@@ -65,15 +65,19 @@ button{cursor:pointer}
           </div>
           <sc-for list="{{syncRows}}" as="r" hint-placeholder-count="6">
             <sc-if value="{{r.isToggle}}" hint-placeholder-val="{{false}}">
-              <div style="margin-left: 16px; height: 46px; padding-right: 16px; display: flex; align-items: center; gap: 8px; border-top: 0.5px solid #E5E5EA">
+              <div style="padding-left: 16px; height: 46px; display: flex">
+                <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="{{r.ic}}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; align-self: center; margin-right: 12px"><path d="{{r.d}}"></path></svg>
+                <div style="flex: 1; height: 46px; padding-right: 16px; display: flex; align-items: center; gap: 8px; border-top: 0.5px solid #E5E5EA">
                 <span style="flex: 1; font-size: 16px">{{r.label}}</span>
                 <button role="switch" aria-checked="{{r.on}}" aria-label="{{r.label}}" onClick="{{r.toggle}}" style="width: 51px; height: 31px; flex-shrink: 0; padding: 0; border: none; border-radius: 16px; background: {{r.track}}; position: relative">
                   <span style="position: absolute; left: {{r.knob}}px; top: 2px; width: 27px; height: 27px; border-radius: 14px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.2)"></span>
                 </button>
+                </div>
               </div>
             </sc-if>
             <sc-if value="{{r.isNav}}" hint-placeholder-val="{{false}}">
               <button style="width: 100%; height: 46px; border: none; background: transparent; padding: 0 0 0 16px; font-family: inherit; text-align: left; display: flex">
+                <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="{{r.ic}}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; align-self: center; margin-right: 12px"><path d="{{r.d}}"></path></svg>
                 <span style="flex: 1; height: 46px; display: flex; align-items: center; gap: 8px; padding-right: 16px; border-top: 0.5px solid #E5E5EA">
                   <span style="flex: 1; font-size: 16px; color: #000000">{{r.label}}</span>
                   <span style="font-size: 16px; color: #6C6C70">{{r.value}}</span>
@@ -83,6 +87,7 @@ button{cursor:pointer}
             </sc-if>
             <sc-if value="{{r.isAction}}" hint-placeholder-val="{{false}}">
               <button style="width: 100%; height: 46px; border: none; background: transparent; padding: 0 0 0 16px; font-family: inherit; text-align: left; display: flex">
+                <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="{{r.ic}}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; align-self: center; margin-right: 12px"><path d="{{r.d}}"></path></svg>
                 <span style="flex: 1; height: 46px; display: flex; align-items: center; border-top: 0.5px solid #E5E5EA; font-size: 16px; color: {{r.color}}">{{r.label}}</span>
               </button>
             </sc-if>
@@ -101,6 +106,7 @@ button{cursor:pointer}
             </div>
           </sc-for>
           <button style="width: 100%; height: 46px; border: none; background: transparent; padding: 0 0 0 16px; font-family: inherit; text-align: left; display: flex">
+            <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="{{accent}}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; align-self: center; margin-right: 12px"><path d="M8 3h8a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM12 9v6M9 12h6"></path></svg>
             <span style="flex: 1; height: 46px; display: flex; align-items: center; border-top: 0.5px solid #E5E5EA; font-size: 16px; color: {{accent}}">Pair a Device…</span>
           </button>
         </div>
@@ -109,11 +115,13 @@ button{cursor:pointer}
       <section style="display: flex; flex-direction: column; gap: 8px">
         <h3 style="margin: 0 4px; font-size: 20px; line-height: 25px; font-weight: 700">Backup file</h3>
         <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
-          <div style="display: flex; align-items: center; height: 46px; padding: 0 16px"><span style="flex: 1; font-size: 16px">Last backup</span><span style="font-size: 16px; color: #6C6C70">Oct 24 · 2.1 GB</span></div>
+          <div style="display: flex; align-items: center; height: 46px; padding: 0 16px"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#6C6C70" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; align-self: center; margin-right: 12px"><path d="M12 3.5a8.5 8.5 0 1 1 0 17 8.5 8.5 0 0 1 0-17zM12 7.5V12l3 2"></path></svg><span style="flex: 1; font-size: 16px">Last backup</span><span style="font-size: 16px; color: #6C6C70">Oct 24 · 2.1 GB</span></div>
           <button style="width: 100%; height: 46px; border: none; background: transparent; padding: 0 0 0 16px; font-family: inherit; text-align: left; display: flex">
+            <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="{{accent}}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; align-self: center; margin-right: 12px"><path d="M12 15V3.5M7.5 8 12 3.5 16.5 8M5 12v7.5h14V12"></path></svg>
             <span style="flex: 1; height: 46px; display: flex; align-items: center; border-top: 0.5px solid #E5E5EA; font-size: 16px; color: {{accent}}">Export Backup…</span>
           </button>
           <button style="width: 100%; height: 46px; border: none; background: transparent; padding: 0 0 0 16px; font-family: inherit; text-align: left; display: flex">
+            <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="{{accent}}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; align-self: center; margin-right: 12px"><path d="M12 3.5V15M7.5 10.5 12 15l4.5-4.5M5 12v7.5h14V12"></path></svg>
             <span style="flex: 1; height: 46px; display: flex; align-items: center; border-top: 0.5px solid #E5E5EA; font-size: 16px; color: {{accent}}">Import Backup…</span>
           </button>
         </div>
@@ -123,7 +131,7 @@ button{cursor:pointer}
       <section style="display: flex; flex-direction: column; gap: 8px">
         <h3 style="margin: 0 4px; font-size: 20px; line-height: 25px; font-weight: 700">Import</h3>
         <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
-          <button style="width: 100%; height: 46px; border: none; background: transparent; padding: 0 16px; font-family: inherit; text-align: left; font-size: 16px; color: {{accent}}">Import Files…</button>
+          <button style="width: 100%; height: 46px; border: none; background: transparent; padding: 0 16px; font-family: inherit; text-align: left; font-size: 16px; color: {{accent}}; display: flex; align-items: center"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="{{accent}}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; align-self: center; margin-right: 12px"><path d="M6 3.5h8l4 4v13H6zM13.5 3.5V8H18M12 11v6M9 14h6"></path></svg>Import Files…</button>
         </div>
         <p style="margin: 0 16px; font-size: 13px; line-height: 18px; color: #6C6C70">Add EPUBs and other books from Files. They join your library like any work.</p>
       </section>
@@ -181,16 +189,18 @@ class Component extends DCLogic {
     const toggle = (label, on, key) => ({ label, isToggle: true, isNav: false, isAction: false, on: on ? 'true' : 'false', track: on ? '#990000' : '#E9E9EB', knob: on ? 22 : 2, toggle: () => this.setState({ [key]: !on }), value: '', color: '#000000' });
     const nav = (label, value) => ({ label, isToggle: false, isNav: true, isAction: false, value: value || '', color: '#000000' });
     const action = (label, color) => ({ label, isToggle: false, isNav: false, isAction: true, value: '', color });
+    const G = '#6C6C70';
+    const I = {"auto": "M4.5 12a7.5 7.5 0 0 1 12.8-5.3L19.5 9M19.5 4.5V9H15M19.5 12a7.5 7.5 0 0 1-12.8 5.3L4.5 15M4.5 19.5V15H9", "now": "M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 4.5V9H15", "details": "M8.5 7h11M8.5 12h11M8.5 17h11M4.5 7h.01M4.5 12h.01M4.5 17h.01", "pause": "M12 3.5a8.5 8.5 0 1 1 0 17 8.5 8.5 0 0 1 0-17zM10 9v6M14 9v6", "folder": "M3.5 7.5V18a1.5 1.5 0 0 0 1.5 1.5h14a1.5 1.5 0 0 0 1.5-1.5V9a1.5 1.5 0 0 0-1.5-1.5h-7L10 5H5a1.5 1.5 0 0 0-1.5 1.5z", "disconnect": "M9.5 14.5 7 17a3 3 0 0 1-4.2-4.2L5.3 10.3M14.5 9.5 17 7a3 3 0 0 1 4.2 4.2L18.7 13.7M4 4l16 16", "pair": "M8 3h8a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM12 9v6M9 12h6", "clock": "M12 3.5a8.5 8.5 0 1 1 0 17 8.5 8.5 0 0 1 0-17zM12 7.5V12l3 2", "export": "M12 15V3.5M7.5 8 12 3.5 16.5 8M5 12v7.5h14V12", "import": "M12 3.5V15M7.5 10.5 12 15l4.5-4.5M5 12v7.5h14V12", "files": "M6 3.5h8l4 4v13H6zM13.5 3.5V8H18M12 11v6M9 14h6"};
     return {
       accent,
       groups,
       syncRows: [
-        toggle('Auto Sync', autoSync, 'autoSync'),
-        action('Sync Now', accent),
-        nav('Sync Details', '0 pending'),
-        toggle('Pause on this iPhone', paused, 'paused'),
-        nav('Change Folder', ''),
-        action('Disconnect', '#D70015')
+        { ...toggle('Auto Sync', autoSync, 'autoSync'), d: I.auto, ic: G },
+        { ...action('Sync Now', accent), d: I.now, ic: accent },
+        { ...nav('Sync Details', '0 pending'), d: I.details, ic: G },
+        { ...toggle('Pause on this iPhone', paused, 'paused'), d: I.pause, ic: G },
+        { ...nav('Change Folder', ''), d: I.folder, ic: G },
+        { ...action('Disconnect', '#D70015'), d: I.disconnect, ic: '#D70015' }
       ],
       devices: [
         { name: 'This iPhone', detail: 'Signs deletions with its own key', d: 'M8 3h8a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM11 18h2' },
