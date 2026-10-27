@@ -13,7 +13,7 @@ body{margin:0}
 button{cursor:pointer}
 </style>
 </helmet>
-<div style="width: 669px; height: 951px; position: relative; overflow: hidden; background: #F2F2F7; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+<div style="width: 669px; height: 951px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
   <main style="padding: 14px 16px 0; display: flex; flex-direction: column; gap: 12px">
     <header style="height: 44px; display: flex; align-items: center; justify-content: space-between">
       <h1 style="margin: 0; font-size: 34px; line-height: 41px; font-weight: 700; letter-spacing: 0.4px">Browse</h1>
@@ -26,7 +26,7 @@ button{cursor:pointer}
       <h2 style="margin: 0; font-size: 22px; line-height: 28px; font-weight: 700; letter-spacing: 0.35px">Jump Back In</h2>
       <div style="display: flex; gap: 8px; margin-right: -16px; overflow: hidden">
         <sc-for list="{{recent}}" as="r" hint-placeholder-count="4">
-          <button style="width: 200px; height: 56px; flex-shrink: 0; border: none; border-radius: 16px; background: #FFFFFF; padding: 0 14px; box-sizing: border-box; font-family: inherit; text-align: left; display: flex; flex-direction: column; justify-content: center; align-items: flex-start">
+          <button style="width: 200px; height: 56px; flex-shrink: 0; border: none; border-radius: 16px; background: #F2F2F7; padding: 0 14px; box-sizing: border-box; font-family: inherit; text-align: left; display: flex; flex-direction: column; justify-content: center; align-items: flex-start">
             <span style="max-width: 100%; font-size: 15px; line-height: 20px; font-weight: 600; color: #000000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{r.name}}</span>
             <sc-if value="{{r.fav}}" hint-placeholder-val="{{false}}">
               <span style="display: flex; align-items: center; gap: 4px; font-size: 12px; line-height: 16px; color: #6C6C70">
@@ -47,7 +47,7 @@ button{cursor:pointer}
       <h2 style="margin: 0; font-size: 22px; line-height: 28px; font-weight: 700; letter-spacing: 0.35px">Categories</h2>
       <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
         <sc-for list="{{media}}" as="c" hint-placeholder-count="11">
-          <div style="height: 100px; box-sizing: border-box; padding: 4px 12px; border-radius: 16px; background: #FFFFFF; display: flex; flex-direction: column; min-width: 0">
+          <div style="height: 100px; box-sizing: border-box; padding: 4px 12px; border-radius: 16px; background: #F2F2F7; display: flex; flex-direction: column; min-width: 0">
             <button aria-label="{{c.label}}" style="height: 48px; flex-shrink: 0; border: none; background: transparent; padding: 0; font-family: inherit; text-align: left; color: #000000; display: flex; align-items: center; gap: 10px">
               <span aria-hidden="true" style="width: 36px; height: 36px; flex-shrink: 0; border-radius: 10px; background: {{accentTint}}; color: {{accent}}; display: flex; align-items: center; justify-content: center">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="{{c.d}}"></path></svg>
@@ -66,7 +66,7 @@ button{cursor:pointer}
             <div style="height: 44px; display: flex; align-items: center; gap: 6px; overflow: hidden">
               <sc-for list="{{c.chips}}" as="f" hint-placeholder-count="2">
                 <button aria-label="{{f.label}}" style="height: 44px; min-width: 0; flex-shrink: 1; border: none; background: transparent; padding: 0; font-family: inherit; display: flex; align-items: center">
-                  <span style="height: 28px; min-width: 0; box-sizing: border-box; border-radius: 14px; background: #F2F2F7; padding: 0 8px; display: flex; align-items: center; gap: 5px">
+                  <span style="height: 28px; min-width: 0; box-sizing: border-box; border-radius: 14px; background: #FFFFFF; padding: 0 8px; display: flex; align-items: center; gap: 5px">
                     <sc-if value="{{f.familiar}}" hint-placeholder-val="{{false}}">
                       <span aria-hidden="true" style="width: 2.5px; height: 12px; flex-shrink: 0; border-radius: 2px; background: {{accent}}"></span>
                     </sc-if>
@@ -85,7 +85,7 @@ button{cursor:pointer}
     </section>
   </main>
 
-  <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 130px; background: linear-gradient(to bottom, rgba(242,242,247,0), rgba(242,242,247,0.94) 72%); pointer-events: none"></div>
+  <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 130px; background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0.94) 72%); pointer-events: none"></div>
   <div style="position: absolute; left: 0; right: 0; bottom: 28px; display: flex; justify-content: center">
     <dc-import name="TabBar" selected="browse" accent="{{accent}}" hint-size="358px,62px"></dc-import>
   </div>
