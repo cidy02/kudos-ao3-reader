@@ -23,7 +23,7 @@ body{margin:0}
         <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18"></path><path d="M10.6 6.1A9.8 9.8 0 0 1 12 6c5 0 8.5 4.5 9.5 6-.4.7-1.3 1.9-2.6 3.1"></path><path d="M6.6 7.6C4.6 8.9 3.2 10.8 2.5 12c1 1.5 4.5 6 9.5 6 1.6 0 3-.4 4.3-1.1"></path></svg>Tap to reveal
       </button>
     </div>
-    <span style="font-size: 12px; line-height: 16px; color: #6C6C70">Hidden mature work</span>
+    <span style="font-size: 12px; line-height: 16px; color: {{ink2}}">Hidden mature work</span>
   </sc-if>
   <sc-if value="{{isShown}}" hint-placeholder-val="{{true}}">
     <div style="position: relative; width: {{width}}px; height: {{coverH}}px; box-sizing: border-box; padding: {{pad}}px; border-radius: 16px; overflow: hidden; background: {{art}}; color: #FFFFFF; box-shadow: 0 4px 12px rgba(0,0,0,0.14); display: flex; flex-direction: column">
@@ -47,11 +47,11 @@ body{margin:0}
       </sc-if>
     </div>
     <sc-if value="{{hasProgress}}" hint-placeholder-val="{{false}}">
-      <div role="progressbar" aria-label="Reading progress" aria-valuenow="{{w.progress}}" aria-valuemin="0" aria-valuemax="100" style="height: 3px; border-radius: 2px; background: #E5E5EA"><div style="width: {{pct}}; height: 3px; border-radius: 2px; background: {{accent}}"></div></div>
+      <div role="progressbar" aria-label="Reading progress" aria-valuenow="{{w.progress}}" aria-valuemin="0" aria-valuemax="100" style="height: 3px; border-radius: 2px; background: {{track}}"><div style="width: {{pct}}; height: 3px; border-radius: 2px; background: {{accent}}"></div></div>
     </sc-if>
-    <dc-import name="Symbols" variant="strip" rating="{{w.rating}}" category="{{w.category}}" warnings="{{w.warnings}}" status="{{w.status}}" warning-count="{{w.warningCount}}" size="{{tile}}" hint-size="{{stripHint}}"></dc-import>
+    <dc-import name="Symbols" variant="strip" rating="{{w.rating}}" category="{{w.category}}" warnings="{{w.warnings}}" status="{{w.status}}" warning-count="{{w.warningCount}}" size="{{tile}}" theme="{{theme}}" hint-size="{{stripHint}}"></dc-import>
     <div style="display: flex; align-items: center; gap: 6px">
-      <span style="flex: 1; min-width: 0; font-size: 12px; line-height: 16px; color: #6C6C70; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{meta}}</span>
+      <span style="flex: 1; min-width: 0; font-size: 12px; line-height: 16px; color: {{ink2}}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{meta}}</span>
       <sc-if value="{{hasBadge}}" hint-placeholder-val="{{false}}">
         <span style="padding: 0 6px; border-radius: 8px; background: {{accent}}; color: #FFFFFF; font-size: 11px; line-height: 16px; font-weight: 700">{{w.badge}}</span>
       </sc-if>
@@ -76,7 +76,7 @@ body{margin:0}
   </sc-if>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"work":{"editor":null},"variant":{"editor":"enum","options":["cover","text"],"default":"cover"},"width":{"editor":"int","default":132,"min":80,"max":220},"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"$preview":{"width":132,"height":310}}'>
+<script type="text/x-dc" data-dc-script data-props='{"work":{"editor":null},"variant":{"editor":"enum","options":["cover","text"],"default":"cover"},"theme":{"editor":"enum","options":["light","sepia","dark"],"default":"light"},"width":{"editor":"int","default":132,"min":80,"max":220},"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"$preview":{"width":132,"height":310}}'>
 class Component extends DCLogic {
   renderVals() {
     const width = Number(this.props.width ?? 132);
@@ -122,6 +122,9 @@ class Component extends DCLogic {
       ghostBottom: -Math.round(width * 0.29),
       art: 'linear-gradient(155deg, hsl(' + hue + ', 46%, 27%), hsl(' + ((hue + 22) % 360) + ', 50%, 41%))',
       initial: title.charAt(0),
+      theme: this.props.theme ?? 'light',
+      ink2: { dark: '#AEAEB2', sepia: '#6B645A' }[this.props.theme] || '#6C6C70',
+      track: { dark: '#3A3A3C', sepia: 'rgba(60,40,10,0.14)' }[this.props.theme] || '#E5E5EA',
       v0: layout === 0, v1: layout === 1, v2: layout === 2,
       accent: this.props.accent ?? '#990000',
       meta: w.meta || [w.words, w.chapters].filter(Boolean).join(' · '),

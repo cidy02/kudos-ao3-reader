@@ -574,7 +574,7 @@
     "Shelf-Options.dc.html": {
       "h": 640,
       "page": "duo",
-      "title": "Shelf cards · cover or no cover",
+      "title": "Shelf cards · earlier options (decided in Your mix)",
       "w": 920,
       "x": 1552,
       "y": 0
@@ -754,6 +754,22 @@
       "h": 1360,
       "title": "Android · Home, Work Detail, Reader",
       "page": "android"
+    },
+    "Themes.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 1400,
+      "h": 2880,
+      "title": "Sepia, Dark and OLED",
+      "page": "variants"
+    },
+    "AX5.dc.html": {
+      "x": 1480,
+      "y": 0,
+      "w": 1400,
+      "h": 1980,
+      "title": "Largest text sizes (AX5)",
+      "page": "variants"
     }
   },
   "createdOnFiles": {
@@ -975,7 +991,9 @@
     "ResumeCard.dc.html",
     "TabRail.dc.html",
     "DuoSidebar.dc.html",
-    "Android.dc.html"
+    "Android.dc.html",
+    "Themes.dc.html",
+    "AX5.dc.html"
   ],
   "pages": [
     {
@@ -993,6 +1011,10 @@
     {
       "id": "android",
       "name": "Android"
+    },
+    {
+      "id": "variants",
+      "name": "Themes & large text"
     },
     {
       "id": "states",
