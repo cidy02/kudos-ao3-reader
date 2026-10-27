@@ -25,8 +25,8 @@ button{cursor:pointer}
     <h1 style="margin: 0 4px; font-size: 34px; line-height: 41px; font-weight: 700; letter-spacing: 0.4px">Read Aloud</h1>
 
     <section style="display: flex; flex-direction: column; gap: 6px">
-      <h2 style="margin: 0 16px; font-size: 13px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; color: #6C6C70">Voice</h2>
-      <div style="background: #FFFFFF; border-radius: 14px; overflow: hidden">
+      <h2 style="margin: 0 16px; font-size: 13px; font-weight: 400; color: #6C6C70">Voice</h2>
+      <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
         <div style="padding: 10px 12px; border-bottom: 0.5px solid #E5E5EA">
           <div role="radiogroup" aria-label="Engine" style="height: 32px; border-radius: 9px; background: rgba(118,118,128,0.12); padding: 2px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr))">
             <button role="radio" aria-checked="false" style="border: none; border-radius: 7px; background: transparent; font-family: inherit; font-size: 14px">Automatic</button>
@@ -44,8 +44,8 @@ button{cursor:pointer}
     </section>
 
     <section style="display: flex; flex-direction: column; gap: 6px">
-      <h2 style="margin: 0 16px; font-size: 13px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; color: #6C6C70">Delivery</h2>
-      <div style="background: #FFFFFF; border-radius: 14px; overflow: hidden">
+      <h2 style="margin: 0 16px; font-size: 13px; font-weight: 400; color: #6C6C70">Delivery</h2>
+      <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
         <sc-for list="{{sliders}}" as="s" hint-placeholder-count="2">
           <div style="padding: 10px 16px; display: flex; flex-direction: column; gap: 10px; border-top: {{s.sep}}">
             <div style="display: flex; justify-content: space-between; font-size: 16px"><span>{{s.label}}</span><span style="color: #6C6C70">{{s.value}}</span></div>
@@ -57,14 +57,14 @@ button{cursor:pointer}
         </sc-for>
         <div style="display: flex; align-items: center; height: 46px; padding: 0 16px; border-top: 0.5px solid #E5E5EA">
           <span style="flex: 1; font-size: 16px">Read author's notes</span>
-          <span role="switch" aria-checked="false" aria-label="Read author's notes" style="width: 51px; height: 31px; border-radius: 16px; background: #E9E9EB; position: relative"><span style="position: absolute; left: 2px; top: 2px; width: 27px; height: 27px; border-radius: 14px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.2)"></span></span>
+          <span role="switch" aria-checked="false" aria-label="Read author's notes" style="width: 51px; height: 31px; border-radius: 16px; background: #E9E9EB; position: relative"><span style="position: absolute; left: 2px; top: 2px; width: 27px; height: 27px; border-radius: 16px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.2)"></span></span>
         </div>
       </div>
     </section>
 
     <section style="display: flex; flex-direction: column; gap: 6px">
-      <h2 style="margin: 0 16px; font-size: 13px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; color: #6C6C70">Kokoro voice pack</h2>
-      <div style="background: #FFFFFF; border-radius: 14px; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px">
+      <h2 style="margin: 0 16px; font-size: 13px; font-weight: 400; color: #6C6C70">Kokoro voice pack</h2>
+      <div style="background: #FFFFFF; border-radius: 16px; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px">
         <div style="display: flex; justify-content: space-between; font-size: 16px"><span>Downloading · 64%</span><span style="color: #6C6C70">201 of 314 MB</span></div>
         <div role="progressbar" aria-label="Voice pack download" aria-valuenow="64" aria-valuemin="0" aria-valuemax="100" style="height: 6px; border-radius: 3px; background: #E5E5EA"><div style="width: 64%; height: 6px; border-radius: 3px; background: {{accent}}"></div></div>
         <div style="display: flex; justify-content: space-between; align-items: center">
@@ -75,8 +75,8 @@ button{cursor:pointer}
     </section>
 
     <section style="display: flex; flex-direction: column; gap: 6px">
-      <h2 style="margin: 0 16px; font-size: 13px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; color: #6C6C70">Pronunciation</h2>
-      <div style="background: #FFFFFF; border-radius: 14px; overflow: hidden">
+      <h2 style="margin: 0 16px; font-size: 13px; font-weight: 400; color: #6C6C70">Pronunciation</h2>
+      <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
         <sc-for list="{{pronRows}}" as="r" hint-placeholder-count="3">
           <div style="display: flex; align-items: center; height: 46px; padding: 0 16px; gap: 8px; border-top: {{r.sep}}">
             <span style="flex: 1; font-size: 16px; color: {{r.color}}">{{r.label}}</span><span style="font-size: 16px; color: #6C6C70">{{r.value}}</span>
@@ -85,7 +85,7 @@ button{cursor:pointer}
       </div>
     </section>
 
-    <button style="height: 46px; border: none; border-radius: 14px; background: #FFFFFF; font-family: inherit; font-size: 16px; color: #D70015">Reset Read Aloud</button>
+    <button style="height: 46px; border: none; border-radius: 16px; background: #FFFFFF; font-family: inherit; font-size: 16px; color: #D70015">Reset Read Aloud</button>
   </main>
 </div>
 </x-dc>

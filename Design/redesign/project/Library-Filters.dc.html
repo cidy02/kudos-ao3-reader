@@ -32,7 +32,7 @@ button{cursor:pointer}
     </div>
 
     <div style="padding: 4px 16px 0; display: flex; flex-direction: column; gap: 14px">
-      <div style="background: #FFFFFF; border-radius: 14px; padding: 0 16px; display: flex; align-items: center; height: 46px; gap: 8px">
+      <div style="background: #FFFFFF; border-radius: 16px; padding: 0 16px; display: flex; align-items: center; height: 46px; gap: 8px">
         <span style="flex: 1; font-size: 16px">Sort by</span>
         <span style="font-size: 16px; color: #6C6C70">Recently read</span>
         <svg aria-hidden="true" width="12" height="16" viewBox="0 0 12 16" fill="none" stroke="#8E8E93" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6 6 2.5 9.5 6M2.5 10 6 13.5 9.5 10"></path></svg>
@@ -40,8 +40,8 @@ button{cursor:pointer}
 
       <sc-for list="{{groups}}" as="g" hint-placeholder-count="3">
         <fieldset style="margin: 0; padding: 0; border: none; display: flex; flex-direction: column; gap: 6px">
-          <legend style="padding: 0 4px 6px; font-size: 13px; line-height: 18px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; color: #6C6C70">{{g.title}}</legend>
-          <div style="background: #FFFFFF; border-radius: 14px; padding: 10px 12px; display: flex; flex-wrap: wrap; gap: 8px">
+          <legend style="padding: 0 4px 6px; font-size: 13px; line-height: 18px; font-weight: 400; color: #6C6C70">{{g.title}}</legend>
+          <div style="background: #FFFFFF; border-radius: 16px; padding: 10px 12px; display: flex; flex-wrap: wrap; gap: 8px">
             <sc-for list="{{g.chips}}" as="c" hint-placeholder-count="4">
               <button aria-pressed="{{c.pressed}}" style="border: none; padding: 2px; border-radius: 999px; background: transparent; box-shadow: {{c.ring}}; display: flex">
                 <dc-import name="Symbols" variant="labeled" only="{{g.kind}}" rating="{{c.rating}}" category="{{c.category}}" warnings="{{c.warnings}}" status="{{c.status}}" size="22" hint-size="90px,28px"></dc-import>
@@ -51,7 +51,7 @@ button{cursor:pointer}
         </fieldset>
       </sc-for>
 
-      <div style="background: #FFFFFF; border-radius: 14px; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px">
+      <div style="background: #FFFFFF; border-radius: 16px; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px">
         <div style="display: flex; justify-content: space-between; font-size: 16px"><span>Word count</span><span style="color: #6C6C70">10k – 150k</span></div>
         <div role="group" aria-label="Word count range" style="position: relative; height: 22px">
           <div style="position: absolute; left: 0; right: 0; top: 9px; height: 4px; border-radius: 2px; background: #E5E5EA"></div>
@@ -61,19 +61,19 @@ button{cursor:pointer}
         </div>
       </div>
 
-      <div style="background: #FFFFFF; border-radius: 14px; overflow: hidden">
+      <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
         <div style="display: flex; align-items: center; height: 46px; padding: 0 16px; gap: 8px; border-bottom: 0.5px solid #E5E5EA">
           <span style="flex: 1; font-size: 16px">Language</span><span style="font-size: 16px; color: #6C6C70">Any</span>
           <svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg>
         </div>
         <div style="display: flex; align-items: center; min-height: 46px; padding: 6px 16px; gap: 8px; flex-wrap: wrap">
           <span style="font-size: 16px; margin-right: 4px">Tags</span>
-          <span style="padding: 4px 6px 4px 10px; border-radius: 13px; background: {{accentTint}}; color: {{accent}}; font-size: 14px; display: flex; align-items: center; gap: 4px">Slow Burn <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"></path></svg></span>
+          <span style="padding: 4px 6px 4px 10px; border-radius: 13px; background: #EFEFF4; color: #000000; font-size: 14px; display: flex; align-items: center; gap: 4px">Slow Burn <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"></path></svg></span>
           <button style="border: none; background: none; padding: 4px 6px; font-family: inherit; font-size: 14px; color: {{accent}}">Add tag…</button>
         </div>
       </div>
 
-      <button style="height: 46px; border: none; border-radius: 14px; background: #FFFFFF; font-family: inherit; font-size: 16px; color: #D70015">Reset filters</button>
+      <button style="height: 46px; border: none; border-radius: 16px; background: #FFFFFF; font-family: inherit; font-size: 16px; color: #D70015">Reset filters</button>
     </div>
   </section>
 </div>

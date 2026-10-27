@@ -26,7 +26,7 @@ button{cursor:pointer}
       </button>
     </div>
     <div style="padding: 0 16px; display: flex; flex-direction: column; gap: 14px">
-      <div style="background: #FFFFFF; border-radius: 14px; overflow: hidden">
+      <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
         <div style="display: flex; align-items: center; height: 46px; padding: 0 16px; gap: 8px; border-bottom: 0.5px solid #E5E5EA">
           <span style="flex: 1; font-size: 16px">Sort by</span><span style="font-size: 16px; color: #6C6C70">Date updated</span>
           <svg aria-hidden="true" width="12" height="16" viewBox="0 0 12 16" fill="none" stroke="#8E8E93" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6 6 2.5 9.5 6M2.5 10 6 13.5 9.5 10"></path></svg>
@@ -41,8 +41,8 @@ button{cursor:pointer}
 
       <sc-for list="{{groups}}" as="g" hint-placeholder-count="3">
         <fieldset style="margin: 0; padding: 0; border: none">
-          <legend style="padding: 0 4px 6px; font-size: 13px; line-height: 18px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; color: #6C6C70">{{g.title}}</legend>
-          <div style="background: #FFFFFF; border-radius: 14px; padding: 10px 12px; display: flex; flex-wrap: wrap; gap: 8px">
+          <legend style="padding: 0 4px 6px; font-size: 13px; line-height: 18px; font-weight: 400; color: #6C6C70">{{g.title}}</legend>
+          <div style="background: #FFFFFF; border-radius: 16px; padding: 10px 12px; display: flex; flex-wrap: wrap; gap: 8px">
             <sc-for list="{{g.chips}}" as="c" hint-placeholder-count="4">
               <button aria-pressed="{{c.pressed}}" style="border: none; padding: 2px; border-radius: 999px; background: transparent; box-shadow: {{c.ring}}; display: flex">
                 <dc-import name="Symbols" variant="labeled" only="{{g.kind}}" rating="{{c.rating}}" category="{{c.category}}" warnings="{{c.warnings}}" status="{{c.status}}" size="20" hint-size="86px,26px"></dc-import>
@@ -52,10 +52,10 @@ button{cursor:pointer}
         </fieldset>
       </sc-for>
 
-      <div style="background: #FFFFFF; border-radius: 14px; overflow: hidden">
+      <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
         <div style="display: flex; align-items: center; height: 46px; padding: 0 16px; border-bottom: 0.5px solid #E5E5EA">
           <span style="flex: 1; font-size: 16px">Include Not Rated</span>
-          <span role="switch" aria-checked="true" aria-label="Include Not Rated" style="width: 51px; height: 31px; border-radius: 16px; background: #34C759; position: relative"><span style="position: absolute; right: 2px; top: 2px; width: 27px; height: 27px; border-radius: 14px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.2)"></span></span>
+          <span role="switch" aria-checked="true" aria-label="Include Not Rated" style="width: 51px; height: 31px; border-radius: 16px; background: #34C759; position: relative"><span style="position: absolute; right: 2px; top: 2px; width: 27px; height: 27px; border-radius: 16px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.2)"></span></span>
         </div>
         <div style="display: flex; align-items: center; height: 46px; padding: 0 16px; gap: 8px">
           <span style="flex: 1; font-size: 16px">Crossovers</span><span style="font-size: 16px; color: #6C6C70">Include</span>
@@ -63,7 +63,7 @@ button{cursor:pointer}
         </div>
       </div>
 
-      <div style="background: #FFFFFF; border-radius: 14px; overflow: hidden">
+      <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
         <sc-for list="{{ranges}}" as="r" hint-placeholder-count="7">
           <div style="display: flex; align-items: center; height: 44px; padding: 0 16px; gap: 8px; border-top: {{r.sep}}">
             <span style="flex: 1; font-size: 16px">{{r.label}}</span><span style="font-size: 16px; color: {{r.color}}">{{r.value}}</span>
@@ -73,8 +73,8 @@ button{cursor:pointer}
       </div>
 
       <fieldset style="margin: 0; padding: 0; border: none">
-        <legend style="padding: 0 4px 6px; font-size: 13px; line-height: 18px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; color: #6C6C70">Tags</legend>
-        <div style="background: #FFFFFF; border-radius: 14px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px">
+        <legend style="padding: 0 4px 6px; font-size: 13px; line-height: 18px; font-weight: 400; color: #6C6C70">Tags</legend>
+        <div style="background: #FFFFFF; border-radius: 16px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px">
           <div style="display: flex; flex-wrap: wrap; gap: 6px; align-items: center">
             <span style="font-size: 13px; font-weight: 600; color: #2F8F3A; width: 64px">Include</span>
             <span style="padding: 4px 10px; border-radius: 13px; background: rgba(47,143,58,0.12); color: #1F6A2A; font-size: 14px">Found Family</span>
@@ -86,7 +86,7 @@ button{cursor:pointer}
           <label style="height: 36px; border-radius: 10px; background: rgba(118,118,128,0.12); display: flex; align-items: center; padding: 0 10px">
             <input type="text" aria-label="Add a tag" placeholder="Add a tag" style="flex: 1; border: none; background: transparent; font-family: inherit; font-size: 15px; outline: none">
           </label>
-          <span style="font-size: 12px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; color: #6C6C70">Popular in Original Work</span>
+          <span style="font-size: 12px; font-weight: 400; color: #6C6C70">Popular in Original Work</span>
           <div style="display: flex; flex-wrap: wrap; gap: 6px">
             <button style="height: 30px; padding: 0 10px; border: none; border-radius: 15px; background: #F2F2F7; font-family: inherit; font-size: 14px">Slow Burn</button>
             <button style="height: 30px; padding: 0 10px; border: none; border-radius: 15px; background: #F2F2F7; font-family: inherit; font-size: 14px">Fluff</button>
@@ -96,8 +96,8 @@ button{cursor:pointer}
       </fieldset>
 
       <div style="display: flex; gap: 10px">
-        <button style="flex: 1; height: 46px; border: none; border-radius: 14px; background: #FFFFFF; font-family: inherit; font-size: 16px; color: #D70015">Reset filters</button>
-        <button style="flex: 1; height: 46px; border: none; border-radius: 14px; background: #FFFFFF; font-family: inherit; font-size: 16px; color: {{accent}}">Save Search…</button>
+        <button style="flex: 1; height: 46px; border: none; border-radius: 16px; background: #FFFFFF; font-family: inherit; font-size: 16px; color: #D70015">Reset filters</button>
+        <button style="flex: 1; height: 46px; border: none; border-radius: 16px; background: #FFFFFF; font-family: inherit; font-size: 16px; color: {{accent}}">Save Search…</button>
       </div>
     </div>
   </section>

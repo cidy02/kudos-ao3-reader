@@ -23,8 +23,8 @@ button{cursor:pointer}
     <h1 style="margin: 0 4px; font-size: 34px; line-height: 41px; font-weight: 700; letter-spacing: 0.4px">Backup &amp; Sync</h1>
 
     <section style="display: flex; flex-direction: column; gap: 6px">
-      <h2 style="margin: 0 16px; font-size: 13px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; color: #6C6C70">Sync folder</h2>
-      <div style="background: #FFFFFF; border-radius: 14px; overflow: hidden">
+      <h2 style="margin: 0 16px; font-size: 13px; font-weight: 400; color: #6C6C70">Sync folder</h2>
+      <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
         <div style="display: flex; align-items: center; gap: 12px; padding: 12px 16px">
           <span aria-hidden="true" style="width: 40px; height: 40px; border-radius: 10px; background: #E5F1FF; color: #007AFF; display: flex; align-items: center; justify-content: center">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18a4 4 0 0 1-.5-8 5.5 5.5 0 0 1 10.6-1.5A4 4 0 0 1 17 18z"></path></svg>
@@ -38,7 +38,7 @@ button{cursor:pointer}
           <div style="display: flex; align-items: center; min-height: 46px; padding: 0 16px; gap: 8px; border-top: 0.5px solid #E5E5EA">
             <span style="flex: 1; font-size: 16px; color: {{r.color}}">{{r.label}}</span>
             <sc-if value="{{r.isToggle}}" hint-placeholder-val="{{false}}">
-              <span role="switch" aria-checked="{{r.on}}" aria-label="{{r.label}}" style="width: 51px; height: 31px; border-radius: 16px; background: {{r.track}}; position: relative"><span style="position: absolute; left: {{r.knob}}px; top: 2px; width: 27px; height: 27px; border-radius: 14px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.2)"></span></span>
+              <span role="switch" aria-checked="{{r.on}}" aria-label="{{r.label}}" style="width: 51px; height: 31px; border-radius: 16px; background: {{r.track}}; position: relative"><span style="position: absolute; left: {{r.knob}}px; top: 2px; width: 27px; height: 27px; border-radius: 16px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.2)"></span></span>
             </sc-if>
             <sc-if value="{{r.isLink}}" hint-placeholder-val="{{false}}">
               <span style="font-size: 16px; color: #6C6C70">{{r.value}}</span>
@@ -51,8 +51,8 @@ button{cursor:pointer}
     </section>
 
     <section style="display: flex; flex-direction: column; gap: 6px">
-      <h2 style="margin: 0 16px; font-size: 13px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; color: #6C6C70">Devices</h2>
-      <div style="background: #FFFFFF; border-radius: 14px; overflow: hidden">
+      <h2 style="margin: 0 16px; font-size: 13px; font-weight: 400; color: #6C6C70">Devices</h2>
+      <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
         <sc-for list="{{devices}}" as="d" hint-placeholder-count="2">
           <div style="display: flex; align-items: center; height: 52px; padding: 0 16px; gap: 12px; border-top: {{d.sep}}">
             <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#6C6C70" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="{{d.d}}"></path></svg>
@@ -64,8 +64,8 @@ button{cursor:pointer}
     </section>
 
     <section style="display: flex; flex-direction: column; gap: 6px">
-      <h2 style="margin: 0 16px; font-size: 13px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; color: #6C6C70">Backup file</h2>
-      <div style="background: #FFFFFF; border-radius: 14px; overflow: hidden">
+      <h2 style="margin: 0 16px; font-size: 13px; font-weight: 400; color: #6C6C70">Backup file</h2>
+      <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
         <div style="display: flex; align-items: center; height: 46px; padding: 0 16px"><span style="flex: 1; font-size: 16px">Last backup</span><span style="font-size: 16px; color: #6C6C70">Oct 24 · 2.1 GB</span></div>
         <div style="display: flex; align-items: center; height: 46px; padding: 0 16px; border-top: 0.5px solid #E5E5EA"><span style="font-size: 16px; color: {{accent}}">Export Backup…</span></div>
         <div style="display: flex; align-items: center; height: 46px; padding: 0 16px; border-top: 0.5px solid #E5E5EA"><span style="font-size: 16px; color: {{accent}}">Import Backup…</span></div>
@@ -74,8 +74,8 @@ button{cursor:pointer}
     </section>
 
     <section style="display: flex; flex-direction: column; gap: 6px">
-      <h2 style="margin: 0 16px; font-size: 13px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; color: #6C6C70">Import</h2>
-      <div style="background: #FFFFFF; border-radius: 14px; overflow: hidden">
+      <h2 style="margin: 0 16px; font-size: 13px; font-weight: 400; color: #6C6C70">Import</h2>
+      <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
         <div style="display: flex; align-items: center; height: 46px; padding: 0 16px"><span style="font-size: 16px; color: {{accent}}">Import Files…</span></div>
       </div>
       <p style="margin: 0 16px; font-size: 13px; line-height: 18px; color: #6C6C70">Add EPUBs and other books from Files. They join your library like any work.</p>
