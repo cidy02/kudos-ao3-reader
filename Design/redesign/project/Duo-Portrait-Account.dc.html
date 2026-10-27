@@ -14,7 +14,7 @@ button{cursor:pointer}
 </style>
 </helmet>
 <div style="width: 669px; height: 951px; position: relative; overflow: hidden; background: #F2F2F7; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
-  <section aria-label="Account" style="position: absolute; left: 0; top: 0; width: 669px; height: 475px; padding: 88px 16px 0; box-sizing: border-box; display: flex; flex-direction: column; gap: 12px; overflow: hidden">
+  <section aria-label="Account" style="position: absolute; left: 0; top: 0; width: 669px; height: 951px; padding: 88px 16px 0; box-sizing: border-box; display: flex; flex-direction: column; gap: 12px; overflow: hidden">
     <section aria-label="Profile" style="flex-shrink: 0; background: #FFFFFF; border-radius: 16px; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px">
         <div style="display: flex; align-items: center; gap: 12px">
           <span aria-hidden="true" style="width: 52px; height: 52px; flex-shrink: 0; border-radius: 26px; background: #23506B; color: #FFFFFF; font-size: 22px; font-weight: 600; display: flex; align-items: center; justify-content: center">S</span>
@@ -35,7 +35,7 @@ button{cursor:pointer}
           </sc-for>
         </dl>
       </section>
-    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start">
+    <div style="display: flex; flex-direction: column; gap: 12px">
       <div style="display: flex; flex-direction: column; gap: 12px">
         <sc-for list="{{groupsA}}" as="g" hint-placeholder-count="4">
         <section style="display: flex; flex-direction: column; gap: 4px">
@@ -79,42 +79,6 @@ button{cursor:pointer}
     </div>
   </section>
 
-  <section aria-label="Inbox" style="position: absolute; left: 0; top: 475px; width: 669px; height: 476px; background: #FFFFFF; border-top: 0.5px solid #D1D1D6; box-sizing: border-box; overflow: hidden">
-    <header style="padding: 14px 16px 10px; display: flex; align-items: center; justify-content: space-between; gap: 10px">
-      <div style="display: flex; flex-direction: column; gap: 1px">
-        <h2 style="margin: 0; font-size: 28px; line-height: 34px; font-weight: 700; letter-spacing: 0.35px">Inbox</h2>
-        <p style="margin: 0; font-size: 13px; line-height: 18px; color: #6C6C70">3 unread · showing Unread</p>
-      </div>
-      <div role="toolbar" aria-label="Inbox actions" style="height: 44px; border-radius: 22px; padding: 0 2px; display: flex; align-items: center; background: rgba(255,255,255,0.78); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)">
-        <button aria-label="Filter: Unread" aria-pressed="true" style="width: 44px; height: 40px; border: none; border-radius: 20px; background: {{accentTint}}; color: {{accent}}; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M7 12h10M10 17h4"></path></svg></button>
-        <button aria-label="More: inbox settings on AO3" style="width: 44px; height: 40px; border: none; border-radius: 20px; background: transparent; color: #1C1C1E; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.9"></circle><circle cx="12" cy="12" r="1.9"></circle><circle cx="19" cy="12" r="1.9"></circle></svg></button>
-      </div>
-    </header>
-    <div style="border-bottom: 0.5px solid #E5E5EA">
-      <sc-for list="{{items}}" as="m" hint-placeholder-count="4">
-        <div style="position: relative; overflow: hidden; border-top: 0.5px solid #E5E5EA">
-          <sc-if value="{{m.swiped}}" hint-placeholder-val="{{false}}">
-            <div style="position: absolute; right: 0; top: 0; bottom: 0; display: flex">
-              <button style="width: 74px; border: none; background: {{accent}}; color: #FFFFFF; font-family: inherit; font-size: 13px; font-weight: 600">Unread</button>
-              <button style="width: 74px; border: none; background: #D70015; color: #FFFFFF; font-family: inherit; font-size: 13px; font-weight: 600">Delete</button>
-            </div>
-          </sc-if>
-          <button style="position: relative; width: 100%; border: none; background: #FFFFFF; transform: translateX({{m.shift}}px); display: flex; gap: 10px; padding: 12px 16px; font-family: inherit; text-align: left; color: #000000">
-            <span role="img" aria-label="{{m.dotLabel}}" style="width: 10px; height: 10px; margin-top: 6px; flex-shrink: 0; border-radius: 5px; background: {{m.dot}}"></span>
-            <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
-              <span style="display: flex; align-items: baseline; gap: 8px">
-                <span style="flex: 1; min-width: 0; font-size: 16px; line-height: 21px; font-weight: {{m.weight}}">{{m.from}}</span>
-                <sc-if value="{{m.replied}}" hint-placeholder-val="{{false}}"><svg role="img" aria-label="Replied" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6C6C70" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 7 5 12l5 5M5 12h9a5 5 0 0 1 5 5v1"></path></svg></sc-if>
-                <span style="font-size: 14px; color: #6C6C70">{{m.time}}</span>
-              </span>
-              <span style="font-size: 14px; line-height: 19px; color: #3A3A3C; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{m.on}}</span>
-              <span style="font-size: 14px; line-height: 19px; color: #6C6C70; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden">{{m.body}}</span>
-            </span>
-          </button>
-        </div>
-      </sc-for>
-    </div>
-  </section>
 
   <div style="position: absolute; left: 0; top: 0; z-index: 2">
     <dc-import name="DuoTopBar" title="Account" title-style="large" actions="{{side}}" accent="#990000" hint-size="669px,80px"></dc-import>
@@ -165,7 +129,7 @@ class Component extends DCLogic {
     const groups = [
       { title: 'Reading on AO3', rows: [row('Marked for Later', I.later, '31'), row('Bookmarks', I.bookmark, '142'), row('Subscriptions', I.bell, '27', { badge: '4 new', hasBadge: true }), row('AO3 History', I.history, '')] },
       { title: 'Writing', rows: [row('Works', I.works, '6'), row('Series', I.series, '1'), row('Drafts', I.drafts, '2')] },
-      { title: 'Community', rows: [row('Inbox', I.inbox, '', { badge: '3', hasBadge: true, selected: true }), row('AO3 Collections & Challenges', I.stack, '4')] },
+      { title: 'Community', rows: [row('Inbox', I.inbox, '', { badge: '3', hasBadge: true }), row('AO3 Collections & Challenges', I.stack, '4')] },
       { title: 'Account', rows: [row('Preferences', I.prefs), row('Dashboard', I.dash), row('More on AO3', I.more), row('Log Out', I.logout, '', { color: '#D70015', iconColor: '#D70015', chevron: false })] }
     ].map((g) => ({
       ...g,
