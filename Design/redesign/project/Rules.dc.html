@@ -12,7 +12,7 @@
 body{margin:0}
 </style>
 </helmet>
-<div style="width: 1280px; height: 1640px; box-sizing: border-box; padding: 64px; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; display: flex; flex-direction: column; gap: 40px">
+<div style="width: 1280px; height: 2340px; box-sizing: border-box; padding: 64px; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; display: flex; flex-direction: column; gap: 40px">
   <header style="display: flex; flex-direction: column; gap: 8px; max-width: 900px">
     <h1 style="margin: 0; font-size: 44px; line-height: 52px; font-weight: 700">Kudos design rules</h1>
     <p style="margin: 0; font-size: 19px; line-height: 27px; color: #3A3A3C">The rules behind every board, from the direction you chose. Each one exists so a screen has a clear front and back: a calm canvas, one kind of surface on it, and colour that only appears when it means something.</p>
@@ -109,6 +109,14 @@ body{margin:0}
         <li>SF Symbols for every icon; Dynamic Type for every size.</li>
         <li>No instructions written on the page (“Tap a tag to…”, “Swipe a row to…”): controls explain themselves. The exception is Settings and setup forms, where a short footer says what a choice does, as Apple’s Settings do.</li>
         <li>“Tap to reveal” blur on mature works, everywhere a work appears.</li>
+        <li>Tab bar stays visible on pushed screens and minimises on scroll (HIG: tab bars); it hides only under modals, the reader and selection. Task screens like Comments use the minimised tab beside their bar. Today the app hides it on pushed screens (<code>hidesFloatingTabBar</code>): a code change to make.</li>
+        <li>Tab icons are filled symbols with one-word labels; Search is the separate button at the trailing end.</li>
+        <li>Back and Close are symbols, never the words; one prominent action (Done, Post, Add) sits trailing; extra actions go in ••• (HIG: toolbars).</li>
+        <li>Sheets: Close leading, confirm trailing; Reset lives in the form, not the bar (HIG: sheets).</li>
+        <li>Toolbar controls stay untinted glass; state shows in the symbol’s colour, not a filled button.</li>
+        <li>Title-style capitalisation on buttons, segments and menu items; at most five segments.</li>
+        <li>No A–Z index next to tappable row controls; favourites are a marker, set by swipe or menu (HIG: lists).</li>
+        <li>iPhone Duo: status bar, toolbar and tab bar on the trailing edge when closed or open in landscape; split views divide at the fold (HIG: designing for iPhone Duo).</li>
       </ul>
     </section>
   </div>
@@ -150,7 +158,7 @@ body{margin:0}
   </section>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1640}}'>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":2340}}'>
 class Component extends DCLogic {
   renderVals() {
     return {

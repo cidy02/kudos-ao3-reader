@@ -13,7 +13,7 @@ body{margin:0}
 button{cursor:pointer}
 </style>
 </helmet>
-<div style="width: 390px; height: 1240px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+<div style="width: 390px; height: 1400px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
   <div aria-hidden="true" style="padding: 18px 16px 0">
     <span style="font-size: 34px; line-height: 41px; font-weight: 700">Library</span>
   </div>
@@ -22,8 +22,8 @@ button{cursor:pointer}
   <section role="dialog" aria-label="Filters" style="position: absolute; left: 0; right: 0; top: 62px; bottom: 0; border-radius: 38px 38px 0 0; background: #F2F2F7; box-shadow: 0 -8px 30px rgba(0,0,0,0.18); overflow: hidden">
     <div aria-hidden="true" style="width: 36px; height: 5px; border-radius: 3px; background: #C7C7CC; margin: 7px auto 0"></div>
     <header style="display: flex; align-items: center; justify-content: space-between; padding: 6px 16px 10px">
-      <button aria-label="Reset filters" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.8); box-shadow: 0 4px 14px rgba(0,0,0,0.08), 0 0 0 0.5px rgba(0,0,0,0.06)">
-        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3"></path><path d="M4.5 4.5v3h3"></path></svg>
+      <button aria-label="Close" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.8); box-shadow: 0 4px 14px rgba(0,0,0,0.08), 0 0 0 0.5px rgba(0,0,0,0.06)">
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"></path></svg>
       </button>
       <div style="display: flex; flex-direction: column; align-items: center">
         <h2 style="margin: 0; font-size: 17px; line-height: 22px; font-weight: 600">Filters</h2>
@@ -95,11 +95,12 @@ button{cursor:pointer}
           <span style="font-size: 17px; color: #8E8E93">Add</span>
         </div>
       </div>
+      <button style="margin-top: 16px; width: 100%; min-height: 48px; border: none; border-radius: 16px; background: #FFFFFF; font-family: inherit; font-size: 17px; color: #D70015; display: flex; align-items: center; justify-content: center">Reset Filters</button>
     </div>
   </section>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1240}}'>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1400}}'>
 class Component extends DCLogic {
   renderVals() {
     const rows = (list) => list.map(([label, state], i) => ({

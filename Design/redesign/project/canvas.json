@@ -83,7 +83,7 @@
       "y": 3960
     },
     "Browse.dc.html": {
-      "h": 844,
+      "h": 1560,
       "page": "iphone",
       "title": "Browse",
       "w": 390,
@@ -372,7 +372,7 @@
       "y": 0
     },
     "Library-Filters.dc.html": {
-      "h": 1240,
+      "h": 1400,
       "page": "iphone",
       "title": "Library · filters",
       "w": 390,
@@ -548,7 +548,7 @@
       "y": 888
     },
     "Rules.dc.html": {
-      "h": 1640,
+      "h": 2340,
       "page": "system",
       "title": "Kudos design rules",
       "w": 1280,
@@ -801,7 +801,7 @@
       "title": "Chapter editor (component)",
       "w": 390,
       "x": 1800,
-      "y": 2160
+      "y": 2420
     },
     "DuoSideBar.dc.html": {
       "h": 669,
@@ -809,7 +809,7 @@
       "title": "Duo side controls: status, toolbar, tab bar on the trailing edge (component)",
       "w": 64,
       "x": 2230,
-      "y": 2160
+      "y": 2420
     }
   },
   "createdOnFiles": {
@@ -834,7 +834,8 @@
     "rowSystem",
     "rowWork",
     "whyDuo",
-    "whyIphone"
+    "whyIphone",
+    "note-47ewmx"
   ],
   "notes": {
     "rowAccount": {
@@ -950,6 +951,16 @@
       "w": 380,
       "x": 4700,
       "y": 0
+    },
+    "note-47ewmx": {
+      "bold": false,
+      "kind": "title1",
+      "page": "iphone",
+      "size": 24,
+      "text": "",
+      "w": 240,
+      "x": -1114,
+      "y": 7387
     }
   },
   "order": [

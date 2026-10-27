@@ -19,11 +19,14 @@ button{cursor:pointer}
     <button aria-label="Back to Account" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)">
       <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg>
     </button>
-    <button style="height: 44px; padding: 0 18px; border: none; border-radius: 22px; font-family: inherit; font-size: 16px; color: #1C1C1E; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)">Select</button>
+    <div style="height: 44px; border-radius: 22px; display: flex; align-items: center; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)">
+      <button aria-label="Filter, on: Unread" aria-pressed="true" style="width: 46px; height: 44px; border: none; border-radius: 22px; background: transparent; color: {{accent}}; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M7 12h10M10 17h4"></path></svg></button>
+      <button aria-label="More: Select, Inbox Settings on AO3" aria-haspopup="menu" style="width: 46px; height: 44px; border: none; background: transparent; color: #1C1C1E; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.7" fill="currentColor"></circle><circle cx="12" cy="12" r="1.7" fill="currentColor"></circle><circle cx="18.5" cy="12" r="1.7" fill="currentColor"></circle></svg></button>
+    </div>
   </div>
   <main style="padding: 106px 0 0; display: flex; flex-direction: column; gap: 10px">
     <header style="padding: 0 20px; display: flex; flex-direction: column; gap: 2px">
-      <p style="margin: 0; font-size: 15px; line-height: 20px; color: #6C6C70">3 unread</p>
+      <p style="margin: 0; font-size: 15px; line-height: 20px; color: #6C6C70">3 unread · showing <span style="color: {{accent}}">Unread</span></p>
     </header>
     <div style="background: #FFFFFF">
       <sc-for list="{{items}}" as="m" hint-placeholder-count="4">
@@ -50,17 +53,9 @@ button{cursor:pointer}
       </sc-for>
     </div>
   </main>
-  <div style="position: absolute; left: 16px; right: 16px; bottom: 28px; height: 54px; border-radius: 27px; padding: 0 6px 0 8px; box-sizing: border-box; display: flex; align-items: center; justify-content: space-between; background: rgba(255,255,255,0.78); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 8px 28px rgba(0,0,0,0.12), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
-    <button aria-label="Filter: on" aria-pressed="true" style="width: 44px; height: 44px; border: none; border-radius: 22px; background: {{accentTint}}; color: {{accent}}; display: flex; align-items: center; justify-content: center">
-      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M7 12h10M10 17h4"></path></svg>
-    </button>
-    <div style="display: flex; flex-direction: column; align-items: center">
-      <span style="font-size: 13px; font-weight: 600">Filtered by:</span>
-      <span style="font-size: 13px; color: {{accent}}">Unread</span>
-    </div>
-    <button aria-label="Inbox settings on AO3" style="width: 44px; height: 44px; border: none; border-radius: 22px; background: transparent; color: #1C1C1E; display: flex; align-items: center; justify-content: center">
-      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7"></path></svg>
-    </button>
+  <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 150px; background: linear-gradient(to bottom, #FFFFFF00, #FFFFFFF0 72%); pointer-events: none"></div>
+  <div style="position: absolute; left: 16px; bottom: 28px; z-index: 3">
+    <dc-import name="TabBar" selected="account" accent="#990000" hint-size="358px,62px"></dc-import>
   </div>
 </div>
 </x-dc>
