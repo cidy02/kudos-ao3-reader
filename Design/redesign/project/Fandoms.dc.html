@@ -19,7 +19,7 @@ button{cursor:pointer}
     <button aria-label="Back to Browse" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)">
       <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg>
     </button>
-    <button aria-label="Filter: grouping, minimum works, tag kinds, yours" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #FFFFFF; display: flex; align-items: center; justify-content: center; background: {{accent}}">
+    <button aria-label="Filter, on: grouping, minimum works, tag kinds, yours" aria-pressed="true" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: {{accent}}; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)">
       <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M7 12h10M10 17h4"></path></svg>
     </button>
   </div>
@@ -37,12 +37,9 @@ button{cursor:pointer}
             <div style="display: flex; align-items: center; min-height: 56px; padding: 6px 12px 6px 16px; gap: 10px; border-top: {{f.sep}}">
               <span aria-hidden="true" style="width: 28px; height: 40px; flex-shrink: 0; border-radius: 6px; background: {{f.art}}"></span>
               <div style="flex: 1; min-width: 0; display: flex; flex-direction: column">
-                <span style="font-size: 17px; line-height: 22px">{{f.name}}</span>
+                <span style="font-size: 17px; line-height: 22px; display: flex; align-items: center; gap: 5px">{{f.name}}<sc-if value="{{f.isFav}}" hint-placeholder-val="{{false}}"><svg role="img" aria-label="Favourite" width="13" height="13" viewBox="0 0 24 24" fill="#F5C400" stroke="#E2A100" stroke-width="2" stroke-linejoin="round"><path d="m12 3.8 2.5 5.2 5.6.8-4.1 3.9 1 5.6-5-2.7-5 2.7 1-5.6-4.1-3.9 5.6-.8z"></path></svg></sc-if></span>
                 <span style="font-size: 13px; line-height: 17px; color: #6C6C70">{{f.detail}}</span>
               </div>
-              <button aria-label="{{f.starLabel}}" aria-pressed="{{f.fav}}" style="width: 36px; height: 36px; border: none; border-radius: 18px; background: transparent; color: {{f.starColor}}; display: flex; align-items: center; justify-content: center">
-                <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="{{f.starFill}}" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="m12 3.8 2.5 5.2 5.6.8-4.1 3.9 1 5.6-5-2.7-5 2.7 1-5.6-4.1-3.9 5.6-.8z"></path></svg>
-              </button>
             </div>
           </sc-for>
         </div>
@@ -64,7 +61,7 @@ button{cursor:pointer}
 class Component extends DCLogic {
   renderVals() {
     const accent = this.props.accent ?? '#990000';
-    const row = (name, detail, fav) => ({ name, detail, fav: fav ? 'true' : 'false', starLabel: fav ? 'Remove from favourite fandoms' : 'Add to favourite fandoms', starColor: fav ? '#E2A100' : '#AEAEB2', starFill: fav ? '#F5C400' : 'none' });
+    const row = (name, detail, fav) => ({ name, detail, isFav: !!fav, fav: fav ? 'true' : 'false', starLabel: fav ? 'Remove from favourite fandoms' : 'Add to favourite fandoms', starColor: fav ? '#E2A100' : '#AEAEB2', starFill: fav ? '#F5C400' : 'none' });
     const art = (h) => 'linear-gradient(155deg, hsl(' + h + ', 46%, 27%), hsl(' + ((h + 22) % 360) + ', 50%, 41%))';
     const seedOf = (t) => { let h = 7; for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) >>> 0; return h; };
     const FAN = { 'Original Work': 188, 'Persuasion': 335, 'Sherlock Holmes': 32, 'Jane Eyre': 262, 'Northanger Abbey': 290, 'Pride and Prejudice': 150 };

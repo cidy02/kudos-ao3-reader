@@ -68,7 +68,7 @@ button{cursor:pointer}
         <div role="progressbar" aria-label="Voice pack download" aria-valuenow="64" aria-valuemin="0" aria-valuemax="100" style="height: 6px; border-radius: 3px; background: #E5E5EA"><div style="width: 64%; height: 6px; border-radius: 3px; background: {{accent}}"></div></div>
         <div style="display: flex; justify-content: space-between; align-items: center">
           <span style="font-size: 13px; color: #6C6C70">Runs on the Neural Engine, fully offline.</span>
-          <button style="border: none; background: none; font-family: inherit; font-size: 15px; color: #D70015">Cancel</button>
+          <button style="border: none; background: none; font-family: inherit; font-size: 15px; color: #D70015">Cancel Download</button>
         </div>
       </div>
     </section>
@@ -86,6 +86,10 @@ button{cursor:pointer}
 
     <button style="height: 46px; border: none; border-radius: 16px; background: #FFFFFF; font-family: inherit; font-size: 16px; color: #D70015">Reset Read Aloud</button>
   </main>
+  <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 150px; background: linear-gradient(to bottom, #F2F2F700, #F2F2F7F0 72%); pointer-events: none"></div>
+  <div style="position: absolute; left: 16px; bottom: 28px; z-index: 3">
+    <dc-import name="TabBar" selected="account" accent="#990000" hint-size="358px,62px"></dc-import>
+  </div>
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"$preview":{"width":390,"height":1100}}'>

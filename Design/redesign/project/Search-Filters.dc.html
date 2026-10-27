@@ -23,8 +23,8 @@ button{cursor:pointer}
   <section role="dialog" aria-label="Filters" style="position: absolute; left: 0; right: 0; top: 64px; bottom: 0; border-radius: 38px 38px 0 0; background: #F2F2F7; box-shadow: 0 -8px 30px rgba(0,0,0,0.18); overflow: hidden">
     <div aria-hidden="true" style="width: 36px; height: 5px; border-radius: 3px; background: #C7C7CC; margin: 7px auto 0"></div>
     <header style="display: flex; align-items: center; justify-content: space-between; padding: 6px 16px 10px">
-      <button aria-label="Reset filters" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.8); box-shadow: 0 4px 14px rgba(0,0,0,0.08), 0 0 0 0.5px rgba(0,0,0,0.06)">
-        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3"></path><path d="M4.5 4.5v3h3"></path></svg>
+      <button aria-label="Close" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.8); box-shadow: 0 4px 14px rgba(0,0,0,0.08), 0 0 0 0.5px rgba(0,0,0,0.06)">
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"></path></svg>
       </button>
       <h2 style="margin: 0; font-size: 17px; line-height: 22px; font-weight: 600">Filters</h2>
       <button aria-label="Apply filters" style="width: 44px; height: 44px; border: none; border-radius: 22px; background: #990000; color: #FFFFFF; display: flex; align-items: center; justify-content: center">
@@ -102,7 +102,8 @@ button{cursor:pointer}
           <div style="min-height: 48px; padding: 0 16px; display: flex; align-items: center; gap: 8px"><span style="flex: 1; font-size: 17px">{{r.label}}</span><span style="font-size: 17px; color: #6C6C70">{{r.value}}</span><svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg></div>
         </sc-for>
       </div>
-      <a href="Search.dc.html" style="margin-top: 16px; min-height: 48px; border-radius: 16px; background: #FFFFFF; text-decoration: none; font-size: 17px; color: #990000; display: flex; align-items: center; justify-content: center">Save Search…</a>
+      <button style="margin-top: 16px; width: 100%; min-height: 48px; border: none; border-radius: 16px; background: #FFFFFF; font-family: inherit; font-size: 17px; color: #D70015; display: flex; align-items: center; justify-content: center">Reset Filters</button>
+      <a href="Search.dc.html" style="margin-top: 8px; min-height: 48px; border-radius: 16px; background: #FFFFFF; text-decoration: none; font-size: 17px; color: #990000; display: flex; align-items: center; justify-content: center">Save Search…</a>
     </div>
   </section>
 </div>

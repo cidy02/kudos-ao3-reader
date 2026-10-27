@@ -32,7 +32,7 @@ button{cursor:pointer}
         <div style="padding: 8px 12px; border-top: 0.5px solid #E5E5EA">
           <div role="radiogroup" aria-label="How to hide" style="height: 32px; border-radius: 9px; background: rgba(118,118,128,0.12); padding: 2px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr))">
             <button role="radio" aria-checked="true" style="border: none; border-radius: 7px; background: #FFFFFF; box-shadow: 0 2px 5px rgba(0,0,0,0.12); font-family: inherit; font-size: 14px; font-weight: 600">Blur</button>
-            <button role="radio" aria-checked="false" style="border: none; border-radius: 7px; background: transparent; font-family: inherit; font-size: 14px">Hide completely</button>
+            <button role="radio" aria-checked="false" style="border: none; border-radius: 7px; background: transparent; font-family: inherit; font-size: 14px">Hide Completely</button>
           </div>
         </div>
         <div style="display: flex; align-items: center; height: 46px; padding: 0 16px; border-top: 0.5px solid #E5E5EA">
@@ -55,6 +55,10 @@ button{cursor:pointer}
       <p style="margin: 0 16px; font-size: 13px; line-height: 18px; color: #6C6C70">Kudos keeps your reading on this device. Your AO3 sign-in stays in the Keychain and is never in a backup.</p>
     </section>
   </main>
+  <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 150px; background: linear-gradient(to bottom, #F2F2F700, #F2F2F7F0 72%); pointer-events: none"></div>
+  <div style="position: absolute; left: 16px; bottom: 28px; z-index: 3">
+    <dc-import name="TabBar" selected="account" accent="#990000" hint-size="358px,62px"></dc-import>
+  </div>
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"$preview":{"width":390,"height":844}}'>
