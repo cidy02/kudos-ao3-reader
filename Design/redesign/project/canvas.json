@@ -13,7 +13,7 @@
     {"id": "coverage", "name": "Feature coverage"}
   ],
   "boards": {
-    "Direction.dc.html": {"x": 0, "y": 0, "w": 2700, "h": 2400, "title": "Direction · pick one, or mix", "page": "direction"},
+    "Direction.dc.html": {"x": 0, "y": 0, "w": 2700, "h": 2700, "title": "Direction · pick one, or mix", "page": "direction"},
 
     "Main.dc.html": {"x": 0, "y": 0, "w": 390, "h": 1960, "title": "Home", "page": "iphone"},
     "Library.dc.html": {"x": 470, "y": 0, "w": 390, "h": 1980, "title": "Library", "page": "iphone"},
