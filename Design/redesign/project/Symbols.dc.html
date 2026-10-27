@@ -42,13 +42,14 @@ body{margin:0}
   </sc-for>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"rating":{"editor":"enum","options":["G","T","M","E","NR"],"default":"T"},"category":{"editor":"enum","options":["FF","FM","MM","Gen","Multi","Other","NA"],"default":"FM"},"warnings":{"editor":"enum","options":["none","undisclosed","present"],"default":"none"},"status":{"editor":"enum","options":["complete","wip","unknown"],"default":"wip"},"variant":{"editor":"enum","options":["grid","strip","labeled"],"default":"grid"},"size":{"editor":"int","default":40,"min":10,"max":64},"only":{"editor":"enum","options":["all","rating","category","warnings","status"],"default":"all"},"warningCount":{"editor":null,"default":1},"chapters":{"editor":null,"default":""},"$preview":{"width":84,"height":84}}'>
+<script type="text/x-dc" data-dc-script data-props='{"rating":{"editor":"enum","options":["G","T","M","E","NR"],"default":"T"},"category":{"editor":"enum","options":["FF","FM","MM","Gen","Multi","Other","NA"],"default":"FM"},"warnings":{"editor":"enum","options":["none","undisclosed","present"],"default":"none"},"status":{"editor":"enum","options":["complete","wip","unknown"],"default":"wip"},"variant":{"editor":"enum","options":["grid","strip","labeled","inline"],"default":"grid"},"size":{"editor":"int","default":40,"min":10,"max":64},"only":{"editor":"enum","options":["all","rating","category","warnings","status"],"default":"all"},"warningCount":{"editor":null,"default":1},"chapters":{"editor":null,"default":""},"$preview":{"width":84,"height":84}}'>
 class Component extends DCLogic {
   renderVals() {
     const s = Math.max(10, Number(this.props.size ?? 40));
     const variant = this.props.variant ?? 'grid';
     const count = Number(this.props.warningCount ?? 1);
-    const chapters = this.props.chapters ?? '';
+    const inline = variant === 'inline';
+    const chapters = inline ? '' : (this.props.chapters ?? '');
     const solid = (bg, fg) => ({ bg, fg: fg || '#FFFFFF', shadow: 'none' });
     const soft = (bg, fg) => ({ bg: bg || '#E6E6EB', fg: fg || '#6C6C70', shadow: 'none' });
     const dash = (o) => ({ ...o, kind: 'dash' });
@@ -80,7 +81,7 @@ class Component extends DCLogic {
     };
     const statuses = {
       complete: { ...solid('#2F8F3A'), kind: 'check', label: 'Complete' },
-      wip: { ...soft('#FFE6C2', '#B35A00'), kind: 'ring', label: 'In progress' },
+      wip: { ...soft('#FFE6C2', '#B35A00'), kind: 'ring', label: inline ? 'WIP' : 'In progress' },
       unknown: { ...letter(soft(), '?'), label: 'Status unknown' }
     };
 
@@ -88,7 +89,7 @@ class Component extends DCLogic {
     const category = categories[this.props.category ?? 'FM'] || categories.NA;
     const warning = warnings[this.props.warnings ?? 'none'] || warnings.none;
     const status = statuses[this.props.status ?? 'wip'] || statuses.unknown;
-    const showLabels = variant === 'labeled';
+    const showLabels = variant === 'labeled' || inline;
     const tiles = [rating, category, warning, { ...status, detail: chapters ? ' ' + chapters : '' }].map((t) => ({
       ...t,
       detail: t.detail || '',
@@ -103,7 +104,7 @@ class Component extends DCLogic {
       isMulti: t.kind === 'multi'
     }));
     const only = { rating: 0, category: 1, warnings: 2, status: 3 }[this.props.only ?? 'all'];
-    const gap = showLabels ? 8 : Math.max(2, Math.round(s * 0.12));
+    const gap = inline ? 10 : (showLabels ? 8 : Math.max(2, Math.round(s * 0.12)));
     return {
       tiles: only === undefined ? tiles : [tiles[only]],
       size: s,
@@ -112,11 +113,11 @@ class Component extends DCLogic {
       dashH: Math.max(2, Math.round(s * 0.11)),
       gap,
       showLabels,
-      labelGap: showLabels ? 7 : 0,
-      chipPad: showLabels ? '3px 11px 3px 3px' : '0',
-      chipBg: showLabels ? '#F2F2F7' : 'transparent',
+      labelGap: inline ? 5 : (showLabels ? 7 : 0),
+      chipPad: variant === 'labeled' ? '3px 11px 3px 3px' : '0',
+      chipBg: variant === 'labeled' ? '#F2F2F7' : 'transparent',
       labelSize: Math.max(12, Math.round(s * 0.62)),
-      display: variant === 'labeled' ? 'flex' : 'inline-grid',
+      display: showLabels ? 'flex' : 'inline-grid',
       cols: variant === 'strip' ? 'repeat(4, minmax(0, 1fr))' : 'repeat(2, minmax(0, 1fr))',
       aria: 'Rating: ' + (rating.aria || rating.label) + '. Category: ' + category.label + '. ' + (warning.aria || warning.label) + '. ' + status.label + (chapters ? ', ' + chapters + ' chapters' : '') + '.'
     };
