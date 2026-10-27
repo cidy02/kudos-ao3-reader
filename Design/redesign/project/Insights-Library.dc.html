@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Reading Insights · Library</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 390px; height: {{height}}px; position: relative; overflow: hidden; background: #F2F2F7; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+  <div style="position: absolute; left: 0; top: 0">
+    <dc-import name="InsightsTop" tab="library" hint-size="390px,204px"></dc-import>
+  </div>
+
+  <main style="padding: 212px 16px 0; display: flex; flex-direction: column; gap: 12px">
+    <section aria-label="Unread" style="background: #FFFFFF; border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 2px">
+      <span style="font-size: 13px; line-height: 18px; color: #6C6C70">Unread in your library</span>
+      <div style="display: flex; align-items: baseline; gap: 8px">
+        <span style="font-size: 38px; line-height: 44px; font-weight: 700; letter-spacing: -0.5px">1.24M</span>
+        <span style="font-size: 15px; color: #3A3A3C">words · 86 works</span>
+      </div>
+      <span style="font-size: 13px; line-height: 18px; color: #6C6C70">About 5 months at your recent pace</span>
+      <div style="height: 0.5px; background: #E5E5EA; margin: 10px 0 8px"></div>
+      <div role="img" aria-label="This month you added 410,000 words and read 212,600" style="display: flex; flex-direction: column; gap: 8px">
+        <div style="display: flex; align-items: center; gap: 10px"><span style="width: 52px; font-size: 13px; color: #3A3A3C">Added</span><div style="flex: 1; height: 10px"><div style="width: 100%; height: 10px; border-radius: 3px; background: #8E8E93"></div></div><span style="width: 52px; text-align: right; font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums">410k</span></div>
+        <div style="display: flex; align-items: center; gap: 10px"><span style="width: 52px; font-size: 13px; color: #3A3A3C">Read</span><div style="flex: 1; height: 10px"><div style="width: 52%; height: 10px; border-radius: 3px; background: {{accent}}"></div></div><span style="width: 52px; text-align: right; font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums">212.6k</span></div>
+      </div>
+    </section>
+
+    <h2 style="margin: 6px 4px 0; font-size: 20px; line-height: 25px; font-weight: 700">Where Everything Stands</h2>
+    <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
+      <sc-for list="{{statuses}}" as="s" hint-placeholder-count="7">
+        <button style="width: 100%; height: 52px; border: none; background: transparent; padding: 0 16px; display: flex; align-items: center; gap: 12px; font-family: inherit; text-align: left; border-top: {{s.sep}}">
+          <span aria-hidden="true" style="width: 28px; height: 28px; border-radius: 7px; background: {{s.tile}}; color: #FFFFFF; display: flex; align-items: center; justify-content: center"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="{{s.icon}}"></path></svg></span>
+          <span style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+            <span style="font-size: 16px; line-height: 21px; color: #000000">{{s.label}}</span>
+            <sc-if value="{{s.hasDetail}}" hint-placeholder-val="{{false}}"><span style="font-size: 12px; line-height: 16px; color: #6C6C70">{{s.detail}}</span></sc-if>
+          </span>
+          <span style="font-size: 16px; color: #6C6C70; font-variant-numeric: tabular-nums">{{s.n}}</span>
+          <svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg>
+        </button>
+      </sc-for>
+    </div>
+
+    <section aria-label="Still reading this?" style="background: #FFFFFF; border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; flex-direction: column; gap: 1px">
+        <span style="display: flex; align-items: center; gap: 6px; font-size: 12px; line-height: 16px; color: #6C6C70"><span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 4px; background: #2F7A4A"></span>Original Work · untouched for 3 weeks</span>
+        <span style="font-size: 17px; line-height: 22px; font-weight: 600">Still reading The Cartographer’s Daughter?</span>
+        <span style="font-size: 13px; line-height: 18px; color: #6C6C70">Chapter 7 of 12 · 58%</span>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+        <button style="height: 40px; border: none; border-radius: 20px; background: rgba(118,118,128,0.12); font-family: inherit; font-size: 15px; font-weight: 600; color: #1C1C1E">Still Reading</button>
+        <button style="height: 40px; border: none; border-radius: 20px; background: rgba(118,118,128,0.12); font-family: inherit; font-size: 15px; font-weight: 600; color: {{accent}}">Stopped…</button>
+      </div>
+    </section>
+
+    <figure style="margin: 0; background: #FFFFFF; border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px">
+      <figcaption style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-size: 15px; line-height: 20px; font-weight: 600">Works in Progress</span><span style="font-size: 13px; color: #6C6C70">38 saved</span></figcaption>
+      <div role="img" aria-label="21 updated in the last 6 months, 6 in 6 to 12 months, 11 not for over a year" style="height: 14px; display: flex; gap: 2px; border-radius: 4px; overflow: hidden">
+        <sc-for list="{{wips}}" as="w" hint-placeholder-count="3"><span style="flex: {{w.n}}; background: {{w.color}}"></span></sc-for>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px">
+        <sc-for list="{{wips}}" as="w" hint-placeholder-count="3">
+          <div style="display: flex; flex-direction: column; gap: 1px">
+            <span style="display: flex; align-items: center; gap: 5px; font-size: 12px; line-height: 16px; color: #6C6C70; white-space: nowrap"><span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 2px; background: {{w.color}}"></span>{{w.label}}</span>
+            <span style="font-size: 17px; line-height: 22px; font-weight: 600">{{w.n}}</span>
+            <span style="font-size: 11px; line-height: 14px; color: #8E8E93">{{w.detail}}</span>
+          </div>
+        </sc-for>
+      </div>
+    </figure>
+
+    <button style="border: none; border-radius: 16px; background: #FFFFFF; padding: 14px 16px; display: flex; align-items: center; gap: 12px; font-family: inherit; text-align: left; color: #000000">
+      <span aria-hidden="true" style="width: 36px; height: 36px; border-radius: 9px; background: #F2F2F7; color: #3A3A3C; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18v4H3zM5 11v9h14v-9M10 15h4"></path></svg></span>
+      <span style="flex: 1; display: flex; flex-direction: column; gap: 1px">
+        <span style="font-size: 16px; line-height: 21px; font-weight: 600">No Longer on AO3</span>
+        <span style="font-size: 13px; line-height: 18px; color: #6C6C70">14 works · 1.1M words · 12 kept as your last copy</span>
+      </span>
+      <svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg>
+    </button>
+
+    <section aria-label="Kudos, bookmarks and comments" style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
+      <div style="padding: 14px 16px 6px; display: flex; justify-content: space-between; align-items: baseline">
+        <h2 style="margin: 0; font-size: 15px; line-height: 20px; font-weight: 600">On Finished Works</h2>
+        <span style="font-size: 13px; color: #6C6C70">312 finished</span>
+      </div>
+      <div style="padding: 0 16px 10px; display: flex; flex-direction: column; gap: 8px">
+        <sc-for list="{{feedback}}" as="f" hint-placeholder-count="3">
+          <div style="display: flex; align-items: center; gap: 10px">
+            <span style="width: 96px; font-size: 14px; line-height: 20px">{{f.label}}</span>
+            <div style="flex: 1; height: 6px; border-radius: 3px; background: #F2F2F7"><div style="width: {{f.pct}}%; height: 6px; border-radius: 3px; background: {{accent}}"></div></div>
+            <span style="width: 36px; text-align: right; font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums">{{f.pct}}%</span>
+          </div>
+        </sc-for>
+        <span style="font-size: 12px; line-height: 16px; color: #8E8E93">Bookmarks: 22 public, 96 private</span>
+      </div>
+      <button style="width: 100%; height: 48px; border: none; border-top: 0.5px solid #E5E5EA; background: transparent; padding: 0 16px; display: flex; align-items: center; gap: 10px; font-family: inherit; font-size: 15px; color: #000000; text-align: left">
+        <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="{{accent}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10Z"></path></svg>
+        <span style="flex: 1">Favourites Without Kudos</span>
+        <span style="color: #6C6C70">7</span>
+        <svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg>
+      </button>
+    </section>
+
+    <section aria-label="Series" style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
+      <div style="padding: 14px 16px 10px; display: flex; flex-direction: column; gap: 8px">
+        <h2 style="margin: 0; font-size: 15px; line-height: 20px; font-weight: 600">Series</h2>
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+          <div style="display: flex; flex-direction: column"><span style="font-size: 22px; line-height: 28px; font-weight: 700">18</span><span style="font-size: 12px; line-height: 16px; color: #6C6C70">started</span></div>
+          <div style="display: flex; flex-direction: column"><span style="font-size: 22px; line-height: 28px; font-weight: 700">7</span><span style="font-size: 12px; line-height: 16px; color: #6C6C70">read to the last part</span></div>
+        </div>
+        <span style="font-size: 13px; line-height: 18px; color: #3A3A3C">Longest finished: <span style="font-weight: 600">The Bath Letters</span> · 5 parts, 412k</span>
+      </div>
+      <button style="width: 100%; height: 48px; border: none; border-top: 0.5px solid #E5E5EA; background: transparent; padding: 0 16px; display: flex; align-items: center; gap: 10px; font-family: inherit; font-size: 15px; color: #000000; text-align: left">
+        <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="{{accent}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h4v16H5zM10 4h4v16h-4zM16 5l3.5-1 3 15-3.5 1z"></path></svg>
+        <span style="flex: 1">Next Part Waiting</span>
+        <span style="color: #6C6C70">4 series</span>
+        <svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg>
+      </button>
+    </section>
+
+    <h2 style="margin: 6px 4px 0; font-size: 20px; line-height: 25px; font-weight: 700">Authors</h2>
+    <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
+      <sc-for list="{{authors}}" as="a" hint-placeholder-count="3">
+        <button style="width: 100%; border: none; background: transparent; padding: 0 16px; height: 58px; display: flex; align-items: center; gap: 12px; font-family: inherit; text-align: left; border-top: {{a.sep}}">
+          <span aria-hidden="true" style="width: 34px; height: 34px; border-radius: 17px; background: {{a.bg}}; color: {{a.fg}}; font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center">{{a.initial}}</span>
+          <span style="flex: 1; min-width: 0; display: flex; flex-direction: column"><span style="font-size: 16px; line-height: 21px; color: #000000">{{a.name}}</span><span style="font-size: 13px; line-height: 17px; color: #6C6C70">{{a.detail}}</span></span>
+          <svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg>
+        </button>
+      </sc-for>
+    </div>
+
+    <figure style="margin: 0; background: #FFFFFF; border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px">
+      <figcaption style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-size: 15px; line-height: 20px; font-weight: 600">How Finished Works Arrived</span><span style="font-size: 13px; color: #6C6C70">since July</span></figcaption>
+      <sc-for list="{{sources}}" as="s" hint-placeholder-count="5">
+        <div style="display: flex; align-items: center; gap: 10px">
+          <span style="width: 124px; font-size: 14px; line-height: 20px">{{s.label}}</span>
+          <div style="flex: 1; height: 6px; border-radius: 3px; background: #F2F2F7"><div style="width: {{s.w}}%; height: 6px; border-radius: 3px; background: #6C6C70"></div></div>
+          <span style="width: 36px; text-align: right; font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums">{{s.pct}}%</span>
+        </div>
+      </sc-for>
+    </figure>
+
+    <section aria-label="Found early" style="background: #FFFFFF; border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px">
+      <div style="display: flex; justify-content: space-between; align-items: baseline">
+        <h2 style="margin: 0; font-size: 15px; line-height: 20px; font-weight: 600">Found Early</h2>
+        <span style="font-size: 13px; color: #6C6C70">since July</span>
+      </div>
+      <div style="display: flex; align-items: baseline; gap: 8px"><span style="font-size: 22px; line-height: 28px; font-weight: 700">34%</span><span style="font-size: 13px; line-height: 18px; color: #6C6C70">of finished works had under 500 kudos when you saved them</span></div>
+      <div style="border-radius: 12px; background: #F2F2F7; padding: 10px 12px; display: flex; align-items: center; gap: 10px">
+        <span style="flex: 1; min-width: 0; display: flex; flex-direction: column"><span style="font-size: 15px; line-height: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Letters Never Sent</span><span style="font-size: 12px; line-height: 16px; color: #6C6C70">310 kudos when saved</span></span>
+        <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8E8E93" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>
+        <span style="display: flex; flex-direction: column; align-items: flex-end"><span style="font-size: 15px; line-height: 20px; font-weight: 600">1,530</span><span style="font-size: 12px; line-height: 16px; color: #6C6C70">now</span></span>
+      </div>
+    </section>
+
+    <button style="height: 48px; border: none; border-radius: 16px; background: #FFFFFF; padding: 0 16px; display: flex; align-items: center; gap: 10px; font-family: inherit; font-size: 15px; color: #000000; text-align: left">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8E8E93" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="8" ry="3"></ellipse><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"></path></svg>
+      <span style="flex: 1">Storage and Library Health</span>
+      <svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg>
+    </button>
+  </main>
+
+  <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 150px; background: linear-gradient(to bottom, rgba(242,242,247,0), rgba(242,242,247,0.94) 72%); pointer-events: none"></div>
+  <div style="position: absolute; left: 16px; bottom: 28px">
+    <dc-import name="TabBar" selected="library" accent="{{accent}}" hint-size="358px,62px"></dc-import>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"height":{"editor":"number","default":2450},"$preview":{"width":390,"height":2450}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const accent = this.props.accent ?? '#990000';
+    const sep = (i) => (i ? '0.5px solid #E5E5EA' : 'none');
+    const I = {
+      reading: 'M3 5.5C5.5 4.5 8.5 4.5 12 6.5c3.5-2 6.5-2 9-1V19c-2.5-1-5.5-1-9 1-3.5-2-6.5-2-9-1zM12 6.5V20',
+      caught: 'M12 7v5l3 2M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z',
+      stack: 'M4 9h16v11H4zM6 6h12M8 3h8',
+      hold: 'M10 9v6M14 9v6M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z',
+      later: 'M6 3h12v18l-6-4-6 4z',
+      done: 'm8 12.5 3 3 5-6M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z',
+      stopped: 'M7 7l10 10M17 7 7 17'
+    };
+    return {
+      accent,
+      height: this.props.height ?? 2450,
+      statuses: [
+        { label: 'Reading', n: 9, icon: I.reading, tile: accent },
+        { label: 'Caught Up', detail: 'every posted chapter read', n: 14, icon: I.caught, tile: '#2C6DB0' },
+        { label: 'Letting Chapters Stack', detail: 'back when 3 more are posted', n: 5, icon: I.stack, tile: '#5E5CE6' },
+        { label: 'On Hold', n: 3, icon: I.hold, tile: '#8E8E93' },
+        { label: 'Saved for Later', n: 86, icon: I.later, tile: '#B07D12' },
+        { label: 'Finished', n: 312, icon: I.done, tile: '#2F7A4A' },
+        { label: 'Stopped', n: 23, icon: I.stopped, tile: '#636366' }
+      ].map((s, i) => ({ ...s, hasDetail: !!s.detail, detail: s.detail || '', sep: sep(i) })),
+      wips: [
+        { label: 'Active', n: 21, detail: 'in 6 months', color: '#3A3A3C' },
+        { label: 'Quiet', n: 6, detail: '6–12 months', color: '#8E8E93' },
+        { label: 'Dormant', n: 11, detail: 'over a year', color: '#D1D1D6' }
+      ],
+      feedback: [
+        { label: 'Kudos left', pct: 71 },
+        { label: 'Bookmarked', pct: 38 },
+        { label: 'Commented', pct: 9 }
+      ],
+      authors: [
+        { name: 'quietharbor', detail: '9 read · 412k words · 7 finished', initial: 'Q', bg: 'hsl(320, 42%, 90%)', fg: 'hsl(320, 40%, 34%)' },
+        { name: 'marginalia', detail: '6 read · 188k words · 6 finished', initial: 'M', bg: 'hsl(140, 42%, 90%)', fg: 'hsl(140, 40%, 34%)' },
+        { name: 'fogandlamplight', detail: '5 read · 61k words · 4 finished', initial: 'F', bg: 'hsl(38, 42%, 90%)', fg: 'hsl(38, 40%, 34%)' }
+      ].map((a, i) => ({ ...a, sep: sep(i) })),
+      sources: [['Search', 38], ['Marked for Later', 21], ['Subscriptions', 17], ['Share Sheet', 14], ['Series', 10]].map(([label, pct]) => ({ label, pct, w: Math.round((pct / 38) * 100) }))
+    };
+  }
+}
+</script>
+</body>
+</html>

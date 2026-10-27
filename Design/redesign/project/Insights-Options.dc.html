@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Insights Options</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 390px; height: 920px; position: relative; overflow: hidden; background: #F2F2F7; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+  <div aria-hidden="true" style="position: absolute; left: 0; top: 0">
+    <dc-import name="Insights-Overview" height="{{bgHeight}}" hint-size="390px,920px"></dc-import>
+  </div>
+  <div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(0,0,0,0.20)"></div>
+
+  <section role="dialog" aria-label="Insights Options" style="position: absolute; left: 0; right: 0; top: 64px; bottom: 0; border-radius: 38px 38px 0 0; background: #F2F2F7; box-shadow: 0 -8px 30px rgba(0,0,0,0.18); overflow: hidden">
+    <div aria-hidden="true" style="width: 36px; height: 5px; border-radius: 3px; background: #C7C7CC; margin: 7px auto 0"></div>
+    <header style="position: relative; display: flex; align-items: center; padding: 6px 16px 10px">
+      <button aria-label="Close" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.8); box-shadow: 0 4px 14px rgba(0,0,0,0.08), 0 0 0 0.5px rgba(0,0,0,0.06)">
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"></path></svg>
+      </button>
+      <h2 style="position: absolute; left: 72px; right: 72px; margin: 0; text-align: center; font-size: 17px; line-height: 22px; font-weight: 600">Insights Options</h2>
+    </header>
+
+    <div style="padding: 4px 16px 0; display: flex; flex-direction: column; gap: 6px">
+      <sc-for list="{{groups}}" as="g" hint-placeholder-count="3">
+        <h3 style="margin: 14px 16px 0; font-size: 13px; line-height: 18px; font-weight: 400; color: #6C6C70">{{g.title}}</h3>
+        <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
+          <sc-for list="{{g.rows}}" as="r" hint-placeholder-count="3">
+            <div style="display: flex; align-items: center; min-height: 46px; padding: 0 16px; gap: 8px; border-top: {{r.sep}}">
+              <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="{{r.ic}}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-right: 4px"><path d="{{r.d}}"></path></svg>
+              <span style="flex: 1; font-size: 16px; color: {{r.color}}">{{r.label}}</span>
+              <sc-if value="{{r.isToggle}}" hint-placeholder-val="{{false}}">
+                <span role="switch" aria-checked="{{r.on}}" aria-label="{{r.label}}" style="width: 51px; height: 31px; border-radius: 16px; background: {{r.track}}; position: relative"><span style="position: absolute; left: {{r.knob}}px; top: 2px; width: 27px; height: 27px; border-radius: 16px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.2)"></span></span>
+              </sc-if>
+              <sc-if value="{{r.isLink}}" hint-placeholder-val="{{false}}">
+                <span style="font-size: 16px; color: #6C6C70">{{r.value}}</span>
+                <svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg>
+              </sc-if>
+            </div>
+          </sc-for>
+        </div>
+        <sc-if value="{{g.hasFooter}}" hint-placeholder-val="{{true}}"><p style="margin: 0 16px; font-size: 13px; line-height: 18px; color: #6C6C70">{{g.footer}}</p></sc-if>
+      </sc-for>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"$preview":{"width":390,"height":920}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const accent = this.props.accent ?? '#990000';
+    const D = {
+      eye: 'M3 3l18 18M10.6 6.1A9.8 9.8 0 0 1 12 6c6 0 9.5 6 9.5 6a17 17 0 0 1-2.6 3.3M6.6 6.6A16.6 16.6 0 0 0 2.5 12S6 18 12 18a9.6 9.6 0 0 0 4.4-1.1M9.9 9.9a3 3 0 0 0 4.2 4.2',
+      clock: 'M12 3.5a8.5 8.5 0 1 1 0 17 8.5 8.5 0 0 1 0-17zM12 7.5V12l3 2',
+      reread: 'M4 12a8 8 0 0 1 13.7-5.7L20 8.5M20 4v4.5h-4.5M20 12a8 8 0 0 1-13.7 5.7L4 15.5M4 20v-4.5h4.5',
+      listen: 'M4 14v-2a8 8 0 0 1 16 0v2M4 14h3v6H5a1 1 0 0 1-1-1zM20 14h-3v6h2a1 1 0 0 0 1-1z',
+      ask: 'M12 20a8 8 0 1 0-7.2-4.5L4 20l4.5-.8A8 8 0 0 0 12 20zM9.8 9.5a2.3 2.3 0 0 1 4.4.8c0 1.5-2.2 1.8-2.2 3.2M12 16.2v.1',
+      exclude: 'M12 3.5a8.5 8.5 0 1 1 0 17 8.5 8.5 0 0 1 0-17zM8 12h8',
+      export: 'M12 15V3.5M8 7.5l4-4 4 4M6 11H5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-1',
+      reset: 'M4.5 12a7.5 7.5 0 1 0 2.2-5.3L4.5 9M4.5 4.5V9H9',
+      info: 'M12 3.5a8.5 8.5 0 1 1 0 17 8.5 8.5 0 0 1 0-17zM12 11v5.5M12 7.8v.2'
+    };
+    const t = (label, d, on) => ({ label, d, ic: '#6C6C70', color: '#000000', isToggle: true, isLink: false, on: on ? 'true' : 'false', track: on ? accent : '#E9E9EB', knob: on ? 22 : 2, value: '' });
+    const l = (label, d, value, ic, color) => ({ label, d, ic: ic || '#6C6C70', color: color || '#000000', isToggle: false, isLink: !!value || value === '', value: value || '', on: 'false', track: '', knob: 0 });
+    const groups = [
+      {
+        title: 'Privacy',
+        rows: [t('Discreet Mode', D.eye, false), t('Hide Reading Time', D.clock, false)],
+        footer: 'Discreet Mode hides fandom, relationship, character and tag names here and in exports. Totals stay.'
+      },
+      {
+        title: 'What Counts',
+        rows: [
+          t('Count Rereads in Totals', D.reread, true),
+          t('Count Read Aloud as Reading', D.listen, true),
+          t('Ask About Untouched Works', D.ask, true),
+          l('Left Out of Insights', D.exclude, '3')
+        ],
+        footer: 'Kudos asks after 3 weeks without opening a work you’re partway through. A work is only marked stopped when you say so.'
+      },
+      {
+        title: 'Reading History',
+        rows: [
+          { ...l('Export Reading History…', D.export, null, accent, accent), isLink: false },
+          { ...l('Reset Insights…', D.reset, null, '#D70015', '#D70015'), isLink: false }
+        ],
+        footer: 'Export saves sessions, statuses and reasons as CSV or JSON. Reset deletes the reading log only; works, progress and statuses stay.'
+      },
+      {
+        title: '',
+        rows: [l('How Reading Insights Are Counted', D.info, '')],
+        footer: ''
+      }
+    ];
+    return {
+      bgHeight: 920,
+      groups: groups.map((g) => ({
+        ...g,
+        hasFooter: !!g.footer,
+        rows: g.rows.map((r, i) => ({ ...r, sep: i ? '0.5px solid #E5E5EA' : 'none' }))
+      }))
+    };
+  }
+}
+</script>
+</body>
+</html>

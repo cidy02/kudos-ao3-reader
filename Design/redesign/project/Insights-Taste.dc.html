@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Reading Insights · Taste</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 390px; height: {{height}}px; position: relative; overflow: hidden; background: #F2F2F7; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+  <div style="position: absolute; left: 0; top: 0">
+    <dc-import name="InsightsTop" tab="taste" hint-size="390px,204px"></dc-import>
+  </div>
+
+  <main style="padding: 212px 16px 0; display: flex; flex-direction: column; gap: 12px">
+    <section aria-label="Your usual fic" style="border-radius: 16px; padding: 16px; background: linear-gradient(160deg, #FFFFFF 40%, #F7E9F0); display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; justify-content: space-between; align-items: baseline">
+        <h2 style="margin: 0; font-size: 15px; line-height: 20px; font-weight: 600">Your Usual Fic</h2>
+        <span style="font-size: 13px; color: #6C6C70">from 21 works</span>
+      </div>
+      <p style="margin: 0; font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: 20px; line-height: 27px">A complete, Teen-rated F/M slow burn in <span style="font-weight: 600">Persuasion</span>, 50–150k words long, with Anne Elliot/Frederick Wentworth, pining and letters.</p>
+      <div style="display: flex; flex-wrap: wrap; gap: 6px">
+        <sc-for list="{{usual}}" as="u" hint-placeholder-count="6"><span style="padding: 3px 9px; border-radius: 10px; background: rgba(255,255,255,0.8); box-shadow: 0 0 0 0.5px rgba(0,0,0,0.08); font-size: 12px; line-height: 16px; color: #3A3A3C">{{u}}</span></sc-for>
+      </div>
+    </section>
+
+    <div style="display: flex; align-items: center; justify-content: space-between; padding: 4px 4px 0">
+      <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">Fandoms</h2>
+      <button aria-label="Rank by: Words" style="height: 28px; padding: 0 9px 0 11px; border: none; border-radius: 14px; background: rgba(118,118,128,0.12); font-family: inherit; font-size: 13px; font-weight: 500; color: #1C1C1E; display: flex; align-items: center; gap: 4px">By Words<svg aria-hidden="true" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg></button>
+    </div>
+    <div style="background: #FFFFFF; border-radius: 16px; padding: 4px 16px">
+      <sc-for list="{{fandoms}}" as="f" hint-placeholder-count="5">
+        <div style="padding: 9px 0; display: flex; flex-direction: column; gap: 6px; border-top: {{f.sep}}">
+          <div style="display: flex; align-items: baseline; gap: 8px">
+            <span style="flex: 1; min-width: 0; font-size: 15px; line-height: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{f.name}}</span>
+            <span style="font-size: 13px; color: #6C6C70; font-variant-numeric: tabular-nums">{{f.works}}</span>
+            <span style="width: 48px; text-align: right; font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums">{{f.words}}</span>
+          </div>
+          <div style="height: 6px; border-radius: 3px; background: #F2F2F7"><div style="width: {{f.pct}}%; height: 6px; border-radius: 3px; background: {{f.color}}"></div></div>
+        </div>
+      </sc-for>
+    </div>
+
+    <h2 style="margin: 6px 4px 0; font-size: 20px; line-height: 25px; font-weight: 700">Relationships</h2>
+    <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
+      <sc-for list="{{ships}}" as="r" hint-placeholder-count="4">
+        <div style="padding: 9px 16px; display: flex; align-items: center; gap: 12px; border-top: {{r.sep}}">
+          <span aria-hidden="true" title="{{r.kind}}" style="width: 28px; height: 28px; border-radius: 8px; background: #F2F2F7; color: #3A3A3C; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 600">{{r.glyph}}</span>
+          <span style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+            <span style="font-size: 15px; line-height: 20px">{{r.name}}</span>
+            <span style="display: flex; align-items: center; gap: 5px; font-size: 12px; line-height: 16px; color: #6C6C70; white-space: nowrap"><span aria-hidden="true" style="width: 7px; height: 7px; border-radius: 4px; background: {{r.color}}"></span>{{r.kind}} · {{r.fandom}} · {{r.works}}</span>
+          </span>
+          <span style="width: 48px; text-align: right; font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums">{{r.words}}</span>
+        </div>
+      </sc-for>
+      <div style="padding: 12px 16px 14px; border-top: 0.5px solid #E5E5EA; display: flex; flex-direction: column; gap: 8px">
+        <span style="font-size: 13px; line-height: 18px; font-weight: 600; color: #3A3A3C">Ship Concentration</span>
+        <sc-for list="{{concentration}}" as="c" hint-placeholder-count="3">
+          <div style="display: flex; align-items: center; gap: 10px">
+            <span style="width: 118px; font-size: 13px; line-height: 18px; color: #3A3A3C; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{c.fandom}}</span>
+            <div style="flex: 1; height: 6px; border-radius: 3px; background: #F2F2F7"><div style="width: {{c.pct}}%; height: 6px; border-radius: 3px; background: {{c.color}}"></div></div>
+            <span style="width: 116px; font-size: 12px; line-height: 16px; color: #6C6C70; text-align: right; white-space: nowrap">{{c.label}}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <h2 style="margin: 6px 4px 0; font-size: 20px; line-height: 25px; font-weight: 700">Characters</h2>
+    <div style="background: #FFFFFF; border-radius: 16px; padding: 14px 16px; display: flex; flex-wrap: wrap; gap: 8px">
+      <sc-for list="{{characters}}" as="c" hint-placeholder-count="8">
+        <span style="height: 30px; padding: 0 11px; border-radius: 15px; background: #F2F2F7; display: flex; align-items: center; gap: 6px; font-size: 14px; color: #000000"><span aria-hidden="true" style="width: 7px; height: 7px; border-radius: 4px; background: {{c.color}}"></span>{{c.name}}<span style="color: #6C6C70; font-variant-numeric: tabular-nums">{{c.n}}</span></span>
+      </sc-for>
+    </div>
+
+    <h2 style="margin: 6px 4px 0; font-size: 20px; line-height: 25px; font-weight: 700">Tags</h2>
+    <div style="background: #FFFFFF; border-radius: 16px; padding: 4px 16px">
+      <sc-for list="{{tags}}" as="t" hint-placeholder-count="8">
+        <div style="height: 36px; display: flex; align-items: center; gap: 10px; border-top: {{t.sep}}">
+          <span style="width: 150px; font-size: 15px; line-height: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{t.name}}</span>
+          <div style="flex: 1; height: 6px; border-radius: 3px; background: #F2F2F7"><div style="width: {{t.pct}}%; height: 6px; border-radius: 3px; background: #6C6C70"></div></div>
+          <span style="width: 44px; text-align: right; font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums">{{t.words}}</span>
+        </div>
+      </sc-for>
+      <div style="padding: 10px 0 12px; border-top: 0.5px solid #E5E5EA; display: flex; flex-direction: column; gap: 6px">
+        <span style="font-size: 13px; line-height: 18px; font-weight: 600; color: #3A3A3C">Often Together</span>
+        <sc-for list="{{pairs}}" as="p" hint-placeholder-count="3">
+          <div style="display: flex; align-items: center; gap: 6px; font-size: 14px; line-height: 20px">
+            <span style="padding: 1px 8px; border-radius: 9px; background: #F2F2F7">{{p.a}}</span><span aria-hidden="true" style="color: #8E8E93">+</span><span style="padding: 1px 8px; border-radius: 9px; background: #F2F2F7">{{p.b}}</span>
+            <span style="flex: 1; text-align: right; font-size: 13px; color: #6C6C70">{{p.n}}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <h2 style="margin: 6px 4px 0; font-size: 20px; line-height: 25px; font-weight: 700">Ratings, Categories, Warnings</h2>
+    <figure style="margin: 0; background: #FFFFFF; border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px">
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <figcaption style="font-size: 13px; line-height: 18px; font-weight: 600; color: #3A3A3C">Rating</figcaption>
+        <div role="img" aria-label="General 5, Teen 9, Mature 5, Explicit 2" style="height: 12px; display: flex; gap: 2px; border-radius: 4px; overflow: hidden">
+          <sc-for list="{{ratings}}" as="r" hint-placeholder-count="4"><span style="flex: {{r.n}}; background: {{r.color}}"></span></sc-for>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px">
+          <sc-for list="{{ratings}}" as="r" hint-placeholder-count="4"><span style="display: flex; align-items: center; gap: 5px; font-size: 13px; color: #3A3A3C; white-space: nowrap"><span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 2px; background: {{r.color}}"></span>{{r.label}} <span style="font-weight: 600; color: #000000">{{r.n}}</span></span></sc-for>
+        </div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <span style="font-size: 13px; line-height: 18px; font-weight: 600; color: #3A3A3C">Status</span>
+        <div role="img" aria-label="Complete 14, Work in Progress 7" style="height: 12px; display: flex; gap: 2px; border-radius: 4px; overflow: hidden"><span style="flex: 14; background: #3A3A3C"></span><span style="flex: 7; background: #C7C7CC"></span></div>
+        <div style="display: flex; gap: 16px; font-size: 13px; color: #3A3A3C"><span style="display: flex; align-items: center; gap: 5px"><span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 2px; background: #3A3A3C"></span>Complete <span style="font-weight: 600; color: #000000">14</span></span><span style="display: flex; align-items: center; gap: 5px"><span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 2px; background: #C7C7CC"></span>Work in Progress <span style="font-weight: 600; color: #000000">7</span></span></div>
+      </div>
+      <div style="height: 0.5px; background: #E5E5EA"></div>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px">
+        <div style="display: flex; flex-direction: column; gap: 4px">
+          <span style="font-size: 13px; line-height: 18px; font-weight: 600; color: #3A3A3C">Category</span>
+          <sc-for list="{{categories}}" as="c" hint-placeholder-count="5"><div style="display: flex; justify-content: space-between; font-size: 14px; line-height: 21px"><span>{{c.label}}</span><span style="font-weight: 600; font-variant-numeric: tabular-nums">{{c.n}}</span></div></sc-for>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 4px">
+          <span style="font-size: 13px; line-height: 18px; font-weight: 600; color: #3A3A3C">Warnings</span>
+          <sc-for list="{{warnings}}" as="w" hint-placeholder-count="4"><div style="display: flex; justify-content: space-between; gap: 6px; font-size: 14px; line-height: 21px"><span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{w.label}}</span><span style="font-weight: 600; font-variant-numeric: tabular-nums">{{w.n}}</span></div></sc-for>
+        </div>
+      </div>
+    </figure>
+
+    <figure style="margin: 0; background: #FFFFFF; border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px">
+      <figcaption style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-size: 15px; line-height: 20px; font-weight: 600">When They Were Posted</span><span style="font-size: 13px; color: #6C6C70">median 2019</span></figcaption>
+      <div role="img" aria-label="Works read by the year they were posted on AO3, 2010 to 2026" style="height: 56px; display: flex; align-items: flex-end; gap: 3px">
+        <sc-for list="{{years}}" as="y" hint-placeholder-count="17"><span style="flex: 1; height: {{y.h}}px; border-radius: 2px 2px 1px 1px; background: {{y.color}}"></span></sc-for>
+      </div>
+      <div aria-hidden="true" style="display: flex; justify-content: space-between; font-size: 11px; color: #6C6C70"><span>2010</span><span>2014</span><span>2018</span><span>2022</span><span>2026</span></div>
+    </figure>
+
+    <dl style="margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+      <div style="background: #FFFFFF; border-radius: 16px; padding: 12px 14px; display: flex; flex-direction: column; gap: 1px">
+        <dt style="font-size: 13px; line-height: 18px; color: #6C6C70">Crossovers</dt>
+        <dd style="margin: 0; font-size: 22px; line-height: 28px; font-weight: 700">2 <span style="font-size: 15px; font-weight: 400; color: #6C6C70">of 21</span></dd>
+        <dd style="margin: 0; font-size: 12px; line-height: 16px; color: #8E8E93">Holmes × Jane Eyre, both</dd>
+      </div>
+      <div style="background: #FFFFFF; border-radius: 16px; padding: 12px 14px; display: flex; flex-direction: column; gap: 1px">
+        <dt style="font-size: 13px; line-height: 18px; color: #6C6C70">Languages</dt>
+        <dd style="margin: 0; font-size: 22px; line-height: 28px; font-weight: 700">2</dd>
+        <dd style="margin: 0; font-size: 12px; line-height: 16px; color: #8E8E93">English 20 · Français 1</dd>
+      </div>
+    </dl>
+  </main>
+
+  <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 150px; background: linear-gradient(to bottom, rgba(242,242,247,0), rgba(242,242,247,0.94) 72%); pointer-events: none"></div>
+  <div style="position: absolute; left: 16px; bottom: 28px">
+    <dc-import name="TabBar" selected="library" accent="{{accent}}" hint-size="358px,62px"></dc-import>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"height":{"editor":"number","default":2750},"$preview":{"width":390,"height":2750}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const accent = this.props.accent ?? '#990000';
+    const C = { per: '#9C2F6B', sh: '#B07D12', je: '#2C6DB0', ow: '#2F7A4A', other: '#C7C7CC' };
+    const sep = (i) => (i ? '0.5px solid #E5E5EA' : 'none');
+    const fandoms = [
+      ['Persuasion', 71.4, 5, C.per], ['Sherlock Holmes', 52.3, 4, C.sh], ['Jane Eyre', 38.9, 3, C.je],
+      ['Original Work', 27.6, 4, C.ow], ['4 other fandoms', 22.4, 5, C.other]
+    ];
+    const tags = [['Slow Burn', 96.2], ['Pining', 88.0], ['Hurt/Comfort', 61.5], ['Found Family', 54.9], ['Canon Divergence', 47.3], ['Epistolary', 33.0], ['Alternate Universe - Modern Setting', 29.4], ['Fluff', 18.1]];
+    const yearCounts = [0, 1, 0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 1, 1, 0, 1, 2];
+    const ymax = Math.max(...yearCounts);
+    return {
+      accent,
+      height: this.props.height ?? 2750,
+      usual: ['Complete', 'Teen And Up', 'F/M', 'Slow Burn', '50–150k', 'Anne Elliot/Frederick Wentworth', 'Pining', 'Epistolary'],
+      fandoms: fandoms.map(([name, w, n, color], i) => ({ name, words: w.toFixed(1) + 'k', works: n + ' works', pct: Math.round((w / 71.4) * 100), color, sep: sep(i) })),
+      ships: [
+        { glyph: '/', kind: 'Romantic', name: 'Anne Elliot/Frederick Wentworth', fandom: 'Persuasion', color: C.per, works: '4 works', words: '57.8k' },
+        { glyph: '&', kind: 'Platonic', name: 'Sherlock Holmes & John Watson', fandom: 'Sherlock Holmes', color: C.sh, works: '3 works', words: '38.0k' },
+        { glyph: '/', kind: 'Romantic', name: 'Jane Eyre/Edward Rochester', fandom: 'Jane Eyre', color: C.je, works: '2 works', words: '24.1k' },
+        { glyph: '/', kind: 'Romantic', name: 'Sherlock Holmes/John Watson', fandom: 'Sherlock Holmes', color: C.sh, works: '1 work', words: '14.3k' }
+      ].map((r, i) => ({ ...r, sep: sep(i) })),
+      concentration: [
+        { fandom: 'Persuasion', pct: 81, color: C.per, label: '81% on one ship' },
+        { fandom: 'Sherlock Holmes', pct: 64, color: C.sh, label: '64% · 3 ships' },
+        { fandom: 'Jane Eyre', pct: 62, color: C.je, label: '62% · 2 ships' }
+      ],
+      characters: [
+        ['Anne Elliot', 5, C.per], ['Frederick Wentworth', 5, C.per], ['Sherlock Holmes', 4, C.sh], ['John Watson', 4, C.sh],
+        ['Jane Eyre', 3, C.je], ['Edward Rochester', 3, C.je], ['Elinor Vane', 3, C.ow], ['Mrs Hudson', 2, C.sh], ['Lady Russell', 2, C.per]
+      ].map(([name, n, color]) => ({ name, n, color })),
+      tags: tags.map(([name, w], i) => ({ name, words: w.toFixed(0) + 'k', pct: Math.round((w / 96.2) * 100), sep: sep(i) })),
+      pairs: [
+        { a: 'Slow Burn', b: 'Pining', n: '5 works' },
+        { a: 'Hurt/Comfort', b: 'Found Family', n: '4 works' },
+        { a: 'Canon Divergence', b: 'Fix-It', n: '3 works' }
+      ],
+      ratings: [['General', 5, '#EBC2C2'], ['Teen', 9, '#D67F7F'], ['Mature', 5, '#B53B3B'], ['Explicit', 2, '#7E0F0F']].map(([label, n, color]) => ({ label, n, color })),
+      categories: [['F/M', 9], ['Gen', 6], ['M/M', 4], ['F/F', 1], ['Multi', 1]].map(([label, n]) => ({ label, n })),
+      warnings: [['No Warnings Apply', 15], ['Chose Not to Warn', 4], ['Graphic Violence', 1], ['Major Character Death', 1]].map(([label, n]) => ({ label, n })),
+      years: yearCounts.map((n) => ({ h: n ? Math.round((n / ymax) * 52) + 4 : 3, color: n ? '#6C6C70' : '#E5E5EA' }))
+    };
+  }
+}
+</script>
+</body>
+</html>

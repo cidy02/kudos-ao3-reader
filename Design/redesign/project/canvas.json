@@ -366,7 +366,7 @@
     "Insights.dc.html": {
       "h": 844,
       "page": "iphone",
-      "title": "Reading Insights",
+      "title": "Reading Insights · first screen (all screens on the Reading Insights page)",
       "w": 390,
       "x": 3290,
       "y": 0
@@ -818,6 +818,78 @@
       "w": 1280,
       "x": 1360,
       "y": 0
+    },
+    "Insights-Overview.dc.html": {
+      "h": 1830,
+      "page": "insights",
+      "title": "Overview · words, time, fandoms, records, finished",
+      "w": 390,
+      "x": 0,
+      "y": 0
+    },
+    "Insights-Taste.dc.html": {
+      "h": 2750,
+      "page": "insights",
+      "title": "Taste · your usual fic, fandoms, relationships, tags, AO3 labels",
+      "w": 390,
+      "x": 470,
+      "y": 0
+    },
+    "Insights-Habits.dc.html": {
+      "h": 2200,
+      "page": "insights",
+      "title": "Habits · time of day, reading days, sittings, rereads, stopped",
+      "w": 390,
+      "x": 940,
+      "y": 0
+    },
+    "Insights-Library.dc.html": {
+      "h": 2450,
+      "page": "insights",
+      "title": "Library · unread, statuses, WIPs, kudos, series, authors",
+      "w": 390,
+      "x": 1410,
+      "y": 0
+    },
+    "Insights-Options.dc.html": {
+      "h": 920,
+      "page": "insights",
+      "title": "Insights Options (sheet from •••)",
+      "w": 390,
+      "x": 1880,
+      "y": 0
+    },
+    "Insights-Stopped.dc.html": {
+      "h": 844,
+      "page": "insights",
+      "title": "Stopped Reading? (sheet)",
+      "w": 390,
+      "x": 1880,
+      "y": 1020
+    },
+    "Insights-Data.dc.html": {
+      "h": 3440,
+      "page": "insights",
+      "title": "The data Insights needs · D1–D11",
+      "w": 1280,
+      "x": 2400,
+      "y": 0
+    },
+    "Insights-Metrics.dc.html": {
+      "h": 3840,
+      "page": "insights",
+      "title": "What each card counts · rule, data, status",
+      "w": 1280,
+      "x": 3760,
+      "y": 0
+    },
+    "InsightsTop.dc.html": {
+      "h": 204,
+      "page": "system",
+      "title": "Reading Insights header (component)",
+      "w": 390,
+      "x": 1360,
+      "y": 2760
     }
   },
   "createdOnFiles": {
@@ -843,7 +915,9 @@
     "rowWork",
     "whyDuo",
     "whyIphone",
-    "note-47ewmx"
+    "note-47ewmx",
+    "rowInsightsScreens",
+    "rowInsightsSpec"
   ],
   "notes": {
     "rowAccount": {
@@ -969,6 +1043,24 @@
       "w": 240,
       "x": -1114,
       "y": 7387
+    },
+    "rowInsightsScreens": {
+      "kind": "title1",
+      "maxW": 2270,
+      "page": "insights",
+      "text": "Reading Insights · four screens and two sheets",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "rowInsightsSpec": {
+      "kind": "title1",
+      "maxW": 2640,
+      "page": "insights",
+      "text": "Data spec · what the code needs to record",
+      "w": 240,
+      "x": 2400,
+      "y": -300
     }
   },
   "order": [
@@ -1073,7 +1165,16 @@
     "CommentThread.dc.html",
     "ChapterEditor.dc.html",
     "DuoSideBar.dc.html",
-    "Needs-Work.dc.html"
+    "Needs-Work.dc.html",
+    "Insights-Overview.dc.html",
+    "Insights-Taste.dc.html",
+    "Insights-Habits.dc.html",
+    "Insights-Library.dc.html",
+    "Insights-Options.dc.html",
+    "Insights-Stopped.dc.html",
+    "Insights-Data.dc.html",
+    "Insights-Metrics.dc.html",
+    "InsightsTop.dc.html"
   ],
   "pages": [
     {
@@ -1111,6 +1212,10 @@
     {
       "id": "coverage",
       "name": "Feature coverage"
+    },
+    {
+      "id": "insights",
+      "name": "Reading Insights"
     }
   ],
   "title": "Kudos for iPhone Duo"

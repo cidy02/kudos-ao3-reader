@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Reading Insights · Habits</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 390px; height: {{height}}px; position: relative; overflow: hidden; background: #F2F2F7; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+  <div style="position: absolute; left: 0; top: 0">
+    <dc-import name="InsightsTop" tab="habits" hint-size="390px,204px"></dc-import>
+  </div>
+
+  <main style="padding: 212px 16px 0; display: flex; flex-direction: column; gap: 12px">
+    <figure style="margin: 0; background: #FFFFFF; border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px">
+      <figcaption style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-size: 15px; line-height: 20px; font-weight: 600">Time of Day</span><span style="font-size: 13px; color: #6C6C70">most at 21:00–23:00</span></figcaption>
+      <div role="img" aria-label="Reading time by hour of day. Most reading between 21:00 and 23:00; 13% between 1:00 and 5:00." style="position: relative; height: 110px; display: flex; align-items: flex-end; gap: 3px">
+        <div aria-hidden="true" style="position: absolute; left: {{lateLeft}}px; width: {{lateWidth}}px; top: 0; bottom: 0; border-radius: 6px; background: #F6E8E8"></div>
+        <span aria-hidden="true" style="position: absolute; left: {{lateLeft}}px; top: 6px; width: {{lateWidth}}px; text-align: center; font-size: 11px; line-height: 13px; font-weight: 600; color: #3A3A3C">13%</span>
+        <sc-for list="{{hours}}" as="h" hint-placeholder-count="24"><span style="position: relative; flex: 1; height: {{h.h}}px; border-radius: 3px 3px 1px 1px; background: {{h.color}}"></span></sc-for>
+      </div>
+      <div aria-hidden="true" style="display: flex; justify-content: space-between; font-size: 11px; color: #6C6C70"><span>0:00</span><span>6:00</span><span>12:00</span><span>18:00</span><span>24:00</span></div>
+      <span style="font-size: 13px; line-height: 18px; color: #6C6C70">Late night, 1:00–5:00: 1 h 50 m this month</span>
+    </figure>
+
+    <figure style="margin: 0; background: #FFFFFF; border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px">
+      <figcaption style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-size: 15px; line-height: 20px; font-weight: 600">Reading Days</span><span style="font-size: 13px; color: #6C6C70">22 of 27</span></figcaption>
+      <div aria-hidden="true" style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; font-size: 11px; line-height: 14px; color: #8E8E93; text-align: center">
+        <span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span>
+      </div>
+      <div role="img" aria-label="Calendar of October with each day shaded by words read" style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px">
+        <sc-for list="{{cal}}" as="c" hint-placeholder-count="35">
+          <span style="height: 34px; border-radius: 8px; background: {{c.bg}}; border: {{c.border}}; box-sizing: border-box; display: flex; align-items: flex-start; justify-content: flex-end; padding: 3px 5px; font-size: 10px; line-height: 12px; font-weight: 500; color: {{c.fg}}; font-variant-numeric: tabular-nums">{{c.label}}</span>
+        </sc-for>
+      </div>
+      <div style="display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: #6C6C70">
+        <span>Longest streak 11 days · now 1 day</span>
+        <span style="display: flex; align-items: center; gap: 3px">Less<span aria-hidden="true" style="width: 10px; height: 10px; border-radius: 3px; background: #F2F2F7"></span><span aria-hidden="true" style="width: 10px; height: 10px; border-radius: 3px; background: #EBC2C2"></span><span aria-hidden="true" style="width: 10px; height: 10px; border-radius: 3px; background: #D67F7F"></span><span aria-hidden="true" style="width: 10px; height: 10px; border-radius: 3px; background: #B53B3B"></span><span aria-hidden="true" style="width: 10px; height: 10px; border-radius: 3px; background: #7E0F0F"></span>More</span>
+      </div>
+    </figure>
+
+    <figure style="margin: 0; background: #FFFFFF; border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px">
+      <figcaption style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-size: 15px; line-height: 20px; font-weight: 600">Sittings</span><span style="font-size: 13px; color: #6C6C70">35 this month</span></figcaption>
+      <div role="img" aria-label="Sittings by length: 6 under 10 minutes, 15 from 10 to 30, 9 from 30 to 60, 4 from 1 to 2 hours, 1 over 2 hours" style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; align-items: end">
+        <sc-for list="{{sittings}}" as="s" hint-placeholder-count="5">
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 4px">
+            <span style="font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums">{{s.n}}</span>
+            <span style="width: 100%; height: {{s.h}}px; border-radius: 4px 4px 1px 1px; background: {{accent}}"></span>
+            <span style="font-size: 11px; line-height: 13px; color: #6C6C70; white-space: nowrap">{{s.label}}</span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="height: 0.5px; background: #E5E5EA"></div>
+      <dl style="margin: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px">
+        <sc-for list="{{sitStats}}" as="s" hint-placeholder-count="3">
+          <div style="display: flex; flex-direction: column; gap: 1px">
+            <dt style="font-size: 12px; line-height: 16px; color: #6C6C70">{{s.label}}</dt>
+            <dd style="margin: 0; font-size: 19px; line-height: 24px; font-weight: 600; font-variant-numeric: tabular-nums">{{s.value}}</dd>
+          </div>
+        </sc-for>
+      </dl>
+      <div style="height: 0.5px; background: #E5E5EA"></div>
+      <div style="display: flex; flex-direction: column">
+        <div style="height: 30px; display: flex; align-items: center; gap: 10px; font-size: 15px"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8E8E93" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4M10 12h4M17 12h4"></path><path d="m15 8 4 4-4 4"></path></svg><span style="flex: 1">Skimmed</span><span style="font-size: 13px; color: #6C6C70">left out of totals</span><span style="font-weight: 600; font-variant-numeric: tabular-nums">9.1k</span></div>
+        <div style="height: 30px; display: flex; align-items: center; gap: 10px; font-size: 15px; border-top: 0.5px solid #E5E5EA"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8E8E93" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"></path><circle cx="12" cy="12" r="3"></circle></svg><span style="flex: 1">Peeked at the Ending</span><span style="font-weight: 600; font-variant-numeric: tabular-nums">2 works</span></div>
+      </div>
+    </figure>
+
+    <section aria-label="From saved to finished" style="background: #FFFFFF; border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px">
+      <h2 style="margin: 0; font-size: 15px; line-height: 20px; font-weight: 600">From Saved to Finished</h2>
+      <div role="img" aria-label="Median 6 days from saving a work to opening it, then 3 days from opening to finishing" style="display: grid; grid-template-columns: 12px minmax(0, 1fr) 12px minmax(0, 1fr) 12px; align-items: center">
+        <span aria-hidden="true" style="width: 12px; height: 12px; border-radius: 6px; border: 2px solid #8E8E93; box-sizing: border-box"></span>
+        <span aria-hidden="true" style="height: 2px; background: #C7C7CC"></span>
+        <span aria-hidden="true" style="width: 12px; height: 12px; border-radius: 6px; background: #D67F7F"></span>
+        <span aria-hidden="true" style="height: 2px; background: {{accent}}"></span>
+        <span aria-hidden="true" style="width: 12px; height: 12px; border-radius: 6px; background: {{accent}}"></span>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: -6px">
+        <span style="font-size: 12px; line-height: 16px; color: #6C6C70">Saved</span>
+        <span style="font-size: 12px; line-height: 16px; color: #6C6C70; text-align: center">Opened</span>
+        <span style="font-size: 12px; line-height: 16px; color: #6C6C70; text-align: right">Finished</span>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+        <div style="display: flex; flex-direction: column"><span style="font-size: 19px; line-height: 24px; font-weight: 600">6 days</span><span style="font-size: 12px; line-height: 16px; color: #6C6C70">saved to opened, median</span></div>
+        <div style="display: flex; flex-direction: column"><span style="font-size: 19px; line-height: 24px; font-weight: 600">3 days</span><span style="font-size: 12px; line-height: 16px; color: #6C6C70">opened to finished, median</span></div>
+      </div>
+      <div style="height: 0.5px; background: #E5E5EA"></div>
+      <div style="display: flex; align-items: center; gap: 10px; font-size: 15px">
+        <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8E8E93" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3M12 18v3M3 12h3M18 12h3"></path><circle cx="12" cy="12" r="5"></circle></svg>
+        <span style="flex: 1; display: flex; flex-direction: column"><span>New Chapters</span><span style="font-size: 12px; line-height: 16px; color: #6C6C70">read after they post, median of 12</span></span>
+        <span style="font-weight: 600">1.4 days</span>
+      </div>
+    </section>
+
+    <section aria-label="Rereads" style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
+      <div style="padding: 14px 16px 8px; display: flex; justify-content: space-between; align-items: baseline">
+        <h2 style="margin: 0; font-size: 15px; line-height: 20px; font-weight: 600">Rereads</h2>
+        <span style="font-size: 13px; color: #6C6C70">18% of reading time</span>
+      </div>
+      <sc-for list="{{rereads}}" as="w" hint-placeholder-count="3">
+        <button style="width: 100%; border: none; background: transparent; padding: 9px 16px; display: flex; align-items: center; gap: 12px; font-family: inherit; text-align: left; border-top: 0.5px solid #E5E5EA">
+          <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px">
+            <span style="font-size: 16px; line-height: 21px; color: #000000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{w.title}}</span>
+            <span style="display: flex; align-items: center; gap: 5px; font-size: 12px; line-height: 16px; color: #6C6C70"><span aria-hidden="true" style="width: 7px; height: 7px; border-radius: 4px; background: {{w.color}}"></span>{{w.detail}}</span>
+          </span>
+          <span style="font-size: 15px; font-weight: 600; color: #000000">{{w.times}}</span>
+        </button>
+      </sc-for>
+    </section>
+
+    <figure style="margin: 0; background: #FFFFFF; border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px">
+      <figcaption style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-size: 15px; line-height: 20px; font-weight: 600">Fandom Timeline</span><span style="font-size: 13px; color: #6C6C70">2026 so far</span></figcaption>
+      <div role="img" aria-label="Share of reading per fandom for each month from January to October 2026" style="display: flex; flex-direction: column; gap: 6px">
+        <sc-for list="{{lanes}}" as="l" hint-placeholder-count="4">
+          <div style="display: flex; align-items: center; gap: 8px">
+            <span style="width: 104px; font-size: 13px; line-height: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{l.name}}</span>
+            <div style="flex: 1; display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 3px">
+              <sc-for list="{{l.cells}}" as="c" hint-placeholder-count="10"><span style="height: 18px; border-radius: 4px; background: {{c}}"></span></sc-for>
+            </div>
+          </div>
+        </sc-for>
+        <div aria-hidden="true" style="display: flex; align-items: center; gap: 8px">
+          <span style="width: 104px"></span>
+          <div style="flex: 1; display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 3px; font-size: 10px; color: #8E8E93; text-align: center"><span>J</span><span>F</span><span>M</span><span>A</span><span>M</span><span>J</span><span>J</span><span>A</span><span>S</span><span>O</span></div>
+        </div>
+      </div>
+      <span style="font-size: 13px; line-height: 18px; color: #6C6C70">New this year: Jane Eyre, from July</span>
+    </figure>
+
+    <section aria-label="Stopped reading" style="background: #FFFFFF; border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; justify-content: space-between; align-items: baseline">
+        <h2 style="margin: 0; font-size: 15px; line-height: 20px; font-weight: 600">Stopped Reading</h2>
+        <span style="font-size: 13px; color: #6C6C70">3 this month · 23 in all</span>
+      </div>
+      <div style="display: flex; align-items: baseline; gap: 8px"><span style="font-size: 22px; line-height: 28px; font-weight: 700">31%</span><span style="font-size: 13px; color: #6C6C70">of the way in, typically</span></div>
+      <sc-for list="{{reasons}}" as="r" hint-placeholder-count="5">
+        <div style="display: flex; align-items: center; gap: 10px">
+          <span style="width: 118px; font-size: 14px; line-height: 20px">{{r.label}}</span>
+          <div style="flex: 1; height: 6px; border-radius: 3px; background: #F2F2F7"><div style="width: {{r.pct}}%; height: 6px; border-radius: 3px; background: #6C6C70"></div></div>
+          <span style="width: 20px; text-align: right; font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums">{{r.n}}</span>
+        </div>
+      </sc-for>
+      <div style="height: 0.5px; background: #E5E5EA"></div>
+      <span style="font-size: 13px; line-height: 18px; font-weight: 600; color: #3A3A3C">Common in Stopped Works</span>
+      <div style="display: flex; flex-wrap: wrap; gap: 6px">
+        <sc-for list="{{stopTags}}" as="t" hint-placeholder-count="3"><span style="padding: 3px 9px; border-radius: 10px; background: #F2F2F7; font-size: 13px; line-height: 18px">{{t.name}} <span style="color: #6C6C70">{{t.n}}</span></span></sc-for>
+      </div>
+    </section>
+  </main>
+
+  <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 150px; background: linear-gradient(to bottom, rgba(242,242,247,0), rgba(242,242,247,0.94) 72%); pointer-events: none"></div>
+  <div style="position: absolute; left: 16px; bottom: 28px">
+    <dc-import name="TabBar" selected="library" accent="{{accent}}" hint-size="358px,62px"></dc-import>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"height":{"editor":"number","default":2200},"$preview":{"width":390,"height":2200}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const accent = this.props.accent ?? '#990000';
+    // Minutes read at each hour of the day over the month.
+    const mins = [42, 30, 26, 14, 6, 0, 0, 4, 8, 6, 4, 6, 18, 12, 6, 8, 10, 14, 26, 40, 58, 92, 104, 70];
+    const max = Math.max(...mins);
+    const barW = (326 - 23 * 3) / 24;
+    // Words per day (thousands), 1–27 October; 28–31 are still to come.
+    const k = [6.2, 9.8, 0, 12.4, 4.1, 7.7, 10.9, 15.2, 0, 3.4, 8.8, 5.1, 9.6, 11.2, 14.7, 6.0, 31.4, 8.2, 7.4, 12.9, 0, 0, 5.6, 9.1, 4.9, 0, 8.0];
+    const shade = (v) => (v === 0 ? '#F2F2F7' : v < 5 ? '#EBC2C2' : v < 10 ? '#D67F7F' : v < 15 ? '#B53B3B' : '#7E0F0F');
+    const cal = [];
+    for (let i = 0; i < 3; i++) cal.push({ label: '', bg: 'transparent', border: 'none', fg: 'transparent' });
+    for (let d = 1; d <= 31; d++) {
+      if (d <= 27) {
+        const v = k[d - 1];
+        cal.push({ label: String(d), bg: shade(v), border: 'none', fg: v >= 10 ? '#FFFFFF' : '#6C6C70' });
+      } else {
+        cal.push({ label: String(d), bg: 'transparent', border: '1px dashed #D1D1D6', fg: '#C7C7CC' });
+      }
+    }
+    while (cal.length % 7) cal.push({ label: '', bg: 'transparent', border: 'none', fg: 'transparent' });
+    const sit = [['< 10 m', 6], ['10–30 m', 15], ['30–60 m', 9], ['1–2 h', 4], ['2 h +', 1]];
+    const tint = (hex, a) => hex + ['00', '4D', '99', 'FF'][a];
+    const lanes = [
+      ['Persuasion', '#9C2F6B', [0, 0, 0, 1, 2, 3, 3, 2, 2, 3]],
+      ['Sherlock Holmes', '#B07D12', [3, 3, 2, 2, 1, 1, 0, 1, 2, 2]],
+      ['Jane Eyre', '#2C6DB0', [0, 0, 0, 0, 0, 0, 1, 1, 2, 2]],
+      ['Original Work', '#2F7A4A', [1, 1, 2, 1, 1, 1, 1, 1, 1, 1]]
+    ];
+    const reasons = [['Lost interest', 9], ['Too long', 5], ['Tag dealbreaker', 4], ['Writing style', 3], ['Got spoiled', 2]];
+    return {
+      accent,
+      height: this.props.height ?? 2200,
+      lateLeft: Math.round(1 * (barW + 3) - 2),
+      lateWidth: Math.round(4 * (barW + 3) + 1),
+      hours: mins.map((m) => ({ h: m ? Math.max(4, Math.round((m / max) * 86)) : 3, color: m ? accent : '#E5E5EA' })),
+      cal,
+      sittings: sit.map(([label, n]) => ({ label, n, h: Math.round((n / 15) * 64) + 4 })),
+      sitStats: [
+        { label: 'Typical sitting', value: '24 min' },
+        { label: 'Chapters each', value: '1.8' },
+        { label: 'End on a chapter', value: '62%' }
+      ],
+      rereads: [
+        { title: 'Letters Never Sent', detail: 'Persuasion · 87.5k words across reads', color: '#9C2F6B', times: '×4' },
+        { title: 'The Baker Street Irregular', detail: 'Sherlock Holmes · 27.4k across reads', color: '#B07D12', times: '×3' },
+        { title: 'A Fortnight at Uppercross', detail: 'Persuasion · 98.0k across reads', color: '#9C2F6B', times: '×2' }
+      ],
+      lanes: lanes.map(([name, color, v]) => ({ name, cells: v.map((a) => (a ? tint(color, a) : '#F2F2F7')) })),
+      reasons: reasons.map(([label, n]) => ({ label, n, pct: Math.round((n / 9) * 100) })),
+      stopTags: [{ name: 'Major Character Death', n: 6 }, { name: 'Unhappy Ending', n: 4 }, { name: 'Character Bashing', n: 3 }]
+    };
+  }
+}
+</script>
+</body>
+</html>
