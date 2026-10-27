@@ -22,6 +22,15 @@ Owner, 2026-10-26 (handoff): don't throw away the current app. It already went t
 ## Done
 - Coverage, Symbols key, Native mapping, components, Home, Library (+section, select, filters, queue, queues, collection, insights, recently deleted), Search (+filters), Browse (+fandoms, fandom works, AO3 web), Work Detail (+actions), Comments (+thread), Author, Series, Reader (+menu, contents, find, highlight, settings, Read Aloud, Read Aloud settings), Account, Account signed out, Login, AO3 lists, Shelf options (cover vs text).
 
+## Rollout plan for the mix (owner said "ok" to Your mix and its five choices, 2026-10-27)
+Revisions may go up several files per Artifact call (the type allows one call per revision); new boards still go one at a time.
+R1. Components first, so every board that imports them changes for free: CoverCard (gradient + background letter + tags strip under the cover; hidden = blurred cover + Tap to reveal), new ResumeCard (the gradient card: ring, chapter bars, Resume; Home and Work Detail variants), Symbols `inline` (done), WorkRow (plain row, no panel), TabBar (app colour only). Then a short "Kudos rules" board on the Symbols & components page: colour jobs, the two backgrounds per theme, type styles, 16 pt radius/edge, containers.
+R2. iPhone anchors: Main (Home) and iPhone-WorkDetail rebuilt from Direction-Mix; then Library and Fandom-Works (the other content screens with work shelves/wash).
+R3. Item 8, Duo: review each written Duo board once against the mix and the fold survey, fix, publish; write Duo-Open-Search; then canvas.json, Flow-Duo, Coverage. Cover display = Home/WD at 466 wide; open = sidebar on grouped background, list + detail; Book pose = nothing across the fold, Resume card in one pane.
+R4. Item 6d, iPhone sweep by screen type (batched): content screens → plain background, wash only on a work's/fandom's page; lists, settings, forms, sheets → grouped background with white sections; section headers bold Title 3; caps only on fandom label + stat captions; app colour on every control; labeled → inline tags outside filters; "Save for Later" → "Want to Read".
+R5. Item 10, Android: Home, Work Detail, Reader in Material 3 + Platform-Map update. Same content parts (generated covers, Resume card, tags, chapter bars, wash); Material chrome: LargeTopAppBar that collapses on scroll, NavigationBar, M3 type scale, surface vs surfaceContainer for the two backgrounds, colorScheme.primary = app red, fandom colour as a CompositionLocal, shapes 16 dp.
+R6. Items 9, 11, 12: Dark/Sepia/OLED with the two background levels; AX5; final pass.
+
 ## Queue (work top to bottom; tick when published)
 1. [x] Critique panel result saved to `notes/critique-report.md` (35 verified findings). Root causes: (1) home-made navigation instead of the system's; (2) no rules for colour, shape, type; (3) reading life invisible (no end-of-work moment, kudos forgotten, progress/new chapters hidden). Owner questions from it: fandom colour on buttons or identity only? reader default serif? a "now reading" bar above the tab bar shared with Read Aloud?
    Follow-ups added as 6a–6d below.
