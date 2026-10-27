@@ -7,7 +7,7 @@
       "page": "iphone",
       "title": "AO3 collections",
       "w": 390,
-      "x": 4230,
+      "x": 5090,
       "y": 7780
     },
     "AO3-Lists.dc.html": {
@@ -47,7 +47,7 @@
       "page": "iphone",
       "title": "Account · proposed regroup",
       "w": 390,
-      "x": 5170,
+      "x": 6030,
       "y": 7780
     },
     "Account-SignedOut.dc.html": {
@@ -103,7 +103,7 @@
       "page": "iphone",
       "title": "Challenge",
       "w": 390,
-      "x": 4700,
+      "x": 5560,
       "y": 7780
     },
     "Collection.dc.html": {
@@ -716,10 +716,10 @@
       "y": 1248
     },
     "Text-Editor.dc.html": {
-      "h": 844,
+      "h": 880,
       "page": "iphone",
       "title": "Chapter text editor",
-      "w": 390,
+      "w": 1250,
       "x": 3760,
       "y": 7780
     },
@@ -793,6 +793,14 @@
       "title": "Comment thread (component)",
       "w": 390,
       "x": 1360,
+      "y": 2160
+    },
+    "ChapterEditor.dc.html": {
+      "h": 844,
+      "page": "system",
+      "title": "Chapter editor (component)",
+      "w": 390,
+      "x": 1800,
       "y": 2160
     }
   },
@@ -1035,7 +1043,8 @@
     "AX5.dc.html",
     "CoverStack.dc.html",
     "AppIcon.dc.html",
-    "CommentThread.dc.html"
+    "CommentThread.dc.html",
+    "ChapterEditor.dc.html"
   ],
   "pages": [
     {

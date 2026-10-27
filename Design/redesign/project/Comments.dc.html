@@ -15,6 +15,7 @@ button{cursor:pointer}
 </helmet>
 <div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
   <div aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 0; height: 380px; background: linear-gradient(to bottom, rgba(37,119,132,0.20), rgba(37,119,132,0.12) 35%, rgba(37,119,132,0.05) 65%, rgba(37,119,132,0))"></div>
+  <h1 data-inline-title style="position: absolute; left: 68px; right: 68px; top: 54px; margin: 0; z-index: 2; font-size: 17px; line-height: 44px; font-weight: 600; text-align: center">Comments</h1>
   <div style="position: absolute; left: 16px; right: 16px; top: 54px; display: flex; justify-content: space-between; z-index: 2">
     <button aria-label="Back to work" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)">
       <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg>
@@ -25,22 +26,22 @@ button{cursor:pointer}
   </div>
 
   <main style="position: relative; padding: 106px 0 0; display: flex; flex-direction: column">
-    <header style="padding: 0 16px; display: flex; flex-direction: column; gap: 2px">
-      <span style="font-size: 13px; line-height: 18px; font-weight: 600; color: hsl(188, 56%, 33%)">Comments · Chapter 7</span>
-      <h1 style="margin: 0; font-size: 22px; line-height: 28px; font-weight: 700">The Cartographer’s Daughter</h1>
-      <a href="Author.dc.html" style="align-self: flex-start; text-decoration: none; font-size: 15px; line-height: 20px; color: {{accent}}">inkwell_moth</a>
-    </header>
+    <a href="iPhone-WorkDetail.dc.html" aria-label="The Cartographer’s Daughter by inkwell_moth, Chapter 7 of 20" style="margin: 0 16px; padding: 4px 0; display: flex; align-items: center; gap: 12px; text-decoration: none; color: #000000">
+      <span aria-hidden="true" style="position: relative; width: 40px; height: 56px; flex-shrink: 0; border-radius: 6px; overflow: hidden; background: linear-gradient(155deg, hsl(188, 46%, 27%), hsl(210, 50%, 41%)); box-shadow: 0 2px 6px rgba(0,0,0,0.18)">
+        <span style="position: absolute; left: -3px; bottom: -12px; font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: 44px; line-height: 1; font-weight: 600; color: rgba(255,255,255,0.18)">T</span>
+      </span>
+      <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px">
+        <span style="font-size: 17px; line-height: 22px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">The Cartographer’s Daughter</span>
+        <span style="font-size: 13px; line-height: 18px; color: #6C6C70">inkwell_moth · Chapter 7 of 20</span>
+      </span>
+      <svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg>
+    </a>
 
-    <dl style="margin: 12px 16px 0; padding: 10px 0; border-radius: 16px; background: rgba(118,118,128,0.08); display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); text-align: center">
-      <sc-for list="{{stats}}" as="t" hint-placeholder-count="4">
-        <div style="display: flex; flex-direction: column; gap: 1px; border-left: {{t.sep}}">
-          <dd style="margin: 0; font-size: 17px; line-height: 22px; font-weight: 600; color: {{t.color}}">{{t.value}}</dd>
-          <dt style="font-size: 11px; line-height: 13px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; color: #6C6C70">{{t.label}}</dt>
-        </div>
-      </sc-for>
-    </dl>
+    <p style="margin: 10px 16px 0; font-size: 13px; line-height: 18px; color: #6C6C70">
+      <span style="color: #1C1C1E; font-weight: 600">286 comments</span> · 12 threads · <span style="color: {{accent}}; font-weight: 600">1 yours</span> · latest 20h ago
+    </p>
 
-    <div style="margin: 12px 16px 0; display: flex; gap: 7px">
+    <div style="margin: 10px 16px 0; display: flex; gap: 7px">
       <button aria-label="Browse comments by chapter" style="height: 32px; padding: 0 12px; border: none; border-radius: 16px; background: rgba(37,119,132,0.14); color: hsl(188, 56%, 28%); font-family: inherit; font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 6px">
         <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5C6.5 4 9.5 4 12 6c2.5-2 5.5-2 8-.5V19c-2.5-1.5-5.5-1.5-8 .5-2.5-2-5.5-2-8-.5zM12 6v13.5"></path></svg>Chapter 7
         <svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 9 7 7 7-7"></path></svg>
@@ -79,10 +80,8 @@ class Component extends DCLogic {
       C('Guest', 0, '4d', 'Tomas not laughing at the end is going to live in my head for weeks.', { chapter: 'Ch 7', guest: true }),
       { kind: 'control', depth: 0, label: 'Show 12 replies' }
     ];
-    const sep = '0.5px solid rgba(60,60,67,0.18)';
     return {
       accent,
-      stats: [['286', 'Comments', '#000000'], ['12', 'Threads', '#000000'], ['1', 'Yours', accent], ['20h', 'Latest', '#000000']].map(([value, label, color], i) => ({ value, label, color, sep: i ? sep : 'none' })),
       thread: list
     };
   }
