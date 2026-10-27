@@ -11,107 +11,94 @@
 <style>
 body{margin:0}
 button{cursor:pointer}
+a{color:#990000}a:hover{color:#6E0000}
 </style>
 </helmet>
-<div style="width: 390px; height: 1560px; position: relative; overflow: hidden; background: #F2F2F7; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
-  <main style="padding: 108px 16px 0; display: flex; flex-direction: column; gap: 14px">
-    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center">
-      <div aria-hidden="true" style="width: 124px; height: 182px; border-radius: 8px; background: #1F4E5F; box-shadow: 0 12px 28px rgba(0,0,0,0.22); padding: 14px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: flex-end; gap: 6px; color: #FFFFFF; text-align: left; margin-bottom: 12px">
-        <span style="font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: 17px; line-height: 20px">The Cartographer's Daughter</span>
-        <span style="width: 20px; height: 1px; background: rgba(255,255,255,0.6)"></span>
-        <span style="font-size: 9px; letter-spacing: 0.7px; text-transform: uppercase">inkwell_moth</span>
-      </div>
-      <h1 style="margin: 0; font-size: 24px; line-height: 29px; font-weight: 700">The Cartographer's Daughter</h1>
-      <button style="border: none; background: none; padding: 0; font-family: inherit; font-size: 17px; line-height: 22px; color: {{accent}}">inkwell_moth</button>
-      <button style="border: none; background: none; padding: 0; font-family: inherit; font-size: 15px; line-height: 20px; color: #3A3A3C">Original Work</button>
+<div style="width: 390px; height: 1880px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+  <div aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 0; height: 380px; background: linear-gradient(to bottom, rgba(37,119,132,0.20), rgba(37,119,132,0.12) 35%, rgba(37,119,132,0.05) 65%, rgba(37,119,132,0))"></div>
+  <main style="position: relative; padding: 108px 16px 0; display: flex; flex-direction: column; gap: 14px">
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <a href="Fandom-Works.dc.html" style="align-self: flex-start; text-decoration: none; font-size: 13px; line-height: 18px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; color: hsl(188, 56%, 33%)">Original Work</a>
+      <span aria-hidden="true" style="width: 16px; height: 2px; border-radius: 1px; background: hsl(188, 56%, 33%)"></span>
     </div>
-
-    <div style="display: flex; justify-content: center">
-      <dc-import name="Symbols" variant="labeled" rating="T" category="FM" warnings="none" status="wip" chapters="12/20" size="22" hint-size="358px,64px"></dc-import>
+    <div style="display: flex; flex-direction: column; gap: 2px">
+      <h1 style="margin: 0; font-size: 34px; line-height: 41px; font-weight: 700; letter-spacing: 0.4px">The Cartographer’s Daughter</h1>
+      <a href="Author.dc.html" style="align-self: flex-start; font-size: 17px; line-height: 22px; text-decoration: none">inkwell_moth</a>
     </div>
+    <dc-import name="Symbols" variant="inline" rating="T" category="FM" warnings="none" status="wip" size="20" hint-size="358px,20px"></dc-import>
 
-    <div style="display: flex; gap: 10px">
-      <button style="flex: 1; height: 50px; border: none; border-radius: 25px; background: {{accent}}; color: #FFFFFF; font-family: inherit; font-size: 17px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px">
-        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5z" fill="currentColor"></path></svg>
-        Resume Chapter 7
-      </button>
-      <button aria-label="Read aloud" style="width: 50px; height: 50px; border: none; border-radius: 25px; background: {{accentTint}}; color: {{accent}}; display: flex; align-items: center; justify-content: center">
-        <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"></path><path d="M15.5 9a4.5 4.5 0 0 1 0 6"></path><path d="M18 6.5a8 8 0 0 1 0 11"></path></svg>
-      </button>
-      <button aria-label="Update download: 2 new chapters" style="width: 50px; height: 50px; border: none; border-radius: 25px; background: {{accentTint}}; color: {{accent}}; display: flex; align-items: center; justify-content: center; position: relative">
-        <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"></path><path d="m7 10.5 5 5 5-5"></path><path d="M5 20h14"></path></svg>
-        <span style="position: absolute; top: 2px; right: 2px; min-width: 18px; height: 18px; border-radius: 9px; background: {{accent}}; color: #FFFFFF; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center">2</span>
-      </button>
-    </div>
+    <dc-import name="ResumeCard" variant="detail" accent="#990000" hint-size="358px,330px"></dc-import>
 
-    <dl style="margin: 0; background: #FFFFFF; border-radius: 16px; padding: 12px 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 12px">
+    <dl style="margin: 0; background: #F2F2F7; border-radius: 16px; padding: 14px 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 14px">
       <sc-for list="{{stats}}" as="s" hint-placeholder-count="9">
         <div style="display: flex; flex-direction: column; align-items: center; gap: 2px; border-right: {{s.border}}">
-          <dt style="font-size: 11px; line-height: 13px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; color: #6C6C70">{{s.label}}</dt>
-          <dd style="margin: 0; font-size: 17px; line-height: 22px; font-weight: 600">{{s.value}}</dd>
+          <dt style="font-size: 11px; line-height: 13px; font-weight: 600; letter-spacing: 0.4px; text-transform: uppercase; color: #6C6C70">{{s.label}}</dt>
+          <dd style="margin: 0; font-family: 'SF Pro Rounded', -apple-system, system-ui, sans-serif; font-size: 17px; line-height: 22px; font-weight: 700">{{s.value}}</dd>
         </div>
       </sc-for>
     </dl>
 
-    <section aria-label="Summary and notes" style="background: #FFFFFF; border-radius: 16px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px">
-      <h2 style="margin: 0; font-size: 13px; line-height: 18px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; color: #6C6C70">Summary</h2>
-      <p style="margin: 0; font-size: 15px; line-height: 21px">Elinor Vane inherits her mother's instruments and none of her maps. To finish the last chart she must walk the coast road nobody has drawn in forty years, with the one person who remembers why.</p>
-      <button style="align-self: flex-start; border: none; background: none; padding: 0; font-family: inherit; font-size: 15px; color: {{accent}}">Notes</button>
+    <section aria-label="Summary" style="display: flex; flex-direction: column; gap: 6px; margin-top: 6px">
+      <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">Summary</h2>
+      <p style="margin: 0; font-size: 17px; line-height: 22px">Elinor Vane inherits her mother’s instruments and none of her maps. To finish the last chart she must walk the coast road nobody has drawn in forty years, with the one person who remembers why.</p>
+      <a href="#notes" style="align-self: flex-start; font-size: 17px; line-height: 22px; text-decoration: none">Notes</a>
     </section>
 
-    <section aria-label="Tags" style="background: #FFFFFF; border-radius: 16px; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px">
+    <section aria-label="Tags" style="display: flex; flex-direction: column; gap: 10px">
+      <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">Tags</h2>
       <sc-for list="{{tagGroups}}" as="g" hint-placeholder-count="3">
         <div style="display: flex; flex-direction: column; gap: 6px">
-          <h2 style="margin: 0; font-size: 13px; line-height: 18px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; color: #6C6C70">{{g.title}}</h2>
+          <span style="font-size: 13px; line-height: 18px; color: #6C6C70">{{g.title}}</span>
           <div style="display: flex; flex-wrap: wrap; gap: 6px">
             <sc-for list="{{g.tags}}" as="t" hint-placeholder-count="3">
-              <button style="height: 30px; padding: 0 11px; border: none; border-radius: 15px; background: {{g.bg}}; color: {{g.fg}}; font-family: inherit; font-size: 14px">{{t}}</button>
+              <a href="Search.dc.html" style="height: 32px; padding: 0 12px; border-radius: 16px; background: #EFEFF4; color: #000000; text-decoration: none; font-size: 15px; line-height: 32px">{{t}}</a>
             </sc-for>
           </div>
         </div>
       </sc-for>
     </section>
 
-    <section aria-label="Series" style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
-      <div style="padding: 12px 14px 10px; display: flex; flex-direction: column; gap: 2px">
-        <h2 style="margin: 0; font-size: 13px; line-height: 18px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; color: #6C6C70">Series</h2>
-        <span style="font-size: 16px; line-height: 21px">Part 2 of <span style="color: {{accent}}">The Coast Road</span> · 3 works</span>
-      </div>
-      <div style="display: flex; border-top: 0.5px solid #E5E5EA">
-        <button style="flex: 1; height: 44px; border: none; background: transparent; font-family: inherit; font-size: 15px; color: {{accent}}">‹ Part 1</button>
-        <button style="flex: 1; height: 44px; border: none; border-left: 0.5px solid #E5E5EA; background: transparent; font-family: inherit; font-size: 15px; color: {{accent}}">Preserve Series…</button>
-        <button style="flex: 1; height: 44px; border: none; border-left: 0.5px solid #E5E5EA; background: transparent; font-family: inherit; font-size: 15px; color: {{accent}}">Part 3 ›</button>
+    <section aria-label="Series" style="display: flex; flex-direction: column; gap: 8px; margin-top: 6px">
+      <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">Series</h2>
+      <div style="background: #F2F2F7; border-radius: 16px; overflow: hidden">
+        <a href="Series.dc.html" style="min-height: 52px; padding: 8px 16px; display: flex; align-items: center; gap: 8px; text-decoration: none; color: #000000">
+          <span style="flex: 1; display: flex; flex-direction: column"><span style="font-size: 17px; line-height: 22px">The Coast Road</span><span style="font-size: 13px; line-height: 18px; color: #6C6C70">Part 2 of 3 · 141k words · in progress</span></span>
+          <svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg>
+        </a>
+        <div style="display: flex; border-top: 0.5px solid #D1D1D6">
+          <button style="flex: 1; height: 44px; border: none; background: transparent; font-family: inherit; font-size: 15px; color: #990000">‹ Part 1</button>
+          <button style="flex: 1; height: 44px; border: none; border-left: 0.5px solid #D1D1D6; background: transparent; font-family: inherit; font-size: 15px; color: #990000">Preserve Series…</button>
+          <button style="flex: 1; height: 44px; border: none; border-left: 0.5px solid #D1D1D6; background: transparent; font-family: inherit; font-size: 15px; color: #990000">Part 3 ›</button>
+        </div>
       </div>
     </section>
 
-    <section aria-label="My copy" style="display: flex; flex-direction: column; gap: 6px">
-      <h2 style="margin: 0 4px; font-size: 13px; line-height: 18px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; color: #6C6C70; display: flex; align-items: center; gap: 6px">
-        <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10.5" width="14" height="10" rx="2.5"></rect><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"></path></svg>
-        My copy · private to this device
-      </h2>
-      <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
-        <sc-for list="{{mine}}" as="m" hint-placeholder-count="5">
-          <div style="display: flex; align-items: center; min-height: 46px; padding: 6px 16px; gap: 8px; border-top: {{m.sep}}; flex-wrap: wrap">
-            <span style="font-size: 16px; flex: 1">{{m.label}}</span>
-            <span style="font-size: 15px; color: {{m.color}}">{{m.value}}</span>
+    <section aria-label="My copy" style="display: flex; flex-direction: column; gap: 8px; margin-top: 6px">
+      <div style="display: flex; align-items: baseline; justify-content: space-between">
+        <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">My copy</h2>
+        <span style="font-size: 13px; line-height: 18px; color: #6C6C70; display: flex; align-items: center; gap: 4px"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10.5" width="14" height="10" rx="2.5"></rect><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"></path></svg>Private to this device</span>
+      </div>
+      <div style="background: #F2F2F7; border-radius: 16px; overflow: hidden">
+        <sc-for list="{{mine}}" as="m" hint-placeholder-count="6">
+          <sc-if value="{{m.sep}}" hint-placeholder-val="{{false}}"><div aria-hidden="true" style="margin-left: 16px; height: 0.5px; background: #D1D1D6"></div></sc-if>
+          <div style="min-height: 48px; padding: 6px 16px; display: flex; align-items: center; gap: 8px; box-sizing: border-box">
+            <span style="flex: 1; font-size: 17px">{{m.label}}</span>
+            <span style="font-size: 17px; color: #6C6C70; text-align: right">{{m.value}}</span>
+            <sc-if value="{{m.hasAction}}" hint-placeholder-val="{{false}}">
+              <button style="border: none; background: none; padding: 0 0 0 4px; font-family: inherit; font-size: 17px; color: #990000">{{m.action}}</button>
+            </sc-if>
           </div>
         </sc-for>
       </div>
+      <span style="padding: 0 16px; font-size: 13px; line-height: 18px; color: #6C6C70">Imported files keep their original here, with Rebuild from Original in the menu.</span>
     </section>
 
-    <section aria-label="File" style="background: #FFFFFF; border-radius: 16px; padding: 12px 14px; display: flex; align-items: center; gap: 10px">
-      <div style="flex: 1; display: flex; flex-direction: column; gap: 2px">
-        <span style="font-size: 16px">EPUB from AO3 · 1.2 MB</span>
-        <span style="font-size: 13px; color: #6C6C70">Imported files show their original here, with Rebuild.</span>
-      </div>
-    </section>
-
-    <button style="height: 50px; border: none; border-radius: 16px; background: #FFFFFF; padding: 0 16px; font-family: inherit; display: flex; align-items: center; gap: 10px; text-align: left">
-      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="{{accent}}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v11H9l-5 4z"></path></svg>
-      <span style="flex: 1; font-size: 16px; color: #000000">Comments</span>
-      <span style="font-size: 15px; color: #6C6C70">286</span>
+    <a href="Comments.dc.html" style="min-height: 52px; padding: 0 16px; border-radius: 16px; background: #F2F2F7; display: flex; align-items: center; gap: 10px; text-decoration: none; color: #000000">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#990000" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v11H9l-5 4z"></path></svg>
+      <span style="flex: 1; font-size: 17px">Comments</span>
+      <span style="font-size: 17px; color: #6C6C70">286</span>
       <svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg>
-    </button>
+    </a>
   </main>
 
   <div style="position: absolute; left: 16px; right: 16px; top: 54px; display: flex; justify-content: space-between">
@@ -119,53 +106,42 @@ button{cursor:pointer}
       <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg>
     </button>
     <div style="height: 44px; border-radius: 22px; display: flex; align-items: center; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
-      <button aria-label="Kudos given" aria-pressed="true" style="width: 46px; height: 44px; border: none; background: transparent; color: {{accent}}; display: flex; align-items: center; justify-content: center">
-        <svg aria-hidden="true" width="21" height="21" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20s-7.5-4.6-7.5-10.2A4.2 4.2 0 0 1 12 7.2a4.2 4.2 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20z"></path></svg>
-      </button>
-      <button aria-label="Bookmark on AO3" style="width: 46px; height: 44px; border: none; background: transparent; color: #1C1C1E; display: flex; align-items: center; justify-content: center">
-        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M7 4h10v16l-5-4-5 4z"></path></svg>
-      </button>
-      <button aria-label="More actions" style="width: 46px; height: 44px; border: none; background: transparent; color: #1C1C1E; display: flex; align-items: center; justify-content: center">
-        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.7" fill="currentColor"></circle><circle cx="12" cy="12" r="1.7" fill="currentColor"></circle><circle cx="18.5" cy="12" r="1.7" fill="currentColor"></circle></svg>
-      </button>
+      <button aria-label="Kudos given" aria-pressed="true" style="width: 46px; height: 44px; border: none; background: transparent; color: #990000; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="21" height="21" viewBox="0 0 24 24" fill="currentColor"><path d="M12 20s-7.5-4.6-7.5-10.2A4.2 4.2 0 0 1 12 7.2a4.2 4.2 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20z"></path></svg></button>
+      <button aria-label="Bookmark on AO3" style="width: 46px; height: 44px; border: none; background: transparent; color: #1C1C1E; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M7 4h10v16l-5-4-5 4z"></path></svg></button>
+      <a href="Work-Actions.dc.html" aria-label="More actions" style="width: 46px; height: 44px; color: #1C1C1E; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.7" fill="currentColor"></circle><circle cx="12" cy="12" r="1.7" fill="currentColor"></circle><circle cx="18.5" cy="12" r="1.7" fill="currentColor"></circle></svg></a>
     </div>
   </div>
 
-  <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 140px; background: linear-gradient(to bottom, rgba(242,242,247,0), rgba(242,242,247,0.94) 70%); pointer-events: none"></div>
+  <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 140px; background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0.94) 70%); pointer-events: none"></div>
   <div style="position: absolute; left: 16px; bottom: 28px">
-    <dc-import name="TabBar" selected="library" variant="minimized" accent="{{accent}}" hint-size="358px,54px"></dc-import>
+    <dc-import name="TabBar" selected="library" variant="minimized" accent="#990000" hint-size="358px,54px"></dc-import>
   </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"$preview":{"width":390,"height":1560}}'>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1880}}'>
 class Component extends DCLogic {
   renderVals() {
-    const accent = this.props.accent ?? '#990000';
-    const hex = accent.replace('#', '');
-    const tint = 'rgba(' + parseInt(hex.slice(0, 2), 16) + ',' + parseInt(hex.slice(2, 4), 16) + ',' + parseInt(hex.slice(4, 6), 16) + ',0.10)';
     const stats = [
       ['Words', '84,210'], ['Chapters', '12/20'], ['Kudos', '♥ 3,104'],
       ['Hits', '41.2k'], ['Comments', '286'], ['Bookmarks', '512'],
       ['Published', 'Mar 3'], ['Updated', 'Oct 21'], ['Language', 'English']
     ];
-    const sep = '0.5px solid #E5E5EA';
     const mine = [
-      ['Progress', 'Ch 7 · 58%', '#3A3A3C'],
-      ['Downloaded', 'Oct 21 · Edit', accent],
-      ['Your tags', 'coast, reread · Add', accent],
-      ['Collections', 'Comfort Reads · Add', accent],
-      ['Queues', 'Summer Reading · Add', accent]
+      ['Progress', 'Ch 7 · 58%', ''],
+      ['Downloaded', 'Oct 21', 'Edit'],
+      ['Your tags', 'coast, reread', 'Add'],
+      ['Collections', 'Comfort Reads', 'Add'],
+      ['Queues', 'Summer Reading', 'Add'],
+      ['File', 'EPUB from AO3 · 1.2 MB', '']
     ];
     return {
-      accent,
-      accentTint: tint,
       stats: stats.map(([label, value], i) => ({ label, value, border: i % 3 === 2 ? 'none' : '0.5px solid #D1D1D6' })),
       tagGroups: [
-        { title: 'Relationships', tags: ['Elinor Vane/Tomas Reyes'], bg: tint, fg: accent },
-        { title: 'Characters', tags: ['Elinor Vane', 'Tomas Reyes', 'Marguerite Vane'], bg: '#EFEFF4', fg: '#000000' },
-        { title: 'Additional tags', tags: ['Slow Burn', 'Found Family', 'Maps & Mapmaking', 'Hurt/Comfort'], bg: '#EFEFF4', fg: '#000000' }
+        { title: 'Relationships', tags: ['Elinor Vane/Tomas Reyes'] },
+        { title: 'Characters', tags: ['Elinor Vane', 'Tomas Reyes', 'Marguerite Vane'] },
+        { title: 'Additional tags', tags: ['Slow Burn', 'Found Family', 'Maps & Mapmaking', 'Hurt/Comfort'] }
       ],
-      mine: mine.map(([label, value, color], i) => ({ label, value, color, sep: i ? sep : 'none' }))
+      mine: mine.map(([label, value, action], i) => ({ label, value, action, hasAction: !!action, sep: i > 0 }))
     };
   }
 }

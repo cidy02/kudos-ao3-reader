@@ -8,7 +8,7 @@
       "title": "AO3 collections",
       "w": 390,
       "x": 4230,
-      "y": 7460
+      "y": 7780
     },
     "AO3-Lists.dc.html": {
       "h": 844,
@@ -16,7 +16,7 @@
       "title": "Marked for Later · Bookmarks · History",
       "w": 390,
       "x": 1410,
-      "y": 7460
+      "y": 7780
     },
     "AO3-Web.dc.html": {
       "h": 844,
@@ -32,7 +32,7 @@
       "title": "About · What's New",
       "w": 390,
       "x": 3760,
-      "y": 9380
+      "y": 9700
     },
     "Account-Regrouped.dc.html": {
       "h": 1240,
@@ -40,7 +40,7 @@
       "title": "Account · proposed regroup",
       "w": 390,
       "x": 5170,
-      "y": 7460
+      "y": 7780
     },
     "Account-SignedOut.dc.html": {
       "h": 844,
@@ -48,7 +48,7 @@
       "title": "Account · signed out",
       "w": 390,
       "x": 470,
-      "y": 7460
+      "y": 7780
     },
     "Account.dc.html": {
       "h": 1360,
@@ -56,7 +56,7 @@
       "title": "Account",
       "w": 390,
       "x": 0,
-      "y": 7460
+      "y": 7780
     },
     "Author.dc.html": {
       "h": 1240,
@@ -80,7 +80,7 @@
       "title": "Report a bug",
       "w": 390,
       "x": 3290,
-      "y": 9380
+      "y": 9700
     },
     "Challenge.dc.html": {
       "h": 844,
@@ -88,7 +88,7 @@
       "title": "Challenge",
       "w": 390,
       "x": 4700,
-      "y": 7460
+      "y": 7780
     },
     "Collection.dc.html": {
       "h": 844,
@@ -337,7 +337,7 @@
       "title": "Inbox",
       "w": 390,
       "x": 2350,
-      "y": 7460
+      "y": 7780
     },
     "Insights.dc.html": {
       "h": 844,
@@ -385,10 +385,10 @@
       "title": "Log in to AO3",
       "w": 390,
       "x": 940,
-      "y": 7460
+      "y": 7780
     },
     "Main.dc.html": {
-      "h": 1960,
+      "h": 2080,
       "page": "iphone",
       "title": "Home",
       "w": 390,
@@ -401,7 +401,7 @@
       "title": "Works · Series · Drafts",
       "w": 390,
       "x": 2820,
-      "y": 7460
+      "y": 7780
     },
     "Onboarding.dc.html": {
       "h": 844,
@@ -409,7 +409,7 @@
       "title": "Welcome",
       "w": 390,
       "x": 2350,
-      "y": 9380
+      "y": 9700
     },
     "Platform-Map.dc.html": {
       "h": 1560,
@@ -425,7 +425,7 @@
       "title": "Privacy and local data",
       "w": 390,
       "x": 1880,
-      "y": 9380
+      "y": 9700
     },
     "Queue.dc.html": {
       "h": 844,
@@ -449,7 +449,7 @@
       "title": "Read Aloud settings",
       "w": 390,
       "x": 3290,
-      "y": 5940
+      "y": 6260
     },
     "Reader-Contents.dc.html": {
       "h": 844,
@@ -457,7 +457,7 @@
       "title": "Reader · contents, bookmarks, notes",
       "w": 390,
       "x": 940,
-      "y": 5940
+      "y": 6260
     },
     "Reader-End.dc.html": {
       "h": 844,
@@ -465,7 +465,7 @@
       "title": "Reader · end of the work",
       "w": 390,
       "x": 3760,
-      "y": 5940
+      "y": 6260
     },
     "Reader-Find.dc.html": {
       "h": 844,
@@ -473,7 +473,7 @@
       "title": "Reader · find in work",
       "w": 390,
       "x": 1410,
-      "y": 5940
+      "y": 6260
     },
     "Reader-Highlight.dc.html": {
       "h": 844,
@@ -481,7 +481,7 @@
       "title": "Reader · highlight and note",
       "w": 390,
       "x": 1880,
-      "y": 5940
+      "y": 6260
     },
     "Reader-Menu.dc.html": {
       "h": 844,
@@ -489,7 +489,7 @@
       "title": "Reader · menu",
       "w": 390,
       "x": 470,
-      "y": 5940
+      "y": 6260
     },
     "Reader-ReadAloud.dc.html": {
       "h": 844,
@@ -497,7 +497,7 @@
       "title": "Reader · Read Aloud playing",
       "w": 390,
       "x": 2820,
-      "y": 5940
+      "y": 6260
     },
     "Reader-Settings.dc.html": {
       "h": 844,
@@ -505,7 +505,7 @@
       "title": "Reader · themes and settings",
       "w": 390,
       "x": 2350,
-      "y": 5940
+      "y": 6260
     },
     "Recently-Deleted.dc.html": {
       "h": 844,
@@ -545,7 +545,7 @@
       "title": "Settings · appearance and fonts",
       "w": 390,
       "x": 470,
-      "y": 9380
+      "y": 9700
     },
     "Settings-Backup-Sync.dc.html": {
       "h": 1100,
@@ -553,7 +553,7 @@
       "title": "Settings · backup, sync, import",
       "w": 390,
       "x": 940,
-      "y": 9380
+      "y": 9700
     },
     "Settings-Storage.dc.html": {
       "h": 844,
@@ -561,7 +561,7 @@
       "title": "Settings · downloads and storage",
       "w": 390,
       "x": 1410,
-      "y": 9380
+      "y": 9700
     },
     "Settings.dc.html": {
       "h": 1240,
@@ -569,7 +569,7 @@
       "title": "Settings",
       "w": 390,
       "x": 0,
-      "y": 9380
+      "y": 9700
     },
     "Shelf-Options.dc.html": {
       "h": 640,
@@ -625,7 +625,7 @@
       "title": "Subscriptions",
       "w": 390,
       "x": 1880,
-      "y": 7460
+      "y": 7780
     },
     "Symbols-Key.dc.html": {
       "h": 800,
@@ -649,7 +649,7 @@
       "title": "Protect your library",
       "w": 390,
       "x": 2820,
-      "y": 9380
+      "y": 9700
     },
     "System-Surfaces.dc.html": {
       "h": 960,
@@ -673,7 +673,7 @@
       "title": "Chapter text editor",
       "w": 390,
       "x": 3760,
-      "y": 7460
+      "y": 7780
     },
     "Work-Actions.dc.html": {
       "h": 844,
@@ -689,7 +689,7 @@
       "title": "Post or edit a work",
       "w": 390,
       "x": 3290,
-      "y": 7460
+      "y": 7780
     },
     "WorkRow.dc.html": {
       "h": 112,
@@ -705,10 +705,10 @@
       "title": "Reader",
       "w": 390,
       "x": 0,
-      "y": 5940
+      "y": 6260
     },
     "iPhone-WorkDetail.dc.html": {
-      "h": 1560,
+      "h": 1880,
       "page": "iphone",
       "title": "Work Detail",
       "w": 390,
@@ -749,7 +749,7 @@
       "text": "Account, writing, collections",
       "w": 240,
       "x": 0,
-      "y": 7160
+      "y": 7480
     },
     "rowBook": {
       "kind": "title1",
@@ -812,7 +812,7 @@
       "text": "Reader & Read Aloud",
       "w": 240,
       "x": 0,
-      "y": 5640
+      "y": 5960
     },
     "rowSettings": {
       "kind": "title1",
@@ -821,7 +821,7 @@
       "text": "Settings, onboarding, support",
       "w": 240,
       "x": 0,
-      "y": 9080
+      "y": 9400
     },
     "rowSystem": {
       "kind": "title1",
