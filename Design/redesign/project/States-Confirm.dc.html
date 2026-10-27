@@ -23,7 +23,8 @@ button{cursor:pointer}
       <figcaption style="font-size: 13px; font-weight: 600; color: #6C6C70">Delete permanently, anchored to the button</figcaption>
       <div style="width: 390px; height: 844px; border-radius: 48px; overflow: hidden; position: relative; background: #F2F2F7; box-shadow: 0 0 0 1px #D1D1D6">
         <div style="padding: 106px 16px 0; display: flex; flex-direction: column; gap: 12px">
-          <span style="font-size: 34px; font-weight: 700; padding: 0 4px">Recently Deleted</span>
+          <span aria-hidden="true" style="position: absolute; left: 16px; top: 54px; width: 44px; height: 44px; border-radius: 22px; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06); display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1C1C1E" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg></span>
+          <span style="position: absolute; left: 68px; right: 68px; top: 54px; text-align: center; font-size: 17px; line-height: 44px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Recently Deleted</span>
           <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
             <dc-import name="WorkRow" work="{{w1}}" selecting="{{true}}" selected="{{true}}" divider="{{true}}" accent="{{accent}}" hint-size="100%,100px"></dc-import>
             <dc-import name="WorkRow" work="{{w2}}" selecting="{{true}}" selected="{{false}}" accent="{{accent}}" hint-size="100%,100px"></dc-import>
@@ -44,7 +45,8 @@ button{cursor:pointer}
       <figcaption style="font-size: 13px; font-weight: 600; color: #6C6C70">Revealing a hidden mature work</figcaption>
       <div style="width: 390px; height: 844px; border-radius: 48px; overflow: hidden; position: relative; background: #F2F2F7; box-shadow: 0 0 0 1px #D1D1D6">
         <div style="padding: 106px 16px 0; display: flex; flex-direction: column; gap: 12px">
-          <span style="font-size: 34px; font-weight: 700; padding: 0 4px">Reading Now</span>
+          <span aria-hidden="true" style="position: absolute; left: 16px; top: 54px; width: 44px; height: 44px; border-radius: 22px; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06); display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1C1C1E" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg></span>
+          <span style="position: absolute; left: 68px; right: 68px; top: 54px; text-align: center; font-size: 17px; line-height: 44px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Reading Now</span>
           <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
             <dc-import name="WorkRow" work="{{hidden}}" divider="{{true}}" accent="{{accent}}" hint-size="100%,72px"></dc-import>
             <dc-import name="WorkRow" work="{{w2}}" accent="{{accent}}" hint-size="100%,100px"></dc-import>
@@ -60,7 +62,8 @@ button{cursor:pointer}
       <figcaption style="font-size: 13px; font-weight: 600; color: #6C6C70">Before something goes public on AO3</figcaption>
       <div style="width: 390px; height: 844px; border-radius: 48px; overflow: hidden; position: relative; background: #F2F2F7; box-shadow: 0 0 0 1px #D1D1D6">
         <div aria-hidden="true" style="padding: 106px 20px 0; display: flex; flex-direction: column; gap: 14px">
-          <span style="font-size: 34px; font-weight: 700">New Work</span>
+          <span aria-hidden="true" style="position: absolute; left: 16px; top: 54px; width: 44px; height: 44px; border-radius: 22px; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06); display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1C1C1E" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg></span>
+          <span style="position: absolute; left: 68px; right: 68px; top: 54px; text-align: center; font-size: 17px; line-height: 44px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">New Work</span>
           <span style="height: 160px; border-radius: 14px; background: #FFFFFF"></span>
           <span style="height: 120px; border-radius: 14px; background: #FFFFFF"></span>
           <span style="height: 200px; border-radius: 14px; background: #FFFFFF"></span>

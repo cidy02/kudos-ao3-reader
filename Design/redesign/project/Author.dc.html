@@ -27,15 +27,19 @@ button{cursor:pointer}
       </button>
     </div>
   </div>
-  <main style="padding: 110px 16px 0; display: flex; flex-direction: column; gap: 14px">
-    <header style="display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center">
-      <span aria-hidden="true" style="width: 84px; height: 84px; border-radius: 42px; background: #8A5A12; color: #FFFFFF; font-size: 34px; font-weight: 600; display: flex; align-items: center; justify-content: center">F</span>
-      <h1 style="margin: 4px 0 0; font-size: 26px; line-height: 32px; font-weight: 700">fogandlamplight</h1>
-      <button style="height: 30px; padding: 0 12px; border: none; border-radius: 15px; background: #EFEFF4; font-family: inherit; font-size: 14px; display: flex; align-items: center; gap: 4px">All pseuds
-        <svg aria-hidden="true" width="10" height="14" viewBox="0 0 12 16" fill="none" stroke="#8E8E93" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6 6 2.5 9.5 6M2.5 10 6 13.5 9.5 10"></path></svg>
-      </button>
-      <p style="margin: 0; font-size: 14px; color: #6C6C70">Joined March 2014 · 42 works · 6 series</p>
-      <button style="margin-top: 4px; height: 40px; padding: 0 22px; border: none; border-radius: 20px; background: {{accent}}; color: #FFFFFF; font-family: inherit; font-size: 16px; font-weight: 600">Subscribe</button>
+  <main style="padding: 106px 16px 0; display: flex; flex-direction: column; gap: 14px">
+    <header style="display: flex; align-items: center; gap: 14px">
+      <span aria-hidden="true" style="width: 64px; height: 64px; flex-shrink: 0; border-radius: 32px; background: #8A5A12; color: #FFFFFF; font-size: 28px; font-weight: 600; display: flex; align-items: center; justify-content: center">F</span>
+      <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+        <h1 style="margin: 0; font-size: 22px; line-height: 28px; font-weight: 700">fogandlamplight</h1>
+        <p style="margin: 0; font-size: 14px; line-height: 19px; color: #6C6C70">Joined March 2014 · 42 works · 6 series</p>
+        <div style="margin-top: 6px; display: flex; align-items: center; gap: 8px">
+          <button style="height: 32px; padding: 0 16px; border: none; border-radius: 16px; background: {{accent}}; color: #FFFFFF; font-family: inherit; font-size: 15px; font-weight: 600">Subscribe</button>
+          <button style="height: 32px; padding: 0 12px; border: none; border-radius: 16px; background: #EFEFF4; font-family: inherit; font-size: 14px; display: flex; align-items: center; gap: 4px">All pseuds
+            <svg aria-hidden="true" width="10" height="14" viewBox="0 0 12 16" fill="none" stroke="#8E8E93" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6 6 2.5 9.5 6M2.5 10 6 13.5 9.5 10"></path></svg>
+          </button>
+        </div>
+      </div>
     </header>
     <div role="tablist" aria-label="Profile sections" style="height: 34px; border-radius: 17px; background: rgba(118,118,128,0.12); padding: 2px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr))">
       <sc-for list="{{tabs}}" as="t" hint-placeholder-count="4">
