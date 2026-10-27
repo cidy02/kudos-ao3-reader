@@ -17,7 +17,8 @@ a{color:#990000}a:hover{color:#6E0000}
 <div style="width: 669px; height: 951px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
   <div aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 0; height: 420px; background: linear-gradient(to bottom, rgba(37,119,132,0.20), rgba(37,119,132,0.12) 35%, rgba(37,119,132,0.05) 65%, rgba(37,119,132,0))"></div>
 
-  <section aria-label="The Cartographer’s Daughter" style="position: absolute; left: 0; top: 0; width: 669px; height: 475px; padding: 88px 16px 0; box-sizing: border-box; display: flex; gap: 16px; overflow: hidden">
+  <main style="position: absolute; left: 0; top: 0; width: 669px; padding: 88px 16px 0; box-sizing: border-box; display: flex; flex-direction: column; gap: 24px">
+  <section aria-label="The Cartographer’s Daughter" style="display: flex; gap: 16px">
     <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 12px">
       <div style="display: flex; flex-direction: column; gap: 5px">
         <a href="Fandom-Works.dc.html" style="align-self: flex-start; text-decoration: none; font-size: 13px; line-height: 18px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; color: hsl(188, 56%, 33%)">Original Work</a>
@@ -41,26 +42,12 @@ a{color:#990000}a:hover{color:#6E0000}
       <dc-import name="ResumeCard" variant="detail" width="320" accent="#990000" hint-size="320px,330px"></dc-import>
     </div>
   </section>
-
-  <section aria-label="About this work" style="position: absolute; left: 0; top: 475px; width: 669px; height: 476px; border-top: 0.5px solid #D1D1D6; padding: 18px 16px 0; box-sizing: border-box; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; align-items: start; overflow: hidden">
-    <div style="display: flex; flex-direction: column; gap: 16px">
+    <section aria-label="About this work" style="display: flex; flex-direction: column; gap: 20px">
       <section aria-label="Summary" style="display: flex; flex-direction: column; gap: 6px">
       <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">Summary</h2>
       <p style="margin: 0; font-size: 17px; line-height: 22px">Elinor Vane inherits her mother’s instruments and none of her maps. To finish the last chart she must walk the coast road nobody has drawn in forty years, with the one person who remembers why.</p>
       <a href="#notes" style="align-self: flex-start; font-size: 17px; line-height: 22px; text-decoration: none">Notes</a>
     </section>
-      <div style="background: #F2F2F7; border-radius: 16px; overflow: hidden">
-      <sc-for list="{{rows}}" as="r" hint-placeholder-count="4">
-        <sc-if value="{{r.sep}}" hint-placeholder-val="{{false}}"><div aria-hidden="true" style="margin-left: 16px; height: 0.5px; background: #D1D1D6"></div></sc-if>
-        <a href="{{r.href}}" style="min-height: 48px; padding: 4px 16px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; text-decoration: none; color: #000000">
-          <span style="flex: 1; font-size: 17px">{{r.label}}</span>
-          <span style="font-size: 17px; color: #6C6C70">{{r.value}}</span>
-          <svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg>
-        </a>
-      </sc-for>
-    </div>
-    </div>
-    <div style="display: flex; flex-direction: column; gap: 16px">
       <section aria-label="Tags" style="display: flex; flex-direction: column; gap: 8px">
       <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">Tags</h2>
       <sc-for list="{{tagGroups}}" as="g" hint-placeholder-count="3">
@@ -74,8 +61,18 @@ a{color:#990000}a:hover{color:#6E0000}
         </div>
       </sc-for>
     </section>
+      <div style="background: #F2F2F7; border-radius: 16px; overflow: hidden">
+      <sc-for list="{{rows}}" as="r" hint-placeholder-count="4">
+        <sc-if value="{{r.sep}}" hint-placeholder-val="{{false}}"><div aria-hidden="true" style="margin-left: 16px; height: 0.5px; background: #D1D1D6"></div></sc-if>
+        <a href="{{r.href}}" style="min-height: 48px; padding: 4px 16px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; text-decoration: none; color: #000000">
+          <span style="flex: 1; font-size: 17px">{{r.label}}</span>
+          <span style="font-size: 17px; color: #6C6C70">{{r.value}}</span>
+          <svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg>
+        </a>
+      </sc-for>
     </div>
-  </section>
+    </section>
+  </main>
 
   <div style="position: absolute; left: 0; top: 0; z-index: 2">
     <dc-import name="DuoTopBar" nav="back" title-style="none" actions="{{side}}" accent="#990000" hint-size="669px,80px"></dc-import>
@@ -100,9 +97,9 @@ class Component extends DCLogic {
       ['Published', 'Mar 3'], ['Updated', 'Oct 21'], ['Language', 'English']
     ];
     const rows = [
-      ['Series', 'Part 2 of 3', 'Series.dc.html'],
+      ['Series', 'The Coast Road · Part 2 of 3', 'Series.dc.html'],
       ['Comments', '286', 'Comments.dc.html'],
-      ['My copy', 'Downloaded', '#mycopy'],
+      ['My copy', 'Downloaded Oct 21 · 1 queue', '#mycopy'],
       ['Your tags', 'coast, reread', '#tags']
     ];
     return {

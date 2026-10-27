@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Duo portrait · Search filters</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 669px; height: 951px; position: relative; overflow: hidden; background: #FFFFFF">
+  <dc-import name="Duo-Portrait-Search" view="filters" hint-size="669px,951px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":669,"height":951}}'>
+class Component extends DCLogic {
+  renderVals() {
+    // Filters open as a form sheet over the results, as on iPad in portrait.
+    return {};
+  }
+}
+</script>
+</body>
+</html>

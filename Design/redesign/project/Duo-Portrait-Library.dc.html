@@ -15,8 +15,8 @@ a{color:#990000}a:hover{color:#6E0000}
 </style>
 </helmet>
 <div style="width: 669px; height: 951px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
-  <section aria-label="Reading Now" style="position: absolute; left: 0; top: 0; width: 669px; height: 475px; overflow: hidden">
-    <p style="position: absolute; left: 16px; top: 84px; margin: 0; font-size: 15px; line-height: 20px; color: #6C6C70">6 works · 2 with new chapters</p>
+  <section aria-label="Reading Now" style="position: absolute; left: 0; top: 0; width: 669px; height: 951px; overflow: hidden">
+    <p style="position: absolute; left: 16px; top: 84px; margin: 0; font-size: 15px; line-height: 20px; color: #6C6C70">12 works · 4 with new chapters</p>
     <div style="position: absolute; left: 8px; right: 8px; top: 112px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 8px">
       <sc-for list="{{works}}" as="w" hint-placeholder-count="6">
         <div aria-current="{{w.current}}" style="border-radius: 16px; background: {{w.bg}}; overflow: hidden">
@@ -26,40 +26,6 @@ a{color:#990000}a:hover{color:#6E0000}
     </div>
   </section>
 
-  <section aria-label="The Cartographer’s Daughter" style="position: absolute; left: 0; top: 475px; width: 669px; height: 476px; border-top: 0.5px solid #D1D1D6; box-sizing: border-box; overflow: hidden">
-    <div aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 0; height: 300px; background: linear-gradient(to bottom, rgba(37,119,132,0.20), rgba(37,119,132,0.12) 35%, rgba(37,119,132,0.05) 65%, rgba(37,119,132,0))"></div>
-    <div style="position: absolute; right: 16px; top: 14px; z-index: 1">
-      <div role="toolbar" aria-label="Work actions" style="height: 44px; border-radius: 22px; padding: 0 2px; display: flex; align-items: center; background: rgba(255,255,255,0.78); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)">
-        <sc-for list="{{side}}" as="a" hint-placeholder-count="3">
-          <button aria-label="{{a.label}}" style="width: 44px; height: 40px; border: none; border-radius: 20px; background: transparent; color: {{a.fg}}; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="{{a.fillc}}" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="{{a.path}}"></path></svg></button>
-        </sc-for>
-      </div>
-    </div>
-    <div style="position: relative; padding: 18px 16px 0; display: flex; gap: 16px">
-      <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 12px">
-        <div style="display: flex; flex-direction: column; gap: 4px">
-          <a href="Fandom-Works.dc.html" style="align-self: flex-start; text-decoration: none; font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; color: hsl(188, 56%, 33%)">Original Work</a>
-          <span aria-hidden="true" style="width: 14px; height: 2px; border-radius: 1px; background: hsl(188, 56%, 33%)"></span>
-        </div>
-        <div style="display: flex; flex-direction: column; gap: 1px">
-          <h2 style="margin: 0; font-size: 24px; line-height: 30px; font-weight: 700">The Cartographer’s Daughter</h2>
-          <a href="Author.dc.html" style="align-self: flex-start; font-size: 15px; line-height: 20px; text-decoration: none">inkwell_moth</a>
-        </div>
-        <dc-import name="Symbols" variant="inline" rating="T" category="FM" warnings="none" status="wip" size="18" hint-size="280px,18px"></dc-import>
-        <dl style="margin: 0; background: #F2F2F7; border-radius: 16px; padding: 10px 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 10px">
-          <sc-for list="{{stats}}" as="s" hint-placeholder-count="9">
-            <div style="display: flex; flex-direction: column; align-items: center; gap: 1px; border-right: {{s.border}}">
-              <dt style="font-size: 11px; line-height: 13px; font-weight: 600; letter-spacing: 0.4px; text-transform: uppercase; color: #6C6C70">{{s.label}}</dt>
-              <dd style="margin: 0; font-family: 'SF Pro Rounded', -apple-system, system-ui, sans-serif; font-size: 15px; line-height: 20px; font-weight: 700">{{s.value}}</dd>
-            </div>
-          </sc-for>
-        </dl>
-      </div>
-      <div style="width: 320px; flex-shrink: 0; padding-top: 58px">
-        <dc-import name="ResumeCard" variant="detail" width="320" accent="#990000" hint-size="320px,330px"></dc-import>
-      </div>
-    </div>
-  </section>
 
   <div style="position: absolute; left: 0; top: 0; z-index: 2">
     <dc-import name="DuoTopBar" nav="back" title="Reading Now" title-style="large" actions="{{listActions}}" accent="#990000" hint-size="669px,80px"></dc-import>
@@ -74,12 +40,18 @@ a{color:#990000}a:hover{color:#6E0000}
 class Component extends DCLogic {
   renderVals() {
     const works = [
-      { title: 'The Cartographer’s Daughter', author: 'inkwell_moth', fandom: 'Original Work', rating: 'T', category: 'FM', warnings: 'none', status: 'wip', words: '84k', chapters: '12/20', progress: 58, progressLabel: 'Ch 7 · 58%', selected: true },
+      { title: 'The Cartographer’s Daughter', author: 'inkwell_moth', fandom: 'Original Work', rating: 'T', category: 'FM', warnings: 'none', status: 'wip', words: '84k', chapters: '12/20', progress: 58, progressLabel: 'Ch 7 · 58%', },
       { title: 'Salt & Starlight', author: 'wrenfield', fandom: 'Original Work', rating: 'M', category: 'Gen', warnings: 'undisclosed', status: 'wip', words: '118k', chapters: '15/30', progress: 40, progressLabel: 'Ch 12 · 40%', badge: '+3' },
       { hidden: true },
       { title: 'Letters Never Sent', author: 'marginalia', fandom: 'Persuasion', rating: 'T', category: 'FM', warnings: 'none', status: 'complete', words: '22k', chapters: '4/4', progress: 50, progressLabel: 'Ch 3 · 50%' },
       { title: 'Northanger Nights', author: 'gothicnovelist', fandom: 'Northanger Abbey', rating: 'T', category: 'FM', warnings: 'none', status: 'wip', words: '47k', chapters: '9/12', progress: 66, progressLabel: 'Ch 8 · 66%', badge: '+1' },
-      { title: 'Moor and Mist', author: 'brontebird', fandom: 'Jane Eyre', rating: 'M', category: 'FM', warnings: 'undisclosed', status: 'complete', words: '61k', chapters: '14/14', progress: 61, progressLabel: 'Ch 11 · 61%' }
+      { title: 'Moor and Mist', author: 'brontebird', fandom: 'Jane Eyre', rating: 'M', category: 'FM', warnings: 'undisclosed', status: 'complete', words: '61k', chapters: '14/14', progress: 61, progressLabel: 'Ch 11 · 61%' },
+      { title: 'The Hound, Revisited', author: 'fogandlamplight', fandom: 'Sherlock Holmes', rating: 'T', category: 'MM', warnings: 'present', status: 'wip', words: '30k', chapters: '5/?', progress: 72, progressLabel: 'Ch 4 · 72%', badge: '+1' },
+      { title: 'A Fortnight at Uppercross', author: 'marginalia', fandom: 'Persuasion', rating: 'G', category: 'FM', warnings: 'none', status: 'complete', words: '49k', chapters: '8/8', progress: 22, progressLabel: 'Ch 2 · 22%' },
+      { title: 'Thornfield in Winter', author: 'brontebird', fandom: 'Jane Eyre', rating: 'T', category: 'FM', warnings: 'none', status: 'complete', words: '64k', chapters: '11/11', progress: 89, progressLabel: 'Ch 10 · 89%' },
+      { title: 'Keeper of the Northern Light', author: 'saltwindow', fandom: 'Original Work', rating: 'T', category: 'FF', warnings: 'none', status: 'complete', words: '22k', chapters: '7/7', progress: 14, progressLabel: 'Ch 1 · 14%' },
+      { title: 'What the Lamp Saw', author: 'tidewright', fandom: 'To the Lighthouse', rating: 'G', category: 'Gen', warnings: 'none', status: 'complete', words: '8k', chapters: '1/1', progress: 45, progressLabel: '45%' },
+      { title: 'The Bath Letters', author: 'quietharbor', fandom: 'Persuasion', rating: 'T', category: 'FM', warnings: 'none', status: 'wip', words: '102k', chapters: '18/25', progress: 31, progressLabel: 'Ch 6 · 31%', badge: '+2' }
     ];
     const stats = [
       ['Words', '84,210'], ['Chapters', '12/20'], ['Kudos', '♥ 3,104'],
@@ -96,7 +68,7 @@ class Component extends DCLogic {
         { label: 'Filter', d: 'M4 7h16M7 12h10M10 17h4' },
         { label: 'Sort', d: 'M8 5v14M4.5 15.5 8 19l3.5-3.5M16 19V5M12.5 8.5 16 5l3.5 3.5' }
       ],
-      works: works.map((w) => ({ ...w, current: w.selected ? 'true' : 'false', bg: w.selected ? 'rgba(153,0,0,0.08)' : 'transparent' })),
+      works: works.map((w) => ({ ...w, current: 'false', bg: 'transparent' })),
       stats: stats.map(([label, value], i) => ({ label, value, border: i % 3 === 2 ? 'none' : '0.5px solid #D1D1D6' }))
     };
   }
