@@ -13,7 +13,7 @@ body{margin:0}
 button{cursor:pointer}
 </style>
 </helmet>
-<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #F2F2F7; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
   <div style="position: absolute; left: 16px; right: 16px; top: 54px; display: flex; justify-content: space-between">
     <button aria-label="Back to Account" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)">
       <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg>
@@ -30,14 +30,14 @@ button{cursor:pointer}
       <button role="tab" aria-selected="false" style="border: none; border-radius: 15px; background: transparent; font-family: inherit; font-size: 14px">Series · 4</button>
       <button role="tab" aria-selected="false" style="border: none; border-radius: 15px; background: transparent; font-family: inherit; font-size: 14px">Authors · 5</button>
     </div>
-    <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
+    <div style="margin: 0 -16px">
       <sc-for list="{{works}}" as="w" hint-placeholder-count="4">
         <dc-import name="WorkRow" work="{{w}}" divider="{{w.divider}}" accent="{{accent}}" hint-size="100%,100px"></dc-import>
       </sc-for>
     </div>
     <p style="margin: 0 4px; font-size: 13px; line-height: 18px; color: #6C6C70">Swipe left on a row to unsubscribe. Turn on Download on subscribe in Settings to keep new chapters offline.</p>
   </main>
-  <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 150px; background: linear-gradient(to bottom, rgba(242,242,247,0), rgba(242,242,247,0.94) 72%); pointer-events: none"></div>
+  <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 150px; background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0.94) 72%); pointer-events: none"></div>
   <div style="position: absolute; left: 16px; bottom: 28px">
     <dc-import name="TabBar" selected="account" accent="{{accent}}" hint-size="358px,62px"></dc-import>
   </div>

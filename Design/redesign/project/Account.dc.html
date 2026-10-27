@@ -48,7 +48,7 @@ button{cursor:pointer}
 
     <sc-for list="{{groups}}" as="g" hint-placeholder-count="4">
       <section style="display: flex; flex-direction: column; gap: 6px">
-        <h2 style="margin: 0 16px; font-size: 13px; line-height: 18px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; color: #6C6C70">{{g.title}}</h2>
+        <h2 style="margin: 0 16px; font-size: 13px; line-height: 18px; font-weight: 400; color: #6C6C70">{{g.title}}</h2>
         <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
           <sc-for list="{{g.rows}}" as="r" hint-placeholder-count="3">
             <div style="display: flex; align-items: center; height: 48px; padding: 0 16px; gap: 12px; border-top: {{r.sep}}">

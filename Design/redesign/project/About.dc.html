@@ -25,7 +25,7 @@ button{cursor:pointer}
       <h1 style="margin: 6px 0 0; font-size: 24px; font-weight: 700">Kudos</h1>
       <p style="margin: 0; font-size: 15px; color: #6C6C70">Version 1.6 (412)</p>
     </header>
-    <section style="background: #FFFFFF; border-radius: 14px; padding: 12px 16px; display: flex; flex-direction: column; gap: 8px">
+    <section style="background: #FFFFFF; border-radius: 16px; padding: 12px 16px; display: flex; flex-direction: column; gap: 8px">
       <h2 style="margin: 0; font-size: 17px; font-weight: 600">What's New</h2>
       <sc-for list="{{news}}" as="n" hint-placeholder-count="3">
         <div style="display: flex; gap: 10px; align-items: flex-start">
@@ -34,7 +34,7 @@ button{cursor:pointer}
         </div>
       </sc-for>
     </section>
-    <div style="background: #FFFFFF; border-radius: 14px; overflow: hidden">
+    <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
       <sc-for list="{{rows}}" as="r" hint-placeholder-count="6">
         <div style="display: flex; align-items: center; height: 46px; padding: 0 16px; gap: 8px; border-top: {{r.sep}}">
           <span style="flex: 1; font-size: 16px">{{r.label}}</span>

@@ -31,8 +31,8 @@ button{cursor:pointer}
 
     <sc-for list="{{sections}}" as="s" hint-placeholder-count="5">
       <section style="display: flex; flex-direction: column; gap: 6px">
-        <h2 style="margin: 0 16px; font-size: 13px; line-height: 18px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; color: #6C6C70">{{s.title}}</h2>
-        <div style="background: #FFFFFF; border-radius: 14px; overflow: hidden">
+        <h2 style="margin: 0 16px; font-size: 13px; line-height: 18px; font-weight: 400; color: #6C6C70">{{s.title}}</h2>
+        <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
           <sc-for list="{{s.rows}}" as="r" hint-placeholder-count="3">
             <div style="display: flex; align-items: center; min-height: 46px; padding: 7px 16px; gap: 10px; border-top: {{r.sep}}; flex-wrap: wrap">
               <sc-if value="{{r.hasSymbol}}" hint-placeholder-val="{{false}}">
@@ -51,7 +51,7 @@ button{cursor:pointer}
                 </div>
               </sc-if>
               <sc-if value="{{r.isToggle}}" hint-placeholder-val="{{false}}">
-                <span role="switch" aria-checked="{{r.on}}" aria-label="{{r.label}}" style="width: 51px; height: 31px; border-radius: 16px; background: {{r.track}}; position: relative"><span style="position: absolute; left: {{r.knob}}px; top: 2px; width: 27px; height: 27px; border-radius: 14px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.2)"></span></span>
+                <span role="switch" aria-checked="{{r.on}}" aria-label="{{r.label}}" style="width: 51px; height: 31px; border-radius: 16px; background: {{r.track}}; position: relative"><span style="position: absolute; left: {{r.knob}}px; top: 2px; width: 27px; height: 27px; border-radius: 16px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.2)"></span></span>
               </sc-if>
               <sc-if value="{{r.isText}}" hint-placeholder-val="{{false}}">
                 <p style="margin: 0; width: 100%; font-size: 15px; line-height: 21px; color: #3A3A3C">{{r.text}}</p>

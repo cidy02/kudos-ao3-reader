@@ -27,8 +27,8 @@ button{cursor:pointer}
     </label>
     <sc-for list="{{groups}}" as="g" hint-placeholder-count="5">
       <section style="display: flex; flex-direction: column; gap: 6px">
-        <h2 style="margin: 0 16px; font-size: 13px; line-height: 18px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; color: #6C6C70">{{g.title}}</h2>
-        <div style="background: #FFFFFF; border-radius: 14px; overflow: hidden">
+        <h2 style="margin: 0 16px; font-size: 13px; line-height: 18px; font-weight: 400; color: #6C6C70">{{g.title}}</h2>
+        <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
           <sc-for list="{{g.rows}}" as="r" hint-placeholder-count="3">
             <div style="display: flex; align-items: center; height: 46px; padding-left: 14px; gap: 12px">
               <span aria-hidden="true" style="width: 29px; height: 29px; flex-shrink: 0; border-radius: 7px; background: {{r.bg}}; color: #FFFFFF; display: flex; align-items: center; justify-content: center">

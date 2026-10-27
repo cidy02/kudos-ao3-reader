@@ -13,7 +13,7 @@ body{margin:0}
 button{cursor:pointer}
 </style>
 </helmet>
-<div style="width: 390px; height: 1240px; position: relative; overflow: hidden; background: #F2F2F7; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+<div style="width: 390px; height: 1240px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
   <div style="position: absolute; left: 16px; right: 16px; top: 54px; display: flex; justify-content: space-between">
     <button aria-label="Back" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)">
       <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg>
@@ -31,7 +31,7 @@ button{cursor:pointer}
     <header style="display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center">
       <span aria-hidden="true" style="width: 84px; height: 84px; border-radius: 42px; background: #8A5A12; color: #FFFFFF; font-size: 34px; font-weight: 600; display: flex; align-items: center; justify-content: center">F</span>
       <h1 style="margin: 4px 0 0; font-size: 26px; line-height: 32px; font-weight: 700">fogandlamplight</h1>
-      <button style="height: 30px; padding: 0 12px; border: none; border-radius: 15px; background: #FFFFFF; font-family: inherit; font-size: 14px; display: flex; align-items: center; gap: 4px">All pseuds
+      <button style="height: 30px; padding: 0 12px; border: none; border-radius: 15px; background: #EFEFF4; font-family: inherit; font-size: 14px; display: flex; align-items: center; gap: 4px">All pseuds
         <svg aria-hidden="true" width="10" height="14" viewBox="0 0 12 16" fill="none" stroke="#8E8E93" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6 6 2.5 9.5 6M2.5 10 6 13.5 9.5 10"></path></svg>
       </button>
       <p style="margin: 0; font-size: 14px; color: #6C6C70">Joined March 2014 · 42 works · 6 series</p>
@@ -46,13 +46,13 @@ button{cursor:pointer}
       <span style="font-size: 15px; color: #6C6C70">42 works · newest first</span>
       <button style="border: none; background: none; padding: 0; font-family: inherit; font-size: 15px; color: {{accent}}">Sort and filter</button>
     </div>
-    <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
+    <div style="margin: 0 -16px">
       <sc-for list="{{works}}" as="w" hint-placeholder-count="5">
         <dc-import name="WorkRow" work="{{w}}" show-summary="{{true}}" divider="{{w.divider}}" accent="{{accent}}" hint-size="100%,140px"></dc-import>
       </sc-for>
     </div>
   </main>
-  <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 150px; background: linear-gradient(to bottom, rgba(242,242,247,0), rgba(242,242,247,0.94) 72%); pointer-events: none"></div>
+  <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 150px; background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0.94) 72%); pointer-events: none"></div>
   <div style="position: absolute; left: 16px; bottom: 28px">
     <dc-import name="TabBar" selected="browse" accent="{{accent}}" hint-size="358px,62px"></dc-import>
   </div>

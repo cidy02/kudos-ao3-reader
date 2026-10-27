@@ -30,12 +30,12 @@ button{cursor:pointer}
       <div role="radiogroup" aria-label="Theme" style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px">
         <sc-for list="{{themes}}" as="t" hint-placeholder-count="4">
           <button role="radio" aria-checked="{{t.checked}}" style="border: none; padding: 0; background: transparent; font-family: inherit; display: flex; flex-direction: column; align-items: center; gap: 6px">
-            <span aria-hidden="true" style="width: 100%; height: 64px; border-radius: 14px; background: {{t.bg}}; color: {{t.fg}}; box-shadow: {{t.ring}}; font-family: 'New York', Georgia, serif; font-size: 22px; display: flex; align-items: center; justify-content: center">Aa</span>
+            <span aria-hidden="true" style="width: 100%; height: 64px; border-radius: 16px; background: {{t.bg}}; color: {{t.fg}}; box-shadow: {{t.ring}}; font-family: 'New York', Georgia, serif; font-size: 22px; display: flex; align-items: center; justify-content: center">Aa</span>
             <span style="font-size: 13px; font-weight: {{t.weight}}; color: #1C1C1E">{{t.name}}</span>
           </button>
         </sc-for>
       </div>
-      <div style="background: #FFFFFF; border-radius: 14px; padding: 10px 16px; display: flex; align-items: center; gap: 12px">
+      <div style="background: #FFFFFF; border-radius: 16px; padding: 10px 16px; display: flex; align-items: center; gap: 12px">
         <span aria-hidden="true" style="font-size: 14px; font-weight: 600">A</span>
         <div role="slider" aria-label="Text size" aria-valuenow="19" style="flex: 1; position: relative; height: 4px; border-radius: 2px; background: #E5E5EA">
           <div style="width: 45%; height: 4px; border-radius: 2px; background: {{accent}}"></div>
@@ -43,7 +43,7 @@ button{cursor:pointer}
         </div>
         <span aria-hidden="true" style="font-size: 22px; font-weight: 600">A</span>
       </div>
-      <div style="background: #FFFFFF; border-radius: 14px; overflow: hidden">
+      <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
         <div style="display: flex; align-items: center; height: 46px; padding: 0 16px; gap: 8px; border-bottom: 0.5px solid #E5E5EA">
           <span style="flex: 1; font-size: 16px">Font</span><span style="font-family: 'New York', Georgia, serif; font-size: 16px; color: #6C6C70">New York</span>
           <svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg>
@@ -62,7 +62,7 @@ button{cursor:pointer}
         <sc-for list="{{toggles}}" as="g" hint-placeholder-count="3">
           <div style="display: flex; align-items: center; height: 46px; padding: 0 16px; border-top: {{g.sep}}">
             <span style="flex: 1; font-size: 16px">{{g.label}}</span>
-            <span role="switch" aria-checked="{{g.on}}" aria-label="{{g.label}}" style="width: 51px; height: 31px; border-radius: 16px; background: {{g.track}}; position: relative"><span style="position: absolute; left: {{g.knob}}px; top: 2px; width: 27px; height: 27px; border-radius: 14px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.2)"></span></span>
+            <span role="switch" aria-checked="{{g.on}}" aria-label="{{g.label}}" style="width: 51px; height: 31px; border-radius: 16px; background: {{g.track}}; position: relative"><span style="position: absolute; left: {{g.knob}}px; top: 2px; width: 27px; height: 27px; border-radius: 16px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.2)"></span></span>
           </div>
         </sc-for>
       </div>

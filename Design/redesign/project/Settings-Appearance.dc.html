@@ -22,8 +22,8 @@ button{cursor:pointer}
   <main style="padding: 106px 16px 0; display: flex; flex-direction: column; gap: 16px">
     <h1 style="margin: 0 4px; font-size: 34px; line-height: 41px; font-weight: 700; letter-spacing: 0.4px">Appearance</h1>
     <section style="display: flex; flex-direction: column; gap: 6px">
-      <h2 style="margin: 0 16px; font-size: 13px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; color: #6C6C70">Theme</h2>
-      <div style="background: #FFFFFF; border-radius: 14px; padding: 14px 12px">
+      <h2 style="margin: 0 16px; font-size: 13px; font-weight: 400; color: #6C6C70">Theme</h2>
+      <div style="background: #FFFFFF; border-radius: 16px; padding: 14px 12px">
         <div role="radiogroup" aria-label="Theme" style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px">
           <sc-for list="{{themes}}" as="t" hint-placeholder-count="4">
             <button role="radio" aria-checked="{{t.checked}}" style="border: none; padding: 0; background: transparent; font-family: inherit; display: flex; flex-direction: column; align-items: center; gap: 6px">
@@ -38,14 +38,14 @@ button{cursor:pointer}
           </sc-for>
         </div>
       </div>
-      <div style="background: #FFFFFF; border-radius: 14px; display: flex; align-items: center; height: 46px; padding: 0 16px">
+      <div style="background: #FFFFFF; border-radius: 16px; display: flex; align-items: center; height: 46px; padding: 0 16px">
         <span style="flex: 1; font-size: 16px">Match app and reader theme</span>
-        <span role="switch" aria-checked="true" aria-label="Match app and reader theme" style="width: 51px; height: 31px; border-radius: 16px; background: #34C759; position: relative"><span style="position: absolute; right: 2px; top: 2px; width: 27px; height: 27px; border-radius: 14px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.2)"></span></span>
+        <span role="switch" aria-checked="true" aria-label="Match app and reader theme" style="width: 51px; height: 31px; border-radius: 16px; background: #34C759; position: relative"><span style="position: absolute; right: 2px; top: 2px; width: 27px; height: 27px; border-radius: 16px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.2)"></span></span>
       </div>
     </section>
     <section style="display: flex; flex-direction: column; gap: 6px">
-      <h2 style="margin: 0 16px; font-size: 13px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; color: #6C6C70">Accent colour</h2>
-      <div style="background: #FFFFFF; border-radius: 14px; overflow: hidden">
+      <h2 style="margin: 0 16px; font-size: 13px; font-weight: 400; color: #6C6C70">Accent colour</h2>
+      <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
         <div role="radiogroup" aria-label="Accent colour" style="display: flex; justify-content: space-between; padding: 14px 16px">
           <sc-for list="{{accents}}" as="a" hint-placeholder-count="7">
             <button role="radio" aria-checked="{{a.checked}}" aria-label="{{a.name}}" style="width: 32px; height: 32px; border: none; border-radius: 16px; background: {{a.hex}}; box-shadow: {{a.ring}}"></button>
@@ -57,8 +57,8 @@ button{cursor:pointer}
       </div>
     </section>
     <section style="display: flex; flex-direction: column; gap: 6px">
-      <h2 style="margin: 0 16px; font-size: 13px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; color: #6C6C70">Reading fonts</h2>
-      <div style="background: #FFFFFF; border-radius: 14px; overflow: hidden">
+      <h2 style="margin: 0 16px; font-size: 13px; font-weight: 400; color: #6C6C70">Reading fonts</h2>
+      <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
         <sc-for list="{{fonts}}" as="f" hint-placeholder-count="4">
           <div style="display: flex; align-items: center; height: 46px; padding: 0 16px; border-top: {{f.sep}}">
             <span style="flex: 1; font-family: {{f.family}}; font-size: 17px">{{f.name}}</span>
@@ -70,7 +70,7 @@ button{cursor:pointer}
         </div>
       </div>
     </section>
-    <div style="background: #FFFFFF; border-radius: 14px; display: flex; align-items: center; height: 46px; padding: 0 16px; gap: 8px">
+    <div style="background: #FFFFFF; border-radius: 16px; display: flex; align-items: center; height: 46px; padding: 0 16px; gap: 8px">
       <span style="flex: 1; font-size: 16px">Customize Theme</span>
       <svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg>
     </div>
