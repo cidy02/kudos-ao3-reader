@@ -37,9 +37,7 @@ a{color:#990000}a:hover{color:#6E0000}
   </section>
 
   <section aria-label="Right pane" style="position: absolute; left: 495px; top: 0; width: 456px; height: 669px; padding: 20px 86px 0 16px; box-sizing: border-box; display: flex; flex-direction: column; gap: 20px; overflow: hidden">
-    <div style="height: 61px; display: flex; align-items: flex-start; justify-content: flex-end">
-      <button style="height: 40px; padding: 0 16px; border: none; border-radius: 20px; font-family: inherit; font-size: 17px; color: #1C1C1E; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">Select</button>
-    </div>
+    <div aria-hidden="true" style="height: 61px"></div>
     <section aria-label="Reading Now" style="display: flex; flex-direction: column; gap: 10px">
       <div style="display: flex; align-items: baseline; justify-content: space-between">
         <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">Reading Now</h2>
@@ -73,8 +71,8 @@ a{color:#990000}a:hover{color:#6E0000}
     </section>
   </section>
 
-  <div style="position: absolute; right: 10px; top: 182px">
-    <dc-import name="TabRail" selected="home" accent="#990000" hint-size="64px,312px"></dc-import>
+  <div style="position: absolute; right: 8px; top: 0; z-index: 2">
+    <dc-import name="DuoSideBar" height="669" tabs="home" actions="{{side}}" accent="#990000" hint-size="64px,669px"></dc-import>
   </div>
 </div>
 </x-dc>
@@ -89,6 +87,7 @@ class Component extends DCLogic {
       { title: 'The Hound, Revisited', author: 'fogandlamplight', fandom: 'Sherlock Holmes', rating: 'T', category: 'MM', warnings: 'present', status: 'wip', words: '30k', chapters: '5/?', updated: '1 new · yesterday', badge: '+1' }
     ];
     return {
+      side: [{ label: 'Select', d: 'M12 3.5a8.5 8.5 0 1 1 0 17 8.5 8.5 0 0 1 0-17zM8.2 12.2l2.6 2.6 5-5.3' }],
       updated: updated.map((w, i) => ({ ...w, divider: i < updated.length - 1 })),
       reading: [
         { title: 'Salt & Starlight', author: 'wrenfield', fandom: 'Original Work', rating: 'M', category: 'Gen', warnings: 'undisclosed', status: 'wip', meta: 'Ch 12 · 40%', progress: 40, badge: '+3' },

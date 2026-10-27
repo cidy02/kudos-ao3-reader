@@ -15,36 +15,20 @@ a{color:#990000}a:hover{color:#6E0000}
 </style>
 </helmet>
 <div style="width: 951px; height: 669px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
-  <div style="position: absolute; left: 10px; top: 10px; z-index: 2">
-    <dc-import name="DuoSidebar" selected="home" accent="#990000" hint-size="232px,649px"></dc-import>
+  <div style="position: absolute; right: 8px; top: 0; z-index: 2">
+    <dc-import name="DuoSideBar" height="669" tabs="home" actions="{{side}}" accent="#990000" hint-size="64px,669px"></dc-import>
   </div>
 
-  <main style="position: absolute; left: 252px; right: 0; top: 0; padding: 18px 16px 0 20px; display: flex; flex-direction: column; gap: 20px">
-    <header style="display: flex; align-items: flex-start; justify-content: space-between; gap: 12px">
-      <div style="display: flex; flex-direction: column; gap: 2px">
-        <h1 style="margin: 0; font-size: 34px; line-height: 41px; font-weight: 700; letter-spacing: 0.4px">Home</h1>
-        <a href="Insights.dc.html" style="text-decoration: none; font-size: 15px; line-height: 20px; color: #6C6C70"><span style="font-weight: 600; color: #3A3A3C">4 h 10 m</span> this week · <span style="font-weight: 600; color: #3A3A3C">2</span> finished · <span style="font-weight: 600; color: #3A3A3C">9-day</span> streak ›</a>
-      </div>
-      <button style="height: 40px; padding: 0 16px; border: none; border-radius: 20px; font-family: inherit; font-size: 17px; color: #1C1C1E; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">Select</button>
-    </header>
-
-    <div style="display: flex; gap: 20px; align-items: flex-start">
-      <dc-import name="ResumeCard" variant="home" width="340" accent="#990000" hint-size="340px,280px"></dc-import>
-      <section aria-label="Reading Now" style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px">
-        <div style="display: flex; align-items: baseline; justify-content: space-between">
-          <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">Reading Now</h2>
-          <a href="Library-Section.dc.html" style="font-size: 17px; text-decoration: none">See All</a>
+  <main style="position: absolute; left: 0; top: 0; width: 871px; padding: 18px 0 0 24px; box-sizing: border-box; display: flex; gap: 40px">
+    <div style="width: 411px; flex-shrink: 0; display: flex; flex-direction: column; gap: 18px">
+      <header style="display: flex; align-items: flex-start; justify-content: space-between; gap: 12px">
+        <div style="display: flex; flex-direction: column; gap: 2px">
+          <h1 style="margin: 0; font-size: 34px; line-height: 41px; font-weight: 700; letter-spacing: 0.4px">Home</h1>
+          <a href="Insights.dc.html" style="text-decoration: none; font-size: 15px; line-height: 20px; color: #6C6C70"><span style="font-weight: 600; color: #3A3A3C">4 h 10 m</span> this week · <span style="font-weight: 600; color: #3A3A3C">2</span> finished · <span style="font-weight: 600; color: #3A3A3C">9-day</span> streak ›</a>
         </div>
-        <div style="display: flex; gap: 12px; overflow: hidden">
-          <sc-for list="{{reading}}" as="w" hint-placeholder-count="3">
-            <dc-import name="CoverCard" work="{{w}}" width="96" accent="#990000" hint-size="96px,220px"></dc-import>
-          </sc-for>
-        </div>
-      </section>
-    </div>
-
-    <div style="display: flex; gap: 20px; align-items: flex-start">
-      <section aria-label="New Chapters" style="width: 340px; flex-shrink: 0; display: flex; flex-direction: column; gap: 2px">
+      </header>
+      <dc-import name="ResumeCard" variant="home" width="411" accent="#990000" hint-size="411px,280px"></dc-import>
+      <section aria-label="New Chapters" style="display: flex; flex-direction: column; gap: 2px">
         <div style="display: flex; align-items: baseline; justify-content: space-between">
           <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">New Chapters</h2>
           <a href="Subscriptions.dc.html" style="font-size: 17px; text-decoration: none">See All</a>
@@ -55,7 +39,20 @@ a{color:#990000}a:hover{color:#6E0000}
           </sc-for>
         </div>
       </section>
-      <section aria-label="Reading Queues" style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px">
+    </div>
+    <div style="flex: 1; min-width: 0; padding-top: 70px; display: flex; flex-direction: column; gap: 22px">
+      <section aria-label="Reading Now" style="display: flex; flex-direction: column; gap: 10px">
+        <div style="display: flex; align-items: baseline; justify-content: space-between">
+          <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">Reading Now</h2>
+          <a href="Library-Section.dc.html" style="font-size: 17px; text-decoration: none">See All</a>
+        </div>
+        <div style="display: flex; gap: 12px; overflow: hidden">
+          <sc-for list="{{reading}}" as="w" hint-placeholder-count="3">
+            <dc-import name="CoverCard" work="{{w}}" width="112" accent="#990000" hint-size="112px,250px"></dc-import>
+          </sc-for>
+        </div>
+      </section>
+      <section aria-label="Reading Queues" style="display: flex; flex-direction: column; gap: 10px">
         <div style="display: flex; align-items: baseline; justify-content: space-between">
           <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">Reading Queues</h2>
           <a href="Queues.dc.html" style="font-size: 17px; text-decoration: none">All Queues</a>
@@ -90,6 +87,7 @@ class Component extends DCLogic {
       { title: 'The Hound, Revisited', author: 'fogandlamplight', fandom: 'Sherlock Holmes', rating: 'T', category: 'MM', warnings: 'present', status: 'wip', words: '30k', chapters: '5/?', updated: '1 new · yesterday', badge: '+1' }
     ];
     return {
+      side: [{ label: 'Select', d: 'M12 3.5a8.5 8.5 0 1 1 0 17 8.5 8.5 0 0 1 0-17zM8.2 12.2l2.6 2.6 5-5.3' }],
       reading: [
         { title: 'Salt & Starlight', author: 'wrenfield', fandom: 'Original Work', rating: 'M', category: 'Gen', warnings: 'undisclosed', status: 'wip', meta: 'Ch 12 · 40%', progress: 40, badge: '+3' },
         { title: 'Whatever Remains', author: 'fogandlamplight', fandom: 'Sherlock Holmes', rating: 'E', category: 'MM', warnings: 'present', warningCount: 2, status: 'complete', hidden: true },

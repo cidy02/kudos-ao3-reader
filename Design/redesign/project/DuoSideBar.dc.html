@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Duo side controls</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 64px; height: {{height}}px; padding: 10px 0 {{padBottom}}px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; gap: 10px; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; color: {{fg}}">
+  <sc-if value="{{showStatus}}" hint-placeholder-val="{{true}}">
+    <div aria-hidden="true" style="display: flex; flex-direction: column; align-items: center; gap: 6px; padding-bottom: 4px">
+      <span style="width: 30px; height: 74px; border-radius: 15px; background: #000000; display: flex; align-items: flex-start; justify-content: center; padding-top: 9px; box-sizing: border-box"><span style="width: 10px; height: 10px; border-radius: 5px; background: #1C2433; box-shadow: inset 0 0 0 2px #0B0F17"></span></span>
+      <span style="font-size: 13px; line-height: 16px; font-weight: 600; letter-spacing: -0.2px">9:41</span>
+      <svg width="16" height="11" viewBox="0 0 16 11" fill="currentColor"><rect x="0" y="7" width="3" height="4" rx="0.8"></rect><rect x="4.3" y="5" width="3" height="6" rx="0.8"></rect><rect x="8.6" y="2.5" width="3" height="8.5" rx="0.8"></rect><rect x="12.9" y="0" width="3" height="11" rx="0.8"></rect></svg>
+      <svg width="22" height="11" viewBox="0 0 22 11"><rect x="0.5" y="0.5" width="18.5" height="10" rx="3" fill="none" stroke="currentColor" stroke-opacity="0.4"></rect><rect x="2" y="2" width="13" height="7" rx="1.6" fill="currentColor"></rect><rect x="20" y="3.5" width="1.6" height="4" rx="0.8" fill="currentColor" fill-opacity="0.4"></rect></svg>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{hasNav}}" hint-placeholder-val="{{true}}">
+    <button aria-label="{{navLabel}}" style="width: 48px; height: 48px; flex-shrink: 0; border: none; border-radius: 24px; color: {{fg}}; display: flex; align-items: center; justify-content: center; background: {{glass}}; box-shadow: {{shadow}}">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="{{navD}}"></path></svg>
+    </button>
+  </sc-if>
+
+  <sc-if value="{{hasPrimary}}" hint-placeholder-val="{{false}}">
+    <button aria-label="{{primaryLabel}}" style="width: 48px; height: 48px; flex-shrink: 0; border: none; border-radius: 24px; color: #FFFFFF; display: flex; align-items: center; justify-content: center; background: {{accent}}; box-shadow: 0 4px 14px rgba(0,0,0,0.18)">
+      <svg aria-hidden="true" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="{{primaryD}}"></path></svg>
+    </button>
+  </sc-if>
+
+  <sc-if value="{{hasActions}}" hint-placeholder-val="{{true}}">
+    <div role="toolbar" aria-label="Actions" style="width: 48px; flex-shrink: 0; border-radius: 24px; padding: 2px 0; display: flex; flex-direction: column; background: {{glass}}; box-shadow: {{shadow}}">
+      <sc-for list="{{actions}}" as="a" hint-placeholder-count="3">
+        <button aria-label="{{a.label}}" aria-pressed="{{a.pressed}}" style="width: 48px; height: 44px; border: none; border-radius: 22px; background: {{a.bg}}; color: {{a.fg}}; font-family: inherit; font-size: 16px; font-weight: 600; display: flex; align-items: center; justify-content: center">
+          <sc-if value="{{a.isText}}" hint-placeholder-val="{{false}}">{{a.text}}</sc-if>
+          <sc-if value="{{a.isIcon}}" hint-placeholder-val="{{true}}"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="{{a.fill}}" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="{{a.d}}"></path></svg></sc-if>
+        </button>
+      </sc-for>
+    </div>
+  </sc-if>
+
+  <span style="flex: 1"></span>
+
+  <sc-if value="{{hasTabs}}" hint-placeholder-val="{{true}}">
+    <nav aria-label="Tabs" style="width: 56px; flex-shrink: 0; border-radius: 28px; padding: 3px; box-sizing: border-box; display: flex; flex-direction: column; gap: 2px; background: {{glass}}; box-shadow: {{shadow}}">
+      <sc-for list="{{tabs}}" as="t" hint-placeholder-count="4">
+        <button aria-current="{{t.current}}" style="width: 50px; height: 50px; border: none; border-radius: 25px; background: {{t.bg}}; color: {{t.fg}}; font-family: inherit; font-size: 9.5px; font-weight: 600; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px">
+          <svg aria-hidden="true" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="{{t.d}}"></path></svg>
+          {{t.label}}
+        </button>
+      </sc-for>
+    </nav>
+    <button aria-label="Search" aria-current="{{searchCurrent}}" style="width: 52px; height: 52px; flex-shrink: 0; border: none; border-radius: 26px; color: {{searchFg}}; display: flex; align-items: center; justify-content: center; background: {{searchBg}}; box-shadow: {{shadow}}">
+      <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="m15.5 15.5 5 5"></path></svg>
+    </button>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"height":{"editor":"int","default":669,"min":300,"max":1000},"nav":{"editor":"enum","options":["back","close","none"],"default":"none"},"primary":{"editor":"enum","options":["none","done","post","play"],"default":"none"},"actions":{"editor":null},"tabs":{"editor":"enum","options":["home","library","browse","account","search","none"],"default":"home"},"status":{"editor":"boolean","default":true},"theme":{"editor":"enum","options":["light","sepia","dark"],"default":"light"},"accent":{"editor":"color","default":"#990000"},"$preview":{"width":64,"height":669}}'>
+class Component extends DCLogic {
+  renderVals() {
+    // iPhone Duo puts the status bar, Dynamic Island, toolbar and tab bar on the
+    // trailing edge, lined up with the camera (HIG: Vertical controls). Order from
+    // the top: navigation (Back/Close), the prominent action, the toolbar group;
+    // the tab bar and Search sit at the bottom. Items overflow bottom to top.
+    const accent = this.props.accent ?? '#990000';
+    const theme = this.props.theme ?? 'light';
+    const T = {
+      light: { glass: 'rgba(255,255,255,0.78)', fg: '#1C1C1E', shadow: '0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)' },
+      sepia: { glass: 'rgba(255,253,248,0.78)', fg: '#1F1B16', shadow: '0 6px 20px rgba(60,40,10,0.10), 0 0 0 0.5px rgba(60,40,10,0.08)' },
+      dark: { glass: 'rgba(44,44,48,0.82)', fg: '#F2F2F7', shadow: '0 6px 20px rgba(0,0,0,0.4), 0 0 0 0.5px rgba(255,255,255,0.08)' }
+    }[theme];
+    const x = accent.replace('#', '');
+    const tint = 'rgba(' + parseInt(x.slice(0, 2), 16) + ',' + parseInt(x.slice(2, 4), 16) + ',' + parseInt(x.slice(4, 6), 16) + ',0.12)';
+    const nav = this.props.nav ?? 'none';
+    const primary = this.props.primary ?? 'none';
+    const P = { done: ['Done', 'M5 12.5l4.6 4.6L19.2 7.4'], post: ['Post', 'M12 19V5M6 11l6-6 6 6'], play: ['Resume', 'M8 5.5v13l10.5-6.5z'] }[primary];
+    const tabsSel = this.props.tabs ?? 'home';
+    const all = [
+      { id: 'home', label: 'Home', d: 'M3.5 10.5 12 3.5l8.5 7M5.5 9v11h5v-6h3v6h5V9' },
+      { id: 'library', label: 'Library', d: 'M3.5 4h4v16h-4zM9.5 4h4v16h-4zM15.6 5.4l3.4-.9 3 15.2-3.4.9z' },
+      { id: 'browse', label: 'Browse', d: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z' },
+      { id: 'account', label: 'Account', d: 'M12 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8zM4.5 20c1.4-3.8 4.2-5.8 7.5-5.8s6.1 2 7.5 5.8' }
+    ];
+    const DOTS = 'M5.5 12h.01M12 12h.01M18.5 12h.01';
+    const actions = (this.props.actions || [{ label: 'More', d: DOTS }]).map((a) => ({
+      label: a.label, d: a.d === 'dots' ? DOTS : a.d, text: a.text || '', isText: !!a.text, isIcon: !a.text,
+      pressed: a.on ? 'true' : 'false', bg: a.on ? tint : 'transparent', fg: a.on ? (a.color || accent) : (a.color || T.fg), fill: a.fill || 'none'
+    }));
+    return {
+      height: Number(this.props.height ?? 669),
+      padBottom: tabsSel === 'none' ? 10 : 14,
+      fg: T.fg, glass: T.glass, shadow: T.shadow, accent,
+      showStatus: this.props.status ?? true,
+      hasNav: nav !== 'none', navLabel: nav === 'close' ? 'Close' : 'Back', navD: nav === 'close' ? 'M6 6l12 12M18 6 6 18' : 'm15 5-7 7 7 7',
+      hasPrimary: !!P, primaryLabel: P ? P[0] : '', primaryD: P ? P[1] : '',
+      hasActions: actions.length > 0, actions,
+      hasTabs: tabsSel !== 'none',
+      searchCurrent: tabsSel === 'search' ? 'page' : 'false', searchFg: tabsSel === 'search' ? accent : T.fg, searchBg: tabsSel === 'search' ? 'linear-gradient(' + tint + ', ' + tint + '), ' + T.glass : T.glass,
+      tabs: all.map((t) => ({ ...t, current: t.id === tabsSel ? 'page' : 'false', bg: t.id === tabsSel ? tint : 'transparent', fg: t.id === tabsSel ? accent : T.fg }))
+    };
+  }
+}
+</script>
+</body>
+</html>
