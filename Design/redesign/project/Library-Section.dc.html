@@ -13,23 +13,23 @@ body{margin:0}
 button{cursor:pointer}
 </style>
 </helmet>
-<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #F2F2F7; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
   <div style="position: absolute; left: 16px; right: 16px; top: 54px; display: flex; justify-content: space-between">
     <button aria-label="Back to Library" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
       <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg>
     </button>
-    <button style="height: 44px; padding: 0 18px; border: none; border-radius: 22px; font-family: inherit; font-size: 16px; font-weight: 500; color: #1C1C1E; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">Select</button>
+    <button style="height: 44px; padding: 0 18px; border: none; border-radius: 22px; font-family: inherit; font-size: 17px; color: #1C1C1E; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">Select</button>
   </div>
 
   <main style="padding: 106px 16px 0; display: flex; flex-direction: column; gap: 16px">
-    <header style="padding: 0 4px; display: flex; flex-direction: column; gap: 2px">
+    <header style=" display: flex; flex-direction: column; gap: 2px">
       <h1 style="margin: 0; font-size: 34px; line-height: 41px; font-weight: 700; letter-spacing: 0.4px">Reading History</h1>
       <p style="margin: 0; font-size: 15px; line-height: 20px; color: #6C6C70">412 works · most recently read first</p>
     </header>
 
     <section aria-label="Today" style="display: flex; flex-direction: column; gap: 6px">
-      <h2 style="margin: 0 4px; font-size: 13px; line-height: 18px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; color: #6C6C70">Today</h2>
-      <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
+      <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">Today</h2>
+      <div style="margin: 0 -16px">
         <div style="position: relative; overflow: hidden">
           <div style="position: absolute; right: 0; top: 0; bottom: 0; display: flex">
             <button style="width: 76px; border: none; background: #8E8E93; color: #FFFFFF; font-family: inherit; font-size: 13px; font-weight: 600; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px">
@@ -42,19 +42,19 @@ button{cursor:pointer}
             </button>
           </div>
           <div style="position: relative; background: #FFFFFF; transform: translateX(-152px)">
-            <dc-import name="WorkRow" work="{{letters}}" accent="{{accent}}" hint-size="100%,96px"></dc-import>
+            <dc-import name="WorkRow" work="{{letters}}" ledger="{{true}}" accent="{{accent}}" hint-size="100%,130px"></dc-import>
           </div>
         </div>
-        <div style="height: 0.5px; margin-left: 76px; background: #D1D1D6"></div>
-        <dc-import name="WorkRow" work="{{cart}}" accent="{{accent}}" hint-size="100%,112px"></dc-import>
+        <div style="height: 0.5px; margin-left: 79px; background: #D1D1D6"></div>
+        <dc-import name="WorkRow" work="{{cart}}" ledger="{{true}}" accent="{{accent}}" hint-size="100%,150px"></dc-import>
       </div>
     </section>
 
     <section aria-label="Yesterday" style="display: flex; flex-direction: column; gap: 6px">
-      <h2 style="margin: 0 4px; font-size: 13px; line-height: 18px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; color: #6C6C70">Yesterday</h2>
-      <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
-        <dc-import name="WorkRow" work="{{baker}}" accent="{{accent}}" hint-size="100%,96px"></dc-import>
-        <div style="margin: 0 16px 12px 76px; padding: 10px 12px; border-radius: 12px; background: #F2F2F7; display: flex; align-items: center; gap: 10px">
+      <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">Yesterday</h2>
+      <div style="margin: 0 -16px">
+        <dc-import name="WorkRow" work="{{baker}}" ledger="{{true}}" accent="{{accent}}" hint-size="100%,130px"></dc-import>
+        <div style="margin: 0 16px 12px 79px; padding: 10px 12px; border-radius: 16px; background: #F2F2F7; display: flex; align-items: center; gap: 10px">
           <span style="flex: 1; font-size: 13px; line-height: 18px; color: #3A3A3C">Finished Oct 24 · read twice · 1 h 10 min</span>
           <button style="border: none; background: none; padding: 0; font-family: inherit; font-size: 13px; font-weight: 600; color: {{accent}}">Move back to In progress</button>
         </div>
@@ -62,7 +62,7 @@ button{cursor:pointer}
     </section>
   </main>
 
-  <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 150px; background: linear-gradient(to bottom, rgba(242,242,247,0), rgba(242,242,247,0.94) 72%); pointer-events: none"></div>
+  <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 150px; background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0.94) 72%); pointer-events: none"></div>
   <div style="position: absolute; left: 16px; bottom: 28px">
     <dc-import name="TabBar" selected="library" accent="{{accent}}" hint-size="358px,62px"></dc-import>
   </div>
@@ -73,9 +73,9 @@ class Component extends DCLogic {
   renderVals() {
     return {
       accent: this.props.accent ?? '#990000',
-      letters: { title: 'Letters Never Sent', author: 'marginalia', fandom: 'Persuasion', rating: 'T', category: 'FM', warnings: 'none', status: 'complete', words: '21,880', chapters: '4/4', kudos: '1,530', updated: 'Read 9:40' },
-      cart: { title: "The Cartographer's Daughter", author: 'inkwell_moth', fandom: 'Original Work', rating: 'T', category: 'FM', warnings: 'none', status: 'wip', words: '84,210', chapters: '12/20', kudos: '3,104', updated: 'Read 8:15', progress: 58, progressLabel: 'Ch 7 · 58%' },
-      baker: { title: 'The Baker Street Irregular', author: 'fogandlamplight', fandom: 'Sherlock Holmes', rating: 'G', category: 'Gen', warnings: 'none', status: 'complete', words: '9,140', chapters: '1/1', kudos: '2,045', updated: 'Read 22:30' }
+      letters: { title: 'Letters Never Sent', author: 'marginalia', fandom: 'Persuasion', rating: 'T', category: 'FM', warnings: 'none', status: 'complete', language: 'English', words: '21,880', chapters: '4/4', comments: '88', kudos: '1,530', bookmarks: '204', hits: '17.0k', updated: 'Read 9:40', summary: 'Anne writes to Wentworth every year on the same date, and never sends a single letter.' },
+      cart: { title: 'The Cartographer’s Daughter', author: 'inkwell_moth', fandom: 'Original Work', rating: 'T', category: 'FM', warnings: 'none', status: 'wip', language: 'English', words: '84,210', chapters: '12/20', comments: '286', kudos: '3,104', bookmarks: '512', hits: '41.2k', updated: 'Read 8:15', progress: 58, progressLabel: 'Ch 7 · 58%', planned: 20, posted: 12, read: 6, cur: 22, summary: 'Elinor Vane inherits her mother’s instruments and none of her maps.' },
+      baker: { title: 'The Baker Street Irregular', author: 'fogandlamplight', fandom: 'Sherlock Holmes', rating: 'G', category: 'Gen', warnings: 'none', status: 'complete', language: 'English', words: '9,140', chapters: '1/1', comments: '41', kudos: '2,045', bookmarks: '310', hits: '19.8k', updated: 'Read 22:30', summary: 'Wiggins is promoted to junior detective for exactly one afternoon.' }
     };
   }
 }
