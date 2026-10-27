@@ -61,8 +61,8 @@ button{cursor:pointer}
         <sc-if value="{{s.isCollections}}" hint-placeholder-val="{{false}}">
           <div style="display: flex; gap: 12px; margin-right: -16px; overflow: hidden">
             <sc-for list="{{collections}}" as="c" hint-placeholder-count="3">
-              <button style="width: 150px; flex-shrink: 0; border: none; border-radius: 16px; padding: 0; background: transparent; font-family: inherit; text-align: left; display: flex; flex-direction: column; gap: 8px">
-                <dc-import name="CoverStack" tiles="{{c.tiles}}" width="150" height="150" hint-size="150px,150px"></dc-import>
+              <button style="width: 160px; flex-shrink: 0; border: none; border-radius: 16px; padding: 0; background: transparent; font-family: inherit; text-align: left; display: flex; flex-direction: column; gap: 8px">
+                <dc-import name="CoverStack" tiles="{{c.tiles}}" colour="{{c.colour}}" initial="{{c.initial}}" kind="collection" width="160" height="184" hint-size="160px,184px"></dc-import>
                 <span style="font-size: 15px; line-height: 20px; font-weight: 600; color: #000000">{{c.name}}</span>
                 <span style="font-size: 12px; line-height: 16px; color: #6C6C70">{{c.detail}}</span>
               </button>
@@ -112,10 +112,10 @@ class Component extends DCLogic {
       return 'linear-gradient(155deg, hsl(' + h + ', 46%, 27%), hsl(' + ((h + 22) % 360) + ', 50%, 41%))';
     };
     const cols = [
-      { name: 'Austen Variations', detail: '12 works · on Home', c: ['#5B2A4E', '#4A3B6B', '#7B3F61', '#2F3A4A'] },
-      { name: 'Baker Street', detail: '9 works', c: ['#8A5A12', '#3D4A2F', '#6B1F2A', '#2F3A4A'] },
-      { name: 'Comfort Reads', detail: '15 works', c: ['#7A4E2D', '#23506B', '#2E5339', '#1F4E5F'] }
-    ].map((c) => ({ name: c.name, detail: c.detail, tiles: c.c.slice(0, 3).map(art) }));
+      { name: 'Austen Variations', detail: '12 works · on Home', colour: '#9C2F6B', h: [150, 335, 290] },
+      { name: 'Baker Street', detail: '9 works', colour: '#B8892A', h: [32, 44, 188] },
+      { name: 'Comfort Reads', detail: '15 works', colour: '#2F7A4A', h: [262, 188, 150] }
+    ].map((c) => ({ name: c.name, detail: c.detail, colour: c.colour, initial: c.name.charAt(0), tiles: c.h.map((h) => 'linear-gradient(155deg, hsl(' + h + ', 46%, 27%), hsl(' + ((h + 22) % 360) + ', 50%, 41%))') }));
     return {
       accent,
       sections,

@@ -773,11 +773,27 @@
     },
     "CoverStack.dc.html": {
       "x": 1360,
-      "y": 1640,
-      "w": 96,
-      "h": 96,
+      "y": 1940,
+      "w": 150,
+      "h": 170,
       "title": "Cover stack, queues and collections (component)",
       "page": "system"
+    },
+    "AppIcon.dc.html": {
+      "h": 96,
+      "page": "system",
+      "title": "App icon (component)",
+      "w": 96,
+      "x": 1540,
+      "y": 1940
+    },
+    "CommentThread.dc.html": {
+      "h": 520,
+      "page": "system",
+      "title": "Comment thread (component)",
+      "w": 390,
+      "x": 1360,
+      "y": 2160
     }
   },
   "createdOnFiles": {
@@ -1017,7 +1033,9 @@
     "Android.dc.html",
     "Themes.dc.html",
     "AX5.dc.html",
-    "CoverStack.dc.html"
+    "CoverStack.dc.html",
+    "AppIcon.dc.html",
+    "CommentThread.dc.html"
   ],
   "pages": [
     {
