@@ -16,7 +16,7 @@ a{color:#990000}a:hover{color:#6E0000}
 </helmet>
 <div style="width: 466px; height: 678px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
   <main style="padding: 28px 86px 0 16px; display: flex; flex-direction: column; gap: 22px">
-    <header style="display: flex; flex-direction: column; gap: 2px; padding-right: 80px">
+    <header style="display: flex; flex-direction: column; gap: 2px">
       <h1 style="margin: 0; font-size: 34px; line-height: 41px; font-weight: 700; letter-spacing: 0.4px">Home</h1>
       <a href="Insights.dc.html" style="align-self: flex-start; text-decoration: none; font-size: 15px; line-height: 20px; color: #6C6C70"><span style="font-weight: 600; color: #3A3A3C">4 h 10 m</span> this week · <span style="font-weight: 600; color: #3A3A3C">9-day</span> streak ›</a>
     </header>
@@ -41,10 +41,9 @@ a{color:#990000}a:hover{color:#6E0000}
     </section>
   </main>
 
-  <button style="position: absolute; right: 16px; top: 27px; height: 44px; padding: 0 18px; border: none; border-radius: 22px; font-family: inherit; font-size: 17px; color: #1C1C1E; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">Select</button>
 
-  <div style="position: absolute; right: 10px; top: 182px">
-    <dc-import name="TabRail" selected="home" accent="#990000" hint-size="64px,312px"></dc-import>
+  <div style="position: absolute; right: 8px; top: 0">
+    <dc-import name="DuoSideBar" height="678" tabs="home" actions="{{side}}" accent="#990000" hint-size="64px,678px"></dc-import>
   </div>
 </div>
 </x-dc>
@@ -52,6 +51,7 @@ a{color:#990000}a:hover{color:#6E0000}
 class Component extends DCLogic {
   renderVals() {
     return {
+      side: [{ label: 'Select', d: 'M12 3.5a8.5 8.5 0 1 1 0 17 8.5 8.5 0 0 1 0-17zM8.2 12.2l2.6 2.6 5-5.3' }],
       reading: [
         { title: 'Salt & Starlight', author: 'wrenfield', fandom: 'Original Work', rating: 'M', category: 'Gen', warnings: 'undisclosed', status: 'wip', meta: 'Ch 12 of 30 · 40%', progress: 40, badge: '+3' },
         { title: 'Whatever Remains', author: 'fogandlamplight', fandom: 'Sherlock Holmes', rating: 'E', category: 'MM', warnings: 'present', warningCount: 2, status: 'complete', hidden: true },

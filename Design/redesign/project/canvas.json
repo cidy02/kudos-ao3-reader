@@ -8,7 +8,7 @@
       "title": "AO3 collections",
       "w": 390,
       "x": 5090,
-      "y": 7780
+      "y": 7980
     },
     "AO3-Lists.dc.html": {
       "h": 844,
@@ -16,7 +16,7 @@
       "title": "Marked for Later · Bookmarks · History",
       "w": 390,
       "x": 1410,
-      "y": 7780
+      "y": 7980
     },
     "AO3-Web.dc.html": {
       "h": 844,
@@ -40,7 +40,7 @@
       "title": "About · What's New",
       "w": 390,
       "x": 3760,
-      "y": 9700
+      "y": 9900
     },
     "Account-Regrouped.dc.html": {
       "h": 1240,
@@ -48,7 +48,7 @@
       "title": "Account · proposed regroup",
       "w": 390,
       "x": 6030,
-      "y": 7780
+      "y": 7980
     },
     "Account-SignedOut.dc.html": {
       "h": 844,
@@ -56,7 +56,7 @@
       "title": "Account · signed out",
       "w": 390,
       "x": 470,
-      "y": 7780
+      "y": 7980
     },
     "Account.dc.html": {
       "h": 1360,
@@ -64,7 +64,7 @@
       "title": "Account",
       "w": 390,
       "x": 0,
-      "y": 7780
+      "y": 7980
     },
     "Android.dc.html": {
       "h": 1360,
@@ -96,7 +96,7 @@
       "title": "Report a bug",
       "w": 390,
       "x": 3290,
-      "y": 9700
+      "y": 9900
     },
     "Challenge.dc.html": {
       "h": 844,
@@ -104,7 +104,7 @@
       "title": "Challenge",
       "w": 390,
       "x": 5560,
-      "y": 7780
+      "y": 7980
     },
     "Collection.dc.html": {
       "h": 844,
@@ -270,7 +270,7 @@
     "DuoSidebar.dc.html": {
       "h": 649,
       "page": "system",
-      "title": "Sidebar, Duo open (component)",
+      "title": "Sidebar, Duo open (component) · earlier, replaced by Duo side controls",
       "w": 232,
       "x": 1504,
       "y": 1248
@@ -361,7 +361,7 @@
       "title": "Inbox",
       "w": 390,
       "x": 2350,
-      "y": 7780
+      "y": 7980
     },
     "Insights.dc.html": {
       "h": 844,
@@ -409,7 +409,7 @@
       "title": "Log in to AO3",
       "w": 390,
       "x": 940,
-      "y": 7780
+      "y": 7980
     },
     "Main.dc.html": {
       "h": 2080,
@@ -425,7 +425,7 @@
       "title": "Works · Series · Drafts",
       "w": 390,
       "x": 2820,
-      "y": 7780
+      "y": 7980
     },
     "Onboarding.dc.html": {
       "h": 844,
@@ -433,7 +433,7 @@
       "title": "Welcome",
       "w": 390,
       "x": 2350,
-      "y": 9700
+      "y": 9900
     },
     "Platform-Map.dc.html": {
       "h": 1760,
@@ -449,7 +449,7 @@
       "title": "Privacy and local data",
       "w": 390,
       "x": 1880,
-      "y": 9700
+      "y": 9900
     },
     "Queue.dc.html": {
       "h": 844,
@@ -473,7 +473,7 @@
       "title": "Read Aloud settings",
       "w": 390,
       "x": 3290,
-      "y": 6260
+      "y": 6460
     },
     "Reader-Contents.dc.html": {
       "h": 844,
@@ -481,7 +481,7 @@
       "title": "Reader · contents, bookmarks, notes",
       "w": 390,
       "x": 940,
-      "y": 6260
+      "y": 6460
     },
     "Reader-End.dc.html": {
       "h": 844,
@@ -489,7 +489,7 @@
       "title": "Reader · end of the work",
       "w": 390,
       "x": 3760,
-      "y": 6260
+      "y": 6460
     },
     "Reader-Find.dc.html": {
       "h": 844,
@@ -497,7 +497,7 @@
       "title": "Reader · find in work",
       "w": 390,
       "x": 1410,
-      "y": 6260
+      "y": 6460
     },
     "Reader-Highlight.dc.html": {
       "h": 844,
@@ -505,7 +505,7 @@
       "title": "Reader · highlight and note",
       "w": 390,
       "x": 1880,
-      "y": 6260
+      "y": 6460
     },
     "Reader-Menu.dc.html": {
       "h": 844,
@@ -513,7 +513,7 @@
       "title": "Reader · menu",
       "w": 390,
       "x": 470,
-      "y": 6260
+      "y": 6460
     },
     "Reader-ReadAloud.dc.html": {
       "h": 844,
@@ -521,7 +521,7 @@
       "title": "Reader · Read Aloud playing",
       "w": 390,
       "x": 2820,
-      "y": 6260
+      "y": 6460
     },
     "Reader-Settings.dc.html": {
       "h": 844,
@@ -529,7 +529,7 @@
       "title": "Reader · themes and settings",
       "w": 390,
       "x": 2350,
-      "y": 6260
+      "y": 6460
     },
     "Recently-Deleted.dc.html": {
       "h": 844,
@@ -585,7 +585,7 @@
       "title": "Settings · appearance and fonts",
       "w": 390,
       "x": 470,
-      "y": 9700
+      "y": 9900
     },
     "Settings-Backup-Sync.dc.html": {
       "h": 1100,
@@ -593,7 +593,7 @@
       "title": "Settings · backup, sync, import",
       "w": 390,
       "x": 940,
-      "y": 9700
+      "y": 9900
     },
     "Settings-Storage.dc.html": {
       "h": 844,
@@ -601,7 +601,7 @@
       "title": "Settings · downloads and storage",
       "w": 390,
       "x": 1410,
-      "y": 9700
+      "y": 9900
     },
     "Settings.dc.html": {
       "h": 1240,
@@ -609,7 +609,7 @@
       "title": "Settings",
       "w": 390,
       "x": 0,
-      "y": 9700
+      "y": 9900
     },
     "Shelf-Options.dc.html": {
       "h": 640,
@@ -665,7 +665,7 @@
       "title": "Subscriptions",
       "w": 390,
       "x": 1880,
-      "y": 7780
+      "y": 7980
     },
     "Symbols-Key.dc.html": {
       "h": 800,
@@ -689,7 +689,7 @@
       "title": "Protect your library",
       "w": 390,
       "x": 2820,
-      "y": 9700
+      "y": 9900
     },
     "System-Surfaces.dc.html": {
       "h": 960,
@@ -710,7 +710,7 @@
     "TabRail.dc.html": {
       "h": 312,
       "page": "system",
-      "title": "Tab rail, Duo cover (component)",
+      "title": "Tab rail, Duo cover (component) · earlier, replaced by Duo side controls",
       "w": 64,
       "x": 1360,
       "y": 1248
@@ -721,7 +721,7 @@
       "title": "Chapter text editor",
       "w": 1250,
       "x": 3760,
-      "y": 7780
+      "y": 7980
     },
     "Themes.dc.html": {
       "h": 2880,
@@ -745,7 +745,7 @@
       "title": "Post or edit a work",
       "w": 390,
       "x": 3290,
-      "y": 7780
+      "y": 7980
     },
     "WorkRow.dc.html": {
       "h": 112,
@@ -761,10 +761,10 @@
       "title": "Reader",
       "w": 390,
       "x": 0,
-      "y": 6260
+      "y": 6460
     },
     "iPhone-WorkDetail.dc.html": {
-      "h": 1880,
+      "h": 2080,
       "page": "iphone",
       "title": "Work Detail",
       "w": 390,
@@ -802,6 +802,14 @@
       "w": 390,
       "x": 1800,
       "y": 2160
+    },
+    "DuoSideBar.dc.html": {
+      "h": 669,
+      "page": "system",
+      "title": "Duo side controls: status, toolbar, tab bar on the trailing edge (component)",
+      "w": 64,
+      "x": 2230,
+      "y": 2160
     }
   },
   "createdOnFiles": {
@@ -836,7 +844,7 @@
       "text": "Account, writing, collections",
       "w": 240,
       "x": 0,
-      "y": 7480
+      "y": 7680
     },
     "rowBook": {
       "kind": "title1",
@@ -899,7 +907,7 @@
       "text": "Reader & Read Aloud",
       "w": 240,
       "x": 0,
-      "y": 5960
+      "y": 6160
     },
     "rowSettings": {
       "kind": "title1",
@@ -908,7 +916,7 @@
       "text": "Settings, onboarding, support",
       "w": 240,
       "x": 0,
-      "y": 9400
+      "y": 9600
     },
     "rowSystem": {
       "kind": "title1",
@@ -1044,7 +1052,8 @@
     "CoverStack.dc.html",
     "AppIcon.dc.html",
     "CommentThread.dc.html",
-    "ChapterEditor.dc.html"
+    "ChapterEditor.dc.html",
+    "DuoSideBar.dc.html"
   ],
   "pages": [
     {

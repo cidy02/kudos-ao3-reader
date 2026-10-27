@@ -15,11 +15,9 @@ button{cursor:pointer}
 </helmet>
 <div style="width: 951px; height: 669px; position: relative; overflow: hidden; background: #F2F2F7; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
 
-  <div style="position: absolute; left: 10px; top: 10px; z-index: 2">
-    <dc-import name="DuoSidebar" selected="account" accent="{{accent}}" hint-size="232px,649px"></dc-import>
-  </div>
 
-  <section aria-label="Account" style="position: absolute; left: 252px; top: 0; width: 368px; height: 669px; display: flex; flex-direction: column; box-sizing: border-box">
+
+  <section aria-label="Account" style="position: absolute; left: 0; top: 0; width: 475px; height: 669px; display: flex; flex-direction: column; box-sizing: border-box">
     <header style="flex-shrink: 0; padding: 14px 16px 8px; display: flex; align-items: center; justify-content: space-between; gap: 10px">
       <h1 style="margin: 0; font-size: 28px; line-height: 34px; font-weight: 700; letter-spacing: 0.35px">Account</h1>
       <div style="height: 40px; border-radius: 20px; display: flex; align-items: center; background: rgba(255,255,255,0.78); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
@@ -73,13 +71,12 @@ button{cursor:pointer}
     </div>
   </section>
 
-  <section aria-label="Inbox" style="position: absolute; left: 620px; top: 0; width: 331px; height: 669px; background: #FFFFFF; border-left: 0.5px solid #D1D1D6; box-sizing: border-box; overflow: hidden">
+  <section aria-label="Inbox" style="position: absolute; left: 475px; top: 0; width: 396px; height: 669px; background: #FFFFFF; border-left: 0.5px solid #D1D1D6; box-sizing: border-box; overflow: hidden">
     <header style="padding: 14px 16px 10px; display: flex; align-items: flex-start; justify-content: space-between; gap: 10px">
       <div style="display: flex; flex-direction: column; gap: 1px">
         <h2 style="margin: 0; font-size: 28px; line-height: 34px; font-weight: 700; letter-spacing: 0.35px">Inbox</h2>
         <p style="margin: 0; font-size: 13px; line-height: 18px; color: #6C6C70">3 unread</p>
       </div>
-      <button style="height: 40px; padding: 0 16px; border: none; border-radius: 20px; font-family: inherit; font-size: 16px; color: #1C1C1E; background: rgba(255,255,255,0.78); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">Select</button>
     </header>
     <div style="border-bottom: 0.5px solid #E5E5EA">
       <sc-for list="{{items}}" as="m" hint-placeholder-count="4">
@@ -119,6 +116,9 @@ button{cursor:pointer}
       </button>
     </div>
   </section>
+  <div style="position: absolute; right: 8px; top: 0; z-index: 3">
+    <dc-import name="DuoSideBar" height="669" nav="none" tabs="account" actions="{{side}}" accent="#990000" hint-size="64px,669px"></dc-import>
+  </div>
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"$preview":{"width":951,"height":669}}'>
@@ -174,6 +174,7 @@ class Component extends DCLogic {
       { from: 'anne_at_lyme', time: 'Oct 20', on: 'on Keeper of the Northern Light · Chapter 1', body: 'Bookmarking for the winter. The first line alone sold me.', unread: false, replied: true, swiped: true }
     ];
     return {
+      side: [{ label: 'Select', d: 'M12 3.5a8.5 8.5 0 1 1 0 17 8.5 8.5 0 0 1 0-17zM8.2 12.2l2.6 2.6 5-5.3' }],
       accent,
       accentTint,
       sidebar: side.map((i) => ({

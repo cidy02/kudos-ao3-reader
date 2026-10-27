@@ -15,12 +15,8 @@ button{cursor:pointer}
 </helmet>
 <div style="width: 951px; height: 669px; position: relative; overflow: hidden; background: #F2F2F7; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
 
-  <nav aria-label="Settings categories" style="position: absolute; left: 0; top: 0; width: 330px; height: 669px; background: #F2F2F7; border-right: 0.5px solid #D1D1D6; box-sizing: border-box; overflow: hidden">
-    <button aria-label="Back to Account" style="position: absolute; left: 16px; top: 14px; z-index: 2; height: 44px; padding: 0 16px 0 10px; border: none; border-radius: 22px; display: flex; align-items: center; gap: 4px; color: #1C1C1E; font-family: inherit; font-size: 16px; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
-      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg>
-      <span>Account</span>
-    </button>
-    <div style="position: absolute; left: 16px; right: 16px; top: 64px; display: flex; flex-direction: column">
+  <nav aria-label="Settings categories" style="position: absolute; left: 0; top: 0; width: 475px; height: 669px; background: #F2F2F7; border-right: 0.5px solid #D1D1D6; box-sizing: border-box; overflow: hidden">
+    <div style="position: absolute; left: 16px; right: 16px; top: 14px; display: flex; flex-direction: column">
       <h1 style="margin: 0; font-size: 28px; line-height: 34px; font-weight: 700; letter-spacing: 0.35px">Settings</h1>
       <label style="margin: 8px 0 10px; height: 38px; border-radius: 19px; background: rgba(118,118,128,0.12); display: flex; align-items: center; gap: 6px; padding: 0 12px; color: #6C6C70">
         <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="m15.5 15.5 5 5"></path></svg>
@@ -47,7 +43,7 @@ button{cursor:pointer}
     </div>
   </nav>
 
-  <main aria-label="Backup and Sync" style="position: absolute; left: 330px; top: 0; right: 0; height: 669px; overflow: hidden">
+  <main aria-label="Backup and Sync" style="position: absolute; left: 475px; top: 0; width: 396px; height: 669px; overflow: hidden">
     <h2 style="position: absolute; left: 0; right: 0; top: 14px; margin: 0; text-align: center; font-size: 17px; line-height: 44px; font-weight: 600">Backup &amp; Sync</h2>
     <div style="padding: 66px 16px 24px; display: flex; flex-direction: column; gap: 24px">
 
@@ -138,6 +134,9 @@ button{cursor:pointer}
 
     </div>
   </main>
+  <div style="position: absolute; right: 8px; top: 0; z-index: 3">
+    <dc-import name="DuoSideBar" height="669" nav="back" tabs="account" actions="{{side}}" accent="#990000" hint-size="64px,669px"></dc-import>
+  </div>
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"$preview":{"width":951,"height":669}}'>
@@ -192,6 +191,7 @@ class Component extends DCLogic {
     const G = '#6C6C70';
     const I = {"auto": "M4.5 12a7.5 7.5 0 0 1 12.8-5.3L19.5 9M19.5 4.5V9H15M19.5 12a7.5 7.5 0 0 1-12.8 5.3L4.5 15M4.5 19.5V15H9", "now": "M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 4.5V9H15", "details": "M8.5 7h11M8.5 12h11M8.5 17h11M4.5 7h.01M4.5 12h.01M4.5 17h.01", "pause": "M12 3.5a8.5 8.5 0 1 1 0 17 8.5 8.5 0 0 1 0-17zM10 9v6M14 9v6", "folder": "M3.5 7.5V18a1.5 1.5 0 0 0 1.5 1.5h14a1.5 1.5 0 0 0 1.5-1.5V9a1.5 1.5 0 0 0-1.5-1.5h-7L10 5H5a1.5 1.5 0 0 0-1.5 1.5z", "disconnect": "M9.5 14.5 7 17a3 3 0 0 1-4.2-4.2L5.3 10.3M14.5 9.5 17 7a3 3 0 0 1 4.2 4.2L18.7 13.7M4 4l16 16", "pair": "M8 3h8a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM12 9v6M9 12h6", "clock": "M12 3.5a8.5 8.5 0 1 1 0 17 8.5 8.5 0 0 1 0-17zM12 7.5V12l3 2", "export": "M12 15V3.5M7.5 8 12 3.5 16.5 8M5 12v7.5h14V12", "import": "M12 3.5V15M7.5 10.5 12 15l4.5-4.5M5 12v7.5h14V12", "files": "M6 3.5h8l4 4v13H6zM13.5 3.5V8H18M12 11v6M9 14h6"};
     return {
+      side: [],
       accent,
       groups,
       syncRows: [

@@ -16,7 +16,7 @@ a{color:#990000}a:hover{color:#6E0000}
 </helmet>
 <div style="width: 951px; height: 669px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
 
-  <section aria-label="Search results" style="position: absolute; left: 0; top: 0; width: 591px; height: 669px; padding: 72px 20px 0 20px; box-sizing: border-box; display: flex; flex-direction: column; gap: 18px; overflow: hidden">
+  <section aria-label="Search results" style="position: absolute; left: 0; top: 0; width: 475px; height: 669px; padding: 72px 20px 0 20px; box-sizing: border-box; display: flex; flex-direction: column; gap: 18px; overflow: hidden">
     <section aria-label="In your library" style="display: flex; flex-direction: column; gap: 2px">
       <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">In your library <span style="font-weight: 400; color: #6C6C70">2</span></h2>
       <div style="margin: 0 -20px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr))">
@@ -61,17 +61,14 @@ a{color:#990000}a:hover{color:#6E0000}
   </section>
 
   <div style="position: absolute; left: 16px; top: 14px; display: flex; gap: 10px; align-items: center">
-    <a href="Browse.dc.html" aria-label="Back to Browse" style="width: 44px; height: 44px; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
-      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg>
-    </a>
-    <label style="width: 470px; height: 44px; padding: 0 6px 0 14px; box-sizing: border-box; border-radius: 22px; display: flex; align-items: center; gap: 8px; color: #6C6C70; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
+    <label style="width: 443px; height: 44px; padding: 0 6px 0 14px; box-sizing: border-box; border-radius: 22px; display: flex; align-items: center; gap: 8px; color: #6C6C70; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
       <svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="m15.5 15.5 5 5"></path></svg>
       <input type="search" value="lighthouse" aria-label="Search AO3 and your library" style="flex: 1; min-width: 0; border: none; background: transparent; font-family: inherit; font-size: 17px; color: #000000; outline: none">
       <button aria-label="Clear" style="width: 32px; height: 32px; border: none; border-radius: 16px; background: transparent; color: #AEAEB2; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="currentColor"></circle><path d="m9 9 6 6M15 9l-6 6" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"></path></svg></button>
     </label>
   </div>
 
-  <aside aria-label="Filters" style="position: absolute; right: 0; top: 0; width: 360px; height: 669px; background: #F2F2F7; border-left: 0.5px solid #D1D1D6; box-sizing: border-box; overflow: hidden; display: flex; flex-direction: column">
+  <aside aria-label="Filters" style="position: absolute; left: 475px; top: 0; width: 396px; height: 669px; background: #F2F2F7; border-left: 0.5px solid #D1D1D6; box-sizing: border-box; overflow: hidden; display: flex; flex-direction: column">
     <header style="height: 72px; padding: 0 14px; display: flex; align-items: center; gap: 10px; flex-shrink: 0">
       <button style="height: 40px; padding: 0 14px; border: none; border-radius: 20px; font-family: inherit; font-size: 17px; color: #1C1C1E; background: rgba(255,255,255,0.8); box-shadow: 0 4px 14px rgba(0,0,0,0.08), 0 0 0 0.5px rgba(0,0,0,0.06)">Reset</button>
       <h2 style="margin: 0; flex: 1; text-align: center; font-size: 17px; line-height: 22px; font-weight: 600">Filters</h2>
@@ -110,6 +107,9 @@ a{color:#990000}a:hover{color:#6E0000}
       </div>
     </div>
   </aside>
+  <div style="position: absolute; right: 8px; top: 0; z-index: 3">
+    <dc-import name="DuoSideBar" height="669" nav="back" tabs="search" actions="{{side}}" accent="#990000" hint-size="64px,669px"></dc-import>
+  </div>
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":951,"height":669}}'>
@@ -122,6 +122,7 @@ class Component extends DCLogic {
       { title: 'What the Lamp Saw', author: 'tidewright', fandom: 'To the Lighthouse', rating: 'G', category: 'Gen', warnings: 'none', status: 'complete', words: '8,050', chapters: '1/1', kudos: '940', hits: '7.7k', updated: 'Oct 19', summary: 'Ten years of a house by the sea, told by the light that swept across it every night.' }
     ];
     return {
+      side: [],
       mine: [
         { title: 'The Lighthouse Keepers', author: 'tidewright', fandom: 'Original Work', rating: 'T', category: 'FF', warnings: 'none', status: 'complete', chapters: '10/10', updated: 'Downloaded' },
         { title: 'Salt & Starlight', author: 'wrenfield', fandom: 'Original Work', rating: 'M', category: 'Gen', warnings: 'undisclosed', status: 'wip', chapters: '15/30', updated: 'Tag: lighthouses' }
