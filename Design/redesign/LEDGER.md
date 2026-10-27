@@ -110,6 +110,8 @@ R6. Items 9, 11, 12: Dark/Sepia/OLED with the two background levels; AX5; final 
   - *Reading Insights on Duo:* Open flat splits the Overview at the fold (sections and period controls lead the left pane; Back and ••• on the side controls); portrait lays the same cards in two columns.
   - Duo note on the canvas rewritten for the current layout (it still described the old sidebar).
 
+- **Android floating navigation (2026-10-27):** owner asked for a bottom bar more like iOS. The full-width NavigationBar became a floating, fully rounded surfaceContainer bar with shadow elevation (NavigationBarItems, pill indicator in secondaryContainer, filled icon when selected) and Search as its own round button beside it, over a light scrim, above the gesture handle. Material colours and labels kept; no blur. Platform map rows (tabs, minimise on scroll, mini player) updated; the Rules board's Duo line now mentions portrait as an iPad mini.
+
 ## Morning note (fill in at the end)
 **2026-10-27, cloud session.** Everything in the queue is done and published.
 - **Direction:** owner saw three directions (Direction page) and picked a mix, drawn as "Your mix": generated covers with a background letter and tags under them (A), the gradient Resume card with ring and chapter bars on Home and Work Detail (B + C), B's Work Detail, C's gradients. The rules are on the "Kudos design rules" board (Symbols & components page).
