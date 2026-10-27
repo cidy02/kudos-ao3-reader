@@ -23,8 +23,9 @@ button{cursor:pointer}
       <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px">
         <figcaption style="font-size: 13px; font-weight: 600; color: #6C6C70">{{p.caption}}</figcaption>
         <div style="width: 390px; height: 844px; border-radius: 48px; overflow: hidden; position: relative; background: #F2F2F7; box-shadow: 0 0 0 1px #D1D1D6">
-          <div style="padding: 106px 20px 0; display: flex; flex-direction: column; gap: 10px">
-            <span style="font-size: 34px; font-weight: 700">{{p.screen}}</span>
+          <div style="padding: {{p.pad}}px 20px 0; display: flex; flex-direction: column; gap: 10px">
+            <sc-if value="{{p.isRoot}}" hint-placeholder-val="{{true}}"><span style="font-size: 34px; font-weight: 700">{{p.screen}}</span></sc-if>
+            <sc-if value="{{p.isPushed}}" hint-placeholder-val="{{false}}"><span aria-hidden="true" style="position: absolute; left: 16px; top: 54px; width: 44px; height: 44px; border-radius: 22px; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06); display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1C1C1E" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg></span><span style="position: absolute; left: 68px; right: 68px; top: 54px; text-align: center; font-size: 17px; line-height: 44px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{p.screen}}</span></sc-if>
             <sc-if value="{{p.hasChips}}" hint-placeholder-val="{{false}}">
               <div style="display: flex; gap: 8px">
                 <span style="height: 32px; padding: 0 12px; border-radius: 16px; background: {{accent}}; color: #FFFFFF; font-size: 14px; font-weight: 600; display: flex; align-items: center">Complete ✕</span>
@@ -56,9 +57,9 @@ class Component extends DCLogic {
     return {
       accent: this.props.accent ?? '#990000',
       phones: [
-        { caption: 'Library on first launch', screen: 'Library', tab: 'library', hasChips: false, d: 'M3.5 4h4v16h-4zM9.5 4h4v16h-4zM15.6 5.4l3.4-.9 3 15.2-3.4.9z', title: 'Your library is empty', body: 'Works you download from AO3 or import from Files appear here, ready to read offline.', primary: 'Browse AO3', secondary: 'Import Files', hasSecondary: true },
-        { caption: 'Filters with no matches', screen: 'Reading Now', tab: 'library', hasChips: true, d: 'M4 7h16M7 12h10M10 17h4', title: 'No matching works', body: 'Nothing in Reading Now is both complete and rated Explicit.', primary: 'Clear Filters', secondary: '', hasSecondary: false },
-        { caption: 'An empty queue', screen: 'Autumn Rereads', tab: 'library', hasChips: false, d: 'M4 6h12M4 11h12M4 16h7M17 14v6M14 17h6', title: 'Nothing queued yet', body: 'Add works from your library, or from any AO3 page with Add to Queue.', primary: 'Add Works', secondary: '', hasSecondary: false }
+        { caption: 'Library on first launch', screen: 'Library', isRoot: true, isPushed: false, pad: 56, tab: 'library', hasChips: false, d: 'M3.5 4h4v16h-4zM9.5 4h4v16h-4zM15.6 5.4l3.4-.9 3 15.2-3.4.9z', title: 'Your library is empty', body: 'Works you download from AO3 or import from Files appear here, ready to read offline.', primary: 'Browse AO3', secondary: 'Import Files', hasSecondary: true },
+        { caption: 'Filters with no matches', screen: 'Reading Now', isRoot: false, isPushed: true, pad: 106, tab: 'library', hasChips: true, d: 'M4 7h16M7 12h10M10 17h4', title: 'No matching works', body: 'Nothing in Reading Now is both complete and rated Explicit.', primary: 'Clear Filters', secondary: '', hasSecondary: false },
+        { caption: 'An empty queue', screen: 'Autumn Rereads', isRoot: false, isPushed: true, pad: 106, tab: 'library', hasChips: false, d: 'M4 6h12M4 11h12M4 16h7M17 14v6M14 17h6', title: 'Nothing queued yet', body: 'Add works from your library, or from any AO3 page with Add to Queue.', primary: 'Add Works', secondary: '', hasSecondary: false }
       ].map((p) => ({ ...p }))
     };
   }
