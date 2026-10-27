@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Duo portrait · Reading Insights</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 669px; height: 951px; position: relative; overflow: hidden; background: #F2F2F7; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+  <main style="position: absolute; left: 0; top: 0; width: 669px; padding: 86px 16px 0; box-sizing: border-box; display: flex; flex-direction: column; gap: 12px">
+    <div role="tablist" aria-label="Insights sections" style="height: 32px; border-radius: 16px; background: rgba(118,118,128,0.12); padding: 2px; box-sizing: border-box; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr))">
+        <sc-for list="{{tabs}}" as="t" hint-placeholder-count="4"><button role="tab" aria-selected="{{t.selected}}" style="border: none; border-radius: 14px; background: {{t.bg}}; box-shadow: {{t.shadow}}; font-family: inherit; font-size: 13px; font-weight: {{t.weight}}; color: #000000">{{t.label}}</button></sc-for>
+      </div>
+      <div style="height: 48px; display: flex; align-items: center; gap: 8px">
+        <div style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+          <h2 style="margin: 0; font-size: 22px; line-height: 28px; font-weight: 700; white-space: nowrap">October 2026</h2>
+          <p style="margin: 0; font-size: 13px; line-height: 18px; color: #6C6C70; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">1–27 Oct · vs September</p>
+        </div>
+        <button aria-label="Period: Month" style="height: 32px; padding: 0 10px 0 12px; border: none; border-radius: 16px; background: rgba(118,118,128,0.12); font-family: inherit; font-size: 15px; font-weight: 500; color: #1C1C1E; display: flex; align-items: center; gap: 4px">Month<svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg></button>
+        <button aria-label="Previous period" style="width: 32px; height: 32px; border: none; border-radius: 16px; background: rgba(118,118,128,0.12); color: #1C1C1E; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg></button>
+        <button aria-label="Next period" aria-disabled="true" style="width: 32px; height: 32px; border: none; border-radius: 16px; background: rgba(118,118,128,0.08); color: #C7C7CC; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m9 5 7 7-7 7"></path></svg></button>
+      </div>
+    <section aria-label="Words read" style="background: #FFFFFF; border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 2px">
+        <span style="font-size: 13px; line-height: 18px; color: #6C6C70">Words read</span>
+        <div style="display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap">
+          <span style="font-size: 38px; line-height: 44px; font-weight: 700; letter-spacing: -0.5px; font-variant-numeric: tabular-nums">212,600</span>
+          <span style="font-size: 15px; line-height: 20px; color: #3A3A3C; display: flex; align-items: center; gap: 3px"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6 11l6-6 6 6"></path></svg>18% vs Sep</span>
+        </div>
+        <span style="font-size: 13px; line-height: 18px; color: #6C6C70">About 3 novels’ worth, at 70,000 words a novel</span>
+        <div style="height: 0.5px; background: #E5E5EA; margin: 10px 0 8px"></div>
+        <dl style="margin: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px">
+          <sc-for list="{{heroStats}}" as="s" hint-placeholder-count="3"><div style="display: flex; flex-direction: column; gap: 1px"><dt style="font-size: 12px; line-height: 16px; color: #6C6C70">{{s.label}}</dt><dd style="margin: 0; font-size: 19px; line-height: 24px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap">{{s.value}}</dd></div></sc-for>
+        </dl>
+      </section>
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start">
+      <div style="display: flex; flex-direction: column; gap: 12px">
+        <figure style="margin: 0; background: #FFFFFF; border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px">
+        <figcaption style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-size: 15px; line-height: 20px; font-weight: 600">Words per Day</span><span style="font-size: 13px; color: #6C6C70">avg 7.9k</span></figcaption>
+        <div role="img" aria-label="Bar chart of words read each day from 1 to 27 October. Five days without reading. Biggest day 17 October, 31,400 words." style="position: relative; height: 112px; display: flex; align-items: flex-end; gap: 3px">
+          <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 26px; border-top: 1px dashed #C7C7CC"></div>
+          <sc-for list="{{days}}" as="d" hint-placeholder-count="27"><span style="position: relative; flex: 1; height: {{d.h}}px; border-radius: 3px 3px 1px 1px; background: {{d.color}}"><sc-if value="{{d.isMax}}" hint-placeholder-val="{{false}}"><span style="position: absolute; bottom: {{d.labelBottom}}px; left: 50%; transform: translateX(-50%); font-size: 11px; line-height: 13px; font-weight: 600; color: #3A3A3C; white-space: nowrap">31.4k</span></sc-if></span></sc-for>
+        </div>
+        <div aria-hidden="true" style="position: relative; height: 14px; font-size: 11px; line-height: 14px; color: #6C6C70"><sc-for list="{{ticks}}" as="t" hint-placeholder-count="5"><span style="position: absolute; left: {{t.left}}px; width: 40px; text-align: {{t.align}}">{{t.label}}</span></sc-for></div>
+      </figure>
+        <figure style="margin: 0; background: #FFFFFF; border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px">
+        <figcaption style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-size: 15px; line-height: 20px; font-weight: 600">Length of What You Read</span><span style="font-size: 13px; color: #6C6C70">21 works</span></figcaption>
+        <div role="img" aria-label="Works by length: 7 under 5,000 words, 9 from 5,000 to 50,000, 4 from 50,000 to 150,000, 1 over 150,000" style="height: 14px; display: flex; gap: 2px; border-radius: 4px; overflow: hidden"><sc-for list="{{lengths}}" as="l" hint-placeholder-count="4"><span style="flex: {{l.n}}; background: {{l.color}}"></span></sc-for></div>
+        <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px"><sc-for list="{{lengths}}" as="l" hint-placeholder-count="4"><div style="display: flex; flex-direction: column; gap: 1px"><span style="display: flex; align-items: center; gap: 5px; font-size: 12px; line-height: 16px; color: #6C6C70; white-space: nowrap"><span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 2px; background: {{l.color}}"></span>{{l.label}}</span><span style="font-size: 17px; line-height: 22px; font-weight: 600">{{l.n}}</span></div></sc-for></div>
+      </figure>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 12px">
+        <figure style="margin: 0; background: #FFFFFF; border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px">
+        <figcaption style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-size: 15px; line-height: 20px; font-weight: 600">Where the Words Went</span><span style="font-size: 13px; color: #6C6C70">8 fandoms</span></figcaption>
+        <div role="img" aria-label="Share of words by fandom" style="height: 14px; display: flex; gap: 2px; border-radius: 4px; overflow: hidden"><sc-for list="{{fandoms}}" as="f" hint-placeholder-count="5"><span style="flex: {{f.words}}; background: {{f.color}}"></span></sc-for></div>
+        <ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column">
+          <sc-for list="{{fandoms}}" as="f" hint-placeholder-count="5"><li style="height: 34px; display: flex; align-items: center; gap: 10px; border-top: {{f.sep}}"><span aria-hidden="true" style="width: 10px; height: 10px; border-radius: 3px; background: {{f.color}}"></span><span style="flex: 1; min-width: 0; font-size: 15px; line-height: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{f.name}}</span><span style="font-size: 13px; line-height: 18px; color: #6C6C70; font-variant-numeric: tabular-nums; white-space: nowrap">{{f.detail}}</span><span style="width: 34px; text-align: right; font-size: 15px; line-height: 20px; font-weight: 600; font-variant-numeric: tabular-nums">{{f.share}}</span></li></sc-for>
+        </ul>
+      </figure>
+        <figure style="margin: 0; background: #FFFFFF; border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px">
+        <figcaption style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-size: 15px; line-height: 20px; font-weight: 600">Reading and Listening</span><span style="font-size: 13px; color: #6C6C70">14 h 10 m</span></figcaption>
+        <div role="img" aria-label="Read 12 hours 25 minutes, listened 1 hour 45 minutes" style="height: 14px; display: flex; gap: 2px; border-radius: 4px; overflow: hidden"><span style="flex: 745; background: {{accent}}"></span><span style="flex: 105; background: #E3A8A8"></span></div>
+        <ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column">
+          <li style="height: 30px; display: flex; align-items: center; gap: 10px"><span aria-hidden="true" style="width: 10px; height: 10px; border-radius: 3px; background: {{accent}}"></span><span style="flex: 1; font-size: 15px">Reading</span><span style="font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums">12 h 25 m</span></li>
+          <li style="height: 30px; display: flex; align-items: center; gap: 10px; border-top: 0.5px solid #E5E5EA"><span aria-hidden="true" style="width: 10px; height: 10px; border-radius: 3px; background: #E3A8A8"></span><span style="flex: 1; font-size: 15px">Read Aloud</span><span style="font-size: 13px; color: #6C6C70">1.2×</span><span style="width: 74px; text-align: right; font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums">1 h 45 m</span></li>
+        </ul>
+      </figure>
+      </div>
+    </div>
+    <dl style="margin: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px">
+        <sc-for list="{{records}}" as="r" hint-placeholder-count="4"><div style="background: #FFFFFF; border-radius: 16px; padding: 12px 14px; display: flex; flex-direction: column; gap: 1px"><dt style="font-size: 13px; line-height: 18px; color: #6C6C70">{{r.label}}</dt><dd style="margin: 0; font-size: 22px; line-height: 28px; font-weight: 700; font-variant-numeric: tabular-nums">{{r.value}}</dd><dd style="margin: 0; font-size: 12px; line-height: 16px; color: #8E8E93">{{r.detail}}</dd></div></sc-for>
+      </dl>
+    <section aria-label="Finished this month" style="display: flex; flex-direction: column; gap: 6px">
+        <div style="display: flex; align-items: baseline; justify-content: space-between; padding: 0 4px"><h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">Finished</h2><button style="border: none; background: none; padding: 0; font-family: inherit; font-size: 15px; color: {{accent}}">See All 6</button></div>
+        <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
+          <sc-for list="{{finished}}" as="w" hint-placeholder-count="3"><button style="width: 100%; border: none; background: transparent; padding: 10px 16px; display: flex; align-items: center; gap: 12px; font-family: inherit; text-align: left; border-top: {{w.sep}}"><span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px"><span style="display: flex; align-items: center; gap: 6px; font-size: 12px; line-height: 16px; color: #6C6C70"><span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 4px; background: {{w.color}}"></span>{{w.fandom}}</span><span style="font-size: 16px; line-height: 21px; color: #000000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{w.title}}</span><span style="font-size: 13px; line-height: 17px; color: #6C6C70">{{w.detail}}</span></span><svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg></button></sc-for>
+        </div>
+      </section>
+  </main>
+  <div style="position: absolute; left: 0; top: 0; z-index: 2; background: linear-gradient(to bottom, rgba(242,242,247,0.96) 70%, rgba(242,242,247,0))">
+    <dc-import name="DuoTopBar" nav="back" title="Reading Insights" title-style="inline" actions="{{side}}" accent="{{accent}}" hint-size="669px,80px"></dc-import>
+  </div>
+  <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 130px; background: linear-gradient(to bottom, rgba(242,242,247,0), rgba(242,242,247,0.94) 72%); pointer-events: none"></div>
+  <div style="position: absolute; left: 0; right: 0; bottom: 24px; display: flex; justify-content: center">
+    <dc-import name="TabBar" selected="library" accent="{{accent}}" hint-size="358px,62px"></dc-import>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"$preview":{"width":669,"height":951}}'>
+class Component extends DCLogic {
+  renderVals() {
+    // Portrait: standard horizontal bars, cards in two columns (an even count, so the layout divides cleanly).
+    const accent = this.props.accent ?? '#990000';
+    const k = [6.2, 9.8, 0, 12.4, 4.1, 7.7, 10.9, 15.2, 0, 3.4, 8.8, 5.1, 9.6, 11.2, 14.7, 6.0, 31.4, 8.2, 7.4, 12.9, 0, 0, 5.6, 9.1, 4.9, 0, 8.0];
+    const max = Math.max(...k);
+    const chartH = 96;
+    const chartW = 280;
+    const barW = (chartW - 26 * 3) / 27;
+    const centre = (i) => i * (barW + 3) + barW / 2;
+    const fandoms = [
+      { name: 'Persuasion', words: 71.4, works: 5, color: '#9C2F6B' },
+      { name: 'Sherlock Holmes', words: 52.3, works: 4, color: '#B07D12' },
+      { name: 'Jane Eyre', words: 38.9, works: 3, color: '#2C6DB0' },
+      { name: 'Original Work', words: 27.6, works: 4, color: '#2F7A4A' },
+      { name: '4 other fandoms', words: 22.4, works: 5, color: '#C7C7CC' }
+    ];
+    const total = fandoms.reduce((a, f) => a + f.words, 0);
+    const ramp = ['#EBC2C2', '#D67F7F', '#B53B3B', '#7E0F0F'];
+    return {
+      accent,
+      side: [{ label: 'More: options, export, how this is counted', d: 'dots' }],
+      tabs: [['Overview', true], ['Taste', false], ['Habits', false], ['Library', false]].map(([label, on]) => ({ label, selected: on ? 'true' : 'false', bg: on ? '#FFFFFF' : 'transparent', shadow: on ? '0 2px 6px rgba(0,0,0,0.12)' : 'none', weight: on ? 600 : 400 })),
+      heroStats: [{ label: 'Time reading', value: '14 h 10 m' }, { label: 'Finished', value: '6' }, { label: 'Reading days', value: '22 of 27' }],
+      days: k.map((v) => ({ h: v ? Math.max(4, Math.round((v / max) * chartH)) : 3, color: v ? accent : '#E5E5EA', isMax: v === max, labelBottom: Math.round((v / max) * chartH) + 3 })),
+      ticks: [[0, 'Oct 1'], [7, '8'], [14, '15'], [21, '22'], [26, '27']].map(([i, label], n) => ({ label, left: n === 0 ? 0 : (n === 4 ? chartW - 40 : Math.round(centre(i) - 20)), align: n === 0 ? 'left' : (n === 4 ? 'right' : 'center') })),
+      fandoms: fandoms.map((f, i) => ({ ...f, detail: f.words.toFixed(1) + 'k · ' + f.works + (true ? '' : ' works'), share: Math.round((f.words / total) * 100) + '%', sep: i ? '0.5px solid #E5E5EA' : 'none' })),
+      records: [
+        { label: 'Longest streak', value: '11 days', detail: 'Oct 10–20' },
+        { label: 'Biggest day', value: '31.4k', detail: 'Saturday, Oct 17' },
+        { label: 'Typical sitting', value: '24 min', detail: 'median of 35' },
+        { label: 'Pace', value: '15.0k', detail: 'words an hour' }
+      ],
+      lengths: [{ label: 'Under 5k', n: 7 }, { label: '5k–50k', n: 9 }, { label: '50k–150k', n: 4 }, { label: '150k+', n: 1 }].map((l, i) => ({ ...l, color: ramp[i] })),
+      finished: [
+        { title: 'Letters Never Sent', fandom: 'Persuasion', color: '#9C2F6B', detail: '21,880 words · Oct 24 · Read ×2' },
+        { title: 'The Baker Street Irregular', fandom: 'Sherlock Holmes', color: '#B07D12', detail: '9,140 words · Oct 22' },
+        { title: 'Thornfield in Winter', fandom: 'Jane Eyre', color: '#2C6DB0', detail: '64,300 words · Oct 19' }
+      ].map((w, i) => ({ ...w, sep: i ? '0.5px solid #E5E5EA' : 'none' }))
+    };
+  }
+}
+</script>
+</body>
+</html>

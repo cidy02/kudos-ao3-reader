@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Duo portrait Home</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+a{color:#990000}a:hover{color:#6E0000}
+</style>
+</helmet>
+<div style="width: 669px; height: 951px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+  <main style="position: absolute; left: 0; top: 0; width: 669px; padding: 84px 16px 0; box-sizing: border-box; display: flex; flex-direction: column; gap: 18px">
+    <a href="Insights.dc.html" style="margin-top: -4px; text-decoration: none; font-size: 15px; line-height: 20px; color: #6C6C70"><span style="font-weight: 600; color: #3A3A3C">4 h 10 m</span> this week · <span style="font-weight: 600; color: #3A3A3C">2</span> finished · <span style="font-weight: 600; color: #3A3A3C">9-day</span> streak ›</a>
+    <dc-import name="ResumeCard" variant="home" width="637" accent="#990000" hint-size="637px,280px"></dc-import>
+    <section aria-label="Reading Now" style="display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; align-items: baseline; justify-content: space-between">
+        <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">Reading Now</h2>
+        <a href="Library-Section.dc.html" style="font-size: 17px; text-decoration: none">See All</a>
+      </div>
+      <div style="display: flex; gap: 12px; overflow: hidden">
+        <sc-for list="{{reading}}" as="w" hint-placeholder-count="4">
+          <dc-import name="CoverCard" work="{{w}}" width="112" accent="#990000" hint-size="112px,250px"></dc-import>
+        </sc-for>
+      </div>
+    </section>
+    <section aria-label="Reading Queues" style="display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; align-items: baseline; justify-content: space-between">
+        <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">Reading Queues</h2>
+        <a href="Queues.dc.html" style="font-size: 17px; text-decoration: none">All Queues</a>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px">
+        <sc-for list="{{queues}}" as="q" hint-placeholder-count="2">
+          <a href="Queue.dc.html" style="text-decoration: none; color: #000000; display: flex; align-items: center; gap: 12px; min-width: 0">
+            <dc-import name="CoverStack" tiles="{{q.tiles}}" colour="{{q.colour}}" initial="{{q.initial}}" kind="queue" width="64" height="64" hint-size="64px,64px"></dc-import>
+            <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px">
+              <span style="font-size: 17px; line-height: 22px; font-weight: 600">{{q.name}}</span>
+              <span style="font-size: 13px; line-height: 18px; color: #6C6C70; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{q.detail}}</span>
+              <div role="img" aria-label="{{q.progressLabel}}" style="margin-top: 3px; display: flex; gap: 3px">
+                <sc-for list="{{q.segs}}" as="s" hint-placeholder-count="8">
+                  <span style="flex: 1; height: 4px; border-radius: 2px; background: {{s.track}}; overflow: hidden"><span style="display: block; width: {{s.w}}; height: 4px; background: {{s.c}}"></span></span>
+                </sc-for>
+              </div>
+            </div>
+          </a>
+        </sc-for>
+      </div>
+    </section>
+    <section aria-label="New Chapters" style="display: flex; flex-direction: column; gap: 2px">
+      <div style="display: flex; align-items: baseline; justify-content: space-between">
+        <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">New Chapters</h2>
+        <a href="Subscriptions.dc.html" style="font-size: 17px; text-decoration: none">See All</a>
+      </div>
+      <div style="margin: 0 -16px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr))">
+        <sc-for list="{{updated}}" as="w" hint-placeholder-count="2">
+          <dc-import name="WorkRow" work="{{w}}" accent="#990000" hint-size="100%,100px"></dc-import>
+        </sc-for>
+      </div>
+    </section>
+  </main>
+  <div style="position: absolute; left: 0; top: 0; z-index: 2">
+    <dc-import name="DuoTopBar" title="Home" title-style="large" actions="{{side}}" accent="#990000" hint-size="669px,80px"></dc-import>
+  </div>
+  <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 130px; background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0.94) 72%); pointer-events: none"></div>
+  <div style="position: absolute; left: 0; right: 0; bottom: 24px; display: flex; justify-content: center">
+    <dc-import name="TabBar" selected="home" accent="#990000" hint-size="358px,62px"></dc-import>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":669,"height":951}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const art = (h) => 'linear-gradient(155deg, hsl(' + h + ', 46%, 27%), hsl(' + ((h + 22) % 360) + ', 50%, 41%))';
+    const rgba = (hex, a) => { const x = hex.replace('#', ''); return 'rgba(' + parseInt(x.slice(0, 2), 16) + ',' + parseInt(x.slice(2, 4), 16) + ',' + parseInt(x.slice(4, 6), 16) + ',' + a + ')'; };
+    const queue = (name, detail, colour, hues, fills, label) => ({ name, detail, progressLabel: label, colour, initial: name.charAt(0), tiles: hues.map(art), segs: fills.map((f) => ({ w: f + '%', c: colour, track: rgba(colour, 0.2) })) });
+    const updated = [
+      { title: 'Salt & Starlight', author: 'wrenfield', fandom: 'Original Work', rating: 'M', category: 'Gen', warnings: 'undisclosed', status: 'wip', words: '118k', chapters: '15/30', updated: '3 new · 2 h ago', badge: '+3' },
+      { title: 'The Hound, Revisited', author: 'fogandlamplight', fandom: 'Sherlock Holmes', rating: 'T', category: 'MM', warnings: 'present', status: 'wip', words: '30k', chapters: '5/?', updated: '1 new · yesterday', badge: '+1' }
+    ];
+    return {
+      side: [{ label: 'Select', d: 'M12 3.5a8.5 8.5 0 1 1 0 17 8.5 8.5 0 0 1 0-17zM8.2 12.2l2.6 2.6 5-5.3' }],
+      reading: [
+        { title: 'Salt & Starlight', author: 'wrenfield', fandom: 'Original Work', rating: 'M', category: 'Gen', warnings: 'undisclosed', status: 'wip', meta: 'Ch 12 · 40%', progress: 40, badge: '+3' },
+        { title: 'Whatever Remains', author: 'fogandlamplight', fandom: 'Sherlock Holmes', rating: 'E', category: 'MM', warnings: 'present', warningCount: 2, status: 'complete', hidden: true },
+        { title: 'Letters Never Sent', author: 'marginalia', fandom: 'Persuasion', rating: 'T', category: 'FM', warnings: 'none', status: 'complete', meta: 'Ch 3 · 50%', progress: 50 },
+        { title: 'Moor and Mist', author: 'brontebird', fandom: 'Jane Eyre', rating: 'M', category: 'FM', warnings: 'undisclosed', status: 'complete', meta: 'Ch 11 · 61%', progress: 61 },
+        { title: 'Northanger Nights', author: 'gothicnovelist', fandom: 'Northanger Abbey', rating: 'T', category: 'FM', warnings: 'none', status: 'wip', meta: 'Ch 8 · 66%', progress: 66, badge: '+1' }
+      ],
+      updated: updated.map((w, i) => ({ ...w, divider: i < updated.length - 1 })),
+      queues: [
+        queue('Summer Reading', '8 works · about 9 h 40 min', '#C25E00', [181, 340, 28, 266], [100, 100, 60, 0, 0, 0, 0, 0], '2 of 8 finished, 1 in progress'),
+        queue('Re-reads', '5 works · about 4 h 5 min', '#1E63C8', [262, 290, 196, 330], [100, 100, 100, 30, 0], '3 of 5 finished, 1 in progress')
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

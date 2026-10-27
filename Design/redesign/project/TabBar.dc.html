@@ -22,7 +22,7 @@ body{margin:0}
         </button>
       </sc-for>
     </div>
-    <button aria-label="Search" style="width: 62px; height: 62px; flex-shrink: 0; border: none; border-radius: 31px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; cursor: pointer; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 8px 28px rgba(0,0,0,0.12), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
+    <button aria-label="Search" aria-current="{{searchCurrent}}" style="width: 62px; height: 62px; flex-shrink: 0; border: none; border-radius: 31px; color: {{searchFg}}; display: flex; align-items: center; justify-content: center; cursor: pointer; background: {{searchBg}}; backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 8px 28px rgba(0,0,0,0.12), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
       <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="m15.5 15.5 5 5"></path></svg>
     </button>
   </sc-if>
@@ -46,7 +46,7 @@ body{margin:0}
   </sc-if>
 </nav>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"selected":{"editor":"enum","options":["home","library","browse","account"],"default":"home"},"variant":{"editor":"enum","options":["full","minimized"],"default":"full"},"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"accessoryTitle":{"editor":null,"default":"Salt & Starlight"},"accessorySubtitle":{"editor":null,"default":"Read Aloud · Ch 15 · 12 min left"},"accessoryCover":{"editor":null,"default":"#2E5339"},"$preview":{"width":358,"height":62}}'>
+<script type="text/x-dc" data-dc-script data-props='{"selected":{"editor":"enum","options":["home","library","browse","account","search"],"default":"home"},"variant":{"editor":"enum","options":["full","minimized"],"default":"full"},"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"accessoryTitle":{"editor":null,"default":"Salt & Starlight"},"accessorySubtitle":{"editor":null,"default":"Read Aloud · Ch 15 · 12 min left"},"accessoryCover":{"editor":null,"default":"#2E5339"},"$preview":{"width":358,"height":62}}'>
 class Component extends DCLogic {
   renderVals() {
     const accent = this.props.accent ?? '#990000';
@@ -66,9 +66,13 @@ class Component extends DCLogic {
       fg: t.id === selected ? accent : '#1C1C1E'
     }));
     const variant = this.props.variant ?? 'full';
+    const glass = 'rgba(255,255,255,0.74)';
     return {
       accent,
       tabs,
+      searchCurrent: selected === 'search' ? 'page' : 'false',
+      searchFg: selected === 'search' ? accent : '#1C1C1E',
+      searchBg: selected === 'search' ? 'linear-gradient(' + tint + ', ' + tint + '), ' + glass : glass,
       current: tabs.find((t) => t.id === selected) || tabs[0],
       isFull: variant === 'full',
       isMini: variant === 'minimized',

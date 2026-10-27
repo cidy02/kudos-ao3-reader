@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Duo portrait · Reader, immersive</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 669px; height: 951px; position: relative; overflow: hidden; background: #FAF7F0">
+  <dc-import name="Duo-Portrait-Reader" view="immersive" accent="{{accent}}" hint-size="669px,951px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"$preview":{"width":669,"height":951}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { accent: this.props.accent ?? '#990000' };
+  }
+}
+</script>
+</body>
+</html>

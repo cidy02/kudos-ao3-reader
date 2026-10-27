@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Duo portrait top bar</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: {{width}}px; height: 80px; position: relative; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; color: {{fg}}">
+  <sc-if value="{{showStatus}}" hint-placeholder-val="{{true}}">
+    <div aria-hidden="true" style="position: absolute; left: 28px; right: 24px; top: 8px; height: 18px; display: flex; align-items: center; justify-content: space-between">
+      <span style="font-size: 15px; line-height: 18px; font-weight: 600; letter-spacing: -0.2px">9:41</span>
+      <span style="display: flex; align-items: center; gap: 6px">
+        <svg width="17" height="11" viewBox="0 0 16 11" fill="currentColor"><rect x="0" y="7" width="3" height="4" rx="0.8"></rect><rect x="4.3" y="5" width="3" height="6" rx="0.8"></rect><rect x="8.6" y="2.5" width="3" height="8.5" rx="0.8"></rect><rect x="12.9" y="0" width="3" height="11" rx="0.8"></rect></svg>
+        <svg width="24" height="12" viewBox="0 0 22 11"><rect x="0.5" y="0.5" width="18.5" height="10" rx="3" fill="none" stroke="currentColor" stroke-opacity="0.4"></rect><rect x="2" y="2" width="13" height="7" rx="1.6" fill="currentColor"></rect><rect x="20" y="3.5" width="1.6" height="4" rx="0.8" fill="currentColor" fill-opacity="0.4"></rect></svg>
+      </span>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{isInline}}" hint-placeholder-val="{{false}}">
+    <h1 style="position: absolute; left: 120px; right: 120px; top: 34px; margin: 0; text-align: center; font-size: 17px; line-height: 44px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{title}}</h1>
+  </sc-if>
+
+  <div style="position: absolute; left: 16px; right: 16px; top: 34px; height: 44px; display: flex; align-items: center; gap: 10px">
+    <sc-if value="{{hasNav}}" hint-placeholder-val="{{true}}">
+      <button aria-label="{{navLabel}}" style="width: 44px; height: 44px; flex-shrink: 0; border: none; border-radius: 22px; color: {{fg}}; display: flex; align-items: center; justify-content: center; background: {{glass}}; box-shadow: {{shadow}}">
+        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="{{navD}}"></path></svg>
+      </button>
+    </sc-if>
+    <sc-if value="{{isLarge}}" hint-placeholder-val="{{false}}">
+      <h1 style="margin: 0; font-size: 34px; line-height: 41px; font-weight: 700; letter-spacing: 0.4px; white-space: nowrap">{{title}}</h1>
+    </sc-if>
+    <span style="flex: 1"></span>
+    <sc-if value="{{hasActions}}" hint-placeholder-val="{{true}}">
+      <div role="toolbar" aria-label="Actions" style="height: 44px; flex-shrink: 0; border-radius: 22px; padding: 0 2px; display: flex; align-items: center; background: {{glass}}; box-shadow: {{shadow}}">
+        <sc-for list="{{actions}}" as="a" hint-placeholder-count="3">
+          <button aria-label="{{a.label}}" aria-pressed="{{a.pressed}}" style="min-width: 44px; height: 40px; padding: 0 {{a.pad}}px; border: none; border-radius: 20px; background: {{a.bg}}; color: {{a.fg}}; font-family: inherit; font-size: 16px; font-weight: {{a.weight}}; display: flex; align-items: center; justify-content: center">
+            <sc-if value="{{a.isText}}" hint-placeholder-val="{{false}}">{{a.text}}</sc-if>
+            <sc-if value="{{a.isIcon}}" hint-placeholder-val="{{true}}"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="{{a.fill}}" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="{{a.d}}"></path></svg></sc-if>
+          </button>
+        </sc-for>
+      </div>
+    </sc-if>
+    <sc-if value="{{hasPrimary}}" hint-placeholder-val="{{false}}">
+      <button aria-label="{{primaryLabel}}" style="width: 44px; height: 44px; flex-shrink: 0; border: none; border-radius: 22px; color: #FFFFFF; display: flex; align-items: center; justify-content: center; background: {{accent}}; box-shadow: 0 4px 14px rgba(0,0,0,0.18)">
+        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="{{primaryD}}"></path></svg>
+      </button>
+    </sc-if>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"width":{"editor":"int","default":669},"title":{"editor":"text","default":"Home"},"titleStyle":{"editor":"enum","options":["large","inline","none"],"default":"large"},"nav":{"editor":"enum","options":["back","close","none"],"default":"none"},"primary":{"editor":"enum","options":["none","done","post","play"],"default":"none"},"actions":{"editor":null},"status":{"editor":"boolean","default":true},"theme":{"editor":"enum","options":["light","sepia","dark"],"default":"light"},"accent":{"editor":"color","default":"#990000"},"$preview":{"width":669,"height":80}}'>
+class Component extends DCLogic {
+  renderVals() {
+    // iPhone Duo, inner display in portrait: the one pose that keeps standard
+    // horizontal bars (HIG: Vertical controls). Same order as DuoSideBar, laid
+    // out left to right: navigation, title, toolbar group, prominent action.
+    const accent = this.props.accent ?? '#990000';
+    const theme = this.props.theme ?? 'light';
+    const T = {
+      light: { glass: 'rgba(255,255,255,0.78)', fg: '#1C1C1E', shadow: '0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)' },
+      sepia: { glass: 'rgba(255,253,248,0.78)', fg: '#1F1B16', shadow: '0 6px 20px rgba(60,40,10,0.10), 0 0 0 0.5px rgba(60,40,10,0.08)' },
+      dark: { glass: 'rgba(44,44,48,0.82)', fg: '#F2F2F7', shadow: '0 6px 20px rgba(0,0,0,0.4), 0 0 0 0.5px rgba(255,255,255,0.08)' }
+    }[theme];
+    const x = accent.replace('#', '');
+    const tint = 'rgba(' + parseInt(x.slice(0, 2), 16) + ',' + parseInt(x.slice(2, 4), 16) + ',' + parseInt(x.slice(4, 6), 16) + ',0.12)';
+    const nav = this.props.nav ?? 'none';
+    const primary = this.props.primary ?? 'none';
+    const P = { done: ['Done', 'M5 12.5l4.6 4.6L19.2 7.4'], post: ['Post', 'M12 19V5M6 11l6-6 6 6'], play: ['Resume', 'M8 5.5v13l10.5-6.5z'] }[primary];
+    const DOTS = 'M5.5 12h.01M12 12h.01M18.5 12h.01';
+    const style = this.props.titleStyle ?? 'large';
+    const actions = (this.props.actions || []).map((a) => ({
+      label: a.label, d: a.d === 'dots' ? DOTS : a.d, text: a.text || '', isText: !!a.text, isIcon: !a.text,
+      pad: a.text && a.text.length > 2 ? 14 : 0, weight: a.text && a.text.length > 2 ? 400 : 600,
+      pressed: a.on ? 'true' : 'false', bg: a.on ? tint : 'transparent', fg: a.on ? (a.color || accent) : (a.color || T.fg), fill: a.fill || 'none'
+    }));
+    return {
+      width: Number(this.props.width ?? 669),
+      title: this.props.title ?? 'Home',
+      isLarge: style === 'large', isInline: style === 'inline',
+      fg: T.fg, glass: T.glass, shadow: T.shadow, accent,
+      showStatus: this.props.status ?? true,
+      hasNav: nav !== 'none', navLabel: nav === 'close' ? 'Close' : 'Back', navD: nav === 'close' ? 'M6 6l12 12M18 6 6 18' : 'm15 5-7 7 7 7',
+      hasPrimary: !!P, primaryLabel: P ? P[0] : '', primaryD: P ? P[1] : '',
+      hasActions: actions.length > 0, actions
+    };
+  }
+}
+</script>
+</body>
+</html>
