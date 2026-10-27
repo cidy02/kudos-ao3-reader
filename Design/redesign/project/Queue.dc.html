@@ -13,7 +13,7 @@ body{margin:0}
 button{cursor:pointer}
 </style>
 </helmet>
-<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #F2F2F7; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
   <div style="position: absolute; left: 16px; right: 16px; top: 54px; display: flex; justify-content: space-between; z-index: 2">
     <button aria-label="Back" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
       <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg>
@@ -28,43 +28,49 @@ button{cursor:pointer}
     </div>
   </div>
 
-  <main style="padding: 106px 16px 0; display: flex; flex-direction: column; gap: 14px">
-    <header style="padding: 0 4px; display: flex; flex-direction: column; gap: 6px">
-      <div style="display: flex; align-items: center; gap: 10px">
-        <span aria-hidden="true" style="width: 14px; height: 14px; border-radius: 7px; background: #C25E00"></span>
-        <h1 style="margin: 0; font-size: 34px; line-height: 41px; font-weight: 700; letter-spacing: 0.4px">Summer Reading</h1>
+  <main style="padding: 106px 16px 0; display: flex; flex-direction: column; gap: 16px">
+    <header style="display: flex; gap: 14px; align-items: center">
+      <div aria-hidden="true" style="width: 96px; height: 96px; flex-shrink: 0; border-radius: 16px; overflow: hidden; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px; box-shadow: 0 4px 12px rgba(0,0,0,0.14)">
+        <sc-for list="{{tiles}}" as="t" hint-placeholder-count="4"><span style="background: {{t}}"></span></sc-for>
       </div>
-      <p style="margin: 0; font-size: 15px; line-height: 20px; color: #3A3A3C">Short, warm things for the train.</p>
-      <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px">
-        <span style="padding: 4px 10px; border-radius: 13px; background: #FFFFFF; font-size: 13px">8 works · about 9 h 40 min</span>
-        <span style="padding: 4px 10px; border-radius: 13px; background: #FFFFFF; font-size: 13px">6 offline</span>
-        <span style="padding: 4px 10px; border-radius: 13px; background: {{accentTint}}; color: {{accent}}; font-size: 13px">fluff</span>
-        <span style="padding: 4px 10px; border-radius: 13px; background: {{accentTint}}; color: {{accent}}; font-size: 13px">under 20k</span>
+      <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+        <h1 style="margin: 0; font-size: 28px; line-height: 34px; font-weight: 700; letter-spacing: 0.35px">Summer Reading</h1>
+        <p style="margin: 0; font-size: 15px; line-height: 20px; color: #3A3A3C">Short, warm things for the train.</p>
+        <p style="margin: 0; font-size: 13px; line-height: 18px; color: #6C6C70">8 works · about 9 h 40 min · 6 offline</p>
       </div>
     </header>
-
-    <div style="background: #FFFFFF; border-radius: 16px; padding: 12px 14px; display: flex; align-items: center; gap: 12px">
-      <div style="flex: 1; display: flex; flex-direction: column; gap: 2px">
-        <span style="font-size: 13px; font-weight: 600; color: #6C6C70">Up next</span>
-        <span style="font-size: 17px; font-weight: 600">Five Times Elizabeth Laughed</span>
-        <span style="font-size: 13px; color: #6C6C70">about 25 min · offline</span>
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <div role="img" aria-label="2 of 8 finished, 1 in progress" style="display: flex; gap: 3px">
+        <sc-for list="{{segs}}" as="g" hint-placeholder-count="8">
+          <span style="flex: 1; height: 5px; border-radius: 3px; background: rgba(194,94,0,0.2); overflow: hidden"><span style="display: block; width: {{g.w}}; height: 5px; background: #C25E00"></span></span>
+        </sc-for>
       </div>
-      <button style="height: 40px; padding: 0 18px; border: none; border-radius: 20px; background: {{accent}}; color: #FFFFFF; font-family: inherit; font-size: 16px; font-weight: 600">Start</button>
+      <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap">
+        <span style="flex: 1; font-size: 13px; line-height: 18px; color: #6C6C70">2 finished · 1 in progress · 5 to go</span>
+        <span style="height: 28px; padding: 0 10px; border-radius: 14px; background: #EFEFF4; font-size: 13px; line-height: 28px">fluff</span>
+        <span style="height: 28px; padding: 0 10px; border-radius: 14px; background: #EFEFF4; font-size: 13px; line-height: 28px">under 20k</span>
+      </div>
     </div>
-    <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
-      <sc-for list="{{works}}" as="w" hint-placeholder-count="4">
-        <div style="display: flex; align-items: stretch">
-          <span style="width: 26px; flex-shrink: 0; padding-top: 14px; text-align: right; font-size: 15px; font-weight: 600; color: #6C6C70">{{w.n}}</span>
-          <div style="flex: 1; min-width: 0">
-            <dc-import name="WorkRow" work="{{w}}" divider="{{w.divider}}" accent="{{accent}}" hint-size="100%,100px"></dc-import>
+
+    <dc-import name="ResumeCard" variant="next" work="{{next}}" accent="#990000" hint-size="358px,250px"></dc-import>
+
+    <section aria-label="In line" style="display: flex; flex-direction: column; gap: 2px">
+      <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">In line</h2>
+      <div style="margin: 0 -16px">
+        <sc-for list="{{works}}" as="w" hint-placeholder-count="4">
+          <div style="display: flex; align-items: stretch">
+            <span style="width: 28px; flex-shrink: 0; padding-top: 14px; text-align: right; font-size: 15px; font-weight: 600; color: #6C6C70; font-variant-numeric: tabular-nums">{{w.n}}</span>
+            <div style="flex: 1; min-width: 0; margin-left: -6px">
+              <dc-import name="WorkRow" work="{{w}}" divider="{{w.divider}}" accent="#990000" hint-size="100%,100px"></dc-import>
+            </div>
           </div>
-        </div>
-      </sc-for>
-    </div>
+        </sc-for>
+      </div>
+    </section>
   </main>
 
   <div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(0,0,0,0.12)"></div>
-  <div role="menu" aria-label="Work actions" style="position: absolute; right: 24px; top: 470px; width: 250px; border-radius: 22px; padding: 6px 0; background: rgba(250,250,252,0.86); backdrop-filter: blur(30px) saturate(180%); -webkit-backdrop-filter: blur(30px) saturate(180%); box-shadow: 0 18px 50px rgba(0,0,0,0.22), 0 0 0 0.5px rgba(0,0,0,0.08)">
+  <div role="menu" aria-label="Work actions" style="position: absolute; right: 24px; top: 560px; width: 250px; border-radius: 22px; padding: 6px 0; background: rgba(250,250,252,0.86); backdrop-filter: blur(30px) saturate(180%); -webkit-backdrop-filter: blur(30px) saturate(180%); box-shadow: 0 18px 50px rgba(0,0,0,0.22), 0 0 0 0.5px rgba(0,0,0,0.08)">
     <sc-for list="{{menu}}" as="m" hint-placeholder-count="7">
       <button role="menuitem" style="width: 100%; height: 44px; border: none; background: transparent; padding: 0 16px; display: flex; align-items: center; justify-content: space-between; font-family: inherit; font-size: 16px; color: {{m.color}}; border-top: {{m.sep}}">
         {{m.label}}
@@ -81,12 +87,12 @@ class Component extends DCLogic {
     const hex = accent.replace('#', '');
     const tint = 'rgba(' + parseInt(hex.slice(0, 2), 16) + ',' + parseInt(hex.slice(2, 4), 16) + ',' + parseInt(hex.slice(4, 6), 16) + ',0.10)';
     const works = [
-      { title: 'Five Times Elizabeth Laughed', author: 'quietharbor', fandom: 'Pride and Prejudice', rating: 'G', category: 'Multi', warnings: 'none', status: 'complete', words: '6,700', chapters: '1/1', kudos: '890', updated: 'Offline' },
       { title: 'Small Gods of the Kitchen', author: 'hearthwitch', fandom: 'Original Work', rating: 'G', category: 'Gen', warnings: 'none', status: 'wip', words: '12,400', chapters: '3/?', kudos: '410', updated: 'Offline' },
       { title: 'The Baker Street Irregular', author: 'fogandlamplight', fandom: 'Sherlock Holmes', rating: 'G', category: 'Gen', warnings: 'none', status: 'complete', words: '9,140', chapters: '1/1', kudos: '2,045', updated: 'Offline' },
       { title: 'Letters Never Sent', author: 'marginalia', fandom: 'Persuasion', rating: 'T', category: 'FM', warnings: 'none', status: 'complete', words: '21,880', chapters: '4/4', kudos: '1,530', updated: 'Not downloaded' },
       { title: 'The Lighthouse Keepers', author: 'tidewright', fandom: 'Original Work', rating: 'T', category: 'FF', warnings: 'none', status: 'complete', words: '40,900', chapters: '10/10', kudos: '3,050', updated: 'Offline' }
     ];
+    const art = (h) => 'linear-gradient(155deg, hsl(' + h + ', 46%, 27%), hsl(' + ((h + 22) % 360) + ', 50%, 41%))';
     const sep = '0.5px solid rgba(60,60,67,0.18)';
     const menu = [
       ['Move to Top', 'M12 19V7M6.5 12.5 12 7l5.5 5.5M5 4h14', '#000000', 'none'],
@@ -100,7 +106,10 @@ class Component extends DCLogic {
     return {
       accent,
       accentTint: tint,
-      works: works.map((w, i) => ({ ...w, n: i + 1, divider: i < works.length - 1 })),
+      works: works.map((w, i) => ({ ...w, n: i + 2, divider: i < works.length - 1 })),
+      tiles: [150, 181, 32, 335].map(art),
+      segs: [100, 100, 60, 0, 0, 0, 0, 0].map((f) => ({ w: f + '%' })),
+      next: { title: 'Five Times Elizabeth Laughed', author: 'quietharbor', fandom: 'Pride and Prejudice', hue: 150, rating: 'G', category: 'Multi', warnings: 'none', status: 'complete', meta: '6,700 words · about 25 min · offline', chapterName: 'One-shot', planned: 1, posted: 1, read: 0, chapterPct: 0, updated: 'Jun 2', pct: 0 },
       menu
     };
   }

@@ -34,6 +34,17 @@ body{margin:0}
     </div>
   </sc-if>
 
+  <sc-if value="{{isNext}}" hint-placeholder-val="{{false}}">
+    <div style="position: relative; display: flex; flex-direction: column; gap: 2px">
+      <span style="font-size: 13px; line-height: 18px; font-weight: 600; color: rgba(255,255,255,0.9)">Up next</span>
+      <span style="font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; color: rgba(255,255,255,0.9); margin-top: 4px">{{w.fandom}}</span>
+      <span aria-hidden="true" style="width: 14px; height: 2px; border-radius: 1px; background: rgba(255,255,255,0.9); margin: 2px 0 3px"></span>
+      <span style="font-size: 20px; line-height: 25px; font-weight: 700">{{w.title}}</span>
+      <a href="Author.dc.html" style="align-self: flex-start; font-size: 15px; line-height: 20px; text-decoration: none; color: #FFFFFF">{{w.author}}</a>
+      <span style="font-size: 13px; line-height: 18px; color: rgba(255,255,255,0.85)">{{w.meta}}</span>
+    </div>
+  </sc-if>
+
   <sc-if value="{{isDetail}}" hint-placeholder-val="{{false}}">
     <div style="position: relative; display: flex; align-items: center; gap: 12px">
       <svg role="img" aria-label="{{pctLabel}}" width="52" height="52" viewBox="0 0 52 52"><circle cx="26" cy="26" r="22" fill="none" stroke="rgba(255,255,255,0.24)" stroke-width="6"></circle><circle cx="26" cy="26" r="22" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round" stroke-dasharray="{{smallDash}}" transform="rotate(-90 26 26)"></circle></svg>
@@ -51,7 +62,7 @@ body{margin:0}
         <span style="flex: 1; min-width: 0; box-sizing: border-box; border-radius: 3px; height: {{b.h}}; background: {{b.bg}}; border: {{b.bd}}"></span>
       </sc-for>
     </div>
-    <sc-if value="{{isHome}}" hint-placeholder-val="{{true}}">
+    <sc-if value="{{isShort}}" hint-placeholder-val="{{true}}">
       <div style="display: flex; justify-content: space-between; gap: 8px; font-size: 12px; line-height: 16px; color: rgba(255,255,255,0.85)"><span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{w.chapterName}} · {{postedLong}}</span><span style="white-space: nowrap">Updated {{w.updated}}</span></div>
     </sc-if>
     <sc-if value="{{isDetail}}" hint-placeholder-val="{{false}}">
@@ -65,14 +76,14 @@ body{margin:0}
   </div>
 
   <div style="position: relative; display: flex; align-items: center; gap: 10px">
-    <sc-if value="{{isHome}}" hint-placeholder-val="{{true}}">
+    <sc-if value="{{isShort}}" hint-placeholder-val="{{true}}">
       <dc-import name="Symbols" variant="strip" rating="{{w.rating}}" category="{{w.category}}" warnings="{{w.warnings}}" status="{{w.status}}" warning-count="{{w.warningCount}}" size="22" hint-size="96px,22px"></dc-import>
       <span style="flex: 1"></span>
       <button aria-label="Read aloud" style="width: 44px; height: 44px; border: none; border-radius: 22px; background: rgba(255,255,255,0.18); color: #FFFFFF; display: flex; align-items: center; justify-content: center; cursor: pointer">
         <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"></path><path d="M15.5 9a4.5 4.5 0 0 1 0 6"></path><path d="M18 6.5a8 8 0 0 1 0 11"></path></svg>
       </button>
       <button style="height: 44px; padding: 0 22px; border: none; border-radius: 22px; background: #FFFFFF; color: {{accent}}; font-family: inherit; font-size: 17px; font-weight: 600; display: flex; align-items: center; gap: 8px; cursor: pointer">
-        <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5z" fill="currentColor"></path></svg>Resume
+        <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5z" fill="currentColor"></path></svg>{{primaryLabel}}
       </button>
     </sc-if>
     <sc-if value="{{isDetail}}" hint-placeholder-val="{{false}}">
@@ -92,7 +103,7 @@ body{margin:0}
   </div>
 </section>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"work":{"editor":null},"variant":{"editor":"enum","options":["home","detail"],"default":"home"},"width":{"editor":"int","default":358,"min":280,"max":720},"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B"]},"$preview":{"width":358,"height":280}}'>
+<script type="text/x-dc" data-dc-script data-props='{"work":{"editor":null},"variant":{"editor":"enum","options":["home","detail","next"],"default":"home"},"width":{"editor":"int","default":358,"min":280,"max":720},"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B"]},"$preview":{"width":358,"height":280}}'>
 class Component extends DCLogic {
   renderVals() {
     const w = {
@@ -103,7 +114,8 @@ class Component extends DCLogic {
       ...(this.props.work || {})
     };
     const variant = this.props.variant ?? 'home';
-    const isHome = variant !== 'detail';
+    const isHome = variant === 'home' || (variant !== 'detail' && variant !== 'next');
+    const isNext = variant === 'next';
     const seedOf = (t) => { let h = 7; for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) >>> 0; return h; };
     const rng = (seed) => { let x = seed || 1; return () => { x ^= x << 13; x >>>= 0; x ^= x >>> 17; x ^= x << 5; x >>>= 0; return (x % 1000) / 1000; }; };
     const hue = Number(w.hue ?? 188);
@@ -121,21 +133,24 @@ class Component extends DCLogic {
     return {
       w,
       isHome,
-      isDetail: !isHome,
+      isNext,
+      isShort: isHome || isNext,
+      isDetail: variant === 'detail',
+      primaryLabel: isNext ? 'Start' : 'Resume',
       width: Number(this.props.width ?? 358),
       accent: this.props.accent ?? '#990000',
       art: 'linear-gradient(155deg, hsl(' + hue + ', 46%, 27%), hsl(' + ((hue + 22) % 360) + ', 50%, 41%))',
       initial: String(w.title).charAt(0),
-      label: isHome ? 'Continue reading ' + w.title : 'Your reading',
+      label: isHome ? 'Continue reading ' + w.title : (isNext ? 'Up next: ' + w.title : 'Your reading'),
       pctLabel: w.pct + ' percent read',
       bigDash: (w.pct * 2.576).toFixed(0) + ' 258',
       smallDash: (w.pct * 1.382).toFixed(0) + ' 139',
       bars,
-      barsH: isHome ? 52 : 76,
-      barGap: isHome ? 3 : 4,
+      barsH: variant === 'detail' ? 76 : 52,
+      barGap: variant === 'detail' ? 4 : 3,
       barsLabel: 'Chapters: ' + w.read + ' read, reading chapter ' + (w.read + 1) + ', ' + (w.posted - w.read - 1) + ' more posted' + (unposted > 0 ? ', ' + unposted + ' not posted yet' : ''),
       postedShort: w.posted + ' of ' + w.planned,
-      postedLong: w.posted + ' of ' + w.planned + ' posted',
+      postedLong: w.posted === w.planned && w.read === 0 ? w.posted + (w.posted === 1 ? ' chapter' : ' chapters') : w.posted + ' of ' + w.planned + ' posted',
       resumeLabel: 'Resume Chapter ' + w.chapter,
       hasUpdate: !!w.newDownloads,
       updateLabel: 'Update download: ' + w.newDownloads + ' new chapters'

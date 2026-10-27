@@ -33,6 +33,9 @@ body{margin:0}
       </sc-if>
       <dc-import name="Symbols" rating="{{w.rating}}" category="{{w.category}}" warnings="{{w.warnings}}" status="{{w.status}}" warning-count="{{w.warningCount}}" size="24" hint-size="51px,51px"></dc-import>
       <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+        <sc-if value="{{ledger}}" hint-placeholder-val="{{false}}">
+          <span style="font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; color: {{fandomColor}}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{w.fandom}}</span>
+        </sc-if>
         <div style="display: flex; align-items: flex-start; gap: 6px">
           <span style="flex: 1; min-width: 0; font-size: 17px; line-height: 22px; font-weight: 600; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden">{{w.title}}</span>
           <sc-if value="{{hasBadge}}" hint-placeholder-val="{{false}}">
@@ -44,7 +47,17 @@ body{margin:0}
           <span style="margin-top: 2px; font-size: 14px; line-height: 19px; color: #3A3A3C; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden">{{w.summary}}</span>
         </sc-if>
         <span style="font-size: 12px; line-height: 16px; color: #6C6C70">{{stats}}</span>
-        <sc-if value="{{hasProgress}}" hint-placeholder-val="{{false}}">
+        <sc-if value="{{hasBars}}" hint-placeholder-val="{{false}}">
+          <div style="display: flex; align-items: flex-end; gap: 8px; margin-top: 5px">
+            <div role="img" aria-label="{{barsLabel}}" style="flex: 1; max-width: {{barsW}}; height: 16px; display: flex; align-items: flex-end; gap: 2px">
+              <sc-for list="{{bars}}" as="b" hint-placeholder-count="12">
+                <span style="flex: 1; min-width: 0; box-sizing: border-box; border-radius: 2px; height: {{b.h}}; background: {{b.bg}}; border: {{b.bd}}"></span>
+              </sc-for>
+            </div>
+            <span style="margin-left: auto; font-size: 12px; line-height: 16px; color: #6C6C70">{{progressLabel}}</span>
+          </div>
+        </sc-if>
+        <sc-if value="{{hasPlainProgress}}" hint-placeholder-val="{{false}}">
           <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px">
             <div style="flex: 1; height: 3px; border-radius: 2px; background: #E5E5EA"><div style="width: {{pct}}; height: 3px; border-radius: 2px; background: {{accent}}"></div></div>
             <span style="font-size: 12px; line-height: 16px; color: #6C6C70">{{progressLabel}}</span>
@@ -58,7 +71,7 @@ body{margin:0}
   </sc-if>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"work":{"editor":null},"selecting":{"editor":"boolean","default":false},"selected":{"editor":"boolean","default":false},"showSummary":{"editor":"boolean","default":false},"divider":{"editor":"boolean","default":false},"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"$preview":{"width":390,"height":112}}'>
+<script type="text/x-dc" data-dc-script data-props='{"work":{"editor":null},"selecting":{"editor":"boolean","default":false},"selected":{"editor":"boolean","default":false},"showSummary":{"editor":"boolean","default":false},"divider":{"editor":"boolean","default":false},"ledger":{"editor":"boolean","default":false},"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"$preview":{"width":390,"height":112}}'>
 class Component extends DCLogic {
   renderVals() {
     const on = (v) => v === true || v === 'true';
@@ -72,17 +85,44 @@ class Component extends DCLogic {
     const selected = on(this.props.selected);
     const hex = accent.replace('#', '');
     const tint = 'rgba(' + parseInt(hex.slice(0, 2), 16) + ',' + parseInt(hex.slice(2, 4), 16) + ',' + parseInt(hex.slice(4, 6), 16) + ',0.08)';
+    const ledger = on(this.props.ledger);
     const parts = [];
+    if (ledger && w.language) parts.push(w.language);
     if (w.words) parts.push(w.words + ' words');
     if (w.chapters) parts.push(w.chapters + ' ch');
-    if (w.kudos) parts.push(w.kudos + ' kudos');
+    if (ledger && w.comments) parts.push(w.comments + ' comments');
+    if (w.kudos) parts.push((ledger ? '♥ ' : '') + w.kudos + (ledger ? '' : ' kudos'));
+    if (ledger && w.bookmarks) parts.push(w.bookmarks + ' bookmarks');
     if (w.hits) parts.push(w.hits + ' hits');
     if (w.updated) parts.push(w.updated);
     const hasProgress = typeof w.progress === 'number';
+    // Ledger: the fandom as a coloured label (identity, not a tinted card); progress as chapter bars.
+    const seedOf = (t) => { let h = 7; for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) >>> 0; return h; };
+    const FAN = { 'Original Work': 188, 'Persuasion': 335, 'Sherlock Holmes': 32, 'Jane Eyre': 262, 'Northanger Abbey': 290, 'Pride and Prejudice': 150, 'To the Lighthouse': 205 };
+    const fk = (w.fandom || '').split(' - ')[0];
+    const fhue = FAN[fk] !== undefined ? FAN[fk] : seedOf(w.fandom || 'x') % 360;
+    const hasBars = ledger && typeof w.planned === 'number';
+    const bars = [];
+    if (hasBars) {
+      let x = seedOf((w.title || '').replace('’', "'") + ' chapters') || 1;
+      const rnd = () => { x ^= x << 13; x >>>= 0; x ^= x >>> 17; x ^= x << 5; x >>>= 0; return (x % 1000) / 1000; };
+      for (let i = 0; i < w.planned; i++) {
+        const hgt = Math.round(42 + rnd() * 58);
+        if (i >= w.posted) bars.push({ h: '46%', bg: 'transparent', bd: '1.5px dashed #C7C7CC' });
+        else bars.push({ h: hgt + '%', bg: i < (w.read || 0) ? accent : (i === w.read && w.cur ? 'linear-gradient(to top, ' + accent + ' ' + w.cur + '%, #E5E5EA ' + w.cur + '%)' : '#E5E5EA'), bd: 'none' });
+      }
+    }
     return {
       w: { ...w, warningCount: w.warningCount || 1, badge: w.badge || '' },
       accent,
-      byline: [w.author, w.fandom].filter(Boolean).join(' · '),
+      byline: ledger ? (w.author || '') : [w.author, w.fandom].filter(Boolean).join(' · '),
+      ledger,
+      fandomColor: 'hsl(' + fhue + ', 56%, 33%)',
+      hasBars,
+      hasPlainProgress: hasProgress && !hasBars,
+      bars,
+      barsW: Math.min(100, (w.planned || 0) * 8) + '%',
+      barsLabel: hasBars ? (w.read || 0) + ' of ' + w.posted + ' posted chapters read' + (w.planned > w.posted ? ', ' + (w.planned - w.posted) + ' not posted yet' : '') : '',
       stats: parts.join(' · '),
       isHidden: !!w.hidden,
       isShown: !w.hidden,
@@ -94,7 +134,7 @@ class Component extends DCLogic {
       checkBg: selected ? accent : 'transparent',
       checkBorder: selected ? 'none' : '1.5px solid #C7C7CC',
       rowBg: selecting && selected ? tint : 'transparent',
-      showSummary: on(this.props.showSummary) && !!w.summary,
+      showSummary: (on(this.props.showSummary) || ledger) && !!w.summary,
       divider: on(this.props.divider),
       dividerInset: selecting ? 115 : 79
     };

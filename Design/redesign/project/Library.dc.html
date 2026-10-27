@@ -62,7 +62,7 @@ button{cursor:pointer}
         <sc-if value="{{s.isList}}" hint-placeholder-val="{{true}}">
           <div style="margin: 0 -16px">
             <sc-for list="{{s.works}}" as="w" hint-placeholder-count="2">
-              <dc-import name="WorkRow" work="{{w}}" divider="{{w.divider}}" accent="{{accent}}" hint-size="100%,100px"></dc-import>
+              <dc-import name="WorkRow" work="{{w}}" divider="{{w.divider}}" ledger="{{true}}" accent="{{accent}}" hint-size="100%,120px"></dc-import>
             </sc-for>
           </div>
         </sc-if>
