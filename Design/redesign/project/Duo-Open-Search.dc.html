@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Open Search with filters</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+a{color:#990000}a:hover{color:#6E0000}
+</style>
+</helmet>
+<div style="width: 951px; height: 669px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+
+  <section aria-label="Search results" style="position: absolute; left: 0; top: 0; width: 591px; height: 669px; padding: 72px 20px 0 20px; box-sizing: border-box; display: flex; flex-direction: column; gap: 18px; overflow: hidden">
+    <section aria-label="In your library" style="display: flex; flex-direction: column; gap: 2px">
+      <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">In your library <span style="font-weight: 400; color: #6C6C70">2</span></h2>
+      <div style="margin: 0 -20px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr))">
+        <sc-for list="{{mine}}" as="w" hint-placeholder-count="2">
+          <dc-import name="WorkRow" work="{{w}}" accent="#990000" hint-size="100%,100px"></dc-import>
+        </sc-for>
+      </div>
+    </section>
+
+    <section aria-label="Your tags, collections and fandoms" style="display: flex; flex-direction: column; gap: 8px">
+      <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">Your tags, collections and fandoms</h2>
+      <div style="display: flex; flex-wrap: wrap; gap: 8px">
+        <sc-for list="{{chips}}" as="c" hint-placeholder-count="3">
+          <a href="Library-Section.dc.html" style="height: 34px; padding: 0 12px; border-radius: 17px; background: #EFEFF4; color: #000000; text-decoration: none; font-size: 15px; display: flex; align-items: center; gap: 6px"><span style="font-size: 13px; color: #6C6C70">{{c.kind}}</span>{{c.name}}<span style="font-size: 13px; color: #6C6C70">{{c.count}}</span></a>
+        </sc-for>
+      </div>
+    </section>
+
+    <section aria-label="Fandoms on AO3" style="display: flex; flex-direction: column">
+      <h2 style="margin: 0 0 4px; font-size: 20px; line-height: 25px; font-weight: 700">Fandoms on AO3</h2>
+      <sc-for list="{{fandoms}}" as="f" hint-placeholder-count="2">
+        <a href="Fandom-Works.dc.html" style="min-height: 48px; display: flex; align-items: center; gap: 10px; border-top: {{f.line}}; text-decoration: none; color: #000000">
+          <span style="flex: 1; font-size: 17px">{{f.name}}</span>
+          <span style="font-size: 15px; color: #6C6C70">{{f.count}} works</span>
+          <svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg>
+        </a>
+      </sc-for>
+    </section>
+
+    <section aria-label="On AO3" style="display: flex; flex-direction: column; gap: 6px">
+      <div style="display: flex; align-items: center; gap: 8px">
+        <h2 style="margin: 0; flex: 1; font-size: 20px; line-height: 25px; font-weight: 700">On AO3 <span style="font-weight: 400; color: #6C6C70">1,284 works</span></h2>
+        <button style="height: 34px; padding: 0 12px; border: none; border-radius: 17px; background: #EFEFF4; color: #000000; font-family: inherit; font-size: 15px">Best match ▾</button>
+        <button aria-pressed="true" style="height: 34px; padding: 0 12px; border: none; border-radius: 17px; background: #990000; color: #FFFFFF; font-family: inherit; font-size: 15px; font-weight: 600">Filters · 2</button>
+      </div>
+      <div style="margin: 0 -20px">
+        <sc-for list="{{results}}" as="w" hint-placeholder-count="2">
+          <dc-import name="WorkRow" work="{{w}}" show-summary="{{true}}" divider="{{w.divider}}" accent="#990000" hint-size="100%,130px"></dc-import>
+        </sc-for>
+      </div>
+    </section>
+  </section>
+
+  <div style="position: absolute; left: 16px; top: 14px; display: flex; gap: 10px; align-items: center">
+    <a href="Browse.dc.html" aria-label="Back to Browse" style="width: 44px; height: 44px; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg>
+    </a>
+    <label style="width: 470px; height: 44px; padding: 0 6px 0 14px; box-sizing: border-box; border-radius: 22px; display: flex; align-items: center; gap: 8px; color: #6C6C70; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
+      <svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="m15.5 15.5 5 5"></path></svg>
+      <input type="search" value="lighthouse" aria-label="Search AO3 and your library" style="flex: 1; min-width: 0; border: none; background: transparent; font-family: inherit; font-size: 17px; color: #000000; outline: none">
+      <button aria-label="Clear" style="width: 32px; height: 32px; border: none; border-radius: 16px; background: transparent; color: #AEAEB2; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="currentColor"></circle><path d="m9 9 6 6M15 9l-6 6" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"></path></svg></button>
+    </label>
+  </div>
+
+  <aside aria-label="Filters" style="position: absolute; right: 0; top: 0; width: 360px; height: 669px; background: #F2F2F7; border-left: 0.5px solid #D1D1D6; box-sizing: border-box; overflow: hidden; display: flex; flex-direction: column">
+    <header style="height: 72px; padding: 0 14px; display: flex; align-items: center; gap: 10px; flex-shrink: 0">
+      <button style="height: 40px; padding: 0 14px; border: none; border-radius: 20px; font-family: inherit; font-size: 17px; color: #1C1C1E; background: rgba(255,255,255,0.8); box-shadow: 0 4px 14px rgba(0,0,0,0.08), 0 0 0 0.5px rgba(0,0,0,0.06)">Reset</button>
+      <h2 style="margin: 0; flex: 1; text-align: center; font-size: 17px; line-height: 22px; font-weight: 600">Filters</h2>
+      <button aria-label="Apply filters" style="width: 40px; height: 40px; border: none; border-radius: 20px; background: #990000; color: #FFFFFF; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"></path></svg></button>
+    </header>
+    <div style="padding: 0 16px; display: flex; flex-direction: column; gap: 14px">
+      <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
+        <div style="min-height: 46px; padding: 0 16px; display: flex; align-items: center; gap: 8px"><span style="flex: 1; font-size: 17px">Sort by</span><span style="font-size: 17px; color: #6C6C70">Date updated ›</span></div>
+        <div aria-hidden="true" style="margin-left: 16px; height: 0.5px; background: #D1D1D6"></div>
+        <div style="min-height: 46px; padding: 0 16px; display: flex; align-items: center; gap: 8px"><span style="flex: 1; font-size: 17px">Order</span><span style="font-size: 17px; color: #6C6C70">Newest first ›</span></div>
+      </div>
+      <sc-for list="{{groups}}" as="g" hint-placeholder-count="3">
+        <fieldset style="margin: 0; padding: 0; border: none; display: flex; flex-direction: column; gap: 6px">
+          <legend style="padding: 0 16px 6px; font-size: 13px; line-height: 18px; color: #6C6C70">{{g.title}}</legend>
+          <div style="background: #FFFFFF; border-radius: 16px; padding: 10px 12px; display: flex; flex-wrap: wrap; gap: 8px">
+            <sc-for list="{{g.chips}}" as="c" hint-placeholder-count="4">
+              <button aria-pressed="{{c.pressed}}" style="border: none; padding: 2px; border-radius: 999px; background: transparent; box-shadow: {{c.ring}}; display: flex">
+                <dc-import name="Symbols" variant="labeled" only="{{g.kind}}" rating="{{c.rating}}" category="{{c.category}}" warnings="{{c.warnings}}" status="{{c.status}}" size="20" hint-size="86px,26px"></dc-import>
+              </button>
+            </sc-for>
+          </div>
+        </fieldset>
+      </sc-for>
+      <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
+        <sc-for list="{{ranges}}" as="r" hint-placeholder-count="3">
+          <sc-if value="{{r.sep}}" hint-placeholder-val="{{false}}"><div aria-hidden="true" style="margin-left: 16px; height: 0.5px; background: #D1D1D6"></div></sc-if>
+          <div style="min-height: 46px; padding: 0 16px; display: flex; align-items: center; gap: 8px"><span style="flex: 1; font-size: 17px">{{r.label}}</span><span style="font-size: 17px; color: #6C6C70">{{r.value}} ›</span></div>
+        </sc-for>
+      </div>
+    </div>
+  </aside>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":951,"height":669}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const chip = (o, on) => ({ rating: 'T', category: 'FM', warnings: 'none', status: 'wip', ...o, pressed: on ? 'true' : 'false', ring: on ? 'inset 0 0 0 2px #990000' : 'none' });
+    const results = [
+      { title: 'Keeper of the Northern Light', author: 'saltwindow', fandom: 'Original Work', rating: 'T', category: 'FF', warnings: 'none', status: 'complete', words: '22,410', chapters: '7/7', kudos: '1,804', hits: '19.2k', updated: 'Oct 22', summary: 'The last keeper on the coast trains her replacement, who has never once been afraid of the dark.' },
+      { title: 'What the Lamp Saw', author: 'tidewright', fandom: 'To the Lighthouse', rating: 'G', category: 'Gen', warnings: 'none', status: 'complete', words: '8,050', chapters: '1/1', kudos: '940', hits: '7.7k', updated: 'Oct 19', summary: 'Ten years of a house by the sea, told by the light that swept across it every night.' }
+    ];
+    return {
+      mine: [
+        { title: 'The Lighthouse Keepers', author: 'tidewright', fandom: 'Original Work', rating: 'T', category: 'FF', warnings: 'none', status: 'complete', chapters: '10/10', updated: 'Downloaded' },
+        { title: 'Salt & Starlight', author: 'wrenfield', fandom: 'Original Work', rating: 'M', category: 'Gen', warnings: 'undisclosed', status: 'wip', chapters: '15/30', updated: 'Tag: lighthouses' }
+      ],
+      chips: [
+        { kind: 'Tag', name: 'lighthouses', count: '4' },
+        { kind: 'Collection', name: 'Comfort Reads', count: '1' },
+        { kind: 'Fandom', name: 'Original Work', count: '3' }
+      ],
+      fandoms: [
+        { name: 'To the Lighthouse - Virginia Woolf', count: '312', line: 'none' },
+        { name: 'The Lamp at Skerry Head (Novel)', count: '48', line: '0.5px solid #E5E5EA' }
+      ],
+      results: results.map((w, i) => ({ ...w, divider: i < results.length - 1 })),
+      groups: [
+        { title: 'Rating', kind: 'rating', chips: [chip({ rating: 'G' }, true), chip({ rating: 'T' }, true), chip({ rating: 'M' }, false), chip({ rating: 'E' }, false)] },
+        { title: 'Warnings', kind: 'warnings', chips: [chip({ warnings: 'none' }, true), chip({ warnings: 'undisclosed' }, false), chip({ warnings: 'present' }, false)] },
+        { title: 'Category', kind: 'category', chips: [chip({ category: 'FF' }, true), chip({ category: 'FM' }, false), chip({ category: 'MM' }, false), chip({ category: 'Gen' }, true), chip({ category: 'Multi' }, false), chip({ category: 'Other' }, false)] },
+        { title: 'Completion', kind: 'status', chips: [chip({ status: 'complete' }, true), chip({ status: 'wip' }, false)] }
+      ],
+      ranges: [
+        { label: 'Word count', value: '10k or more', sep: false },
+        { label: 'Kudos', value: '100 or more', sep: true },
+        { label: 'Updated', value: 'Past month', sep: true },
+        { label: 'Language', value: 'English', sep: true }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>
