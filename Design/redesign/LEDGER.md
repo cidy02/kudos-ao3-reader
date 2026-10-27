@@ -7,6 +7,8 @@ Screenshots of the current app: `shots/` (see HANDOFF.md for what each folder ho
 ## North star (owner, 2026-10-26)
 An app that looks and feels like Apple designed and shipped it. Judge every board against Apple Books, Music, Podcasts, Mail and Settings on iOS 26: stock controls, Dynamic Type styles, SF Symbols, restrained tint, glass only on navigation, large titles that collapse, inset grouped lists, sheets with grabbers, standard menus. Fix my own boards where they drift from this.
 
+Owner, 2026-10-26 (handoff): don't throw away the current app. It already went through one redesign; evolve it. The goal is polish and coherence, and the app feels "too one-dimensional". AO3 works have no covers, so depth has to come from hierarchy, the fandom, the work's own words and shape, and the reader's history. See HANDOFF.md, "What the owner wants".
+
 ## Rules (from the owner and the Design type)
 - Every feature in today's app keeps a home in the redesign; keep information density (AO3 metadata visible).
 - Native only: SwiftUI + Liquid Glass on iOS (glass on navigation only), Material 3 / Compose equivalent for Android. No web tricks.
