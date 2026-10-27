@@ -730,6 +730,22 @@
       "h": 1640,
       "title": "Kudos design rules",
       "page": "system"
+    },
+    "TabRail.dc.html": {
+      "x": 1360,
+      "y": 1248,
+      "w": 64,
+      "h": 312,
+      "title": "Tab rail, Duo cover (component)",
+      "page": "system"
+    },
+    "DuoSidebar.dc.html": {
+      "x": 1504,
+      "y": 1248,
+      "w": 232,
+      "h": 649,
+      "title": "Sidebar, Duo open (component)",
+      "page": "system"
     }
   },
   "createdOnFiles": {
@@ -948,7 +964,9 @@
     "CoverCard.dc.html",
     "Coverage.dc.html",
     "Rules.dc.html",
-    "ResumeCard.dc.html"
+    "ResumeCard.dc.html",
+    "TabRail.dc.html",
+    "DuoSidebar.dc.html"
   ],
   "pages": [
     {

@@ -11,136 +11,54 @@
 <style>
 body{margin:0}
 button{cursor:pointer}
+a{color:#990000}a:hover{color:#6E0000}
 </style>
 </helmet>
-<div style="width: 466px; height: 678px; position: relative; overflow: hidden; background: #F2F2F7; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
-  <main style="padding: 28px 86px 0 16px; display: flex; flex-direction: column; gap: 18px">
-    <header style="display: flex; flex-direction: column; gap: 2px">
+<div style="width: 466px; height: 678px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+  <main style="padding: 28px 86px 0 16px; display: flex; flex-direction: column; gap: 22px">
+    <header style="display: flex; flex-direction: column; gap: 2px; padding-right: 80px">
       <h1 style="margin: 0; font-size: 34px; line-height: 41px; font-weight: 700; letter-spacing: 0.4px">Home</h1>
-      <p style="margin: 0; font-size: 15px; line-height: 20px; color: #6C6C70">3 new chapters · checked 2 min ago</p>
+      <a href="Insights.dc.html" style="align-self: flex-start; text-decoration: none; font-size: 15px; line-height: 20px; color: #6C6C70"><span style="font-weight: 600; color: #3A3A3C">4 h 10 m</span> this week · <span style="font-weight: 600; color: #3A3A3C">9-day</span> streak ›</a>
     </header>
+
+    <dc-import name="ResumeCard" variant="home" width="364" accent="#990000" hint-size="364px,280px"></dc-import>
 
     <section aria-label="Reading Now" style="display: flex; flex-direction: column; gap: 10px">
       <div style="display: flex; align-items: baseline; justify-content: space-between">
-        <h2 style="margin: 0; font-size: 22px; line-height: 28px; font-weight: 700; letter-spacing: 0.35px">Reading Now</h2>
-        <button style="border: none; background: none; padding: 12px 0; margin: -12px 0; font-family: inherit; font-size: 15px; color: {{accent}}">See All</button>
+        <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">Reading Now</h2>
+        <a href="Library-Section.dc.html" style="font-size: 17px; text-decoration: none">See All</a>
       </div>
-      <div style="background: #FFFFFF; border-radius: 22px; padding: 14px; display: flex; flex-direction: column; gap: 12px">
-        <div style="display: flex; align-items: flex-start; gap: 14px">
-          <div aria-hidden="true" style="width: 76px; height: 112px; flex-shrink: 0; border-radius: 6px; background: #1F4E5F; box-shadow: 0 6px 16px rgba(0,0,0,0.18); padding: 9px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; color: #FFFFFF">
-            <span style="font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: 12px; line-height: 14px">The Cartographer's Daughter</span>
-            <span style="display: flex; flex-direction: column; gap: 4px"><span style="width: 14px; height: 1px; background: rgba(255,255,255,0.6)"></span><span style="font-size: 7px; letter-spacing: 0.6px; text-transform: uppercase">inkwell_moth</span></span>
-          </div>
-          <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px">
-            <div style="display: flex; align-items: flex-start; gap: 10px">
-              <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
-                <span style="font-size: 12px; line-height: 16px; font-weight: 600; color: #6C6C70; letter-spacing: 0.3px; text-transform: uppercase">Original Work</span>
-                <span style="font-size: 17px; line-height: 22px; font-weight: 600; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden">The Cartographer's Daughter</span>
-              </div>
-              <div style="flex-shrink: 0">
-                <dc-import name="Symbols" variant="grid" rating="T" category="FM" warnings="none" status="wip" chapters="12/20" size="24" hint-size="51px,51px"></dc-import>
-              </div>
-            </div>
-            <button style="align-self: flex-start; border: none; background: none; padding: 0; font-family: inherit; font-size: 15px; line-height: 20px; color: {{accent}}">inkwell_moth</button>
-            <span style="font-size: 13px; line-height: 18px; color: #6C6C70; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">84,210 words · 12/20 ch · 3,104 kudos</span>
-          </div>
-        </div>
-        <div style="display: flex; flex-direction: column; gap: 5px">
-          <div style="display: flex; justify-content: space-between; font-size: 12px; line-height: 16px; color: #6C6C70"><span>Ch 7 · The Salt Road</span><span>58%</span></div>
-          <div role="progressbar" aria-label="Reading progress" aria-valuenow="58" aria-valuemin="0" aria-valuemax="100" style="height: 4px; border-radius: 2px; background: #E5E5EA"><div style="width: 58%; height: 4px; border-radius: 2px; background: {{accent}}"></div></div>
-        </div>
-        <div style="display: flex; gap: 10px">
-          <button style="flex: 1; height: 44px; border: none; border-radius: 22px; background: {{accent}}; color: #FFFFFF; font-family: inherit; font-size: 16px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px">
-            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5z" fill="currentColor"></path></svg>
-            Resume
-          </button>
-          <button aria-label="Read aloud" style="width: 44px; height: 44px; flex-shrink: 0; border: none; border-radius: 22px; background: {{accentTint}}; color: {{accent}}; display: flex; align-items: center; justify-content: center">
-            <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"></path><path d="M15.5 9a4.5 4.5 0 0 1 0 6"></path><path d="M18 6.5a8 8 0 0 1 0 11"></path></svg>
-          </button>
-          <button aria-label="Work details" style="width: 44px; height: 44px; flex-shrink: 0; border: none; border-radius: 22px; background: #F2F2F7; color: #1C1C1E; display: flex; align-items: center; justify-content: center">
-            <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 11v5.5"></path><circle cx="12" cy="7.8" r="1" fill="currentColor" stroke="none"></circle></svg>
-          </button>
-        </div>
-      </div>
-    </section>
-
-    <section aria-label="New Chapters" style="display: flex; flex-direction: column; gap: 10px">
-      <div style="display: flex; align-items: baseline; justify-content: space-between">
-        <h2 style="margin: 0; font-size: 22px; line-height: 28px; font-weight: 700; letter-spacing: 0.35px">New Chapters</h2>
-        <button style="border: none; background: none; padding: 12px 0; margin: -12px 0; font-family: inherit; font-size: 15px; color: {{accent}}">See All</button>
-      </div>
-      <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
-        <dc-import name="WorkRow" work="{{newChapter}}" accent="{{accent}}" hint-size="364px,83px"></dc-import>
-      </div>
-    </section>
-
-    <a href="Insights.dc.html" aria-label="This week: 4 hours 10 minutes read, 2 works finished, 9-day streak. Open Reading Insights." style="text-decoration: none; color: inherit; background: #FFFFFF; border-radius: 16px; padding: 12px 14px; display: flex; align-items: center; gap: 4px">
-      <div style="flex: 1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr))">
-        <div style="display: flex; flex-direction: column; gap: 1px"><span style="font-size: 20px; font-weight: 700">4 h 10 m</span><span style="font-size: 12px; color: #6C6C70">this week</span></div>
-        <div style="display: flex; flex-direction: column; gap: 1px"><span style="font-size: 20px; font-weight: 700">2</span><span style="font-size: 12px; color: #6C6C70">finished</span></div>
-        <div style="display: flex; flex-direction: column; gap: 1px"><span style="font-size: 20px; font-weight: 700">9 days</span><span style="font-size: 12px; color: #6C6C70">reading streak</span></div>
-      </div>
-      <svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg>
-    </a>
-
-    <section aria-label="Up Next" style="display: flex; flex-direction: column; gap: 10px">
-      <div style="display: flex; align-items: baseline; justify-content: space-between">
-        <h2 style="margin: 0; font-size: 22px; line-height: 28px; font-weight: 700; letter-spacing: 0.35px">Up Next</h2>
-        <button style="border: none; background: none; padding: 12px 0; margin: -12px 0; font-family: inherit; font-size: 15px; color: {{accent}}">See All</button>
-      </div>
-      <div style="display: flex; gap: 12px; overflow: hidden">
-        <sc-for list="{{upNext}}" as="w" hint-placeholder-count="4">
-          <dc-import name="CoverCard" work="{{w}}" variant="cover" width="96" accent="{{accent}}" hint-size="96px,233px"></dc-import>
+      <div style="width: 364px; display: flex; gap: 12px; overflow: hidden">
+        <sc-for list="{{reading}}" as="w" hint-placeholder-count="3">
+          <dc-import name="CoverCard" work="{{w}}" width="110" accent="#990000" hint-size="110px,240px"></dc-import>
         </sc-for>
       </div>
     </section>
+
+    <section aria-label="New Chapters" style="display: flex; flex-direction: column; gap: 4px">
+      <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">New Chapters</h2>
+      <div style="margin-left: -16px"><dc-import name="WorkRow" work="{{fresh}}" accent="#990000" hint-size="100%,100px"></dc-import></div>
+    </section>
   </main>
 
-  <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 34px; background: linear-gradient(to bottom, rgba(242,242,247,0), rgba(242,242,247,0.94) 75%); pointer-events: none"></div>
+  <button style="position: absolute; right: 16px; top: 27px; height: 44px; padding: 0 18px; border: none; border-radius: 22px; font-family: inherit; font-size: 17px; color: #1C1C1E; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">Select</button>
 
-  <button style="position: absolute; right: 16px; top: 27px; height: 44px; padding: 0 18px; border: none; border-radius: 22px; font-family: inherit; font-size: 16px; font-weight: 500; color: #1C1C1E; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">Select</button>
-
-  <nav aria-label="Tabs" style="position: absolute; right: 10px; top: 182px; width: 64px; display: flex; flex-direction: column; align-items: center; gap: 10px">
-    <div style="width: 64px; border-radius: 32px; padding: 4px; box-sizing: border-box; display: flex; flex-direction: column; gap: 2px; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 8px 28px rgba(0,0,0,0.12), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
-      <button aria-current="page" style="width: 56px; height: 56px; border: none; border-radius: 28px; background: {{accentTint}}; color: {{accent}}; font-family: inherit; font-size: 10px; font-weight: 600; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px">
-        <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 10.5 12 3.5l8.5 7"></path><path d="M5.5 9v11h5v-6h3v6h5V9"></path></svg>
-        Home
-      </button>
-      <button style="width: 56px; height: 56px; border: none; border-radius: 28px; background: transparent; color: #1C1C1E; font-family: inherit; font-size: 10px; font-weight: 600; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px">
-        <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4" width="4" height="16" rx="1"></rect><rect x="9.5" y="4" width="4" height="16" rx="1"></rect><path d="m15.6 5.4 3.4-.9 3 15.2-3.4.9z"></path></svg>
-        Library
-      </button>
-      <button style="width: 56px; height: 56px; border: none; border-radius: 28px; background: transparent; color: #1C1C1E; font-family: inherit; font-size: 10px; font-weight: 600; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px">
-        <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="7" height="7" rx="1.8"></rect><rect x="13" y="4" width="7" height="7" rx="1.8"></rect><rect x="4" y="13" width="7" height="7" rx="1.8"></rect><rect x="13" y="13" width="7" height="7" rx="1.8"></rect></svg>
-        Browse
-      </button>
-      <button style="width: 56px; height: 56px; border: none; border-radius: 28px; background: transparent; color: #1C1C1E; font-family: inherit; font-size: 10px; font-weight: 600; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px">
-        <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"></circle><path d="M4.5 20c1.4-3.8 4.2-5.8 7.5-5.8s6.1 2 7.5 5.8"></path></svg>
-        Account
-      </button>
-    </div>
-    <button aria-label="Search" style="width: 64px; height: 64px; border: none; border-radius: 32px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 8px 28px rgba(0,0,0,0.12), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
-      <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="m15.5 15.5 5 5"></path></svg>
-    </button>
-  </nav>
+  <div style="position: absolute; right: 10px; top: 182px">
+    <dc-import name="TabRail" selected="home" accent="#990000" hint-size="64px,312px"></dc-import>
+  </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"$preview":{"width":466,"height":678}}'>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":466,"height":678}}'>
 class Component extends DCLogic {
   renderVals() {
-    const accent = this.props.accent ?? '#990000';
-    const hex = accent.replace('#', '');
-    const r = parseInt(hex.slice(0, 2), 16), g = parseInt(hex.slice(2, 4), 16), b = parseInt(hex.slice(4, 6), 16);
     return {
-      accent,
-      accentTint: 'rgba(' + r + ',' + g + ',' + b + ',0.10)',
-      newChapter: { title: 'Salt & Starlight', author: 'wrenfield', fandom: 'Original Work', rating: 'M', category: 'Gen', warnings: 'undisclosed', status: 'wip', words: '118k', chapters: '15/30', updated: 'Ch 15 · 2h ago', badge: '+3' },
-      upNext: [
-        { title: 'A Map of Small Hours', author: 'quietharbor', cover: '#5B2A4E', rating: 'G', category: 'FM', warnings: 'none', status: 'complete', meta: '32k · Complete', progress: 0 },
-        { title: 'Salt & Starlight', author: 'wrenfield', cover: '#2E5339', rating: 'M', category: 'Gen', warnings: 'undisclosed', status: 'wip', meta: '118k · 15/30', progress: 40 },
-        { title: 'The Baker Street Irregular', author: 'fogandlamplight', cover: '#8A5A12', rating: 'G', category: 'Gen', warnings: 'none', status: 'complete', meta: '9k · One-shot', progress: 0 },
-        { title: 'Letters Never Sent', author: 'marginalia', cover: '#2F3A4A', rating: 'T', category: 'FM', warnings: 'none', status: 'complete', meta: '21k · Complete', progress: 50 }
-      ]
+      reading: [
+        { title: 'Salt & Starlight', author: 'wrenfield', fandom: 'Original Work', rating: 'M', category: 'Gen', warnings: 'undisclosed', status: 'wip', meta: 'Ch 12 of 30 · 40%', progress: 40, badge: '+3' },
+        { title: 'Whatever Remains', author: 'fogandlamplight', fandom: 'Sherlock Holmes', rating: 'E', category: 'MM', warnings: 'present', warningCount: 2, status: 'complete', hidden: true },
+        { title: 'Letters Never Sent', author: 'marginalia', fandom: 'Persuasion', rating: 'T', category: 'FM', warnings: 'none', status: 'complete', meta: 'Ch 3 of 4 · 50%', progress: 50 },
+        { title: 'Moor and Mist', author: 'brontebird', fandom: 'Jane Eyre', rating: 'M', category: 'FM', warnings: 'undisclosed', status: 'complete', meta: 'Ch 11 of 18 · 61%', progress: 61 }
+      ],
+      fresh: { title: 'Salt & Starlight', author: 'wrenfield', fandom: 'Original Work', rating: 'M', category: 'Gen', warnings: 'undisclosed', status: 'wip', words: '118,402', chapters: '15/30', kudos: '5,870', updated: '3 new chapters · 2 h ago', badge: '+3' }
     };
   }
 }
