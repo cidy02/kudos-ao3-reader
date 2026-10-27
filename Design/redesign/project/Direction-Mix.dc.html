@@ -195,35 +195,40 @@ a{color:#990000}a:hover{color:#6E0000}
             <a href="Author.dc.html" style="align-self: flex-start; font-size: 17px; line-height: 22px; text-decoration: none">inkwell_moth</a>
           </div>
           <dc-import name="Symbols" variant="labeled" rating="T" category="FM" warnings="none" status="wip" chapters="12/20" size="22" hint-size="358px,64px"></dc-import>
-          <div style="display: flex; gap: 10px">
-            <button style="flex: 1; height: 50px; border: none; border-radius: 25px; background: #990000; color: #FFFFFF; font-family: inherit; font-size: 17px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px">
-              <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5z" fill="currentColor"></path></svg>Resume Chapter 7
-            </button>
-            <button aria-label="Read aloud" style="width: 50px; height: 50px; border: none; border-radius: 25px; background: rgba(153,0,0,0.10); color: #990000; display: flex; align-items: center; justify-content: center">
-              <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"></path><path d="M15.5 9a4.5 4.5 0 0 1 0 6"></path><path d="M18 6.5a8 8 0 0 1 0 11"></path></svg>
-            </button>
-            <button aria-label="Update download: 2 new chapters" style="position: relative; width: 50px; height: 50px; border: none; border-radius: 25px; background: rgba(153,0,0,0.10); color: #990000; display: flex; align-items: center; justify-content: center">
-              <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"></path><path d="m7 10.5 5 5 5-5"></path><path d="M5 20h14"></path></svg>
-              <span style="position: absolute; top: 2px; right: 2px; min-width: 18px; height: 18px; border-radius: 9px; background: #990000; color: #FFFFFF; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center">2</span>
-            </button>
-          </div>
-          <section aria-label="Chapters" style="background: hsla(188, 56%, 33%, 0.08); border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px">
-            <div style="display: flex; align-items: baseline; justify-content: space-between">
-              <h2 style="margin: 0; font-size: 17px; line-height: 22px; font-weight: 600">Chapters</h2>
-              <a href="Reader-Contents.dc.html" style="font-size: 15px; line-height: 20px; text-decoration: none">12 of 20 posted</a>
+          <section aria-label="Your reading" style="position: relative; overflow: hidden; border-radius: 16px; padding: 16px; background: linear-gradient(155deg, hsl(188, 46%, 27%), hsl(210, 50%, 41%)); color: #FFFFFF; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 10px 28px rgba(20,60,70,0.22)">
+            <span aria-hidden="true" style="position: absolute; right: -10px; bottom: -58px; font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: 250px; line-height: 1; font-weight: 600; color: rgba(255,255,255,0.08)">C</span>
+            <div style="position: relative; display: flex; align-items: center; gap: 12px">
+              <svg role="img" aria-label="58 percent read" width="52" height="52" viewBox="0 0 52 52"><circle cx="26" cy="26" r="22" fill="none" stroke="rgba(255,255,255,0.24)" stroke-width="6"></circle><circle cx="26" cy="26" r="22" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round" stroke-dasharray="80 139" transform="rotate(-90 26 26)"></circle></svg>
+              <div style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+                <span style="font-size: 17px; line-height: 22px; font-weight: 600">Ch 7, The Salt Road</span>
+                <span style="font-size: 13px; line-height: 18px; color: rgba(255,255,255,0.85)">22% of the chapter · 58% of the work</span>
+              </div>
+              <a href="Reader-Contents.dc.html" style="font-size: 15px; line-height: 20px; text-decoration: none; color: #FFFFFF">12 of 20 ›</a>
             </div>
-            <div role="img" aria-label="Chapter lengths: 6 read, reading chapter 7, 5 more posted, 8 not posted yet" style="height: 76px; display: flex; align-items: flex-end; gap: 4px">
-              <sc-for list="{{heroBars}}" as="b" hint-placeholder-count="20">
+            <div role="img" aria-label="Chapter lengths: 6 read, reading chapter 7, 5 more posted, 8 not posted yet" style="position: relative; height: 76px; display: flex; align-items: flex-end; gap: 4px">
+              <sc-for list="{{heroBarsLight}}" as="b" hint-placeholder-count="20">
                 <span style="flex: 1; min-width: 0; box-sizing: border-box; border-radius: 3px; height: {{b.h}}; background: {{b.bg}}; border: {{b.bd}}"></span>
               </sc-for>
             </div>
-            <div aria-hidden="true" style="display: flex; justify-content: space-between; font-size: 11px; line-height: 13px; color: #6C6C70"><span>1</span><span>Ch 7 · 22%</span><span>12</span><span>20</span></div>
-            <div style="display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; line-height: 18px; color: #3A3A3C">
-              <span style="display: flex; align-items: center; gap: 5px"><span aria-hidden="true" style="width: 10px; height: 10px; border-radius: 2px; background: hsl(188, 56%, 33%)"></span>Read</span>
-              <span style="display: flex; align-items: center; gap: 5px"><span aria-hidden="true" style="width: 10px; height: 10px; border-radius: 2px; background: hsla(188, 56%, 33%, 0.22)"></span>Posted, unread</span>
-              <span style="display: flex; align-items: center; gap: 5px"><span aria-hidden="true" style="width: 10px; height: 10px; box-sizing: border-box; border-radius: 2px; border: 1.5px dashed #C7C7CC"></span>Not posted yet</span>
+            <div aria-hidden="true" style="position: relative; display: flex; justify-content: space-between; font-size: 11px; line-height: 13px; color: rgba(255,255,255,0.8)"><span>1</span><span>7</span><span>12</span><span>20</span></div>
+            <div style="position: relative; display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; line-height: 18px; color: rgba(255,255,255,0.9)">
+              <span style="display: flex; align-items: center; gap: 5px"><span aria-hidden="true" style="width: 10px; height: 10px; border-radius: 2px; background: #FFFFFF"></span>Read</span>
+              <span style="display: flex; align-items: center; gap: 5px"><span aria-hidden="true" style="width: 10px; height: 10px; border-radius: 2px; background: rgba(255,255,255,0.30)"></span>Posted, unread</span>
+              <span style="display: flex; align-items: center; gap: 5px"><span aria-hidden="true" style="width: 10px; height: 10px; box-sizing: border-box; border-radius: 2px; border: 1.5px dashed rgba(255,255,255,0.5)"></span>Not posted yet</span>
             </div>
-            <span style="font-size: 13px; line-height: 18px; color: #6C6C70">Bar height is chapter length. Published Mar 3 · updated Oct 21.</span>
+            <span style="position: relative; font-size: 13px; line-height: 18px; color: rgba(255,255,255,0.85)">Bar height is chapter length. Published Mar 3 · updated Oct 21.</span>
+            <div style="position: relative; display: flex; gap: 10px">
+              <button style="flex: 1; height: 50px; border: none; border-radius: 25px; background: #FFFFFF; color: #990000; font-family: inherit; font-size: 17px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px">
+                <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5z" fill="currentColor"></path></svg>Resume Chapter 7
+              </button>
+              <button aria-label="Read aloud" style="width: 50px; height: 50px; border: none; border-radius: 25px; background: rgba(255,255,255,0.18); color: #FFFFFF; display: flex; align-items: center; justify-content: center">
+                <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"></path><path d="M15.5 9a4.5 4.5 0 0 1 0 6"></path><path d="M18 6.5a8 8 0 0 1 0 11"></path></svg>
+              </button>
+              <button aria-label="Update download: 2 new chapters" style="position: relative; width: 50px; height: 50px; border: none; border-radius: 25px; background: rgba(255,255,255,0.18); color: #FFFFFF; display: flex; align-items: center; justify-content: center">
+                <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"></path><path d="m7 10.5 5 5 5-5"></path><path d="M5 20h14"></path></svg>
+                <span style="position: absolute; top: 0; right: 0; min-width: 18px; height: 18px; border-radius: 9px; background: #990000; color: #FFFFFF; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 2px #FFFFFF">2</span>
+              </button>
+            </div>
           </section>
           <dl style="margin: 0; background: #F2F2F7; border-radius: 16px; padding: 14px 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 14px">
             <sc-for list="{{stats}}" as="s" hint-placeholder-count="9">
@@ -279,17 +284,17 @@ a{color:#990000}a:hover{color:#6E0000}
     </div>
     <dl style="margin: 0; display: grid; grid-template-columns: 76px minmax(0, 1fr); column-gap: 14px; row-gap: 10px; font-size: 15px; line-height: 21px">
       <dt style="font-weight: 600">From A</dt><dd style="margin: 0; color: #3A3A3C">The large background letter on covers. The four tags as a strip under every cover.</dd>
-      <dt style="font-weight: 600">From B</dt><dd style="margin: 0; color: #3A3A3C">The Resume card on Home (ring, chapter bars, Resume). Work Detail, with the chapter-shape card.</dd>
-      <dt style="font-weight: 600">From C</dt><dd style="margin: 0; color: #3A3A3C">Gradient backgrounds on covers and cards. The hero card’s gradient, now behind B’s Resume card. Queue rows with the segmented bar.</dd>
+      <dt style="font-weight: 600">From B</dt><dd style="margin: 0; color: #3A3A3C">The Resume card on Home (ring, chapter bars, Resume). Work Detail’s layout and its chapter bars.</dd>
+      <dt style="font-weight: 600">From C</dt><dd style="margin: 0; color: #3A3A3C">Gradient backgrounds on covers and cards. The hero card’s gradient and letter, now behind the Resume card on Home and on Work Detail, so both screens share one card. Queue rows with the segmented bar.</dd>
       <dt style="font-weight: 600">Dropped</dt><dd style="margin: 0; color: #3A3A3C">C’s chapter track list: most fics name chapters “Chapter 1, 2, 3”. The chapter bars show the same shape without names, and titled chapters still show in the reader’s Contents.</dd>
     </dl>
 
     <div style="display: flex; flex-direction: column; gap: 8px">
       <div style="position: relative; width: 390px; height: 150px; border-radius: 28px; overflow: hidden; background: #FFFFFF; box-shadow: 0 0 0 1px rgba(0,0,0,0.10), 0 12px 30px rgba(0,0,0,0.08)">
-        <div aria-hidden="true" style="position: absolute; left: 16px; right: 16px; top: 52px; height: 120px; background: hsla(188, 56%, 33%, 0.08); border-radius: 16px; padding: 14px 16px; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px">
-          <div style="display: flex; justify-content: space-between"><span style="font-size: 17px; line-height: 22px; font-weight: 600">Chapters</span><span style="font-size: 15px; color: #990000">12 of 20 posted</span></div>
+        <div aria-hidden="true" style="position: absolute; left: 16px; right: 16px; top: 52px; height: 120px; background: linear-gradient(155deg, hsl(188, 46%, 27%), hsl(210, 50%, 41%)); color: #FFFFFF; border-radius: 16px; padding: 14px 16px; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px">
+          <div style="display: flex; justify-content: space-between"><span style="font-size: 17px; line-height: 22px; font-weight: 600">Ch 7, The Salt Road</span><span style="font-size: 15px">12 of 20 ›</span></div>
           <div style="height: 50px; display: flex; align-items: flex-end; gap: 4px">
-            <sc-for list="{{heroBars}}" as="b" hint-placeholder-count="20">
+            <sc-for list="{{heroBarsLight}}" as="b" hint-placeholder-count="20">
               <span style="flex: 1; min-width: 0; box-sizing: border-box; border-radius: 3px; height: {{b.h}}; background: {{b.bg}}; border: {{b.bd}}"></span>
             </sc-for>
           </div>
@@ -309,13 +314,13 @@ a{color:#990000}a:hover{color:#6E0000}
     </div>
 
     <dl style="margin: 0; display: grid; grid-template-columns: 110px minmax(0, 1fr); column-gap: 14px; row-gap: 10px; font-size: 15px; line-height: 21px; border-top: 1px solid #E5E5EA; padding-top: 16px">
-      <dt style="font-weight: 600">Containers</dt><dd style="margin: 0; color: #3A3A3C">Two: the card and the capsule chip. A card about one work takes that work’s gradient or a pale tint of its fandom; every other card is system grey. Lists are plain rows.</dd>
+      <dt style="font-weight: 600">Containers</dt><dd style="margin: 0; color: #3A3A3C">Two: the card and the capsule chip. The one gradient card per screen is your place in a work (Home’s Resume card, Work Detail’s chapters and Resume); every other card is system grey. Lists are plain rows.</dd>
       <dt style="font-weight: 600">Covers</dt><dd style="margin: 0; color: #3A3A3C">Generated for every work: a gradient in the fandom’s colour family, the title in New York, and a large background letter. The title picks the shade and where the letter and title sit, so two works never match and a work always looks the same. The four tags sit under the cover.</dd>
       <dt style="font-weight: 600">Corners</dt><dd style="margin: 0; color: #3A3A3C">16 pt everywhere (the app’s work-cover radius today), capsules fully round.</dd>
       <dt style="font-weight: 600">Edge</dt><dd style="margin: 0; color: #3A3A3C">16 pt on every screen.</dd>
       <dt style="font-weight: 600">Type</dt><dd style="margin: 0; color: #3A3A3C">Large Title, Title 3 bold for sections, Headline, Body, Footnote. New York on covers; figures in SF Pro Rounded.</dd>
       <dt style="font-weight: 600">Capitals</dt><dd style="margin: 0; color: #3A3A3C">The fandom label above a title, and stat captions.</dd>
-      <dt style="font-weight: 600">Colour</dt><dd style="margin: 0; color: #3A3A3C">Fandom colour: cover and card gradients, the fandom label, a work’s chapter bars, and the wash on its page. App red: every button (on a gradient, a white capsule with a red label), the tab bar, toolbars, links, and states about you (progress, kudos given, new chapters).</dd>
+      <dt style="font-weight: 600">Colour</dt><dd style="margin: 0; color: #3A3A3C">Fandom colour: cover and card gradients, the fandom label, and the wash on a work’s page; chapter bars are white on the gradient. App red: every button (on a gradient, a white capsule with a red label), the tab bar, toolbars, links, and states about you (progress, kudos given, new chapters).</dd>
       <dt style="font-weight: 600">Background</dt><dd style="margin: 0; color: #3A3A3C">Plain for Home and Work Detail, grouped for lists, settings and forms. The wash only on a work’s or fandom’s page, fading as you scroll.</dd>
     </dl>
   </aside>
