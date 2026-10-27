@@ -810,6 +810,14 @@
       "w": 64,
       "x": 2230,
       "y": 2420
+    },
+    "Needs-Work.dc.html": {
+      "h": 2020,
+      "page": "coverage",
+      "title": "Needs more work · app features, not the redesign",
+      "w": 1280,
+      "x": 1360,
+      "y": 0
     }
   },
   "createdOnFiles": {
@@ -1064,7 +1072,8 @@
     "AppIcon.dc.html",
     "CommentThread.dc.html",
     "ChapterEditor.dc.html",
-    "DuoSideBar.dc.html"
+    "DuoSideBar.dc.html",
+    "Needs-Work.dc.html"
   ],
   "pages": [
     {

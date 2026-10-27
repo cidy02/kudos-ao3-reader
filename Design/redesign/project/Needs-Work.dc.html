@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Needs more work</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1280px; height: 2020px; box-sizing: border-box; padding: 64px; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; display: flex; flex-direction: column; gap: 40px">
+  <header style="display: flex; flex-direction: column; gap: 8px; max-width: 920px">
+    <h1 style="margin: 0; font-size: 44px; line-height: 52px; font-weight: 700">Needs more work</h1>
+    <p style="margin: 0; font-size: 19px; line-height: 27px; color: #3A3A3C">App features whose behaviour is unfinished, as of 27 October 2026. This is about what the app does, not how the boards look. <span style="font-weight: 600; color: #000000">Checked in code</span> means confirmed in today’s source; <span style="font-weight: 600; color: #000000">Task board</span> means taken from TASKS.md.</p>
+  </header>
+
+  <sc-for list="{{groups}}" as="g" hint-placeholder-count="3">
+    <section style="display: flex; flex-direction: column; gap: 14px">
+      <div style="display: flex; align-items: baseline; gap: 12px">
+        <h2 style="margin: 0; font-size: 26px; line-height: 32px; font-weight: 700">{{g.title}}</h2>
+        <span style="font-size: 15px; line-height: 20px; color: #6C6C70">{{g.sub}}</span>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px">
+        <sc-for list="{{g.items}}" as="i" hint-placeholder-count="4">
+          <article style="border-radius: 16px; background: #F2F2F7; padding: 18px 20px; display: flex; flex-direction: column; gap: 8px; border-left: 4px solid {{g.bar}}">
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
+              <h3 style="margin: 0; flex: 1; min-width: 0; font-size: 19px; line-height: 24px; font-weight: 700">{{i.title}}</h3>
+              <sc-if value="{{i.hasSev}}" hint-placeholder-val="{{false}}"><span style="padding: 2px 8px; border-radius: 10px; background: {{g.pillBg}}; color: {{g.pillFg}}; font-size: 12px; line-height: 16px; font-weight: 700">{{i.sev}}</span></sc-if>
+              <span style="padding: 2px 8px; border-radius: 10px; background: {{i.srcBg}}; color: {{i.srcFg}}; font-size: 12px; line-height: 16px; font-weight: 600">{{i.src}}</span>
+            </div>
+            <p style="margin: 0; font-size: 15px; line-height: 21px; color: #1C1C1E">{{i.what}}</p>
+            <p style="margin: 0; font-size: 14px; line-height: 20px; color: #3A3A3C"><span style="font-weight: 600; color: #000000">Next:</span> {{i.next}}</p>
+            <span style="font-family: 'SF Mono', ui-monospace, Menlo, monospace; font-size: 12px; line-height: 16px; color: #6C6C70">{{i.ref}}</span>
+          </article>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":2020}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const CODE = { src: 'Checked in code', srcBg: '#E3F1E6', srcFg: '#1E6B34' };
+    const BOARD = { src: 'Task board', srcBg: '#E5E5EA', srcFg: '#3A3A3C' };
+    const I = (title, what, next, ref, source, sev) => ({ title, what, next, ref, ...source, sev: sev || '', hasSev: !!sev });
+    return {
+      groups: [
+        {
+          title: 'Broken or risky', sub: 'P1: affects everyone who hits it', bar: '#D70015', pillBg: '#FDE7E9', pillFg: '#B0001A',
+          items: [
+            I('Comments land on the wrong chapter',
+              'A top-level comment can’t target a chapter: postComment posts to the whole work and AO3 files it under the latest chapter. Commenting from chapter 3 of 20 lands on chapter 20; the composer only says so in a footnote. Related: “Newest First” may not be newest on whole-work comments, and a comment that starts a new page needs a manual refresh.',
+              'Post to the chapter’s own comment form when one is open; keep whole-work as an explicit choice.',
+              'BUG-9 · BUG-11 · BUG-6 · Services/AO3WriteActions.swift', CODE, 'P1'),
+            I('Sync freezes the app at launch',
+              'With the sync folder in iCloud Drive, FolderSyncService is @MainActor and syncDown runs on every launch, touching every not-yet-downloaded EPUB (measured ~79 works per 90 s). Large libraries freeze Home for minutes. Real-device iCloud verification and conflict handling were never finished.',
+              'Move the walk off the main actor and skip placeholders; then a real-device sync test.',
+              'BUG-10 · Services/FolderSyncService.swift:83 · App/FolderSyncObserver.swift', CODE, 'P1'),
+            I('Reading position isn’t stable',
+              'Paged reading jumps back to the chapter start after rotating and back. The fix for the scrolled-mode freeze sits on an unmerged branch waiting for a smoke test.',
+              'Finish T-451; smoke-test and merge T-98.',
+              'T-451 · T-98 · reader-scrolled-hang-diagnosis', BOARD, 'P1')
+          ]
+        },
+        {
+          title: 'Half-built', sub: 'works, but stops short', bar: '#C77700', pillBg: '#FFF1D6', pillFg: '#8A5200',
+          items: [
+            I('Read Aloud',
+              'The on-device Kokoro voice is still in progress (Core ML, then Sherpa, then Apple). Most of the quality plan hasn’t started: no way to compare voice settings, pauses ignore speed, no voice changes for dialogue, and flow across sentences is the real limit. Android has no Read Aloud at all.',
+              'Build the audition harness first; it gates every quality change.',
+              'T-208 · T-209 · T-210 · docs/TTS_IMPROVEMENT_PLAN.md', BOARD),
+            I('Importing files that aren’t EPUB',
+              'Word, ODT, RTF, Kindle, RAR and 7z are recognised and then refused with “coming in a later update”. EPUB, HTML, text and PDF work.',
+              'Word via mammoth.js (T-153), Kindle and archives via libmobi/libarchive (T-154).',
+              'T-153 · T-154 · Services/ImportedDocumentConverter.swift', CODE),
+            I('Editing a work’s details',
+              'Nothing in the app can change a work’s title, author or fandom, so an imported community copy keeps its file name forever. Duplicate detection for non-AO3 works falls back to title + author + exact file size, which breaks on any re-encode.',
+              'Edit Details sheet plus provenance (site, story ID, original file) in backup v9.',
+              'T-155 · Services/WorkImporter.swift', CODE),
+            I('AO3 bookmarks',
+              'Creating and editing a bookmark works (notes, tags, private, rec). There is no delete, and its collections are carried through rather than editable.',
+              'Add Delete Bookmark and a collections field to the bookmark sheet.',
+              'Services/AO3WriteActions.swift · saveBookmark', CODE),
+            I('Challenges',
+              'Known bugs: sign-ups read “1 requests · 0 offers”; a failed fetch shows as UNMATCHED; Matched counts only delivered assignments; “works due” uses the reveal date; several failures are swallowed silently.',
+              'Finish the C1 batch and Codex’s review fixes.',
+              'T-253 · T-280 · Features/Challenges', BOARD)
+          ]
+        },
+        {
+          title: 'Rough edges', sub: 'from the HIG review registry; some may be partly fixed since', bar: '#8E8E93', pillBg: '#E5E5EA', pillFg: '#3A3A3C',
+          items: [
+            I('Accessibility',
+              'VoiceOver reads work-card stats as fragments; some targets are under 44 pt (Inbox bulk bar, search pagination, reorder handle); only 3 of 15 animating files respect Reduce Motion.',
+              'One sweep per finding, starting with the stat labels every card shares.',
+              'UI-2 · UI-3 · UI-5 · docs/audits/HIG_ADHERENCE_REVIEW_T115.md', BOARD),
+            I('Compact / detailed list setting',
+              'Decided to be one app-wide setting, but each screen still keeps its own (account, collection, sections).',
+              'One shared @AppStorage key, default compact.',
+              'Key decisions · AccountView.swift · Collections.swift', CODE),
+            I('macOS reader',
+              'The legacy macOS reader lays text out under the sidebar, so the start of each preface line is hidden.',
+              'Inset the web view by the sidebar width.',
+              'BUG-7', BOARD),
+            I('Tab bar on pushed screens',
+              'The app hides the tab bar on pushed screens (hidesFloatingTabBar). Apple’s guidance, and the redesign, keep it visible and let it minimise on scroll.',
+              'Owner decision, then drop the modifier where it’s used.',
+              'UIComponents/FloatingChrome.swift', CODE)
+          ]
+        }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>
