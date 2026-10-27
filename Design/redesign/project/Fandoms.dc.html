@@ -35,8 +35,9 @@ button{cursor:pointer}
         <div style="margin: 0 -16px">
           <sc-for list="{{s.rows}}" as="f" hint-placeholder-count="2">
             <div style="display: flex; align-items: center; min-height: 56px; padding: 6px 12px 6px 16px; gap: 10px; border-top: {{f.sep}}">
+              <span aria-hidden="true" style="width: 28px; height: 40px; flex-shrink: 0; border-radius: 6px; background: {{f.art}}"></span>
               <div style="flex: 1; min-width: 0; display: flex; flex-direction: column">
-                <span style="font-size: 16px; line-height: 21px">{{f.name}}</span>
+                <span style="font-size: 17px; line-height: 22px">{{f.name}}</span>
                 <span style="font-size: 13px; line-height: 17px; color: #6C6C70">{{f.detail}}</span>
               </div>
               <button aria-label="{{f.starLabel}}" aria-pressed="{{f.fav}}" style="width: 36px; height: 36px; border: none; border-radius: 18px; background: transparent; color: {{f.starColor}}; display: flex; align-items: center; justify-content: center">
@@ -64,11 +65,15 @@ class Component extends DCLogic {
   renderVals() {
     const accent = this.props.accent ?? '#990000';
     const row = (name, detail, fav) => ({ name, detail, fav: fav ? 'true' : 'false', starLabel: fav ? 'Remove from favourite fandoms' : 'Add to favourite fandoms', starColor: fav ? '#E2A100' : '#AEAEB2', starFill: fav ? '#F5C400' : 'none' });
+    const art = (h) => 'linear-gradient(155deg, hsl(' + h + ', 46%, 27%), hsl(' + ((h + 22) % 360) + ', 50%, 41%))';
+    const seedOf = (t) => { let h = 7; for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) >>> 0; return h; };
+    const FAN = { 'Original Work': 188, 'Persuasion': 335, 'Sherlock Holmes': 32, 'Jane Eyre': 262, 'Northanger Abbey': 290, 'Pride and Prejudice': 150 };
+    const fandomArt = (name) => { const k = Object.keys(FAN).find((f) => name.indexOf(f) === 0); return art(k ? FAN[k] : seedOf(name) % 360); };
     const sections = [
       { title: 'Favourites', rows: [row('Pride and Prejudice & related', '6 fandoms · about 9k works · 14 downloaded', true), row('Sherlock Holmes & related', '11 fandoms · about 30k works · 9 downloaded', true)] },
       { title: 'J', rows: [row('Jane Eyre - Charlotte Brontë', 'about 1.1k works · 2 downloaded'), row('Jane Austen - Works', 'about 600 works')] },
       { title: 'N', rows: [row('Northanger Abbey - Jane Austen', 'about 500 works · 1 downloaded')] }
-    ].map((s) => ({ ...s, rows: s.rows.map((r, i) => ({ ...r, sep: i ? '0.5px solid #E5E5EA' : 'none' })) }));
+    ].map((s) => ({ ...s, rows: s.rows.map((r, i) => ({ ...r, art: fandomArt(r.name), sep: i ? '0.5px solid #E5E5EA' : 'none' })) }));
     return { accent, sections, letters: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('') };
   }
 }

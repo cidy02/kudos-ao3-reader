@@ -42,14 +42,6 @@ button{cursor:pointer}
           Favourites
         </button>
       </div>
-      <div role="group" aria-label="Favourite authors" style="display: flex; gap: 14px; padding: 0 16px; overflow: hidden">
-        <sc-for list="{{authors}}" as="a" hint-placeholder-count="5">
-          <button style="width: 58px; flex-shrink: 0; border: none; background: none; padding: 0; font-family: inherit; display: flex; flex-direction: column; align-items: center; gap: 4px">
-            <span aria-hidden="true" style="width: 48px; height: 48px; border-radius: 24px; background: {{a.bg}}; color: #FFFFFF; font-size: 17px; font-weight: 600; display: flex; align-items: center; justify-content: center">{{a.initial}}</span>
-            <span style="width: 58px; font-size: 11px; line-height: 14px; color: #3A3A3C; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center">{{a.name}}</span>
-          </button>
-        </sc-for>
-      </div>
     </div>
 
     <sc-for list="{{sections}}" as="s" hint-placeholder-count="6">
@@ -70,12 +62,7 @@ button{cursor:pointer}
           <div style="display: flex; gap: 12px; margin-right: -16px; overflow: hidden">
             <sc-for list="{{collections}}" as="c" hint-placeholder-count="3">
               <button style="width: 150px; flex-shrink: 0; border: none; border-radius: 16px; padding: 0; background: transparent; font-family: inherit; text-align: left; display: flex; flex-direction: column; gap: 8px">
-                <div aria-hidden="true" style="height: 150px; border-radius: 16px; overflow: hidden; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px">
-                  <span style="background: {{c.a0}}"></span>
-                  <span style="background: {{c.a1}}"></span>
-                  <span style="background: {{c.a2}}"></span>
-                  <span style="background: {{c.a3}}"></span>
-                </div>
+                <dc-import name="CoverStack" tiles="{{c.tiles}}" width="150" height="150" hint-size="150px,150px"></dc-import>
                 <span style="font-size: 15px; line-height: 20px; font-weight: 600; color: #000000">{{c.name}}</span>
                 <span style="font-size: 12px; line-height: 16px; color: #6C6C70">{{c.detail}}</span>
               </button>
@@ -128,18 +115,10 @@ class Component extends DCLogic {
       { name: 'Austen Variations', detail: '12 works · on Home', c: ['#5B2A4E', '#4A3B6B', '#7B3F61', '#2F3A4A'] },
       { name: 'Baker Street', detail: '9 works', c: ['#8A5A12', '#3D4A2F', '#6B1F2A', '#2F3A4A'] },
       { name: 'Comfort Reads', detail: '15 works', c: ['#7A4E2D', '#23506B', '#2E5339', '#1F4E5F'] }
-    ].map((c) => ({ name: c.name, detail: c.detail, a0: art(c.c[0]), a1: art(c.c[1]), a2: art(c.c[2]), a3: art(c.c[3]) }));
+    ].map((c) => ({ name: c.name, detail: c.detail, tiles: c.c.slice(0, 3).map(art) }));
     return {
       accent,
       sections,
-      authors: [
-        { name: 'quietharbor', initial: 'Q', bg: '#5B2A4E' },
-        { name: 'wrenfield', initial: 'W', bg: '#2E5339' },
-        { name: 'fogandlamplight', initial: 'F', bg: '#8A5A12' },
-        { name: 'inkwell_moth', initial: 'I', bg: '#1F4E5F' },
-        { name: 'brontebird', initial: 'B', bg: '#3A3F58' },
-        { name: 'tidewright', initial: 'T', bg: '#23506B' }
-      ],
       collections: cols
     };
   }

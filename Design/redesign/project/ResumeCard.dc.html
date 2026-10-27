@@ -57,7 +57,7 @@ body{margin:0}
   </sc-if>
 
   <div style="position: relative; display: flex; flex-direction: column; gap: 6px">
-    <div role="img" aria-label="{{barsLabel}}" style="height: {{barsH}}px; display: flex; align-items: flex-end; gap: {{barGap}}px">
+    <div role="img" aria-label="{{barsLabel}}" style="height: {{barsH}}px; max-width: {{barsMaxW}}; display: flex; align-items: flex-end; gap: {{barGap}}px">
       <sc-for list="{{bars}}" as="b" hint-placeholder-count="20">
         <span style="flex: 1; min-width: 0; box-sizing: border-box; border-radius: 3px; height: {{b.h}}; background: {{b.bg}}; border: {{b.bd}}"></span>
       </sc-for>
@@ -148,6 +148,7 @@ class Component extends DCLogic {
       bars,
       barsH: variant === 'detail' ? 76 : 52,
       barGap: variant === 'detail' ? 4 : 3,
+      barsMaxW: w.planned < 10 ? (w.planned * 30) + 'px' : '100%',
       barsLabel: 'Chapters: ' + w.read + ' read, reading chapter ' + (w.read + 1) + ', ' + (w.posted - w.read - 1) + ' more posted' + (unposted > 0 ? ', ' + unposted + ' not posted yet' : ''),
       postedShort: w.posted + ' of ' + w.planned,
       postedLong: w.posted === w.planned && w.read === 0 ? w.posted + (w.posted === 1 ? ' chapter' : ' chapters') : w.posted + ' of ' + w.planned + ' posted',

@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Cover stack</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div aria-hidden="true" style="position: relative; isolation: isolate; width: {{width}}px; height: {{height}}px; flex-shrink: 0">
+  <sc-for list="{{covers}}" as="c" hint-placeholder-count="3">
+    <span style="position: absolute; left: {{c.left}}px; top: {{c.top}}px; width: {{c.w}}px; height: {{c.h}}px; z-index: {{c.z}}; border-radius: {{radius}}px; background: {{c.bg}}; box-shadow: {{c.shadow}}; filter: {{c.filter}}"></span>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"tiles":{"editor":null},"width":{"editor":"int","default":96,"min":32,"max":240},"height":{"editor":"int","default":96,"min":32,"max":240},"$preview":{"width":96,"height":96}}'>
+class Component extends DCLogic {
+  renderVals() {
+    // A queue or collection shown as its first works' covers, fanned like a stack of books.
+    // Deliberately not a 2×2 grid, which would read as AO3's four-tag square.
+    const W = Number(this.props.width ?? 96), H = Number(this.props.height ?? 96);
+    const tiles = (this.props.tiles || ['linear-gradient(155deg, hsl(188, 46%, 27%), hsl(210, 50%, 41%))', 'linear-gradient(155deg, hsl(335, 46%, 27%), hsl(357, 50%, 41%))', 'linear-gradient(155deg, hsl(32, 46%, 27%), hsl(54, 50%, 41%))']).slice(0, 3);
+    const ch = H, cw = Math.round(H / 1.414);
+    const dx = tiles.length > 1 ? Math.max(0, (W - cw) / (tiles.length - 1)) : 0;
+    const scale = [1, 0.9, 0.8];
+    return {
+      width: W,
+      height: H,
+      radius: Math.max(4, Math.round(cw * 0.12)),
+      covers: tiles.map((bg, i) => {
+        const h = Math.round(ch * scale[i]), w = Math.round(cw * scale[i]);
+        return {
+          bg, w, h,
+          left: Math.round(i * dx + (cw - w)),
+          top: Math.round((ch - h) / 2),
+          z: 3 - i,
+          shadow: i === 0 ? '0 3px 10px rgba(0,0,0,0.20)' : '-2px 0 6px rgba(0,0,0,0.18)',
+          filter: i === 0 ? 'none' : 'brightness(' + (1 - i * 0.12) + ')'
+        };
+      })
+    };
+  }
+}
+</script>
+</body>
+</html>
