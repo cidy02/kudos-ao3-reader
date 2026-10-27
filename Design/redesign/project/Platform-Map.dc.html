@@ -52,9 +52,9 @@ body{margin:0}
 class Component extends DCLogic {
   renderVals() {
     const rows = [
-      ['Tabs and Search', 'TabView { Tab(…) ×4; Tab(role: .search) }', 'NavigationSuiteScaffold (bar on phones, rail when wider); Search as a top app bar action'],
-      ['Tab bar shrinks on scroll', '.tabBarMinimizeBehavior(.onScrollDown)', 'BottomAppBarScrollBehavior / hide NavigationBar on scroll'],
-      ['Read Aloud mini player', '.tabViewBottomAccessory { NowPlayingBar() }', 'Mini player row above NavigationBar in Scaffold(bottomBar)'],
+      ['Tabs and Search', 'TabView { Tab(…) ×4; Tab(role: .search) }', 'Floating bar on phones (rounded Surface + NavigationBarItem), NavigationRail when wider; Search as its own round button beside the bar'],
+      ['Tab bar shrinks on scroll', '.tabBarMinimizeBehavior(.onScrollDown)', 'Floating bar (rounded Surface + NavigationBarItem) collapses to the current destination on scroll'],
+      ['Read Aloud mini player', '.tabViewBottomAccessory { NowPlayingBar() }', 'Mini player row above the floating navigation bar'],
       ['Large title and toolbar', '.navigationTitle + .toolbar { ToolbarItemGroup }, ToolbarSpacer', 'LargeTopAppBar + actions, exitUntilCollapsedScrollBehavior'],
       ['Floating reader controls', 'GlassEffectContainer { … .glassEffect(.regular.interactive()) }', 'Surface(tonalElevation) in AnimatedVisibility'],
       ['Grouped sections', 'List(.insetGrouped), Form, Section', 'LazyColumn of ListItem inside Card groups'],

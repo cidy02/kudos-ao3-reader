@@ -47,16 +47,23 @@ a{color:#990000}a:hover{color:#6E0000}
             </div>
           </section>
         </main>
-        <nav aria-label="Navigation" style="position: absolute; left: 0; right: 0; bottom: 0; height: 80px; padding-bottom: 12px; background: #FBEAE7; display: flex; align-items: center">
-          <sc-for list="{{nav}}" as="n" hint-placeholder-count="5">
-            <button aria-current="{{n.current}}" style="flex: 1; border: none; background: transparent; color: {{n.fg}}; font-family: inherit; font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: 0.5px; display: flex; flex-direction: column; align-items: center; gap: 4px">
-              <span style="width: 64px; height: 32px; border-radius: 16px; background: {{n.pill}}; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="{{n.d}}"></path></svg></span>
-              {{n.label}}
-            </button>
-          </sc-for>
-        </nav>
+        <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 140px; background: linear-gradient(to bottom, rgba(255,248,247,0), rgba(255,248,247,0.94) 70%); pointer-events: none"></div>
+        <div style="position: absolute; left: 16px; right: 16px; bottom: 28px; display: flex; align-items: center; gap: 10px">
+          <nav aria-label="Navigation" style="flex: 1; height: 68px; border-radius: 34px; padding: 0 6px; box-sizing: border-box; background: #FBEAE7; box-shadow: 0 6px 16px rgba(65,0,1,0.14), 0 1px 3px rgba(65,0,1,0.10); display: flex; align-items: center">
+            <sc-for list="{{nav}}" as="n" hint-placeholder-count="4">
+              <button aria-current="{{n.current}}" style="flex: 1; border: none; background: transparent; color: {{n.fg}}; font-family: inherit; font-size: 12px; line-height: 16px; font-weight: {{n.weight}}; letter-spacing: 0.5px; display: flex; flex-direction: column; align-items: center; gap: 3px">
+                <span style="width: 56px; height: 30px; border-radius: 15px; background: {{n.pill}}; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="{{n.fill}}" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="{{n.d}}"></path></svg></span>
+                {{n.label}}
+              </button>
+            </sc-for>
+          </nav>
+          <button aria-label="Search" style="width: 68px; height: 68px; flex-shrink: 0; border: none; border-radius: 34px; background: #FBEAE7; color: #534341; box-shadow: 0 6px 16px rgba(65,0,1,0.14), 0 1px 3px rgba(65,0,1,0.10); display: flex; align-items: center; justify-content: center">
+            <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="m15.5 15.5 5 5"></path></svg>
+          </button>
+        </div>
+        <span aria-hidden="true" style="position: absolute; left: 50%; bottom: 8px; width: 108px; height: 4px; margin-left: -54px; border-radius: 2px; background: #1D1B1B; opacity: 0.85"></span>
       </div>
-      <figcaption style="font-size: 15px; line-height: 22px; color: #534341"><span style="font-weight: 700; color: #1D1B1B">Home.</span> LargeTopAppBar (headline, actions as IconButtons), plain surface, the Resume card and cover shelf drawn in Compose. NavigationBar with the pill indicator in secondaryContainer; it hides on scroll.</figcaption>
+      <figcaption style="font-size: 15px; line-height: 22px; color: #534341"><span style="font-weight: 700; color: #1D1B1B">Home.</span> LargeTopAppBar (headline, actions as IconButtons), plain surface, the Resume card and cover shelf drawn in Compose. A floating navigation bar, placed like iPhone’s tab bar: a fully rounded surfaceContainer with shadow elevation holding NavigationBarItems (pill indicator in secondaryContainer, filled icon when selected), Search as its own round button beside it. It collapses to the current destination on scroll.</figcaption>
     </figure>
 
     <!-- Android · Work Detail -->
@@ -146,11 +153,10 @@ a{color:#990000}a:hover{color:#6E0000}
 class Component extends DCLogic {
   renderVals() {
     const navItems = [
-      { id: 'home', label: 'Home', d: 'M3.5 10.5 12 3.5l8.5 7M5.5 9v11h5v-6h3v6h5V9' },
+      { id: 'home', label: 'Home', d: 'M12 2.8 2.6 11.2c-.5.5-.2 1.3.5 1.3H5v7.3c0 .6.4 1 1 1h4v-6h4v6h4c.6 0 1-.4 1-1v-7.3h1.9c.7 0 1-.8.5-1.3z', line: 'M3.5 10.5 12 3.5l8.5 7M5.5 9v11h5v-6h3v6h5V9' },
       { id: 'library', label: 'Library', d: 'M3.5 4h4v16h-4zM9.5 4h4v16h-4zM15.6 5.4l3.4-.9 3 15.2-3.4.9z' },
-      { id: 'browse', label: 'Browse', d: 'M12 3.5a8.5 8.5 0 1 1 0 17 8.5 8.5 0 0 1 0-17zM15.5 8.5l-2 5-5 2 2-5z' },
-      { id: 'account', label: 'Account', d: 'M12 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8zM4.5 20c1.4-3.8 4.2-5.8 7.5-5.8s6.1 2 7.5 5.8' },
-      { id: 'search', label: 'Search', d: 'M10.5 4a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM15.5 15.5l5 5' }
+      { id: 'browse', label: 'Browse', d: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z' },
+      { id: 'account', label: 'Account', d: 'M12 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8zM4.5 20c1.4-3.8 4.2-5.8 7.5-5.8s6.1 2 7.5 5.8' }
     ];
     const stats = [
       ['Words', '84,210'], ['Chapters', '12/20'], ['Kudos', '♥ 3,104'],
@@ -158,7 +164,7 @@ class Component extends DCLogic {
       ['Published', 'Mar 3'], ['Updated', 'Oct 21'], ['Language', 'English']
     ];
     return {
-      nav: navItems.map((n) => ({ ...n, current: n.id === 'home' ? 'page' : 'false', pill: n.id === 'home' ? '#FFDAD5' : 'transparent', fg: n.id === 'home' ? '#410001' : '#534341' })),
+      nav: navItems.map((n) => { const on = n.id === 'home'; return { ...n, d: on ? n.d : (n.line || n.d), fill: on ? 'currentColor' : 'none', current: on ? 'page' : 'false', pill: on ? '#FFDAD5' : 'transparent', fg: on ? '#410001' : '#534341', weight: on ? 700 : 500 }; }),
       stats: stats.map(([label, value], i) => ({ label, value, border: i % 3 === 2 ? 'none' : '0.5px solid #D8C2BE' })),
       tags: ['Elinor Vane/Tomas Reyes', 'Slow Burn', 'Found Family', 'Maps & Mapmaking', 'Hurt/Comfort'],
       reading: [
