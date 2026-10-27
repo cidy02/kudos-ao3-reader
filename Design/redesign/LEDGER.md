@@ -45,6 +45,13 @@ Owner, 2026-10-26 (handoff): don't throw away the current app. It already went t
 12. [ ] Final pass: Coverage board complete, canvas.json tidy (titles, rows), morning note written below.
 
 ## Notes / decisions
+- **Step 0 (2026-10-27, cloud session): `Direction.dc.html` published** on its own page "Direction" (now the canvas's launch page). Three evolutions of today's app, each drawn as Home + Work Detail + a scrolled strip showing the title shrinking into the bar, each with its rules (containers, corners, edge, type, capitals, colour):
+  - **A · The page you stopped on** (Apple Books, Settings): the passage where you stopped is the hero's picture; plain-title covers on the fandom's paper colour; Work Detail with two container styles (grouped panel + chip). Colour: fandom = identity only, app red for everything tappable and every reader state. Radius 16.
+  - **B · The shape of the work** (Fitness, Health): each work drawn as its chapter bars (height = chapter length, filled = read, dashed = not posted); ring leads the hero; stats strip → week chart. Colour: fandom colour on the work's own controls (Resume, ring, bars), app red on chrome. Radius 20.
+  - **C · Sections with shapes** (Music, App Store): varied Home sections (hero art, square art tiles, row grid led by the four-tag square, queue rows with segmented bar); generated art per work (fandom hue + title shade/layout); Work Detail as an album page with chapters as a track list. Colour: app red on Home/chrome, fandom colour on the work's own page. Radius 12.
+  - Owner notes (`notes/owner-notes-2026-10-26.md`) shaped it: two containers max, one radius, one 16 pt edge, Dynamic Type, caps only on fandom label + stat captions, a job for each colour; show both sides of the fandom-colour-on-buttons question; no new features.
+  - **WAITING ON THE OWNER'S PICK.** Record it here, then carry it into every board (item 6d), including the Duo boards.
+  - Canvas `canvas.json` Coverage frame is back to 5600 to match the published Coverage; set it to 8000 when the updated Coverage board is published (item 8).
 - Current app (from screenshots): fandom-tinted cards and hero washes, progress rings, kicker labels with accent rule, one-capsule tab bar with 5 items, reader with top capsule + bottom position card. Context menu has Read, Select, Favourite, Save for Later, Add to Queue, Mark as Finished, Add to Collection, Work Details, Delete.
 - Real defects seen: reader error screen has no visible close button; Work Detail large title slides under the back button when scrolled; toolbar tint follows the last fandom viewed.
 
