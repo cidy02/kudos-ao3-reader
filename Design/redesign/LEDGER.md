@@ -85,6 +85,9 @@ R6. Items 9, 11, 12: Dark/Sepia/OLED with the two background levels; AX5; final 
   - Settings action rows have icons (Sync Now, Disconnect, Change Folder, Pair a Device, Export/Import Backup, Import Files; info rows in grey) on iPhone and Duo.
   - Boards are now checked by rendering (owner allowed it); fonts fall back on Linux, so SF/New York aren't exact.
 
+- **Chapter editor, Pages style (2026-10-27):** `Text-Editor` is now three phones from a shared `ChapterEditor` component: writing (floating shortcut bar over the keyboard: paragraph style, B/I/U/S, bullets, insert), the Format panel in place of the keyboard (paragraph styles Paragraph/Heading/Quote/Spoiler as cards; eight character styles; bullets, numbers, link, line break, divider), and the reading view (the app's Preview). It stays the app's plain AO3 HTML buffer: every control is labelled with the tag it writes (all 17 of `AO3Markup.writing`), tags drawn quieter than the prose. Canvas row to the right shifted 860.
+- **Comments header refreshed:** the boxed four-cell stat grid is gone. "Comments" is the bar title; the work is a compact row (generated cover, title, author · chapter) linking to Work Detail; the counts are one meta line ("286 comments · 12 threads · 1 yours · latest 20h ago"); then the chapter and sort pills. Duo uses the same meta line.
+
 ## Morning note (fill in at the end)
 **2026-10-27, cloud session.** Everything in the queue is done and published.
 - **Direction:** owner saw three directions (Direction page) and picked a mix, drawn as "Your mix": generated covers with a background letter and tags under them (A), the gradient Resume card with ring and chapter bars on Home and Work Detail (B + C), B's Work Detail, C's gradients. The rules are on the "Kudos design rules" board (Symbols & components page).
