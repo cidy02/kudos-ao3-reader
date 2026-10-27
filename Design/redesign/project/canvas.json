@@ -2,8 +2,9 @@
   "v": 3,
   "createdOnFiles": {"v": 1, "at": "2026-10-25T12:00:00Z"},
   "title": "Kudos for iPhone Duo",
-  "launch": {"view": "canvas", "page": "iphone"},
+  "launch": {"view": "canvas", "page": "direction"},
   "pages": [
+    {"id": "direction", "name": "Direction"},
     {"id": "iphone", "name": "iPhone"},
     {"id": "duo", "name": "iPhone Duo"},
     {"id": "states", "name": "States & system"},
@@ -12,6 +13,8 @@
     {"id": "coverage", "name": "Feature coverage"}
   ],
   "boards": {
+    "Direction.dc.html": {"x": 0, "y": 0, "w": 2700, "h": 2400, "title": "Direction · pick one, or mix", "page": "direction"},
+
     "Main.dc.html": {"x": 0, "y": 0, "w": 390, "h": 1960, "title": "Home", "page": "iphone"},
     "Library.dc.html": {"x": 470, "y": 0, "w": 390, "h": 1980, "title": "Library", "page": "iphone"},
     "Library-Section.dc.html": {"x": 940, "y": 0, "w": 390, "h": 844, "title": "Library · Reading History, swipe actions", "page": "iphone"},
@@ -107,9 +110,10 @@
     "WorkRow.dc.html": {"x": 1360, "y": 306, "w": 390, "h": 112, "title": "Work row (component)", "page": "system"},
     "CoverCard.dc.html": {"x": 1360, "y": 498, "w": 132, "h": 310, "title": "Cover card (component)", "page": "system"},
 
-    "Coverage.dc.html": {"x": 0, "y": 0, "w": 1280, "h": 8000, "title": "Feature coverage", "page": "coverage", "expand": "fill"}
+    "Coverage.dc.html": {"x": 0, "y": 0, "w": 1280, "h": 5600, "title": "Feature coverage", "page": "coverage", "expand": "fill"}
   },
   "order": [
+    "Direction.dc.html",
     "Main.dc.html", "Library.dc.html", "Library-Section.dc.html", "Library-Filters.dc.html", "Queue.dc.html", "Queues.dc.html", "Collection.dc.html", "Insights.dc.html", "Recently-Deleted.dc.html", "Library-Select.dc.html",
     "Search.dc.html", "Search-Filters.dc.html", "Browse.dc.html", "Fandoms.dc.html", "Fandom-Works.dc.html", "AO3-Web.dc.html",
     "iPhone-WorkDetail.dc.html", "Work-Actions.dc.html", "Comments.dc.html", "Comment-Thread.dc.html", "Author.dc.html", "Series.dc.html",
