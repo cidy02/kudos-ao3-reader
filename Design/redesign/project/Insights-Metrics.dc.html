@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Reading Insights metric rules</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1280px; height: 3840px; box-sizing: border-box; padding: 64px; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; display: flex; flex-direction: column; gap: 36px">
+  <header style="display: flex; flex-direction: column; gap: 10px; max-width: 980px">
+    <h1 style="margin: 0; font-size: 44px; line-height: 52px; font-weight: 700">Reading Insights: what each card counts</h1>
+    <p style="margin: 0; font-size: 19px; line-height: 27px; color: #3A3A3C">One rule per card, so the code, the tests and How Reading Insights Are Counted all say the same thing. Shared rules: a period is the dates on screen; sittings under 15 seconds never count; rereads count unless the option is off; Read Aloud counts as time, never as pace; excluded fandoms, tags and works are left out of everything; a card with too little data is hidden, never shown as zero.</p>
+  </header>
+
+  <sc-for list="{{tabs}}" as="t" hint-placeholder-count="4">
+    <section style="display: flex; flex-direction: column; gap: 10px">
+      <h2 style="margin: 0; font-size: 26px; line-height: 32px; font-weight: 700">{{t.title}}</h2>
+      <div role="table" style="border-radius: 16px; background: #F2F2F7; overflow: hidden">
+        <div role="row" style="display: grid; grid-template-columns: 230px minmax(0, 1fr) 270px 150px; gap: 20px; padding: 10px 20px; font-size: 13px; line-height: 18px; font-weight: 600; color: #6C6C70; border-bottom: 0.5px solid #D1D1D6">
+          <span role="columnheader">Card</span><span role="columnheader">Rule</span><span role="columnheader">Data</span><span role="columnheader">Status</span>
+        </div>
+        <sc-for list="{{t.rows}}" as="r" hint-placeholder-count="12">
+          <div role="row" style="display: grid; grid-template-columns: 230px minmax(0, 1fr) 270px 150px; gap: 20px; padding: 11px 20px; align-items: start; border-top: {{r.sep}}">
+            <span role="cell" style="font-size: 15px; line-height: 21px; font-weight: 600">{{r.card}}</span>
+            <span role="cell" style="font-size: 14px; line-height: 20px; color: #1C1C1E">{{r.rule}}</span>
+            <span role="cell" style="font-family: 'SF Mono', ui-monospace, Menlo, monospace; font-size: 12px; line-height: 18px; color: #3A3A3C">{{r.data}}</span>
+            <span role="cell"><span style="display: inline-block; padding: 2px 8px; border-radius: 9px; background: {{r.bg}}; color: {{r.fg}}; font-size: 12px; line-height: 17px; font-weight: 600">{{r.status}}</span></span>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":3840}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const S = {
+      ready: { bg: '#E3F1E6', fg: '#1E6B34' },
+      change: { bg: '#FBF0DC', fg: '#8A5A00' },
+      net: { bg: '#E5F0FB', fg: '#1F5D99' }
+    };
+    const R = (card, rule, data, status) => {
+      const kind = status.startsWith('Ready') ? 'ready' : status.startsWith('Existing') ? 'net' : 'change';
+      return { card, rule, data, status, ...S[kind] };
+    };
+    const tabs = [
+      {
+        title: 'Overview',
+        rows: [
+          R('Words read', 'Sum of the words each sitting read in the period: the move in position since the work’s previous sitting, times its words (T-420). Skimmed words are left out once D7 exists.', 'ReadingSession.endingProgress, wordCount', 'Ready now · D3 sharpens'),
+          R('vs last period', 'Same rule over the period before. Hidden when that period has no sittings.', 'ReadingSession', 'Ready now'),
+          R('Novels’ worth', 'Words read ÷ 70,000, to the nearest half. Hidden under 35,000 words.', 'derived', 'Ready now'),
+          R('Time reading', 'Sum of sitting durations; background time already excluded.', 'durationSeconds', 'Ready now'),
+          R('Finished', 'Works with a finishing sitting in the period, each once.', 'didFinish', 'Ready now'),
+          R('Reading days', 'Days with at least one sitting ÷ days elapsed in the period.', 'startedAt', 'Ready now'),
+          R('Words per Day', 'Words read per calendar day; average over elapsed days, empty days included. The biggest day is labelled.', 'startedAt, words read', 'Ready now'),
+          R('Where the Words Went', 'Words read by each work’s first fandom, so the shares add up to the total. Top 4, then the rest folded together.', 'SavedWork.workFandoms → D1', 'Ready now · D1 keeps deleted works'),
+          R('Reading and Listening', 'Time by sitting mode; Read Aloud’s average playback rate and works listened to.', 'modeRaw, playbackRate', 'D4'),
+          R('Longest streak', 'Longest run of consecutive reading days inside the period.', 'startedAt', 'Ready now'),
+          R('Biggest day', 'Day with the most words read.', 'words read', 'Ready now'),
+          R('Typical sitting', 'Median sitting duration, not the mean.', 'durationSeconds', 'Ready now'),
+          R('Pace', 'Words read ÷ hours reading, weighted by time, reading mode only.', 'words read, durationSeconds', 'Ready now · D3, D4 sharpen'),
+          R('Length of What You Read', 'Works with a sitting in the period by AO3 word count: under 5k, 5k–50k, 50k–150k, over 150k.', 'SavedWork.wordCount', 'Ready now'),
+          R('Finished list', 'Works finished in the period, newest first. “Read ×2” is the count of finishing sittings, all time.', 'didFinish', 'Ready now')
+        ]
+      },
+      {
+        title: 'Taste',
+        rows: [
+          R('Your Usual Fic', 'The most common value of each field among works read in the period (status, rating, category, length band, first fandom, top relationship, top two tags), weighted by the rank toggle. Needs at least 5 works.', 'tags → D1', 'Ready now · D1'),
+          R('By Words / By Works', 'One toggle for every ranking on the tab: words read, or works with a sitting.', 'derived', 'Ready now'),
+          R('Fandoms', 'First fandom, as on Overview, so the numbers match.', 'workFandoms → D1', 'Ready now · D1'),
+          R('Relationships', 'Relationship tags as written. “/” is romantic and “&” platonic, read from the tag text.', 'workRelationships → D1', 'Ready now · D1'),
+          R('Ship Concentration', 'Share of a fandom’s words on its top relationship. Fandoms with at least 2 works only; neutral wording.', 'workRelationships', 'Ready now'),
+          R('Characters', 'Character tags by works read.', 'workCharacters → D1', 'Ready now · D1'),
+          R('Tags', 'Freeform tags, exact strings only, no merging of near-matches.', 'workTags → D1', 'Ready now · D1'),
+          R('Often Together', 'Tag pairs that appear together on at least 3 works read in the period.', 'workTags', 'Ready now'),
+          R('Rating, Status, Category, Warnings', 'Works read, AO3’s own labels. A work with several categories or warnings counts in each.', 'rating, isComplete, workCategories, workWarnings', 'Ready now'),
+          R('When They Were Posted', 'Works read by the year AO3 says they were first posted; median year.', 'datePublished', 'Ready now'),
+          R('Crossovers', 'Works read with two or more fandoms.', 'workFandoms', 'Ready now'),
+          R('Languages', 'Works read by language.', 'language', 'Ready now')
+        ]
+      },
+      {
+        title: 'Habits',
+        rows: [
+          R('Time of Day', 'Each sitting’s time spread across the hours it covered, in local time. The 1:00–5:00 share is labelled.', 'startedAt, endedAt, durationSeconds', 'Ready now'),
+          R('Reading Days', 'Calendar of the period, each day shaded by words read in four steps set from your own quartiles.', 'words read', 'Ready now'),
+          R('Sittings', 'Sittings by length: under 10 min, 10–30, 30–60, 1–2 h, over 2 h.', 'durationSeconds', 'Ready now'),
+          R('Chapters Each', 'Chapters entered per sitting, median.', 'startSpineIndex, lastSpineIndex', 'D3'),
+          R('End on a Chapter', 'Share of sittings that end within the last 2% of a chapter.', 'endedAtChapterEnd', 'D7'),
+          R('Skimmed · Peeked at the Ending', 'See D7. Never shown until there are 5 sittings of pace history.', 'chapterSecondsJSON', 'D7'),
+          R('From Saved to Finished', 'Saved → first sitting, and first sitting → finishing sitting; medians over works opened in the period.', 'dateAdded, sittings', 'Ready now'),
+          R('New Chapters', 'Median days from a chapter being posted to your first sitting that reaches it.', 'ChapterUpdateEvent', 'D10'),
+          R('Rereads', 'Share of reading time on works already finished when the sitting began; top works by finishing sittings.', 'didFinish history', 'Ready now'),
+          R('Fandom Timeline', 'Share of each month’s words by first fandom, for the year. Shows activity only; no labels about the reader.', 'words read, fandoms → D1', 'Ready now · D1'),
+          R('Stopped Reading', 'Works marked stopped: count in the period and in all, median position when stopped, reasons, and the tags most common among them.', 'readingStatusRaw, stopReasonRaw, stopTag', 'D2')
+        ]
+      },
+      {
+        title: 'Library',
+        rows: [
+          R('Unread', 'Words and works never opened (not deleted, not stopped). Months to clear = unread words ÷ the last 30 days’ daily average; hidden with under 7 reading days.', 'SavedWork, sittings', 'Ready now'),
+          R('Added vs Read', 'Words of works added in the period beside words read. No judgement either way.', 'dateAdded, wordCount', 'Ready now'),
+          R('Where Everything Stands', 'Reading, Caught Up, Letting Chapters Stack, On Hold, Saved for Later, Finished, Stopped. Each work in exactly one.', 'readingStatusRaw + derived', 'D2'),
+          R('Still reading?', 'Asks about a work partway through and unopened for 21 days. Still Reading clears it; Stopped opens the sheet. Never marks anything by itself.', 'isAbandoned threshold', 'D2'),
+          R('Works in Progress', 'WIPs in the library by time since their last update.', 'isComplete, dateUpdated', 'Existing refresh'),
+          R('No Longer on AO3', 'Confirmed “last copy” and “gone” works and their words. A failed check is not counted.', 'WorkPreservationState', 'Existing refresh'),
+          R('Kudos left', 'Finished works with hasGivenKudos ÷ finished works.', 'hasGivenKudos', 'Existing refresh'),
+          R('Bookmarked · Commented', 'Finished works you bookmarked or commented on, as far as Kudos knows.', 'bookmarkedAt, lastCommentedAt', 'D11'),
+          R('Favourites Without Kudos', 'Favourited or reread works, finished, without kudos.', 'isFavorite, didFinish, hasGivenKudos', 'Ready now'),
+          R('Series', 'Series with a part read; finished = its last known part finished. Next Part Waiting = an unread next part in the library or on AO3.', 'ao3SeriesID, seriesPosition', 'Ready now'),
+          R('Authors', 'Works read, words and finished per author account, not pseud. orphan_account and anonymous works are left out.', 'ReadingAffinities, authorIdentitiesJSON', 'Ready now'),
+          R('How Finished Works Arrived', 'Finished works by import source, since recording began.', 'importSourceRaw', 'D8'),
+          R('Found Early', 'Finished works that had under 500 kudos when saved; one example with its kudos then and now.', 'kudosAtSave, kudos', 'D9')
+        ]
+      }
+    ];
+    return {
+      tabs: tabs.map((t) => ({ ...t, rows: t.rows.map((r, i) => ({ ...r, sep: i ? '0.5px solid #D1D1D6' : 'none' })) }))
+    };
+  }
+}
+</script>
+</body>
+</html>

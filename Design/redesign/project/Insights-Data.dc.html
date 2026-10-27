@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Reading Insights data spec</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1280px; height: 3440px; box-sizing: border-box; padding: 64px; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; display: flex; flex-direction: column; gap: 40px">
+  <header style="display: flex; flex-direction: column; gap: 10px; max-width: 980px">
+    <h1 style="margin: 0; font-size: 44px; line-height: 52px; font-weight: 700">Reading Insights: the data it needs</h1>
+    <p style="margin: 0; font-size: 19px; line-height: 27px; color: #3A3A3C">What the code has to record before the four Insights screens can show real numbers, as of 27 October 2026. Everything is computed on the device; nothing about what someone reads is uploaded. Each change below names the cards it unlocks; the next board gives the rule behind every card.</p>
+    <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px">
+      <span style="padding: 4px 10px; border-radius: 10px; background: #E3F1E6; color: #1E6B34; font-size: 14px; font-weight: 600">Ready now: data already recorded</span>
+      <span style="padding: 4px 10px; border-radius: 10px; background: #FBF0DC; color: #8A5A00; font-size: 14px; font-weight: 600">D1–D11: needs a data change</span>
+      <span style="padding: 4px 10px; border-radius: 10px; background: #E5F0FB; color: #1F5D99; font-size: 14px; font-weight: 600">Existing refresh: uses AO3 data the app already fetches</span>
+    </div>
+  </header>
+
+  <section style="display: flex; flex-direction: column; gap: 14px">
+    <div style="display: flex; align-items: baseline; gap: 12px">
+      <h2 style="margin: 0; font-size: 26px; line-height: 32px; font-weight: 700">Already recorded</h2>
+      <span style="font-size: 15px; color: #6C6C70">checked in today’s source</span>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px">
+      <sc-for list="{{have}}" as="h" hint-placeholder-count="3">
+        <article style="border-radius: 16px; background: #F2F2F7; padding: 18px 20px; display: flex; flex-direction: column; gap: 8px; border-left: 4px solid #2F8F3A">
+          <h3 style="margin: 0; font-size: 18px; line-height: 23px; font-weight: 700">{{h.title}}</h3>
+          <p style="margin: 0; font-family: 'SF Mono', ui-monospace, Menlo, monospace; font-size: 12.5px; line-height: 19px; color: #1C1C1E">{{h.fields}}</p>
+          <p style="margin: 0; font-size: 14px; line-height: 20px; color: #3A3A3C">{{h.note}}</p>
+        </article>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 14px">
+    <div style="display: flex; align-items: baseline; gap: 12px">
+      <h2 style="margin: 0; font-size: 26px; line-height: 32px; font-weight: 700">Data changes, in build order</h2>
+      <span style="font-size: 15px; color: #6C6C70">P1 first: they protect history that is being lost today</span>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px">
+      <sc-for list="{{changes}}" as="c" hint-placeholder-count="11">
+        <article style="border-radius: 16px; background: #F2F2F7; padding: 18px 20px; display: flex; flex-direction: column; gap: 8px; border-left: 4px solid #C98A12">
+          <div style="display: flex; align-items: center; gap: 8px">
+            <span style="padding: 2px 8px; border-radius: 8px; background: #FBF0DC; color: #8A5A00; font-size: 13px; line-height: 18px; font-weight: 700">{{c.id}}</span>
+            <h3 style="margin: 0; flex: 1; min-width: 0; font-size: 19px; line-height: 24px; font-weight: 700">{{c.title}}</h3>
+            <span style="padding: 2px 8px; border-radius: 10px; background: {{c.pBg}}; color: {{c.pFg}}; font-size: 12px; line-height: 16px; font-weight: 700">{{c.p}}</span>
+          </div>
+          <p style="margin: 0; font-size: 15px; line-height: 21px; color: #1C1C1E"><span style="font-weight: 600">Unlocks:</span> {{c.unlocks}}</p>
+          <p style="margin: 0; padding: 10px 12px; border-radius: 10px; background: #FFFFFF; font-family: 'SF Mono', ui-monospace, Menlo, monospace; font-size: 12.5px; line-height: 19px; color: #1C1C1E">{{c.fields}}</p>
+          <p style="margin: 0; font-size: 14px; line-height: 20px; color: #3A3A3C">{{c.notes}}</p>
+          <span style="font-family: 'SF Mono', ui-monospace, Menlo, monospace; font-size: 12px; line-height: 16px; color: #6C6C70">{{c.ref}}</span>
+        </article>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px">
+    <div style="display: flex; flex-direction: column; gap: 14px">
+      <h2 style="margin: 0; font-size: 26px; line-height: 32px; font-weight: 700">Uses what the app already fetches</h2>
+      <sc-for list="{{network}}" as="n" hint-placeholder-count="5">
+        <article style="border-radius: 16px; background: #F2F2F7; padding: 16px 20px; display: flex; flex-direction: column; gap: 6px; border-left: 4px solid #2C6DB0">
+          <h3 style="margin: 0; font-size: 17px; line-height: 22px; font-weight: 700">{{n.title}}</h3>
+          <p style="margin: 0; font-size: 14px; line-height: 20px; color: #3A3A3C">{{n.text}}</p>
+        </article>
+      </sc-for>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 14px">
+      <h2 style="margin: 0; font-size: 26px; line-height: 32px; font-weight: 700">Left out on purpose</h2>
+      <sc-for list="{{cut}}" as="n" hint-placeholder-count="5">
+        <article style="border-radius: 16px; background: #F2F2F7; padding: 16px 20px; display: flex; flex-direction: column; gap: 6px; border-left: 4px solid #8E8E93">
+          <h3 style="margin: 0; font-size: 17px; line-height: 22px; font-weight: 700">{{n.title}}</h3>
+          <p style="margin: 0; font-size: 14px; line-height: 20px; color: #3A3A3C">{{n.text}}</p>
+        </article>
+      </sc-for>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":3440}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const P = {
+      P1: { pBg: '#FDE7E9', pFg: '#B0001A' },
+      P2: { pBg: '#FBF0DC', pFg: '#8A5A00' },
+      P3: { pBg: '#E5E5EA', pFg: '#3A3A3C' }
+    };
+    const D = (id, p, title, unlocks, fields, notes, ref) => ({ id, p, title, unlocks, fields, notes, ref, ...P[p] });
+    return {
+      have: [
+        {
+          title: 'ReadingSession (one row per sitting)',
+          fields: 'workID · ao3WorkID · workTitle · startedAt · endedAt · durationSeconds · lastSpineIndex · chapterTitle · endingProgress · wordCount · chapterCountAtVisit · didFinish',
+          note: 'Pauses excluded, sittings under 15 s dropped, one row per visit even when backgrounded. Kept when the work is deleted, but only the title survives.'
+        },
+        {
+          title: 'SavedWork (the work and your state)',
+          fields: 'workFandoms · workRelationships · workCharacters · workTags · rating · workWarnings · workCategories · language · wordCount · chapters · isComplete · datePublished · dateUpdated · series* · kudos · hits · bookmarks · hasGivenKudos · isFavorite · isFinished · isQueuedForLater · keepInProgressOverride · dateAdded · lastReadDate · knownChapterCount · preservation state',
+          note: 'Tags are read from here at query time, so a permanently deleted work drops out of every fandom and tag figure.'
+        },
+        {
+          title: 'Rules already in code',
+          fields: 'ReadingLogService.wordsRead (T-420) · ReadingInsights.make · ReadingAffinities (authors, fandoms, tags) · ReadingLogService.isAbandoned (21 days) · WorkPreservationState · AO3WordCounter',
+          note: 'Today’s screen: hours vs last period, weekly bars, top 3 fandoms by time, median sitting, words per hour, finish rate, longest streak, library counts.'
+        }
+      ],
+      changes: [
+        D('D1', 'P1', 'Snapshot what each sitting read',
+          'Taste, Fandom Timeline, Authors and Stopped Reading tags, for works that were later deleted.',
+          'ReadingSession + fandoms, relationships, characters, freeformTags: [String] · rating: String · warnings, categories: [String] · authorAccounts: [String] · language: String · isCompleteAtVisit: Bool · ao3SeriesID: Int? · seriesPosition: Int · publishedYear: Int?',
+          'Store the same way SavedWork stores its tag arrays, with defaults so CloudKit and older backups load. Backfill once from SavedWork where the work still exists; sittings of works already deleted stay “not known”. Add to the backup format (DATA_AND_PERSISTENCE_INVARIANTS).',
+          'Models/ReadingSession.swift · ReadingLogService.persist · ReadingSessionFacts.fandom'),
+        D('D2', 'P1', 'An explicit reading status',
+          'Where Everything Stands, the Stopped Reading sheet and card, On Hold, Letting Chapters Stack.',
+          'SavedWork + readingStatusRaw: reading | onHold | stacking | stopped (empty = derived) · statusChangedAt: Date? · stoppedAt: Date? · stopReasonRaw: lostInterest | tooLong | writingStyle | tagDealbreaker | gotSpoiled | other · stopTag: String · stopNote: String · stackThreshold: Int = 3',
+          'Derived, not stored: Caught Up = WIP with every posted chapter read; Finished = isFinished; Saved for Later = isQueuedForLater. isAbandoned stops being a status: it only shows the “Still reading?” card, behind Ask About Untouched Works, and never marks anything. Stacking returns the work to Reading and notifies when the threshold of new chapters is posted. Sync and back up all fields.',
+          'ReadingLogService.isAbandoned · SavedWork.keepInProgressOverride'),
+        D('D3', 'P2', 'Word counts per chapter',
+          'Accurate Words Read and Pace, Chapters Each, credit for partly read WIPs.',
+          'SavedWork + chapterWordCountsJSON: [Int] · wordUnitRaw: words | characters · ReadingSession + startProgress: Double · startSpineIndex: Int',
+          'Count chapter text only: AO3 EPUBs also carry the preface, summaries, notes and end notes. Use AO3WordCounter so totals match AO3. Languages written without spaces count characters: keep them out of word totals and pace. If the chapter sum is more than 10% off AO3’s count, fall back to today’s progress × words rule. A revised chapter you already read is not counted again.',
+          'Models/AO3WordCounter.swift · ReadingLogService.wordsRead · T-420'),
+        D('D4', 'P2', 'Reading or Read Aloud',
+          'Reading and Listening, the Count Read Aloud option, a Pace that leaves listening out.',
+          'ReadingSession + modeRaw: read | listen · playbackRate: Double',
+          'Read Aloud opens and closes sittings through ReadingLogService like the reader does (one tracker, mode listen). A sitting that switches mode splits into two rows.',
+          'Features/ReaderReadium (Read Aloud) · ReadingLogService.startSession'),
+        D('D5', 'P2', 'Insights options',
+          'Insights Options sheet: Discreet Mode, Hide Reading Time, what counts, exclusions.',
+          'discreetMode = false · hideReadingTime = false · countRereads = true · countReadAloud = true · askAboutUntouched = true · untouchedDays = 21 · excludedFandoms, excludedTags, excludedWorkIDs: [String]',
+          'Settings, backed up with the others. Exclusions apply to every card and to export. Discreet Mode shows “Fandom A”, “Ship B” in place of names, on screen and in exports; numbers stay.',
+          'Settings/ · KudosBackup.swift'),
+        D('D6', 'P2', 'Export and reset',
+          'Export Reading History, Reset Insights.',
+          'no new fields · CSV: one row per sitting + one per work status · JSON: sittings, statuses, reasons, notes',
+          'Export goes through the share sheet and respects exclusions and Discreet Mode. Reset deletes ReadingSession rows only, never works, progress or statuses, and asks once with the counts it will remove.',
+          'ReadingLogService.delete(_:in:)'),
+        D('D7', 'P3', 'Time on each chapter',
+          'Skimmed, Peeked at the Ending, End on a Chapter.',
+          'ReadingSession + chapterSecondsJSON: {spineIndex: seconds} · endedAtChapterEnd: Bool',
+          'Skimmed: a chapter read in less than half the time your median pace needs; its words leave the totals. Peeked: the last chapter opened before reaching 50% of the work. Needs at least 5 sittings of pace history before anything is called skimmed. Gather in memory from locator changes and write it with the sitting; the debounced locator path still never writes a session.',
+          'ReadiumReaderView · ReadingLogService.applyDebouncedReadiumLocator'),
+        D('D8', 'P3', 'Where a work came from',
+          'How Finished Works Arrived.',
+          'SavedWork + importSourceRaw: search | browse | fandom | author | series | subscription | markedForLater | ao3History | shareSheet | pastedLink | fileImport | backupRestore | unknown · importSourceSince (first date recorded)',
+          'Set once by each import path when the work is created. Existing works are unknown; the card says “since” the date recording began.',
+          'Services/WorkImporter.swift importEPUB / importUserEPUB and their callers'),
+        D('D9', 'P3', 'Kudos and hits when saved',
+          'Found Early (“310 kudos when saved, 1,530 now”).',
+          'SavedWork + kudosAtSave, hitsAtSave, bookmarksAtSave: Int? · statsSavedAt: Date?',
+          'Written once at import. Metadata refresh keeps updating kudos and hits, which is right for “now”, and must never touch these. Works saved before this ships stay empty and are left out of the card.',
+          'WorkMetadataRefresh.swift:155 · ReadingQueueService.swift:879 · WorkTags.swift:61'),
+        D('D10', 'P3', 'Chapter update events',
+          'New Chapters (read after they post) and the Letting Chapters Stack trigger.',
+          'new @Model ChapterUpdateEvent: workID · ao3WorkID · chapterCount · detectedAt: Date · postedDate: String',
+          'Written when knownChapterCount rises during the update checks the app already makes; no new AO3 requests. Delay = first sitting that reaches the new chapter minus the posted date (detectedAt when no date).',
+          'SavedWork.knownChapterCount · lastUpdateCheck'),
+        D('D11', 'P3', 'Your own AO3 actions',
+          'Bookmarked and Commented on finished works, the public/private split.',
+          'SavedWork + bookmarkedAt: Date? · bookmarkIsPrivate: Bool · lastCommentedAt: Date? · kudosGivenAt: Date?',
+          'Set when the action is done in Kudos (saveBookmark, postComment, kudos) or seen on a fetched work page. Actions taken on AO3 in a browser are invisible until the work page is refreshed, so these are lower bounds.',
+          'AO3WriteActions.saveBookmark · postComment · WorkMetadataRefresh.swift:161')
+      ],
+      network: [
+        { title: 'No Longer on AO3', text: 'WorkPreservationState already separates “last copy” from “gone, file freed”. Count only confirmed states; a failed check is not a deletion. Keep the neutral wording, and keep these works off any share card.' },
+        { title: 'Works in Progress: active, quiet, dormant', text: 'From dateUpdated, which the throttled metadata refresh already keeps. Active within 6 months, quiet 6–12, dormant over a year. Works never refreshed are shown as “not checked”.' },
+        { title: 'Kudos left', text: 'hasGivenKudos is only ever raised, from kudos given in Kudos or seen on a fetched page. Present it as “kudos Kudos knows about”; How Insights Are Counted says so.' },
+        { title: 'Tags stay as written', text: 'No canonical tag lookups: that is one AO3 request per tag. Merge only identical strings. “/” vs “&” comes from the relationship tag text.' },
+        { title: 'Later, maybe: AO3 History backfill', text: 'Importing AO3 History would add works read before Kudos with no time data. If done, it may count works and words, never time, pace or streaks.' }
+      ],
+      cut: [
+        { title: 'Writing-style analysis', text: 'No POV, tense or dialogue detection from the text. Authors already tag much of it, and fic communities are wary of anything that reads like text mining.' },
+        { title: 'Pace by trope or rating', text: 'Formatting, dialogue and mood move reading speed more than tags do; the comparison would mislead.' },
+        { title: 'Labels about the reader', text: 'No “hyperfixation”, mood weather or personality read-outs. The Fandom Timeline shows activity, not a diagnosis.' },
+        { title: 'The novels jab', text: 'Novels’ worth stays a friendly scale, never “you could have read books instead”.' },
+        { title: 'Share cards with kept works', text: 'Works no longer on AO3 never appear on anything shareable, and there is no way to share their text.' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>
