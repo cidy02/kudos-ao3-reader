@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Kudos on Android</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&amp;family=Literata:opsz,wght@7..72,400;7..72,600&amp;display=swap">
+<style>
+body{margin:0}
+button{cursor:pointer}
+a{color:#990000}a:hover{color:#6E0000}
+</style>
+</helmet>
+<div style="width: 1460px; height: 1360px; box-sizing: border-box; padding: 56px 64px; background: #FFFFFF; color: #1D1B1B; font-family: Roboto, 'Google Sans', system-ui, sans-serif; display: flex; flex-direction: column; gap: 32px">
+  <header style="display: flex; flex-direction: column; gap: 8px; max-width: 1100px">
+    <h1 style="margin: 0; font-size: 40px; line-height: 48px; font-weight: 700">Kudos on Android</h1>
+    <p style="margin: 0; font-size: 18px; line-height: 26px; color: #534341">The same parts as iPhone: generated covers, the Resume card, the four tags, chapter bars, and the wash only on a work’s page. The chrome is Material 3: a large top app bar that collapses, the navigation bar, outlined chips, the M3 slider, Roboto, and surface containers. The colour scheme comes from AO3 red with dynamic colour off.</p>
+  </header>
+
+  <div style="display: flex; gap: 48px; align-items: flex-start">
+    <!-- Android · Home -->
+    <figure style="margin: 0; width: 412px; display: flex; flex-direction: column; gap: 14px">
+      <div style="position: relative; width: 412px; height: 915px; border-radius: 36px; overflow: hidden; background: #FFF8F7; box-shadow: 0 0 0 1px rgba(0,0,0,0.12), 0 24px 60px rgba(0,0,0,0.10)">
+        <div style="position: absolute; right: 8px; top: 44px; display: flex">
+          <button aria-label="Select" style="width: 48px; height: 48px; border: none; border-radius: 24px; background: transparent; color: #534341; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m4 7 2 2 3.5-3.5M4 15l2 2 3.5-3.5M13 8h7M13 16h7"></path></svg></button>
+          <button aria-label="More options" style="width: 48px; height: 48px; border: none; border-radius: 24px; background: transparent; color: #534341; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="5.5" r="1.8" fill="currentColor"></circle><circle cx="12" cy="12" r="1.8" fill="currentColor"></circle><circle cx="12" cy="18.5" r="1.8" fill="currentColor"></circle></svg></button>
+        </div>
+        <main style="padding: 104px 16px 0; display: flex; flex-direction: column; gap: 20px">
+          <header style="display: flex; flex-direction: column; gap: 4px">
+            <h2 style="margin: 0; font-size: 32px; line-height: 40px; font-weight: 400">Home</h2>
+            <a href="Insights.dc.html" style="align-self: flex-start; text-decoration: none; font-size: 14px; line-height: 20px; letter-spacing: 0.25px; color: #534341"><span style="font-weight: 500; color: #1D1B1B">4 h 10 m</span> this week · <span style="font-weight: 500; color: #1D1B1B">2</span> finished · <span style="font-weight: 500; color: #1D1B1B">9-day</span> streak ›</a>
+          </header>
+          <dc-import name="ResumeCard" variant="home" width="380" accent="#990000" hint-size="380px,280px"></dc-import>
+          <section aria-label="Reading Now" style="display: flex; flex-direction: column; gap: 10px">
+            <div style="display: flex; align-items: center; justify-content: space-between">
+              <h3 style="margin: 0; font-size: 22px; line-height: 28px; font-weight: 400">Reading Now</h3>
+              <a href="Library-Section.dc.html" style="height: 40px; padding: 0 12px; margin-right: -12px; border-radius: 20px; text-decoration: none; font-size: 14px; line-height: 40px; font-weight: 500; letter-spacing: 0.1px">See all</a>
+            </div>
+            <div style="display: flex; gap: 12px; margin-right: -16px; overflow: hidden">
+              <sc-for list="{{reading}}" as="w" hint-placeholder-count="3">
+                <dc-import name="CoverCard" work="{{w}}" width="120" accent="#990000" hint-size="120px,250px"></dc-import>
+              </sc-for>
+            </div>
+          </section>
+        </main>
+        <nav aria-label="Navigation" style="position: absolute; left: 0; right: 0; bottom: 0; height: 80px; padding-bottom: 12px; background: #FBEAE7; display: flex; align-items: center">
+          <sc-for list="{{nav}}" as="n" hint-placeholder-count="5">
+            <button aria-current="{{n.current}}" style="flex: 1; border: none; background: transparent; color: {{n.fg}}; font-family: inherit; font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: 0.5px; display: flex; flex-direction: column; align-items: center; gap: 4px">
+              <span style="width: 64px; height: 32px; border-radius: 16px; background: {{n.pill}}; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="{{n.d}}"></path></svg></span>
+              {{n.label}}
+            </button>
+          </sc-for>
+        </nav>
+      </div>
+      <figcaption style="font-size: 15px; line-height: 22px; color: #534341"><span style="font-weight: 700; color: #1D1B1B">Home.</span> LargeTopAppBar (headline, actions as IconButtons), plain surface, the Resume card and cover shelf drawn in Compose. NavigationBar with the pill indicator in secondaryContainer; it hides on scroll.</figcaption>
+    </figure>
+
+    <!-- Android · Work Detail -->
+    <figure style="margin: 0; width: 412px; display: flex; flex-direction: column; gap: 14px">
+      <div style="position: relative; width: 412px; height: 915px; border-radius: 36px; overflow: hidden; background: #FFF8F7; box-shadow: 0 0 0 1px rgba(0,0,0,0.12), 0 24px 60px rgba(0,0,0,0.10)">
+        <div aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 0; height: 400px; background: linear-gradient(to bottom, rgba(37,119,132,0.20), rgba(37,119,132,0.12) 35%, rgba(37,119,132,0.05) 65%, rgba(37,119,132,0))"></div>
+        <div style="position: absolute; left: 4px; right: 4px; top: 44px; display: flex; align-items: center">
+          <a href="Main.dc.html" aria-label="Navigate up" style="width: 48px; height: 48px; border-radius: 24px; color: #1D1B1B; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 6l-6 6 6 6"></path></svg></a>
+          <span style="flex: 1"></span>
+          <button aria-label="Kudos given" aria-pressed="true" style="width: 48px; height: 48px; border: none; border-radius: 24px; background: transparent; color: #990000; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 20s-7.5-4.6-7.5-10.2A4.2 4.2 0 0 1 12 7.2a4.2 4.2 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20z"></path></svg></button>
+          <button aria-label="Bookmark on AO3" style="width: 48px; height: 48px; border: none; border-radius: 24px; background: transparent; color: #534341; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M7 4h10v16l-5-4-5 4z"></path></svg></button>
+          <button aria-label="More options" style="width: 48px; height: 48px; border: none; border-radius: 24px; background: transparent; color: #534341; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="5.5" r="1.8" fill="currentColor"></circle><circle cx="12" cy="12" r="1.8" fill="currentColor"></circle><circle cx="12" cy="18.5" r="1.8" fill="currentColor"></circle></svg></button>
+        </div>
+        <main style="position: relative; padding: 104px 16px 0; display: flex; flex-direction: column; gap: 14px">
+          <div style="display: flex; flex-direction: column; gap: 6px">
+            <a href="Fandom-Works.dc.html" style="align-self: flex-start; text-decoration: none; font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: 0.8px; text-transform: uppercase; color: hsl(188, 56%, 33%)">Original Work</a>
+            <span aria-hidden="true" style="width: 16px; height: 2px; border-radius: 1px; background: hsl(188, 56%, 33%)"></span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 4px">
+            <h2 style="margin: 0; font-size: 32px; line-height: 40px; font-weight: 400">The Cartographer’s Daughter</h2>
+            <a href="Author.dc.html" style="align-self: flex-start; text-decoration: none; font-size: 16px; line-height: 24px; font-weight: 500">inkwell_moth</a>
+          </div>
+          <dc-import name="Symbols" variant="inline" rating="T" category="FM" warnings="none" status="wip" size="20" hint-size="380px,20px"></dc-import>
+          <dc-import name="ResumeCard" variant="detail" width="380" accent="#990000" hint-size="380px,320px"></dc-import>
+          <dl style="margin: 0; background: #FBEAE7; border-radius: 16px; padding: 12px 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 12px">
+            <sc-for list="{{stats}}" as="s" hint-placeholder-count="9">
+              <div style="display: flex; flex-direction: column; align-items: center; gap: 2px; border-right: {{s.border}}">
+                <dt style="font-size: 11px; line-height: 16px; font-weight: 500; letter-spacing: 0.5px; text-transform: uppercase; color: #534341">{{s.label}}</dt>
+                <dd style="margin: 0; font-size: 16px; line-height: 24px; font-weight: 500">{{s.value}}</dd>
+              </div>
+            </sc-for>
+          </dl>
+          <section aria-label="Tags" style="display: flex; flex-direction: column; gap: 8px">
+            <h3 style="margin: 0; font-size: 22px; line-height: 28px; font-weight: 400">Tags</h3>
+            <div style="display: flex; flex-wrap: wrap; gap: 8px">
+              <sc-for list="{{tags}}" as="t" hint-placeholder-count="5">
+                <a href="Search.dc.html" style="height: 32px; padding: 0 16px; box-sizing: border-box; border-radius: 8px; border: 1px solid #857370; color: #1D1B1B; text-decoration: none; font-size: 14px; line-height: 30px; font-weight: 500; letter-spacing: 0.1px">{{t}}</a>
+              </sc-for>
+            </div>
+          </section>
+        </main>
+      </div>
+      <figcaption style="font-size: 15px; line-height: 22px; color: #534341"><span style="font-weight: 700; color: #1D1B1B">Work Detail.</span> The wash from the fandom, a LargeTopAppBar that collapses with exitUntilCollapsedScrollBehavior (the title moves into the bar, the wash fades). Tags are outlined SuggestionChips (8 dp corners). Buttons on the gradient: a white filled Button with the primary label.</figcaption>
+    </figure>
+
+    <!-- Android · Reader -->
+    <figure style="margin: 0; width: 412px; display: flex; flex-direction: column; gap: 14px">
+      <div style="position: relative; width: 412px; height: 915px; border-radius: 36px; overflow: hidden; background: #FAF7F0; color: #1F1B16; box-shadow: 0 0 0 1px rgba(0,0,0,0.12), 0 24px 60px rgba(0,0,0,0.10)">
+        <div style="position: absolute; left: 12px; right: 12px; top: 44px; display: flex; justify-content: space-between">
+          <button aria-label="Close" style="width: 48px; height: 48px; border: none; border-radius: 24px; background: rgba(60,45,30,0.08); color: #1F1B16; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"></path></svg></button>
+          <div style="display: flex; gap: 8px">
+            <button aria-label="Themes and settings" style="width: 48px; height: 48px; border: none; border-radius: 24px; background: rgba(60,45,30,0.08); color: #1F1B16; font-family: inherit; font-size: 17px; font-weight: 500">Aa</button>
+            <button aria-label="More options" style="width: 48px; height: 48px; border: none; border-radius: 24px; background: rgba(60,45,30,0.08); color: #1F1B16; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24"><circle cx="12" cy="5.5" r="1.8" fill="currentColor"></circle><circle cx="12" cy="12" r="1.8" fill="currentColor"></circle><circle cx="12" cy="18.5" r="1.8" fill="currentColor"></circle></svg></button>
+          </div>
+        </div>
+        <article style="padding: 124px 30px 0; font-family: Literata, Georgia, serif">
+          <p style="margin: 0 0 6px; font-family: Roboto, system-ui, sans-serif; font-size: 14px; line-height: 20px; font-weight: 500; color: #6B645A">Chapter 7</p>
+          <h2 style="margin: 0 0 22px; font-size: 28px; line-height: 34px; font-weight: 600">The Salt Road</h2>
+          <p style="margin: 0; font-size: 19px; line-height: 30px">The road to the coast had not been mapped in forty years, and Elinor suspected her mother had liked it that way.</p>
+          <p style="margin: 0; font-size: 19px; line-height: 30px; text-indent: 1.3em">She walked it anyway, with the brass compass knocking against her hip and a roll of blank vellum under one arm. Every mile she paused, sighted the dunes, and drew what she saw: the leaning post that had once held a sign, the dry creek bed, the line of gulls that rose whenever the wind changed its mind.</p>
+          <p style="margin: 0; font-size: 19px; line-height: 30px; text-indent: 1.3em">“You’re doing it backwards,” Tomas said, when he caught her up at the third milestone.</p>
+        </article>
+        <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 220px; background: linear-gradient(to bottom, rgba(250,247,240,0), rgba(250,247,240,0.96) 50%)"></div>
+        <section aria-label="Reader controls" style="position: absolute; left: 12px; right: 12px; bottom: 24px; border-radius: 28px; padding: 12px 8px 10px; background: #F5ECDF; box-shadow: 0 2px 6px rgba(60,40,10,0.10), 0 8px 24px rgba(60,40,10,0.12); display: flex; flex-direction: column; gap: 6px">
+          <div style="padding: 0 12px; display: flex; align-items: baseline; gap: 8px"><span style="font-size: 14px; line-height: 20px; font-weight: 500">The Cartographer’s Daughter</span><span style="font-size: 13px; color: #6B645A">Ch 7 of 20</span></div>
+          <div style="display: flex; align-items: center; gap: 2px">
+            <button aria-label="Contents" style="width: 48px; height: 48px; border: none; border-radius: 24px; background: transparent; color: #1F1B16; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"></path></svg></button>
+            <button aria-label="Add bookmark" style="width: 48px; height: 48px; border: none; border-radius: 24px; background: transparent; color: #1F1B16; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M7 4h10v16l-5-4-5 4z"></path></svg></button>
+            <div style="flex: 1; display: flex; flex-direction: column; gap: 4px; padding: 0 6px">
+              <div role="slider" aria-label="Page" aria-valuenow="4" aria-valuemin="1" aria-valuemax="18" style="position: relative; height: 44px; display: flex; align-items: center; gap: 6px">
+                <span style="width: 22%; height: 16px; border-radius: 8px 2px 2px 8px; background: #990000"></span>
+                <span style="width: 4px; height: 44px; border-radius: 2px; background: #990000"></span>
+                <span style="flex: 1; height: 16px; border-radius: 2px 8px 8px 2px; background: #FFDAD5"></span>
+              </div>
+              <span style="font-size: 12px; line-height: 16px; color: #6B645A; text-align: center">Page 4 of 18 · 21 min left</span>
+            </div>
+            <button aria-label="Read aloud" style="width: 48px; height: 48px; border: none; border-radius: 24px; background: #FFDAD5; color: #410001; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"></path><path d="M15.5 9a4.5 4.5 0 0 1 0 6"></path><path d="M18 6.5a8 8 0 0 1 0 11"></path></svg></button>
+          </div>
+        </section>
+      </div>
+      <figcaption style="font-size: 15px; line-height: 22px; color: #534341"><span style="font-weight: 700; color: #1D1B1B">Reader.</span> The same controls as iPhone in a Material surface: tonal IconButtons at the top, a bottom Surface (extra-large shape) with the M3 slider and a FilledTonalIconButton for Read Aloud. Readium’s Kotlin navigator draws the page; Literata as the default serif.</figcaption>
+    </figure>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1460,"height":1360}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const navItems = [
+      { id: 'home', label: 'Home', d: 'M3.5 10.5 12 3.5l8.5 7M5.5 9v11h5v-6h3v6h5V9' },
+      { id: 'library', label: 'Library', d: 'M3.5 4h4v16h-4zM9.5 4h4v16h-4zM15.6 5.4l3.4-.9 3 15.2-3.4.9z' },
+      { id: 'browse', label: 'Browse', d: 'M12 3.5a8.5 8.5 0 1 1 0 17 8.5 8.5 0 0 1 0-17zM15.5 8.5l-2 5-5 2 2-5z' },
+      { id: 'account', label: 'Account', d: 'M12 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8zM4.5 20c1.4-3.8 4.2-5.8 7.5-5.8s6.1 2 7.5 5.8' },
+      { id: 'search', label: 'Search', d: 'M10.5 4a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM15.5 15.5l5 5' }
+    ];
+    const stats = [
+      ['Words', '84,210'], ['Chapters', '12/20'], ['Kudos', '♥ 3,104'],
+      ['Hits', '41.2k'], ['Comments', '286'], ['Bookmarks', '512'],
+      ['Published', 'Mar 3'], ['Updated', 'Oct 21'], ['Language', 'English']
+    ];
+    return {
+      nav: navItems.map((n) => ({ ...n, current: n.id === 'home' ? 'page' : 'false', pill: n.id === 'home' ? '#FFDAD5' : 'transparent', fg: n.id === 'home' ? '#410001' : '#534341' })),
+      stats: stats.map(([label, value], i) => ({ label, value, border: i % 3 === 2 ? 'none' : '0.5px solid #D8C2BE' })),
+      tags: ['Elinor Vane/Tomas Reyes', 'Slow Burn', 'Found Family', 'Maps & Mapmaking', 'Hurt/Comfort'],
+      reading: [
+        { title: 'Salt & Starlight', author: 'wrenfield', fandom: 'Original Work', rating: 'M', category: 'Gen', warnings: 'undisclosed', status: 'wip', meta: 'Ch 12 of 30 · 40%', progress: 40, badge: '+3' },
+        { title: 'Whatever Remains', author: 'fogandlamplight', fandom: 'Sherlock Holmes', rating: 'E', category: 'MM', warnings: 'present', warningCount: 2, status: 'complete', hidden: true },
+        { title: 'Letters Never Sent', author: 'marginalia', fandom: 'Persuasion', rating: 'T', category: 'FM', warnings: 'none', status: 'complete', meta: 'Ch 3 of 4 · 50%', progress: 50 }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

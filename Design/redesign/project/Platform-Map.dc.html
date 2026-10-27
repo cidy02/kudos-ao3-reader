@@ -12,7 +12,7 @@
 body{margin:0}
 </style>
 </helmet>
-<div style="width: 1280px; height: 1560px; box-sizing: border-box; padding: 52px 64px; background: #FFFFFF; color: #1C1C1E; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; display: flex; flex-direction: column; gap: 26px">
+<div style="width: 1280px; height: 1760px; box-sizing: border-box; padding: 52px 64px; background: #FFFFFF; color: #1C1C1E; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; display: flex; flex-direction: column; gap: 26px">
   <header style="display: flex; flex-direction: column; gap: 6px; max-width: 960px">
     <p style="margin: 0; font-size: 13px; line-height: 18px; font-weight: 600; letter-spacing: 0.6px; text-transform: uppercase; color: {{accent}}">Native toolkits only</p>
     <h1 style="margin: 0; font-size: 44px; line-height: 52px; font-weight: 700">Native mapping</h1>
@@ -48,7 +48,7 @@ body{margin:0}
   </section>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"$preview":{"width":1280,"height":1560}}'>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"$preview":{"width":1280,"height":1760}}'>
 class Component extends DCLogic {
   renderVals() {
     const rows = [
@@ -59,7 +59,7 @@ class Component extends DCLogic {
       ['Floating reader controls', 'GlassEffectContainer { … .glassEffect(.regular.interactive()) }', 'Surface(tonalElevation) in AnimatedVisibility'],
       ['Grouped sections', 'List(.insetGrouped), Form, Section', 'LazyColumn of ListItem inside Card groups'],
       ['Shelves', 'ScrollView(.horizontal) { LazyHStack }, .scrollTargetBehavior(.viewAligned)', 'LazyRow, or HorizontalMultiBrowseCarousel'],
-      ['Work row, cover card', 'WorkRow, WorkCoverCard (existing)', 'Existing Compose work cards'],
+      ['Work row, ledger card', 'WorkRow; ledger card with fandom label, summary, seven stats, chapter bars', 'ListItem with the same parts; ledger as an ElevatedCard-free row'],
       ['Symbols', 'WorkStatusIconGrid: grid, strip; labelled = WorkTopStatsRow', 'One WorkSymbols composable: same order, colours, glyphs'],
       ['Menus', 'Menu, .contextMenu { } preview: { }, ShareLink', 'DropdownMenu, long-press DropdownMenu, share Intent'],
       ['Swipe actions', '.swipeActions(edge:)', 'SwipeToDismissBox'],
@@ -73,7 +73,10 @@ class Component extends DCLogic {
       ['Reader page', 'Readium navigator (UIKit) in UIViewControllerRepresentable', 'Readium Kotlin navigator in AndroidView / Fragment'],
       ['Text editor', 'WritingNativeTextView (UITextView) + keyboard toolbar', 'BasicTextField(TextFieldState) + formatting row above the IME'],
       ['AO3 web fallback', 'WKWebView (WebBrowser)', 'AndroidView { WebView }'],
-      ['Type and colour', 'Dynamic Type styles; systemGroupedBackground; .tint(AO3 red)', 'M3 type scale; dynamic colour off; primary = AO3 red; dark theme']
+      ['Generated covers', 'CoverArt: fandom hue + title shade, background letter (one SwiftUI view, cached)', 'Same CoverArt drawn in Compose: Brush.linearGradient + Text; same hue function'],
+      ['Resume card', 'ResumeCard view: LinearGradient, ring (Circle().trim), chapter bars (HStack of Capsules)', 'ResumeCard composable: Brush gradient, CircularProgressIndicator, Row of bars'],
+      ['Wash and backgrounds', 'Wash only on work and fandom pages (scroll-faded); .background(.background) vs systemGroupedBackground', 'Wash only on work and fandom pages; surface vs surfaceContainerLow; cards surfaceContainer'],
+      ['Type and colour', 'Dynamic Type styles; .tint(AO3 red) for everything tappable; fandom colour only in covers, the Resume card, the fandom label and the wash', 'M3 type scale; dynamic colour off; primary = AO3 red; fandom colour via a CompositionLocal, never on buttons; dark theme']
     ];
     return {
       accent: this.props.accent ?? '#990000',

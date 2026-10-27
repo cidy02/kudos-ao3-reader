@@ -412,7 +412,7 @@
       "y": 9700
     },
     "Platform-Map.dc.html": {
-      "h": 1560,
+      "h": 1760,
       "page": "system",
       "title": "Native mapping · SwiftUI and Compose",
       "w": 1280,
@@ -746,6 +746,14 @@
       "h": 649,
       "title": "Sidebar, Duo open (component)",
       "page": "system"
+    },
+    "Android.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 1460,
+      "h": 1360,
+      "title": "Android · Home, Work Detail, Reader",
+      "page": "android"
     }
   },
   "createdOnFiles": {
@@ -966,7 +974,8 @@
     "Rules.dc.html",
     "ResumeCard.dc.html",
     "TabRail.dc.html",
-    "DuoSidebar.dc.html"
+    "DuoSidebar.dc.html",
+    "Android.dc.html"
   ],
   "pages": [
     {
@@ -980,6 +989,10 @@
     {
       "id": "duo",
       "name": "iPhone Duo"
+    },
+    {
+      "id": "android",
+      "name": "Android"
     },
     {
       "id": "states",
