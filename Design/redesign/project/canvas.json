@@ -26,6 +26,14 @@
       "x": 2350,
       "y": 2300
     },
+    "AX5.dc.html": {
+      "h": 1980,
+      "page": "variants",
+      "title": "Largest text sizes (AX5)",
+      "w": 1400,
+      "x": 1480,
+      "y": 0
+    },
     "About.dc.html": {
       "h": 844,
       "page": "iphone",
@@ -57,6 +65,14 @@
       "w": 390,
       "x": 0,
       "y": 7780
+    },
+    "Android.dc.html": {
+      "h": 1360,
+      "page": "android",
+      "title": "Android · Home, Work Detail, Reader",
+      "w": 1460,
+      "x": 0,
+      "y": 0
     },
     "Author.dc.html": {
       "h": 1240,
@@ -251,6 +267,14 @@
       "x": 0,
       "y": 3276
     },
+    "DuoSidebar.dc.html": {
+      "h": 649,
+      "page": "system",
+      "title": "Sidebar, Duo open (component)",
+      "w": 232,
+      "x": 1504,
+      "y": 1248
+    },
     "Fandom-Works.dc.html": {
       "h": 844,
       "page": "iphone",
@@ -348,7 +372,7 @@
       "y": 0
     },
     "Library-Filters.dc.html": {
-      "h": 844,
+      "h": 1240,
       "page": "iphone",
       "title": "Library · filters",
       "w": 390,
@@ -515,6 +539,22 @@
       "x": 3760,
       "y": 0
     },
+    "ResumeCard.dc.html": {
+      "h": 280,
+      "page": "system",
+      "title": "Resume card (component)",
+      "w": 358,
+      "x": 1360,
+      "y": 888
+    },
+    "Rules.dc.html": {
+      "h": 1640,
+      "page": "system",
+      "title": "Kudos design rules",
+      "w": 1280,
+      "x": 1830,
+      "y": 0
+    },
     "Search-Filters.dc.html": {
       "h": 1240,
       "page": "iphone",
@@ -667,6 +707,14 @@
       "x": 1360,
       "y": 164
     },
+    "TabRail.dc.html": {
+      "h": 312,
+      "page": "system",
+      "title": "Tab rail, Duo cover (component)",
+      "w": 64,
+      "x": 1360,
+      "y": 1248
+    },
     "Text-Editor.dc.html": {
       "h": 844,
       "page": "iphone",
@@ -674,6 +722,14 @@
       "w": 390,
       "x": 3760,
       "y": 7780
+    },
+    "Themes.dc.html": {
+      "h": 2880,
+      "page": "variants",
+      "title": "Sepia, Dark and OLED",
+      "w": 1400,
+      "x": 0,
+      "y": 0
     },
     "Work-Actions.dc.html": {
       "h": 844,
@@ -715,61 +771,13 @@
       "x": 0,
       "y": 3960
     },
-    "ResumeCard.dc.html": {
+    "CoverStack.dc.html": {
       "x": 1360,
-      "y": 888,
-      "w": 358,
-      "h": 280,
-      "title": "Resume card (component)",
+      "y": 1640,
+      "w": 96,
+      "h": 96,
+      "title": "Cover stack, queues and collections (component)",
       "page": "system"
-    },
-    "Rules.dc.html": {
-      "x": 1830,
-      "y": 0,
-      "w": 1280,
-      "h": 1640,
-      "title": "Kudos design rules",
-      "page": "system"
-    },
-    "TabRail.dc.html": {
-      "x": 1360,
-      "y": 1248,
-      "w": 64,
-      "h": 312,
-      "title": "Tab rail, Duo cover (component)",
-      "page": "system"
-    },
-    "DuoSidebar.dc.html": {
-      "x": 1504,
-      "y": 1248,
-      "w": 232,
-      "h": 649,
-      "title": "Sidebar, Duo open (component)",
-      "page": "system"
-    },
-    "Android.dc.html": {
-      "x": 0,
-      "y": 0,
-      "w": 1460,
-      "h": 1360,
-      "title": "Android · Home, Work Detail, Reader",
-      "page": "android"
-    },
-    "Themes.dc.html": {
-      "x": 0,
-      "y": 0,
-      "w": 1400,
-      "h": 2880,
-      "title": "Sepia, Dark and OLED",
-      "page": "variants"
-    },
-    "AX5.dc.html": {
-      "x": 1480,
-      "y": 0,
-      "w": 1400,
-      "h": 1980,
-      "title": "Largest text sizes (AX5)",
-      "page": "variants"
     }
   },
   "createdOnFiles": {
@@ -781,6 +789,21 @@
     "page": "direction",
     "view": "canvas"
   },
+  "noteOrder": [
+    "rowAccount",
+    "rowBook",
+    "rowCover",
+    "rowDiscover",
+    "rowHome",
+    "rowOpen",
+    "rowPortrait",
+    "rowReader",
+    "rowSettings",
+    "rowSystem",
+    "rowWork",
+    "whyDuo",
+    "whyIphone"
+  ],
   "notes": {
     "rowAccount": {
       "kind": "title1",
@@ -993,7 +1016,8 @@
     "DuoSidebar.dc.html",
     "Android.dc.html",
     "Themes.dc.html",
-    "AX5.dc.html"
+    "AX5.dc.html",
+    "CoverStack.dc.html"
   ],
   "pages": [
     {

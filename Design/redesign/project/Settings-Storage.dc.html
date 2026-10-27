@@ -58,7 +58,7 @@ button{cursor:pointer}
 class Component extends DCLogic {
   renderVals() {
     const accent = this.props.accent ?? '#990000';
-    const t = (label, on) => ({ label, isToggle: true, isLink: false, on: on ? 'true' : 'false', track: on ? '#34C759' : '#E9E9EB', knob: on ? 22 : 2, color: '#000000', value: '' });
+    const t = (label, on) => ({ label, isToggle: true, isLink: false, on: on ? 'true' : 'false', track: on ? '#990000' : '#E9E9EB', knob: on ? 22 : 2, color: '#000000', value: '' });
     const l = (label, value, color) => ({ label, isToggle: false, isLink: true, value: value || '', color: color || '#000000', on: 'false', track: '', knob: 0 });
     const groups = [
       { title: 'Downloads', rows: [t('Download on subscribe', true), t('Keep works you read', true), l('Preserve series', 'Up to 10 works')] },

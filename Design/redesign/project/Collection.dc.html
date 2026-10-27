@@ -24,9 +24,7 @@ button{cursor:pointer}
   </div>
   <main style="padding: 106px 16px 0; display: flex; flex-direction: column; gap: 12px">
     <header style="display: flex; gap: 14px; align-items: center">
-      <div aria-hidden="true" style="width: 96px; height: 96px; flex-shrink: 0; border-radius: 16px; overflow: hidden; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px; box-shadow: 0 4px 12px rgba(0,0,0,0.14)">
-        <sc-for list="{{tiles}}" as="t" hint-placeholder-count="4"><span style="background: {{t}}"></span></sc-for>
-      </div>
+      <dc-import name="CoverStack" tiles="{{tiles}}" width="96" height="96" hint-size="96px,96px"></dc-import>
       <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
         <h1 style="margin: 0; font-size: 28px; line-height: 34px; font-weight: 700; letter-spacing: 0.35px">Austen Variations</h1>
         <p style="margin: 0; font-size: 15px; line-height: 20px; color: #6C6C70">12 works · about 14 h · custom order</p>
@@ -35,7 +33,7 @@ button{cursor:pointer}
     <div style="background: #F2F2F7; border-radius: 16px; overflow: hidden">
       <div style="display: flex; align-items: center; height: 46px; padding: 0 16px; border-bottom: 0.5px solid #D1D1D6">
         <span style="flex: 1; font-size: 17px">Show on Home</span>
-        <span role="switch" aria-checked="true" aria-label="Show on Home" style="width: 51px; height: 31px; border-radius: 16px; background: #34C759; position: relative"><span style="position: absolute; right: 2px; top: 2px; width: 27px; height: 27px; border-radius: 14px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.2)"></span></span>
+        <span role="switch" aria-checked="true" aria-label="Show on Home" style="width: 51px; height: 31px; border-radius: 16px; background: #990000; position: relative"><span style="position: absolute; right: 2px; top: 2px; width: 27px; height: 27px; border-radius: 14px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.2)"></span></span>
       </div>
       <div style="display: flex; align-items: center; height: 46px; padding: 0 16px">
         <span style="flex: 1; font-size: 17px">Keep downloads</span>

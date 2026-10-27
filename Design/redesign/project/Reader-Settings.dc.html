@@ -80,7 +80,7 @@ class Component extends DCLogic {
     return {
       accent,
       themes: themes.map(([name, bg, fg], i) => ({ name, bg, fg, checked: i === 1 ? 'true' : 'false', weight: i === 1 ? 600 : 400, ring: i === 1 ? '0 0 0 2.5px ' + accent : '0 0 0 0.5px #D1D1D6' })),
-      toggles: toggles.map(([label, on], i) => ({ label, on: on ? 'true' : 'false', track: on ? '#34C759' : '#E9E9EB', knob: on ? 22 : 2, sep: i ? '0.5px solid #E5E5EA' : 'none' }))
+      toggles: toggles.map(([label, on], i) => ({ label, on: on ? 'true' : 'false', track: on ? '#990000' : '#E9E9EB', knob: on ? 22 : 2, sep: i ? '0.5px solid #E5E5EA' : 'none' }))
     };
   }
 }

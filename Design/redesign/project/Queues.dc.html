@@ -38,9 +38,7 @@ button{cursor:pointer}
     <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
       <sc-for list="{{queues}}" as="q" hint-placeholder-count="3">
         <a href="Queue.dc.html" style="display: flex; align-items: center; gap: 12px; min-height: 72px; padding: 0 16px; border-top: {{q.sep}}; text-decoration: none; color: #000000">
-          <span aria-hidden="true" style="width: 48px; height: 48px; flex-shrink: 0; border-radius: 12px; overflow: hidden; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px">
-            <sc-for list="{{q.tiles}}" as="t" hint-placeholder-count="4"><span style="background: {{t}}"></span></sc-for>
-          </span>
+          <dc-import name="CoverStack" tiles="{{q.tiles}}" width="48" height="48" hint-size="48px,48px"></dc-import>
           <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px">
             <span style="font-size: 17px; line-height: 22px; font-weight: 600">{{q.name}}</span>
             <span style="font-size: 13px; line-height: 18px; color: #6C6C70">{{q.detail}}</span>
@@ -92,7 +90,7 @@ button{cursor:pointer}
       <div style="display: flex; flex-direction: column; gap: 6px">
         <div style="background: #FFFFFF; border-radius: 16px; display: flex; align-items: center; height: 50px; padding: 0 16px">
           <span style="flex: 1; font-size: 16px">Keep works offline</span>
-          <span role="switch" aria-checked="true" aria-label="Keep works offline" style="width: 51px; height: 31px; border-radius: 16px; background: #34C759; position: relative"><span style="position: absolute; right: 2px; top: 2px; width: 27px; height: 27px; border-radius: 14px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.2)"></span></span>
+          <span role="switch" aria-checked="true" aria-label="Keep works offline" style="width: 51px; height: 31px; border-radius: 16px; background: #990000; position: relative"><span style="position: absolute; right: 2px; top: 2px; width: 27px; height: 27px; border-radius: 14px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.2)"></span></span>
         </div>
         <p style="margin: 0 16px; font-size: 13px; line-height: 18px; color: #6C6C70">Kudos downloads each work you add and keeps it while it's in this queue.</p>
       </div>

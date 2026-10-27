@@ -79,21 +79,28 @@ a{color:#990000}a:hover{color:#6E0000}
     </header>
     <div style="padding: 0 16px; display: flex; flex-direction: column; gap: 14px">
       <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
-        <div style="min-height: 46px; padding: 0 16px; display: flex; align-items: center; gap: 8px"><span style="flex: 1; font-size: 17px">Sort by</span><span style="font-size: 17px; color: #6C6C70">Date updated ›</span></div>
+        <div style="min-height: 46px; padding: 0 16px; display: flex; align-items: center; gap: 8px"><span style="flex: 1; font-size: 17px">Sort by</span><span style="font-size: 17px; color: #990000">Date updated ⌃⌄</span></div>
         <div aria-hidden="true" style="margin-left: 16px; height: 0.5px; background: #D1D1D6"></div>
-        <div style="min-height: 46px; padding: 0 16px; display: flex; align-items: center; gap: 8px"><span style="flex: 1; font-size: 17px">Order</span><span style="font-size: 17px; color: #6C6C70">Newest first ›</span></div>
+        <div style="min-height: 46px; padding: 0 16px; display: flex; align-items: center; gap: 8px"><span style="flex: 1; font-size: 17px">Order</span><span style="font-size: 17px; color: #990000">Newest first ⌃⌄</span></div>
+        <div aria-hidden="true" style="margin-left: 16px; height: 0.5px; background: #D1D1D6"></div>
+        <div style="min-height: 46px; padding: 0 16px; display: flex; align-items: center; gap: 8px"><span style="flex: 1; font-size: 17px">Rating</span><span style="font-size: 17px; color: #990000">General, Teen ⌃⌄</span></div>
+        <div aria-hidden="true" style="margin-left: 16px; height: 0.5px; background: #D1D1D6"></div>
+        <div style="min-height: 46px; padding: 0 16px; display: flex; align-items: center; gap: 8px"><span style="flex: 1; font-size: 17px">Completion</span><span style="font-size: 17px; color: #990000">Complete only ⌃⌄</span></div>
       </div>
-      <sc-for list="{{groups}}" as="g" hint-placeholder-count="3">
-        <fieldset style="margin: 0; padding: 0; border: none; display: flex; flex-direction: column; gap: 6px">
-          <legend style="padding: 0 16px 6px; font-size: 13px; line-height: 18px; color: #6C6C70">{{g.title}}</legend>
-          <div style="background: #FFFFFF; border-radius: 16px; padding: 10px 12px; display: flex; flex-wrap: wrap; gap: 8px">
-            <sc-for list="{{g.chips}}" as="c" hint-placeholder-count="4">
-              <button aria-pressed="{{c.pressed}}" style="border: none; padding: 2px; border-radius: 999px; background: transparent; box-shadow: {{c.ring}}; display: flex">
-                <dc-import name="Symbols" variant="labeled" only="{{g.kind}}" rating="{{c.rating}}" category="{{c.category}}" warnings="{{c.warnings}}" status="{{c.status}}" size="20" hint-size="86px,26px"></dc-import>
+      <sc-for list="{{facets}}" as="g" hint-placeholder-count="2">
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <h3 style="margin: 0 16px; font-size: 13px; line-height: 18px; font-weight: 400; color: #6C6C70">{{g.title}}</h3>
+          <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
+            <sc-for list="{{g.rows}}" as="r" hint-placeholder-count="6">
+              <sc-if value="{{r.sep}}" hint-placeholder-val="{{false}}"><div aria-hidden="true" style="margin-left: 16px; height: 0.5px; background: #D1D1D6"></div></sc-if>
+              <button aria-label="{{r.aria}}" style="width: 100%; min-height: 44px; padding: 6px 16px; box-sizing: border-box; border: none; background: transparent; font-family: inherit; text-align: left; display: flex; align-items: center; gap: 10px; color: #000000">
+                <span style="flex: 1; font-size: 17px; line-height: 22px">{{r.label}}</span>
+                <sc-if value="{{r.isIn}}" hint-placeholder-val="{{false}}"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#990000" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"></path></svg></sc-if>
+                <sc-if value="{{r.isOut}}" hint-placeholder-val="{{false}}"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#990000"></circle><path d="M8 12h8" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round"></path></svg></sc-if>
               </button>
             </sc-for>
           </div>
-        </fieldset>
+        </div>
       </sc-for>
       <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
         <sc-for list="{{ranges}}" as="r" hint-placeholder-count="3">
@@ -108,6 +115,7 @@ a{color:#990000}a:hover{color:#6E0000}
 <script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":951,"height":669}}'>
 class Component extends DCLogic {
   renderVals() {
+    const facetRows = (list) => list.map(([label, state], i) => ({ label, sep: i > 0, isIn: state === 'in', isOut: state === 'out', aria: label + (state === 'in' ? ', included' : state === 'out' ? ', excluded' : '') }));
     const chip = (o, on) => ({ rating: 'T', category: 'FM', warnings: 'none', status: 'wip', ...o, pressed: on ? 'true' : 'false', ring: on ? 'inset 0 0 0 2px #990000' : 'none' });
     const results = [
       { title: 'Keeper of the Northern Light', author: 'saltwindow', fandom: 'Original Work', rating: 'T', category: 'FF', warnings: 'none', status: 'complete', words: '22,410', chapters: '7/7', kudos: '1,804', hits: '19.2k', updated: 'Oct 22', summary: 'The last keeper on the coast trains her replacement, who has never once been afraid of the dark.' },
@@ -128,11 +136,9 @@ class Component extends DCLogic {
         { name: 'The Lamp at Skerry Head (Novel)', count: '48', line: '0.5px solid #E5E5EA' }
       ],
       results: results.map((w, i) => ({ ...w, divider: i < results.length - 1 })),
-      groups: [
-        { title: 'Rating', kind: 'rating', chips: [chip({ rating: 'G' }, true), chip({ rating: 'T' }, true), chip({ rating: 'M' }, false), chip({ rating: 'E' }, false)] },
-        { title: 'Warnings', kind: 'warnings', chips: [chip({ warnings: 'none' }, true), chip({ warnings: 'undisclosed' }, false), chip({ warnings: 'present' }, false)] },
-        { title: 'Category', kind: 'category', chips: [chip({ category: 'FF' }, true), chip({ category: 'FM' }, false), chip({ category: 'MM' }, false), chip({ category: 'Gen' }, true), chip({ category: 'Multi' }, false), chip({ category: 'Other' }, false)] },
-        { title: 'Completion', kind: 'status', chips: [chip({ status: 'complete' }, true), chip({ status: 'wip' }, false)] }
+      facets: [
+        { title: 'Warnings', rows: facetRows([['No Archive Warnings Apply', 'in'], ['Creator Chose Not To Use Archive Warnings', ''], ['Graphic Depictions Of Violence', ''], ['Major Character Death', 'out'], ['Rape/Non-Con', ''], ['Underage Sex', '']]) },
+        { title: 'Categories', rows: facetRows([['F/F', 'in'], ['F/M', ''], ['Gen', 'in'], ['M/M', ''], ['Multi', ''], ['Other', '']]) }
       ],
       ranges: [
         { label: 'Word count', value: '10k or more', sep: false },
