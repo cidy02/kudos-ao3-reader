@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Tab rail</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<nav aria-label="Tabs" style="width: 64px; display: flex; flex-direction: column; align-items: center; gap: 10px; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif">
+  <div style="width: 64px; border-radius: 32px; padding: 4px; box-sizing: border-box; display: flex; flex-direction: column; gap: 2px; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 8px 28px rgba(0,0,0,0.12), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
+    <sc-for list="{{tabs}}" as="t" hint-placeholder-count="4">
+      <button aria-current="{{t.current}}" style="width: 56px; height: 56px; border: none; border-radius: 28px; background: {{t.bg}}; color: {{t.fg}}; font-family: inherit; font-size: 10px; font-weight: 600; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; cursor: pointer">
+        <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="{{t.d}}"></path></svg>
+        {{t.label}}
+      </button>
+    </sc-for>
+  </div>
+  <button aria-label="Search" style="width: 64px; height: 64px; border: none; border-radius: 32px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; cursor: pointer; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 8px 28px rgba(0,0,0,0.12), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
+    <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="m15.5 15.5 5 5"></path></svg>
+  </button>
+</nav>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"selected":{"editor":"enum","options":["home","library","browse","account"],"default":"home"},"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B"]},"$preview":{"width":64,"height":312}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const accent = this.props.accent ?? '#990000';
+    const x = accent.replace('#', '');
+    const tint = 'rgba(' + parseInt(x.slice(0, 2), 16) + ',' + parseInt(x.slice(2, 4), 16) + ',' + parseInt(x.slice(4, 6), 16) + ',0.10)';
+    const selected = this.props.selected ?? 'home';
+    const all = [
+      { id: 'home', label: 'Home', d: 'M3.5 10.5 12 3.5l8.5 7M5.5 9v11h5v-6h3v6h5V9' },
+      { id: 'library', label: 'Library', d: 'M3.5 4h4v16h-4zM9.5 4h4v16h-4zM15.6 5.4l3.4-.9 3 15.2-3.4.9z' },
+      { id: 'browse', label: 'Browse', d: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z' },
+      { id: 'account', label: 'Account', d: 'M12 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8zM4.5 20c1.4-3.8 4.2-5.8 7.5-5.8s6.1 2 7.5 5.8' }
+    ];
+    return {
+      tabs: all.map((t) => ({ ...t, current: t.id === selected ? 'page' : 'false', bg: t.id === selected ? tint : 'transparent', fg: t.id === selected ? accent : '#1C1C1E' }))
+    };
+  }
+}
+</script>
+</body>
+</html>
