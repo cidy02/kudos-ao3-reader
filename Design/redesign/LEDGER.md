@@ -73,6 +73,18 @@ R6. Items 9, 11, 12: Dark/Sepia/OLED with the two background levels; AX5; final 
 - Current app (from screenshots): fandom-tinted cards and hero washes, progress rings, kicker labels with accent rule, one-capsule tab bar with 5 items, reader with top capsule + bottom position card. Context menu has Read, Select, Favourite, Save for Later, Add to Queue, Mark as Finished, Add to Collection, Work Details, Delete.
 - Real defects seen: reader error screen has no visible close button; Work Detail large title slides under the back button when scrolled; toolbar tint follows the last fandom viewed.
 
+- **Owner feedback round, 2026-10-27 (later), all published:**
+  - Queues/collections: no 2×2 tile grid (works in a collection don't share ratings or pairings) → shared `CoverStack`. After the owner's concept image it draws the queue's or collection's own card in its own colour (the app's picked or name-derived colour), with a type ribbon (grid = collection, layers = queue) and background letter, and the works' real covers fanned and tilted behind. Left out on purpose: the concept's centred icon (repeats the ribbon) and the iPhone page dots/arrows (a swipe row is the system pattern; arrows fit Duo with a pointer).
+  - Filters follow the app's AO3FilterPanel form: pickers (red value + ⌃⌄), checkable include ✓ / exclude ⊖ rows for Warnings and Categories, an Include Not Rated switch. Not tag chips. Library filters gained an Authors selector; the authors carousel on Library is gone.
+  - Browse: category tiles get a colour derived from the category name; fandom rows and Jump Back In get their fandom swatch.
+  - Switches are app red, as in the app. Reader pill: title left, chapter right.
+  - **Top space:** no empty bar row. Tabs use the app's `.inlineLarge` (title on the toolbar row); pushed pages use `.inline` (small centred title), with crowded actions folded into ••• or icon buttons; Author and About got compact side-by-side headers. Content starts right under the bar (~50 pt higher).
+  - **Comments** now follow `CommentThreadRow` (board 1f in the code): no cards, hairline rails with elbows into reply avatars (30/26/22), name + role pill + time + chapter pill, 14 pt prose, plain red Reply and a bare •••; header is the work's subject header + Comments/Threads/Yours/Latest strip + chapter and sort pills. Shared `CommentThread` component used by Comments, Comment-Thread and Duo-Book-Comments.
+  - **App icon:** Onboarding has the real icon over "Welcome to Kudos"; About and System Surfaces use it too (shared `AppIcon`, from `Design/AppIcon.svg`), replacing a drawn "K".
+  - **No instructions on screens** ("Swipe a row to…", "Tap Edit to…", "hold for voices", "Bar height is chapter length"); exception per owner: Settings and setup forms keep short footers, as Apple's do. Kept: sign-in trust line, legal disclaimers, Recently Deleted's 90-day line.
+  - Settings action rows have icons (Sync Now, Disconnect, Change Folder, Pair a Device, Export/Import Backup, Import Files; info rows in grey) on iPhone and Duo.
+  - Boards are now checked by rendering (owner allowed it); fonts fall back on Linux, so SF/New York aren't exact.
+
 ## Morning note (fill in at the end)
 **2026-10-27, cloud session.** Everything in the queue is done and published.
 - **Direction:** owner saw three directions (Direction page) and picked a mix, drawn as "Your mix": generated covers with a background letter and tags under them (A), the gradient Resume card with ring and chapter bars on Home and Work Detail (B + C), B's Work Detail, C's gradients. The rules are on the "Kudos design rules" board (Symbols & components page).
