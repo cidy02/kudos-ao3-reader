@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sepia, Dark and OLED</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 1400px; height: 2880px; box-sizing: border-box; padding: 56px 64px; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; display: flex; flex-direction: column; gap: 36px">
+  <header style="display: flex; flex-direction: column; gap: 8px; max-width: 1100px">
+    <h1 style="margin: 0; font-size: 40px; line-height: 48px; font-weight: 700">Sepia, Dark and OLED</h1>
+    <p style="margin: 0; font-size: 18px; line-height: 26px; color: #3A3A3C">Every theme has the same two levels as Light: a canvas and one kind of surface on it. Sepia is paper because the reader chose it; the generated covers and the Resume card keep their colour in every theme. Light is every other board on this canvas.</p>
+  </header>
+
+  <sc-for list="{{rows}}" as="row" hint-placeholder-count="3">
+    <section style="display: flex; flex-direction: column; gap: 12px">
+      <h2 style="margin: 0; font-size: 22px; line-height: 28px; font-weight: 700">{{row.title}}</h2>
+      <div style="display: flex; gap: 48px">
+        <sc-for list="{{row.themes}}" as="t" hint-placeholder-count="3">
+          <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px">
+            <figcaption style="font-size: 15px; line-height: 20px; font-weight: 600; color: #6C6C70">{{t.name}}</figcaption>
+            <div style="position: relative; width: 390px; height: 760px; border-radius: 44px; overflow: hidden; background: {{t.plain}}; color: {{t.ink}}; box-shadow: 0 0 0 1px rgba(0,0,0,0.12), 0 20px 50px rgba(0,0,0,0.10)">
+
+              <sc-if value="{{row.isHome}}" hint-placeholder-val="{{true}}">
+                <div style="position: absolute; right: 16px; top: 54px; height: 44px; padding: 0 18px; border-radius: 22px; background: {{t.glass}}; box-shadow: 0 6px 20px rgba(0,0,0,0.12), 0 0 0 0.5px {{t.sep}}; font-size: 17px; line-height: 44px; color: {{t.ink}}">Select</div>
+                <div style="padding: 106px 16px 0; display: flex; flex-direction: column; gap: 22px">
+                  <div style="display: flex; flex-direction: column; gap: 2px">
+                    <span style="font-size: 34px; line-height: 41px; font-weight: 700; letter-spacing: 0.4px">Home</span>
+                    <span style="font-size: 15px; line-height: 20px; color: {{t.ink2}}"><span style="font-weight: 600; color: {{t.ink}}">4 h 10 m</span> this week · <span style="font-weight: 600; color: {{t.ink}}">9-day</span> streak ›</span>
+                  </div>
+                  <dc-import name="ResumeCard" variant="home" accent="#990000" hint-size="358px,280px"></dc-import>
+                  <div style="display: flex; flex-direction: column; gap: 10px">
+                    <div style="display: flex; align-items: baseline; justify-content: space-between"><span style="font-size: 20px; line-height: 25px; font-weight: 700">Reading Now</span><span style="font-size: 17px; color: {{t.link}}">See All</span></div>
+                    <div style="display: flex; gap: 12px; margin-right: -16px; overflow: hidden">
+                      <sc-for list="{{covers}}" as="w" hint-placeholder-count="3">
+                        <dc-import name="CoverCard" work="{{w}}" width="120" theme="{{t.compTheme}}" accent="#990000" hint-size="120px,250px"></dc-import>
+                      </sc-for>
+                    </div>
+                  </div>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{row.isDetail}}" hint-placeholder-val="{{false}}">
+                <div aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 0; height: 380px; background: {{t.wash}}"></div>
+                <div style="position: absolute; left: 16px; right: 16px; top: 54px; display: flex; justify-content: space-between">
+                  <span aria-hidden="true" style="width: 44px; height: 44px; border-radius: 22px; background: {{t.glass}}; box-shadow: 0 6px 20px rgba(0,0,0,0.12), 0 0 0 0.5px {{t.sep}}; display: flex; align-items: center; justify-content: center; color: {{t.ink}}"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg></span>
+                  <span aria-hidden="true" style="width: 138px; height: 44px; border-radius: 22px; background: {{t.glass}}; box-shadow: 0 6px 20px rgba(0,0,0,0.12), 0 0 0 0.5px {{t.sep}}; display: flex; align-items: center; justify-content: space-around; color: {{t.ink}}">
+                    <svg width="21" height="21" viewBox="0 0 24 24" fill="{{t.link}}"><path d="M12 20s-7.5-4.6-7.5-10.2A4.2 4.2 0 0 1 12 7.2a4.2 4.2 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20z"></path></svg>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M7 4h10v16l-5-4-5 4z"></path></svg>
+                    <svg width="20" height="20" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.7" fill="currentColor"></circle><circle cx="12" cy="12" r="1.7" fill="currentColor"></circle><circle cx="18.5" cy="12" r="1.7" fill="currentColor"></circle></svg>
+                  </span>
+                </div>
+                <div style="position: relative; padding: 108px 16px 0; display: flex; flex-direction: column; gap: 14px">
+                  <div style="display: flex; flex-direction: column; gap: 6px">
+                    <span style="font-size: 13px; line-height: 18px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; color: {{t.kicker}}">Original Work</span>
+                    <span aria-hidden="true" style="width: 16px; height: 2px; border-radius: 1px; background: {{t.kicker}}"></span>
+                  </div>
+                  <div style="display: flex; flex-direction: column; gap: 2px">
+                    <span style="font-size: 34px; line-height: 41px; font-weight: 700; letter-spacing: 0.4px">The Cartographer’s Daughter</span>
+                    <span style="font-size: 17px; line-height: 22px; color: {{t.link}}">inkwell_moth</span>
+                  </div>
+                  <dc-import name="Symbols" variant="inline" rating="T" category="FM" warnings="none" status="wip" size="20" theme="{{t.compTheme}}" hint-size="358px,20px"></dc-import>
+                  <dc-import name="ResumeCard" variant="detail" accent="#990000" hint-size="358px,330px"></dc-import>
+                  <div style="background: {{t.card}}; border-radius: 16px; padding: 14px 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 14px">
+                    <sc-for list="{{stats}}" as="s" hint-placeholder-count="6">
+                      <div style="display: flex; flex-direction: column; align-items: center; gap: 2px">
+                        <span style="font-size: 11px; line-height: 13px; font-weight: 600; letter-spacing: 0.4px; text-transform: uppercase; color: {{t.ink2}}">{{s.label}}</span>
+                        <span style="font-family: 'SF Pro Rounded', -apple-system, system-ui, sans-serif; font-size: 17px; line-height: 22px; font-weight: 700">{{s.value}}</span>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{row.isReader}}" hint-placeholder-val="{{false}}">
+                <div style="position: absolute; inset: 0; background: {{t.page}}; color: {{t.pageInk}}">
+                  <div style="position: absolute; left: 16px; right: 16px; top: 54px; display: flex; justify-content: space-between">
+                    <span aria-hidden="true" style="width: 44px; height: 44px; border-radius: 22px; background: {{t.paperGlass}}; box-shadow: 0 6px 20px rgba(0,0,0,0.12), 0 0 0 0.5px {{t.sep}}; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"></path></svg></span>
+                    <span aria-hidden="true" style="width: 92px; height: 44px; border-radius: 22px; background: {{t.paperGlass}}; box-shadow: 0 6px 20px rgba(0,0,0,0.12), 0 0 0 0.5px {{t.sep}}; display: flex; align-items: center; justify-content: space-around; font-size: 17px; font-weight: 500">Aa<svg width="20" height="20" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.7" fill="currentColor"></circle><circle cx="12" cy="12" r="1.7" fill="currentColor"></circle><circle cx="18.5" cy="12" r="1.7" fill="currentColor"></circle></svg></span>
+                  </div>
+                  <div style="padding: 124px 30px 0; font-family: 'New York', 'Iowan Old Style', Georgia, serif">
+                    <p style="margin: 0 0 6px; font-family: -apple-system, system-ui, sans-serif; font-size: 15px; line-height: 20px; font-weight: 500; color: {{t.pageInk2}}">Chapter 7</p>
+                    <p style="margin: 0 0 20px; font-size: 28px; line-height: 34px; font-weight: 600">The Salt Road</p>
+                    <p style="margin: 0; font-size: 19px; line-height: 29px">The road to the coast had not been mapped in forty years, and Elinor suspected her mother had liked it that way.</p>
+                    <p style="margin: 0; font-size: 19px; line-height: 29px; text-indent: 1.3em">She walked it anyway, with the brass compass knocking against her hip and a roll of blank vellum under one arm. Every mile she paused, sighted the dunes, and drew what she saw.</p>
+                  </div>
+                  <div style="position: absolute; left: 16px; right: 16px; bottom: 28px; border-radius: 30px; padding: 10px 8px 6px; background: {{t.paperGlass}}; box-shadow: 0 8px 28px rgba(0,0,0,0.14), 0 0 0 0.5px {{t.sep}}; display: flex; flex-direction: column; gap: 4px">
+                    <div style="padding: 0 10px; display: flex; gap: 6px; align-items: baseline"><span style="font-size: 14px; font-weight: 600">The Cartographer’s Daughter</span><span style="font-size: 13px; color: {{t.pageInk2}}">Ch 7 of 20</span></div>
+                    <div style="display: flex; align-items: center; gap: 4px">
+                      <span aria-hidden="true" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"></path></svg></span>
+                      <span aria-hidden="true" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M7 4h10v16l-5-4-5 4z"></path></svg></span>
+                      <div style="flex: 1; display: flex; flex-direction: column; gap: 4px">
+                        <div style="position: relative; height: 4px; border-radius: 2px; background: {{t.track}}"><div style="width: 22%; height: 4px; border-radius: 2px; background: {{t.pageInk}}"></div><span style="position: absolute; left: 22%; top: -6px; width: 16px; height: 16px; margin-left: -8px; border-radius: 8px; background: #FFFFFF; box-shadow: 0 1px 4px rgba(0,0,0,0.3)"></span></div>
+                        <span style="font-size: 11px; text-align: center; color: {{t.pageInk2}}">Page 4 of 18 · 21 min left</span>
+                      </div>
+                      <span aria-hidden="true" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"></path><path d="M15.5 9a4.5 4.5 0 0 1 0 6"></path><path d="M18 6.5a8 8 0 0 1 0 11"></path></svg></span>
+                    </div>
+                  </div>
+                </div>
+              </sc-if>
+            </div>
+          </figure>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1400,"height":2880}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const wash = (rgb, a) => 'linear-gradient(to bottom, rgba(' + rgb + ',' + a[0] + '), rgba(' + rgb + ',' + a[1] + ') 35%, rgba(' + rgb + ',' + a[2] + ') 65%, rgba(' + rgb + ',0))';
+    const themes = [
+      { name: 'Sepia', compTheme: 'sepia', plain: '#FBF0D9', card: '#F1E3C5', ink: '#2E241B', ink2: '#6B645A', sep: 'rgba(60,40,10,0.14)', glass: 'rgba(251,240,217,0.80)', link: '#990000', kicker: 'hsl(188, 43%, 30%)', wash: wash('37,119,132', [0.14, 0.10, 0.05]), page: '#FBF0D9', pageInk: '#5B4636', pageInk2: '#7A6A58', paperGlass: 'rgba(251,240,217,0.82)', track: 'rgba(60,40,10,0.16)' },
+      { name: 'Dark', compTheme: 'dark', plain: '#16161B', card: '#222228', ink: '#F2F2F7', ink2: '#AEAEB2', sep: 'rgba(255,255,255,0.10)', glass: 'rgba(44,44,50,0.78)', link: '#FF7A70', kicker: 'hsl(188, 60%, 65%)', wash: wash('37,119,132', [0.36, 0.24, 0.12]), page: '#16161B', pageInk: '#CFCFD4', pageInk2: '#9A9AA2', paperGlass: 'rgba(44,44,50,0.80)', track: 'rgba(255,255,255,0.18)' },
+      { name: 'OLED', compTheme: 'dark', plain: '#000000', card: '#1C1C1E', ink: '#F2F2F7', ink2: '#AEAEB2', sep: 'rgba(255,255,255,0.10)', glass: 'rgba(36,36,38,0.80)', link: '#FF7A70', kicker: 'hsl(188, 60%, 65%)', wash: wash('37,119,132', [0.40, 0.28, 0.14]), page: '#000000', pageInk: '#CFCFD4', pageInk2: '#9A9AA2', paperGlass: 'rgba(36,36,38,0.82)', track: 'rgba(255,255,255,0.18)' }
+    ];
+    return {
+      rows: [
+        { title: 'Home', isHome: true, isDetail: false, isReader: false, themes },
+        { title: 'Work Detail', isHome: false, isDetail: true, isReader: false, themes },
+        { title: 'Reader', isHome: false, isDetail: false, isReader: true, themes }
+      ],
+      covers: [
+        { title: 'Salt & Starlight', author: 'wrenfield', fandom: 'Original Work', rating: 'M', category: 'Gen', warnings: 'undisclosed', status: 'wip', meta: 'Ch 12 of 30 · 40%', progress: 40, badge: '+3' },
+        { title: 'Whatever Remains', author: 'fogandlamplight', fandom: 'Sherlock Holmes', rating: 'E', category: 'MM', warnings: 'present', status: 'complete', hidden: true },
+        { title: 'Letters Never Sent', author: 'marginalia', fandom: 'Persuasion', rating: 'T', category: 'FM', warnings: 'none', status: 'complete', meta: 'Ch 3 of 4 · 50%', progress: 50 }
+      ],
+      stats: [
+        { label: 'Words', value: '84,210' }, { label: 'Chapters', value: '12/20' }, { label: 'Kudos', value: '♥ 3,104' },
+        { label: 'Hits', value: '41.2k' }, { label: 'Comments', value: '286' }, { label: 'Bookmarks', value: '512' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

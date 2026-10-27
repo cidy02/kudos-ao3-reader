@@ -128,6 +128,13 @@ class Component extends DCLogic {
       flowWrite: ['Flow-Write.dc.html', 'Flow · write and post'],
       flowFirst: ['Flow-FirstLaunch.dc.html', 'Flow · first launch'],
       flowDuo: ['Flow-Duo.dc.html', 'Flow · Duo unfolding'],
+      direction: ['Direction.dc.html', 'Direction · three ways'],
+      mix: ['Direction-Mix.dc.html', 'Your mix'],
+      rules: ['Rules.dc.html', 'Kudos design rules'],
+      android: ['Android.dc.html', 'Android'],
+      themes: ['Themes.dc.html', 'Sepia, Dark and OLED'],
+      ax5: ['AX5.dc.html', 'Largest text sizes'],
+      resumeCard: ['ResumeCard.dc.html', 'Resume card'],
       loading: ['States-Loading.dc.html', 'States · loading'],
       empty: ['States-Empty.dc.html', 'States · empty'],
       error: ['States-Error.dc.html', 'States · errors, offline'],
@@ -290,7 +297,7 @@ class Component extends DCLogic {
         ['Open Home', 'Sidebar tabs; resume hero beside the next work; shelves as grids', 'duoHome'],
         ['Open Library', 'Sidebar, list and detail side by side', 'duoLibrary'],
         ['Open Search', 'Results beside an inspector with every AO3 filter', 'duoSearch'],
-        ['Open Work Detail', 'Two regions, like an album page: cover, tags and stats beside summary and chapters', 'duoDetail'],
+        ['Open Work Detail', 'Two panes: identity, tags, the Resume card and stats beside summary, tags, Series and My copy', 'duoDetail'],
         ['Open Account', 'Account list beside the selected item, such as the Inbox', 'duoAccount'],
         ['Open Settings', 'Categories beside the selected pane, like the iPad Settings app', 'duoSettings'],
         ['Two-page reader', 'Unfolded flat, the book opens to a spread', 'duoReader'],
@@ -298,7 +305,16 @@ class Component extends DCLogic {
         ['Book pose comments', "Read on one side, the chapter's comments on the other", 'duoComments'],
         ['Book pose Home', 'Resume on one side, the next work on the other; shelves page whole cards', 'duoBookHome'],
         ['Open portrait', 'Browse with the tab bar at the bottom and two-column grids', 'duoBrowse'],
-        ['Shelf cards without covers', 'Generated cover or text card; the owner picks', 'shelfOptions']
+        ['Shelf cards without covers', 'Decided: generated covers (fandom gradient, title, background letter), tags under the cover', 'mix']
+      ]],
+      ['Direction, rules and other platforms', [
+        ['Three directions', 'The page you stopped on, the shape of the work, sections with shapes', 'direction'],
+        ['The chosen mix', 'Covers with a background letter, the gradient Resume card, chapter bars, Work Detail', 'mix'],
+        ['Design rules', 'Colour jobs, two backgrounds, the wash rule, type, 16 pt shape, the parts', 'rules'],
+        ['Resume card', 'Home, Work Detail and Up Next variants; your place in a work', 'resumeCard'],
+        ['Android', 'Home, Work Detail, Reader in Material 3 with the same parts', 'android'],
+        ['Themes', 'Sepia, Dark and OLED with two background levels each', 'themes'],
+        ['Largest text', 'AX5 work row and Work Detail: stacked, no truncation', 'ax5']
       ]],
       ['Key journeys (storyboards)', [
         ['Find and read', 'Search → Work Detail → Reader → The End → Home', 'flowFind'],

@@ -12,7 +12,7 @@
 body{margin:0}
 </style>
 </helmet>
-<div role="img" aria-label="{{aria}}" style="display: {{display}}; grid-template-columns: {{cols}}; flex-wrap: wrap; gap: {{gap}}px; align-items: center; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif; color: #1C1C1E">
+<div role="img" aria-label="{{aria}}" style="display: {{display}}; grid-template-columns: {{cols}}; flex-wrap: wrap; gap: {{gap}}px; align-items: center; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif; color: {{ink}}">
   <sc-for list="{{tiles}}" as="t" hint-placeholder-count="4">
     <div aria-hidden="true" style="display: flex; align-items: center; gap: {{labelGap}}px; padding: {{chipPad}}; border-radius: 999px; background: {{chipBg}}">
       <div style="width: {{size}}px; height: {{size}}px; flex-shrink: 0; position: relative; overflow: hidden; border-radius: {{radius}}px; background: {{t.bg}}; box-shadow: {{t.shadow}}; display: flex; align-items: center; justify-content: center">
@@ -36,13 +36,13 @@ body{margin:0}
         </sc-if>
       </div>
       <sc-if value="{{showLabels}}" hint-placeholder-val="{{false}}">
-        <span style="font-size: {{labelSize}}px; line-height: 1.2; font-weight: 600; white-space: nowrap">{{t.label}}<span style="font-weight: 500; color: #6C6C70">{{t.detail}}</span></span>
+        <span style="font-size: {{labelSize}}px; line-height: 1.2; font-weight: 600; white-space: nowrap">{{t.label}}<span style="font-weight: 500; color: {{ink2}}">{{t.detail}}</span></span>
       </sc-if>
     </div>
   </sc-for>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"rating":{"editor":"enum","options":["G","T","M","E","NR"],"default":"T"},"category":{"editor":"enum","options":["FF","FM","MM","Gen","Multi","Other","NA"],"default":"FM"},"warnings":{"editor":"enum","options":["none","undisclosed","present"],"default":"none"},"status":{"editor":"enum","options":["complete","wip","unknown"],"default":"wip"},"variant":{"editor":"enum","options":["grid","strip","labeled","inline"],"default":"grid"},"size":{"editor":"int","default":40,"min":10,"max":64},"only":{"editor":"enum","options":["all","rating","category","warnings","status"],"default":"all"},"warningCount":{"editor":null,"default":1},"chapters":{"editor":null,"default":""},"$preview":{"width":84,"height":84}}'>
+<script type="text/x-dc" data-dc-script data-props='{"rating":{"editor":"enum","options":["G","T","M","E","NR"],"default":"T"},"category":{"editor":"enum","options":["FF","FM","MM","Gen","Multi","Other","NA"],"default":"FM"},"warnings":{"editor":"enum","options":["none","undisclosed","present"],"default":"none"},"status":{"editor":"enum","options":["complete","wip","unknown"],"default":"wip"},"variant":{"editor":"enum","options":["grid","strip","labeled","inline"],"default":"grid"},"size":{"editor":"int","default":40,"min":10,"max":64},"only":{"editor":"enum","options":["all","rating","category","warnings","status"],"default":"all"},"warningCount":{"editor":null,"default":1},"chapters":{"editor":null,"default":""},"theme":{"editor":"enum","options":["light","sepia","dark"],"default":"light"},"$preview":{"width":84,"height":84}}'>
 class Component extends DCLogic {
   renderVals() {
     const s = Math.max(10, Number(this.props.size ?? 40));
@@ -106,6 +106,8 @@ class Component extends DCLogic {
     const only = { rating: 0, category: 1, warnings: 2, status: 3 }[this.props.only ?? 'all'];
     const gap = inline ? 10 : (showLabels ? 8 : Math.max(2, Math.round(s * 0.12)));
     return {
+      ink: { dark: '#F2F2F7', sepia: '#3B2F25' }[this.props.theme] || '#1C1C1E',
+      ink2: { dark: '#AEAEB2', sepia: '#6B645A' }[this.props.theme] || '#6C6C70',
       tiles: only === undefined ? tiles : [tiles[only]],
       size: s,
       radius: Math.round(s * 0.24),
