@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Kudos design rules</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1280px; height: 1640px; box-sizing: border-box; padding: 64px; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; display: flex; flex-direction: column; gap: 40px">
+  <header style="display: flex; flex-direction: column; gap: 8px; max-width: 900px">
+    <h1 style="margin: 0; font-size: 44px; line-height: 52px; font-weight: 700">Kudos design rules</h1>
+    <p style="margin: 0; font-size: 19px; line-height: 27px; color: #3A3A3C">The rules behind every board, from the direction you chose. Each one exists so a screen has a clear front and back: a calm canvas, one kind of surface on it, and colour that only appears when it means something.</p>
+  </header>
+
+  <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 32px">
+    <section style="display: flex; flex-direction: column; gap: 14px">
+      <h2 style="margin: 0; font-size: 22px; line-height: 28px; font-weight: 700">Colour has a job</h2>
+      <div style="display: flex; gap: 12px; align-items: flex-start">
+        <span aria-hidden="true" style="width: 44px; height: 44px; flex-shrink: 0; border-radius: 22px; background: #990000"></span>
+        <div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 17px; line-height: 22px; font-weight: 600">App colour</span><span style="font-size: 15px; line-height: 21px; color: #3A3A3C">Everything you tap (buttons, links, the tab bar, toolbars, toggles) and states about you: progress, kudos given, new chapters. One colour, from Settings › Appearance.</span></div>
+      </div>
+      <div style="display: flex; gap: 12px; align-items: flex-start">
+        <span aria-hidden="true" style="width: 44px; height: 44px; flex-shrink: 0; border-radius: 22px; background: linear-gradient(155deg, hsl(188, 46%, 27%), hsl(210, 50%, 41%))"></span>
+        <div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 17px; line-height: 22px; font-weight: 600">Fandom colour</span><span style="font-size: 15px; line-height: 21px; color: #3A3A3C">Identity only: generated covers, the Resume card, the fandom label above a title, and the wash on a work’s or fandom’s own page. Never on a button.</span></div>
+      </div>
+      <div style="display: flex; gap: 12px; align-items: flex-start">
+        <span aria-hidden="true" style="width: 44px; height: 44px; flex-shrink: 0; border-radius: 12px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px; overflow: hidden"><span style="background: #F5C400"></span><span style="background: #B3127A"></span><span style="background: #E6E6EB"></span><span style="background: #FFE6C2"></span></span>
+        <div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 17px; line-height: 22px; font-weight: 600">Tag colours</span><span style="font-size: 15px; line-height: 21px; color: #3A3A3C">AO3’s own palette, only inside the four tags (rating, category, warnings, status). Nowhere else.</span></div>
+      </div>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 14px">
+      <h2 style="margin: 0; font-size: 22px; line-height: 28px; font-weight: 700">Two backgrounds</h2>
+      <p style="margin: 0; font-size: 15px; line-height: 21px; color: #3A3A3C"><span style="font-weight: 600; color: #000000">Plain</span> for content: Home, shelves, Work Detail, Search, Browse, the reader. <span style="font-weight: 600; color: #000000">Grouped</span> for lists, settings, forms and sheets, with sections on it like the Settings app. No custom paper, texture or gradient behind the app.</p>
+      <div style="display: grid; grid-template-columns: 64px repeat(3, minmax(0, 1fr)); gap: 6px 8px; align-items: center; font-size: 13px; line-height: 18px">
+        <span></span><span style="color: #6C6C70">Plain</span><span style="color: #6C6C70">Grouped</span><span style="color: #6C6C70">Section</span>
+        <sc-for list="{{themes}}" as="t" hint-placeholder-count="4">
+          <span style="font-weight: 600">{{t.name}}</span>
+          <span style="height: 34px; border-radius: 8px; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.12); background: {{t.plain}}; color: {{t.ink}}; font-size: 11px; line-height: 34px; padding-left: 8px">{{t.plain}}</span>
+          <span style="height: 34px; border-radius: 8px; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.12); background: {{t.grouped}}; color: {{t.ink}}; font-size: 11px; line-height: 34px; padding-left: 8px">{{t.grouped}}</span>
+          <span style="height: 34px; border-radius: 8px; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.12); background: {{t.section}}; color: {{t.ink}}; font-size: 11px; line-height: 34px; padding-left: 8px">{{t.section}}</span>
+        </sc-for>
+      </div>
+      <p style="margin: 0; font-size: 13px; line-height: 18px; color: #6C6C70">Sepia is the reader’s choice of warmth, with the reader’s own paper colours. Dark and OLED values are confirmed in the variants pass (item 9).</p>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 14px">
+      <h2 style="margin: 0; font-size: 22px; line-height: 28px; font-weight: 700">Whose page is this?</h2>
+      <div style="display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; border-radius: 16px; background: linear-gradient(to bottom, rgba(37,119,132,0.20), rgba(37,119,132,0.04))">
+        <span style="font-size: 17px; line-height: 22px; font-weight: 600">A work’s or a fandom’s</span>
+        <span style="font-size: 15px; line-height: 21px; color: #3A3A3C">Work Detail, a fandom’s works, Author, Series: the wash, in that colour, does the job of a cover. It fades as you scroll and the large title shrinks into the bar.</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; border-radius: 16px; background: #F2F2F7">
+        <span style="font-size: 17px; line-height: 22px; font-weight: 600">Yours, or the app’s</span>
+        <span style="font-size: 15px; line-height: 21px; color: #3A3A3C">Home, Library, Account, queues, Settings, editors, sheets: no wash. On Home the Resume card carries the colour instead.</span>
+      </div>
+    </section>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 32px">
+    <section style="display: flex; flex-direction: column; gap: 10px">
+      <h2 style="margin: 0; font-size: 22px; line-height: 28px; font-weight: 700">Type: the system’s styles</h2>
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px"><span style="font-size: 34px; line-height: 41px; font-weight: 700">Large Title</span><span style="font-size: 13px; color: #6C6C70">screen titles</span></div>
+        <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px"><span style="font-size: 20px; line-height: 25px; font-weight: 700">Title 3, bold</span><span style="font-size: 13px; color: #6C6C70">section headers</span></div>
+        <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px"><span style="font-size: 17px; line-height: 22px; font-weight: 600">Headline</span><span style="font-size: 13px; color: #6C6C70">work titles in rows</span></div>
+        <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px"><span style="font-size: 17px; line-height: 22px">Body</span><span style="font-size: 13px; color: #6C6C70">summaries, rows</span></div>
+        <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px"><span style="font-size: 15px; line-height: 20px; color: #3A3A3C">Subheadline</span><span style="font-size: 13px; color: #6C6C70">subtitles, links</span></div>
+        <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px"><span style="font-size: 13px; line-height: 18px; color: #6C6C70">Footnote · byline, stats, meta</span><span style="font-size: 13px; color: #6C6C70">secondary</span></div>
+        <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px"><span style="font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: 19px; line-height: 24px; font-weight: 600">New York</span><span style="font-size: 13px; color: #6C6C70">covers and the reader</span></div>
+        <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px"><span style="font-family: 'SF Pro Rounded', -apple-system, system-ui, sans-serif; font-size: 22px; line-height: 26px; font-weight: 700">58% · 4 h 10 m</span><span style="font-size: 13px; color: #6C6C70">figures</span></div>
+      </div>
+      <p style="margin: 0; font-size: 13px; line-height: 18px; color: #6C6C70">All sizes are Dynamic Type styles at the default setting, never fixed points. <span style="font-weight: 600; color: #3A3A3C">CAPITALS</span> only for the fandom label above a title and stat captions.</p>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 12px">
+      <h2 style="margin: 0; font-size: 22px; line-height: 28px; font-weight: 700">Shape and space</h2>
+      <p style="margin: 0; font-size: 15px; line-height: 21px; color: #3A3A3C"><span style="font-weight: 600; color: #000000">16 pt</span> corner radius everywhere, capsules fully round. <span style="font-weight: 600; color: #000000">16 pt</span> edge on every screen. <span style="font-weight: 600; color: #000000">Two</span> container styles:</p>
+      <div style="display: flex; gap: 12px; align-items: stretch">
+        <div style="flex: 1; display: flex; flex-direction: column; gap: 6px">
+          <div style="height: 64px; border-radius: 16px; background: #F2F2F7; display: flex; align-items: center; padding: 0 14px; font-size: 15px">Card</div>
+          <span style="font-size: 13px; line-height: 18px; color: #6C6C70">System grey on plain, white on grouped. The one gradient card per screen is your place in a work.</span>
+        </div>
+        <div style="flex: 1; display: flex; flex-direction: column; gap: 6px">
+          <div style="height: 64px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap"><span style="height: 32px; padding: 0 12px; border-radius: 16px; background: #EFEFF4; font-size: 15px; line-height: 32px">Slow Burn</span><span style="height: 32px; padding: 0 12px; border-radius: 16px; background: #EFEFF4; font-size: 15px; line-height: 32px">Fluff</span></div>
+          <span style="font-size: 13px; line-height: 18px; color: #6C6C70">Capsule chip, for tags and filters. Lists are plain rows with hairlines.</span>
+        </div>
+      </div>
+      <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap">
+        <button style="height: 44px; padding: 0 22px; border: none; border-radius: 22px; background: #990000; color: #FFFFFF; font-family: inherit; font-size: 17px; font-weight: 600">Resume</button>
+        <button aria-label="Read aloud" style="width: 44px; height: 44px; border: none; border-radius: 22px; background: rgba(153,0,0,0.10); color: #990000; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"></path><path d="M15.5 9a4.5 4.5 0 0 1 0 6"></path><path d="M18 6.5a8 8 0 0 1 0 11"></path></svg></button>
+        <span style="height: 52px; padding: 0 4px 0 10px; border-radius: 26px; background: linear-gradient(155deg, hsl(188, 46%, 27%), hsl(210, 50%, 41%)); display: flex; align-items: center"><button style="height: 40px; padding: 0 18px; border: none; border-radius: 20px; background: #FFFFFF; color: #990000; font-family: inherit; font-size: 16px; font-weight: 600">Resume</button></span>
+      </div>
+      <span style="font-size: 13px; line-height: 18px; color: #6C6C70">One main button: the filled capsule. Secondary: a tinted circle. On a gradient: a white capsule with the app-colour label.</span>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 12px">
+      <h2 style="margin: 0; font-size: 22px; line-height: 28px; font-weight: 700">Let iOS do it</h2>
+      <ul style="margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; font-size: 15px; line-height: 21px; color: #3A3A3C">
+        <li>The system navigation bar: large titles shrink into it, content softens under it.</li>
+        <li>Liquid Glass only on navigation: the tab bar, toolbars, the Read Aloud accessory.</li>
+        <li>Sheets with grabbers, standard menus and context menus, swipe actions.</li>
+        <li>SF Symbols for every icon; Dynamic Type for every size.</li>
+        <li>No instructions written on the page (“Tap a tag to…”): controls explain themselves.</li>
+        <li>“Tap to reveal” blur on mature works, everywhere a work appears.</li>
+      </ul>
+    </section>
+  </div>
+
+  <section style="display: flex; flex-direction: column; gap: 16px">
+    <h2 style="margin: 0; font-size: 22px; line-height: 28px; font-weight: 700">The parts</h2>
+    <div style="display: flex; gap: 40px; align-items: flex-start">
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <dc-import name="ResumeCard" variant="home" hint-size="358px,280px"></dc-import>
+        <span style="font-size: 13px; line-height: 18px; color: #6C6C70; max-width: 358px">Resume card: your place in a work. Home uses this variant, Work Detail the one with the legend and Resume Chapter.</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <div style="display: flex; gap: 12px">
+          <sc-for list="{{covers}}" as="w" hint-placeholder-count="4">
+            <dc-import name="CoverCard" work="{{w}}" width="120" accent="#990000" hint-size="120px,250px"></dc-import>
+          </sc-for>
+        </div>
+        <span style="font-size: 13px; line-height: 18px; color: #6C6C70; max-width: 540px">Generated covers: the fandom picks the colour family, the title picks the shade and where the letter and title sit, so a work always looks the same and two works never match. Tags under every cover.</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 14px">
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <dc-import name="Symbols" variant="inline" rating="T" category="FM" warnings="none" status="wip" size="20" hint-size="300px,20px"></dc-import>
+          <span style="font-size: 13px; line-height: 18px; color: #6C6C70">Inline: Work Detail and heroes, one line.</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <dc-import name="Symbols" variant="strip" rating="M" category="Gen" warnings="undisclosed" status="wip" size="26" hint-size="113px,26px"></dc-import>
+          <span style="font-size: 13px; line-height: 18px; color: #6C6C70">Strip: under covers.</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <dc-import name="Symbols" variant="grid" rating="E" category="MM" warnings="present" status="complete" size="24" hint-size="51px,51px"></dc-import>
+          <span style="font-size: 13px; line-height: 18px; color: #6C6C70">Grid: leads every row.</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <dc-import name="Symbols" variant="labeled" only="rating" rating="G" size="20" hint-size="110px,28px"></dc-import>
+          <span style="font-size: 13px; line-height: 18px; color: #6C6C70">Labeled chips: filters only.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1640}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      themes: [
+        { name: 'Light', plain: '#FFFFFF', grouped: '#F2F2F7', section: '#FFFFFF', ink: '#3A3A3C' },
+        { name: 'Sepia', plain: '#FBF0D9', grouped: '#ECDEC1', section: '#FBF0D9', ink: '#5B4636' },
+        { name: 'Dark', plain: '#1C1C1E', grouped: '#1C1C1E', section: '#2C2C2E', ink: '#EBEBF0' },
+        { name: 'OLED', plain: '#000000', grouped: '#000000', section: '#1C1C1E', ink: '#EBEBF0' }
+      ],
+      covers: [
+        { title: 'Salt & Starlight', author: 'wrenfield', fandom: 'Original Work', rating: 'M', category: 'Gen', warnings: 'undisclosed', status: 'wip', meta: 'Ch 12 of 30 · 40%', progress: 40, badge: '+3' },
+        { title: 'Letters Never Sent', author: 'marginalia', fandom: 'Persuasion', rating: 'T', category: 'FM', warnings: 'none', status: 'complete', meta: 'Ch 3 of 4 · 50%', progress: 50 },
+        { title: 'Moor and Mist', author: 'brontebird', fandom: 'Jane Eyre', rating: 'M', category: 'FM', warnings: 'undisclosed', status: 'complete', meta: 'Ch 11 of 18 · 61%', progress: 61 },
+        { title: 'Whatever Remains', author: 'fogandlamplight', fandom: 'Sherlock Holmes', rating: 'E', category: 'MM', warnings: 'present', status: 'complete', hidden: true }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

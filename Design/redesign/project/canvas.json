@@ -1,146 +1,984 @@
 {
   "v": 3,
-  "createdOnFiles": {"v": 1, "at": "2026-10-25T12:00:00Z"},
-  "title": "Kudos for iPhone Duo",
-  "launch": {"view": "canvas", "page": "direction"},
-  "pages": [
-    {"id": "direction", "name": "Direction"},
-    {"id": "iphone", "name": "iPhone"},
-    {"id": "duo", "name": "iPhone Duo"},
-    {"id": "states", "name": "States & system"},
-    {"id": "structure", "name": "Structure & flows"},
-    {"id": "system", "name": "Symbols & components"},
-    {"id": "coverage", "name": "Feature coverage"}
-  ],
+  "attachments": {},
   "boards": {
-    "Direction.dc.html": {"x": 0, "y": 0, "w": 2700, "h": 2700, "title": "Direction · pick one, or mix", "page": "direction"},
-    "Direction-Mix.dc.html": {"x": 2780, "y": 0, "w": 1500, "h": 1640, "title": "Your mix · confirm before it goes everywhere", "page": "direction"},
-
-    "Main.dc.html": {"x": 0, "y": 0, "w": 390, "h": 1960, "title": "Home", "page": "iphone"},
-    "Library.dc.html": {"x": 470, "y": 0, "w": 390, "h": 1980, "title": "Library", "page": "iphone"},
-    "Library-Section.dc.html": {"x": 940, "y": 0, "w": 390, "h": 844, "title": "Library · Reading History, swipe actions", "page": "iphone"},
-    "Library-Select.dc.html": {"x": 4230, "y": 0, "w": 390, "h": 844, "title": "Library · select mode", "page": "iphone"},
-    "Library-Filters.dc.html": {"x": 1410, "y": 0, "w": 390, "h": 844, "title": "Library · filters", "page": "iphone"},
-    "Queue.dc.html": {"x": 1880, "y": 0, "w": 390, "h": 844, "title": "Reading Queue", "page": "iphone"},
-    "Queues.dc.html": {"x": 2350, "y": 0, "w": 390, "h": 844, "title": "Queues · organizer, new queue", "page": "iphone"},
-    "Collection.dc.html": {"x": 2820, "y": 0, "w": 390, "h": 844, "title": "Collection", "page": "iphone"},
-    "Insights.dc.html": {"x": 3290, "y": 0, "w": 390, "h": 844, "title": "Reading Insights", "page": "iphone"},
-    "Recently-Deleted.dc.html": {"x": 3760, "y": 0, "w": 390, "h": 844, "title": "Recently Deleted", "page": "iphone"},
-
-    "Search.dc.html": {"x": 0, "y": 2300, "w": 390, "h": 1240, "title": "Search", "page": "iphone"},
-    "Search-Filters.dc.html": {"x": 470, "y": 2300, "w": 390, "h": 1240, "title": "Search · AO3 filters", "page": "iphone"},
-    "Browse.dc.html": {"x": 940, "y": 2300, "w": 390, "h": 844, "title": "Browse", "page": "iphone"},
-    "Fandoms.dc.html": {"x": 1410, "y": 2300, "w": 390, "h": 844, "title": "Browse · fandom index", "page": "iphone"},
-    "Fandom-Works.dc.html": {"x": 1880, "y": 2300, "w": 390, "h": 844, "title": "Browse · fandom works", "page": "iphone"},
-    "AO3-Web.dc.html": {"x": 2350, "y": 2300, "w": 390, "h": 844, "title": "AO3 website", "page": "iphone"},
-
-    "iPhone-WorkDetail.dc.html": {"x": 0, "y": 3960, "w": 390, "h": 1560, "title": "Work Detail", "page": "iphone"},
-    "Work-Actions.dc.html": {"x": 470, "y": 3960, "w": 390, "h": 844, "title": "Work Detail · actions menu", "page": "iphone"},
-    "Comments.dc.html": {"x": 940, "y": 3960, "w": 390, "h": 844, "title": "Comments", "page": "iphone"},
-    "Comment-Thread.dc.html": {"x": 1410, "y": 3960, "w": 390, "h": 844, "title": "Comments · thread, reply", "page": "iphone"},
-    "Author.dc.html": {"x": 1880, "y": 3960, "w": 390, "h": 1240, "title": "Author profile", "page": "iphone"},
-    "Series.dc.html": {"x": 2350, "y": 3960, "w": 390, "h": 844, "title": "Series", "page": "iphone"},
-
-    "iPhone-Reader.dc.html": {"x": 0, "y": 5940, "w": 390, "h": 844, "title": "Reader", "page": "iphone"},
-    "Reader-Menu.dc.html": {"x": 470, "y": 5940, "w": 390, "h": 844, "title": "Reader · menu", "page": "iphone"},
-    "Reader-Contents.dc.html": {"x": 940, "y": 5940, "w": 390, "h": 844, "title": "Reader · contents, bookmarks, notes", "page": "iphone"},
-    "Reader-Find.dc.html": {"x": 1410, "y": 5940, "w": 390, "h": 844, "title": "Reader · find in work", "page": "iphone"},
-    "Reader-Highlight.dc.html": {"x": 1880, "y": 5940, "w": 390, "h": 844, "title": "Reader · highlight and note", "page": "iphone"},
-    "Reader-Settings.dc.html": {"x": 2350, "y": 5940, "w": 390, "h": 844, "title": "Reader · themes and settings", "page": "iphone"},
-    "Reader-ReadAloud.dc.html": {"x": 2820, "y": 5940, "w": 390, "h": 844, "title": "Reader · Read Aloud playing", "page": "iphone"},
-    "Read-Aloud-Settings.dc.html": {"x": 3290, "y": 5940, "w": 390, "h": 1100, "title": "Read Aloud settings", "page": "iphone"},
-
-    "Account.dc.html": {"x": 0, "y": 7460, "w": 390, "h": 1360, "title": "Account", "page": "iphone"},
-    "Account-SignedOut.dc.html": {"x": 470, "y": 7460, "w": 390, "h": 844, "title": "Account · signed out", "page": "iphone"},
-    "Login.dc.html": {"x": 940, "y": 7460, "w": 390, "h": 844, "title": "Log in to AO3", "page": "iphone"},
-    "AO3-Lists.dc.html": {"x": 1410, "y": 7460, "w": 390, "h": 844, "title": "Marked for Later · Bookmarks · History", "page": "iphone"},
-    "Subscriptions.dc.html": {"x": 1880, "y": 7460, "w": 390, "h": 844, "title": "Subscriptions", "page": "iphone"},
-    "Inbox.dc.html": {"x": 2350, "y": 7460, "w": 390, "h": 844, "title": "Inbox", "page": "iphone"},
-    "My-Works.dc.html": {"x": 2820, "y": 7460, "w": 390, "h": 844, "title": "Works · Series · Drafts", "page": "iphone"},
-    "Work-Editor.dc.html": {"x": 3290, "y": 7460, "w": 390, "h": 1500, "title": "Post or edit a work", "page": "iphone"},
-    "Text-Editor.dc.html": {"x": 3760, "y": 7460, "w": 390, "h": 844, "title": "Chapter text editor", "page": "iphone"},
-    "AO3-Collections.dc.html": {"x": 4230, "y": 7460, "w": 390, "h": 844, "title": "AO3 collections", "page": "iphone"},
-    "Challenge.dc.html": {"x": 4700, "y": 7460, "w": 390, "h": 844, "title": "Challenge", "page": "iphone"},
-
-    "Settings.dc.html": {"x": 0, "y": 9380, "w": 390, "h": 1240, "title": "Settings", "page": "iphone"},
-    "Settings-Appearance.dc.html": {"x": 470, "y": 9380, "w": 390, "h": 844, "title": "Settings · appearance and fonts", "page": "iphone"},
-    "Settings-Backup-Sync.dc.html": {"x": 940, "y": 9380, "w": 390, "h": 1100, "title": "Settings · backup, sync, import", "page": "iphone"},
-    "Settings-Storage.dc.html": {"x": 1410, "y": 9380, "w": 390, "h": 844, "title": "Settings · downloads and storage", "page": "iphone"},
-    "Privacy.dc.html": {"x": 1880, "y": 9380, "w": 390, "h": 844, "title": "Privacy and local data", "page": "iphone"},
-    "Onboarding.dc.html": {"x": 2350, "y": 9380, "w": 390, "h": 844, "title": "Welcome", "page": "iphone"},
-    "Sync-Onboarding.dc.html": {"x": 2820, "y": 9380, "w": 390, "h": 844, "title": "Protect your library", "page": "iphone"},
-    "Bug-Report.dc.html": {"x": 3290, "y": 9380, "w": 390, "h": 844, "title": "Report a bug", "page": "iphone"},
-    "About.dc.html": {"x": 3760, "y": 9380, "w": 390, "h": 844, "title": "About · What's New", "page": "iphone"},
-
-    "Duo-Cover-Home.dc.html": {"x": 0, "y": 0, "w": 466, "h": 678, "title": "Cover · Home", "page": "duo"},
-    "Duo-Cover-Reader.dc.html": {"x": 546, "y": 0, "w": 466, "h": 678, "title": "Cover · Reader", "page": "duo"},
-    "Shelf-Options.dc.html": {"x": 1552, "y": 0, "w": 920, "h": 640, "title": "Shelf cards · cover or no cover", "page": "duo"},
-    "Duo-Open-Home.dc.html": {"x": 0, "y": 1098, "w": 951, "h": 669, "title": "Open · Home", "page": "duo"},
-    "Duo-Open-Library.dc.html": {"x": 1031, "y": 1098, "w": 951, "h": 669, "title": "Open · Library", "page": "duo"},
-    "Duo-Open-Search.dc.html": {"x": 2062, "y": 1098, "w": 951, "h": 669, "title": "Open · Search with filters", "page": "duo"},
-    "Duo-Open-WorkDetail.dc.html": {"x": 3093, "y": 1098, "w": 951, "h": 669, "title": "Open · Work Detail", "page": "duo"},
-    "Duo-Open-Account.dc.html": {"x": 4124, "y": 1098, "w": 951, "h": 669, "title": "Open · Account", "page": "duo"},
-    "Duo-Open-Settings.dc.html": {"x": 5155, "y": 1098, "w": 951, "h": 669, "title": "Open · Settings", "page": "duo"},
-    "Duo-Open-Reader.dc.html": {"x": 6186, "y": 1098, "w": 951, "h": 669, "title": "Open · Reader, two-page spread", "page": "duo"},
-    "Duo-Book-Reader.dc.html": {"x": 0, "y": 2187, "w": 951, "h": 669, "title": "Book pose · Reader", "page": "duo"},
-    "Duo-Book-Comments.dc.html": {"x": 1031, "y": 2187, "w": 951, "h": 669, "title": "Book pose · Reader and Comments", "page": "duo"},
-    "Duo-Book-Home.dc.html": {"x": 2062, "y": 2187, "w": 951, "h": 669, "title": "Book pose · Home", "page": "duo"},
-    "Duo-Portrait-Browse.dc.html": {"x": 0, "y": 3276, "w": 669, "h": 951, "title": "Open portrait · Browse", "page": "duo"},
-
-    "IA-Map.dc.html": {"x": 0, "y": 0, "w": 1290, "h": 1100, "title": "Information architecture · today and proposed", "page": "structure"},
-    "Flow-Find.dc.html": {"x": 0, "y": 1220, "w": 1290, "h": 620, "title": "Flow · find and read", "page": "structure"},
-    "Flow-Resume.dc.html": {"x": 0, "y": 1960, "w": 1290, "h": 620, "title": "Flow · resume and listen", "page": "structure"},
-    "Flow-Organise.dc.html": {"x": 0, "y": 2700, "w": 1290, "h": 620, "title": "Flow · organise with queues", "page": "structure"},
-    "Flow-Kudos.dc.html": {"x": 0, "y": 3440, "w": 1290, "h": 620, "title": "Flow · kudos and comments", "page": "structure"},
-    "Flow-Write.dc.html": {"x": 0, "y": 4180, "w": 1290, "h": 620, "title": "Flow · write and post", "page": "structure"},
-    "Flow-FirstLaunch.dc.html": {"x": 0, "y": 4920, "w": 1290, "h": 620, "title": "Flow · first launch and sync", "page": "structure"},
-    "Flow-Duo.dc.html": {"x": 0, "y": 5660, "w": 1290, "h": 620, "title": "Flow · iPhone Duo unfolding", "page": "structure"},
-    "Reader-End.dc.html": {"x": 3760, "y": 5940, "w": 390, "h": 844, "title": "Reader · end of the work", "page": "iphone"},
-    "Account-Regrouped.dc.html": {"x": 5170, "y": 7460, "w": 390, "h": 1240, "title": "Account · proposed regroup", "page": "iphone"},
-    "States-Loading.dc.html": {"x": 0, "y": 0, "w": 1290, "h": 960, "title": "Loading", "page": "states"},
-    "States-Empty.dc.html": {"x": 0, "y": 1080, "w": 1290, "h": 960, "title": "Empty", "page": "states"},
-    "States-Error.dc.html": {"x": 0, "y": 2160, "w": 1290, "h": 960, "title": "Errors and offline", "page": "states"},
-    "States-Feedback.dc.html": {"x": 1410, "y": 0, "w": 1290, "h": 960, "title": "Feedback: undo, progress, import", "page": "states"},
-    "States-Confirm.dc.html": {"x": 1410, "y": 1080, "w": 1290, "h": 960, "title": "Confirmations and Face ID", "page": "states"},
-    "System-Surfaces.dc.html": {"x": 1410, "y": 2160, "w": 1290, "h": 960, "title": "Proposed: widgets, Control Center, Spotlight, Share", "page": "states"},
-
-    "Symbols-Key.dc.html": {"x": 0, "y": 0, "w": 1280, "h": 800, "title": "Symbols key", "page": "system"},
-    "Platform-Map.dc.html": {"x": 0, "y": 920, "w": 1280, "h": 1560, "title": "Native mapping · SwiftUI and Compose", "page": "system"},
-    "Symbols.dc.html": {"x": 1360, "y": 0, "w": 84, "h": 84, "title": "Symbols (component)", "page": "system"},
-    "TabBar.dc.html": {"x": 1360, "y": 164, "w": 358, "h": 62, "title": "Tab bar (component)", "page": "system"},
-    "WorkRow.dc.html": {"x": 1360, "y": 306, "w": 390, "h": 112, "title": "Work row (component)", "page": "system"},
-    "CoverCard.dc.html": {"x": 1360, "y": 498, "w": 132, "h": 310, "title": "Cover card (component)", "page": "system"},
-
-    "Coverage.dc.html": {"x": 0, "y": 0, "w": 1280, "h": 5600, "title": "Feature coverage", "page": "coverage", "expand": "fill"}
+    "AO3-Collections.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "AO3 collections",
+      "w": 390,
+      "x": 4230,
+      "y": 7460
+    },
+    "AO3-Lists.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Marked for Later · Bookmarks · History",
+      "w": 390,
+      "x": 1410,
+      "y": 7460
+    },
+    "AO3-Web.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "AO3 website",
+      "w": 390,
+      "x": 2350,
+      "y": 2300
+    },
+    "About.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "About · What's New",
+      "w": 390,
+      "x": 3760,
+      "y": 9380
+    },
+    "Account-Regrouped.dc.html": {
+      "h": 1240,
+      "page": "iphone",
+      "title": "Account · proposed regroup",
+      "w": 390,
+      "x": 5170,
+      "y": 7460
+    },
+    "Account-SignedOut.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Account · signed out",
+      "w": 390,
+      "x": 470,
+      "y": 7460
+    },
+    "Account.dc.html": {
+      "h": 1360,
+      "page": "iphone",
+      "title": "Account",
+      "w": 390,
+      "x": 0,
+      "y": 7460
+    },
+    "Author.dc.html": {
+      "h": 1240,
+      "page": "iphone",
+      "title": "Author profile",
+      "w": 390,
+      "x": 1880,
+      "y": 3960
+    },
+    "Browse.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Browse",
+      "w": 390,
+      "x": 940,
+      "y": 2300
+    },
+    "Bug-Report.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Report a bug",
+      "w": 390,
+      "x": 3290,
+      "y": 9380
+    },
+    "Challenge.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Challenge",
+      "w": 390,
+      "x": 4700,
+      "y": 7460
+    },
+    "Collection.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Collection",
+      "w": 390,
+      "x": 2820,
+      "y": 0
+    },
+    "Comment-Thread.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Comments · thread, reply",
+      "w": 390,
+      "x": 1410,
+      "y": 3960
+    },
+    "Comments.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Comments",
+      "w": 390,
+      "x": 940,
+      "y": 3960
+    },
+    "CoverCard.dc.html": {
+      "h": 310,
+      "page": "system",
+      "title": "Cover card (component)",
+      "w": 132,
+      "x": 1360,
+      "y": 498
+    },
+    "Coverage.dc.html": {
+      "expand": "fill",
+      "h": 5600,
+      "page": "coverage",
+      "title": "Feature coverage",
+      "w": 1280,
+      "x": 0,
+      "y": 0
+    },
+    "Direction-Mix.dc.html": {
+      "h": 1640,
+      "page": "direction",
+      "title": "Your mix · confirm before it goes everywhere",
+      "w": 1500,
+      "x": 2780,
+      "y": 0
+    },
+    "Direction.dc.html": {
+      "h": 2700,
+      "page": "direction",
+      "title": "Direction · pick one, or mix",
+      "w": 2700,
+      "x": 0,
+      "y": 0
+    },
+    "Duo-Book-Comments.dc.html": {
+      "h": 669,
+      "page": "duo",
+      "title": "Book pose · Reader and Comments",
+      "w": 951,
+      "x": 1031,
+      "y": 2187
+    },
+    "Duo-Book-Home.dc.html": {
+      "h": 669,
+      "page": "duo",
+      "title": "Book pose · Home",
+      "w": 951,
+      "x": 2062,
+      "y": 2187
+    },
+    "Duo-Book-Reader.dc.html": {
+      "h": 669,
+      "page": "duo",
+      "title": "Book pose · Reader",
+      "w": 951,
+      "x": 0,
+      "y": 2187
+    },
+    "Duo-Cover-Home.dc.html": {
+      "h": 678,
+      "page": "duo",
+      "title": "Cover · Home",
+      "w": 466,
+      "x": 0,
+      "y": 0
+    },
+    "Duo-Cover-Reader.dc.html": {
+      "h": 678,
+      "page": "duo",
+      "title": "Cover · Reader",
+      "w": 466,
+      "x": 546,
+      "y": 0
+    },
+    "Duo-Open-Account.dc.html": {
+      "h": 669,
+      "page": "duo",
+      "title": "Open · Account",
+      "w": 951,
+      "x": 4124,
+      "y": 1098
+    },
+    "Duo-Open-Home.dc.html": {
+      "h": 669,
+      "page": "duo",
+      "title": "Open · Home",
+      "w": 951,
+      "x": 0,
+      "y": 1098
+    },
+    "Duo-Open-Library.dc.html": {
+      "h": 669,
+      "page": "duo",
+      "title": "Open · Library",
+      "w": 951,
+      "x": 1031,
+      "y": 1098
+    },
+    "Duo-Open-Reader.dc.html": {
+      "h": 669,
+      "page": "duo",
+      "title": "Open · Reader, two-page spread",
+      "w": 951,
+      "x": 6186,
+      "y": 1098
+    },
+    "Duo-Open-Search.dc.html": {
+      "h": 669,
+      "page": "duo",
+      "title": "Open · Search with filters",
+      "w": 951,
+      "x": 2062,
+      "y": 1098
+    },
+    "Duo-Open-Settings.dc.html": {
+      "h": 669,
+      "page": "duo",
+      "title": "Open · Settings",
+      "w": 951,
+      "x": 5155,
+      "y": 1098
+    },
+    "Duo-Open-WorkDetail.dc.html": {
+      "h": 669,
+      "page": "duo",
+      "title": "Open · Work Detail",
+      "w": 951,
+      "x": 3093,
+      "y": 1098
+    },
+    "Duo-Portrait-Browse.dc.html": {
+      "h": 951,
+      "page": "duo",
+      "title": "Open portrait · Browse",
+      "w": 669,
+      "x": 0,
+      "y": 3276
+    },
+    "Fandom-Works.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Browse · fandom works",
+      "w": 390,
+      "x": 1880,
+      "y": 2300
+    },
+    "Fandoms.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Browse · fandom index",
+      "w": 390,
+      "x": 1410,
+      "y": 2300
+    },
+    "Flow-Duo.dc.html": {
+      "h": 620,
+      "page": "structure",
+      "title": "Flow · iPhone Duo unfolding",
+      "w": 1290,
+      "x": 0,
+      "y": 5660
+    },
+    "Flow-Find.dc.html": {
+      "h": 620,
+      "page": "structure",
+      "title": "Flow · find and read",
+      "w": 1290,
+      "x": 0,
+      "y": 1220
+    },
+    "Flow-FirstLaunch.dc.html": {
+      "h": 620,
+      "page": "structure",
+      "title": "Flow · first launch and sync",
+      "w": 1290,
+      "x": 0,
+      "y": 4920
+    },
+    "Flow-Kudos.dc.html": {
+      "h": 620,
+      "page": "structure",
+      "title": "Flow · kudos and comments",
+      "w": 1290,
+      "x": 0,
+      "y": 3440
+    },
+    "Flow-Organise.dc.html": {
+      "h": 620,
+      "page": "structure",
+      "title": "Flow · organise with queues",
+      "w": 1290,
+      "x": 0,
+      "y": 2700
+    },
+    "Flow-Resume.dc.html": {
+      "h": 620,
+      "page": "structure",
+      "title": "Flow · resume and listen",
+      "w": 1290,
+      "x": 0,
+      "y": 1960
+    },
+    "Flow-Write.dc.html": {
+      "h": 620,
+      "page": "structure",
+      "title": "Flow · write and post",
+      "w": 1290,
+      "x": 0,
+      "y": 4180
+    },
+    "IA-Map.dc.html": {
+      "h": 1100,
+      "page": "structure",
+      "title": "Information architecture · today and proposed",
+      "w": 1290,
+      "x": 0,
+      "y": 0
+    },
+    "Inbox.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Inbox",
+      "w": 390,
+      "x": 2350,
+      "y": 7460
+    },
+    "Insights.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Reading Insights",
+      "w": 390,
+      "x": 3290,
+      "y": 0
+    },
+    "Library-Filters.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Library · filters",
+      "w": 390,
+      "x": 1410,
+      "y": 0
+    },
+    "Library-Section.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Library · Reading History, swipe actions",
+      "w": 390,
+      "x": 940,
+      "y": 0
+    },
+    "Library-Select.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Library · select mode",
+      "w": 390,
+      "x": 4230,
+      "y": 0
+    },
+    "Library.dc.html": {
+      "h": 1980,
+      "page": "iphone",
+      "title": "Library",
+      "w": 390,
+      "x": 470,
+      "y": 0
+    },
+    "Login.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Log in to AO3",
+      "w": 390,
+      "x": 940,
+      "y": 7460
+    },
+    "Main.dc.html": {
+      "h": 1960,
+      "page": "iphone",
+      "title": "Home",
+      "w": 390,
+      "x": 0,
+      "y": 0
+    },
+    "My-Works.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Works · Series · Drafts",
+      "w": 390,
+      "x": 2820,
+      "y": 7460
+    },
+    "Onboarding.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Welcome",
+      "w": 390,
+      "x": 2350,
+      "y": 9380
+    },
+    "Platform-Map.dc.html": {
+      "h": 1560,
+      "page": "system",
+      "title": "Native mapping · SwiftUI and Compose",
+      "w": 1280,
+      "x": 0,
+      "y": 920
+    },
+    "Privacy.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Privacy and local data",
+      "w": 390,
+      "x": 1880,
+      "y": 9380
+    },
+    "Queue.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Reading Queue",
+      "w": 390,
+      "x": 1880,
+      "y": 0
+    },
+    "Queues.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Queues · organizer, new queue",
+      "w": 390,
+      "x": 2350,
+      "y": 0
+    },
+    "Read-Aloud-Settings.dc.html": {
+      "h": 1100,
+      "page": "iphone",
+      "title": "Read Aloud settings",
+      "w": 390,
+      "x": 3290,
+      "y": 5940
+    },
+    "Reader-Contents.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Reader · contents, bookmarks, notes",
+      "w": 390,
+      "x": 940,
+      "y": 5940
+    },
+    "Reader-End.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Reader · end of the work",
+      "w": 390,
+      "x": 3760,
+      "y": 5940
+    },
+    "Reader-Find.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Reader · find in work",
+      "w": 390,
+      "x": 1410,
+      "y": 5940
+    },
+    "Reader-Highlight.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Reader · highlight and note",
+      "w": 390,
+      "x": 1880,
+      "y": 5940
+    },
+    "Reader-Menu.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Reader · menu",
+      "w": 390,
+      "x": 470,
+      "y": 5940
+    },
+    "Reader-ReadAloud.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Reader · Read Aloud playing",
+      "w": 390,
+      "x": 2820,
+      "y": 5940
+    },
+    "Reader-Settings.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Reader · themes and settings",
+      "w": 390,
+      "x": 2350,
+      "y": 5940
+    },
+    "Recently-Deleted.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Recently Deleted",
+      "w": 390,
+      "x": 3760,
+      "y": 0
+    },
+    "Search-Filters.dc.html": {
+      "h": 1240,
+      "page": "iphone",
+      "title": "Search · AO3 filters",
+      "w": 390,
+      "x": 470,
+      "y": 2300
+    },
+    "Search.dc.html": {
+      "h": 1240,
+      "page": "iphone",
+      "title": "Search",
+      "w": 390,
+      "x": 0,
+      "y": 2300
+    },
+    "Series.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Series",
+      "w": 390,
+      "x": 2350,
+      "y": 3960
+    },
+    "Settings-Appearance.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Settings · appearance and fonts",
+      "w": 390,
+      "x": 470,
+      "y": 9380
+    },
+    "Settings-Backup-Sync.dc.html": {
+      "h": 1100,
+      "page": "iphone",
+      "title": "Settings · backup, sync, import",
+      "w": 390,
+      "x": 940,
+      "y": 9380
+    },
+    "Settings-Storage.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Settings · downloads and storage",
+      "w": 390,
+      "x": 1410,
+      "y": 9380
+    },
+    "Settings.dc.html": {
+      "h": 1240,
+      "page": "iphone",
+      "title": "Settings",
+      "w": 390,
+      "x": 0,
+      "y": 9380
+    },
+    "Shelf-Options.dc.html": {
+      "h": 640,
+      "page": "duo",
+      "title": "Shelf cards · cover or no cover",
+      "w": 920,
+      "x": 1552,
+      "y": 0
+    },
+    "States-Confirm.dc.html": {
+      "h": 960,
+      "page": "states",
+      "title": "Confirmations and Face ID",
+      "w": 1290,
+      "x": 1410,
+      "y": 1080
+    },
+    "States-Empty.dc.html": {
+      "h": 960,
+      "page": "states",
+      "title": "Empty",
+      "w": 1290,
+      "x": 0,
+      "y": 1080
+    },
+    "States-Error.dc.html": {
+      "h": 960,
+      "page": "states",
+      "title": "Errors and offline",
+      "w": 1290,
+      "x": 0,
+      "y": 2160
+    },
+    "States-Feedback.dc.html": {
+      "h": 960,
+      "page": "states",
+      "title": "Feedback: undo, progress, import",
+      "w": 1290,
+      "x": 1410,
+      "y": 0
+    },
+    "States-Loading.dc.html": {
+      "h": 960,
+      "page": "states",
+      "title": "Loading",
+      "w": 1290,
+      "x": 0,
+      "y": 0
+    },
+    "Subscriptions.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Subscriptions",
+      "w": 390,
+      "x": 1880,
+      "y": 7460
+    },
+    "Symbols-Key.dc.html": {
+      "h": 800,
+      "page": "system",
+      "title": "Symbols key",
+      "w": 1280,
+      "x": 0,
+      "y": 0
+    },
+    "Symbols.dc.html": {
+      "h": 84,
+      "page": "system",
+      "title": "Symbols (component)",
+      "w": 84,
+      "x": 1360,
+      "y": 0
+    },
+    "Sync-Onboarding.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Protect your library",
+      "w": 390,
+      "x": 2820,
+      "y": 9380
+    },
+    "System-Surfaces.dc.html": {
+      "h": 960,
+      "page": "states",
+      "title": "Proposed: widgets, Control Center, Spotlight, Share",
+      "w": 1290,
+      "x": 1410,
+      "y": 2160
+    },
+    "TabBar.dc.html": {
+      "h": 62,
+      "page": "system",
+      "title": "Tab bar (component)",
+      "w": 358,
+      "x": 1360,
+      "y": 164
+    },
+    "Text-Editor.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Chapter text editor",
+      "w": 390,
+      "x": 3760,
+      "y": 7460
+    },
+    "Work-Actions.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Work Detail · actions menu",
+      "w": 390,
+      "x": 470,
+      "y": 3960
+    },
+    "Work-Editor.dc.html": {
+      "h": 1500,
+      "page": "iphone",
+      "title": "Post or edit a work",
+      "w": 390,
+      "x": 3290,
+      "y": 7460
+    },
+    "WorkRow.dc.html": {
+      "h": 112,
+      "page": "system",
+      "title": "Work row (component)",
+      "w": 390,
+      "x": 1360,
+      "y": 306
+    },
+    "iPhone-Reader.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Reader",
+      "w": 390,
+      "x": 0,
+      "y": 5940
+    },
+    "iPhone-WorkDetail.dc.html": {
+      "h": 1560,
+      "page": "iphone",
+      "title": "Work Detail",
+      "w": 390,
+      "x": 0,
+      "y": 3960
+    },
+    "ResumeCard.dc.html": {
+      "x": 1360,
+      "y": 888,
+      "w": 358,
+      "h": 280,
+      "title": "Resume card (component)",
+      "page": "system"
+    },
+    "Rules.dc.html": {
+      "x": 1830,
+      "y": 0,
+      "w": 1280,
+      "h": 1640,
+      "title": "Kudos design rules",
+      "page": "system"
+    }
+  },
+  "createdOnFiles": {
+    "at": "2026-10-25T12:00:00Z",
+    "v": 1
+  },
+  "designSystems": [],
+  "launch": {
+    "page": "direction",
+    "view": "canvas"
+  },
+  "notes": {
+    "rowAccount": {
+      "kind": "title1",
+      "maxW": 5560,
+      "page": "iphone",
+      "text": "Account, writing, collections",
+      "w": 240,
+      "x": 0,
+      "y": 7160
+    },
+    "rowBook": {
+      "kind": "title1",
+      "maxW": 3013,
+      "page": "duo",
+      "text": "Book pose",
+      "w": 240,
+      "x": 0,
+      "y": 1887
+    },
+    "rowCover": {
+      "kind": "title1",
+      "maxW": 1012,
+      "page": "duo",
+      "text": "Cover display",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "rowDiscover": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "iphone",
+      "text": "Search & Browse",
+      "w": 240,
+      "x": 0,
+      "y": 2000
+    },
+    "rowHome": {
+      "kind": "title1",
+      "maxW": 4620,
+      "page": "iphone",
+      "text": "Home & Library",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "rowOpen": {
+      "kind": "title1",
+      "maxW": 7137,
+      "page": "duo",
+      "text": "Open, flat",
+      "w": 240,
+      "x": 0,
+      "y": 798
+    },
+    "rowPortrait": {
+      "kind": "title1",
+      "maxW": 1500,
+      "page": "duo",
+      "text": "Open, portrait",
+      "w": 240,
+      "x": 0,
+      "y": 2976
+    },
+    "rowReader": {
+      "kind": "title1",
+      "maxW": 4150,
+      "page": "iphone",
+      "text": "Reader & Read Aloud",
+      "w": 240,
+      "x": 0,
+      "y": 5640
+    },
+    "rowSettings": {
+      "kind": "title1",
+      "maxW": 4150,
+      "page": "iphone",
+      "text": "Settings, onboarding, support",
+      "w": 240,
+      "x": 0,
+      "y": 9080
+    },
+    "rowSystem": {
+      "kind": "title1",
+      "maxW": 1750,
+      "page": "system",
+      "text": "Symbols & shared components",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "rowWork": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "iphone",
+      "text": "Works, comments, authors",
+      "w": 240,
+      "x": 0,
+      "y": 3660
+    },
+    "whyDuo": {
+      "fill": "blue",
+      "page": "duo",
+      "text": "iPhone Duo\n\n• Cover: the tab rail sits on the right and rows stop at it (T-447)\n• Open: the tab bar becomes a sidebar; Library, Account and Settings get list and detail side by side\n• Sheets become inspectors beside the content (filters, comments)\n• Book pose: nothing crosses the fold; the reader shows one page per pane",
+      "w": 380,
+      "x": 1092,
+      "y": 0
+    },
+    "whyIphone": {
+      "page": "iphone",
+      "text": "What changes on every iPhone\n\n• Floating glass tab bar; Search gets its own button (Tab role .search)\n• Large titles and grouped sections in system type and spacing\n• Glass toolbar groups on Work Detail and the Reader\n• Read Aloud lives in a bottom accessory, like Music's mini player\n• The four symbols (Rating, Category, Warnings, Status) on every work, same order everywhere\n• Density kept: words, chapters, kudos and hits stay visible",
+      "w": 380,
+      "x": 4700,
+      "y": 0
+    }
   },
   "order": [
     "Direction.dc.html",
     "Direction-Mix.dc.html",
-    "Main.dc.html", "Library.dc.html", "Library-Section.dc.html", "Library-Filters.dc.html", "Queue.dc.html", "Queues.dc.html", "Collection.dc.html", "Insights.dc.html", "Recently-Deleted.dc.html", "Library-Select.dc.html",
-    "Search.dc.html", "Search-Filters.dc.html", "Browse.dc.html", "Fandoms.dc.html", "Fandom-Works.dc.html", "AO3-Web.dc.html",
-    "iPhone-WorkDetail.dc.html", "Work-Actions.dc.html", "Comments.dc.html", "Comment-Thread.dc.html", "Author.dc.html", "Series.dc.html",
-    "iPhone-Reader.dc.html", "Reader-Menu.dc.html", "Reader-Contents.dc.html", "Reader-Find.dc.html", "Reader-Highlight.dc.html", "Reader-Settings.dc.html", "Reader-ReadAloud.dc.html", "Read-Aloud-Settings.dc.html", "Reader-End.dc.html",
-    "Account.dc.html", "Account-SignedOut.dc.html", "Login.dc.html", "AO3-Lists.dc.html", "Subscriptions.dc.html", "Inbox.dc.html", "My-Works.dc.html", "Work-Editor.dc.html", "Text-Editor.dc.html", "AO3-Collections.dc.html", "Challenge.dc.html", "Account-Regrouped.dc.html", "IA-Map.dc.html", "Flow-Find.dc.html", "Flow-Resume.dc.html", "Flow-Organise.dc.html", "Flow-Kudos.dc.html", "Flow-Write.dc.html", "Flow-FirstLaunch.dc.html", "Flow-Duo.dc.html",
-    "Settings.dc.html", "Settings-Appearance.dc.html", "Settings-Backup-Sync.dc.html", "Settings-Storage.dc.html", "Privacy.dc.html", "Onboarding.dc.html", "Sync-Onboarding.dc.html", "Bug-Report.dc.html", "About.dc.html",
-    "Duo-Cover-Home.dc.html", "Duo-Cover-Reader.dc.html", "Shelf-Options.dc.html", "Duo-Open-Home.dc.html", "Duo-Open-Library.dc.html", "Duo-Open-Search.dc.html", "Duo-Open-WorkDetail.dc.html", "Duo-Open-Account.dc.html", "Duo-Open-Settings.dc.html", "Duo-Open-Reader.dc.html", "Duo-Book-Reader.dc.html", "Duo-Book-Comments.dc.html", "Duo-Book-Home.dc.html", "Duo-Portrait-Browse.dc.html",
-    "States-Loading.dc.html", "States-Empty.dc.html", "States-Error.dc.html", "States-Feedback.dc.html", "States-Confirm.dc.html", "System-Surfaces.dc.html",
-    "Symbols-Key.dc.html", "Platform-Map.dc.html", "Symbols.dc.html", "TabBar.dc.html", "WorkRow.dc.html", "CoverCard.dc.html",
-    "Coverage.dc.html"
+    "Main.dc.html",
+    "Library.dc.html",
+    "Library-Section.dc.html",
+    "Library-Filters.dc.html",
+    "Queue.dc.html",
+    "Queues.dc.html",
+    "Collection.dc.html",
+    "Insights.dc.html",
+    "Recently-Deleted.dc.html",
+    "Library-Select.dc.html",
+    "Search.dc.html",
+    "Search-Filters.dc.html",
+    "Browse.dc.html",
+    "Fandoms.dc.html",
+    "Fandom-Works.dc.html",
+    "AO3-Web.dc.html",
+    "iPhone-WorkDetail.dc.html",
+    "Work-Actions.dc.html",
+    "Comments.dc.html",
+    "Comment-Thread.dc.html",
+    "Author.dc.html",
+    "Series.dc.html",
+    "iPhone-Reader.dc.html",
+    "Reader-Menu.dc.html",
+    "Reader-Contents.dc.html",
+    "Reader-Find.dc.html",
+    "Reader-Highlight.dc.html",
+    "Reader-Settings.dc.html",
+    "Reader-ReadAloud.dc.html",
+    "Read-Aloud-Settings.dc.html",
+    "Reader-End.dc.html",
+    "Account.dc.html",
+    "Account-SignedOut.dc.html",
+    "Login.dc.html",
+    "AO3-Lists.dc.html",
+    "Subscriptions.dc.html",
+    "Inbox.dc.html",
+    "My-Works.dc.html",
+    "Work-Editor.dc.html",
+    "Text-Editor.dc.html",
+    "AO3-Collections.dc.html",
+    "Challenge.dc.html",
+    "Account-Regrouped.dc.html",
+    "IA-Map.dc.html",
+    "Flow-Find.dc.html",
+    "Flow-Resume.dc.html",
+    "Flow-Organise.dc.html",
+    "Flow-Kudos.dc.html",
+    "Flow-Write.dc.html",
+    "Flow-FirstLaunch.dc.html",
+    "Flow-Duo.dc.html",
+    "Settings.dc.html",
+    "Settings-Appearance.dc.html",
+    "Settings-Backup-Sync.dc.html",
+    "Settings-Storage.dc.html",
+    "Privacy.dc.html",
+    "Onboarding.dc.html",
+    "Sync-Onboarding.dc.html",
+    "Bug-Report.dc.html",
+    "About.dc.html",
+    "Duo-Cover-Home.dc.html",
+    "Duo-Cover-Reader.dc.html",
+    "Shelf-Options.dc.html",
+    "Duo-Open-Home.dc.html",
+    "Duo-Open-Library.dc.html",
+    "Duo-Open-Search.dc.html",
+    "Duo-Open-WorkDetail.dc.html",
+    "Duo-Open-Account.dc.html",
+    "Duo-Open-Settings.dc.html",
+    "Duo-Open-Reader.dc.html",
+    "Duo-Book-Reader.dc.html",
+    "Duo-Book-Comments.dc.html",
+    "Duo-Book-Home.dc.html",
+    "Duo-Portrait-Browse.dc.html",
+    "States-Loading.dc.html",
+    "States-Empty.dc.html",
+    "States-Error.dc.html",
+    "States-Feedback.dc.html",
+    "States-Confirm.dc.html",
+    "System-Surfaces.dc.html",
+    "Symbols-Key.dc.html",
+    "Platform-Map.dc.html",
+    "Symbols.dc.html",
+    "TabBar.dc.html",
+    "WorkRow.dc.html",
+    "CoverCard.dc.html",
+    "Coverage.dc.html",
+    "Rules.dc.html",
+    "ResumeCard.dc.html"
   ],
-  "notes": {
-    "rowHome": {"x": 0, "y": -300, "text": "Home & Library", "kind": "title1", "maxW": 4620, "page": "iphone"},
-    "rowDiscover": {"x": 0, "y": 2000, "text": "Search & Browse", "kind": "title1", "maxW": 2740, "page": "iphone"},
-    "rowWork": {"x": 0, "y": 3660, "text": "Works, comments, authors", "kind": "title1", "maxW": 2740, "page": "iphone"},
-    "rowReader": {"x": 0, "y": 5640, "text": "Reader & Read Aloud", "kind": "title1", "maxW": 4150, "page": "iphone"},
-    "rowAccount": {"x": 0, "y": 7160, "text": "Account, writing, collections", "kind": "title1", "maxW": 5560, "page": "iphone"},
-    "rowSettings": {"x": 0, "y": 9080, "text": "Settings, onboarding, support", "kind": "title1", "maxW": 4150, "page": "iphone"},
-    "whyIphone": {"x": 4700, "y": 0, "w": 380, "page": "iphone", "text": "What changes on every iPhone\n\n• Floating glass tab bar; Search gets its own button (Tab role .search)\n• Large titles and grouped sections in system type and spacing\n• Glass toolbar groups on Work Detail and the Reader\n• Read Aloud lives in a bottom accessory, like Music's mini player\n• The four symbols (Rating, Category, Warnings, Status) on every work, same order everywhere\n• Density kept: words, chapters, kudos and hits stay visible"},
-    "rowCover": {"x": 0, "y": -300, "text": "Cover display", "kind": "title1", "maxW": 1012, "page": "duo"},
-    "rowOpen": {"x": 0, "y": 798, "text": "Open, flat", "kind": "title1", "maxW": 7137, "page": "duo"},
-    "rowBook": {"x": 0, "y": 1887, "text": "Book pose", "kind": "title1", "maxW": 3013, "page": "duo"},
-    "rowPortrait": {"x": 0, "y": 2976, "text": "Open, portrait", "kind": "title1", "maxW": 1500, "page": "duo"},
-    "whyDuo": {"x": 1092, "y": 0, "w": 380, "fill": "blue", "page": "duo", "text": "iPhone Duo\n\n• Cover: the tab rail sits on the right and rows stop at it (T-447)\n• Open: the tab bar becomes a sidebar; Library, Account and Settings get list and detail side by side\n• Sheets become inspectors beside the content (filters, comments)\n• Book pose: nothing crosses the fold; the reader shows one page per pane"},
-    "rowSystem": {"x": 0, "y": -300, "text": "Symbols & shared components", "kind": "title1", "maxW": 1750, "page": "system"}
-  },
-  "designSystems": []
+  "pages": [
+    {
+      "id": "direction",
+      "name": "Direction"
+    },
+    {
+      "id": "iphone",
+      "name": "iPhone"
+    },
+    {
+      "id": "duo",
+      "name": "iPhone Duo"
+    },
+    {
+      "id": "states",
+      "name": "States & system"
+    },
+    {
+      "id": "structure",
+      "name": "Structure & flows"
+    },
+    {
+      "id": "system",
+      "name": "Symbols & components"
+    },
+    {
+      "id": "coverage",
+      "name": "Feature coverage"
+    }
+  ],
+  "title": "Kudos for iPhone Duo"
 }

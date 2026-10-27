@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Resume card</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<section aria-label="{{label}}" style="position: relative; width: {{width}}px; box-sizing: border-box; overflow: hidden; border-radius: 16px; padding: 16px; background: {{art}}; color: #FFFFFF; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 10px 28px rgba(20,40,60,0.20); font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif">
+  <span aria-hidden="true" style="position: absolute; right: -10px; bottom: -58px; font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: 250px; line-height: 1; font-weight: 600; color: rgba(255,255,255,0.08)">{{initial}}</span>
+
+  <sc-if value="{{isHome}}" hint-placeholder-val="{{true}}">
+    <div style="position: relative; display: flex; gap: 14px; align-items: center">
+      <div style="position: relative; width: 96px; height: 96px; flex-shrink: 0">
+        <svg role="img" aria-label="{{pctLabel}}" width="96" height="96" viewBox="0 0 96 96"><circle cx="48" cy="48" r="41" fill="none" stroke="rgba(255,255,255,0.24)" stroke-width="10"></circle><circle cx="48" cy="48" r="41" fill="none" stroke="#FFFFFF" stroke-width="10" stroke-linecap="round" stroke-dasharray="{{bigDash}}" transform="rotate(-90 48 48)"></circle></svg>
+        <div aria-hidden="true" style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center">
+          <span style="font-family: 'SF Pro Rounded', -apple-system, system-ui, sans-serif; font-size: 22px; line-height: 26px; font-weight: 700">{{w.pct}}%</span>
+          <span style="font-size: 10px; line-height: 12px; font-weight: 600; letter-spacing: 0.6px; text-transform: uppercase; color: rgba(255,255,255,0.85)">Read</span>
+        </div>
+      </div>
+      <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+        <span style="font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; color: rgba(255,255,255,0.9)">{{w.fandom}}</span>
+        <span aria-hidden="true" style="width: 14px; height: 2px; border-radius: 1px; background: rgba(255,255,255,0.9); margin: 2px 0 3px"></span>
+        <span style="font-size: 20px; line-height: 25px; font-weight: 700">{{w.title}}</span>
+        <a href="Author.dc.html" style="align-self: flex-start; font-size: 15px; line-height: 20px; text-decoration: none; color: #FFFFFF">{{w.author}}</a>
+        <span style="font-size: 13px; line-height: 18px; color: rgba(255,255,255,0.85)">{{w.words}} words · ♥ {{w.kudos}}</span>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{isDetail}}" hint-placeholder-val="{{false}}">
+    <div style="position: relative; display: flex; align-items: center; gap: 12px">
+      <svg role="img" aria-label="{{pctLabel}}" width="52" height="52" viewBox="0 0 52 52"><circle cx="26" cy="26" r="22" fill="none" stroke="rgba(255,255,255,0.24)" stroke-width="6"></circle><circle cx="26" cy="26" r="22" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round" stroke-dasharray="{{smallDash}}" transform="rotate(-90 26 26)"></circle></svg>
+      <div style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+        <span style="font-size: 17px; line-height: 22px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{w.chapterName}}</span>
+        <span style="font-size: 13px; line-height: 18px; color: rgba(255,255,255,0.85)">{{w.chapterPct}}% of the chapter · {{w.pct}}% of the work</span>
+      </div>
+      <a href="Reader-Contents.dc.html" style="font-size: 15px; line-height: 20px; text-decoration: none; color: #FFFFFF; white-space: nowrap">{{postedShort}} ›</a>
+    </div>
+  </sc-if>
+
+  <div style="position: relative; display: flex; flex-direction: column; gap: 6px">
+    <div role="img" aria-label="{{barsLabel}}" style="height: {{barsH}}px; display: flex; align-items: flex-end; gap: {{barGap}}px">
+      <sc-for list="{{bars}}" as="b" hint-placeholder-count="20">
+        <span style="flex: 1; min-width: 0; box-sizing: border-box; border-radius: 3px; height: {{b.h}}; background: {{b.bg}}; border: {{b.bd}}"></span>
+      </sc-for>
+    </div>
+    <sc-if value="{{isHome}}" hint-placeholder-val="{{true}}">
+      <div style="display: flex; justify-content: space-between; gap: 8px; font-size: 12px; line-height: 16px; color: rgba(255,255,255,0.85)"><span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{w.chapterName}} · {{postedLong}}</span><span style="white-space: nowrap">Updated {{w.updated}}</span></div>
+    </sc-if>
+    <sc-if value="{{isDetail}}" hint-placeholder-val="{{false}}">
+      <div style="display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; line-height: 18px; color: rgba(255,255,255,0.9)">
+        <span style="display: flex; align-items: center; gap: 5px"><span aria-hidden="true" style="width: 10px; height: 10px; border-radius: 2px; background: #FFFFFF"></span>Read</span>
+        <span style="display: flex; align-items: center; gap: 5px"><span aria-hidden="true" style="width: 10px; height: 10px; border-radius: 2px; background: rgba(255,255,255,0.30)"></span>Posted, unread</span>
+        <span style="display: flex; align-items: center; gap: 5px"><span aria-hidden="true" style="width: 10px; height: 10px; box-sizing: border-box; border-radius: 2px; border: 1.5px dashed rgba(255,255,255,0.5)"></span>Not posted yet</span>
+      </div>
+      <span style="font-size: 13px; line-height: 18px; color: rgba(255,255,255,0.85)">Bar height is chapter length. Published {{w.published}} · updated {{w.updated}}.</span>
+    </sc-if>
+  </div>
+
+  <div style="position: relative; display: flex; align-items: center; gap: 10px">
+    <sc-if value="{{isHome}}" hint-placeholder-val="{{true}}">
+      <dc-import name="Symbols" variant="strip" rating="{{w.rating}}" category="{{w.category}}" warnings="{{w.warnings}}" status="{{w.status}}" warning-count="{{w.warningCount}}" size="22" hint-size="96px,22px"></dc-import>
+      <span style="flex: 1"></span>
+      <button aria-label="Read aloud" style="width: 44px; height: 44px; border: none; border-radius: 22px; background: rgba(255,255,255,0.18); color: #FFFFFF; display: flex; align-items: center; justify-content: center; cursor: pointer">
+        <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"></path><path d="M15.5 9a4.5 4.5 0 0 1 0 6"></path><path d="M18 6.5a8 8 0 0 1 0 11"></path></svg>
+      </button>
+      <button style="height: 44px; padding: 0 22px; border: none; border-radius: 22px; background: #FFFFFF; color: {{accent}}; font-family: inherit; font-size: 17px; font-weight: 600; display: flex; align-items: center; gap: 8px; cursor: pointer">
+        <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5z" fill="currentColor"></path></svg>Resume
+      </button>
+    </sc-if>
+    <sc-if value="{{isDetail}}" hint-placeholder-val="{{false}}">
+      <button style="flex: 1; height: 50px; border: none; border-radius: 25px; background: #FFFFFF; color: {{accent}}; font-family: inherit; font-size: 17px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer">
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5z" fill="currentColor"></path></svg>{{resumeLabel}}
+      </button>
+      <button aria-label="Read aloud" style="width: 50px; height: 50px; border: none; border-radius: 25px; background: rgba(255,255,255,0.18); color: #FFFFFF; display: flex; align-items: center; justify-content: center; cursor: pointer">
+        <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"></path><path d="M15.5 9a4.5 4.5 0 0 1 0 6"></path><path d="M18 6.5a8 8 0 0 1 0 11"></path></svg>
+      </button>
+      <sc-if value="{{hasUpdate}}" hint-placeholder-val="{{true}}">
+        <button aria-label="{{updateLabel}}" style="position: relative; width: 50px; height: 50px; border: none; border-radius: 25px; background: rgba(255,255,255,0.18); color: #FFFFFF; display: flex; align-items: center; justify-content: center; cursor: pointer">
+          <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"></path><path d="m7 10.5 5 5 5-5"></path><path d="M5 20h14"></path></svg>
+          <span style="position: absolute; top: 0; right: 0; min-width: 18px; height: 18px; border-radius: 9px; background: {{accent}}; color: #FFFFFF; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 2px #FFFFFF">{{w.newDownloads}}</span>
+        </button>
+      </sc-if>
+    </sc-if>
+  </div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"work":{"editor":null},"variant":{"editor":"enum","options":["home","detail"],"default":"home"},"width":{"editor":"int","default":358,"min":280,"max":720},"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B"]},"$preview":{"width":358,"height":280}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const w = {
+      title: 'The Cartographer’s Daughter', author: 'inkwell_moth', fandom: 'Original Work', hue: 188,
+      rating: 'T', category: 'FM', warnings: 'none', status: 'wip', warningCount: 1,
+      words: '84,210', kudos: '3,104', pct: 58, chapterName: 'Ch 7, The Salt Road', chapter: 7, chapterPct: 22,
+      planned: 20, posted: 12, read: 6, published: 'Mar 3', updated: 'Oct 21', newDownloads: 2,
+      ...(this.props.work || {})
+    };
+    const variant = this.props.variant ?? 'home';
+    const isHome = variant !== 'detail';
+    const seedOf = (t) => { let h = 7; for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) >>> 0; return h; };
+    const rng = (seed) => { let x = seed || 1; return () => { x ^= x << 13; x >>>= 0; x ^= x >>> 17; x ^= x << 5; x >>>= 0; return (x % 1000) / 1000; }; };
+    const hue = Number(w.hue ?? 188);
+    // One bar per chapter: height = chapter length (seeded stand-in here), white = read, faint = posted, dashed = not posted.
+    const r = rng(seedOf(String(w.title).replace('’', "'") + ' chapters'));
+    const bars = [];
+    for (let i = 0; i < w.planned; i++) {
+      const height = Math.round(42 + r() * 58);
+      if (i >= w.posted) bars.push({ h: '46%', bg: 'transparent', bd: '1.5px dashed rgba(255,255,255,0.5)' });
+      else if (i < w.read) bars.push({ h: height + '%', bg: '#FFFFFF', bd: 'none' });
+      else if (i === w.read && w.chapterPct) bars.push({ h: height + '%', bg: 'linear-gradient(to top, #FFFFFF ' + w.chapterPct + '%, rgba(255,255,255,0.30) ' + w.chapterPct + '%)', bd: 'none' });
+      else bars.push({ h: height + '%', bg: 'rgba(255,255,255,0.30)', bd: 'none' });
+    }
+    const unposted = w.planned - w.posted;
+    return {
+      w,
+      isHome,
+      isDetail: !isHome,
+      width: Number(this.props.width ?? 358),
+      accent: this.props.accent ?? '#990000',
+      art: 'linear-gradient(155deg, hsl(' + hue + ', 46%, 27%), hsl(' + ((hue + 22) % 360) + ', 50%, 41%))',
+      initial: String(w.title).charAt(0),
+      label: isHome ? 'Continue reading ' + w.title : 'Your reading',
+      pctLabel: w.pct + ' percent read',
+      bigDash: (w.pct * 2.576).toFixed(0) + ' 258',
+      smallDash: (w.pct * 1.382).toFixed(0) + ' 139',
+      bars,
+      barsH: isHome ? 52 : 76,
+      barGap: isHome ? 3 : 4,
+      barsLabel: 'Chapters: ' + w.read + ' read, reading chapter ' + (w.read + 1) + ', ' + (w.posted - w.read - 1) + ' more posted' + (unposted > 0 ? ', ' + unposted + ' not posted yet' : ''),
+      postedShort: w.posted + ' of ' + w.planned,
+      postedLong: w.posted + ' of ' + w.planned + ' posted',
+      resumeLabel: 'Resume Chapter ' + w.chapter,
+      hasUpdate: !!w.newDownloads,
+      updateLabel: 'Update download: ' + w.newDownloads + ' new chapters'
+    };
+  }
+}
+</script>
+</body>
+</html>
