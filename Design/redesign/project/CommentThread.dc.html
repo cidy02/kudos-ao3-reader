@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Comment thread</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: {{width}}; display: flex; flex-direction: column; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; color: #000000">
+  <sc-for list="{{rows}}" as="r" hint-placeholder-count="6">
+    <sc-if value="{{r.isGap}}" hint-placeholder-val="{{false}}">
+      <div aria-hidden="true" style="margin: 18px 16px 6px; height: 0.5px; background: #D1D1D6"></div>
+    </sc-if>
+    <sc-if value="{{r.isComment}}" hint-placeholder-val="{{true}}">
+      <article aria-label="{{r.aria}}" style="position: relative; padding: 12px 16px 0 {{r.contentLeft}}px">
+        <sc-for list="{{r.rails}}" as="x" hint-placeholder-count="1">
+          <span aria-hidden="true" style="position: absolute; left: {{x}}px; top: 0; bottom: 0; width: 1px; background: #D1D1D6"></span>
+        </sc-for>
+        <sc-if value="{{r.hasElbow}}" hint-placeholder-val="{{false}}">
+          <span aria-hidden="true" style="position: absolute; left: {{r.elbowLeft}}px; top: 0; width: {{r.elbowW}}px; height: {{r.elbowH}}px; box-sizing: border-box; border-left: 1px solid #D1D1D6; border-bottom: 1px solid #D1D1D6; border-bottom-left-radius: {{r.elbowR}}px"></span>
+        </sc-if>
+        <sc-if value="{{r.hasOwnRail}}" hint-placeholder-val="{{false}}">
+          <span aria-hidden="true" style="position: absolute; left: {{r.ownX}}px; top: {{r.ownTop}}px; bottom: 0; width: 1px; background: #D1D1D6"></span>
+        </sc-if>
+        <span aria-hidden="true" style="position: absolute; left: {{r.avLeft}}px; top: 12px; width: {{r.size}}px; height: {{r.size}}px; border-radius: 50%; background: #E9E9EE; color: #6C6C70; font-family: ui-rounded, -apple-system, system-ui, sans-serif; font-size: {{r.initialSize}}px; font-weight: 600; display: flex; align-items: center; justify-content: center">
+          <sc-if value="{{r.isGuest}}" hint-placeholder-val="{{false}}"><svg width="{{r.glyph}}" height="{{r.glyph}}" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="8" r="4.2"></circle><path d="M3.5 21c1.2-4.6 4.5-7 8.5-7s7.3 2.4 8.5 7z"></path></svg></sc-if>
+          <sc-if value="{{r.hasInitial}}" hint-placeholder-val="{{true}}">{{r.initial}}</sc-if>
+        </span>
+        <div style="min-height: {{r.size}}px; display: flex; align-items: center; gap: 7px">
+          <span style="min-width: 0; font-size: 15px; line-height: 20px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{r.author}}</span>
+          <sc-if value="{{r.hasRole}}" hint-placeholder-val="{{false}}">
+            <span style="flex-shrink: 0; padding: 2px 7px; border-radius: 10px; background: {{r.roleBg}}; color: {{r.roleColor}}; font-size: 11px; line-height: 13px; font-weight: {{r.roleWeight}}; display: flex; align-items: center; gap: 3px">{{r.role}}</span>
+          </sc-if>
+          <span style="flex: 1"></span>
+          <span style="flex-shrink: 0; font-size: 11px; line-height: 13px; color: #6C6C70">{{r.time}}</span>
+          <sc-if value="{{r.hasChapter}}" hint-placeholder-val="{{false}}">
+            <span style="flex-shrink: 0; padding: 2px 7px; border-radius: 10px; background: rgba(118,118,128,0.12); color: #6C6C70; font-size: 11px; line-height: 13px">{{r.chapter}}</span>
+          </sc-if>
+        </div>
+        <sc-if value="{{r.hasReplyTo}}" hint-placeholder-val="{{false}}">
+          <span style="display: block; font-size: 11px; line-height: 14px; font-weight: 600; letter-spacing: 0.4px; color: {{accent}}">REPLYING TO YOU</span>
+        </sc-if>
+        <p style="margin: 2px 0 0; font-size: 14px; line-height: 1.55; color: rgba(0,0,0,0.8)">{{r.body}}</p>
+        <div style="min-height: 40px; display: flex; align-items: center; justify-content: space-between">
+          <button style="border: none; background: none; padding: 0; font-family: inherit; font-size: 12px; font-weight: 500; color: {{accent}}; display: flex; align-items: center; gap: 5px">
+            <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 6 4 11.5 9.5 17M4 11.5h10a6 6 0 0 1 6 6V19"></path></svg>Reply
+          </button>
+          <button aria-label="More actions for this comment" style="width: 44px; height: 40px; margin-right: -12px; border: none; background: none; color: #8E8E93; display: flex; align-items: center; justify-content: center">
+            <svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.6" fill="currentColor"></circle><circle cx="12" cy="12" r="1.6" fill="currentColor"></circle><circle cx="18.5" cy="12" r="1.6" fill="currentColor"></circle></svg>
+          </button>
+        </div>
+      </article>
+    </sc-if>
+    <sc-if value="{{r.isControl}}" hint-placeholder-val="{{false}}">
+      <button style="margin-left: {{r.contentLeft}}px; min-height: 44px; border: none; background: none; padding: 0; font-family: inherit; font-size: 12px; font-weight: 500; color: {{accent}}; display: flex; align-items: center; gap: 6px; text-align: left">
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 5h11v8H8l-4.5 3.5zM17.5 9h3v8.5L18 15.5h-6v-2"></path></svg>{{r.label}}
+      </button>
+    </sc-if>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"items":{"editor":null},"accent":{"editor":"color","default":"#990000"},"width":{"editor":"text","default":"390px"},"$preview":{"width":390,"height":520}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const accent = this.props.accent ?? '#990000';
+    // Geometry from the app's CommentThreadGeometry (board 1f): no cards, an avatar
+    // column with 1pt hairline rails, an elbow into each reply's avatar.
+    const M = 16, SIZE = [30, 26, 22], GAP = [11, 10, 10];
+    const size = (d) => SIZE[Math.min(d, 2)], gap = (d) => GAP[Math.min(d, 2)];
+    const indent = (d) => { let x = 0; for (let i = 0; i < d; i++) x += size(i) + gap(i); return x; };
+    const avLeft = (d) => M + indent(d);
+    const cx = (d) => avLeft(d) + Math.floor(size(d) / 2);
+    const C = (author, depth, time, body, extra) => ({ kind: 'c', author, depth, time, body, ...extra });
+    const sample = [
+      C('saltwindow', 0, '2d', 'The single unbroken line across the vellum.', { chapter: 'Ch 7' }),
+      C('inkwell_moth', 1, '1d', 'That line is the whole story, honestly.', { role: 'Author' }),
+      C('marginalia', 1, '20h', 'Same. I read it three times.', {})
+    ];
+    const list = this.props.items || sample;
+    const rows = list.map((r, i) => {
+      if (r.kind === 'gap') return { isGap: true, isComment: false, isControl: false };
+      if (r.kind === 'control') return { isGap: false, isComment: false, isControl: true, label: r.label, contentLeft: avLeft(0) + size(0) + gap(0) };
+      const d = r.depth;
+      // An ancestor's rail runs through this row if it has a child still to come.
+      const rails = [];
+      for (let a = 0; a < d; a++) {
+        for (let j = i + 1; j < list.length; j++) {
+          const n = list[j];
+          if (n.kind !== 'c' || n.depth <= a) break;
+          if (n.depth === a + 1) { rails.push(cx(a)); break; }
+        }
+      }
+      const next = list[i + 1];
+      const hasKids = !!(next && next.kind === 'c' && next.depth > d);
+      const roleEm = r.role === 'Author' || r.role === 'Me';
+      const s = size(d);
+      return {
+        isGap: false, isComment: true, isControl: false,
+        aria: r.author + ', ' + r.time,
+        author: r.author, time: r.time, body: r.body,
+        size: s, avLeft: avLeft(d), contentLeft: avLeft(d) + s + gap(d),
+        initial: r.author.charAt(0).toUpperCase(), initialSize: Math.round(s * 0.42),
+        hasInitial: !r.guest, isGuest: !!r.guest, glyph: Math.round(s * 0.5),
+        rails,
+        hasElbow: d > 0, elbowLeft: d > 0 ? cx(d - 1) : 0, elbowW: d > 0 ? avLeft(d) - cx(d - 1) : 0,
+        elbowH: 12 + Math.round(s / 2), elbowR: d <= 1 ? 21 : 18,
+        hasOwnRail: hasKids, ownX: cx(d), ownTop: 12 + s + 5,
+        hasRole: !!r.role, role: r.role || '',
+        roleBg: roleEm ? accent : 'rgba(118,118,128,0.12)', roleColor: roleEm ? '#FFFFFF' : '#6C6C70', roleWeight: roleEm ? 600 : 400,
+        hasChapter: !!r.chapter, chapter: r.chapter || '',
+        hasReplyTo: !!r.toYou
+      };
+    });
+    return { accent, width: this.props.width ?? '390px', rows };
+  }
+}
+</script>
+</body>
+</html>

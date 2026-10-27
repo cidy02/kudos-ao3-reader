@@ -13,7 +13,8 @@ body{margin:0}
 button{cursor:pointer}
 </style>
 </helmet>
-<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box; display: flex; flex-direction: column; padding: 96px 32px 40px">
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box; display: flex; flex-direction: column; padding: 72px 32px 40px">
+  <div style="display: flex; justify-content: center; margin-bottom: 20px"><dc-import name="AppIcon" size="96" hint-size="96px,96px"></dc-import></div>
   <h1 style="margin: 0; text-align: center; font-size: 36px; line-height: 43px; font-weight: 800">Welcome to<br><span style="color: {{accent}}">Kudos</span></h1>
   <div style="margin-top: 48px; display: flex; flex-direction: column; gap: 28px">
     <sc-for list="{{features}}" as="f" hint-placeholder-count="3">

@@ -35,7 +35,7 @@ button{cursor:pointer}
     <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
       <sc-for list="{{queues}}" as="q" hint-placeholder-count="3">
         <a href="Queue.dc.html" style="display: flex; align-items: center; gap: 12px; min-height: 72px; padding: 0 16px; border-top: {{q.sep}}; text-decoration: none; color: #000000">
-          <dc-import name="CoverStack" tiles="{{q.tiles}}" width="48" height="48" hint-size="48px,48px"></dc-import>
+          <dc-import name="CoverStack" tiles="{{q.tiles}}" colour="{{q.colour}}" initial="{{q.initial}}" kind="queue" width="48" height="48" hint-size="48px,48px"></dc-import>
           <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px">
             <span style="font-size: 17px; line-height: 22px; font-weight: 600">{{q.name}}</span>
             <span style="font-size: 13px; line-height: 18px; color: #6C6C70">{{q.detail}}</span>
@@ -107,7 +107,7 @@ class Component extends DCLogic {
       { name: 'Summer Reading', detail: '8 works · about 9 h 40 min · 6 offline', colour: '#C25E00', hues: [150, 181, 32, 335], fills: [100, 100, 60, 0, 0, 0, 0, 0] },
       { name: 'Re-reads', detail: '5 works · about 4 h 5 min · all offline', colour: '#1E63C8', hues: [262, 290, 196, 330], fills: [100, 100, 100, 30, 0] },
       { name: 'For the Train', detail: '3 works · about 1 h 50 min · 3 offline', colour: '#2F8F3A', hues: [32, 188, 340, 150], fills: [0, 0, 0] }
-    ].map((q) => ({ ...q, tiles: q.hues.map(art), segs: q.fills.map((f) => f + '%'), track: rgba(q.colour, 0.2) }));
+    ].map((q) => ({ ...q, initial: q.name.charAt(0), tiles: q.hues.map(art), segs: q.fills.map((f) => f + '%'), track: rgba(q.colour, 0.2) }));
     const colours = [['Orange', '#C25E00'], ['Blue', '#1E63C8'], ['Green', '#2F8F3A'], ['Purple', '#7B3FA0'], ['Pink', '#B3127A'], ['Graphite', '#6C6C70']];
     return {
       accent,

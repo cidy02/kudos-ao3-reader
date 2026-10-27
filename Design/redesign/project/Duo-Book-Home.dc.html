@@ -58,7 +58,7 @@ a{color:#990000}a:hover{color:#6E0000}
       </div>
       <sc-for list="{{queues}}" as="q" hint-placeholder-count="2">
         <a href="Queue.dc.html" style="text-decoration: none; color: #000000; display: flex; align-items: center; gap: 12px">
-          <dc-import name="CoverStack" tiles="{{q.tiles}}" width="56" height="56" hint-size="56px,56px"></dc-import>
+          <dc-import name="CoverStack" tiles="{{q.tiles}}" colour="{{q.colour}}" initial="{{q.initial}}" kind="queue" width="56" height="56" hint-size="56px,56px"></dc-import>
           <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px">
             <span style="font-size: 17px; line-height: 22px; font-weight: 600">{{q.name}}</span>
             <span style="font-size: 13px; line-height: 18px; color: #6C6C70">{{q.detail}}</span>
@@ -83,7 +83,7 @@ class Component extends DCLogic {
   renderVals() {
     const art = (h) => 'linear-gradient(155deg, hsl(' + h + ', 46%, 27%), hsl(' + ((h + 22) % 360) + ', 50%, 41%))';
     const rgba = (hex, a) => { const x = hex.replace('#', ''); return 'rgba(' + parseInt(x.slice(0, 2), 16) + ',' + parseInt(x.slice(2, 4), 16) + ',' + parseInt(x.slice(4, 6), 16) + ',' + a + ')'; };
-    const queue = (name, detail, colour, hues, fills, label) => ({ name, detail, progressLabel: label, tiles: hues.map(art), segs: fills.map((f) => ({ w: f + '%', c: colour, track: rgba(colour, 0.2) })) });
+    const queue = (name, detail, colour, hues, fills, label) => ({ name, detail, progressLabel: label, colour, initial: name.charAt(0), tiles: hues.map(art), segs: fills.map((f) => ({ w: f + '%', c: colour, track: rgba(colour, 0.2) })) });
     const updated = [
       { title: 'Salt & Starlight', author: 'wrenfield', fandom: 'Original Work', rating: 'M', category: 'Gen', warnings: 'undisclosed', status: 'wip', words: '118k', chapters: '15/30', updated: '3 new · 2 h ago', badge: '+3' },
       { title: 'The Hound, Revisited', author: 'fogandlamplight', fandom: 'Sherlock Holmes', rating: 'T', category: 'MM', warnings: 'present', status: 'wip', words: '30k', chapters: '5/?', updated: '1 new · yesterday', badge: '+1' }

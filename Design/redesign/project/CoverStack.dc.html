@@ -13,35 +13,57 @@ body{margin:0}
 </style>
 </helmet>
 <div aria-hidden="true" style="position: relative; isolation: isolate; width: {{width}}px; height: {{height}}px; flex-shrink: 0">
-  <sc-for list="{{covers}}" as="c" hint-placeholder-count="3">
-    <span style="position: absolute; left: {{c.left}}px; top: {{c.top}}px; width: {{c.w}}px; height: {{c.h}}px; z-index: {{c.z}}; border-radius: {{radius}}px; background: {{c.bg}}; box-shadow: {{c.shadow}}; filter: {{c.filter}}"></span>
+  <sc-for list="{{backs}}" as="c" hint-placeholder-count="2">
+    <span style="position: absolute; left: {{c.left}}px; top: {{c.top}}px; width: {{c.w}}px; height: {{c.h}}px; z-index: {{c.z}}; border-radius: {{radius}}px; background: {{c.bg}}; box-shadow: -2px 0 6px rgba(0,0,0,0.18); filter: {{c.filter}}; transform: rotate({{c.rot}}deg); transform-origin: 0% 100%"></span>
   </sc-for>
+  <span style="position: absolute; left: 0; top: 0; width: {{cw}}px; height: {{height}}px; z-index: 5; border-radius: {{radius}}px; background: {{front}}; box-shadow: 0 4px 12px rgba(0,0,0,0.22); overflow: hidden">
+    <span style="position: absolute; left: {{ghostIn}}px; bottom: {{ghostBottom}}px; font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: {{ghostSize}}px; line-height: 1; font-weight: 600; color: rgba(255,255,255,0.15)">{{initial}}</span>
+    <sc-if value="{{hasRibbon}}" hint-placeholder-val="{{false}}">
+      <span style="position: absolute; right: {{ribRight}}px; top: 0; width: {{ribW}}px; height: {{ribH}}px; background: rgba(0,0,0,0.24); clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 80%, 0 100%); display: flex; justify-content: center; padding-top: {{ribPad}}px; box-sizing: border-box">
+        <svg width="{{ribIcon}}" height="{{ribIcon}}" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.92)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="{{kindD}}"></path></svg>
+      </span>
+    </sc-if>
+  </span>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"tiles":{"editor":null},"width":{"editor":"int","default":96,"min":32,"max":240},"height":{"editor":"int","default":96,"min":32,"max":240},"$preview":{"width":96,"height":96}}'>
+<script type="text/x-dc" data-dc-script data-props='{"tiles":{"editor":null},"colour":{"editor":"color","default":"#9C2F6B"},"initial":{"editor":"text","default":"A"},"kind":{"editor":"enum","options":["collection","queue","none"],"default":"collection"},"width":{"editor":"int","default":150,"min":32,"max":260},"height":{"editor":"int","default":170,"min":32,"max":260},"$preview":{"width":150,"height":170}}'>
 class Component extends DCLogic {
   renderVals() {
-    // A queue or collection shown as its first works' covers, fanned like a stack of books.
-    // Deliberately not a 2×2 grid, which would read as AO3's four-tag square.
-    const W = Number(this.props.width ?? 96), H = Number(this.props.height ?? 96);
-    const tiles = (this.props.tiles || ['linear-gradient(155deg, hsl(188, 46%, 27%), hsl(210, 50%, 41%))', 'linear-gradient(155deg, hsl(335, 46%, 27%), hsl(357, 50%, 41%))', 'linear-gradient(155deg, hsl(32, 46%, 27%), hsl(54, 50%, 41%))']).slice(0, 3);
-    const ch = H, cw = Math.round(H / 1.414);
-    const dx = tiles.length > 1 ? Math.max(0, (W - cw) / (tiles.length - 1)) : 0;
-    const scale = [1, 0.9, 0.8];
+    // A queue or collection: its own card in its own colour, with the covers of the works
+    // inside fanned and tilted behind it. Not a 2x2 grid, which would read as AO3's
+    // four-tag square, and the back covers keep each work's own fandom colour.
+    const W = Number(this.props.width ?? 150), H = Number(this.props.height ?? 170);
+    const art = (h) => 'linear-gradient(155deg, hsl(' + h + ', 46%, 27%), hsl(' + ((h + 22) % 360) + ', 50%, 41%))';
+    const tiles = (this.props.tiles || [art(150), art(335), art(290)]).slice();
+    const colour = this.props.colour ?? (this.props.tiles ? null : '#9C2F6B');
+    const shade = (hex, k) => {
+      const x = hex.replace('#', '');
+      const c = [0, 2, 4].map((i) => Math.round(parseInt(x.slice(i, i + 2), 16) * k));
+      return 'rgb(' + c.join(',') + ')';
+    };
+    const front = colour ? 'linear-gradient(155deg, ' + shade(colour, 0.62) + ', ' + colour + ')' : tiles.shift();
+    const backs = tiles.slice(0, 2);
+    const cw = Math.min(W, Math.round(H * 0.72));
+    const dx = backs.length ? Math.min(Math.round(cw * 0.2), Math.max(4, Math.round((W - cw) / backs.length))) : 0;
+    const kind = this.props.kind ?? (colour ? 'collection' : 'none');
+    const big = cw >= 64;
+    const ribW = Math.round(cw * 0.2);
     return {
-      width: W,
-      height: H,
-      radius: Math.max(4, Math.round(cw * 0.12)),
-      covers: tiles.map((bg, i) => {
-        const h = Math.round(ch * scale[i]), w = Math.round(cw * scale[i]);
-        return {
-          bg, w, h,
-          left: Math.round(i * dx + (cw - w)),
-          top: Math.round((ch - h) / 2),
-          z: 3 - i,
-          shadow: i === 0 ? '0 3px 10px rgba(0,0,0,0.20)' : '-2px 0 6px rgba(0,0,0,0.18)',
-          filter: i === 0 ? 'none' : 'brightness(' + (1 - i * 0.12) + ')'
-        };
+      width: W, height: H, cw,
+      radius: Math.max(4, Math.round(cw * 0.09)),
+      front,
+      initial: colour ? (this.props.initial ?? '') : '',
+      ghostSize: Math.round(cw * 1.05),
+      ghostIn: -Math.round(cw * 0.06),
+      ghostBottom: -Math.round(cw * 0.27),
+      hasRibbon: big && kind !== 'none',
+      ribW, ribH: Math.round(ribW * 1.45), ribRight: Math.round(cw * 0.09), ribPad: Math.round(ribW * 0.2), ribIcon: Math.round(ribW * 0.6),
+      kindD: kind === 'queue' ? 'M12 3.5 3 8l9 4.5L21 8zM3 12l9 4.5 9-4.5M3 16l9 4.5 9-4.5' : 'M4.5 4.5h6v6h-6zM13.5 4.5h6v6h-6zM4.5 13.5h6v6h-6zM13.5 13.5h6v6h-6z',
+      backs: backs.map((bg, k) => {
+        const i = k + 1, sc = 1 - i * 0.04;
+        const w = Math.round(cw * sc), h = Math.round(H * sc);
+        const rot = big ? i * 5 : i * 3;
+        return { bg, w, h, left: i * dx, top: H - h - Math.round(w * Math.sin(rot * Math.PI / 180)), z: 5 - i, rot, filter: 'brightness(' + (1 - i * 0.1) + ')' };
       })
     };
   }

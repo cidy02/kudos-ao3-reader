@@ -13,7 +13,7 @@ body{margin:0}
 button{cursor:pointer}
 </style>
 </helmet>
-<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #F2F2F7; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
   <div style="position: absolute; left: 16px; right: 16px; top: 54px; display: flex; justify-content: space-between; align-items: center">
     <button aria-label="Back" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)">
       <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg>
@@ -21,19 +21,8 @@ button{cursor:pointer}
     <span style="font-size: 17px; font-weight: 600">Thread</span>
     <button style="height: 44px; padding: 0 14px; border: none; border-radius: 22px; font-family: inherit; font-size: 15px; color: #1C1C1E; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)">Parent Thread</button>
   </div>
-  <main style="padding: 112px 16px 0; display: flex; flex-direction: column; gap: 8px">
-    <sc-for list="{{comments}}" as="c" hint-placeholder-count="3">
-      <div style="display: flex; gap: 0; margin-left: {{c.indent}}px">
-        <sc-if value="{{c.isReply}}" hint-placeholder-val="{{false}}"><span aria-hidden="true" style="width: 2px; margin-right: 10px; border-radius: 1px; background: #D1D1D6"></span></sc-if>
-        <article style="flex: 1; background: #FFFFFF; border-radius: 16px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px">
-          <div style="display: flex; align-items: baseline; gap: 8px">
-            <button style="border: none; background: none; padding: 0; font-family: inherit; font-size: 15px; font-weight: 600; color: {{accent}}">{{c.author}}</button>
-            <span style="font-size: 12px; color: #6C6C70">{{c.meta}}</span>
-          </div>
-          <p style="margin: 0; font-size: 15px; line-height: 21px">{{c.body}}</p>
-        </article>
-      </div>
-    </sc-for>
+  <main style="padding: 106px 0 0">
+    <dc-import name="CommentThread" items="{{thread}}" accent="{{accent}}" hint-size="390px,420px"></dc-import>
   </main>
   <section role="dialog" aria-label="Reply to saltwindow" style="position: absolute; left: 0; right: 0; bottom: 0; height: 330px; border-radius: 32px 32px 0 0; background: #FFFFFF; box-shadow: 0 -8px 30px rgba(0,0,0,0.14); padding: 8px 16px 28px; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px">
     <div aria-hidden="true" style="width: 36px; height: 5px; border-radius: 3px; background: #C7C7CC; margin: 0 auto"></div>
@@ -65,10 +54,10 @@ class Component extends DCLogic {
     const t = (label, glyph, o) => ({ label, glyph, font: sans, weight: 500, style: 'normal', deco: 'none', ...o });
     return {
       accent: this.props.accent ?? '#990000',
-      comments: [
-        { author: 'saltwindow', meta: 'Chapter 7 · 2 days ago', body: 'The single unbroken line across the vellum. I had to put my phone down for a minute.', indent: 0, isReply: false },
-        { author: 'inkwell_moth', meta: 'Creator · 1 day ago', body: 'That line is the whole story, honestly. Thank you for reading so closely!', indent: 0, isReply: true },
-        { author: 'tidewright', meta: 'in reply to saltwindow · 20 h ago', body: 'And it echoes her mother’s map in chapter 2.', indent: 12, isReply: true }
+      thread: [
+        { kind: 'c', author: 'saltwindow', depth: 0, time: '2d', chapter: 'Ch 7', body: 'The single unbroken line across the vellum. I had to put my phone down for a minute.' },
+        { kind: 'c', author: 'inkwell_moth', depth: 1, time: '1d', role: 'Author', body: 'That line is the whole story, honestly. Thank you for reading so closely!' },
+        { kind: 'c', author: 'tidewright', depth: 2, time: '20h', body: 'And it echoes her mother’s map in chapter 2.' }
       ],
       tools: [
         t('Bold', 'B', { weight: 800 }),
