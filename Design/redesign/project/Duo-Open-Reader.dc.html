@@ -30,17 +30,20 @@ button{cursor:pointer}
     <p style="position: absolute; left: 52px; bottom: 22px; margin: 0; font-size: 12px; line-height: 16px; color: #6B645A">4</p>
   </article>
 
-  <article aria-label="Page 5" style="flex: 1; min-width: 0; height: 669px; position: relative; padding: 70px 124px 0 44px; box-sizing: border-box; overflow: hidden">
+  <article aria-label="Page 5" style="flex: 1; min-width: 0; height: 669px; position: relative; padding: 70px {{rightPad}}px 0 44px; box-sizing: border-box; overflow: hidden">
     <div aria-hidden="true" style="position: absolute; left: 0; top: 0; bottom: 0; width: 40px; background: linear-gradient(to right, rgba(60,40,10,0.08), rgba(60,40,10,0)); pointer-events: none"></div>
-    <p style="position: absolute; left: 44px; right: 124px; top: 26px; margin: 0; text-align: center; font-size: 12px; line-height: 16px; font-weight: 500; color: #6B645A">Chapter 7 · The Salt Road</p>
+    <p style="position: absolute; left: 44px; right: {{rightPad}}px; top: 26px; margin: 0; text-align: center; font-size: 12px; line-height: 16px; font-weight: 500; color: #6B645A">Chapter 7 · The Salt Road</p>
     <div style="height: 476px; overflow: hidden; font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: 18px; line-height: 28px; text-align: justify; hyphens: auto">
       <p style="margin: 0; text-indent: 1.3em">She drew the first line of the flats as a single stroke, left to right, without lifting the pen. It was the only honest way to draw a place that had no landmarks: you committed to the horizon and hoped it held.</p>
       <p style="margin: 0; text-indent: 1.3em">They walked until the light went copper. Somewhere behind them the dunes had folded themselves away, and ahead there was nothing but the white ground and the long blue shadow each of them threw.</p>
       <p style="margin: 0; text-indent: 1.3em">“How will you know where to stop?” Tomas asked.</p>
       <p style="margin: 0; text-indent: 1.3em">Elinor checked the compass. The needle was steady, which was its own kind of answer. “When the map runs out,” she said, “I'll know I've arrived.”</p>
       <p style="margin: 0; text-indent: 1.3em">He looked at the vellum, at the single unbroken line crossing it, and then at her, and for once he didn't laugh.</p>
+      <p style="margin: 0; text-indent: 1.3em">They made camp where the crust gave way to shingle. Tomas built a fire from driftwood that burned green at the edges, and Elinor sat with the map across her knees until the light was gone.</p>
+      <p style="margin: 0; text-indent: 1.3em">“Tomorrow,” she said, “we find the marker.”</p>
     </div>
-    <p style="position: absolute; right: 124px; bottom: 22px; margin: 0; font-size: 12px; line-height: 16px; color: #6B645A">5</p>
+    <p style="position: absolute; right: {{rightPad}}px; bottom: 22px; margin: 0; font-size: 12px; line-height: 16px; color: #6B645A">5</p>
+    <sc-if value="{{immersive}}" hint-placeholder-val="{{false}}"><p style="position: absolute; left: 44px; right: {{rightPad}}px; bottom: 22px; margin: 0; text-align: center; font-size: 12px; line-height: 16px; color: #9A9184">21 min left in chapter</p></sc-if>
   </article>
 
   <sc-if value="{{showScrim}}" hint-placeholder-val="{{false}}">
@@ -49,6 +52,7 @@ button{cursor:pointer}
 
 
 
+  <sc-if value="{{chrome}}" hint-placeholder-val="{{true}}">
   <div style="position: absolute; left: 0; right: 80px; width: 440px; margin: 0 auto; bottom: 20px; border-radius: 26px; padding: 10px 18px; box-sizing: border-box; display: flex; flex-direction: column; gap: 8px; background: rgba(255,253,248,0.78); backdrop-filter: blur(24px) saturate(160%); -webkit-backdrop-filter: blur(24px) saturate(160%); box-shadow: 0 8px 28px rgba(60,40,10,0.12), 0 0 0 0.5px rgba(60,40,10,0.08), inset 0 1px 0 rgba(255,255,255,0.9)">
     <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px; min-width: 0">
       <span style="min-width: 0; font-size: 14px; line-height: 18px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">The Cartographer's Daughter</span>
@@ -63,6 +67,7 @@ button{cursor:pointer}
   <div style="position: absolute; right: 8px; top: 0; z-index: 3">
     <dc-import name="DuoSideBar" height="669" nav="close" tabs="none" theme="sepia" actions="{{side}}" accent="{{accent}}" hint-size="64px,669px"></dc-import>
   </div>
+  </sc-if>
 
   <sc-if value="{{showMenu}}" hint-placeholder-val="{{false}}">
     <div role="menu" aria-label="Reader" style="position: absolute; z-index: 4; right: 84px; top: 196px; width: 268px; border-radius: 24px; padding: 6px 0; background: rgba(252,250,245,0.9); backdrop-filter: blur(30px) saturate(160%); -webkit-backdrop-filter: blur(30px) saturate(160%); box-shadow: 0 18px 50px rgba(40,30,10,0.24), 0 0 0 0.5px rgba(60,40,10,0.1)">
@@ -131,7 +136,7 @@ button{cursor:pointer}
   </sc-if>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"view":{"editor":"enum","options":["controls","more","settings"],"default":"controls"},"$preview":{"width":951,"height":669}}'>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"view":{"editor":"enum","options":["controls","more","settings","immersive"],"default":"controls"},"$preview":{"width":951,"height":669}}'>
 class Component extends DCLogic {
   componentDidUpdate(prev) {
     if (prev.view !== this.props.view && this.state && this.state.view) this.setState({ view: null });
@@ -160,7 +165,10 @@ class Component extends DCLogic {
       side: [{ label: 'Themes and settings', text: 'Aa', on: view === 'settings' }, { label: 'Contents', d: RI.contents }, { label: 'Add bookmark', d: RI.bookmark }, { label: 'Read Aloud', d: RI.listen }, { label: 'More', d: 'dots', on: view === 'more' }],
       showMenu: view === 'more',
       showSettings: view === 'settings',
-      showScrim: view !== 'controls',
+      showScrim: view !== 'controls' && view !== 'immersive',
+      chrome: view !== 'immersive',
+      immersive: view === 'immersive',
+      rightPad: view === 'immersive' ? 52 : 124,
       moreExpanded: view === 'more' ? 'true' : 'false',
       settingsExpanded: view === 'settings' ? 'true' : 'false',
       moreBg: view === 'more' ? 'rgba(0,0,0,0.07)' : 'transparent',

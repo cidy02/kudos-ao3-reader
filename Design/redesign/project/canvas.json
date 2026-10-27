@@ -264,7 +264,7 @@
       "page": "duo",
       "title": "Open portrait · Browse",
       "w": 669,
-      "x": 0,
+      "x": 6741,
       "y": 3276
     },
     "DuoSidebar.dc.html": {
@@ -890,6 +890,102 @@
       "w": 390,
       "x": 1360,
       "y": 2760
+    },
+    "Duo-Open-Reader-Immersive.dc.html": {
+      "h": 669,
+      "page": "duo",
+      "title": "Open · Reader, immersive (controls hidden)",
+      "w": 951,
+      "x": 7217,
+      "y": 1098
+    },
+    "Duo-Open-Insights.dc.html": {
+      "h": 669,
+      "page": "duo",
+      "title": "Open · Reading Insights",
+      "w": 951,
+      "x": 8248,
+      "y": 1098
+    },
+    "Duo-Portrait-Home.dc.html": {
+      "h": 951,
+      "page": "duo",
+      "title": "Open portrait · Home",
+      "w": 669,
+      "x": 0,
+      "y": 3276
+    },
+    "Duo-Portrait-Library.dc.html": {
+      "h": 951,
+      "page": "duo",
+      "title": "Open portrait · Library",
+      "w": 669,
+      "x": 749,
+      "y": 3276
+    },
+    "Duo-Portrait-Search.dc.html": {
+      "h": 951,
+      "page": "duo",
+      "title": "Open portrait · Search with filters",
+      "w": 669,
+      "x": 1498,
+      "y": 3276
+    },
+    "Duo-Portrait-WorkDetail.dc.html": {
+      "h": 951,
+      "page": "duo",
+      "title": "Open portrait · Work Detail",
+      "w": 669,
+      "x": 2247,
+      "y": 3276
+    },
+    "Duo-Portrait-Account.dc.html": {
+      "h": 951,
+      "page": "duo",
+      "title": "Open portrait · Account",
+      "w": 669,
+      "x": 2996,
+      "y": 3276
+    },
+    "Duo-Portrait-Settings.dc.html": {
+      "h": 951,
+      "page": "duo",
+      "title": "Open portrait · Settings",
+      "w": 669,
+      "x": 3745,
+      "y": 3276
+    },
+    "Duo-Portrait-Reader.dc.html": {
+      "h": 951,
+      "page": "duo",
+      "title": "Open portrait · Reader",
+      "w": 669,
+      "x": 4494,
+      "y": 3276
+    },
+    "Duo-Portrait-Reader-Immersive.dc.html": {
+      "h": 951,
+      "page": "duo",
+      "title": "Open portrait · Reader, immersive (controls hidden)",
+      "w": 669,
+      "x": 5243,
+      "y": 3276
+    },
+    "Duo-Portrait-Insights.dc.html": {
+      "h": 951,
+      "page": "duo",
+      "title": "Open portrait · Reading Insights",
+      "w": 669,
+      "x": 5992,
+      "y": 3276
+    },
+    "DuoTopBar.dc.html": {
+      "h": 80,
+      "page": "system",
+      "title": "Duo portrait top bar: status bar, Back/Close, toolbar group (component)",
+      "w": 669,
+      "x": 2340,
+      "y": 2420
     }
   },
   "createdOnFiles": {
@@ -967,7 +1063,7 @@
     },
     "rowOpen": {
       "kind": "title1",
-      "maxW": 7137,
+      "maxW": 9199,
       "page": "duo",
       "text": "Open, flat",
       "w": 240,
@@ -976,7 +1072,7 @@
     },
     "rowPortrait": {
       "kind": "title1",
-      "maxW": 1500,
+      "maxW": 7410,
       "page": "duo",
       "text": "Open, portrait",
       "w": 240,
@@ -1022,7 +1118,7 @@
     "whyDuo": {
       "fill": "blue",
       "page": "duo",
-      "text": "iPhone Duo\n\n• Cover: the tab rail sits on the right and rows stop at it (T-447)\n• Open: the tab bar becomes a sidebar; Library, Account and Settings get list and detail side by side\n• Sheets become inspectors beside the content (filters, comments)\n• Book pose: nothing crosses the fold; the reader shows one page per pane",
+      "text": "iPhone Duo\n\n• Cover, and open in landscape: status bar, Back/Close, toolbar and tab bar sit on the trailing edge (DuoSideBar)\n• Open in portrait: standard horizontal bars (DuoTopBar on top, tab bar at the bottom); two-pane screens split top and bottom at the fold\n• Open in landscape: list and detail side by side, split at the fold; sheets become inspectors beside the content\n• Book pose: nothing crosses the fold; the reader shows one page per pane\n• Reader: immersive mode hides every control and the status bar; a tap brings them back",
       "w": 380,
       "x": 1092,
       "y": 0
@@ -1174,7 +1270,19 @@
     "Insights-Stopped.dc.html",
     "Insights-Data.dc.html",
     "Insights-Metrics.dc.html",
-    "InsightsTop.dc.html"
+    "InsightsTop.dc.html",
+    "Duo-Open-Reader-Immersive.dc.html",
+    "Duo-Open-Insights.dc.html",
+    "Duo-Portrait-Home.dc.html",
+    "Duo-Portrait-Library.dc.html",
+    "Duo-Portrait-Search.dc.html",
+    "Duo-Portrait-WorkDetail.dc.html",
+    "Duo-Portrait-Account.dc.html",
+    "Duo-Portrait-Settings.dc.html",
+    "Duo-Portrait-Reader.dc.html",
+    "Duo-Portrait-Reader-Immersive.dc.html",
+    "Duo-Portrait-Insights.dc.html",
+    "DuoTopBar.dc.html"
   ],
   "pages": [
     {

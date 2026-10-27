@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Open Reader, immersive</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 951px; height: 669px; position: relative; overflow: hidden; background: #FAF7F0">
+  <dc-import name="Duo-Open-Reader" view="immersive" accent="{{accent}}" hint-size="951px,669px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"$preview":{"width":951,"height":669}}'>
+class Component extends DCLogic {
+  renderVals() {
+    // Immersive reading: the side controls, the status bar and the position pill
+    // are hidden; both pages take even margins. A tap in the middle brings the
+    // controls back (Duo-Open-Reader).
+    return { accent: this.props.accent ?? '#990000' };
+  }
+}
+</script>
+</body>
+</html>
