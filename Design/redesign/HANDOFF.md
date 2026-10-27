@@ -5,6 +5,35 @@ The job is a redesign of Kudos (the AO3 reader app in this repo) on a Design can
 like Apple designed and shipped it, plus a version for the iPhone Duo (cover display, unfolded, Book pose).
 It is a design job. Don't change app code.
 
+## What the owner wants (read this first)
+
+In the owner's words: *"We've put a lot of work into the current version of the app, and we've already been through
+one redesign. I don't want to throw that work away. I'm chasing a polished version I can't seem to find. It needs
+to feel more like a native Apple app. AO3 is all fanworks, so some things are limited: works have no covers, and
+that limits the design options. I want the app to feel polished and coherent, but I'm stuck. It feels a little too
+one-dimensional at the moment."*
+
+What that means for you:
+
+- **Evolve, don't replace.** Today's app is the result of a full redesign, and most of its parts are right. Before
+  you draw anything, read `docs/PROJECT_PHILOSOPHY.md`, `docs/REDESIGN_DECISIONS.md` (binding unless the owner
+  overrides one) and the "What to keep" list in `notes/critique-report.md`: the fandom wash, kicker and card colours
+  as identity, the full AO3 metadata density, Home's single left edge, the progress ring and Resume hero, the
+  "Tap to reveal" blur, the queue's segmented progress bar. Every board should be recognisably Kudos.
+- **The gap is polish and coherence, not features.** The critique names three causes: the app draws its own
+  navigation instead of using the system's, colour, type and boxes have no rules, so everything is equally loud,
+  and the reading life is invisible. Fix those. Don't add new things for the sake of it.
+- **"One-dimensional" is the problem to solve.** Our reading of it: every surface is tinted, boxed and capitalised
+  at the same volume, so nothing is in front of anything else, and every work is drawn as the same card, so a shelf
+  of ten fics looks like ten copies of one shape. Apple's apps get depth from hierarchy: chrome that recedes,
+  content that leads, sections with different shapes, and moments that matter. Check that reading with the owner.
+- **No covers is a constraint to design for, not around.** Don't fake cover art. What every fic does have is its
+  fandom, its words, its tags, its shape (length, chapters, WIP cadence) and the reader's history with it. Places
+  to look: Apple Music's generated playlist art and Apple Books' plain-title covers (the `CoverCard` text variant
+  already exists); the passage where you stopped as the hero's "cover" (critique finding); a work's shape drawn as
+  data, the way Fitness and Health make rings and charts the imagery; varied section shapes on Home the way Music
+  and the App Store do it; the end-of-work and kudos moments. These are starting points, not answers.
+
 ## Where things are
 
 - **Canvas:** https://claude.ai/artifact/YDoKqygRYFNBhAch47Bmux (made from the Design Artifact type). Read it
@@ -51,7 +80,16 @@ and the code (`kudos-ao3-reader/UIComponents/AdaptiveContentRegions.swift`, `Wid
 working tree that also had uncommitted Duo work (`LocalNavigationHost.swift`, the Library/Account/Settings sidebar
 lists). Those files aren't in this branch, so for those parts the survey is your only source.
 
-## Not published yet (start here)
+## Step 0: help the owner get unstuck (before the Duo boards)
+
+The owner is stuck on direction, so don't polish 12 more boards in a direction they haven't confirmed. First, make
+one board, `Direction.dc.html`, on its own canvas page: Home and Work Detail in two or three directions. Each
+direction is an evolution of today's app (same parts, same density), and each takes a different answer to
+"depth without covers". Put a short caption under each saying what changed and which Apple app it borrows from.
+Publish it, ask the owner to pick (or mix), and record the choice in LEDGER.md under "Notes / decisions". Then
+carry the chosen direction into everything below, including the boards already written.
+
+## Not published yet
 
 Queue item 8, the iPhone Duo boards. A background workflow wrote these, but every reviewer hit the usage limit,
 so **none of them have been reviewed, and none are published**:
