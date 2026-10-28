@@ -136,7 +136,7 @@ button{cursor:pointer}
   </sc-if>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"view":{"editor":"enum","options":["controls","more","settings","immersive"],"default":"controls"},"$preview":{"width":951,"height":669}}'>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#990000"},"view":{"editor":"enum","options":["controls","more","settings","immersive"],"default":"controls"},"$preview":{"width":951,"height":669}}'>
 class Component extends DCLogic {
   componentDidUpdate(prev) {
     if (prev.view !== this.props.view && this.state && this.state.view) this.setState({ view: null });
