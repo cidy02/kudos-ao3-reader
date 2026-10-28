@@ -547,6 +547,20 @@ hand-rolling** — "as many dependencies as are necessary". PDF is explicitly *i
   Ledger → List; dashboard Shelves/Ledger keys are ignored. Touches the 17 files that
   read either enum plus `LibrarySectionKindTests`. Density rule (AGENTS.md): no
   metadata leaves a surface without the owner's approval; screenshot gate applies.
+- **T-467 · Writing stats: only what AO3's stats page holds** 🅿️ *(owner, 2026-10-28;
+  canvas `Writing`, `Writing-Stats`).* The Writing tab and its Stats screen show
+  nothing AO3's `/users/<name>/stats` page doesn't: Totals (Hits, Kudos, Comment
+  Threads, Bookmarks, Subscriptions, User Subscriptions, Word Count), a year filter
+  (All Years default, `?year=`), sort by date or any of those measures, By Fandom /
+  Flat, and each work's words, hits, kudos, comment threads, bookmarks and
+  subscriptions. No daily or weekly figures, deltas, sparklines or "who's reading"
+  — AO3 keeps no history, and snapshots taken on app launch would be guesses.
+  `AO3Client.parseUserStats` reads only the Totals block today: extend it to the
+  per-work list and the year options (scoped per work; the `dd.kudos` classes repeat,
+  see the comment there), with fixtures in `AO3UserStatsParsingTests`. Own account
+  only; one foreground fetch when Writing or Stats opens, through
+  `AO3RequestCoordinator.withSlot` (no polling). The draft card's word goal and
+  streak stay: they count the user's own writing in the editor.
 
 ### Phase 3 — native AO3 writes (most fragile; needs the per-page CSRF token)
 - **Leave kudos · comment · subscribe · AO3-side bookmark** — fetch the work/page,
