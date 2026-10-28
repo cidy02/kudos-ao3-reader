@@ -38,6 +38,27 @@ button{cursor:pointer}
     </sc-if>
     <sc-if value="{{smallSubtitle}}" hint-placeholder-val="{{false}}"><p style="margin: -4px 0 0; font-size: 15px; line-height: 20px; color: #6C6C70">{{subtitle}}</p></sc-if>
 
+    <sc-if value="{{hasContext}}" hint-placeholder-val="{{false}}">
+      <div aria-label="{{ctx.aria}}" style="background: #F2F2F7; border-radius: 16px; padding: 12px; display: flex; align-items: center; gap: 12px">
+      <sc-if value="{{ctx.hasCover}}" hint-placeholder-val="{{true}}"><span aria-hidden="true" style="position: relative; width: 46px; height: 62px; flex-shrink: 0; border-radius: 7px; overflow: hidden; background: {{ctx.cover}}; color: rgba(255,255,255,0.9); font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: 30px; font-weight: 600; display: flex; align-items: flex-end; justify-content: flex-end; padding: 0 5px 2px 0; box-sizing: border-box; box-shadow: 0 2px 6px rgba(0,0,0,0.18)">{{ctx.initial}}</span></sc-if>
+      <sc-if value="{{ctx.hasTile}}" hint-placeholder-val="{{false}}"><span aria-hidden="true" style="width: 52px; height: 52px; flex-shrink: 0; border-radius: 14px; background: {{ctx.tile}}; color: #FFFFFF; display: flex; align-items: center; justify-content: center"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{ctx.d}}"></path></svg></span></sc-if>
+        <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px">
+          <span style="font-size: 11px; line-height: 14px; font-weight: 600; letter-spacing: 0.6px; text-transform: uppercase; color: {{ctx.kickerColour}}">{{ctx.kicker}}</span>
+          <span style="font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: 18px; line-height: 23px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{ctx.title}}</span>
+          <span style="font-size: 13px; line-height: 18px; color: #6C6C70">{{ctx.meta}}</span>
+        </span>
+      </div>
+    </sc-if>
+    <sc-if value="{{hasStats}}" hint-placeholder-val="{{false}}">
+      <div role="list" aria-label="{{statsLabel}}" style="background: #F2F2F7; border-radius: 16px; display: grid; grid-template-columns: {{statCols}}">
+        <sc-for list="{{stats}}" as="k" hint-placeholder-count="3">
+          <span role="listitem" style="padding: 10px 4px; display: flex; flex-direction: column; align-items: center; gap: 1px; border-left: {{k.sep}}">
+            <span style="font-size: 19px; line-height: 24px; font-weight: 700; font-variant-numeric: tabular-nums; color: {{k.colour}}">{{k.n}}</span>
+            <span style="font-size: 11px; line-height: 14px; color: #6C6C70; text-align: center">{{k.label}}</span>
+          </span>
+        </sc-for>
+      </div>
+    </sc-if>
     <sc-if value="{{hasSegments}}" hint-placeholder-val="{{false}}">
       <div role="tablist" aria-label="Show" style="height: 34px; border-radius: 17px; background: rgba(118,118,128,0.12); padding: 2px; display: grid; grid-template-columns: {{segCols}}">
         <sc-for list="{{segs}}" as="g" hint-placeholder-count="2"><button role="tab" aria-selected="{{g.on}}" style="border: none; border-radius: 15px; background: {{g.bg}}; box-shadow: {{g.shadow}}; font-family: inherit; font-size: 14px; font-weight: {{g.weight}}">{{g.label}}</button></sc-for>
@@ -77,11 +98,15 @@ button{cursor:pointer}
               <div style="display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: {{r.sep}}">
                 <sc-if value="{{r.hasHandle}}" hint-placeholder-val="{{false}}"><span aria-hidden="true" style="color: #8E8E93; display: flex"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 9h14M5 15h14"></path></svg></span></sc-if>
                 <sc-if value="{{r.hasCircle}}" hint-placeholder-val="{{false}}"><span aria-hidden="true" style="width: 22px; height: 22px; flex-shrink: 0; box-sizing: border-box; border-radius: 11px; border: {{r.circleBorder}}; background: {{r.circleBg}}; color: #FFFFFF; display: flex; align-items: center; justify-content: center"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="{{r.tick}}"></path></svg></span></sc-if>
+                <sc-if value="{{r.hasCover}}" hint-placeholder-val="{{false}}"><span aria-hidden="true" style="width: 34px; height: 46px; flex-shrink: 0; align-self: flex-start; border-radius: 5px; background: {{r.cover}}; color: rgba(255,255,255,0.9); font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: 20px; font-weight: 600; display: flex; align-items: flex-end; justify-content: flex-end; padding: 0 3px 1px 0; box-sizing: border-box">{{r.initial}}</span></sc-if>
                 <sc-if value="{{r.hasAvatar}}" hint-placeholder-val="{{false}}"><span aria-hidden="true" style="width: {{r.avatarSize}}px; height: {{r.avatarSize}}px; flex-shrink: 0; border-radius: {{r.avatarRadius}}; background: {{r.tone}}; color: #FFFFFF; font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center"><sc-if value="{{r.hasGlyph}}" hint-placeholder-val="{{false}}"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{r.glyph}}"></path></svg></sc-if><sc-if value="{{r.noGlyph}}" hint-placeholder-val="{{true}}">{{r.initial}}</sc-if></span></sc-if>
                 <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
                   <sc-if value="{{r.hasKicker}}" hint-placeholder-val="{{false}}"><span style="font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: 0.6px; text-transform: uppercase; color: {{r.kickerColour}}">{{r.kicker}}</span></sc-if>
                   <span style="font-size: 17px; line-height: 22px; font-weight: {{r.weight}}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{r.title}}</span>
                   <sc-if value="{{r.hasSub}}" hint-placeholder-val="{{true}}"><span style="font-size: 13px; line-height: 18px; color: #6C6C70">{{r.sub}}</span></sc-if>
+                  <sc-if value="{{r.hasMeta}}" hint-placeholder-val="{{false}}"><span style="font-size: 12px; line-height: 16px; color: {{r.metaColour}}; font-weight: {{r.metaWeight}}">{{r.meta}}</span></sc-if>
+                  <sc-if value="{{r.hasTags}}" hint-placeholder-val="{{false}}"><span style="margin-top: 3px; display: flex; flex-wrap: wrap; gap: 4px"><sc-for list="{{r.tags}}" as="t" hint-placeholder-count="2"><span style="padding: 1px 8px; border-radius: 10px; background: {{t.bg}}; color: {{t.fg}}; font-size: 12px; line-height: 18px; font-weight: {{t.weight}}">{{t.label}}</span></sc-for></span></sc-if>
+                  <sc-if value="{{r.hasButtons}}" hint-placeholder-val="{{false}}"><span style="margin-top: 6px; display: flex; gap: 8px"><sc-for list="{{r.buttons}}" as="b" hint-placeholder-count="2"><button style="height: 30px; padding: 0 14px; border: none; border-radius: 15px; background: {{b.bg}}; color: {{b.fg}}; font-family: inherit; font-size: 14px; font-weight: 600">{{b.label}}</button></sc-for></span></sc-if>
                   <sc-if value="{{r.hasBar}}" hint-placeholder-val="{{false}}"><span role="img" aria-label="{{r.barLabel}}" style="margin-top: 3px; height: 4px; border-radius: 2px; background: #E5E5EA; overflow: hidden"><span style="display: block; width: {{r.bar}}; height: 4px; background: {{r.barColour}}"></span></span></sc-if>
                 </span>
                 <sc-if value="{{r.hasBadge}}" hint-placeholder-val="{{false}}"><span style="padding: 0 7px; border-radius: 9px; background: {{r.badgeBg}}; color: {{r.badgeFg}}; font-size: 12px; line-height: 18px; font-weight: 700; white-space: nowrap">{{r.badge}}</span></sc-if>
@@ -111,7 +136,7 @@ button{cursor:pointer}
   </sc-if>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"title":{"editor":"text","default":"Finished"},"subtitle":{"editor":"text","default":""},"large":{"editor":"boolean","default":true},"back":{"editor":"text","default":"Back"},"tools":{"editor":null},"segments":{"editor":null},"chips":{"editor":null},"sections":{"editor":null},"actions":{"editor":null},"tab":{"editor":"enum","options":["none","home","library","writing","browse"],"default":"library"},"height":{"editor":"int","default":844,"min":400,"max":2000},"$preview":{"width":390,"height":844}}'>
+<script type="text/x-dc" data-dc-script data-props='{"title":{"editor":"text","default":"Finished"},"subtitle":{"editor":"text","default":""},"large":{"editor":"boolean","default":true},"back":{"editor":"text","default":"Back"},"tools":{"editor":null},"segments":{"editor":null},"chips":{"editor":null},"sections":{"editor":null},"actions":{"editor":null},"context":{"editor":null},"stats":{"editor":null},"tab":{"editor":"enum","options":["none","home","library","writing","browse"],"default":"library"},"height":{"editor":"int","default":844,"min":400,"max":2000},"$preview":{"width":390,"height":844}}'>
 class Component extends DCLogic {
   renderVals() {
     // One data-driven list screen: work lists (rows or a two-up grid) and plain lists
@@ -130,6 +155,10 @@ class Component extends DCLogic {
     const tab = this.props.tab ?? 'library';
     const actions = this.props.actions;
     const tick = 'M5 12.5l4.6 4.6L19.2 7.4';
+    const ctxIn = this.props.context;
+    const ctx = ctxIn ? { aria: ctxIn.title, kicker: ctxIn.kicker || '', kickerColour: ctxIn.kickerColour || '#6C6C70', title: ctxIn.title || '', meta: ctxIn.meta || '', hasCover: !!ctxIn.cover, cover: ctxIn.cover || '', initial: (ctxIn.title || '?').charAt(0), hasTile: !ctxIn.cover, tile: ctxIn.tile || '#6C6C70', d: ctxIn.icon || '' } : {};
+    const statsIn = this.props.stats || [];
+    const statBlock = { hasContext: !!ctxIn, ctx, hasStats: statsIn.length > 0, statsLabel: this.props.statsLabel || 'Summary', statCols: 'repeat(' + (statsIn.length || 1) + ', minmax(0, 1fr))', stats: statsIn.map((k, i) => ({ n: k.n, label: k.label, colour: k.colour || '#000000', sep: i ? '0.5px solid #E5E5EA' : 'none' })) };
     const sections = (this.props.sections || []).map((s) => {
       const kind = s.kind || 'works';
       const works = (s.works || []).map((w, i, all) => ({ ...w, divider: i < all.length - 1, selected: !!w.selected }));
@@ -144,12 +173,16 @@ class Component extends DCLogic {
           detail: r.detail || '', hasDetail: !!r.detail,
           badge: r.badge || '', hasBadge: !!r.badge, badgeBg: r.badgeBg || '#990000', badgeFg: r.badgeFg || '#FFFFFF',
           action: r.action || '', hasAction: !!r.action,
-          hasAvatar: !!(r.tone || r.glyph), tone: r.tone || '#8E8E93', initial: (r.initial || r.title || '?').charAt(0).toUpperCase(),
+          hasAvatar: !!(r.tone || r.glyph) && !r.cover, tone: r.tone || '#8E8E93', initial: (r.initial || r.title || '?').charAt(0).toUpperCase(),
           glyph: r.glyph || '', hasGlyph: !!r.glyph, noGlyph: !r.glyph,
           avatarSize: r.square ? 44 : 36, avatarRadius: r.square ? '10px' : '50%',
           hasHandle: !!r.handle, hasCircle: r.circle !== undefined, circleBorder: r.circle ? 'none' : '1.5px solid #C7C7CC', circleBg: r.circle ? '#990000' : 'transparent', tick: r.circle ? tick : '',
+          meta: r.meta || '', hasMeta: !!r.meta, metaColour: r.metaColour || '#8E8E93', metaWeight: r.metaColour ? 600 : 400,
+          hasCover: !!r.cover, cover: r.cover || '', initial: (r.title || '?').replace(/^\d+\.\s*/, '').charAt(0),
+          tags: (r.tags || []).map((t) => (typeof t === 'string' ? { label: t, bg: '#EFEFF4', fg: '#3A3A3C', weight: 400 } : { label: t.label, bg: t.bg || '#EFEFF4', fg: t.fg || '#3A3A3C', weight: t.bg ? 600 : 400 })), hasTags: !!(r.tags && r.tags.length),
+          buttons: (r.buttons || []).map((b) => ({ label: b.label, bg: b.primary ? '#990000' : b.destructive ? 'rgba(215,0,21,0.10)' : '#EFEFF4', fg: b.primary ? '#FFFFFF' : b.destructive ? '#D70015' : '#1C1C1E' })), hasButtons: !!(r.buttons && r.buttons.length),
           hasBar: r.bar !== undefined, bar: (r.bar || 0) + '%', barColour: r.barColour || '#990000', barLabel: r.barLabel || '',
-          hasChevron: r.chevron ?? (!r.action && r.circle === undefined && !r.handle),
+          hasChevron: r.chevron ?? (!r.action && r.circle === undefined && !r.handle && !r.buttons),
           sep: i ? '0.5px solid #E5E5EA' : 'none'
         }))
       };
@@ -165,6 +198,7 @@ class Component extends DCLogic {
       hasChips: !!chipsIn,
       chips: (chipsIn || []).map((c) => ({ label: c.label, on: c.on ? 'true' : 'false', bg: c.on ? '#990000' : '#EFEFF4', fg: c.on ? '#FFFFFF' : '#1C1C1E' })),
       sections,
+      ...statBlock,
       tab, hasTab: !actions && tab !== 'none', hasBottom: !!actions || tab !== 'none',
       hasActions: !!actions, actionsLabel: 'Actions for the selected works',
       actions: (actions || []).map((a) => ({ label: a.label || a, colour: a.destructive ? '#D70015' : '#990000' }))

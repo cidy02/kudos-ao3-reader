@@ -12,14 +12,42 @@
 body{margin:0}
 </style>
 </helmet>
-<div style="width: 390px; height: 844px; position: relative; overflow: hidden">
-  <dc-import name="ListScreen" title="Persuasion Prompt Meme" subtitle="142 prompts · 38 claimed · 21 filled" back="Back" height="844" tools="{{tools}}" chips="{{chips}}" sections="{{sections}}" hint-size="390px,844px"></dc-import>
+<div style="width: 390px; height: 980px; position: relative; overflow: hidden">
+  <dc-import name="ListScreen" title="Prompts" back="Back" tab="writing" height="980" large="{{large}}" context="{{context}}" stats="{{stats}}" tools="{{tools}}" chips="{{chips}}" sections="{{sections}}" hint-size="390px,980px"></dc-import>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":980}}'>
 class Component extends DCLogic {
   renderVals() {
     return {
+  "large": false,
+  "context": {
+    "kicker": "Prompt meme · Persuasion",
+    "kickerColour": "#7B3FA0",
+    "title": "Persuasion Prompt Meme",
+    "meta": "Open for prompts until Dec 31",
+    "tile": "#7B3FA0",
+    "icon": "M4 5h16v11H9l-5 4z"
+  },
+  "stats": [
+    {
+      "n": "142",
+      "label": "Prompts"
+    },
+    {
+      "n": "38",
+      "label": "Claimed"
+    },
+    {
+      "n": "21",
+      "label": "Filled"
+    },
+    {
+      "n": "1",
+      "label": "Yours",
+      "colour": "#990000"
+    }
+  ],
   "tools": [
     {
       "label": "New Prompt",
@@ -47,7 +75,16 @@ class Component extends DCLogic {
       "rows": [
         {
           "title": "Anne, rain, a borrowed coat",
-          "sub": "Anne Elliot/Frederick Wentworth · claimed by you",
+          "sub": "by quietharbor · Oct 12",
+          "tags": [
+            {
+              "label": "Anne Elliot/Frederick Wentworth",
+              "bg": "rgba(153,0,0,0.10)",
+              "fg": "#990000"
+            }
+          ],
+          "meta": "Claimed by you",
+          "metaColour": "#990000",
           "tone": "#7B3FA0",
           "glyph": "M4 5h16v11H9l-5 4z",
           "square": true,
@@ -56,7 +93,13 @@ class Component extends DCLogic {
         },
         {
           "title": "The navy list, read aloud",
-          "sub": "Gen · 2 claims · 1 fill",
+          "sub": "by anne_at_lyme · Oct 9",
+          "tags": [
+            "Gen",
+            "Admiral Croft",
+            "Sophia Croft"
+          ],
+          "meta": "2 claims · 1 fill",
           "tone": "#7B3FA0",
           "glyph": "M4 5h16v11H9l-5 4z",
           "square": true,
@@ -64,7 +107,12 @@ class Component extends DCLogic {
         },
         {
           "title": "Lyme, the morning after",
-          "sub": "Louisa Musgrove, Anne Elliot · unclaimed",
+          "sub": "Anonymous · Oct 8",
+          "tags": [
+            "Louisa Musgrove",
+            "Anne Elliot"
+          ],
+          "meta": "Unclaimed",
           "tone": "#7B3FA0",
           "glyph": "M4 5h16v11H9l-5 4z",
           "square": true,
@@ -72,7 +120,16 @@ class Component extends DCLogic {
         },
         {
           "title": "Kellynch, years later",
-          "sub": "Anne Elliot/Frederick Wentworth · 1 fill",
+          "sub": "by elinor_d · Oct 2",
+          "tags": [
+            {
+              "label": "Anne Elliot/Frederick Wentworth",
+              "bg": "rgba(153,0,0,0.10)",
+              "fg": "#990000"
+            },
+            "Future Fic"
+          ],
+          "meta": "1 fill",
           "tone": "#7B3FA0",
           "glyph": "M4 5h16v11H9l-5 4z",
           "square": true,

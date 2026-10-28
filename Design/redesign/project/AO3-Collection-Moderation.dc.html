@@ -12,52 +12,119 @@
 body{margin:0}
 </style>
 </helmet>
-<div style="width: 390px; height: 844px; position: relative; overflow: hidden">
-  <dc-import name="ListScreen" title="Moderation" subtitle="Lighthouse Week 2026 · 3 waiting" back="Back" height="844" segments="{{segments}}" sections="{{sections}}" hint-size="390px,844px"></dc-import>
+<div style="width: 390px; height: 960px; position: relative; overflow: hidden">
+  <dc-import name="ListScreen" title="Moderation" back="Back" tab="writing" height="960" large="{{large}}" context="{{context}}" stats="{{stats}}" chips="{{chips}}" sections="{{sections}}" hint-size="390px,960px"></dc-import>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":960}}'>
 class Component extends DCLogic {
   renderVals() {
     return {
-  "segments": {
-    "options": [
-      "Waiting",
-      "Approved",
-      "Rejected"
-    ],
-    "selected": 0
+  "large": false,
+  "context": {
+    "kicker": "Collection · moderated",
+    "kickerColour": "#2F6D6A",
+    "title": "Lighthouse Week 2026",
+    "meta": "Open until Nov 7 · you own it",
+    "tile": "#2F6D6A",
+    "icon": "M6 8h12v12H6zM8 5h8"
   },
+  "stats": [
+    {
+      "n": "3",
+      "label": "Waiting",
+      "colour": "#C25E00"
+    },
+    {
+      "n": "41",
+      "label": "Approved"
+    },
+    {
+      "n": "2",
+      "label": "Rejected"
+    }
+  ],
+  "chips": [
+    {
+      "label": "Waiting 3",
+      "on": true
+    },
+    {
+      "label": "Approved 41"
+    },
+    {
+      "label": "Rejected 2"
+    }
+  ],
   "sections": [
     {
       "kind": "rows",
       "rows": [
         {
           "title": "Fog Signal",
-          "kicker": "Original Work",
-          "sub": "by tidewright · submitted 2 h ago",
-          "tone": "#2F6D6A",
-          "glyph": "M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h5",
-          "square": true,
-          "action": "Approve"
+          "kicker": "Original Work · T",
+          "kickerColour": "hsl(188, 56%, 33%)",
+          "sub": "tidewright · 1,380 words · submitted 2 h ago",
+          "tags": [
+            {
+              "label": "Lighthouse Keeper/Original Character",
+              "bg": "rgba(153,0,0,0.10)",
+              "fg": "#990000"
+            },
+            "Fog",
+            "Hurt/Comfort"
+          ],
+          "cover": "linear-gradient(155deg, hsl(188, 46%, 27%), hsl(210, 50%, 41%))",
+          "buttons": [
+            {
+              "label": "Approve",
+              "primary": true
+            },
+            {
+              "label": "Reject",
+              "destructive": true
+            }
+          ]
         },
         {
           "title": "The Keeper’s Daughter",
-          "kicker": "Original Work",
-          "sub": "by inkwell_moth · yesterday",
-          "tone": "#1F4E5F",
-          "glyph": "M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h5",
-          "square": true,
-          "action": "Approve"
+          "kicker": "Original Work · G",
+          "kickerColour": "hsl(188, 56%, 33%)",
+          "sub": "inkwell_moth · 4,700 words · yesterday",
+          "tags": [
+            "Gen",
+            "Coming of Age",
+            "Lighthouses"
+          ],
+          "cover": "linear-gradient(155deg, hsl(214, 46%, 27%), hsl(236, 50%, 41%))",
+          "buttons": [
+            {
+              "label": "Approve",
+              "primary": true
+            },
+            {
+              "label": "Reject",
+              "destructive": true
+            }
+          ]
         },
         {
-          "title": "Bookmark of “Salt & Starlight”",
+          "title": "Bookmark of Salt & Starlight",
           "kicker": "Bookmark",
-          "sub": "by marginalia · Oct 25",
-          "tone": "#6C6C70",
-          "glyph": "M7 4h10v16l-5-4-5 4z",
-          "square": true,
-          "action": "Approve"
+          "kickerColour": "#6C6C70",
+          "sub": "marginalia · Oct 25",
+          "meta": "“The lighthouse chapter is the whole reason I read this.”",
+          "cover": "linear-gradient(155deg, hsl(196, 46%, 27%), hsl(218, 50%, 41%))",
+          "buttons": [
+            {
+              "label": "Approve",
+              "primary": true
+            },
+            {
+              "label": "Reject",
+              "destructive": true
+            }
+          ]
         }
       ]
     }

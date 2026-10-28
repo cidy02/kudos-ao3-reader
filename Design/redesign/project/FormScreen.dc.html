@@ -56,6 +56,27 @@ button{cursor:pointer}
         </label>
       </sc-if>
 
+      <sc-if value="{{hasContext}}" hint-placeholder-val="{{false}}">
+        <div aria-label="{{ctx.aria}}" style="background: #FFFFFF; border-radius: 16px; padding: 12px; display: flex; align-items: center; gap: 12px">
+          <sc-if value="{{ctx.hasCover}}" hint-placeholder-val="{{true}}"><span aria-hidden="true" style="position: relative; width: 46px; height: 62px; flex-shrink: 0; border-radius: 7px; overflow: hidden; background: {{ctx.cover}}; color: rgba(255,255,255,0.9); font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: 30px; font-weight: 600; display: flex; align-items: flex-end; justify-content: flex-end; padding: 0 5px 2px 0; box-sizing: border-box; box-shadow: 0 2px 6px rgba(0,0,0,0.18)">{{ctx.initial}}</span></sc-if>
+          <sc-if value="{{ctx.hasTile}}" hint-placeholder-val="{{false}}"><span aria-hidden="true" style="width: 52px; height: 52px; flex-shrink: 0; border-radius: 14px; background: {{ctx.tile}}; color: #FFFFFF; display: flex; align-items: center; justify-content: center"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{ctx.d}}"></path></svg></span></sc-if>
+          <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px">
+            <span style="font-size: 11px; line-height: 14px; font-weight: 600; letter-spacing: 0.6px; text-transform: uppercase; color: {{ctx.kickerColour}}">{{ctx.kicker}}</span>
+            <span style="font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: 18px; line-height: 23px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{ctx.title}}</span>
+            <span style="font-size: 13px; line-height: 18px; color: #6C6C70">{{ctx.meta}}</span>
+          </span>
+        </div>
+      </sc-if>
+      <sc-if value="{{hasStats}}" hint-placeholder-val="{{false}}">
+        <div role="list" aria-label="{{statsLabel}}" style="background: #FFFFFF; border-radius: 16px; display: grid; grid-template-columns: {{statCols}}">
+          <sc-for list="{{stats}}" as="k" hint-placeholder-count="3">
+            <span role="listitem" style="padding: 10px 4px; display: flex; flex-direction: column; align-items: center; gap: 1px; border-left: {{k.sep}}">
+              <span style="font-size: 19px; line-height: 24px; font-weight: 700; font-variant-numeric: tabular-nums; color: {{k.colour}}">{{k.n}}</span>
+              <span style="font-size: 11px; line-height: 14px; color: #6C6C70; text-align: center">{{k.label}}</span>
+            </span>
+          </sc-for>
+        </div>
+      </sc-if>
       <sc-if value="{{hasHero}}" hint-placeholder-val="{{false}}">
         <div style="display: flex; align-items: center; gap: 14px; padding: 2px 4px">
           <span aria-hidden="true" style="width: 52px; height: 52px; flex-shrink: 0; border-radius: 14px; background: {{heroColour}}; color: #FFFFFF; display: flex; align-items: center; justify-content: center">
@@ -85,6 +106,9 @@ button{cursor:pointer}
                 <sc-if value="{{r.hasIcon}}" hint-placeholder-val="{{false}}">
                   <svg aria-hidden="true" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="{{r.iconColour}}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0"><path d="{{r.d}}"></path></svg>
                 </sc-if>
+                <sc-if value="{{r.hasCover}}" hint-placeholder-val="{{false}}">
+                  <span aria-hidden="true" style="width: 30px; height: 40px; flex-shrink: 0; border-radius: 5px; background: {{r.cover}}; color: rgba(255,255,255,0.9); font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: 18px; font-weight: 600; display: flex; align-items: flex-end; justify-content: flex-end; padding: 0 3px 1px 0; box-sizing: border-box">{{r.initial}}</span>
+                </sc-if>
                 <sc-if value="{{r.hasAvatar}}" hint-placeholder-val="{{false}}">
                   <span aria-hidden="true" style="width: 32px; height: 32px; flex-shrink: 0; border-radius: 16px; background: {{r.tile}}; color: #FFFFFF; font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: center">{{r.initial}}</span>
                 </sc-if>
@@ -96,6 +120,8 @@ button{cursor:pointer}
                     <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
                       <span style="font-size: 16px; line-height: 21px; font-weight: {{r.weight}}; color: {{r.colour}}">{{r.label}}</span>
                       <sc-if value="{{r.hasSub}}" hint-placeholder-val="{{false}}"><span style="font-size: 13px; line-height: 18px; color: #6C6C70">{{r.sub}}</span></sc-if>
+                      <sc-if value="{{r.hasMeta}}" hint-placeholder-val="{{false}}"><span style="font-size: 12px; line-height: 16px; color: {{r.metaColour}}; font-weight: {{r.metaWeight}}">{{r.meta}}</span></sc-if>
+                      <sc-if value="{{r.hasBar}}" hint-placeholder-val="{{false}}"><span aria-hidden="true" style="margin-top: 4px; height: 4px; border-radius: 2px; background: #E5E5EA; overflow: hidden"><span style="display: block; width: {{r.bar}}; height: 4px; background: {{r.barColour}}"></span></span></sc-if>
                     </span>
                   </sc-if>
                   <sc-if value="{{r.isField}}" hint-placeholder-val="{{false}}">
@@ -107,7 +133,7 @@ button{cursor:pointer}
                     </span>
                   </sc-if>
                   <sc-if value="{{r.hasDetail}}" hint-placeholder-val="{{false}}"><span style="font-size: 16px; color: #8E8E93; white-space: nowrap">{{r.detail}}</span></sc-if>
-                  <sc-if value="{{r.hasBadge}}" hint-placeholder-val="{{false}}"><span style="padding: 0 7px; border-radius: 9px; background: #990000; color: #FFFFFF; font-size: 12px; line-height: 18px; font-weight: 700">{{r.badge}}</span></sc-if>
+                  <sc-if value="{{r.hasBadge}}" hint-placeholder-val="{{false}}"><span style="padding: 0 7px; border-radius: 9px; background: {{r.badgeBg}}; color: {{r.badgeFg}}; font-size: 12px; line-height: 18px; font-weight: 700; white-space: nowrap">{{r.badge}}</span></sc-if>
                   <sc-if value="{{r.isToggle}}" hint-placeholder-val="{{false}}">
                     <span role="switch" aria-checked="{{r.onText}}" aria-label="{{r.label}}" style="width: 51px; height: 31px; flex-shrink: 0; border-radius: 16px; background: {{r.track}}; position: relative"><span style="position: absolute; left: {{r.knob}}px; top: 2px; width: 27px; height: 27px; border-radius: 14px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.2)"></span></span>
                   </sc-if>
@@ -154,28 +180,38 @@ button{cursor:pointer}
   </sc-if>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"title":{"editor":"text","default":"Settings"},"subtitle":{"editor":"text","default":""},"mode":{"editor":"enum","options":["push","sheet"],"default":"push"},"tab":{"editor":"enum","options":["none","home","library","writing","browse"],"default":"none"},"confirm":{"editor":"text","default":""},"trailing":{"editor":"text","default":""},"back":{"editor":"text","default":"Back"},"search":{"editor":"text","default":""},"hero":{"editor":null},"sections":{"editor":null},"height":{"editor":"int","default":844,"min":400,"max":2000},"$preview":{"width":390,"height":844}}'>
+<script type="text/x-dc" data-dc-script data-props='{"title":{"editor":"text","default":"Settings"},"subtitle":{"editor":"text","default":""},"mode":{"editor":"enum","options":["push","sheet"],"default":"push"},"tab":{"editor":"enum","options":["none","home","library","writing","browse"],"default":"none"},"confirm":{"editor":"text","default":""},"trailing":{"editor":"text","default":""},"back":{"editor":"text","default":"Back"},"search":{"editor":"text","default":""},"hero":{"editor":null},"context":{"editor":null},"stats":{"editor":null},"sections":{"editor":null},"height":{"editor":"int","default":844,"min":400,"max":2000},"$preview":{"width":390,"height":844}}'>
 class Component extends DCLogic {
   renderVals() {
     // One data-driven grouped screen: settings pages, forms, pickers and sheets.
     // Row kinds: nav (chevron), out (opens elsewhere), value, toggle, check (selected),
     // circle (multi-select), field (text entry), textarea, chips, segments, swatches,
     // button (centred, app colour), destructive (centred, red), info (no accessory).
+    // Any row can add a third line (meta), a progress bar (bar), a coloured badge and a
+    // lead cover. `context` puts the work, series or collection being edited on top;
+    // `stats` adds a strip of figures.
     const sheet = this.props.mode === 'sheet';
     const tab = this.props.tab ?? 'none';
     const hero = this.props.hero;
+    const ctxIn = this.props.context;
+    const ctx = ctxIn ? { aria: ctxIn.title, kicker: ctxIn.kicker || '', kickerColour: ctxIn.kickerColour || '#6C6C70', title: ctxIn.title || '', meta: ctxIn.meta || '', hasCover: !!ctxIn.cover, cover: ctxIn.cover || '', initial: (ctxIn.title || '?').charAt(0), hasTile: !ctxIn.cover, tile: ctxIn.tile || '#6C6C70', d: ctxIn.icon || '' } : {};
+    const statsIn = this.props.stats || [];
+    const statBlock = { hasContext: !!ctxIn, ctx, hasStats: statsIn.length > 0, statsLabel: this.props.statsLabel || 'Summary', statCols: 'repeat(' + (statsIn.length || 1) + ', minmax(0, 1fr))', stats: statsIn.map((k, i) => ({ n: k.n, label: k.label, colour: k.colour || '#000000', sep: i ? '0.5px solid #E5E5EA' : 'none' })) };
     const sections = (this.props.sections || [{ header: 'General', rows: [{ label: 'Example', kind: 'nav' }] }]).map((s) => ({
       header: s.header || '', hasHeader: !!s.header, footer: s.footer || '', hasFooter: !!s.footer,
       rows: (s.rows || []).map((r, i) => {
         const k = r.kind || 'nav';
         const centred = k === 'button' || k === 'destructive';
         const field = k === 'field' || k === 'textarea';
-        const tall = !!r.sub || k === 'textarea';
-        const lead = r.handle || r.tile || r.icon || r.avatar;
+        const tall = !!r.sub || !!r.meta || k === 'textarea';
+        const lead = r.handle || r.tile || r.icon || r.avatar || r.cover;
         return {
           label: r.label || '', sub: r.sub || '', hasSub: !!r.sub,
           detail: r.detail || '', hasDetail: !!r.detail && !field,
-          badge: r.badge || '', hasBadge: !!r.badge,
+          badge: r.badge || '', hasBadge: !!r.badge, badgeBg: r.badgeBg || '#990000', badgeFg: r.badgeFg || '#FFFFFF',
+          meta: r.meta || '', hasMeta: !!r.meta, metaColour: r.metaColour || '#8E8E93', metaWeight: r.metaColour ? 600 : 400,
+          hasBar: r.bar !== undefined, bar: (r.bar || 0) + '%', barColour: r.barColour || '#990000',
+          hasCover: !!r.cover, cover: r.cover || '',
           text: r.text || r.placeholder || '', fieldColour: r.text ? '#000000' : '#AEAEB2',
           wrap: k === 'textarea' ? 'normal' : 'nowrap',
           chips: r.chips || [], hasChips: k === 'chips',
@@ -217,6 +253,7 @@ class Component extends DCLogic {
       search: this.props.search || '', hasSearch: !!this.props.search,
       hasHero: !!hero, heroTitle: hero ? hero.title : '', heroSub: hero ? (hero.sub || '') : '', heroColour: hero ? (hero.colour || '#990000') : '#990000', heroD: hero ? (hero.icon || '') : '',
       sections,
+      ...statBlock,
       tab, hasTab: !sheet && tab !== 'none'
     };
   }

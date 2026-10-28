@@ -13,13 +13,20 @@ body{margin:0}
 </style>
 </helmet>
 <div style="width: 390px; height: 844px; position: relative; overflow: hidden">
-  <dc-import name="FormScreen" title="Creators" back="Back to Post" search="Invite a co-creator by name" height="844" sections="{{sections}}" hint-size="390px,844px"></dc-import>
+  <dc-import name="FormScreen" title="Creators" back="Back to Post" search="Invite a co-creator by name" height="844" context="{{context}}" sections="{{sections}}" hint-size="390px,844px"></dc-import>
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
 class Component extends DCLogic {
   renderVals() {
     return {
+  "context": {
+    "kicker": "Original Work · new work",
+    "kickerColour": "hsl(188, 56%, 33%)",
+    "title": "Untitled lighthouse piece",
+    "meta": "3,240 words · 1 chapter · not posted yet",
+    "cover": "linear-gradient(155deg, hsl(188, 46%, 27%), hsl(210, 50%, 41%))"
+  },
   "sections": [
     {
       "header": "Creators",
@@ -34,11 +41,39 @@ class Component extends DCLogic {
         },
         {
           "label": "tidewright",
-          "sub": "Invited · they accept on AO3",
+          "sub": "Invited Oct 27",
+          "meta": "Shows once they accept on AO3",
           "kind": "info",
           "avatar": true,
           "tile": "#2F6D6A",
-          "badge": "Invited"
+          "badge": "Invited",
+          "badgeBg": "#EFEFF4",
+          "badgeFg": "#3A3A3C"
+        }
+      ]
+    },
+    {
+      "header": "People you’ve written with",
+      "rows": [
+        {
+          "label": "quietharbor",
+          "sub": "Co-created Small Weathers · 2025",
+          "kind": "info",
+          "avatar": true,
+          "tile": "#3E5B3A",
+          "badge": "Invite",
+          "badgeBg": "rgba(153,0,0,0.10)",
+          "badgeFg": "#990000"
+        },
+        {
+          "label": "anne_at_lyme",
+          "sub": "Beta-read Lantern Season",
+          "kind": "info",
+          "avatar": true,
+          "tile": "#6B4E23",
+          "badge": "Invite",
+          "badgeBg": "rgba(153,0,0,0.10)",
+          "badgeFg": "#990000"
         }
       ]
     },

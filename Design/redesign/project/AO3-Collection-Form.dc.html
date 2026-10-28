@@ -12,14 +12,22 @@
 body{margin:0}
 </style>
 </helmet>
-<div style="width: 390px; height: 1000px; position: relative; overflow: hidden">
-  <dc-import name="FormScreen" title="New Collection" subtitle="On AO3" mode="sheet" confirm="Create" height="1000" sections="{{sections}}" hint-size="390px,1000px"></dc-import>
+<div style="width: 390px; height: 1160px; position: relative; overflow: hidden">
+  <dc-import name="FormScreen" title="New Collection" subtitle="On AO3" mode="sheet" confirm="Create" height="1160" context="{{context}}" sections="{{sections}}" hint-size="390px,1160px"></dc-import>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1000}}'>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1160}}'>
 class Component extends DCLogic {
   renderVals() {
     return {
+  "context": {
+    "kicker": "Preview",
+    "kickerColour": "#2F6D6A",
+    "title": "Lighthouse Week 2026",
+    "meta": "archiveofourown.org/collections/lighthouse_week_2026",
+    "tile": "#2F6D6A",
+    "icon": "M6 8h12v12H6zM8 5h8"
+  },
   "sections": [
     {
       "header": "Names",
@@ -42,13 +50,25 @@ class Component extends DCLogic {
       "rows": [
         {
           "kind": "textarea",
-          "placeholder": "Description",
-          "rows": 3
+          "text": "A week of lighthouses, keepers and the sea. Any fandom, any rating.",
+          "rows": 2
+        },
+        {
+          "label": "Icon",
+          "kind": "nav",
+          "detail": "None",
+          "tile": "#2F6D6A",
+          "icon": "M6 8h12v12H6zM8 5h8"
         },
         {
           "label": "Parent collection",
           "kind": "nav",
           "detail": "None"
+        },
+        {
+          "label": "Contact email",
+          "kind": "field",
+          "placeholder": "Shown to members"
         }
       ]
     },
@@ -58,12 +78,14 @@ class Component extends DCLogic {
         {
           "label": "Moderated",
           "kind": "toggle",
-          "on": true
+          "on": true,
+          "sub": "You approve every work and bookmark"
         },
         {
           "label": "Closed",
           "kind": "toggle",
-          "on": false
+          "on": false,
+          "sub": "Nothing new can be added"
         },
         {
           "label": "Unrevealed",

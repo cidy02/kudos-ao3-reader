@@ -12,14 +12,42 @@
 body{margin:0}
 </style>
 </helmet>
-<div style="width: 390px; height: 844px; position: relative; overflow: hidden">
-  <dc-import name="ListScreen" title="Assignments" subtitle="Austen Exchange 2026 · works due Nov 12" back="Back" tab="writing" height="844" sections="{{sections}}" hint-size="390px,844px"></dc-import>
+<div style="width: 390px; height: 1020px; position: relative; overflow: hidden">
+  <dc-import name="ListScreen" title="Assignments" back="Back" tab="writing" height="1020" large="{{large}}" context="{{context}}" stats="{{stats}}" sections="{{sections}}" hint-size="390px,1020px"></dc-import>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1020}}'>
 class Component extends DCLogic {
   renderVals() {
     return {
+  "large": false,
+  "context": {
+    "kicker": "Gift exchange · moderated",
+    "kickerColour": "#7B3FA0",
+    "title": "Austen Exchange 2026",
+    "meta": "Assignments sent Nov 2 · works due Nov 12",
+    "tile": "#7B3FA0",
+    "icon": "M4 9h16v4H4zM6 13h12v8H6zM12 9v12M12 9c-1.5-3-5-3-5-1s3 1 5 1c2 0 5 1 5-1s-3.5-2-5 1"
+  },
+  "stats": [
+    {
+      "n": "92",
+      "label": "Assigned"
+    },
+    {
+      "n": "31",
+      "label": "Posted"
+    },
+    {
+      "n": "2",
+      "label": "Defaulted",
+      "colour": "#D70015"
+    },
+    {
+      "n": "15 days",
+      "label": "To go"
+    }
+  ],
   "sections": [
     {
       "header": "Yours",
@@ -27,29 +55,71 @@ class Component extends DCLogic {
       "rows": [
         {
           "title": "Writing for quietharbor",
-          "sub": "Persuasion · Anne Elliot/Frederick Wentworth · 0 of 5,000 words",
-          "tone": "#7B3FA0",
-          "glyph": "M4 9h16v4H4zM6 13h12v8H6zM12 9v12M12 9c-1.5-3-5-3-5-1s3 1 5 1c2 0 5 1 5-1s-3.5-2-5 1",
-          "square": true,
+          "sub": "Persuasion",
+          "tags": [
+            {
+              "label": "Anne Elliot/Frederick Wentworth",
+              "bg": "rgba(153,0,0,0.10)",
+              "fg": "#990000"
+            }
+          ],
+          "meta": "Draft: Untitled lighthouse piece · 3,240 of 5,000 words",
+          "cover": "linear-gradient(155deg, hsl(335, 46%, 27%), hsl(357, 50%, 41%))",
           "badge": "15 days",
           "badgeBg": "#FFF4E5",
           "badgeFg": "#6B3A00",
-          "bar": 0,
-          "barLabel": "0 of 5,000 words"
+          "bar": 65,
+          "barLabel": "3,240 of 5,000 words"
         }
       ]
     },
     {
       "header": "Pinch hits open",
+      "count": "2",
       "kind": "rows",
       "rows": [
         {
           "title": "For elinor_d",
           "sub": "Sense and Sensibility · original writer defaulted",
-          "tone": "#1E63C8",
-          "glyph": "M4 9h16v4H4zM6 13h12v8H6zM12 9v12M12 9c-1.5-3-5-3-5-1s3 1 5 1c2 0 5 1 5-1s-3.5-2-5 1",
-          "square": true,
+          "tags": [
+            {
+              "label": "Elinor Dashwood/Edward Ferrars",
+              "bg": "rgba(153,0,0,0.10)",
+              "fg": "#990000"
+            }
+          ],
+          "cover": "linear-gradient(155deg, hsl(262, 46%, 27%), hsl(284, 50%, 41%))",
           "action": "Claim"
+        },
+        {
+          "title": "For lizzy_reads",
+          "sub": "Pride and Prejudice · due Nov 19",
+          "tags": [
+            {
+              "label": "Elizabeth Bennet/Fitzwilliam Darcy",
+              "bg": "rgba(153,0,0,0.10)",
+              "fg": "#990000"
+            }
+          ],
+          "cover": "linear-gradient(155deg, hsl(150, 46%, 27%), hsl(172, 50%, 41%))",
+          "action": "Claim"
+        }
+      ]
+    },
+    {
+      "header": "Recently posted",
+      "count": "31",
+      "kind": "rows",
+      "rows": [
+        {
+          "title": "A Map of Small Hours",
+          "sub": "quietharbor for elinor_d · Oct 26",
+          "cover": "linear-gradient(155deg, hsl(150, 46%, 27%), hsl(172, 50%, 41%))"
+        },
+        {
+          "title": "Letters Never Sent",
+          "sub": "marginalia for lizzy_reads · Oct 25",
+          "cover": "linear-gradient(155deg, hsl(335, 46%, 27%), hsl(357, 50%, 41%))"
         }
       ]
     }

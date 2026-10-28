@@ -12,14 +12,21 @@
 body{margin:0}
 </style>
 </helmet>
-<div style="width: 390px; height: 844px; position: relative; overflow: hidden">
-  <dc-import name="FormScreen" title="Series" back="Back to Post" height="844" sections="{{sections}}" hint-size="390px,844px"></dc-import>
+<div style="width: 390px; height: 940px; position: relative; overflow: hidden">
+  <dc-import name="FormScreen" title="Series" back="Back to Post" height="940" context="{{context}}" sections="{{sections}}" hint-size="390px,940px"></dc-import>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":940}}'>
 class Component extends DCLogic {
   renderVals() {
     return {
+  "context": {
+    "kicker": "Original Work · new work",
+    "kickerColour": "hsl(188, 56%, 33%)",
+    "title": "Untitled lighthouse piece",
+    "meta": "3,240 words · 1 chapter · not posted yet",
+    "cover": "linear-gradient(155deg, hsl(188, 46%, 27%), hsl(210, 50%, 41%))"
+  },
   "sections": [
     {
       "header": "Add to a series",
@@ -30,9 +37,51 @@ class Component extends DCLogic {
         },
         {
           "label": "Lantern Season",
-          "sub": "3 parts · becomes part 4",
+          "sub": "3 parts · 47,260 words",
+          "meta": "Becomes part 4",
+          "metaColour": "#990000",
           "kind": "check",
-          "on": true
+          "on": true,
+          "tile": "#1E63C8",
+          "icon": "M4 6h16M4 12h16M4 18h10"
+        },
+        {
+          "label": "Small Weathers",
+          "sub": "Persuasion · 2 parts · 7,120 words",
+          "kind": "check",
+          "tile": "#9C2F6B",
+          "icon": "M4 6h16M4 12h16M4 18h10"
+        }
+      ]
+    },
+    {
+      "header": "Lantern Season after posting",
+      "rows": [
+        {
+          "label": "1. Keeper of the Northern Light",
+          "sub": "22,410 words · complete",
+          "kind": "info",
+          "cover": "linear-gradient(155deg, hsl(188, 46%, 27%), hsl(210, 50%, 41%))"
+        },
+        {
+          "label": "2. Lantern Season",
+          "sub": "15,050 words · complete",
+          "kind": "info",
+          "cover": "linear-gradient(155deg, hsl(203, 46%, 27%), hsl(225, 50%, 41%))"
+        },
+        {
+          "label": "3. What the Tide Keeps",
+          "sub": "9,800 words · 3/8",
+          "kind": "info",
+          "cover": "linear-gradient(155deg, hsl(176, 46%, 27%), hsl(198, 50%, 41%))"
+        },
+        {
+          "label": "4. Untitled lighthouse piece",
+          "sub": "3,240 words",
+          "meta": "This work",
+          "metaColour": "#990000",
+          "kind": "info",
+          "cover": "linear-gradient(155deg, hsl(188, 46%, 27%), hsl(210, 50%, 41%))"
         }
       ]
     },

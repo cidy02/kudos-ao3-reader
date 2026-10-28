@@ -13,41 +13,94 @@ body{margin:0}
 </style>
 </helmet>
 <div style="width: 390px; height: 844px; position: relative; overflow: hidden">
-  <dc-import name="ListScreen" title="Your Items" subtitle="5 works and bookmarks in collections" back="Back" tab="writing" height="844" segments="{{segments}}" sections="{{sections}}" hint-size="390px,844px"></dc-import>
+  <dc-import name="ListScreen" title="Your Items" subtitle="5 works and bookmarks in 3 collections" back="Back" tab="writing" height="844" stats="{{stats}}" chips="{{chips}}" sections="{{sections}}" hint-size="390px,844px"></dc-import>
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
 class Component extends DCLogic {
   renderVals() {
     return {
-  "segments": {
-    "options": [
-      "Awaiting",
-      "Approved",
-      "Rejected"
-    ],
-    "selected": 0
-  },
+  "stats": [
+    {
+      "n": "2",
+      "label": "Awaiting you",
+      "colour": "#C25E00"
+    },
+    {
+      "n": "1",
+      "label": "With moderators"
+    },
+    {
+      "n": "2",
+      "label": "Approved"
+    }
+  ],
+  "chips": [
+    {
+      "label": "All",
+      "on": true
+    },
+    {
+      "label": "Awaiting 2"
+    },
+    {
+      "label": "Approved 2"
+    },
+    {
+      "label": "Rejected"
+    }
+  ],
   "sections": [
     {
+      "header": "Awaiting you",
+      "count": "2",
       "kind": "rows",
       "rows": [
         {
           "title": "Small Weathers",
           "kicker": "Persuasion Prompt Meme",
-          "sub": "Invited by a maintainer · Oct 24",
-          "tone": "#7A4040",
-          "glyph": "M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h5",
-          "square": true,
-          "action": "Approve"
+          "kickerColour": "#7B3FA0",
+          "sub": "A maintainer invited it · Oct 24",
+          "cover": "linear-gradient(155deg, hsl(335, 46%, 27%), hsl(357, 50%, 41%))",
+          "buttons": [
+            {
+              "label": "Approve",
+              "primary": true
+            },
+            {
+              "label": "Decline"
+            }
+          ]
         },
+        {
+          "title": "Lantern Season",
+          "kicker": "Original Work Fortnight",
+          "kickerColour": "#C25E00",
+          "sub": "A maintainer invited it · Oct 22",
+          "cover": "linear-gradient(155deg, hsl(203, 46%, 27%), hsl(225, 50%, 41%))",
+          "buttons": [
+            {
+              "label": "Approve",
+              "primary": true
+            },
+            {
+              "label": "Decline"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "header": "With moderators",
+      "count": "1",
+      "kind": "rows",
+      "rows": [
         {
           "title": "Keeper of the Northern Light",
           "kicker": "Lighthouse Week 2026",
-          "sub": "You submitted · waiting for a moderator",
-          "tone": "#2F6D6A",
-          "glyph": "M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h5",
-          "square": true,
+          "kickerColour": "#2F6D6A",
+          "sub": "You submitted it · Oct 26",
+          "cover": "linear-gradient(155deg, hsl(188, 46%, 27%), hsl(210, 50%, 41%))",
           "badge": "Waiting",
           "badgeBg": "#EFEFF4",
           "badgeFg": "#3A3A3C"

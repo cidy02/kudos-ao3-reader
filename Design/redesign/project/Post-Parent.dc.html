@@ -12,29 +12,56 @@
 body{margin:0}
 </style>
 </helmet>
-<div style="width: 390px; height: 844px; position: relative; overflow: hidden">
-  <dc-import name="FormScreen" title="Inspired By" back="Back to Post" height="844" sections="{{sections}}" hint-size="390px,844px"></dc-import>
+<div style="width: 390px; height: 900px; position: relative; overflow: hidden">
+  <dc-import name="FormScreen" title="Inspired By" back="Back to Post" height="900" context="{{context}}" sections="{{sections}}" hint-size="390px,900px"></dc-import>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":900}}'>
 class Component extends DCLogic {
   renderVals() {
     return {
+  "context": {
+    "kicker": "Original Work · new work",
+    "kickerColour": "hsl(188, 56%, 33%)",
+    "title": "Untitled lighthouse piece",
+    "meta": "3,240 words · 1 chapter · not posted yet",
+    "cover": "linear-gradient(155deg, hsl(188, 46%, 27%), hsl(210, 50%, 41%))"
+  },
   "sections": [
     {
-      "header": "Parent work",
-      "footer": "AO3 lets the parent’s creator know, unless they turned that off.",
+      "header": "Parent works",
       "rows": [
+        {
+          "label": "The Lighthouse Keepers",
+          "sub": "tidewright · Original Work · 40,900 words",
+          "meta": "Found on AO3",
+          "metaColour": "#2F8F3A",
+          "kind": "check",
+          "on": true,
+          "cover": "linear-gradient(155deg, hsl(188, 46%, 27%), hsl(210, 50%, 41%))"
+        },
         {
           "label": "AO3 link",
           "kind": "field",
-          "text": "archiveofourown.org/works/48211093"
+          "placeholder": "archiveofourown.org/works/…"
+        }
+      ],
+      "footer": "AO3 tells the parent’s creator, unless they turned that off."
+    },
+    {
+      "header": "From your reading",
+      "rows": [
+        {
+          "label": "Salt & Starlight",
+          "sub": "wrenfield · Original Work · read this month",
+          "kind": "circle",
+          "cover": "linear-gradient(155deg, hsl(196, 46%, 27%), hsl(218, 50%, 41%))"
         },
         {
-          "label": "The Lighthouse Keepers",
-          "sub": "tidewright · Original Work · found on AO3",
-          "kind": "check",
-          "on": true
+          "label": "Under the Same Stars",
+          "sub": "wrenfield · Original Work · finished Oct 19",
+          "kind": "circle",
+          "cover": "linear-gradient(155deg, hsl(240, 46%, 27%), hsl(262, 50%, 41%))"
         }
       ]
     },

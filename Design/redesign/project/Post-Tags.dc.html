@@ -12,14 +12,21 @@
 body{margin:0}
 </style>
 </helmet>
-<div style="width: 390px; height: 1000px; position: relative; overflow: hidden">
-  <dc-import name="FormScreen" title="Tags" back="Back to Post" search="Add a tag" height="1000" sections="{{sections}}" hint-size="390px,1000px"></dc-import>
+<div style="width: 390px; height: 1300px; position: relative; overflow: hidden">
+  <dc-import name="FormScreen" title="Tags" back="Back to Post" search="Add a tag" height="1300" context="{{context}}" sections="{{sections}}" hint-size="390px,1300px"></dc-import>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1000}}'>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1300}}'>
 class Component extends DCLogic {
   renderVals() {
     return {
+  "context": {
+    "kicker": "Original Work · new work",
+    "kickerColour": "hsl(188, 56%, 33%)",
+    "title": "Untitled lighthouse piece",
+    "meta": "3,240 words · 1 chapter · not posted yet",
+    "cover": "linear-gradient(155deg, hsl(188, 46%, 27%), hsl(210, 50%, 41%))"
+  },
   "sections": [
     {
       "header": "Fandoms · required",
@@ -52,7 +59,8 @@ class Component extends DCLogic {
           "label": "Characters",
           "kind": "chips",
           "chips": [
-            "Original Characters"
+            "Original Characters",
+            "Lighthouse Keeper"
           ]
         }
       ]
@@ -77,18 +85,42 @@ class Component extends DCLogic {
         {
           "label": "Lighthouse Keepers",
           "sub": "2,904 works",
+          "meta": "Canonical tag",
           "kind": "nav"
         },
         {
           "label": "Lighthouses",
-          "sub": "6,120 works · added",
+          "sub": "6,120 works",
+          "meta": "Added",
+          "metaColour": "#990000",
           "kind": "check",
           "on": true
         },
         {
           "label": "Light Angst",
           "sub": "98k works",
+          "meta": "Canonical tag",
           "kind": "nav"
+        }
+      ]
+    },
+    {
+      "header": "Tags you often use",
+      "rows": [
+        {
+          "label": "Weather as Metaphor",
+          "sub": "On 3 of your works",
+          "kind": "circle"
+        },
+        {
+          "label": "Epistolary",
+          "sub": "On 2 of your works",
+          "kind": "circle"
+        },
+        {
+          "label": "Quiet Romance",
+          "sub": "On 2 of your works",
+          "kind": "circle"
         }
       ]
     }
