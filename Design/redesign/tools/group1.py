@@ -14,17 +14,18 @@ add('Shelf-Grid','Library › Finished (grid)','ListScreen',{'title':'Finished',
  'chips':[{'label':'All','on':True},{'label':'Read twice'},{'label':'Kudos given'},{'label':'Downloaded'}],
  'sections':[{'kind':'grid','works':works('letters','baker','moor','map')}]},1000)
 add('Edit-Shelves','Library › Edit Shelves (sheet)','FormScreen',{'title':'Edit Shelves','mode':'sheet','confirm':'Done'},{
- 'sections':[{'header':'Shown in Library','rows':[
-   {'label':'Want to Read','kind':'circle','on':True,'handle':True,'dot':SHELF['Want to Read'][0],'dotD':SHELF['Want to Read'][1]},
-   {'label':'Reading Now','kind':'circle','on':True,'handle':True,'dot':SHELF['Reading Now'][0],'dotD':SHELF['Reading Now'][1]},
-   {'label':'Finished','kind':'circle','on':True,'handle':True,'dot':SHELF['Finished'][0],'dotD':SHELF['Finished'][1]},
-   {'label':'Downloaded','kind':'circle','on':True,'handle':True,'dot':SHELF['Downloaded'][0],'dotD':SHELF['Downloaded'][1]},
-   {'label':'Favourites','kind':'circle','on':True,'handle':True,'dot':SHELF['Favourites'][0],'dotD':SHELF['Favourites'][1]},
-   {'label':'Queues','kind':'circle','on':True,'handle':True,'dot':SHELF['Queues'][0],'dotD':SHELF['Queues'][1]}]},
-  {'header':'Hidden','rows':[
-   {'label':'History','kind':'circle','on':False,'handle':True,'dot':SHELF['History'][0],'dotD':SHELF['History'][1]},
-   {'label':'All Works','kind':'circle','on':False,'handle':True,'dot':SHELF['All Works'][0],'dotD':SHELF['All Works'][1],'sub':'Also in the Library header'},
-   {'label':'Imported','kind':'circle','on':False,'handle':True,'dot':SHELF['Imported'][0],'dotD':SHELF['Imported'][1],'sub':'Works from other sites and files'}]}]})
+ 'sections':[{'header':'On the Library page','rows':[
+   {'label':'Favourites','kind':'segments','options':['Carousel','List'],'selected':0,'edit':'remove','handle':True,'dot':SHELF['Favourites'][0],'dotD':SHELF['Favourites'][1]},
+   {'label':'Collections','kind':'segments','options':['Carousel','List'],'selected':0,'edit':'remove','handle':True,'dot':SHELF['Collections'][0],'dotD':SHELF['Collections'][1]},
+   {'label':'Downloaded','kind':'segments','options':['Carousel','List'],'selected':0,'edit':'remove','handle':True,'dot':SHELF['Downloaded'][0],'dotD':SHELF['Downloaded'][1]}]},
+  {'header':'As shelf buttons','rows':[
+   {'label':'Want to Read','kind':'value','detail':'31','edit':'add','handle':True,'dot':SHELF['Want to Read'][0],'dotD':SHELF['Want to Read'][1]},
+   {'label':'Reading Now','kind':'value','detail':'6','edit':'add','handle':True,'dot':SHELF['Reading Now'][0],'dotD':SHELF['Reading Now'][1]},
+   {'label':'Finished','kind':'value','detail':'74','edit':'add','handle':True,'dot':SHELF['Finished'][0],'dotD':SHELF['Finished'][1]},
+   {'label':'Queues','kind':'value','detail':'3','edit':'add','handle':True,'dot':SHELF['Queues'][0],'dotD':SHELF['Queues'][1]},
+   {'label':'History','kind':'value','detail':'412','edit':'add','handle':True,'dot':SHELF['History'][0],'dotD':SHELF['History'][1]},
+   {'label':'Imported','kind':'value','detail':'12','edit':'add','handle':True,'dot':SHELF['Imported'][0],'dotD':SHELF['Imported'][1]}]},
+  {'rows':[{'label':'All Works','sub':'Always in the Library header','kind':'value','detail':'214','dot':SHELF['All Works'][0],'dotD':SHELF['All Works'][1]}]}]})
 
 # Subscriptions tabs
 sub_tools=[{'label':'More: Mark All as Seen, Follow a Tag…, Manage on AO3','icon':'more'}]

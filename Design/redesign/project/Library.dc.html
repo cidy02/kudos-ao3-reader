@@ -13,7 +13,7 @@ body{margin:0}
 button{cursor:pointer}
 </style>
 </helmet>
-<div style="width: 390px; height: 1300px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+<div style="width: 390px; height: 1560px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
   <div style="position: absolute; right: 16px; top: 54px; display: flex; gap: 10px; z-index: 2">
     <div style="height: 44px; border-radius: 22px; display: flex; align-items: center; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
       <button aria-label="New: Collection, Queue, Import EPUB" style="width: 46px; height: 44px; border: none; background: transparent; color: #1C1C1E; display: flex; align-items: center; justify-content: center">
@@ -31,6 +31,20 @@ button{cursor:pointer}
       <h1 style="margin: 0; font-size: 34px; line-height: 41px; font-weight: 700; letter-spacing: 0.4px">Library</h1>
       <a href="Shelf-List.dc.html" style="align-self: flex-start; text-decoration: none; font-size: 15px; line-height: 20px; color: #6C6C70; display: flex; align-items: center; gap: 4px"><span><span style="font-weight: 600; color: #3A3A3C">214 works</span> · 98 downloaded · 2.1 GB</span><svg aria-hidden="true" width="7" height="12" viewBox="0 0 8 14" fill="none" stroke="#AEAEB2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg></a>
     </header>
+
+    <section aria-label="Favourites" style="display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; align-items: baseline; gap: 8px">
+        <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">Favourites</h2>
+        <span style="font-size: 15px; color: #6C6C70">19</span>
+        <a href="Shelf-List.dc.html" style="margin-left: auto; font-size: 17px; color: #990000; text-decoration: none">See All</a>
+      </div>
+      <div style="display: flex; gap: 12px; margin-right: -16px; overflow: hidden">
+        <sc-for list="{{favourites}}" as="w" hint-placeholder-count="3">
+          <dc-import name="CoverCard" work="{{w}}" width="112" accent="#990000" hint-size="112px,240px"></dc-import>
+        </sc-for>
+        <a href="Shelf-List.dc.html" aria-label="15 more favourites" style="width: 96px; flex-shrink: 0; min-height: 160px; align-self: stretch; border-radius: 12px; background: #F2F2F7; color: #990000; text-decoration: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 15px; font-weight: 600"><span style="font-size: 22px; line-height: 26px; font-weight: 700">+15</span>more</a>
+      </div>
+    </section>
 
     <section aria-label="Collections" style="display: flex; flex-direction: column; gap: 10px">
       <div style="display: flex; align-items: baseline; gap: 8px">
@@ -111,7 +125,7 @@ button{cursor:pointer}
   </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"account":{"editor":"enum","options":["avatar","tab"],"default":"avatar"},"$preview":{"width":390,"height":1300}}'>
+<script type="text/x-dc" data-dc-script data-props='{"account":{"editor":"enum","options":["avatar","tab"],"default":"avatar"},"$preview":{"width":390,"height":1560}}'>
 class Component extends DCLogic {
   renderVals() {
     const account = this.props.account ?? 'avatar';
@@ -127,7 +141,8 @@ class Component extends DCLogic {
       ['Downloaded', 'M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19.5h14', '98', 'Shelf-List.dc.html'],
       ['Favourites', 'm12 3.8 2.5 5.2 5.6.8-4.1 3.9 1 5.6-5-2.7-5 2.7 1-5.6-4.1-3.9 5.6-.8z', '19', 'Shelf-List.dc.html'],
       ['History', 'M4 12a8 8 0 1 0 2.3-5.6M4 4v4h4M12 8v4l3 2', '412', 'Library-Section.dc.html'],
-      ['Queues', 'M4 6h11M4 12h11M4 18h7M18 15v6M15 18h6', '3', 'Queues.dc.html']
+      ['Queues', 'M4 6h11M4 12h11M4 18h7M18 15v6M15 18h6', '3', 'Queues.dc.html'],
+      ['Imported', '', '12', 'Shelf-List.dc.html']
     ]);
     const queue = (name, detail, colour, hues, fills, label) => ({
       name, detail, colour, progressLabel: label, initial: name.charAt(0), tiles: hues.map(art),
@@ -150,7 +165,9 @@ class Component extends DCLogic {
       ['AO3 History', 'M4 12a8 8 0 1 0 2.3-5.6M4 4v4h4M12 8v4l3 2', '', '']
     ]);
     // Six shelves by default; Edit Shelves (••• menu) shows, hides and orders them, as Music's Library does.
-    const pick = ['Want to Read', 'Reading Now', 'Finished', 'Downloaded', 'Favourites', 'Queues'];
+    // Favourites, Collections and Downloaded show as sections by default; every other shelf is a
+    // button here. Edit Shelves moves a shelf between the two and picks Carousel or List per section.
+    const pick = ['Want to Read', 'Reading Now', 'Finished', 'Queues', 'History', 'Imported'];
     // Each shelf has its own colour and a solid glyph, as Reminders' smart lists do (shared with Edit Shelves).
     const SHELF = {
       'Want to Read': ['#1E63C8', 'M7 3.5h10a1 1 0 0 1 1 1V21l-6-4-6 4V4.5a1 1 0 0 1 1-1z'],
@@ -161,7 +178,8 @@ class Component extends DCLogic {
       'Queues': ['#7B3FA0', 'M4.5 5h15v3.2h-15zM4.5 10.4h15v3.2h-15zM4.5 15.8h9v3.2h-9z'],
       'History': ['#6C6C70', 'M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18zm-1.2 4.2v6.1l4.8 2.9.9-1.5-3.9-2.3V7.2z'],
       'All Works': ['#6C6C70', 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z'],
-      'Imported': ['#6C6C70', 'M10.4 3.5h3.2v8.2h4.1L12 18l-5.7-6.3h4.1zM5 19h14v2H5z']
+      'Imported': ['#6C6C70', 'M6 3h8.5L19 7.5V21H6z'],
+      'Collections': ['#9C2F6B', 'M5 7.5h14V21H5zM7 4h10v2H7z']
     };
     const tiles = pick.map((n) => shelves.find((x) => x.label === n)).map((t) => ({ ...t, colour: SHELF[t.label][0], glyph: SHELF[t.label][1] }));
     // Newest downloads first; each says when it came down and how much room it takes.
@@ -171,7 +189,13 @@ class Component extends DCLogic {
       { title: 'A Map of Small Hours', author: 'quietharbor', fandom: 'Pride and Prejudice', rating: 'G', category: 'FM', warnings: 'none', status: 'complete', meta: 'Oct 18 · 1.1 MB' },
       { title: 'The Lighthouse Keepers', author: 'tidewright', fandom: 'Original Work', rating: 'T', category: 'FF', warnings: 'none', status: 'complete', meta: 'Oct 12 · 1.9 MB' }
     ];
-    return { account, isAvatar: account === 'avatar', tiles, queues, collections, ao3, downloaded };
+    const favourites = [
+      { title: 'Letters Never Sent', author: 'marginalia', fandom: 'Persuasion', rating: 'T', category: 'FM', warnings: 'none', status: 'complete', meta: 'Read ×2 · Oct 24' },
+      { title: 'The Lighthouse Keepers', author: 'tidewright', fandom: 'Original Work', rating: 'T', category: 'FF', warnings: 'none', status: 'complete', meta: 'Read ×3 · Oct 3' },
+      { title: 'Salt & Starlight', author: 'wrenfield', fandom: 'Original Work', rating: 'M', category: 'Gen', warnings: 'undisclosed', status: 'wip', meta: 'Ch 12 of 30 · 40%', progress: 40, badge: '+3' },
+      { title: 'Watson’s Notebook', author: 'fogandlamplight', fandom: 'Sherlock Holmes', rating: 'T', category: 'Gen', warnings: 'none', status: 'complete', meta: 'Read Aug 2' }
+    ];
+    return { account, isAvatar: account === 'avatar', tiles, queues, collections, ao3, downloaded, favourites };
   }
 }
 </script>

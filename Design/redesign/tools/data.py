@@ -58,7 +58,11 @@ SHELF = {
  ),
  "Imported": (
   "#6C6C70",
-  "M10.4 3.5h3.2v8.2h4.1L12 18l-5.7-6.3h4.1zM5 19h14v2H5z"
+  "M6 3h8.5L19 7.5V21H6z"
+ ),
+ "Collections": (
+  "#9C2F6B",
+  "M5 7.5h14V21H5zM7 4h10v2H7z"
  )
 }
 
