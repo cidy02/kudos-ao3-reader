@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Account › AO3 Preferences</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 1100px; position: relative; overflow: hidden">
+  <dc-import name="FormScreen" title="AO3 Preferences" back="Back to Account" height="1100" sections="{{sections}}" hint-size="390px,1100px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1100}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+  "sections": [
+    {
+      "header": "Reading on AO3",
+      "rows": [
+        {
+          "label": "Show adult content without asking",
+          "kind": "toggle",
+          "on": false
+        },
+        {
+          "label": "Hide warnings",
+          "kind": "toggle",
+          "on": false
+        },
+        {
+          "label": "Hide additional tags",
+          "kind": "toggle",
+          "on": false
+        },
+        {
+          "label": "Show whole work by default",
+          "kind": "toggle",
+          "on": true
+        }
+      ]
+    },
+    {
+      "header": "Your profile",
+      "rows": [
+        {
+          "label": "Time zone",
+          "kind": "nav",
+          "detail": "Europe/London"
+        },
+        {
+          "label": "Skin",
+          "kind": "nav",
+          "detail": "Default"
+        },
+        {
+          "label": "Browser title",
+          "kind": "nav",
+          "detail": "Default"
+        }
+      ]
+    },
+    {
+      "header": "Notifications by email",
+      "footer": "These are AO3’s own settings, saved to your AO3 account. Kudos never sends email.",
+      "rows": [
+        {
+          "label": "Comments on your works",
+          "kind": "toggle",
+          "on": true
+        },
+        {
+          "label": "Kudos on your works",
+          "kind": "toggle",
+          "on": false
+        },
+        {
+          "label": "Subscription updates",
+          "kind": "toggle",
+          "on": true
+        },
+        {
+          "label": "Gift notifications",
+          "kind": "toggle",
+          "on": true
+        }
+      ]
+    },
+    {
+      "header": "Privacy on AO3",
+      "rows": [
+        {
+          "label": "Allow others to invite your works to collections",
+          "kind": "toggle",
+          "on": true
+        },
+        {
+          "label": "Hide your email",
+          "kind": "toggle",
+          "on": true
+        }
+      ]
+    }
+  ]
+};
+  }
+}
+</script>
+</body>
+</html>

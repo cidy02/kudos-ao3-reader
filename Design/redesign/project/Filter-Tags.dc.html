@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Search filters › Tags</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 900px; position: relative; overflow: hidden">
+  <dc-import name="FormScreen" title="Additional Tags" back="Back to Filters" search="fluff" height="900" sections="{{sections}}" hint-size="390px,900px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+  "sections": [
+    {
+      "header": "Included",
+      "rows": [
+        {
+          "label": "Include",
+          "kind": "chips",
+          "chips": [
+            "Slow Burn",
+            "Epistolary"
+          ]
+        }
+      ]
+    },
+    {
+      "header": "Excluded",
+      "rows": [
+        {
+          "label": "Exclude",
+          "kind": "chips",
+          "chips": [
+            "Major Character Death"
+          ]
+        }
+      ]
+    },
+    {
+      "header": "Matching “fluff”",
+      "rows": [
+        {
+          "label": "Fluff",
+          "sub": "1.9M works",
+          "kind": "nav"
+        },
+        {
+          "label": "Fluff and Angst",
+          "sub": "612k works",
+          "kind": "nav"
+        },
+        {
+          "label": "Tooth-Rotting Fluff",
+          "sub": "88k works",
+          "kind": "nav"
+        },
+        {
+          "label": "Domestic Fluff",
+          "sub": "71k works",
+          "kind": "nav"
+        }
+      ]
+    }
+  ]
+};
+  }
+}
+</script>
+</body>
+</html>

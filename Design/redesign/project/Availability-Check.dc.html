@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Settings › What’s still on AO3</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden">
+  <dc-import name="ListScreen" title="Still on AO3?" subtitle="Checking 214 works · 38 done · one at a time" back="Back to Storage" height="844" sections="{{sections}}" hint-size="390px,844px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+  "sections": [
+    {
+      "kind": "rows",
+      "rows": [
+        {
+          "title": "Checking…",
+          "sub": "38 of 214 · about 6 min left · stops if you leave",
+          "light": true,
+          "tone": "#2F8F3A",
+          "glyph": "M12 3.5a8.5 8.5 0 1 1 0 17 8.5 8.5 0 0 1 0-17zM12 7.5V12l3 2",
+          "square": true,
+          "bar": 18,
+          "barColour": "#2F8F3A",
+          "barLabel": "38 of 214 checked",
+          "chevron": false
+        }
+      ]
+    },
+    {
+      "header": "Gone from AO3",
+      "count": "2",
+      "kind": "rows",
+      "rows": [
+        {
+          "title": "Thornfield, Rebuilt",
+          "kicker": "Jane Eyre",
+          "kickerColour": "hsl(262, 46%, 40%)",
+          "sub": "Deleted or made private · your copy is safe",
+          "tone": "#C25E00",
+          "glyph": "M12 4 2.8 19.5h18.4zM12 10v4.5M12 17.2v.1",
+          "square": true
+        },
+        {
+          "title": "The Quiet Year",
+          "kicker": "Original Work",
+          "kickerColour": "hsl(188, 56%, 33%)",
+          "sub": "Locked to AO3 users · log in to check",
+          "tone": "#6C6C70",
+          "glyph": "M6 11h12v9H6zM8.5 11V8a3.5 3.5 0 0 1 7 0v3",
+          "square": true
+        }
+      ]
+    }
+  ]
+};
+  }
+}
+</script>
+</body>
+</html>

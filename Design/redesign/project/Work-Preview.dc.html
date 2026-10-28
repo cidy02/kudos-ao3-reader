@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Long-press preview of a work</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+  <div aria-hidden="true" style="position: absolute; inset: 0; filter: blur(6px); opacity: 0.7; pointer-events: none">
+    <dc-import name="Search" hint-size="390px,844px"></dc-import>
+  </div>
+  <div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(0,0,0,0.12)"></div>
+
+  <article aria-label="Preview: A Map of Small Hours" style="position: absolute; left: 16px; right: 16px; top: 62px; border-radius: 22px; overflow: hidden; background: #FFFFFF; box-shadow: 0 18px 50px rgba(0,0,0,0.22)">
+    <div style="padding: 14px 16px 12px; display: flex; flex-direction: column; gap: 8px; background: linear-gradient(to bottom, rgba(47,122,74,0.14), rgba(47,122,74,0))">
+      <div style="display: flex; gap: 12px; align-items: flex-start">
+        <dc-import name="Symbols" variant="grid" rating="G" category="FM" warnings="none" status="complete" size="24" hint-size="51px,51px"></dc-import>
+        <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+          <span style="font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: 0.6px; text-transform: uppercase; color: hsl(150, 50%, 28%)">Pride and Prejudice</span>
+          <span style="font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: 21px; line-height: 26px; font-weight: 600">A Map of Small Hours</span>
+          <span style="font-size: 14px; line-height: 19px; color: #990000">quietharbor</span>
+        </div>
+      </div>
+      <p style="margin: 0; font-size: 15px; line-height: 21px; color: #1C1C1E">Elizabeth keeps a ledger of the hours she cannot sleep at Pemberley: the clock in the long gallery, the rain against the east windows, and the one night Darcy is awake too. Slow, quiet, and very fond.</p>
+      <div style="display: flex; flex-wrap: wrap; gap: 6px">
+        <sc-for list="{{tags}}" as="t" hint-placeholder-count="6">
+          <span style="padding: 3px 9px; border-radius: 12px; background: {{t.bg}}; color: {{t.fg}}; font-size: 12px; line-height: 18px; font-weight: {{t.weight}}">{{t.label}}</span>
+        </sc-for>
+      </div>
+      <span style="font-size: 12px; line-height: 16px; color: #6C6C70">32,050 words · 9/9 chapters · ♥ 1,212 · 15.4k hits · 188 bookmarks · English · updated Jun 2</span>
+    </div>
+  </article>
+
+  <div role="menu" aria-label="Work actions" style="position: absolute; left: 16px; top: 384px; width: 270px; border-radius: 24px; padding: 0 0 4px; overflow: hidden; background: rgba(250,250,252,0.9); backdrop-filter: blur(30px) saturate(180%); -webkit-backdrop-filter: blur(30px) saturate(180%); box-shadow: 0 18px 50px rgba(0,0,0,0.22), 0 0 0 0.5px rgba(0,0,0,0.08)">
+    <dc-import name="MenuTopRow" items="{{top}}" width="270" hint-size="270px,66px"></dc-import>
+    <sc-for list="{{rows}}" as="m" hint-placeholder-count="4">
+      <button role="menuitem" style="width: 100%; height: 42px; border: none; border-top: {{m.sep}}; background: transparent; padding: 0 16px; display: flex; align-items: center; gap: 12px; font-family: inherit; font-size: 16px; color: #000000; text-align: left">
+        <svg aria-hidden="true" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="{{m.d}}"></path></svg>
+        <span style="flex: 1">{{m.label}}</span>
+        <span style="font-size: 14px; color: #6C6C70">{{m.detail}}</span>
+      </button>
+    </sc-for>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    // Long-press any work anywhere: the preview carries the summary and tags, so lists
+    // can stay dense without hiding what a reader needs to decide.
+    const T = (label, kind) => ({ label, bg: kind === 'ship' ? 'rgba(47,122,74,0.14)' : '#EFEFF4', fg: kind === 'ship' ? 'hsl(150, 50%, 24%)' : '#1C1C1E', weight: kind === 'ship' ? 600 : 400 });
+    return {
+      tags: [T('Elizabeth Bennet/Fitzwilliam Darcy', 'ship'), T('Insomnia'), T('Slow Burn'), T('Pemberley'), T('Fluff'), T('+6 more')],
+      top: [
+        { label: 'Want to Read', d: 'M7 4h10v16l-5-4-5 4z' },
+        { label: 'Download', d: 'M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19.5h14' },
+        { label: 'Kudos', d: 'M12 20s-7.5-4.6-7.5-10.2A4.2 4.2 0 0 1 12 7.2a4.2 4.2 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20z' },
+        { label: 'Share', d: 'M12 15V4M8 8l4-4 4 4M5 12v8h14v-8' }
+      ],
+      rows: [
+        ['Read', 'M3 5.5c3-1 6-1 9 1 3-2 6-2 9-1v13c-3-1-6-1-9 1-3-2-6-2-9-1zM12 6.5v13', '', 'none'],
+        ['Add to Queue', 'M4 6h12M4 11h12M4 16h7M17 14v6M14 17h6', '›', 'none'],
+        ['Add to Collection', 'M6 8h12v12H6zM8 5h8', '›', 'none'],
+        ['Work Details', 'M12 3.5a8.5 8.5 0 1 1 0 17 8.5 8.5 0 0 1 0-17zM12 11v5.5M12 7.8v.1', '', '0.5px solid rgba(60,60,67,0.18)']
+      ].map(([label, d, detail, sep]) => ({ label, d, detail, sep }))
+    };
+  }
+}
+</script>
+</body>
+</html>

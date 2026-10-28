@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Library › Collections</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden">
+  <dc-import name="ListScreen" title="Collections" subtitle="4 collections · 1 pinned to Home" back="Back to Library" height="844" tools="{{tools}}" sections="{{sections}}" hint-size="390px,844px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+  "tools": [
+    {
+      "label": "New Collection",
+      "icon": "plus"
+    },
+    {
+      "label": "More: Sort, Select",
+      "icon": "more"
+    }
+  ],
+  "sections": [
+    {
+      "kind": "rows",
+      "rows": [
+        {
+          "title": "Austen Variations",
+          "sub": "12 works · on Home · updated today",
+          "tone": "#9C2F6B",
+          "initial": "A",
+          "square": true
+        },
+        {
+          "title": "Baker Street",
+          "sub": "9 works · Oct 20",
+          "tone": "#B8892A",
+          "initial": "B",
+          "square": true
+        },
+        {
+          "title": "Comfort Reads",
+          "sub": "15 works · Oct 2",
+          "tone": "#2F7A4A",
+          "initial": "C",
+          "square": true
+        },
+        {
+          "title": "Lighthouses and Lanterns",
+          "sub": "6 works · September",
+          "tone": "#1E63C8",
+          "initial": "L",
+          "square": true
+        }
+      ]
+    }
+  ]
+};
+  }
+}
+</script>
+</body>
+</html>

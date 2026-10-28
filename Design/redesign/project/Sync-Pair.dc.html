@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Settings › Add a Device (sheet)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden">
+  <dc-import name="FormScreen" title="Add a Device" mode="sheet" height="844" hero="{{hero}}" sections="{{sections}}" hint-size="390px,844px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+  "hero": {
+    "title": "Sync with another device",
+    "sub": "Through your iCloud Drive folder; nothing goes through a Kudos server.",
+    "colour": "#2F8F3A",
+    "icon": "M4 12a8 8 0 0 1 13.7-5.6L20 9M20 4v5h-5M20 12a8 8 0 0 1-13.7 5.6L4 15M4 20v-5h5"
+  },
+  "sections": [
+    {
+      "rows": [
+        {
+          "label": "Show a Code on This iPhone",
+          "kind": "nav",
+          "tile": "#1E63C8",
+          "icon": "M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h2v2h-2zM18 18h2v2h-2zM14 18h2v2h-2zM18 14h2v2h-2z"
+        },
+        {
+          "label": "Scan the Other Device’s Code",
+          "kind": "nav",
+          "tile": "#2F8F3A",
+          "icon": "M4 8V4h4M16 4h4v4M20 16v4h-4M8 20H4v-4M4 12h16"
+        },
+        {
+          "label": "Type a Key Instead",
+          "kind": "nav",
+          "tile": "#6C6C70",
+          "icon": "M7 15a4 4 0 1 1 3.9-5H21v3h-2v2h-3v-2h-5.1A4 4 0 0 1 7 15z"
+        }
+      ]
+    },
+    {
+      "rows": [
+        {
+          "label": "I got this key from my own device",
+          "kind": "toggle",
+          "on": false
+        }
+      ],
+      "footer": "Only pair devices you own: a paired device can read your whole library."
+    }
+  ]
+};
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Reader › Customize Theme</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden">
+  <dc-import name="FormScreen" title="Customize Theme" subtitle="Sepia" back="Back to Themes" confirm="Save" height="844" hero="{{hero}}" sections="{{sections}}" hint-size="390px,844px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+  "hero": {
+    "title": "Aa · The road to the coast",
+    "sub": "Preview in New York, 19 pt",
+    "colour": "#9A6732",
+    "icon": "M4 19 9 5l5 14M6 14h6M15 19l3-8 3 8M16 16.5h4"
+  },
+  "sections": [
+    {
+      "header": "Colours",
+      "rows": [
+        {
+          "label": "Paper",
+          "kind": "swatches",
+          "colours": [
+            "#FBF0D9",
+            "#F4ECD8",
+            "#EDE3CC",
+            "#FFFFFF"
+          ],
+          "selected": 0
+        },
+        {
+          "label": "Text",
+          "kind": "swatches",
+          "colours": [
+            "#5B4636",
+            "#3B2F1E",
+            "#1F1B16"
+          ],
+          "selected": 0
+        },
+        {
+          "label": "Links",
+          "kind": "swatches",
+          "colours": [
+            "#9A6732",
+            "#990000",
+            "#1E63C8"
+          ],
+          "selected": 0
+        }
+      ]
+    },
+    {
+      "header": "Highlights",
+      "rows": [
+        {
+          "label": "Highlight",
+          "kind": "swatches",
+          "colours": [
+            "#F5D76E",
+            "#9ED8A0",
+            "#9CC6F0",
+            "#F4A6C0"
+          ],
+          "selected": 0
+        }
+      ]
+    },
+    {
+      "rows": [
+        {
+          "label": "Reset to Sepia",
+          "kind": "button"
+        }
+      ]
+    }
+  ]
+};
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Library › Finished (list)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 1000px; position: relative; overflow: hidden">
+  <dc-import name="ListScreen" title="Finished" subtitle="74 works · most recently finished first" back="Back to Library" height="1000" tools="{{tools}}" chips="{{chips}}" sections="{{sections}}" hint-size="390px,1000px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+  "tools": [
+    {
+      "label": "Filters",
+      "icon": "filter"
+    },
+    {
+      "label": "More: List or Grid, Sort, Select",
+      "icon": "more"
+    }
+  ],
+  "chips": [
+    {
+      "label": "All",
+      "on": true
+    },
+    {
+      "label": "Read twice"
+    },
+    {
+      "label": "Kudos given"
+    },
+    {
+      "label": "Downloaded"
+    }
+  ],
+  "sections": [
+    {
+      "header": "October",
+      "count": "6",
+      "works": [
+        {
+          "title": "Letters Never Sent",
+          "author": "marginalia",
+          "fandom": "Persuasion",
+          "rating": "T",
+          "category": "FM",
+          "warnings": "none",
+          "status": "complete",
+          "words": "21,880",
+          "chapters": "4/4",
+          "kudos": "1,530",
+          "hits": "17.0k",
+          "updated": "Finished today",
+          "summary": "Anne writes to Wentworth every year on the same date, and never sends a single letter."
+        },
+        {
+          "title": "The Baker Street Irregular",
+          "author": "fogandlamplight",
+          "fandom": "Sherlock Holmes",
+          "rating": "G",
+          "category": "Gen",
+          "warnings": "none",
+          "status": "complete",
+          "words": "9,140",
+          "chapters": "1/1",
+          "kudos": "2,045",
+          "hits": "19.8k",
+          "updated": "Finished Oct 24 · read twice",
+          "summary": "Wiggins is promoted to junior detective for exactly one afternoon."
+        },
+        {
+          "title": "Moor and Mist",
+          "author": "brontebird",
+          "fandom": "Jane Eyre",
+          "rating": "M",
+          "category": "FM",
+          "warnings": "undisclosed",
+          "status": "complete",
+          "words": "54,200",
+          "chapters": "18/18",
+          "kudos": "2,310",
+          "hits": "30.2k",
+          "updated": "Finished Oct 19",
+          "summary": "Thornfield burns a second time, and this time Jane is the one who stays."
+        },
+        {
+          "title": "A Map of Small Hours",
+          "author": "quietharbor",
+          "fandom": "Pride and Prejudice",
+          "rating": "G",
+          "category": "FM",
+          "warnings": "none",
+          "status": "complete",
+          "words": "32,050",
+          "chapters": "9/9",
+          "kudos": "1,212",
+          "hits": "15.4k",
+          "updated": "Finished Oct 12",
+          "summary": "Elizabeth keeps a ledger of the hours she cannot sleep at Pemberley."
+        }
+      ]
+    }
+  ]
+};
+  }
+}
+</script>
+</body>
+</html>

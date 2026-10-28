@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Post a work › Tags</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 1000px; position: relative; overflow: hidden">
+  <dc-import name="FormScreen" title="Tags" back="Back to Post" search="Add a tag" height="1000" sections="{{sections}}" hint-size="390px,1000px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+  "sections": [
+    {
+      "header": "Fandoms · required",
+      "rows": [
+        {
+          "label": "Fandoms",
+          "kind": "chips",
+          "chips": [
+            "Original Work"
+          ]
+        }
+      ]
+    },
+    {
+      "header": "Relationships",
+      "rows": [
+        {
+          "label": "Relationships",
+          "kind": "chips",
+          "chips": [
+            "Original Female Character/Original Female Character"
+          ]
+        }
+      ]
+    },
+    {
+      "header": "Characters",
+      "rows": [
+        {
+          "label": "Characters",
+          "kind": "chips",
+          "chips": [
+            "Original Characters"
+          ]
+        }
+      ]
+    },
+    {
+      "header": "Additional tags",
+      "rows": [
+        {
+          "label": "Tags",
+          "kind": "chips",
+          "chips": [
+            "Lighthouses",
+            "Slow Burn",
+            "Found Family"
+          ]
+        }
+      ]
+    },
+    {
+      "header": "Suggestions for “light”",
+      "rows": [
+        {
+          "label": "Lighthouse Keepers",
+          "sub": "2,904 works",
+          "kind": "nav"
+        },
+        {
+          "label": "Lighthouses",
+          "sub": "6,120 works · added",
+          "kind": "check",
+          "on": true
+        },
+        {
+          "label": "Light Angst",
+          "sub": "98k works",
+          "kind": "nav"
+        }
+      ]
+    }
+  ]
+};
+  }
+}
+</script>
+</body>
+</html>

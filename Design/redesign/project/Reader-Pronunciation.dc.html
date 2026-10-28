@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Read Aloud › Pronunciations</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden">
+  <dc-import name="FormScreen" title="Pronunciations" back="Back to Read Aloud" trailing="Edit" height="844" sections="{{sections}}" hint-size="390px,844px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+  "sections": [
+    {
+      "header": "This work",
+      "rows": [
+        {
+          "label": "Wentworth",
+          "sub": "Said as “WENT-wurth”",
+          "kind": "nav"
+        },
+        {
+          "label": "Uppercross",
+          "sub": "Said as “UP-per-cross”",
+          "kind": "nav"
+        }
+      ]
+    },
+    {
+      "header": "All works",
+      "rows": [
+        {
+          "label": "AU",
+          "sub": "Said as “alternate universe”",
+          "kind": "nav"
+        },
+        {
+          "label": "POV",
+          "sub": "Said as “point of view”",
+          "kind": "nav"
+        },
+        {
+          "label": "Mx.",
+          "sub": "Said as “mix”",
+          "kind": "nav"
+        }
+      ]
+    },
+    {
+      "rows": [
+        {
+          "label": "Add a Pronunciation…",
+          "kind": "button"
+        }
+      ]
+    }
+  ]
+};
+  }
+}
+</script>
+</body>
+</html>

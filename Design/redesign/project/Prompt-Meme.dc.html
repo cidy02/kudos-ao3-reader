@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Challenge › Prompt meme</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden">
+  <dc-import name="ListScreen" title="Persuasion Prompt Meme" subtitle="142 prompts · 38 claimed · 21 filled" back="Back" height="844" tools="{{tools}}" chips="{{chips}}" sections="{{sections}}" hint-size="390px,844px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+  "tools": [
+    {
+      "label": "New Prompt",
+      "icon": "plus"
+    }
+  ],
+  "chips": [
+    {
+      "label": "All",
+      "on": true
+    },
+    {
+      "label": "Unclaimed"
+    },
+    {
+      "label": "Claimed by me"
+    },
+    {
+      "label": "Filled"
+    }
+  ],
+  "sections": [
+    {
+      "kind": "rows",
+      "rows": [
+        {
+          "title": "Anne, rain, a borrowed coat",
+          "sub": "Anne Elliot/Frederick Wentworth · claimed by you",
+          "tone": "#7B3FA0",
+          "glyph": "M4 5h16v11H9l-5 4z",
+          "square": true,
+          "badge": "Claimed",
+          "badgeBg": "#990000"
+        },
+        {
+          "title": "The navy list, read aloud",
+          "sub": "Gen · 2 claims · 1 fill",
+          "tone": "#7B3FA0",
+          "glyph": "M4 5h16v11H9l-5 4z",
+          "square": true,
+          "action": "Claim"
+        },
+        {
+          "title": "Lyme, the morning after",
+          "sub": "Louisa Musgrove, Anne Elliot · unclaimed",
+          "tone": "#7B3FA0",
+          "glyph": "M4 5h16v11H9l-5 4z",
+          "square": true,
+          "action": "Claim"
+        },
+        {
+          "title": "Kellynch, years later",
+          "sub": "Anne Elliot/Frederick Wentworth · 1 fill",
+          "tone": "#7B3FA0",
+          "glyph": "M4 5h16v11H9l-5 4z",
+          "square": true,
+          "action": "Claim"
+        }
+      ]
+    }
+  ]
+};
+  }
+}
+</script>
+</body>
+</html>

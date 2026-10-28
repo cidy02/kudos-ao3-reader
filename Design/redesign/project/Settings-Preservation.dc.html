@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Settings › Preservation</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden">
+  <dc-import name="FormScreen" title="Preservation" back="Back to Settings" height="844" sections="{{sections}}" hint-size="390px,844px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+  "sections": [
+    {
+      "header": "Works that leave AO3",
+      "footer": "Kudos never deletes a work because AO3 lost it.",
+      "rows": [
+        {
+          "label": "Keep a copy of every saved work",
+          "kind": "toggle",
+          "on": true,
+          "sub": "2 works are kept only in Kudos"
+        },
+        {
+          "label": "Check what’s still on AO3",
+          "kind": "nav",
+          "detail": "Last: Oct 20"
+        }
+      ]
+    },
+    {
+      "header": "Originals",
+      "rows": [
+        {
+          "label": "Keep imported original files",
+          "kind": "toggle",
+          "on": true,
+          "sub": "PDFs and EPUBs from other sites · 84 MB"
+        },
+        {
+          "label": "Rebuild works from originals",
+          "kind": "nav"
+        }
+      ]
+    },
+    {
+      "header": "Series",
+      "rows": [
+        {
+          "label": "Ask to save the whole series",
+          "kind": "toggle",
+          "on": true
+        }
+      ]
+    }
+  ]
+};
+  }
+}
+</script>
+</body>
+</html>
