@@ -13,13 +13,14 @@ body{margin:0}
 </style>
 </helmet>
 <div style="width: 390px; height: 844px; position: relative; overflow: hidden">
-  <dc-import name="ListScreen" title="Subscriptions" large="False" subtitle="3 tags followed in Kudos · checked 10 min ago" back="Back to Library" height="844" tools="{{tools}}" chips="{{chips}}" sections="{{sections}}" hint-size="390px,844px"></dc-import>
+  <dc-import name="ListScreen" title="Subscriptions" subtitle="3 tags followed in Kudos · checked 10 min ago" back="Back to Library" height="844" large="{{large}}" tools="{{tools}}" chips="{{chips}}" sections="{{sections}}" hint-size="390px,844px"></dc-import>
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
 class Component extends DCLogic {
   renderVals() {
     return {
+  "large": false,
   "tools": [
     {
       "label": "More: Mark All as Seen, Follow a Tag…, Manage on AO3",

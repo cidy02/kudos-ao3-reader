@@ -3,6 +3,10 @@ import json, sys, html
 import os
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "project")
 def board(name, title, component, attrs, data, height=844):
+    # Attributes are written as text, so a False would arrive as the truthy string
+    # "False"; pass true/false settings as bound data instead.
+    data = {**{k: v for k, v in attrs.items() if isinstance(v, bool)}, **data}
+    attrs = {k: v for k, v in attrs.items() if not isinstance(v, bool)}
     obj_attrs = ''.join(' %s="{{%s}}"' % (k, k) for k in data)
     plain = ''.join(' %s="%s"' % (k, html.escape(str(v), quote=True)) for k, v in attrs.items())
     src = f'''<!doctype html>

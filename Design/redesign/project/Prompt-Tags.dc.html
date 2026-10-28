@@ -12,14 +12,41 @@
 body{margin:0}
 </style>
 </helmet>
-<div style="width: 390px; height: 844px; position: relative; overflow: hidden">
-  <dc-import name="FormScreen" title="Tag Set" subtitle="Austen Exchange 2026" back="Back" confirm="Save" height="844" sections="{{sections}}" hint-size="390px,844px"></dc-import>
+<div style="width: 390px; height: 1060px; position: relative; overflow: hidden">
+  <dc-import name="FormScreen" title="Tag Set" back="Back" confirm="Save" height="1060" context="{{context}}" stats="{{stats}}" sections="{{sections}}" hint-size="390px,1060px"></dc-import>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1060}}'>
 class Component extends DCLogic {
   renderVals() {
     return {
+  "context": {
+    "kicker": "Tag set",
+    "kickerColour": "#7B3FA0",
+    "title": "Austen Exchange 2026",
+    "meta": "Used by Austen Exchange 2026",
+    "tile": "#7B3FA0",
+    "icon": "M4 9h16v4H4zM6 13h12v8H6zM12 9v12M12 9c-1.5-3-5-3-5-1s3 1 5 1c2 0 5 1 5-1s-3.5-2-5 1"
+  },
+  "stats": [
+    {
+      "n": "7",
+      "label": "Fandoms"
+    },
+    {
+      "n": "44",
+      "label": "Characters"
+    },
+    {
+      "n": "23",
+      "label": "Relationships"
+    },
+    {
+      "n": "12",
+      "label": "To review",
+      "colour": "#C25E00"
+    }
+  ],
   "sections": [
     {
       "header": "Fandoms",
@@ -58,12 +85,35 @@ class Component extends DCLogic {
       ]
     },
     {
-      "header": "Nominations",
+      "header": "Nominations to review",
       "rows": [
         {
-          "label": "Review nominations",
+          "label": "Admiral Croft",
+          "sub": "Character · Persuasion",
+          "meta": "Nominated by 3",
           "kind": "nav",
-          "badge": "12"
+          "badge": "New",
+          "badgeBg": "#FFF4E5",
+          "badgeFg": "#6B3A00"
+        },
+        {
+          "label": "Catherine Morland/Henry Tilney",
+          "sub": "Relationship · Northanger Abbey",
+          "meta": "Nominated by 5",
+          "kind": "nav",
+          "badge": "New",
+          "badgeBg": "#FFF4E5",
+          "badgeFg": "#6B3A00"
+        },
+        {
+          "label": "Mr Woodhouse",
+          "sub": "Character · Emma",
+          "meta": "Nominated by 1",
+          "kind": "nav"
+        },
+        {
+          "label": "All 12 Nominations",
+          "kind": "nav"
         }
       ]
     }

@@ -12,14 +12,40 @@
 body{margin:0}
 </style>
 </helmet>
-<div style="width: 390px; height: 844px; position: relative; overflow: hidden">
-  <dc-import name="FormScreen" title="Edit Series" subtitle="Lantern Season" back="Back" confirm="Save" height="844" sections="{{sections}}" hint-size="390px,844px"></dc-import>
+<div style="width: 390px; height: 1100px; position: relative; overflow: hidden">
+  <dc-import name="FormScreen" title="Edit Series" back="Back" confirm="Save" height="1100" context="{{context}}" stats="{{stats}}" sections="{{sections}}" hint-size="390px,1100px"></dc-import>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1100}}'>
 class Component extends DCLogic {
   renderVals() {
     return {
+  "context": {
+    "kicker": "Original Work · series",
+    "kickerColour": "#1E63C8",
+    "title": "Lantern Season",
+    "meta": "3 parts · 47,260 words · updated Oct 20",
+    "tile": "#1E63C8",
+    "icon": "M4 6h16M4 12h16M4 18h10"
+  },
+  "stats": [
+    {
+      "n": "3",
+      "label": "Parts"
+    },
+    {
+      "n": "47.3k",
+      "label": "Words"
+    },
+    {
+      "n": "1,712",
+      "label": "Kudos"
+    },
+    {
+      "n": "48",
+      "label": "Subscribers"
+    }
+  ],
   "sections": [
     {
       "header": "Title",
@@ -37,6 +63,39 @@ class Component extends DCLogic {
           "kind": "textarea",
           "text": "Three keepers, three winters, one light.",
           "rows": 2
+        },
+        {
+          "label": "Notes",
+          "kind": "nav",
+          "detail": "None"
+        }
+      ]
+    },
+    {
+      "header": "Parts",
+      "rows": [
+        {
+          "label": "Keeper of the Northern Light",
+          "sub": "Part 1 · 22,410 words · complete",
+          "kind": "info",
+          "handle": true,
+          "cover": "linear-gradient(155deg, hsl(188, 46%, 27%), hsl(210, 50%, 41%))"
+        },
+        {
+          "label": "Lantern Season",
+          "sub": "Part 2 · 15,050 words · complete",
+          "kind": "info",
+          "handle": true,
+          "cover": "linear-gradient(155deg, hsl(203, 46%, 27%), hsl(225, 50%, 41%))"
+        },
+        {
+          "label": "What the Tide Keeps",
+          "sub": "Part 3 · 9,800 words · 3/8",
+          "meta": "Work in progress",
+          "metaColour": "#C25E00",
+          "kind": "info",
+          "handle": true,
+          "cover": "linear-gradient(155deg, hsl(176, 46%, 27%), hsl(198, 50%, 41%))"
         }
       ]
     },
@@ -48,13 +107,9 @@ class Component extends DCLogic {
           "on": false
         },
         {
-          "label": "Reorder Works",
+          "label": "Creators",
           "kind": "nav",
-          "detail": "3"
-        },
-        {
-          "label": "Remove Works",
-          "kind": "nav"
+          "detail": "saltwindow"
         }
       ]
     },

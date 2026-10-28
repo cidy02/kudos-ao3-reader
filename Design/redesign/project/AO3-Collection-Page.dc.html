@@ -12,14 +12,41 @@
 body{margin:0}
 </style>
 </helmet>
-<div style="width: 390px; height: 1000px; position: relative; overflow: hidden">
-  <dc-import name="ListScreen" title="Austen Exchange 2026" subtitle="Gift exchange · 214 works · 98 members · moderated" back="Back" height="1000" tools="{{tools}}" chips="{{chips}}" sections="{{sections}}" hint-size="390px,1000px"></dc-import>
+<div style="width: 390px; height: 1040px; position: relative; overflow: hidden">
+  <dc-import name="ListScreen" title="Austen Exchange 2026" back="Back" tab="writing" height="1040" large="{{large}}" context="{{context}}" stats="{{stats}}" tools="{{tools}}" chips="{{chips}}" sections="{{sections}}" hint-size="390px,1040px"></dc-import>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1000}}'>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1040}}'>
 class Component extends DCLogic {
   renderVals() {
     return {
+  "large": false,
+  "context": {
+    "kicker": "Gift exchange · moderated",
+    "kickerColour": "#7B3FA0",
+    "title": "Austen Exchange 2026",
+    "meta": "Maintained by elinor_d and 2 others · reveal Dec 1",
+    "tile": "#7B3FA0",
+    "icon": "M4 9h16v4H4zM6 13h12v8H6zM12 9v12M12 9c-1.5-3-5-3-5-1s3 1 5 1c2 0 5 1 5-1s-3.5-2-5 1"
+  },
+  "stats": [
+    {
+      "n": "214",
+      "label": "Works"
+    },
+    {
+      "n": "57",
+      "label": "Bookmarks"
+    },
+    {
+      "n": "98",
+      "label": "Participants"
+    },
+    {
+      "n": "7",
+      "label": "Fandoms"
+    }
+  ],
   "tools": [
     {
       "label": "Join",
@@ -82,6 +109,21 @@ class Component extends DCLogic {
           "hits": "17.0k",
           "updated": "Gift for lizzy_reads · Oct 25",
           "summary": "Anne writes to Wentworth every year on the same date, and never sends a single letter."
+        },
+        {
+          "title": "The Bath Letters",
+          "author": "anne_at_lyme",
+          "fandom": "Persuasion",
+          "rating": "G",
+          "category": "Gen",
+          "warnings": "none",
+          "status": "complete",
+          "words": "6,400",
+          "chapters": "1/1",
+          "kudos": "388",
+          "hits": "3.9k",
+          "updated": "Gift for quietharbor · Oct 24",
+          "summary": "Mrs Smith reads the post aloud, and edits as she goes."
         }
       ],
       "summary": true

@@ -12,14 +12,42 @@
 body{margin:0}
 </style>
 </helmet>
-<div style="width: 390px; height: 844px; position: relative; overflow: hidden">
-  <dc-import name="ListScreen" title="Sign-ups" subtitle="Austen Exchange 2026 · 98 sign-ups · closes Nov 1" back="Back" height="844" tools="{{tools}}" chips="{{chips}}" sections="{{sections}}" hint-size="390px,844px"></dc-import>
+<div style="width: 390px; height: 980px; position: relative; overflow: hidden">
+  <dc-import name="ListScreen" title="Sign-ups" back="Back" tab="writing" height="980" large="{{large}}" context="{{context}}" stats="{{stats}}" tools="{{tools}}" chips="{{chips}}" sections="{{sections}}" hint-size="390px,980px"></dc-import>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":980}}'>
 class Component extends DCLogic {
   renderVals() {
     return {
+  "large": false,
+  "context": {
+    "kicker": "Gift exchange · moderated",
+    "kickerColour": "#7B3FA0",
+    "title": "Austen Exchange 2026",
+    "meta": "Sign-ups close Nov 1 · works due Nov 12",
+    "tile": "#7B3FA0",
+    "icon": "M4 9h16v4H4zM6 13h12v8H6zM12 9v12M12 9c-1.5-3-5-3-5-1s3 1 5 1c2 0 5 1 5-1s-3.5-2-5 1"
+  },
+  "stats": [
+    {
+      "n": "98",
+      "label": "Sign-ups"
+    },
+    {
+      "n": "4",
+      "label": "Incomplete",
+      "colour": "#C25E00"
+    },
+    {
+      "n": "6",
+      "label": "Pinch hitters"
+    },
+    {
+      "n": "4 days",
+      "label": "Left"
+    }
+  ],
   "tools": [
     {
       "label": "More: Export, Close Sign-ups",
@@ -44,17 +72,43 @@ class Component extends DCLogic {
       "rows": [
         {
           "title": "quietharbor",
-          "sub": "Requests Persuasion · offers Pride and Prejudice, Emma",
+          "sub": "Requests",
+          "tags": [
+            {
+              "label": "Anne Elliot/Frederick Wentworth",
+              "bg": "rgba(153,0,0,0.10)",
+              "fg": "#990000"
+            }
+          ],
+          "meta": "Offers Pride and Prejudice, Emma · signed up Oct 3",
           "tone": "#3E5B3A"
         },
         {
           "title": "anne_at_lyme",
-          "sub": "Requests Persuasion ×2 · offers Northanger Abbey",
+          "sub": "Requests",
+          "tags": [
+            {
+              "label": "Louisa Musgrove/Captain Benwick",
+              "bg": "rgba(153,0,0,0.10)",
+              "fg": "#990000"
+            },
+            "Persuasion"
+          ],
+          "meta": "Offers Northanger Abbey · signed up Oct 4",
           "tone": "#6B4E23"
         },
         {
           "title": "lizzy_reads",
-          "sub": "Requests Pride and Prejudice · offer missing",
+          "sub": "Requests",
+          "tags": [
+            {
+              "label": "Elizabeth Bennet/Fitzwilliam Darcy",
+              "bg": "rgba(153,0,0,0.10)",
+              "fg": "#990000"
+            }
+          ],
+          "meta": "No offer yet",
+          "metaColour": "#C25E00",
           "tone": "#7A4040",
           "badge": "Incomplete",
           "badgeBg": "#FFF4E5",
@@ -62,8 +116,19 @@ class Component extends DCLogic {
         },
         {
           "title": "elinor_d",
-          "sub": "Requests Sense and Sensibility · offers Persuasion",
-          "tone": "#4A3D6A"
+          "sub": "Requests",
+          "tags": [
+            {
+              "label": "Elinor Dashwood/Edward Ferrars",
+              "bg": "rgba(153,0,0,0.10)",
+              "fg": "#990000"
+            }
+          ],
+          "meta": "Offers Persuasion · pinch hitter",
+          "tone": "#4A3D6A",
+          "badge": "Pinch hitter",
+          "badgeBg": "#E5EEFB",
+          "badgeFg": "#1E4E9A"
         }
       ]
     }

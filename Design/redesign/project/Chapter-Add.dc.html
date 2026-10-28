@@ -12,14 +12,21 @@
 body{margin:0}
 </style>
 </helmet>
-<div style="width: 390px; height: 960px; position: relative; overflow: hidden">
-  <dc-import name="FormScreen" title="New Chapter" subtitle="What the Tide Keeps · Chapter 5" mode="sheet" trailing="Post…" height="960" sections="{{sections}}" hint-size="390px,960px"></dc-import>
+<div style="width: 390px; height: 1040px; position: relative; overflow: hidden">
+  <dc-import name="FormScreen" title="New Chapter" subtitle="Chapter 5 of 8" mode="sheet" trailing="Post…" height="1040" context="{{context}}" sections="{{sections}}" hint-size="390px,1040px"></dc-import>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":960}}'>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1040}}'>
 class Component extends DCLogic {
   renderVals() {
     return {
+  "context": {
+    "kicker": "Original Work · work in progress",
+    "kickerColour": "hsl(188, 56%, 33%)",
+    "title": "What the Tide Keeps",
+    "meta": "3 of 8 chapters posted · 9,800 words · 412 kudos",
+    "cover": "linear-gradient(155deg, hsl(188, 46%, 27%), hsl(210, 50%, 41%))"
+  },
   "sections": [
     {
       "rows": [
@@ -32,6 +39,27 @@ class Component extends DCLogic {
           "label": "Number",
           "kind": "value",
           "detail": "5 of 8"
+        },
+        {
+          "label": "Published",
+          "kind": "nav",
+          "detail": "When posted"
+        }
+      ]
+    },
+    {
+      "header": "Text",
+      "rows": [
+        {
+          "label": "Write Chapter",
+          "sub": "Draft · 1,180 words · edited today",
+          "kind": "nav",
+          "icon": "M5 19h4L19 9l-4-4L5 15zM13 7l4 4"
+        },
+        {
+          "label": "Import from a File…",
+          "kind": "nav",
+          "icon": "M12 4v11M7.5 10.5 12 15l4.5-4.5M4 19.5h16"
         }
       ]
     },
@@ -57,22 +85,6 @@ class Component extends DCLogic {
           "label": "End notes",
           "kind": "nav",
           "detail": "None"
-        }
-      ]
-    },
-    {
-      "header": "Text",
-      "rows": [
-        {
-          "label": "Write Chapter",
-          "kind": "nav",
-          "detail": "Empty",
-          "icon": "M5 19h4L19 9l-4-4L5 15zM13 7l4 4"
-        },
-        {
-          "label": "Import from a File…",
-          "kind": "nav",
-          "icon": "M12 4v11M7.5 10.5 12 15l4.5-4.5M4 19.5h16"
         }
       ]
     },

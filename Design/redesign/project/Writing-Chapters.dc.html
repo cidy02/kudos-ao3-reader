@@ -12,14 +12,40 @@
 body{margin:0}
 </style>
 </helmet>
-<div style="width: 390px; height: 844px; position: relative; overflow: hidden">
-  <dc-import name="ListScreen" title="What the Tide Keeps" subtitle="3 of 8 chapters posted · 9,800 words" back="Back to Your Works" tab="writing" height="844" tools="{{tools}}" sections="{{sections}}" hint-size="390px,844px"></dc-import>
+<div style="width: 390px; height: 980px; position: relative; overflow: hidden">
+  <dc-import name="ListScreen" title="Chapters" back="Back to Your Works" tab="writing" height="980" large="{{large}}" context="{{context}}" stats="{{stats}}" tools="{{tools}}" sections="{{sections}}" hint-size="390px,980px"></dc-import>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":980}}'>
 class Component extends DCLogic {
   renderVals() {
     return {
+  "large": false,
+  "context": {
+    "kicker": "Original Work · work in progress",
+    "kickerColour": "hsl(188, 56%, 33%)",
+    "title": "What the Tide Keeps",
+    "meta": "3 of 8 chapters posted · 9,800 words · 412 kudos",
+    "cover": "linear-gradient(155deg, hsl(188, 46%, 27%), hsl(210, 50%, 41%))"
+  },
+  "stats": [
+    {
+      "n": "3/8",
+      "label": "Posted"
+    },
+    {
+      "n": "9,800",
+      "label": "Words"
+    },
+    {
+      "n": "4,108",
+      "label": "Hits"
+    },
+    {
+      "n": "63",
+      "label": "Comment threads"
+    }
+  ],
   "tools": [
     {
       "label": "Add Chapter",
@@ -36,26 +62,51 @@ class Component extends DCLogic {
       "rows": [
         {
           "title": "1. Low Water",
-          "sub": "3,210 words · posted Sep 28 · 84 comments",
+          "sub": "3,210 words · posted Sep 28",
+          "meta": "29 comment threads",
           "handle": true
         },
         {
           "title": "2. The Lamp Room",
-          "sub": "3,350 words · posted Oct 9 · 61 comments",
+          "sub": "3,350 words · posted Oct 9",
+          "meta": "21 comment threads",
           "handle": true
         },
         {
           "title": "3. Fog Bell",
-          "sub": "3,240 words · posted Oct 20 · 41 comments",
+          "sub": "3,240 words · posted Oct 20",
+          "meta": "13 comment threads · 2 new",
+          "metaColour": "#990000",
           "handle": true
         },
         {
           "title": "4. Slack Water",
-          "sub": "1,240 words · draft, edited yesterday",
+          "sub": "1,240 words · edited yesterday",
+          "meta": "Draft on AO3 · deleted Nov 19 unless posted",
+          "metaColour": "#C25E00",
           "handle": true,
           "badge": "Draft",
           "badgeBg": "#EFEFF4",
           "badgeFg": "#3A3A3C"
+        }
+      ]
+    },
+    {
+      "header": "Planned",
+      "count": "4",
+      "kind": "rows",
+      "rows": [
+        {
+          "title": "5. Spring Tide",
+          "sub": "Outline only",
+          "light": true,
+          "chevron": false
+        },
+        {
+          "title": "6–8",
+          "sub": "Not started",
+          "light": true,
+          "chevron": false
         }
       ]
     }
