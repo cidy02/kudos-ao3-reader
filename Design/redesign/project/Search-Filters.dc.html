@@ -139,13 +139,13 @@ button{cursor:pointer}
           </div>
         </sc-for>
       </div>
-      <div role="radiogroup" aria-label="Length" style="margin-top: 8px; display: flex; gap: 6px; overflow: hidden">
+      <div role="radiogroup" aria-label="Length" style="margin-top: 8px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px">
         <sc-for list="{{lengths}}" as="l" hint-placeholder-count="5"><button role="radio" aria-checked="{{l.on}}" style="flex-shrink: 0; height: 32px; padding: 0 12px; border: none; border-radius: 16px; background: {{l.bg}}; color: {{l.fg}}; font-family: inherit; font-size: 14px; font-weight: 600">{{l.label}}</button></sc-for>
       </div>
       <div style="margin-top: 8px; background: #FFFFFF; border-radius: 16px; display: flex; overflow: hidden">
         <label style="flex: 1; min-width: 0; min-height: 48px; padding: 0 16px; display: flex; align-items: center; gap: 8px"><span style="flex-shrink: 0; font-size: 17px; color: #6C6C70">Words</span><input type="text" value="10,000" aria-label="Word count from" style="flex: 1; width: 0; min-width: 0; border: none; background: transparent; font-family: inherit; font-size: 17px; text-align: right; outline: none"></label>
         <span aria-hidden="true" style="width: 0.5px; background: #D1D1D6"></span>
-        <label style="flex: 1; min-width: 0; min-height: 48px; padding: 0 16px; display: flex; align-items: center; gap: 8px"><span style="flex-shrink: 0; font-size: 17px; color: #6C6C70">to</span><input type="text" placeholder="Any" aria-label="Word count to" style="flex: 1; width: 0; min-width: 0; border: none; background: transparent; font-family: inherit; font-size: 17px; text-align: right; outline: none"></label>
+        <label style="flex: 1; min-width: 0; min-height: 48px; padding: 0 16px; display: flex; align-items: center; gap: 8px"><span style="flex-shrink: 0; font-size: 17px; color: #6C6C70">to</span><input type="text" value="60,000" aria-label="Word count to" style="flex: 1; width: 0; min-width: 0; border: none; background: transparent; font-family: inherit; font-size: 17px; text-align: right; outline: none"></label>
       </div>
       <h3 style="margin: 16px 16px 2px; font-size: 13px; line-height: 18px; font-weight: 400; color: #6C6C70">Popularity</h3>
       <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
@@ -184,10 +184,10 @@ class Component extends DCLogic {
       ring: st ? 'none' : '1.5px solid #C7C7CC', markBg: st === 'in' ? '#990000' : st === 'out' ? '#8E8E93' : 'transparent'
     }));
     const chip = (label, kind) => ({ label, bg: kind === 'out' ? '#EFEFF4' : 'rgba(153,0,0,0.10)', fg: kind === 'out' ? '#6C6C70' : '#990000', strike: kind === 'out' ? 'line-through' : 'none' });
-    const active = [chip('General, Teen'), chip('F/F'), chip('Gen'), chip('Other', 'out'), chip('No Warnings Apply'), chip('Major Character Death', 'out'), chip('Found Family'), chip('Complete'), chip('10k+ words'), chip('Past month'), chip('English'), chip('100+ kudos')];
+    const active = [chip('General, Teen'), chip('F/F'), chip('Gen'), chip('Other', 'out'), chip('No Warnings Apply'), chip('Major Character Death', 'out'), chip('Found Family'), chip('Complete'), chip('10k–60k words'), chip('Past month'), chip('English'), chip('100+ kudos')];
     return {
       active, activeCount: active.length,
-      lengths: ['Any', 'Under 1k', '1k–10k', '10k+', '50k+'].map((label) => ({ label, on: label === '10k+' ? 'true' : 'false', bg: label === '10k+' ? '#990000' : '#FFFFFF', fg: label === '10k+' ? '#FFFFFF' : '#1C1C1E' })),
+      lengths: ['Any', 'Under 1k', '1k–10k', '10k+', '50k+', 'Custom'].map((label) => ({ label, on: label === 'Custom' ? 'true' : 'false', bg: label === 'Custom' ? '#990000' : '#FFFFFF', fg: label === 'Custom' ? '#FFFFFF' : '#1C1C1E' })),
       top: list([{ label: 'Sort by', tile: '#1E63C8', d: 'M7 4v16M3.5 16.5 7 20l3.5-3.5M17 20V4M13.5 7.5 17 4l3.5 3.5', value: 'Best Match', isPicker: true }]),
       content: list([
         { label: 'Rating', tile: '#E0A100', d: 'M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z', value: 'General, Teen', isPicker: true },
