@@ -782,7 +782,7 @@
     "Reader-Menu.dc.html": {
       "h": 844,
       "page": "iphone",
-      "title": "Reader · menu",
+      "title": "Reader · menu, top row",
       "w": 390,
       "x": 470,
       "y": 6460
@@ -1006,7 +1006,7 @@
     "Work-Actions.dc.html": {
       "h": 844,
       "page": "iphone",
-      "title": "Work Detail · actions menu",
+      "title": "Work Detail · actions menu, top row",
       "w": 390,
       "x": 470,
       "y": 3960
@@ -1074,6 +1074,22 @@
       "w": 1290,
       "x": 0,
       "y": 7960
+    },
+    "Comment-Menu.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Comments · long-press menu",
+      "w": 390,
+      "x": 2820,
+      "y": 3960
+    },
+    "MenuTopRow.dc.html": {
+      "h": 64,
+      "page": "system",
+      "title": "Menu top row (component)",
+      "w": 270,
+      "x": 0,
+      "y": 3400
     }
   },
   "createdOnFiles": {
@@ -1381,7 +1397,9 @@
     "Account-Sheet.dc.html",
     "Writing.dc.html",
     "Delete-Warnings.dc.html",
-    "Subscriptions-Plan.dc.html"
+    "Subscriptions-Plan.dc.html",
+    "Comment-Menu.dc.html",
+    "MenuTopRow.dc.html"
   ],
   "pages": [
     {

@@ -94,7 +94,8 @@ button{cursor:pointer}
     </button>
 
     <sc-if value="{{menuOpen}}" hint-placeholder-val="{{false}}">
-      <div role="menu" aria-label="Comment actions" style="position: absolute; right: 98px; top: {{menuTop}}px; width: 250px; border-radius: 22px; padding: 6px 0; background: rgba(250,250,252,0.88); backdrop-filter: blur(30px) saturate(180%); -webkit-backdrop-filter: blur(30px) saturate(180%); box-shadow: 0 18px 50px rgba(0,0,0,0.22), 0 0 0 0.5px rgba(0,0,0,0.06)">
+      <div role="menu" aria-label="Comment actions" style="position: absolute; right: 98px; top: {{menuTop}}px; width: 250px; border-radius: 22px; padding: 0 0 6px; overflow: hidden; background: rgba(250,250,252,0.88); backdrop-filter: blur(30px) saturate(180%); -webkit-backdrop-filter: blur(30px) saturate(180%); box-shadow: 0 18px 50px rgba(0,0,0,0.22), 0 0 0 0.5px rgba(0,0,0,0.06)">
+        <dc-import name="MenuTopRow" items="{{commentTop}}" width="250" hint-size="250px,66px"></dc-import>
         <sc-for list="{{menuItems}}" as="m" hint-placeholder-count="3">
           <button role="menuitem" onClick="{{closeMenu}}" style="width: 100%; height: 44px; border: none; border-top: {{m.sep}}; background: transparent; padding: 0 16px; display: flex; align-items: center; gap: 12px; font-family: inherit; font-size: 16px; color: {{m.color}}; text-align: left">
             <span style="flex: 1">{{m.label}}</span>
@@ -162,11 +163,14 @@ class Component extends DCLogic {
       edit: 'M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4',
       trash: 'M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13M10 11v6M14 11v6'
     };
-    const copy = { label: 'Copy Link', d: icons.link, color: '#1C1C1E', sep: 'none' };
+    // Top row: Reply, Copy Link, Share. Rows: the thread and chapter; your own comment adds Edit and Delete.
+    const commentTop = [{ label: 'Reply', d: 'M9 7 4 12l5 5M4 12h10a6 6 0 0 1 6 6' }, { label: 'Copy Link', d: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1' }, { label: 'Share', d: 'M12 15V4M8 8l4-4 4 4M5 12v8h14v-8' }];
+    const thread = { label: 'Show Thread', d: 'M5 6h14M5 12h10M5 18h6', color: '#1C1C1E', sep: 'none' };
+    const chapterRow = { label: 'Go to Chapter 7', d: 'M4 5.5c3-1 5.5-.6 8 1 2.5-1.6 5-2 8-1v13c-3-1-5.5-.6-8 1-2.5-1.6-5-2-8-1zM12 6.5v13', color: '#1C1C1E', sep: 'none' };
     // Only saltwindow's own comment (index 0) can be edited or deleted.
     const menuItems = menuIndex === 0
-      ? [copy, { label: 'Edit Comment', d: icons.edit, color: '#1C1C1E', sep: 'none' }, { label: 'Delete Comment', d: icons.trash, color: '#D70015', sep }]
-      : [copy];
+      ? [thread, chapterRow, { label: 'Edit Comment', d: icons.edit, color: '#1C1C1E', sep }, { label: 'Delete Comment', d: icons.trash, color: '#D70015', sep: 'none' }]
+      : [thread, chapterRow];
     const comments = [
       { author: 'saltwindow', initial: 'S', bg: '#23506B', meta: 'Chapter 7 · 2 days ago', body: 'The single unbroken line across the vellum. I had to put my phone down for a minute.', thread: '3 replies', hasThread: true, isCreator: false, indent: 0 },
       { author: 'inkwell_moth', initial: 'I', bg: '#1F4E5F', meta: 'Chapter 7 · 1 day ago', body: 'That line is the whole story, honestly. Thank you for reading so closely!', thread: '', hasThread: false, isCreator: true, indent: 20 },
@@ -186,6 +190,7 @@ class Component extends DCLogic {
     const sans = '-apple-system, system-ui, sans-serif';
     const t = (label, glyph, o) => ({ label, glyph, font: sans, weight: 500, style: 'normal', deco: 'none', ...o });
     return {
+      commentTop,
       accent,
       accentTint,
       textSize: this.props.textSize ?? 18,

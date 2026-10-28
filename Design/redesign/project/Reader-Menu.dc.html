@@ -32,7 +32,8 @@ button{cursor:pointer}
     </div>
   </div>
 
-  <div role="menu" aria-label="Reader" style="position: absolute; right: 16px; top: 108px; width: 268px; border-radius: 24px; padding: 6px 0; background: rgba(252,250,245,0.9); backdrop-filter: blur(30px) saturate(160%); -webkit-backdrop-filter: blur(30px) saturate(160%); box-shadow: 0 18px 50px rgba(40,30,10,0.24), 0 0 0 0.5px rgba(60,40,10,0.1)">
+  <div role="menu" aria-label="Reader" style="position: absolute; right: 16px; top: 108px; width: 268px; border-radius: 24px; padding: 0 0 6px; overflow: hidden; background: rgba(252,250,245,0.9); backdrop-filter: blur(30px) saturate(160%); -webkit-backdrop-filter: blur(30px) saturate(160%); box-shadow: 0 18px 50px rgba(40,30,10,0.24), 0 0 0 0.5px rgba(60,40,10,0.1)">
+    <dc-import name="MenuTopRow" items="{{top}}" theme="paper" width="268" hint-size="268px,66px"></dc-import>
     <sc-for list="{{items}}" as="m" hint-placeholder-count="8">
       <button role="menuitem" style="width: 100%; height: 44px; border: none; border-top: {{m.sep}}; background: transparent; padding: 0 16px; display: flex; align-items: center; gap: 12px; font-family: inherit; font-size: 16px; color: #1F1B16; text-align: left">
         <svg aria-hidden="true" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="{{m.d}}"></path></svg>
@@ -55,18 +56,17 @@ button{cursor:pointer}
 class Component extends DCLogic {
   renderVals() {
     const sep = '0.5px solid rgba(60,40,10,0.14)';
+    // Top row: Find, Comments, Read Aloud, Share. Contents and Add Bookmark already sit on the bottom bar.
+    const top = [{ label: 'Find', d: 'M10.5 4a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM15.5 15.5l5 5' }, { label: 'Comments', d: 'M4 5h16v11H9l-5 4z' }, { label: 'Read Aloud', d: 'M4 9.5h3.5L12 5.5v13l-4.5-4H4zM15.5 9a4.5 4.5 0 0 1 0 6M18 6.5a8 8 0 0 1 0 11' }, { label: 'Share', d: 'M12 15V4M8 8l4-4 4 4M5 12v8h14v-8' }];
     const items = [
       ['Contents', 'M9 6.5h11M9 12h11M9 17.5h11M4.5 6.5h.01M4.5 12h.01M4.5 17.5h.01', '22%', 'none'],
       ['Bookmarks & Highlights', 'M7 4h10v16l-5-4-5 4z', '5', 'none'],
-      ['Find in Work', 'M10.5 4a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM15.5 15.5l5 5', '', 'none'],
-      ['Comments', 'M4 5h16v11H9l-5 4z', '286', 'none'],
-      ['Read Aloud', 'M4 9.5h3.5L12 5.5v13l-4.5-4H4zM15.5 9a4.5 4.5 0 0 1 0 6M18 6.5a8 8 0 0 1 0 11', '', sep],
       ['Themes & Settings', 'M4 19 9 5l5 14M6 14h6M15 19l3-8 3 8M16 16.5h4', '', 'none'],
-      ['Rebuild from Original', 'M19 12a7 7 0 1 1-2.1-5M19 4v4h-4', '', 'none'],
-      ['Share', 'M12 15V4M8 8l4-4 4 4M5 12v8h14v-8', '', sep]
+      ['Rebuild from Original', 'M19 12a7 7 0 1 1-2.1-5M19 4v4h-4', '', sep]
     ];
     return {
       accent: this.props.accent ?? '#990000',
+      top,
       items: items.map(([label, d, detail, s]) => ({ label, d, detail, sep: s }))
     };
   }

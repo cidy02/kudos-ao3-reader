@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Menu top row</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div role="group" aria-label="Quick actions" style="width: {{width}}px; box-sizing: border-box; display: grid; grid-template-columns: {{cols}}; padding: 6px 8px 8px; border-bottom: 6px solid {{gap}}; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif">
+  <sc-for list="{{items}}" as="q" hint-placeholder-count="4">
+    <button aria-label="{{q.aria}}" aria-pressed="{{q.pressed}}" style="border: none; background: transparent; padding: 6px 0; display: flex; flex-direction: column; align-items: center; gap: 4px; font-family: inherit; font-size: 11px; line-height: 13px; color: {{q.fg}}">
+      <svg aria-hidden="true" width="21" height="21" viewBox="0 0 24 24" fill="{{q.fill}}" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="{{q.d}}"></path></svg>
+      {{q.label}}
+    </button>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"items":{"editor":null},"theme":{"editor":"enum","options":["app","paper"],"default":"app"},"width":{"editor":"int","default":270,"min":200,"max":360},"$preview":{"width":270,"height":64}}'>
+class Component extends DCLogic {
+  renderVals() {
+    // The top row of a menu: up to four labelled icons for the most frequent,
+    // non-destructive actions. A toggle that is on draws filled in the app colour.
+    // Share, when present, goes last. Everything else stays a row below.
+    const paper = this.props.theme === 'paper';
+    const ink = paper ? '#1F1B16' : '#1C1C1E';
+    const items = (this.props.items || [
+      { label: 'Kudos', d: 'M12 20s-7.5-4.6-7.5-10.2A4.2 4.2 0 0 1 12 7.2a4.2 4.2 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20z' },
+      { label: 'Share', d: 'M12 15V4M8 8l4-4 4 4M5 12v8h14v-8' }
+    ]).slice(0, 4);
+    return {
+      width: Number(this.props.width ?? 270),
+      cols: 'repeat(' + items.length + ', minmax(0, 1fr))',
+      gap: paper ? 'rgba(60,40,10,0.08)' : 'rgba(60,60,67,0.08)',
+      items: items.map((q) => ({
+        label: q.label, d: q.d,
+        aria: q.aria || q.label,
+        pressed: q.on === undefined ? 'false' : (q.on ? 'true' : 'false'),
+        fill: q.on ? '#990000' : 'none',
+        fg: q.on ? '#990000' : ink
+      }))
+    };
+  }
+}
+</script>
+</body>
+</html>
