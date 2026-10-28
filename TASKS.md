@@ -459,9 +459,13 @@ hand-rolling** — "as many dependencies as are necessary". PDF is explicitly *i
   `accentColorHex` (`KudosBackup.swift:1606ff`) so older files still import, but
   stop applying it (`SettingsBackupPage.swift:458`) and stop writing it, or write the
   constant; the manifest version only moves if the field is dropped. A stored
-  non-red accent is ignored on upgrade. Open: whether T-399's fandom wash on the tab
-  bar and chrome buttons stays (the design rules say fandom colour is identity only,
-  never on a button). Android has the same picker (parity).
+  non-red accent is ignored on upgrade. **Chrome is red only (owner, same day):**
+  undo T-399 and T-290's screen-colour controls, so the tab bar, toolbar buttons and
+  every control stay AO3 red on a work's or fandom's page too. The root
+  `.accentTint(washRegistry.current ?? theme.effectiveTint, …)` and the root ink
+  (`ContentView.swift:23`, `:89`) stop reading `ScreenWashRegistry`; the fandom colour
+  stays on identity only (generated covers, the Resume card, the fandom label, the
+  page wash). Android has the same picker and chrome tint (parity).
 
 ### Phase 3 — native AO3 writes (most fragile; needs the per-page CSRF token)
 - **Leave kudos · comment · subscribe · AO3-side bookmark** — fetch the work/page,
