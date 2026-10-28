@@ -438,6 +438,17 @@ hand-rolling** — "as many dependencies as are necessary". PDF is explicitly *i
   conflict UX polish, and any follow-up from large-library testing.
 - **Highlights / notes / annotations** — large; a reader annotation system.
 - **Text-to-Speech (TTS)** — large; `AVSpeechSynthesizer` in the reader.
+- **T-458 · Read Aloud keeps playing outside the reader** 🅿️ *(owner, 2026-10-27).*
+  Today `ReaderSpeechController` is reader-scoped: leaving the work calls
+  `tearDown()`, which stops speech and clears Now Playing. Move the session to app
+  scope (owned next to `DownloadQueue` in `ContentView`, not by `ReadiumReaderView`)
+  so it survives closing the reader. Controls: the system Now Playing (Dynamic Island,
+  Lock Screen, Control Center) when Kudos is in the background; inside the app the
+  Island never shows Kudos's own playback, so add a mini player in
+  `.tabViewBottomAccessory` (as Books/Podcasts do) only while a session exists.
+  Tapping it reopens the reader at the spoken passage. Watch: Readium publication
+  lifetime once the navigator is gone, chapter auto-advance without a navigator,
+  saving the spoken position, and macOS (legacy reader, no Readium).
 
 ### Phase 3 — native AO3 writes (most fragile; needs the per-page CSRF token)
 - **Leave kudos · comment · subscribe · AO3-side bookmark** — fetch the work/page,
@@ -676,6 +687,12 @@ _UI-2 … UI-9 are T-115's confirmed HIG findings (all adversarially verified ag
 
 ## 🧭 Key decisions & open questions
 
+- **Redesign answers (owner, 2026-10-27; from `Design/redesign/LEDGER.md`'s open
+  questions):** reader serif stays **New York** for now (Android can't license it:
+  Literata); **Now Reading** lives on Home under Continue Reading, so no shared bar
+  above the tab bar (Read Aloud's own controls → T-458). Leaning, not yet decided:
+  removing the user-selectable accent colour (one fixed AO3 red with its own Dark
+  shade) and merging Recently Updated + Subscriptions into "New Chapters" on Home.
 - **macOS reader — decided:** iOS/iPadOS use Readium; **macOS keeps the legacy
   reader** (Readium navigator is UIKit-only). Readium SPM is scoped `platformFilter = ios;`.
 - **Workflow — decided:** **single `main` branch** (the `main`/`readium-migration`
