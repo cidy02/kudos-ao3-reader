@@ -2650,6 +2650,22 @@
       "w": 1250,
       "x": 13900,
       "y": 0
+    },
+    "Search-Sort.dc.html": {
+      "h": 1240,
+      "page": "iphone",
+      "title": "Search filters › Sort By (AO3 sorts and computed ratios)",
+      "w": 390,
+      "x": 2820,
+      "y": 2300
+    },
+    "Themes-Search-Sort.dc.html": {
+      "h": 1240,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Search filters › Sort By (AO3 sorts and computed ratios)",
+      "w": 1250,
+      "x": 8340,
+      "y": 2300
     }
   },
   "createdOnFiles": {
@@ -3229,7 +3245,9 @@
     "Themes-Insights-Stopped.dc.html",
     "Themes-Insights-Taste.dc.html",
     "Library-Edit.dc.html",
-    "Themes-Library-Edit.dc.html"
+    "Themes-Library-Edit.dc.html",
+    "Search-Sort.dc.html",
+    "Themes-Search-Sort.dc.html"
   ],
   "pages": [
     {
