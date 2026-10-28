@@ -1,6 +1,6 @@
 import sys; sys.path.insert(0,'.')
 from gen import board
-from data import W, I, works
+from data import W, I, works, SHELF
 B=[]
 def add(name,title,comp,attrs,data,h=844): board(name,title,comp,attrs,data,h); B.append((name,title,h))
 
@@ -15,16 +15,16 @@ add('Shelf-Grid','Library › Finished (grid)','ListScreen',{'title':'Finished',
  'sections':[{'kind':'grid','works':works('letters','baker','moor','map')}]},1000)
 add('Edit-Shelves','Library › Edit Shelves (sheet)','FormScreen',{'title':'Edit Shelves','mode':'sheet','confirm':'Done'},{
  'sections':[{'header':'Shown in Library','rows':[
-   {'label':'Want to Read','kind':'circle','on':True,'handle':True,'icon':I['book']},
-   {'label':'Reading Now','kind':'circle','on':True,'handle':True,'icon':I['reading']},
-   {'label':'Finished','kind':'circle','on':True,'handle':True,'icon':I['check']},
-   {'label':'Downloaded','kind':'circle','on':True,'handle':True,'icon':I['down']},
-   {'label':'Favourites','kind':'circle','on':True,'handle':True,'icon':I['star']},
-   {'label':'Queues','kind':'circle','on':True,'handle':True,'icon':I['queue']}]},
+   {'label':'Want to Read','kind':'circle','on':True,'handle':True,'dot':SHELF['Want to Read'][0],'dotD':SHELF['Want to Read'][1]},
+   {'label':'Reading Now','kind':'circle','on':True,'handle':True,'dot':SHELF['Reading Now'][0],'dotD':SHELF['Reading Now'][1]},
+   {'label':'Finished','kind':'circle','on':True,'handle':True,'dot':SHELF['Finished'][0],'dotD':SHELF['Finished'][1]},
+   {'label':'Downloaded','kind':'circle','on':True,'handle':True,'dot':SHELF['Downloaded'][0],'dotD':SHELF['Downloaded'][1]},
+   {'label':'Favourites','kind':'circle','on':True,'handle':True,'dot':SHELF['Favourites'][0],'dotD':SHELF['Favourites'][1]},
+   {'label':'Queues','kind':'circle','on':True,'handle':True,'dot':SHELF['Queues'][0],'dotD':SHELF['Queues'][1]}]},
   {'header':'Hidden','rows':[
-   {'label':'History','kind':'circle','on':False,'handle':True,'icon':I['history']},
-   {'label':'All Works','kind':'circle','on':False,'handle':True,'icon':I['all'],'sub':'Also in the Library header'},
-   {'label':'Imported','kind':'circle','on':False,'handle':True,'icon':I['import'],'sub':'Works from other sites and files'}]}]})
+   {'label':'History','kind':'circle','on':False,'handle':True,'dot':SHELF['History'][0],'dotD':SHELF['History'][1]},
+   {'label':'All Works','kind':'circle','on':False,'handle':True,'dot':SHELF['All Works'][0],'dotD':SHELF['All Works'][1],'sub':'Also in the Library header'},
+   {'label':'Imported','kind':'circle','on':False,'handle':True,'dot':SHELF['Imported'][0],'dotD':SHELF['Imported'][1],'sub':'Works from other sites and files'}]}]})
 
 # Subscriptions tabs
 sub_tools=[{'label':'More: Mark All as Seen, Follow a Tag…, Manage on AO3','icon':'more'}]
