@@ -449,6 +449,19 @@ hand-rolling** — "as many dependencies as are necessary". PDF is explicitly *i
   Tapping it reopens the reader at the spoken passage. Watch: Readium publication
   lifetime once the navigator is gone, chapter auto-advance without a navigator,
   saving the spoken position, and macOS (legacy reader, no Readium).
+- **T-459 · One fixed app colour: remove the accent picker** 🅿️ *(owner, 2026-10-27;
+  the redesign canvas already reflects it).* Settings › Appearance's accent
+  `ColorPicker` and "Reset to AO3 Red" go (`SettingsReadingPages.swift:28-41`);
+  `ThemeManager.accentHex`/`setAccent`/`accentColorHex` collapse to the constant
+  `ao3Red`, so `effectiveTint`, `accentInk` and the scope palette all derive from one
+  red (Sepia's `appTint` brown stays unless the owner says otherwise; Dark/OLED text
+  keeps the lighter readable step from T-419). Backup: keep decoding
+  `accentColorHex` (`KudosBackup.swift:1606ff`) so older files still import, but
+  stop applying it (`SettingsBackupPage.swift:458`) and stop writing it, or write the
+  constant; the manifest version only moves if the field is dropped. A stored
+  non-red accent is ignored on upgrade. Open: whether T-399's fandom wash on the tab
+  bar and chrome buttons stays (the design rules say fandom colour is identity only,
+  never on a button). Android has the same picker (parity).
 
 ### Phase 3 — native AO3 writes (most fragile; needs the per-page CSRF token)
 - **Leave kudos · comment · subscribe · AO3-side bookmark** — fetch the work/page,
@@ -690,9 +703,9 @@ _UI-2 … UI-9 are T-115's confirmed HIG findings (all adversarially verified ag
 - **Redesign answers (owner, 2026-10-27; from `Design/redesign/LEDGER.md`'s open
   questions):** reader serif stays **New York** for now (Android can't license it:
   Literata); **Now Reading** lives on Home under Continue Reading, so no shared bar
-  above the tab bar (Read Aloud's own controls → T-458). Leaning, not yet decided:
-  removing the user-selectable accent colour (one fixed AO3 red with its own Dark
-  shade) and merging Recently Updated + Subscriptions into "New Chapters" on Home.
+  above the tab bar (Read Aloud's own controls → T-458). **No accent colour
+  setting** (decided later the same day): one fixed AO3 red → T-459. Leaning, not
+  yet decided: merging Recently Updated + Subscriptions on Home.
 - **macOS reader — decided:** iOS/iPadOS use Readium; **macOS keeps the legacy
   reader** (Readium navigator is UIKit-only). Readium SPM is scoped `platformFilter = ios;`.
 - **Workflow — decided:** **single `main` branch** (the `main`/`readium-migration`
