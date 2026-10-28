@@ -36,7 +36,7 @@ What that means for you:
 
 ## Where things are
 
-- **Canvas:** https://claude.ai/artifact/YDoKqygRYFNBhAch47Bmux (made from the Design Artifact type). Read it
+- **Canvas:** https://claude.ai/artifact/MVa16oT8hCeHQdLhyWjPk2 (made from the Design Artifact type). Read it
   first with the Artifact tool (`action: "read"`). The read brings the type's instructions; follow them.
 - **This folder** (`Design/redesign/`) is the canvas's local root: `project/` holds every board (`*.dc.html`)
   and `canvas.json`. The board files here match what is published, except for the ones listed under "Not
@@ -50,7 +50,7 @@ What that means for you:
 Publish a board like this, one file per call, then the next:
 
 ```
-Artifact { url: "https://claude.ai/artifact/YDoKqygRYFNBhAch47Bmux",
+Artifact { url: "https://claude.ai/artifact/MVa16oT8hCeHQdLhyWjPk2",
            root: "<repo>/Design/redesign",
            file_path: "<repo>/Design/redesign/project/<Board>.dc.html" }
 ```
