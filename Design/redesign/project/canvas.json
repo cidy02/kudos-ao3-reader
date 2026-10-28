@@ -1006,7 +1006,7 @@
     "Library-Organize.dc.html": {
       "h": 1000,
       "page": "iphone",
-      "title": "Library · organise (proposal)",
+      "title": "Library · organise, shelf tiles (proposal)",
       "w": 390,
       "x": 470,
       "y": 11300
@@ -1066,22 +1066,6 @@
       "w": 1290,
       "x": 0,
       "y": 7180
-    },
-    "Library-Tiles.dc.html": {
-      "h": 844,
-      "page": "iphone",
-      "title": "Library · shelves as tiles (option A)",
-      "w": 390,
-      "x": 3290,
-      "y": 11300
-    },
-    "Library-Rows.dc.html": {
-      "h": 844,
-      "page": "iphone",
-      "title": "Library · trimmed shelf rows (option B)",
-      "w": 390,
-      "x": 3760,
-      "y": 11300
     }
   },
   "createdOnFiles": {
@@ -1388,9 +1372,7 @@
     "Account-Sheet.dc.html",
     "Library-AO3.dc.html",
     "Home-Library-Plan.dc.html",
-    "Account-Move.dc.html",
-    "Library-Tiles.dc.html",
-    "Library-Rows.dc.html"
+    "Account-Move.dc.html"
   ],
   "pages": [
     {
