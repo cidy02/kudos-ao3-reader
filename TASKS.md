@@ -574,9 +574,10 @@ hand-rolling** — "as many dependencies as are necessary". PDF is explicitly *i
 - **T-470 · Account sheet redesign; Create an AO3 Account** 🅿️ *(owner, 2026-10-28;
   canvas `Account-Sheet`, `Account-SignedOut`).* Centred profile with pseud chevron
   and View Profile; a Works · Bookmarks · Subscriptions strip linking to each list;
-  an Inbox card with the two latest messages; then AO3 and Kudos groups. Signed out
-  shows Log In only. The Login sheet gets a text line under Forgot your password?:
-  "No AO3 account? Create one", opening AO3's invitation request
+  an Inbox card with the two latest messages; then AO3 and Kudos groups. Signed out:
+  a text line (not a button) "No AO3 account? Create one" under Log In on the
+  Account screen and sheet, and under Forgot your password? on the Login sheet,
+  opening AO3's invitation request
   (`/invite_requests`) in the in-app browser — AO3 accounts need an invitation.
 - **T-471 · Small interaction fixes from the canvas review** 🅿️ *(owner,
   2026-10-28).* Every colour picker ends with a colour well for any colour after the
