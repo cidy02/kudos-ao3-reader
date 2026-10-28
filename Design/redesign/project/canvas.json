@@ -2634,6 +2634,22 @@
       "w": 1250,
       "x": 1390,
       "y": 21854
+    },
+    "Library-Edit.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Library › Edit (sheet over Library)",
+      "w": 390,
+      "x": 4700,
+      "y": 0
+    },
+    "Themes-Library-Edit.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Library › Edit (sheet over Library)",
+      "w": 1250,
+      "x": 13900,
+      "y": 0
     }
   },
   "createdOnFiles": {
@@ -3211,7 +3227,9 @@
     "Themes-Insights-Options.dc.html",
     "Themes-Insights-Overview.dc.html",
     "Themes-Insights-Stopped.dc.html",
-    "Themes-Insights-Taste.dc.html"
+    "Themes-Insights-Taste.dc.html",
+    "Library-Edit.dc.html",
+    "Themes-Library-Edit.dc.html"
   ],
   "pages": [
     {

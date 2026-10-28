@@ -2,7 +2,7 @@ import sys; sys.path.insert(0,'.')
 from gen import board
 from data import W, I, works, SHELF
 B=[]
-def add(name,title,comp,attrs,data,h=844): board(name,title,comp,attrs,data,h); B.append((name,title,h))
+def add(name,title,comp,attrs,data,h=844,**kw): board(name,title,comp,attrs,data,h,**kw); B.append((name,title,h))
 
 # Library › a shelf (list and grid)
 add('Shelf-List','Library › Finished (list)','ListScreen',{'title':'Finished','subtitle':'74 works · most recently finished first','back':'Back to Library'},{
@@ -13,7 +13,7 @@ add('Shelf-Grid','Library › Finished (grid)','ListScreen',{'title':'Finished',
  'tools':[{'label':'Filters','icon':'filter'},{'label':'More: List or Grid, Sort, Select','icon':'more'}],
  'chips':[{'label':'All','on':True},{'label':'Read twice'},{'label':'Kudos given'},{'label':'Downloaded'}],
  'sections':[{'kind':'grid','works':works('letters','baker','moor','map')}]},1000)
-add('Edit-Shelves','Library › Edit Shelves (sheet)','FormScreen',{'title':'Edit Shelves','mode':'sheet','confirm':'Done'},{
+EDIT_SHELVES = {
  'sections':[{'header':'On the Library page','rows':[
    {'label':'Favourites','kind':'segments','options':['Carousel','List'],'selected':0,'edit':'remove','handle':True,'dot':SHELF['Favourites'][0],'dotD':SHELF['Favourites'][1]},
    {'label':'Collections','kind':'segments','options':['Carousel','List'],'selected':0,'edit':'remove','handle':True,'dot':SHELF['Collections'][0],'dotD':SHELF['Collections'][1]},
@@ -25,7 +25,9 @@ add('Edit-Shelves','Library › Edit Shelves (sheet)','FormScreen',{'title':'Edi
    {'label':'Queues','kind':'value','detail':'3','edit':'add','handle':True,'dot':SHELF['Queues'][0],'dotD':SHELF['Queues'][1]},
    {'label':'History','kind':'value','detail':'412','edit':'add','handle':True,'dot':SHELF['History'][0],'dotD':SHELF['History'][1]},
    {'label':'Imported','kind':'value','detail':'12','edit':'add','handle':True,'dot':SHELF['Imported'][0],'dotD':SHELF['Imported'][1]}]},
-  {'rows':[{'label':'All Works','sub':'Always in the Library header','kind':'value','detail':'214','dot':SHELF['All Works'][0],'dotD':SHELF['All Works'][1]}]}]})
+  {'rows':[{'label':'All Works','sub':'Always in the Library header','kind':'value','detail':'214','dot':SHELF['All Works'][0],'dotD':SHELF['All Works'][1]}]}]}
+add('Edit-Shelves','Library › Edit Shelves (sheet)','FormScreen',{'title':'Edit Shelves','mode':'sheet','confirm':'Done'},EDIT_SHELVES)
+add('Library-Edit','Library › Edit (over Library)','FormScreen',{'title':'Edit Shelves','mode':'sheet','confirm':'Done'},EDIT_SHELVES,backdrop='Library')
 
 # Subscriptions tabs
 sub_tools=[{'label':'More: Mark All as Seen, Follow a Tag…, Manage on AO3','icon':'more'}]
