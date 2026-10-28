@@ -563,8 +563,8 @@ hand-rolling** — "as many dependencies as are necessary". PDF is explicitly *i
   streak stay: they count the user's own writing in the editor.
 - **T-468 · Author profile as one page; Mute and Block** 🅿️ *(owner, 2026-10-28;
   canvas `Author`).* Replace the Works / Series / Bookmarks / About segmented switch
-  with one page of varied sections, like a Music artist page: a header tinted in
-  the author's colour, a Works · Series · Bookmarks · Gifts strip, the bio and
+  with one page of varied sections, like a Music artist page: a left-aligned header
+  tinted in the author's colour, a Works · Series · Bookmarks · Gifts strip, the bio and
   fandom chips, a Latest feature card, Most Kudos as a cover carousel, Series as
   cards showing their parts, and Bookmarks as note cards — each with See All. Pseuds become an up-down chevron
   beside the name; the button row is Subscribe, Mute, Block (AO3's own mute and
