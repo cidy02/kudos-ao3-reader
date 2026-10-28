@@ -20,7 +20,7 @@ body{margin:0}
     <span style="position: absolute; left: {{ghostIn}}px; bottom: {{ghostBottom}}px; font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: {{ghostSize}}px; line-height: 1; font-weight: 600; color: rgba(255,255,255,0.15)">{{initial}}</span>
     <sc-if value="{{hasRibbon}}" hint-placeholder-val="{{false}}">
       <span style="position: absolute; right: {{ribRight}}px; top: 0; width: {{ribW}}px; height: {{ribH}}px; background: rgba(0,0,0,0.24); clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 80%, 0 100%); display: flex; justify-content: center; padding-top: {{ribPad}}px; box-sizing: border-box">
-        <svg width="{{ribIcon}}" height="{{ribIcon}}" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.92)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="{{kindD}}"></path></svg>
+        <sc-if value="{{hasIcon}}" hint-placeholder-val="{{false}}"><svg width="{{ribIcon}}" height="{{ribIcon}}" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.92)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="{{kindD}}"></path></svg></sc-if>
       </span>
     </sc-if>
   </span>
@@ -76,8 +76,9 @@ class Component extends DCLogic {
       ghostBottom: -Math.round(cw * 0.27),
       hasRibbon: big && kind !== 'none',
       ribW, ribH: Math.round(ribW * 1.45), ribRight: Math.round(cw * 0.09), ribPad: Math.round(ribW * 0.2), ribIcon: Math.round(ribW * 0.6),
-      // Queue: numbered list (an order). Collection: a pile of squares (a set).
-      kindD: isQueue ? 'M10 6.5h10M10 12h10M10 17.5h10M4 5h1.5v3.5M4 13.5c0-1 .7-1.5 1.4-1.5S7 12.5 7 13.2c0 1-3 1.6-3 2.8h3' : 'M4.5 4.5h6v6h-6zM13.5 4.5h6v6h-6zM4.5 13.5h6v6h-6zM13.5 13.5h6v6h-6z',
+      // Queue: numbered list (an order). Collection: a plain ribbon, no glyph (owner, 2026-10-28).
+      hasIcon: isQueue,
+      kindD: 'M10 6.5h10M10 12h10M10 17.5h10M4 5h1.5v3.5M4 13.5c0-1 .7-1.5 1.4-1.5S7 12.5 7 13.2c0 1-3 1.6-3 2.8h3',
       backs: backs.map((bg, k) => {
         const i = k + 1, sc = isQueue ? 1 - i * 0.12 : 1 - i * 0.04;
         const w = Math.round(cw * sc), h = Math.round(H * sc);
