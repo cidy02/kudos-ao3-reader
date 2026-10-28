@@ -25,6 +25,9 @@ body{margin:0}
         <sc-if value="{{t.isCheck}}" hint-placeholder-val="{{false}}">
           <svg width="{{icon}}" height="{{icon}}" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.6 4.6L19.2 7.4"></path></svg>
         </sc-if>
+        <sc-if value="{{t.isGen}}" hint-placeholder-val="{{false}}">
+          <svg width="{{icon}}" height="{{icon}}" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8" stroke="{{t.fg}}" stroke-width="2.4"></circle><circle cx="12" cy="12" r="2.6" fill="{{t.fg}}"></circle></svg>
+        </sc-if>
         <sc-if value="{{t.isRing}}" hint-placeholder-val="{{false}}">
           <svg width="{{icon}}" height="{{icon}}" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.2" stroke="{{t.fg}}" stroke-width="2.6"></circle><path d="M12 3.8a8.2 8.2 0 0 0 0 16.4z" fill="{{t.fg}}"></path></svg>
         </sc-if>
@@ -69,7 +72,8 @@ class Component extends DCLogic {
       FF: { ...mark(solid('#D2264B'), '⚢', 0.8), label: 'F/F' },
       FM: { ...mark(solid('#B3127A'), '⚤', 0.8), label: 'F/M' },
       MM: { ...mark(solid('#1E63C8'), '⚣', 0.8), label: 'M/M' },
-      Gen: { ...mark(solid('#2F8F3A'), '☉', 0.84), label: 'Gen' },
+      // Drawn, not typed: the ☉ character sat off-centre in every symbol font.
+      Gen: { ...solid('#2F8F3A'), kind: 'gen', label: 'Gen' },
       Multi: { kind: 'multi', bg: '#FFFFFF', fg: '#FFFFFF', shadow: 'none', label: 'Multi' },
       Other: { ...mark(solid('#1C1C1E'), '♅', 0.78), label: 'Other' },
       NA: { ...dash(soft()), label: 'No category' }
@@ -100,6 +104,7 @@ class Component extends DCLogic {
       isText: t.kind === 'text',
       isCheck: t.kind === 'check',
       isRing: t.kind === 'ring',
+      isGen: t.kind === 'gen',
       isDash: t.kind === 'dash',
       isMulti: t.kind === 'multi'
     }));
