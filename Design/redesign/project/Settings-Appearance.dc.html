@@ -44,19 +44,6 @@ button{cursor:pointer}
       </div>
     </section>
     <section style="display: flex; flex-direction: column; gap: 6px">
-      <h2 style="margin: 0 16px; font-size: 13px; font-weight: 400; color: #6C6C70">Accent colour</h2>
-      <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
-        <div role="radiogroup" aria-label="Accent colour" style="display: flex; justify-content: space-between; padding: 14px 16px">
-          <sc-for list="{{accents}}" as="a" hint-placeholder-count="7">
-            <button role="radio" aria-checked="{{a.checked}}" aria-label="{{a.name}}" style="width: 32px; height: 32px; border: none; border-radius: 16px; background: {{a.hex}}; box-shadow: {{a.ring}}"></button>
-          </sc-for>
-        </div>
-        <div style="display: flex; align-items: center; height: 46px; padding: 0 16px; border-top: 0.5px solid #E5E5EA">
-          <span style="flex: 1; font-size: 16px; color: {{accent}}">Reset to AO3 Red</span>
-        </div>
-      </div>
-    </section>
-    <section style="display: flex; flex-direction: column; gap: 6px">
       <h2 style="margin: 0 16px; font-size: 13px; font-weight: 400; color: #6C6C70">Reading fonts</h2>
       <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
         <sc-for list="{{fonts}}" as="f" hint-placeholder-count="4">
@@ -81,17 +68,15 @@ button{cursor:pointer}
   </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"$preview":{"width":390,"height":844}}'>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#990000"},"$preview":{"width":390,"height":844}}'>
 class Component extends DCLogic {
   renderVals() {
     const accent = this.props.accent ?? '#990000';
     const themes = [['Light', '#FFFFFF', '#000000'], ['Sepia', '#F4ECD8', '#3B2F1E'], ['Dark', '#1C1C1E', '#E5E5EA'], ['OLED', '#000000', '#C7C7CC']];
-    const accents = [['AO3 red', '#990000'], ['Blue', '#007AFF'], ['Teal', '#1F7A8C'], ['Green', '#2F8F3A'], ['Purple', '#7B3FA0'], ['Pink', '#C2185B'], ['Graphite', '#6C6C70']];
     const fonts = [['New York', "'New York', 'Iowan Old Style', Georgia, serif", true], ['Georgia', 'Georgia, serif', false], ['San Francisco', '-apple-system, system-ui, sans-serif', false], ['Atkinson Hyperlegible', "'Atkinson Hyperlegible', system-ui, sans-serif", false]];
     return {
       accent,
       themes: themes.map(([name, bg, fg], i) => ({ name, bg, fg, checked: i === 1 ? 'true' : 'false', weight: i === 1 ? 600 : 400, ring: i === 1 ? '0 0 0 2.5px ' + accent : '0 0 0 0.5px #D1D1D6' })),
-      accents: accents.map(([name, hex], i) => ({ name, hex, checked: i === 0 ? 'true' : 'false', ring: i === 0 ? '0 0 0 2px #FFFFFF, 0 0 0 4px ' + hex : 'none' })),
       fonts: fonts.map(([name, family, checked], i) => ({ name, family, checked, sep: i ? '0.5px solid #E5E5EA' : 'none' }))
     };
   }

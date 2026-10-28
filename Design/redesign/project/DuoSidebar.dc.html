@@ -37,7 +37,7 @@ body{margin:0}
   </sc-for>
 </nav>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"selected":{"editor":"enum","options":["home","all","reading","want","finished","downloaded","history","favorites","collections","browse","account"],"default":"home"},"height":{"editor":"int","default":649,"min":300,"max":1000},"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B"]},"$preview":{"width":232,"height":649}}'>
+<script type="text/x-dc" data-dc-script data-props='{"selected":{"editor":"enum","options":["home","all","reading","want","finished","downloaded","history","favorites","collections","browse","account"],"default":"home"},"height":{"editor":"int","default":649,"min":300,"max":1000},"accent":{"editor":null,"default":"#990000"},"$preview":{"width":232,"height":649}}'>
 class Component extends DCLogic {
   renderVals() {
     const accent = this.props.accent ?? '#990000';
