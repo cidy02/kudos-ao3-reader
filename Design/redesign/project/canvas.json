@@ -59,7 +59,7 @@
       "y": 8600
     },
     "Account-Sheet.dc.html": {
-      "h": 1040,
+      "h": 1260,
       "page": "iphone",
       "title": "Account sheet (from the profile button)",
       "w": 390,
@@ -1668,7 +1668,7 @@
       "y": 8600
     },
     "Themes-Account-Sheet.dc.html": {
-      "h": 1040,
+      "h": 1260,
       "page": "themes-all",
       "title": "Dark · OLED · Sepia — Account sheet (from the profile button)",
       "w": 1250,
