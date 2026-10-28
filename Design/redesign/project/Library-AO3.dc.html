@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Library with the AO3 lists</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+  <div style="position: absolute; right: 16px; top: 54px; display: flex; gap: 10px">
+    <div style="height: 44px; border-radius: 22px; display: flex; align-items: center; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
+      <button aria-label="Filters" style="width: 46px; height: 44px; border: none; background: transparent; color: #1C1C1E; display: flex; align-items: center; justify-content: center">
+        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M7 12h10M10 17h4"></path></svg>
+      </button>
+      <button aria-label="More: Layout, Reading Insights, Recently Deleted" style="width: 46px; height: 44px; border: none; background: transparent; color: #1C1C1E; display: flex; align-items: center; justify-content: center">
+        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.7" fill="currentColor"></circle><circle cx="12" cy="12" r="1.7" fill="currentColor"></circle><circle cx="18.5" cy="12" r="1.7" fill="currentColor"></circle></svg>
+      </button>
+    </div>
+    <button style="height: 44px; padding: 0 18px; border: none; border-radius: 22px; font-family: inherit; font-size: 17px; color: #1C1C1E; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">Select</button>
+  </div>
+
+  <main style="padding: 56px 0 0; display: flex; flex-direction: column; gap: 22px">
+    <header style="padding: 0 16px; display: flex; flex-direction: column; gap: 2px">
+      <h1 style="margin: 0; font-size: 34px; line-height: 41px; font-weight: 700; letter-spacing: 0.4px">Library</h1>
+      <p style="margin: 0; font-size: 15px; line-height: 20px; color: #6C6C70">214 works · 98 downloaded · 2.1 GB</p>
+    </header>
+
+    <div style="display: flex; flex-direction: column; gap: 12px">
+      <div role="group" aria-label="Quick filters" style="display: flex; gap: 8px; padding: 0 16px; overflow: hidden">
+        <button aria-pressed="true" style="height: 34px; padding: 0 14px; border: none; border-radius: 17px; background: #990000; color: #FFFFFF; font-family: inherit; font-size: 14px; font-weight: 600">All</button>
+        <button aria-pressed="false" style="height: 34px; padding: 0 14px; border: none; border-radius: 17px; background: #EFEFF4; color: #1C1C1E; font-family: inherit; font-size: 14px; font-weight: 500">In Progress</button>
+        <button aria-pressed="false" style="height: 34px; padding: 0 14px; border: none; border-radius: 17px; background: #EFEFF4; color: #1C1C1E; font-family: inherit; font-size: 14px; font-weight: 500">Complete</button>
+        <button aria-pressed="false" style="height: 34px; padding: 0 12px; border: none; border-radius: 17px; background: #EFEFF4; color: #1C1C1E; font-family: inherit; font-size: 14px; font-weight: 500; display: flex; align-items: center; gap: 5px">
+          <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="m12 3.8 2.5 5.2 5.6.8-4.1 3.9 1 5.6-5-2.7-5 2.7 1-5.6-4.1-3.9 5.6-.8z"></path></svg>
+          Favourites
+        </button>
+      </div>
+    </div>
+
+    <section aria-label="On AO3" style="padding: 0 16px; display: flex; flex-direction: column; gap: 2px">
+      <h2 style="margin: 0 0 4px; font-size: 20px; line-height: 25px; font-weight: 700">On AO3</h2>
+      <sc-for list="{{ao3Lists}}" as="l" hint-placeholder-count="4">
+        <a href="{{l.href}}" style="color: #000000; text-decoration: none; display: flex; align-items: center; gap: 14px; min-height: 48px">
+          <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="{{accent}}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="{{l.d}}"></path></svg>
+          <span style="flex: 1; min-height: 48px; display: flex; align-items: center; gap: 8px; border-bottom: {{l.sep}}">
+            <span style="flex: 1; font-size: 17px; line-height: 22px">{{l.label}}</span>
+            <sc-if value="{{l.hasBadge}}" hint-placeholder-val="{{false}}"><span style="padding: 0 7px; border-radius: 9px; background: {{accent}}; color: #FFFFFF; font-size: 12px; line-height: 18px; font-weight: 700">{{l.badge}}</span></sc-if>
+            <span style="font-size: 17px; color: #8E8E93; font-variant-numeric: tabular-nums">{{l.count}}</span>
+            <svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg>
+          </span>
+        </a>
+      </sc-for>
+    </section>
+
+    <sc-for list="{{sections}}" as="s" hint-placeholder-count="6">
+      <section style="padding: 0 16px; display: flex; flex-direction: column; gap: 8px">
+        <div style="display: flex; align-items: baseline; gap: 8px">
+          <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">{{s.title}}</h2>
+          <span style="font-size: 15px; color: #6C6C70">{{s.count}}</span>
+          <button style="margin-left: auto; border: none; background: none; padding: 0; font-family: inherit; font-size: 17px; color: {{accent}}">See All</button>
+        </div>
+        <sc-if value="{{s.isList}}" hint-placeholder-val="{{true}}">
+          <div style="margin: 0 -16px">
+            <sc-for list="{{s.works}}" as="w" hint-placeholder-count="2">
+              <dc-import name="WorkRow" work="{{w}}" divider="{{w.divider}}" ledger="{{true}}" accent="{{accent}}" hint-size="100%,120px"></dc-import>
+            </sc-for>
+          </div>
+        </sc-if>
+        <sc-if value="{{s.isCollections}}" hint-placeholder-val="{{false}}">
+          <div style="display: flex; gap: 12px; margin-right: -16px; overflow: hidden">
+            <sc-for list="{{collections}}" as="c" hint-placeholder-count="3">
+              <button style="width: 160px; flex-shrink: 0; border: none; border-radius: 16px; padding: 0; background: transparent; font-family: inherit; text-align: left; display: flex; flex-direction: column; gap: 8px">
+                <dc-import name="CoverStack" tiles="{{c.tiles}}" colour="{{c.colour}}" initial="{{c.initial}}" kind="collection" width="160" height="184" hint-size="160px,184px"></dc-import>
+                <span style="font-size: 15px; line-height: 20px; font-weight: 600; color: #000000">{{c.name}}</span>
+                <span style="font-size: 12px; line-height: 16px; color: #6C6C70">{{c.detail}}</span>
+              </button>
+            </sc-for>
+          </div>
+        </sc-if>
+      </section>
+    </sc-for>
+  </main>
+
+  <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 150px; background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0.94) 72%); pointer-events: none"></div>
+  <div style="position: absolute; left: 16px; bottom: 28px">
+    <dc-import name="TabBar" selected="library" account="avatar" accent="{{accent}}" hint-size="358px,62px"></dc-import>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const accent = this.props.accent ?? '#990000';
+    const W = {
+      cart: { title: "The Cartographer's Daughter", author: 'inkwell_moth', fandom: 'Original Work', rating: 'T', category: 'FM', warnings: 'none', status: 'wip', words: '84,210', chapters: '12/20', kudos: '3,104', hits: '41.2k', progress: 58, progressLabel: 'Ch 7 · 58%' },
+      salt: { title: 'Salt & Starlight', author: 'wrenfield', fandom: 'Original Work', rating: 'M', category: 'Gen', warnings: 'undisclosed', status: 'wip', words: '118,402', chapters: '15/30', kudos: '5,870', hits: '88.1k', progress: 40, progressLabel: 'Ch 12 · 40%', badge: '3 new' },
+      hidden: { hidden: true },
+      map: { title: 'A Map of Small Hours', author: 'quietharbor', fandom: 'Pride and Prejudice', rating: 'G', category: 'FM', warnings: 'none', status: 'complete', words: '32,050', chapters: '9/9', kudos: '1,212', hits: '15.4k' },
+      lights: { title: 'The Lighthouse Keepers', author: 'tidewright', fandom: 'Original Work', rating: 'T', category: 'FF', warnings: 'none', status: 'complete', words: '40,900', chapters: '10/10', kudos: '3,050', hits: '26.7k' },
+      baker: { title: 'The Baker Street Irregular', author: 'fogandlamplight', fandom: 'Sherlock Holmes', rating: 'G', category: 'Gen', warnings: 'none', status: 'complete', words: '9,140', chapters: '1/1', kudos: '2,045', hits: '19.8k' },
+      hound: { title: 'The Hound, Revisited', author: 'fogandlamplight', fandom: 'Sherlock Holmes', rating: 'T', category: 'MM', warnings: 'present', status: 'wip', words: '30,600', chapters: '5/?', kudos: '760', hits: '9.3k', updated: 'Downloaded Oct 22' },
+      letters: { title: 'Letters Never Sent', author: 'marginalia', fandom: 'Persuasion', rating: 'T', category: 'FM', warnings: 'none', status: 'complete', words: '21,880', chapters: '4/4', kudos: '1,530', hits: '17.0k', updated: 'Read today, 9:40' },
+      moor: { title: 'Moor and Mist', author: 'brontebird', fandom: 'Jane Eyre', rating: 'M', category: 'FM', warnings: 'undisclosed', status: 'complete', words: '54,200', chapters: '18/18', kudos: '2,310', hits: '30.2k' }
+    };
+    const list = (works) => works.map((w, i) => ({ ...w, divider: i < works.length - 1 }));
+    const sections = [
+      { title: 'Reading Now', count: '6', works: list([W.cart, W.salt, W.hidden]) },
+      { title: 'Want to Read', count: '31', works: list([W.map, W.lights]) },
+      { title: 'Finished', count: '74', works: list([W.baker]) },
+      { title: 'Collections', count: '4', collections: true },
+      { title: 'Downloaded', count: '98', works: list([W.hound]) },
+      { title: 'Reading History', count: '412', works: list([W.letters]) },
+      { title: 'Favorites', count: '19', works: list([W.moor]) }
+    ].map((s) => ({ ...s, works: s.works || [], isList: !s.collections, isCollections: !!s.collections }));
+    const art = (hex) => {
+      const x = hex.replace('#', '');
+      const R = parseInt(x.slice(0, 2), 16) / 255, G = parseInt(x.slice(2, 4), 16) / 255, B = parseInt(x.slice(4, 6), 16) / 255;
+      const mx = Math.max(R, G, B), d = mx - Math.min(R, G, B);
+      const h = !d ? 210 : Math.round(((mx === R ? ((G - B) / d) % 6 : mx === G ? (B - R) / d + 2 : (R - G) / d + 4) * 60 + 360) % 360);
+      return 'linear-gradient(155deg, hsl(' + h + ', 46%, 27%), hsl(' + ((h + 22) % 360) + ', 50%, 41%))';
+    };
+    const cols = [
+      { name: 'Austen Variations', detail: '12 works · on Home', colour: '#9C2F6B', h: [150, 335, 290] },
+      { name: 'Baker Street', detail: '9 works', colour: '#B8892A', h: [32, 44, 188] },
+      { name: 'Comfort Reads', detail: '15 works', colour: '#2F7A4A', h: [262, 188, 150] }
+    ].map((c) => ({ name: c.name, detail: c.detail, colour: c.colour, initial: c.name.charAt(0), tiles: c.h.map((h) => 'linear-gradient(155deg, hsl(' + h + ', 46%, 27%), hsl(' + ((h + 22) % 360) + ', 50%, 41%))') }));
+    return {
+      accent,
+      sections,
+      ao3Lists: [
+        ['Marked for Later', 'M12 4a8 8 0 1 1 0 16 8 8 0 0 1 0-16zM12 8v4l3 2', '31', 'AO3-Lists.dc.html', ''],
+        ['Bookmarks', 'M7 4h10v16l-5-4-5 4z', '142', 'AO3-Lists.dc.html', ''],
+        ['Subscriptions', 'M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15zM10 20.5h4', '27', 'Subscriptions.dc.html', '4 new'],
+        ['AO3 History', 'M4 12a8 8 0 1 0 2.3-5.6M4 4v4h4M12 8v4l3 2', '', 'AO3-Lists.dc.html', '']
+      ].map(([label, d, count, href, badge], i, all) => ({ label, d, count, href, badge, hasBadge: !!badge, sep: i < all.length - 1 ? '0.5px solid #E5E5EA' : 'none' })),
+      collections: cols
+    };
+  }
+}
+</script>
+</body>
+</html>

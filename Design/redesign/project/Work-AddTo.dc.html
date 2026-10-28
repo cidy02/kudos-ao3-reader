@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Add to a queue or collection</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+  <div aria-hidden="true" style="position: absolute; inset: 0; filter: blur(6px); opacity: 0.7; pointer-events: none">
+    <dc-import name="Library-Organize" hint-size="390px,844px"></dc-import>
+  </div>
+  <div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(0,0,0,0.10)"></div>
+
+  <div aria-label="Preview" style="position: absolute; left: 16px; right: 16px; top: 62px; border-radius: 22px; overflow: hidden; background: #FFFFFF; box-shadow: 0 18px 50px rgba(0,0,0,0.20)">
+    <dc-import name="WorkRow" work="{{work}}" ledger="{{true}}" accent="#990000" hint-size="358px,150px"></dc-import>
+  </div>
+
+  <div role="menu" aria-label="Work actions" style="position: absolute; left: 16px; top: 262px; width: 290px; border-radius: 24px; padding: 4px 0; background: rgba(250,250,252,0.9); backdrop-filter: blur(30px) saturate(180%); -webkit-backdrop-filter: blur(30px) saturate(180%); box-shadow: 0 18px 50px rgba(0,0,0,0.22), 0 0 0 0.5px rgba(0,0,0,0.08)">
+    <div role="group" aria-label="Quick actions" style="display: grid; grid-template-columns: repeat(4, 1fr); padding: 6px 8px 8px; border-bottom: 6px solid rgba(60,60,67,0.08)">
+      <sc-for list="{{quick}}" as="q" hint-placeholder-count="4">
+        <button aria-label="{{q.label}}" style="border: none; background: transparent; padding: 6px 0; display: flex; flex-direction: column; align-items: center; gap: 4px; font-family: inherit; font-size: 11px; color: #1C1C1E">
+          <svg aria-hidden="true" width="21" height="21" viewBox="0 0 24 24" fill="{{q.fill}}" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="{{q.d}}"></path></svg>
+          {{q.label}}
+        </button>
+      </sc-for>
+    </div>
+
+    <button role="menuitem" aria-expanded="true" style="width: 100%; height: 42px; border: none; background: rgba(0,0,0,0.05); padding: 0 16px; display: flex; align-items: center; gap: 12px; font-family: inherit; font-size: 16px; font-weight: 600; color: #000000; text-align: left">
+      <svg aria-hidden="true" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h12M4 11h12M4 16h7M17 14v6M14 17h6"></path></svg>
+      <span style="flex: 1">Add to Queue</span>
+      <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8E8E93" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg>
+    </button>
+    <sc-for list="{{queues}}" as="q" hint-placeholder-count="3">
+      <button role="menuitem" style="width: 100%; min-height: 46px; border: none; background: transparent; padding: 4px 16px 4px 46px; display: flex; align-items: center; gap: 10px; font-family: inherit; text-align: left">
+        <span aria-hidden="true" style="width: 10px; height: 10px; border-radius: 5px; background: {{q.colour}}; flex-shrink: 0"></span>
+        <span style="flex: 1; display: flex; flex-direction: column">
+          <span style="font-size: 16px; line-height: 21px; color: #000000">{{q.name}}</span>
+          <span style="font-size: 12px; line-height: 16px; color: #6C6C70">{{q.detail}}</span>
+        </span>
+      </button>
+    </sc-for>
+    <button role="menuitem" style="width: 100%; height: 42px; border: none; background: transparent; padding: 0 16px 0 46px; display: flex; align-items: center; gap: 10px; font-family: inherit; font-size: 16px; color: #990000; text-align: left">
+      <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>
+      New Queue…
+    </button>
+
+    <div style="border-top: 0.5px solid rgba(60,60,67,0.18)">
+      <button role="menuitem" style="width: 100%; height: 42px; border: none; background: transparent; padding: 0 16px; display: flex; align-items: center; gap: 12px; font-family: inherit; font-size: 16px; color: #000000; text-align: left">
+        <svg aria-hidden="true" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8h12v12H6zM8 5h8"></path></svg>
+        <span style="flex: 1">Add to Collection</span>
+        <span style="font-size: 14px; color: #6C6C70">In 1</span>
+        <svg aria-hidden="true" width="8" height="13" viewBox="0 0 8 14" fill="none" stroke="#8E8E93" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg>
+      </button>
+      <sc-for list="{{rest}}" as="m" hint-placeholder-count="3">
+        <button role="menuitem" style="width: 100%; height: 42px; border: none; border-top: {{m.sep}}; background: transparent; padding: 0 16px; display: flex; align-items: center; gap: 12px; font-family: inherit; font-size: 16px; color: {{m.color}}; text-align: left">
+          <svg aria-hidden="true" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="{{m.d}}"></path></svg>
+          <span style="flex: 1">{{m.label}}</span>
+        </button>
+      </sc-for>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const sep = '0.5px solid rgba(60,60,67,0.18)';
+    return {
+      work: { title: 'A Map of Small Hours', author: 'quietharbor', fandom: 'Pride and Prejudice', rating: 'G', category: 'FM', warnings: 'none', status: 'complete', words: '32,050', chapters: '9/9', kudos: '1,212', hits: '15.4k' },
+      // The four things done most often sit in the menu's top row, as in Music and Books.
+      quick: [
+        ['Want to Read', 'M7 4h10v16l-5-4-5 4z', 'none'],
+        ['Favourite', 'm12 3.8 2.5 5.2 5.6.8-4.1 3.9 1 5.6-5-2.7-5 2.7 1-5.6-4.1-3.9 5.6-.8z', 'none'],
+        ['Download', 'M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19.5h14', 'none'],
+        ['Share', 'M12 15V4M8 8l4-4 4 4M5 12v8h14v-8', 'none']
+      ].map(([label, d, fill]) => ({ label, d, fill })),
+      queues: [
+        ['Summer Reading', '#C25E00', '8 works · about 9 h 40 min'],
+        ['Re-reads', '#1E63C8', '5 works · about 4 h 5 min'],
+        ['For the Train', '#2F8F3A', '3 works · about 1 h 50 min']
+      ].map(([name, colour, detail]) => ({ name, colour, detail })),
+      rest: [
+        ['Mark as Finished', 'M12 3.5a8.5 8.5 0 1 1 0 17 8.5 8.5 0 0 1 0-17zM8 12.5l2.8 2.8L16.5 9.5', '#000000', sep],
+        ['Work Details', 'M12 3.5a8.5 8.5 0 1 1 0 17 8.5 8.5 0 0 1 0-17zM12 11v5.5M12 7.8v.1', '#000000', 'none'],
+        ['Delete from Library', 'M5 7h14M10 7V5h4v2M7 7l1 13h8l1-13', '#D70015', sep]
+      ].map(([label, d, color, s]) => ({ label, d, color, sep: s }))
+    };
+  }
+}
+</script>
+</body>
+</html>

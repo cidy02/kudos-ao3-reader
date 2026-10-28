@@ -46,7 +46,7 @@ body{margin:0}
   </sc-if>
 </nav>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"selected":{"editor":"enum","options":["home","library","browse","account","search"],"default":"home"},"variant":{"editor":"enum","options":["full","minimized"],"default":"full"},"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"accessoryTitle":{"editor":null,"default":"Salt & Starlight"},"accessorySubtitle":{"editor":null,"default":"Read Aloud · Ch 15 · 12 min left"},"accessoryCover":{"editor":null,"default":"#2E5339"},"$preview":{"width":358,"height":62}}'>
+<script type="text/x-dc" data-dc-script data-props='{"selected":{"editor":"enum","options":["home","library","browse","account","search"],"default":"home"},"variant":{"editor":"enum","options":["full","minimized"],"default":"full"},"account":{"editor":"enum","options":["tab","avatar"],"default":"tab"},"accent":{"editor":"color","default":"#990000","options":["#990000","#B3261E","#7A1F2B","#1F4E5F"]},"accessoryTitle":{"editor":null,"default":"Salt & Starlight"},"accessorySubtitle":{"editor":null,"default":"Read Aloud · Ch 15 · 12 min left"},"accessoryCover":{"editor":null,"default":"#2E5339"},"$preview":{"width":358,"height":62}}'>
 class Component extends DCLogic {
   renderVals() {
     const accent = this.props.accent ?? '#990000';
@@ -59,7 +59,8 @@ class Component extends DCLogic {
       { id: 'browse', label: 'Browse', d: 'M4 5.5C4 4.7 4.7 4 5.5 4h4C10.3 4 11 4.7 11 5.5v4c0 .8-.7 1.5-1.5 1.5h-4C4.7 11 4 10.3 4 9.5zM13 5.5c0-.8.7-1.5 1.5-1.5h4c.8 0 1.5.7 1.5 1.5v4c0 .8-.7 1.5-1.5 1.5h-4c-.8 0-1.5-.7-1.5-1.5zM4 14.5c0-.8.7-1.5 1.5-1.5h4c.8 0 1.5.7 1.5 1.5v4c0 .8-.7 1.5-1.5 1.5h-4C4.7 20 4 19.3 4 18.5zM13 14.5c0-.8.7-1.5 1.5-1.5h4c.8 0 1.5.7 1.5 1.5v4c0 .8-.7 1.5-1.5 1.5h-4c-.8 0-1.5-.7-1.5-1.5z' },
       { id: 'account', label: 'Account', d: 'M12 3.5a4.3 4.3 0 1 1 0 8.6 4.3 4.3 0 0 1 0-8.6zM3.8 20.2c.6-4.4 4-7 8.2-7s7.6 2.6 8.2 7c.1.5-.3.8-.7.8H4.5c-.4 0-.8-.3-.7-.8z' }
     ];
-    const tabs = all.map((t) => ({
+    // account="avatar": Account moves to a profile button in each tab's toolbar (Books/Music style).
+    const tabs = all.filter((t) => !(this.props.account === 'avatar' && t.id === 'account')).map((t) => ({
       ...t,
       current: t.id === selected ? 'page' : 'false',
       bg: t.id === selected ? tint : 'transparent',
