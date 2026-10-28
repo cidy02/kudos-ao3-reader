@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Deleting a work Kudos can't fetch again</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 1290px; height: 960px; box-sizing: border-box; padding: 24px 30px; background: #FFFFFF; color: #1C1C1E; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; display: flex; flex-direction: column; gap: 16px">
+  <header style="display: flex; align-items: baseline; gap: 16px">
+    <h1 style="margin: 0; font-size: 28px; font-weight: 700">Deleting a work Kudos can’t fetch again</h1>
+    <p style="margin: 0; font-size: 15px; color: #3A3A3C">A normal delete asks nothing. A work that is gone from AO3, or came from somewhere else, says so first.</p>
+  </header>
+  <div style="display: flex; gap: 40px">
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px">
+      <figcaption style="font-size: 13px; font-weight: 600; color: #6C6C70">Delete from Library: no longer on AO3</figcaption>
+      <div style="width: 390px; height: 844px; border-radius: 48px; overflow: hidden; position: relative; background: #FFFFFF; box-shadow: 0 0 0 1px #D1D1D6">
+        <div aria-hidden="true" style="padding: 106px 0 0">
+          <span style="position: absolute; left: 68px; right: 68px; top: 54px; text-align: center; font-size: 17px; line-height: 44px; font-weight: 600">Finished</span>
+          <dc-import name="WorkRow" work="{{gone}}" ledger="{{true}}" divider="{{true}}" accent="#990000" hint-size="100%,120px"></dc-import>
+          <dc-import name="WorkRow" work="{{baker}}" ledger="{{true}}" accent="#990000" hint-size="100%,120px"></dc-import>
+        </div>
+        <div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(0,0,0,0.18)"></div>
+        <div role="alertdialog" aria-label="Delete Thornfield, Rebuilt?" style="position: absolute; left: 34px; right: 34px; top: 290px; border-radius: 30px; padding: 22px 18px 16px; background: rgba(250,250,252,0.95); backdrop-filter: blur(30px); -webkit-backdrop-filter: blur(30px); box-shadow: 0 20px 60px rgba(0,0,0,0.25); display: flex; flex-direction: column; gap: 8px; text-align: center">
+          <svg aria-hidden="true" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#C25E00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="align-self: center"><path d="M12 4 2.8 19.5h18.4zM12 10v4.5M12 17.2v.1"></path></svg>
+          <h2 style="margin: 0; font-size: 17px; font-weight: 600">Delete “Thornfield, Rebuilt”?</h2>
+          <p style="margin: 0; font-size: 14px; line-height: 19px; color: #3A3A3C">It’s no longer on AO3, so Kudos can’t download it again. It stays in Recently Deleted for 90 days, then it’s gone for good.</p>
+          <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px">
+            <button style="height: 44px; border: none; border-radius: 22px; background: #D70015; color: #FFFFFF; font-family: inherit; font-size: 16px; font-weight: 600">Delete</button>
+            <button style="height: 44px; border: none; border-radius: 22px; background: rgba(118,118,128,0.14); font-family: inherit; font-size: 16px">Keep</button>
+          </div>
+        </div>
+      </div>
+    </figure>
+
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px">
+      <figcaption style="font-size: 13px; font-weight: 600; color: #6C6C70">Delete Permanently: imported from another site</figcaption>
+      <div style="width: 390px; height: 844px; border-radius: 48px; overflow: hidden; position: relative; background: #FFFFFF; box-shadow: 0 0 0 1px #D1D1D6">
+        <div aria-hidden="true" style="position: absolute; inset: 0; transform: scale(1); pointer-events: none">
+          <dc-import name="Recently-Deleted" hint-size="390px,844px"></dc-import>
+        </div>
+        <div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(0,0,0,0.18)"></div>
+        <div role="alertdialog" aria-label="Delete The Boy Who Lived Twice permanently?" style="position: absolute; left: 34px; right: 34px; top: 260px; border-radius: 30px; padding: 22px 18px 16px; background: rgba(250,250,252,0.95); backdrop-filter: blur(30px); -webkit-backdrop-filter: blur(30px); box-shadow: 0 20px 60px rgba(0,0,0,0.25); display: flex; flex-direction: column; gap: 8px; text-align: center">
+          <svg aria-hidden="true" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#C25E00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="align-self: center"><path d="M12 4 2.8 19.5h18.4zM12 10v4.5M12 17.2v.1"></path></svg>
+          <h2 style="margin: 0; font-size: 17px; font-weight: 600">Delete permanently?</h2>
+          <p style="margin: 0; font-size: 14px; line-height: 19px; color: #3A3A3C">“The Boy Who Lived Twice” was imported from a PDF from FanFiction.net. Kudos only downloads from AO3, so this is the only copy.</p>
+          <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px">
+            <button style="height: 44px; border: none; border-radius: 22px; background: rgba(153,0,0,0.10); color: #990000; font-family: inherit; font-size: 16px; font-weight: 600">Save the Original File…</button>
+            <button style="height: 44px; border: none; border-radius: 22px; background: #D70015; color: #FFFFFF; font-family: inherit; font-size: 16px; font-weight: 600">Delete Permanently</button>
+            <button style="height: 44px; border: none; border-radius: 22px; background: rgba(118,118,128,0.14); font-family: inherit; font-size: 16px">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </figure>
+
+    <section style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 14px; padding-top: 22px">
+      <h2 style="margin: 0; font-size: 17px; font-weight: 700">When the warning shows</h2>
+      <div style="display: flex; flex-direction: column; gap: 10px; font-size: 14px; line-height: 20px; color: #3A3A3C">
+        <p style="margin: 0"><b style="color: #1C1C1E">No longer on AO3.</b> The last check found the work deleted, hidden or locked to someone else. Kudos already records this when it refreshes a work’s tags.</p>
+        <p style="margin: 0"><b style="color: #1C1C1E">Imported from somewhere else.</b> A PDF, EPUB, HTML or Word file from FanFiction.net, Wattpad, another site or your own files. The message names the format and the site when Kudos knows them.</p>
+        <p style="margin: 0"><b style="color: #1C1C1E">Where it appears.</b> Delete from Library (the work goes to Recently Deleted), Delete Permanently, and Delete All. Deleting several at once counts them: “2 of these 5 can’t be downloaded again.”</p>
+        <p style="margin: 0"><b style="color: #1C1C1E">Save the Original File…</b> appears when Kudos still holds the file you imported, so it can go to Files first.</p>
+        <p style="margin: 0"><b style="color: #1C1C1E">In Recently Deleted</b> every row shows days left (red in the last week) and the same reason in an orange note.</p>
+        <p style="margin: 0"><b style="color: #1C1C1E">A work still on AO3</b> deletes without a question, as today; Undo appears for a few seconds.</p>
+      </div>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1290,"height":960}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      gone: { title: 'Thornfield, Rebuilt', author: 'brontebird', fandom: 'Jane Eyre', rating: 'M', category: 'FM', warnings: 'undisclosed', status: 'wip', words: '28,700', chapters: '7/?', kudos: '1,120', hits: '14.2k', updated: 'No longer on AO3' },
+      baker: { title: 'The Baker Street Irregular', author: 'fogandlamplight', fandom: 'Sherlock Holmes', rating: 'G', category: 'Gen', warnings: 'none', status: 'complete', words: '9,140', chapters: '1/1', kudos: '2,045', hits: '19.8k' }
+    };
+  }
+}
+</script>
+</body>
+</html>

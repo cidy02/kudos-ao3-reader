@@ -14,9 +14,9 @@ body{margin:0}
 </helmet>
 <div aria-hidden="true" style="position: relative; isolation: isolate; width: {{width}}px; height: {{height}}px; flex-shrink: 0">
   <sc-for list="{{backs}}" as="c" hint-placeholder-count="2">
-    <span style="position: absolute; left: {{c.left}}px; top: {{c.top}}px; width: {{c.w}}px; height: {{c.h}}px; z-index: {{c.z}}; border-radius: {{radius}}px; background: {{c.bg}}; box-shadow: -2px 0 6px rgba(0,0,0,0.18); filter: {{c.filter}}; transform: rotate({{c.rot}}deg); transform-origin: 0% 100%"></span>
+    <span style="position: absolute; left: {{c.left}}px; top: {{c.top}}px; width: {{c.w}}px; height: {{c.h}}px; z-index: {{c.z}}; border-radius: {{radius}}px; background: {{c.bg}}; box-shadow: -2px 0 6px rgba(0,0,0,0.18); filter: {{c.filter}}; transform: rotate({{c.rot}}deg); transform-origin: {{c.origin}}"></span>
   </sc-for>
-  <span style="position: absolute; left: 0; top: 0; width: {{cw}}px; height: {{height}}px; z-index: 5; border-radius: {{radius}}px; background: {{front}}; box-shadow: 0 4px 12px rgba(0,0,0,0.22); overflow: hidden">
+  <span style="position: absolute; left: {{frontLeft}}px; top: {{frontTop}}px; width: {{cw}}px; height: {{frontH}}px; z-index: 5; border-radius: {{radius}}px; background: {{front}}; box-shadow: 0 4px 12px rgba(0,0,0,0.22); overflow: hidden">
     <span style="position: absolute; left: {{ghostIn}}px; bottom: {{ghostBottom}}px; font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: {{ghostSize}}px; line-height: 1; font-weight: 600; color: rgba(255,255,255,0.15)">{{initial}}</span>
     <sc-if value="{{hasRibbon}}" hint-placeholder-val="{{false}}">
       <span style="position: absolute; right: {{ribRight}}px; top: 0; width: {{ribW}}px; height: {{ribH}}px; background: rgba(0,0,0,0.24); clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 80%, 0 100%); display: flex; justify-content: center; padding-top: {{ribPad}}px; box-sizing: border-box">
@@ -29,9 +29,11 @@ body{margin:0}
 <script type="text/x-dc" data-dc-script data-props='{"tiles":{"editor":null},"colour":{"editor":"color","default":"#9C2F6B"},"initial":{"editor":"text","default":"A"},"kind":{"editor":"enum","options":["collection","queue","none"],"default":"collection"},"width":{"editor":"int","default":150,"min":32,"max":260},"height":{"editor":"int","default":170,"min":32,"max":260},"$preview":{"width":150,"height":170}}'>
 class Component extends DCLogic {
   renderVals() {
-    // A queue or collection: its own card in its own colour, with the covers of the works
-    // inside fanned and tilted behind it. Not a 2x2 grid, which would read as AO3's
-    // four-tag square, and the back covers keep each work's own fandom colour.
+    // A collection: its own card in its own colour, the covers of the works inside fanned
+    // and tilted behind it (a pile). A queue: the next covers stacked straight up behind
+    // it, each a step narrower, like cards in Wallet (a line waiting its turn). Not a 2x2 grid, which would
+    // read as AO3's four-tag square; the back covers keep each work's own fandom colour.
+    // Everything stays inside width × height, so stacks never run into their neighbours.
     const W = Number(this.props.width ?? 150), H = Number(this.props.height ?? 170);
     const art = (h) => 'linear-gradient(155deg, hsl(' + h + ', 46%, 27%), hsl(' + ((h + 22) % 360) + ', 50%, 41%))';
     const tiles = (this.props.tiles || [art(150), art(335), art(290)]).slice();
@@ -43,13 +45,29 @@ class Component extends DCLogic {
     };
     const front = colour ? 'linear-gradient(155deg, ' + shade(colour, 0.62) + ', ' + colour + ')' : tiles.shift();
     const backs = tiles.slice(0, 2);
-    const cw = Math.min(W, Math.round(H * 0.72));
-    const dx = backs.length ? Math.min(Math.round(cw * 0.2), Math.max(4, Math.round((W - cw) / backs.length))) : 0;
     const kind = this.props.kind ?? (colour ? 'collection' : 'none');
+    const isQueue = kind === 'queue';
+    let cw = Math.min(W, Math.round(H * 0.72));
     const big = cw >= 64;
+    const rotOf = (i) => (isQueue ? 0 : (big ? i * 5 : i * 3));
+    // The right edge a back card reaches once tilted about its bottom-left corner.
+    const reach = (cwTry, dxTry) => Math.max(cwTry, ...backs.map((_, k) => {
+      const i = k + 1, sc = isQueue ? 1 - i * 0.12 : 1 - i * 0.04, r = rotOf(i) * Math.PI / 180;
+      return cwTry * (1 - sc) + i * dxTry + cwTry * sc * Math.cos(r) + H * sc * Math.sin(r);
+    }));
+    let dx = 0;
+    const peek = isQueue && backs.length ? Math.max(4, Math.round(H * 0.07)) : 0;
+    if (isQueue) cw = Math.min(W, Math.round((H - peek * backs.length) * 0.72));
+    for (let n = 0; n < 40 && !isQueue; n++) {
+      dx = backs.length ? Math.max(4, Math.round(cw * (isQueue ? 0.16 : 0.12))) : 0;
+      if (reach(cw, dx) <= W || cw <= 24) break;
+      cw -= 2;
+    }
     const ribW = Math.round(cw * 0.2);
+    const frontTop = peek * backs.length, frontH = H - frontTop;
+    const frontLeft = isQueue ? Math.round((W - cw) / 2) : 0;
     return {
-      width: W, height: H, cw,
+      width: W, height: H, cw, frontTop, frontH, frontLeft,
       radius: Math.max(4, Math.round(cw * 0.09)),
       front,
       initial: colour ? (this.props.initial ?? '') : '',
@@ -58,12 +76,19 @@ class Component extends DCLogic {
       ghostBottom: -Math.round(cw * 0.27),
       hasRibbon: big && kind !== 'none',
       ribW, ribH: Math.round(ribW * 1.45), ribRight: Math.round(cw * 0.09), ribPad: Math.round(ribW * 0.2), ribIcon: Math.round(ribW * 0.6),
-      kindD: kind === 'queue' ? 'M12 3.5 3 8l9 4.5L21 8zM3 12l9 4.5 9-4.5M3 16l9 4.5 9-4.5' : 'M4.5 4.5h6v6h-6zM13.5 4.5h6v6h-6zM4.5 13.5h6v6h-6zM13.5 13.5h6v6h-6z',
+      // Queue: numbered list (an order). Collection: a pile of squares (a set).
+      kindD: isQueue ? 'M10 6.5h10M10 12h10M10 17.5h10M4 5h1.5v3.5M4 13.5c0-1 .7-1.5 1.4-1.5S7 12.5 7 13.2c0 1-3 1.6-3 2.8h3' : 'M4.5 4.5h6v6h-6zM13.5 4.5h6v6h-6zM4.5 13.5h6v6h-6zM13.5 13.5h6v6h-6z',
       backs: backs.map((bg, k) => {
-        const i = k + 1, sc = 1 - i * 0.04;
+        const i = k + 1, sc = isQueue ? 1 - i * 0.12 : 1 - i * 0.04;
         const w = Math.round(cw * sc), h = Math.round(H * sc);
-        const rot = big ? i * 5 : i * 3;
-        return { bg, w, h, left: i * dx, top: H - h - Math.round(w * Math.sin(rot * Math.PI / 180)), z: 5 - i, rot, filter: 'brightness(' + (1 - i * 0.1) + ')' };
+        const rot = rotOf(i);
+        if (isQueue) {
+          // Straight, centred over the front card, each one a peek higher and a step narrower.
+          const qw = Math.round(cw * (1 - i * 0.1)), qh = H - peek * backs.length;
+          return { bg, w: qw, h: qh, left: frontLeft + Math.round((cw - qw) / 2), top: peek * (backs.length - i), z: 5 - i, rot: 0, origin: '50% 0%', filter: 'brightness(' + (1 - i * 0.12) + ')' };
+        }
+        const top = H - h - Math.round(w * Math.sin(rot * Math.PI / 180));
+        return { bg, w, h, left: Math.round(cw - w + i * dx), top, z: 5 - i, rot, origin: '0% 100%', filter: 'brightness(' + (1 - i * 0.1) + ')' };
       })
     };
   }

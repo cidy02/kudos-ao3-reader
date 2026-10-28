@@ -13,7 +13,7 @@ body{margin:0}
 button{cursor:pointer}
 </style>
 </helmet>
-<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+<div style="width: 390px; height: 1000px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
   <h1 data-inline-title style="position: absolute; left: 120px; right: 120px; top: 54px; margin: 0; font-size: 17px; line-height: 44px; font-weight: 600; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Recently Deleted</h1>
   <div style="position: absolute; left: 16px; right: 16px; top: 54px; display: flex; justify-content: space-between">
     <button style="height: 44px; padding: 0 12px; border: none; border-radius: 22px; font-family: inherit; font-size: 16px; color: #D70015; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)">Delete All</button>
@@ -22,10 +22,25 @@ button{cursor:pointer}
   <main style="padding: 106px 16px 0; display: flex; flex-direction: column; gap: 12px">
     <header style="padding: 0 4px; display: flex; flex-direction: column; gap: 4px">
       <p style="margin: 0; font-size: 15px; line-height: 20px; color: #3A3A3C">Works stay here for 90 days, then they're gone for good. Restoring brings back the EPUB, your progress and your tags.</p>
+      <p style="margin: 0; font-size: 13px; line-height: 18px; color: #6C6C70">2 of these can't be downloaded again once they're gone.</p>
     </header>
     <div style="margin: 0 -16px">
       <sc-for list="{{works}}" as="w" hint-placeholder-count="4">
-        <dc-import name="WorkRow" work="{{w}}" selecting="{{true}}" selected="{{w.selected}}" divider="{{w.divider}}" accent="{{accent}}" hint-size="100%,96px"></dc-import>
+        <div style="border-bottom: {{w.sep}}">
+          <dc-import name="WorkRow" work="{{w}}" selecting="{{true}}" selected="{{w.selected}}" accent="{{accent}}" hint-size="100%,96px"></dc-import>
+          <div style="margin: -4px 16px 12px 79px; display: flex; flex-direction: column; gap: 6px">
+            <span style="display: flex; align-items: center; gap: 6px; font-size: 13px; line-height: 18px; font-weight: 600; color: {{w.daysColour}}">
+              <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5a8.5 8.5 0 1 1 0 17 8.5 8.5 0 0 1 0-17zM12 7.5V12l3 2"></path></svg>
+              {{w.days}}
+            </span>
+            <sc-if value="{{w.hasWarning}}" hint-placeholder-val="{{false}}">
+              <span style="display: flex; align-items: flex-start; gap: 8px; padding: 8px 10px; border-radius: 12px; background: #FFF4E5; font-size: 13px; line-height: 18px; color: #6B3A00">
+                <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C25E00" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 1px"><path d="M12 4 2.8 19.5h18.4zM12 10v4.5M12 17.2v.1"></path></svg>
+                <span><b style="font-weight: 600">{{w.warnTitle}}</b> {{w.warnBody}}</span>
+              </span>
+            </sc-if>
+          </div>
+        </div>
       </sc-for>
     </div>
   </main>
@@ -36,18 +51,26 @@ button{cursor:pointer}
   </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#990000"},"$preview":{"width":390,"height":844}}'>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#990000"},"$preview":{"width":390,"height":1000}}'>
 class Component extends DCLogic {
   renderVals() {
+    // Soonest to go first, as Photos does. A work that can't be fetched again says so on its row.
     const works = [
-      { title: 'Watson’s Notebook', author: 'fogandlamplight', fandom: 'Sherlock Holmes', rating: 'T', category: 'Gen', warnings: 'none', status: 'complete', words: '15,200', chapters: '6/6', updated: '82 days left', selected: true },
-      { title: 'A Season at Bath', author: 'quietharbor', fandom: 'Persuasion', rating: 'G', category: 'FM', warnings: 'none', status: 'complete', words: '4,100', chapters: '1/1', updated: '61 days left' },
-      { title: 'Thornfield, Rebuilt', author: 'brontebird', fandom: 'Jane Eyre', rating: 'M', category: 'FM', warnings: 'undisclosed', status: 'wip', words: '28,700', chapters: '7/?', updated: '12 days left' },
-      { title: 'Ink and Salt', author: 'inkwell_moth', fandom: 'Original Work', rating: 'T', category: 'FF', warnings: 'none', status: 'wip', words: '9,800', chapters: '3/8', updated: '3 days left' }
+      { title: 'Ink and Salt', author: 'inkwell_moth', fandom: 'Original Work', rating: 'T', category: 'FF', warnings: 'none', status: 'wip', words: '9,800', chapters: '3/8', left: 3 },
+      { title: 'Thornfield, Rebuilt', author: 'brontebird', fandom: 'Jane Eyre', rating: 'M', category: 'FM', warnings: 'undisclosed', status: 'wip', words: '28,700', chapters: '7/?', left: 12,
+        warnTitle: 'No longer on AO3.', warnBody: 'The author removed it or made it private, so Kudos can\u2019t download it again.' },
+      { title: 'The Boy Who Lived Twice', author: 'quill_and_ash', fandom: 'Harry Potter', rating: 'T', category: 'Gen', warnings: 'none', status: 'complete', words: '61,400', chapters: '22/22', left: 47, selected: true,
+        warnTitle: 'Imported PDF from FanFiction.net.', warnBody: 'Kudos can only download from AO3, so this copy is the only one.' },
+      { title: 'Watson\u2019s Notebook', author: 'fogandlamplight', fandom: 'Sherlock Holmes', rating: 'T', category: 'Gen', warnings: 'none', status: 'complete', words: '15,200', chapters: '6/6', left: 82 }
     ];
     return {
       accent: this.props.accent ?? '#990000',
-      works: works.map((w, i) => ({ ...w, selected: !!w.selected, divider: i < works.length - 1 }))
+      works: works.map((w, i) => ({
+        ...w, selected: !!w.selected, hasWarning: !!w.warnTitle,
+        days: w.left === 1 ? '1 day left' : w.left + ' days left',
+        daysColour: w.left <= 7 ? '#D70015' : '#6C6C70',
+        sep: i < works.length - 1 ? '0.5px solid #D1D1D6' : 'none'
+      }))
     };
   }
 }

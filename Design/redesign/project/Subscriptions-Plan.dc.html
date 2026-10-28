@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Subscriptions: works, series, authors and tags</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 1290px; height: 960px; box-sizing: border-box; padding: 24px 30px; background: #FFFFFF; color: #1C1C1E; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; display: flex; flex-direction: column; gap: 16px">
+  <header style="display: flex; flex-direction: column; gap: 4px">
+    <h1 style="margin: 0; font-size: 28px; font-weight: 700">Subscriptions: works, series, authors and tags</h1>
+    <p style="margin: 0; font-size: 15px; color: #3A3A3C; max-width: 1100px">Your AO3 subscriptions (works, series, authors) plus tags followed in Kudos through AO3’s public feeds, in one Updates list. Proposal, 2026-10-28.</p>
+  </header>
+  <div style="display: flex; gap: 36px">
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px">
+      <figcaption style="font-size: 13px; font-weight: 600; color: #6C6C70">Authors: newest work first, swipe to unsubscribe</figcaption>
+      <div style="width: 390px; height: 844px; border-radius: 48px; overflow: hidden; position: relative; background: #FFFFFF; box-shadow: 0 0 0 1px #D1D1D6">
+        <span style="position: absolute; left: 68px; right: 68px; top: 54px; text-align: center; font-size: 17px; line-height: 44px; font-weight: 600">Subscriptions</span>
+        <span aria-hidden="true" style="position: absolute; left: 16px; top: 54px; width: 44px; height: 44px; border-radius: 22px; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06); display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1C1C1E" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg></span>
+        <div style="padding: 106px 16px 0; display: flex; flex-direction: column; gap: 12px">
+          <div role="tablist" aria-label="Show" style="display: flex; gap: 8px; overflow: hidden">
+            <sc-for list="{{scopes}}" as="t" hint-placeholder-count="5">
+              <button role="tab" aria-selected="{{t.selected}}" style="flex-shrink: 0; height: 34px; padding: 0 13px; border: none; border-radius: 17px; background: {{t.bg}}; color: {{t.fg}}; font-family: inherit; font-size: 14px; font-weight: 600">{{t.label}}</button>
+            </sc-for>
+          </div>
+          <div style="margin: 0 -16px">
+            <sc-for list="{{authors}}" as="a" hint-placeholder-count="5">
+              <div style="position: relative; overflow: hidden">
+                <sc-if value="{{a.swiped}}" hint-placeholder-val="{{false}}">
+                  <span aria-hidden="true" style="position: absolute; right: 0; top: 0; bottom: 0; width: 104px; background: #D70015; color: #FFFFFF; font-size: 13px; font-weight: 600; display: flex; align-items: center; justify-content: center">Unsubscribe</span>
+                </sc-if>
+                <div style="position: relative; background: #FFFFFF; transform: {{a.shift}}; display: flex; align-items: center; gap: 12px; padding: 10px 16px">
+                  <span aria-hidden="true" style="width: 40px; height: 40px; flex-shrink: 0; border-radius: 20px; background: {{a.bg}}; color: #FFFFFF; font-size: 17px; font-weight: 600; display: flex; align-items: center; justify-content: center">{{a.initial}}</span>
+                  <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; padding-bottom: 10px; margin-bottom: -10px; border-bottom: {{a.sep}}">
+                    <span style="font-size: 17px; line-height: 22px; font-weight: 600">{{a.name}}</span>
+                    <span style="font-size: 13px; line-height: 18px; color: #6C6C70; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{a.latest}}</span>
+                  </span>
+                  <sc-if value="{{a.hasNew}}" hint-placeholder-val="{{false}}"><span style="padding: 0 7px; border-radius: 9px; background: #990000; color: #FFFFFF; font-size: 12px; line-height: 18px; font-weight: 700">{{a.badge}}</span></sc-if>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </figure>
+
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px">
+      <figcaption style="font-size: 13px; font-weight: 600; color: #6C6C70">Follow a tag from its page (fandom, ship, character…)</figcaption>
+      <div style="width: 390px; height: 844px; border-radius: 48px; overflow: hidden; position: relative; background: #FFFFFF; box-shadow: 0 0 0 1px #D1D1D6">
+        <div aria-hidden="true" style="position: absolute; inset: 0; pointer-events: none">
+          <dc-import name="Fandom-Works" hint-size="390px,844px"></dc-import>
+        </div>
+        <div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(0,0,0,0.22)"></div>
+        <section role="dialog" aria-label="Follow Sherlock Holmes - Arthur Conan Doyle" style="position: absolute; left: 0; right: 0; bottom: 0; height: 420px; border-radius: 38px 38px 0 0; background: #F2F2F7; box-shadow: 0 -8px 30px rgba(0,0,0,0.18); display: flex; flex-direction: column">
+          <div aria-hidden="true" style="width: 36px; height: 5px; border-radius: 3px; background: #C7C7CC; margin: 7px auto 0"></div>
+          <header style="display: flex; align-items: center; justify-content: space-between; padding: 6px 16px 10px">
+            <button aria-label="Cancel" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.8); box-shadow: 0 4px 14px rgba(0,0,0,0.08), 0 0 0 0.5px rgba(0,0,0,0.06)"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"></path></svg></button>
+            <h2 style="margin: 0; font-size: 17px; line-height: 22px; font-weight: 600">Follow Tag</h2>
+            <button aria-label="Follow" style="width: 44px; height: 44px; border: none; border-radius: 22px; background: #990000; color: #FFFFFF; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.6 4.6L19.2 7.4"></path></svg></button>
+          </header>
+          <div style="padding: 0 16px; display: flex; flex-direction: column; gap: 18px">
+            <div style="display: flex; align-items: center; gap: 12px; padding: 0 4px">
+              <span aria-hidden="true" style="width: 44px; height: 44px; border-radius: 12px; background: #2F7A4A; color: #FFFFFF; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 12.5V4.5h8l9 9-8 8zM8 8.5h.01"></path></svg></span>
+              <span style="display: flex; flex-direction: column">
+                <span style="font-size: 20px; line-height: 25px; font-weight: 700">Sherlock Holmes - Arthur Conan Doyle</span>
+                <span style="font-size: 13px; line-height: 18px; color: #6C6C70">Fandom · about 9 new works a week</span>
+              </span>
+            </div>
+            <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
+              <sc-for list="{{toggles}}" as="t" hint-placeholder-count="3">
+                <div style="display: flex; align-items: center; min-height: 48px; padding: 0 16px; gap: 12px; border-top: {{t.sep}}">
+                  <span style="flex: 1; font-size: 16px">{{t.label}}</span>
+                  <span role="switch" aria-checked="{{t.on}}" aria-label="{{t.label}}" style="width: 51px; height: 31px; border-radius: 16px; background: {{t.bg}}; position: relative"><span style="position: absolute; left: {{t.knob}}px; top: 2px; width: 27px; height: 27px; border-radius: 14px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.2)"></span></span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </section>
+      </div>
+    </figure>
+
+    <section style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 12px; padding-top: 22px">
+      <h2 style="margin: 0; font-size: 17px; font-weight: 700">How Kudos learns what’s new</h2>
+      <div style="border-top: 0.5px solid #D1D1D6">
+        <sc-for list="{{how}}" as="h" hint-placeholder-count="4">
+          <div style="display: flex; gap: 10px; padding: 7px 0; border-bottom: 0.5px solid #E5E5EA; font-size: 13px; line-height: 18px">
+            <span style="width: 64px; flex-shrink: 0; font-weight: 700; color: {{h.colour}}">{{h.kind}}</span>
+            <span style="flex: 1; color: #3A3A3C">{{h.how}}</span>
+          </div>
+        </sc-for>
+      </div>
+      <h2 style="margin: 6px 0 0; font-size: 17px; font-weight: 700">Within the networking policy</h2>
+      <div style="display: flex; flex-direction: column; gap: 6px; font-size: 13px; line-height: 18px; color: #3A3A3C">
+        <p style="margin: 0">Checks run only while Kudos is open (Home or Subscriptions on screen), one request at a time through the existing request slots, and stop when you leave.</p>
+        <p style="margin: 0">Each source is checked at most every 6 hours; tags are capped (proposed: 20 followed tags). Pull to refresh checks now, still one at a time.</p>
+        <p style="margin: 0">Feeds are public: no login, no session cookie sent. A feed lists a tag’s newest works only, so a busy tag shows “and more” and links to its full page.</p>
+        <p style="margin: 0"><b style="color: #1C1C1E">Open for you:</b> notifications when the app is closed would need background checks, which the policy forbids today. AO3’s own emails still arrive as before.</p>
+      </div>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1290,"height":960}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const scopes = [['Updates', false], ['Works 18', false], ['Series 4', false], ['Authors 5', true], ['Tags 3', false]];
+    const authors = [
+      ['fogandlamplight', '#6B4E23', 'Watson Abroad · new work 5 h ago', 'New'],
+      ['wrenfield', '#2F6D6A', 'Under the Same Stars · chapter 6, Oct 19', ''],
+      ['quietharbor', '#3E5B3A', 'A Fortnight at Uppercross · yesterday', 'New'],
+      ['brontebird', '#4A3D6A', 'Moor and Mist · finished in August', ''],
+      ['marginalia', '#7A4040', 'Letters Never Sent · March', '']
+    ];
+    const toggles = [['Show new works on Home', true], ['Complete works only', false], ['Hide works rated Explicit', false]];
+    return {
+      scopes: scopes.map(([label, on]) => ({ label, selected: on ? 'true' : 'false', bg: on ? '#990000' : '#EFEFF4', fg: on ? '#FFFFFF' : '#1C1C1E' })),
+      authors: authors.map(([name, bg, latest, badge], i) => ({
+        name, bg, latest, badge, hasNew: !!badge, initial: name.charAt(0).toUpperCase(),
+        swiped: i === 3, shift: i === 3 ? 'translateX(-104px)' : 'none',
+        sep: i < authors.length - 1 ? '0.5px solid #E5E5EA' : 'none'
+      })),
+      toggles: toggles.map(([label, on], i) => ({ label, on: on ? 'true' : 'false', bg: on ? '#34C759' : '#E9E9EB', knob: on ? 22 : 2, sep: i ? '0.5px solid #E5E5EA' : 'none' })),
+      how: [
+        ['Works', '#990000', 'Your AO3 work subscriptions. The chapter count Kudos already reads for the subscriptions page (anonymous, page-bounded) shows new chapters.'],
+        ['Series', '#1E63C8', 'Your AO3 series subscriptions. The series page lists its parts; a new part is a new work in the series.'],
+        ['Authors', '#7B3FA0', 'Your AO3 user subscriptions. The same newest-work check Favourites › Authors already makes, foreground and cancellable.'],
+        ['Tags', '#2F7A4A', 'Followed in Kudos, not on AO3. Each tag’s public Atom feed (/tags/<id>/feed.atom) lists its newest works; Kudos keeps the ids it has shown you.']
+      ].map(([kind, colour, how]) => ({ kind, colour, how }))
+    };
+  }
+}
+</script>
+</body>
+</html>
