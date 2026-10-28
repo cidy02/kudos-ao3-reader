@@ -466,6 +466,19 @@ hand-rolling** — "as many dependencies as are necessary". PDF is explicitly *i
   (`ContentView.swift:23`, `:89`) stop reading `ScreenWashRegistry`; the fandom colour
   stays on identity only (generated covers, the Resume card, the fandom label, the
   page wash). Android has the same picker and chrome tint (parity).
+- **T-460 · Tabs: Home, Library, Writing, Browse; Account behind a profile button**
+  🅿️ *(owner, 2026-10-27; canvas boards `Writing`, `Account-Sheet`, `Account-Move`).*
+  `AppTab.mainTabs` (`AppRouter.swift:19`) becomes `[.home, .library, .writing,
+  .browse]`; `.account` stops being a tab. Home's toolbar gains a profile button
+  (avatar, unread-Inbox badge) presenting an Account sheet with its own
+  `NavigationStack`: profile, Inbox, AO3 Preferences, Open AO3, Kudos Settings
+  (Backup & Sync, About), Log Out. New Writing tab root: the draft last edited with
+  Continue, this week's kudos/hits/comments, New Comments, Your Works, Drafts, Series,
+  Collections & Challenges, pseud switcher in the header. Marked for Later, Bookmarks,
+  Subscriptions and AO3 History move to Library › On AO3. Router deep links and
+  state restoration that target `.account` need new homes; macOS sidebar and the Duo
+  rail follow. Card titles (the Resume hero, the Writing draft card) are New York.
+  Android parity: its bottom bar and nav graph.
 
 ### Phase 3 — native AO3 writes (most fragile; needs the per-page CSRF token)
 - **Leave kudos · comment · subscribe · AO3-side bookmark** — fetch the work/page,
