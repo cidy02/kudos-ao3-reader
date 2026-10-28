@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Account behind a profile button</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1290px; height: 580px; box-sizing: border-box; padding: 26px 34px; background: #FFFFFF; color: #1C1C1E; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; display: flex; flex-direction: column; gap: 18px">
+  <header style="display: flex; align-items: baseline; gap: 14px">
+    <h1 style="margin: 0; font-size: 26px; font-weight: 700">Account behind a profile button</h1>
+    <p style="margin: 0; font-size: 15px; color: #3A3A3C">Option, not decided. Three tabs plus Search, as in Apple Books; Account opens as a sheet from Home.</p>
+  </header>
+  <div style="display: flex; align-items: flex-start; gap: 22px">
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 10px; width: 225px">
+      <div style="width: 225px; height: 487px; overflow: hidden; border-radius: 30px; box-shadow: 0 0 0 1px #D1D1D6"><div style="width: 390px; height: 844px; transform: scale(0.5769); transform-origin: 0 0"><dc-import name="Home-Avatar" hint-size="390px,844px"></dc-import></div></div>
+      <figcaption style="font-size: 13px; line-height: 18px"><b>1</b> {{cap1}}</figcaption>
+    </figure>
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 10px; width: 225px">
+      <div style="width: 225px; height: 487px; overflow: hidden; border-radius: 30px; box-shadow: 0 0 0 1px #D1D1D6"><div style="width: 390px; height: 844px; transform: scale(0.5769); transform-origin: 0 0"><dc-import name="Account-Sheet" hint-size="390px,844px"></dc-import></div></div>
+      <figcaption style="font-size: 13px; line-height: 18px"><b>2</b> {{cap2}}</figcaption>
+    </figure>
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 10px; width: 225px">
+      <div style="width: 225px; height: 487px; overflow: hidden; border-radius: 30px; box-shadow: 0 0 0 1px #D1D1D6"><div style="width: 390px; height: 844px; transform: scale(0.5769); transform-origin: 0 0"><dc-import name="Library-AO3" hint-size="390px,844px"></dc-import></div></div>
+      <figcaption style="font-size: 13px; line-height: 18px"><b>3</b> {{cap3}}</figcaption>
+    </figure>
+
+    <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+      <section style="display: flex; flex-direction: column; gap: 6px">
+        <h2 style="margin: 0; font-size: 17px; font-weight: 700">Where today's Account goes</h2>
+        <div style="border-top: 0.5px solid #D1D1D6">
+          <sc-for list="{{moves}}" as="m" hint-placeholder-count="8">
+            <div style="display: flex; gap: 10px; padding: 6px 0; border-bottom: 0.5px solid #E5E5EA; font-size: 13px; line-height: 18px">
+              <span style="width: 170px; flex-shrink: 0; font-weight: 600">{{m.what}}</span>
+              <span style="flex: 1; color: #3A3A3C">{{m.where}}</span>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+      <div style="display: flex; gap: 18px">
+        <section style="flex: 1; display: flex; flex-direction: column; gap: 4px">
+          <h2 style="margin: 0; font-size: 15px; font-weight: 700; color: #2F7A36">Gains</h2>
+          <sc-for list="{{gains}}" as="g" hint-placeholder-count="3"><p style="margin: 0; font-size: 13px; line-height: 18px">{{g}}</p></sc-for>
+        </section>
+        <section style="flex: 1; display: flex; flex-direction: column; gap: 4px">
+          <h2 style="margin: 0; font-size: 15px; font-weight: 700; color: #A35200">Costs</h2>
+          <sc-for list="{{costs}}" as="c" hint-placeholder-count="3"><p style="margin: 0; font-size: 13px; line-height: 18px">{{c}}</p></sc-for>
+        </section>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1290,"height":580}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const shots = [
+        { n: '1', board: 'Home-Avatar', caption: 'Home keeps Select and gains the profile button. The red badge counts unread Inbox messages.' },
+        { n: '2', board: 'Account-Sheet', caption: 'The sheet holds what is about you on AO3, plus Kudos settings. Rows push inside the sheet.' },
+        { n: '3', board: 'Library-AO3', caption: 'Lists of works move to Library, next to your own shelves: content in tabs, account in the sheet.' }
+    ];
+    return {
+      cap1: shots[0].caption, cap2: shots[1].caption, cap3: shots[2].caption,
+      moves: [
+        ['Marked for Later, Bookmarks', 'Library › On AO3'],
+        ['Subscriptions', 'Library › On AO3; new chapters already lead Home'],
+        ['AO3 History', 'Library › On AO3 (Kudos history stays in Insights)'],
+        ['Inbox', 'Sheet, top row; its count badges the profile button'],
+        ['Works, Series, Drafts', 'Sheet › Your Works (one page, segmented as today)'],
+        ['Collections & Challenges', 'Sheet'],
+        ['AO3 Preferences, More on AO3', 'Sheet'],
+        ['Settings, Backup, About', 'Sheet › Kudos (the gear leaves every toolbar)'],
+        ['Pseud switcher, Log Out', 'Your AO3 profile page; Log Out at the foot of the sheet']
+      ].map(([what, where]) => ({ what, where })),
+      gains: [
+        'Matches Books, Music, Podcasts and the App Store; the tab bar gets a slot back.',
+        'Reading lists sit with the rest of your reading, so Library answers "where is that fic?" alone.',
+        'Signed out, nothing is greyed out: the button is a plain person, the sheet offers Log In.'
+      ],
+      costs: [
+        'Inbox and Your Works go from one tap to two; writers feel this most.',
+        'Reverses docs/Kudos_Layout_Structure.md (4 tabs, Settings in Account) and IA-Map\'s "keep 4 tabs".',
+        'Open question: button on Home only (Books) or on Library and Browse too (Music).'
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

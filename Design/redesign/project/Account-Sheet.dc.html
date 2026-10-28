@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Account sheet</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+a{color:inherit;text-decoration:none}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #000000; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+  <div aria-hidden="true" style="position: absolute; left: 0; top: 0; width: 390px; height: 844px; transform: translateY(10px) scale(0.92); transform-origin: 50% 0; border-radius: 38px; overflow: hidden; pointer-events: none">
+    <dc-import name="Home-Avatar" signed-in="{{signedIn}}" hint-size="390px,844px"></dc-import>
+    <div style="position: absolute; inset: 0; background: rgba(0,0,0,0.22)"></div>
+  </div>
+
+  <section role="dialog" aria-label="Account" style="position: absolute; left: 0; right: 0; top: 62px; bottom: 0; border-radius: 38px 38px 0 0; background: #F2F2F7; box-shadow: 0 -8px 30px rgba(0,0,0,0.18); overflow: hidden">
+    <div aria-hidden="true" style="width: 36px; height: 5px; border-radius: 3px; background: #C7C7CC; margin: 7px auto 0"></div>
+    <header style="display: flex; align-items: center; justify-content: space-between; padding: 6px 16px 10px">
+      <span aria-hidden="true" style="width: 44px"></span>
+      <h2 style="margin: 0; font-size: 17px; line-height: 22px; font-weight: 600">Account</h2>
+      <button aria-label="Done" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.8); box-shadow: 0 4px 14px rgba(0,0,0,0.08), 0 0 0 0.5px rgba(0,0,0,0.06)">
+        <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.6 4.6L19.2 7.4"></path></svg>
+      </button>
+    </header>
+
+    <div style="padding: 4px 16px 0; display: flex; flex-direction: column; gap: 22px">
+      <sc-if value="{{signedIn}}" hint-placeholder-val="{{true}}">
+        <a href="Author.dc.html" style="color: #000000; text-decoration: none; background: #FFFFFF; border-radius: 16px; padding: 14px 16px; display: flex; align-items: center; gap: 14px">
+          <span aria-hidden="true" style="width: 60px; height: 60px; flex-shrink: 0; border-radius: 30px; background: #23506B; color: #FFFFFF; font-size: 24px; font-weight: 600; display: flex; align-items: center; justify-content: center">S</span>
+          <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+            <span style="font-size: 22px; line-height: 28px; font-weight: 700">saltwindow</span>
+            <span style="font-size: 15px; line-height: 20px; color: #6C6C70">Your AO3 profile</span>
+          </span>
+          <svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg>
+        </a>
+      </sc-if>
+      <sc-if value="{{signedOut}}" hint-placeholder-val="{{false}}">
+        <div style="background: #FFFFFF; border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 14px">
+          <div style="display: flex; align-items: center; gap: 14px">
+            <span aria-hidden="true" style="width: 60px; height: 60px; flex-shrink: 0; border-radius: 30px; background: rgba(118,118,128,0.16); color: #6C6C70; display: flex; align-items: center; justify-content: center">
+              <svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3.5a4.3 4.3 0 1 1 0 8.6 4.3 4.3 0 0 1 0-8.6zM3.8 20.2c.6-4.4 4-7 8.2-7s7.6 2.6 8.2 7c.1.5-.3.8-.7.8H4.5c-.4 0-.8-.3-.7-.8z"></path></svg>
+            </span>
+            <span style="flex: 1; display: flex; flex-direction: column; gap: 2px">
+              <span style="font-size: 20px; line-height: 25px; font-weight: 700">Not logged in</span>
+              <span style="font-size: 15px; line-height: 20px; color: #6C6C70">Your library and reading stay on this iPhone either way.</span>
+            </span>
+          </div>
+          <a href="Login.dc.html" style="text-decoration: none; height: 50px; border-radius: 25px; background: #990000; color: #FFFFFF; font-size: 17px; font-weight: 600; display: flex; align-items: center; justify-content: center">Log In to AO3</a>
+        </div>
+      </sc-if>
+
+      <sc-for list="{{groups}}" as="g" hint-placeholder-count="3">
+        <section style="display: flex; flex-direction: column; gap: 6px">
+          <sc-if value="{{g.hasTitle}}" hint-placeholder-val="{{true}}">
+            <h3 style="margin: 0 16px; font-size: 15px; line-height: 20px; font-weight: 600; color: #3A3A3C">{{g.title}}</h3>
+          </sc-if>
+          <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
+            <sc-for list="{{g.rows}}" as="r" hint-placeholder-count="3">
+              <a href="{{r.href}}" style="color: #000000; text-decoration: none; display: flex; align-items: center; min-height: 48px; padding-left: 16px; gap: 12px">
+                <span aria-hidden="true" style="width: 29px; height: 29px; flex-shrink: 0; border-radius: 7px; background: {{r.tile}}; color: #FFFFFF; display: flex; align-items: center; justify-content: center">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{r.d}}"></path></svg>
+                </span>
+                <span style="flex: 1; min-height: 48px; display: flex; align-items: center; gap: 8px; padding-right: 16px; border-top: {{r.sep}}">
+                  <span style="flex: 1; font-size: 17px; line-height: 22px; color: #000000">{{r.label}}</span>
+                  <sc-if value="{{r.hasBadge}}" hint-placeholder-val="{{false}}"><span style="min-width: 22px; height: 22px; padding: 0 7px; box-sizing: border-box; border-radius: 11px; background: #990000; color: #FFFFFF; font-size: 13px; line-height: 22px; font-weight: 700; text-align: center">{{r.badge}}</span></sc-if>
+                  <span style="font-size: 17px; color: #8E8E93">{{r.detail}}</span>
+                  <svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{r.chev}}"></path></svg>
+                </span>
+              </a>
+            </sc-for>
+          </div>
+        </section>
+      </sc-for>
+
+      <sc-if value="{{signedIn}}" hint-placeholder-val="{{true}}">
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <button style="height: 48px; border: none; border-radius: 16px; background: #FFFFFF; font-family: inherit; font-size: 17px; color: #D70015">Log Out</button>
+          <p style="margin: 0 16px; font-size: 13px; line-height: 18px; color: #6C6C70">Logged in to archiveofourown.org. Kudos keeps the session on this iPhone only.</p>
+        </div>
+      </sc-if>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"signedIn":{"editor":"boolean","default":true},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const signedIn = this.props.signedIn ?? true;
+    const I = {
+      inbox: 'M4 13l2.5-8h11L20 13v6H4zM4 13h5l1 2h4l1-2h5',
+      works: 'M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h5',
+      stack: 'M6 8h12v12H6zM8 5h8',
+      prefs: 'M4 7h10M18 7h2M4 17h4M12 17h8M14 4v6M8 14v6',
+      web: 'M12 3.5a8.5 8.5 0 1 1 0 17 8.5 8.5 0 0 1 0-17zM3.5 12h17M12 3.5c2.4 2.6 3.4 5.4 3.4 8.5s-1 5.9-3.4 8.5c-2.4-2.6-3.4-5.4-3.4-8.5s1-5.9 3.4-8.5z',
+      gear: 'M12 9a3 3 0 1 1 0 6 3 3 0 0 1 0-6zM12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7',
+      sync: 'M4 12a8 8 0 0 1 13.7-5.6L20 9M20 4v5h-5M20 12a8 8 0 0 1-13.7 5.6L4 15M4 20v-5h5',
+      info: 'M12 3.5a8.5 8.5 0 1 1 0 17 8.5 8.5 0 0 1 0-17zM12 11v5.5M12 7.8v.1'
+    };
+    const chev = 'm1.5 1.5 5 5.5-5 5.5';
+    const out = 'M2 6V2h4M2 2l4.5 4.5M6 12H2V8';
+    const row = (label, d, tile, href, extra) => ({ label, d, tile, href, detail: '', badge: '', hasBadge: false, chev, ...extra });
+    const ao3 = { title: 'On AO3', rows: [
+      row('Inbox', I.inbox, '#990000', 'Inbox.dc.html', { badge: '3', hasBadge: true }),
+      row('Your Works', I.works, '#C25E00', 'My-Works.dc.html', { detail: '6' }),
+      row('Collections & Challenges', I.stack, '#7B3FA0', 'AO3-Collections.dc.html', { detail: '4' }),
+      row('AO3 Preferences', I.prefs, '#6C6C70', 'Settings.dc.html'),
+      row('Open AO3 in Kudos', I.web, '#1E63C8', 'AO3-Web.dc.html', { chev: out })
+    ] };
+    const kudos = { title: 'Kudos', rows: [
+      row('Settings', I.gear, '#8E8E93', 'Settings.dc.html'),
+      row('Backup & Sync', I.sync, '#2F8F3A', 'Settings-Backup-Sync.dc.html', { detail: 'On' }),
+      row('About Kudos', I.info, '#1E63C8', 'About.dc.html')
+    ] };
+    const groups = (signedIn ? [ao3, kudos] : [kudos]).map((g) => ({
+      ...g,
+      hasTitle: true,
+      rows: g.rows.map((r, i) => ({ ...r, sep: i ? '0.5px solid #E5E5EA' : 'none' }))
+    }));
+    return { signedIn, signedOut: !signedIn, groups };
+  }
+}
+</script>
+</body>
+</html>

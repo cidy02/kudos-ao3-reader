@@ -994,6 +994,78 @@
       "w": 669,
       "x": 2247,
       "y": 3276
+    },
+    "Home-Launchpad.dc.html": {
+      "h": 1600,
+      "page": "iphone",
+      "title": "Home · launchpad (proposal)",
+      "w": 390,
+      "x": 0,
+      "y": 11300
+    },
+    "Library-Organize.dc.html": {
+      "h": 1000,
+      "page": "iphone",
+      "title": "Library · organise (proposal)",
+      "w": 390,
+      "x": 470,
+      "y": 11300
+    },
+    "Work-AddTo.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Work menu · Add to queue or collection",
+      "w": 390,
+      "x": 940,
+      "y": 11300
+    },
+    "Queue-Manage.dc.html": {
+      "h": 1000,
+      "page": "iphone",
+      "title": "Queue · swipe and drag",
+      "w": 390,
+      "x": 1410,
+      "y": 11300
+    },
+    "Home-Avatar.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Home · Account as a profile button (option)",
+      "w": 390,
+      "x": 1880,
+      "y": 11300
+    },
+    "Account-Sheet.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Account sheet (option)",
+      "w": 390,
+      "x": 2350,
+      "y": 11300
+    },
+    "Library-AO3.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Library · AO3 lists (option)",
+      "w": 390,
+      "x": 2820,
+      "y": 11300
+    },
+    "Home-Library-Plan.dc.html": {
+      "h": 640,
+      "page": "structure",
+      "title": "Home launches, Library organises",
+      "w": 1290,
+      "x": 0,
+      "y": 6440
+    },
+    "Account-Move.dc.html": {
+      "h": 580,
+      "page": "structure",
+      "title": "Account behind a profile button",
+      "w": 1290,
+      "x": 0,
+      "y": 7180
     }
   },
   "createdOnFiles": {
@@ -1291,7 +1363,16 @@
     "Duo-Portrait-Reader-Immersive.dc.html",
     "Duo-Portrait-Insights.dc.html",
     "DuoTopBar.dc.html",
-    "Duo-Portrait-Search-Filters.dc.html"
+    "Duo-Portrait-Search-Filters.dc.html",
+    "Home-Launchpad.dc.html",
+    "Library-Organize.dc.html",
+    "Work-AddTo.dc.html",
+    "Queue-Manage.dc.html",
+    "Home-Avatar.dc.html",
+    "Account-Sheet.dc.html",
+    "Library-AO3.dc.html",
+    "Home-Library-Plan.dc.html",
+    "Account-Move.dc.html"
   ],
   "pages": [
     {
