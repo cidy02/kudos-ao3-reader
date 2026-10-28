@@ -600,6 +600,17 @@ hand-rolling** — "as many dependencies as are necessary". PDF is explicitly *i
   (add, reorder); All Works stays in the header. Stored per device and synced with
   the library. Narrows T-466 for Library only: this is the one place a reader picks
   a layout.
+- **T-473 · Computed sorts: kudos, comments and bookmarks per hit** 🅿️ *(owner,
+  2026-10-28; canvas `Search-Sort`, `Search-Filters`).* Sort By lists AO3's own
+  columns (`AO3WorksSortColumn`, plus Best Match), then "Computed in Kudos": Kudos
+  per Hit, Comments per Hit (comment threads ÷ hits), Bookmarks per Hit, Kudos per
+  1,000 Words. These rank only the results already loaded from AO3 and re-rank as
+  the reader scrolls more in; they never fetch pages to rank (docs/
+  AO3_NETWORKING_POLICY.md — a bounded "load N pages" option needs owner approval
+  first, like the Collections crawl). A minimum-hits cut-off (default 500) leaves
+  out works too small for a meaningful ratio; "Show the ratio on each result" adds
+  it to every row; Highest / Lowest First. Pure functions over parsed listing
+  stats, with tests for zero hits and the cut-off.
 
 ### Phase 3 — native AO3 writes (most fragile; needs the per-page CSRF token)
 - **Leave kudos · comment · subscribe · AO3-side bookmark** — fetch the work/page,
