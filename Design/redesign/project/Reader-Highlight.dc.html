@@ -24,6 +24,9 @@ button{cursor:pointer}
     <sc-for list="{{colours}}" as="c" hint-placeholder-count="5">
       <button aria-label="{{c.name}}" aria-pressed="{{c.pressed}}" style="width: 32px; height: 32px; border: none; border-radius: 16px; background: {{c.hex}}; box-shadow: {{c.ring}}"></button>
     </sc-for>
+    <button aria-label="More colours" style="width: 32px; height: 32px; border: none; border-radius: 16px; padding: 0; background: conic-gradient(#F5C400, #5FBF5F, #5A9BE0, #A57BD8, #E86AA0, #E5484D, #F5C400); display: flex; align-items: center; justify-content: center">
+      <span style="width: 24px; height: 24px; border-radius: 12px; background: #FFFDF8; color: #1F1B16; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></span>
+    </button>
     <span aria-hidden="true" style="width: 1px; height: 24px; background: rgba(60,40,10,0.18); margin: 0 4px"></span>
     <button style="height: 36px; padding: 0 10px; border: none; border-radius: 18px; background: transparent; font-family: inherit; font-size: 15px; font-weight: 600; color: #1F1B16">Note</button>
     <button aria-label="Delete highlight" style="width: 36px; height: 36px; border: none; border-radius: 18px; background: transparent; color: #D70015; display: flex; align-items: center; justify-content: center">
