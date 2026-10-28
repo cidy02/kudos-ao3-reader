@@ -1,6 +1,6 @@
 # Kudos redesign — overnight ledger
 
-Canvas: https://claude.ai/artifact/YDoKqygRYFNBhAch47Bmux (Design type). Local root: this folder; boards in `project/`.
+Canvas: https://claude.ai/artifact/MVa16oT8hCeHQdLhyWjPk2 (Design type). Local root: this folder; boards in `project/`.
 Code (read-only): the rest of this repo checkout (branch claude/duo-redesign-handoff = claude/iphone-duo @ 1e5d3d44 + this folder). Never edit app code. Commit only inside `design/redesign/` and push this branch as you go.
 Screenshots of the current app: `shots/` (see HANDOFF.md for what each folder holds). No simulator or Mac in the cloud: use these instead of capturing new ones.
 
@@ -57,10 +57,11 @@ R6. Items 9, 11, 12: Dark/Sepia/OLED with the two background levels; AX5; final 
 12. [x] (DONE 2026-10-27: Coverage gained "Direction, rules and other platforms"; Shelf-Options retitled as an earlier option; cover comment thread answered and resolved; morning note below) Final pass: Coverage board complete, canvas.json tidy (titles, rows), morning note written below.
 
 ## Notes / decisions
-- **2026-10-27, local session (not published: the canvas is owned by another account, so these boards are only in `project/`).** Owner asked for Home as a launchpad and Library as the place to organise, easier queue/collection management, and a look at Account behind a profile button.
+- **2026-10-27, local session.** The canvas moved to a new Design artifact under the owner's current account (old canvas YDoKqygRYFNBhAch47Bmux could not be opened from it); every board was republished there. Owner asked for Home as a launchpad and Library as the place to organise, easier queue/collection management, and a look at Account behind a profile button.
   - Proposal boards (iPhone, new row at y 11300): `Home-Launchpad` (Continue Reading = hero + Also Reading; Subscriptions with new chapters and new works; Queues with each queue's next work + Start; pinned collection; no Select), `Library-Organize` (shelf rows: All Works, Want to Read, Reading Now, Finished, Downloaded, Favourites, History, Queues; Collections grid with New Collection), `Work-AddTo` (long-press: quick row, Add to Queue/Collection open in place with New…), `Queue-Manage` (swipe right Read Next, left Remove, drag to reorder; replaces the Move menu). Summary: `Home-Library-Plan` (Structure & flows).
   - Owner calls during the session: Home keeps Subscriptions (chapters and new works); queues belong on Home because that is where you go to read.
   - Option boards, not decided: `Home-Avatar`, `Account-Sheet`, `Library-AO3`, summary `Account-Move`. `TabBar` gained `account="tab|avatar"` (default unchanged).
+  - `Library-Tiles`: the shelves as a 2×3 tile grid (Reminders-style) instead of eight rows; Edit Shelves in the ••• menu picks which show; the header's "214 works" opens All Works.
   - Owner answers to the morning note: reader font New York for now (Literata on Android); Now Reading lives on Home; Read Aloud outside the reader is T-458; leaning to one fixed accent and to merging New Chapters + Subscriptions.
 - **Step 0 (2026-10-27, cloud session): `Direction.dc.html` published** on its own page "Direction" (now the canvas's launch page). Three evolutions of today's app, each drawn as Home + Work Detail + a scrolled strip showing the title shrinking into the bar, each with its rules (containers, corners, edge, type, capitals, colour):
   - **A · The page you stopped on** (Apple Books, Settings): the passage where you stopped is the hero's picture; plain-title covers on the fandom's paper colour; Work Detail with two container styles (grouped panel + chip). Colour: fandom = identity only, app red for everything tappable and every reader state. Radius 16.

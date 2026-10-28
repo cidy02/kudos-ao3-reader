@@ -1066,6 +1066,14 @@
       "w": 1290,
       "x": 0,
       "y": 7180
+    },
+    "Library-Tiles.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Library · shelf tiles (compact)",
+      "w": 390,
+      "x": 3290,
+      "y": 11300
     }
   },
   "createdOnFiles": {
@@ -1372,7 +1380,8 @@
     "Account-Sheet.dc.html",
     "Library-AO3.dc.html",
     "Home-Library-Plan.dc.html",
-    "Account-Move.dc.html"
+    "Account-Move.dc.html",
+    "Library-Tiles.dc.html"
   ],
   "pages": [
     {
