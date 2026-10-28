@@ -45,7 +45,7 @@
     "Account-Regrouped.dc.html": {
       "h": 1240,
       "page": "iphone",
-      "title": "Account · proposed regroup",
+      "title": "Account · proposed regroup (superseded: Account sheet + Writing tab)",
       "w": 390,
       "x": 6030,
       "y": 7980
@@ -53,7 +53,7 @@
     "Account-SignedOut.dc.html": {
       "h": 844,
       "page": "iphone",
-      "title": "Account · signed out",
+      "title": "Account · signed out (superseded: Account sheet + Writing tab)",
       "w": 390,
       "x": 470,
       "y": 7980
@@ -61,7 +61,7 @@
     "Account.dc.html": {
       "h": 1360,
       "page": "iphone",
-      "title": "Account",
+      "title": "Account (superseded: Account sheet + Writing tab)",
       "w": 390,
       "x": 0,
       "y": 7980
@@ -206,7 +206,7 @@
     "Duo-Open-Account.dc.html": {
       "h": 669,
       "page": "duo",
-      "title": "Open · Account",
+      "title": "Open · Account (superseded: Account sheet + Writing tab)",
       "w": 951,
       "x": 4124,
       "y": 1098
@@ -942,7 +942,7 @@
     "Duo-Portrait-Account.dc.html": {
       "h": 951,
       "page": "duo",
-      "title": "Open portrait · Account",
+      "title": "Open portrait · Account (superseded: Account sheet + Writing tab)",
       "w": 669,
       "x": 3745,
       "y": 3276
@@ -998,15 +998,15 @@
     "Home-Launchpad.dc.html": {
       "h": 1600,
       "page": "iphone",
-      "title": "Home · launchpad (proposal)",
+      "title": "Home · launchpad, profile button",
       "w": 390,
       "x": 0,
       "y": 11300
     },
     "Library-Organize.dc.html": {
-      "h": 1000,
+      "h": 1240,
       "page": "iphone",
-      "title": "Library · organise, shelf tiles (proposal)",
+      "title": "Library · organise, shelf tiles, On AO3",
       "w": 390,
       "x": 470,
       "y": 11300
@@ -1016,7 +1016,7 @@
       "page": "iphone",
       "title": "Work menu · Add to queue or collection",
       "w": 390,
-      "x": 940,
+      "x": 1410,
       "y": 11300
     },
     "Queue-Manage.dc.html": {
@@ -1024,31 +1024,15 @@
       "page": "iphone",
       "title": "Queue · swipe and drag",
       "w": 390,
-      "x": 1410,
-      "y": 11300
-    },
-    "Home-Avatar.dc.html": {
-      "h": 844,
-      "page": "iphone",
-      "title": "Home · Account as a profile button (option)",
-      "w": 390,
       "x": 1880,
       "y": 11300
     },
     "Account-Sheet.dc.html": {
       "h": 844,
       "page": "iphone",
-      "title": "Account sheet (option)",
+      "title": "Account sheet (from the profile button)",
       "w": 390,
       "x": 2350,
-      "y": 11300
-    },
-    "Library-AO3.dc.html": {
-      "h": 844,
-      "page": "iphone",
-      "title": "Library · AO3 lists (option)",
-      "w": 390,
-      "x": 2820,
       "y": 11300
     },
     "Home-Library-Plan.dc.html": {
@@ -1060,12 +1044,20 @@
       "y": 6440
     },
     "Account-Move.dc.html": {
-      "h": 580,
+      "h": 660,
       "page": "structure",
-      "title": "Account behind a profile button",
+      "title": "Account behind a profile button, Writing as a tab",
       "w": 1290,
       "x": 0,
       "y": 7180
+    },
+    "Writing.dc.html": {
+      "h": 1240,
+      "page": "iphone",
+      "title": "Writing tab",
+      "w": 390,
+      "x": 940,
+      "y": 11300
     }
   },
   "createdOnFiles": {
@@ -1368,11 +1360,10 @@
     "Library-Organize.dc.html",
     "Work-AddTo.dc.html",
     "Queue-Manage.dc.html",
-    "Home-Avatar.dc.html",
     "Account-Sheet.dc.html",
-    "Library-AO3.dc.html",
     "Home-Library-Plan.dc.html",
-    "Account-Move.dc.html"
+    "Account-Move.dc.html",
+    "Writing.dc.html"
   ],
   "pages": [
     {

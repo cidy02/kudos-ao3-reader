@@ -46,7 +46,7 @@ body{margin:0}
   </sc-if>
 </nav>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"selected":{"editor":"enum","options":["home","library","browse","account","search"],"default":"home"},"variant":{"editor":"enum","options":["full","minimized"],"default":"full"},"account":{"editor":"enum","options":["tab","avatar"],"default":"tab"},"accent":{"editor":null,"default":"#990000"},"accessoryTitle":{"editor":null,"default":"Salt & Starlight"},"accessorySubtitle":{"editor":null,"default":"Read Aloud · Ch 15 · 12 min left"},"accessoryCover":{"editor":null,"default":"#2E5339"},"$preview":{"width":358,"height":62}}'>
+<script type="text/x-dc" data-dc-script data-props='{"selected":{"editor":"enum","options":["home","library","writing","browse","account","search"],"default":"home"},"variant":{"editor":"enum","options":["full","minimized"],"default":"full"},"account":{"editor":"enum","options":["avatar","tab"],"default":"avatar"},"accent":{"editor":null,"default":"#990000"},"accessoryTitle":{"editor":null,"default":"Salt & Starlight"},"accessorySubtitle":{"editor":null,"default":"Read Aloud · Ch 15 · 12 min left"},"accessoryCover":{"editor":null,"default":"#2E5339"},"$preview":{"width":358,"height":62}}'>
 class Component extends DCLogic {
   renderVals() {
     const accent = this.props.accent ?? '#990000';
@@ -56,11 +56,14 @@ class Component extends DCLogic {
     const all = [
       { id: 'home', label: 'Home', d: 'M12 2.8 2.6 11.2c-.5.5-.2 1.3.5 1.3H5v7.3c0 .6.4 1 1 1h4v-6h4v6h4c.6 0 1-.4 1-1v-7.3h1.9c.7 0 1-.8.5-1.3z' },
       { id: 'library', label: 'Library', d: 'M3.5 4.2c0-.4.3-.7.7-.7h2.6c.4 0 .7.3.7.7v15.6c0 .4-.3.7-.7.7H4.2a.7.7 0 0 1-.7-.7zM9.5 4.2c0-.4.3-.7.7-.7h2.6c.4 0 .7.3.7.7v15.6c0 .4-.3.7-.7.7h-2.6a.7.7 0 0 1-.7-.7zM15.3 5.6c-.1-.4.2-.8.6-.9l2.4-.6c.4-.1.8.2.9.6l3 14.7c.1.4-.2.8-.6.9l-2.4.6c-.4.1-.8-.2-.9-.6z' },
+      { id: 'writing', label: 'Writing', d: 'M16.4 3.9a2.1 2.1 0 0 1 3 0l.7.7a2.1 2.1 0 0 1 0 3L9.4 18.3l-4.6 1.5c-.6.2-1.2-.4-1-1l1.5-4.6zM11.5 19.2h8.6a.9.9 0 0 1 0 1.8h-8.6a.9.9 0 0 1 0-1.8z' },
       { id: 'browse', label: 'Browse', d: 'M4 5.5C4 4.7 4.7 4 5.5 4h4C10.3 4 11 4.7 11 5.5v4c0 .8-.7 1.5-1.5 1.5h-4C4.7 11 4 10.3 4 9.5zM13 5.5c0-.8.7-1.5 1.5-1.5h4c.8 0 1.5.7 1.5 1.5v4c0 .8-.7 1.5-1.5 1.5h-4c-.8 0-1.5-.7-1.5-1.5zM4 14.5c0-.8.7-1.5 1.5-1.5h4c.8 0 1.5.7 1.5 1.5v4c0 .8-.7 1.5-1.5 1.5h-4C4.7 20 4 19.3 4 18.5zM13 14.5c0-.8.7-1.5 1.5-1.5h4c.8 0 1.5.7 1.5 1.5v4c0 .8-.7 1.5-1.5 1.5h-4c-.8 0-1.5-.7-1.5-1.5z' },
       { id: 'account', label: 'Account', d: 'M12 3.5a4.3 4.3 0 1 1 0 8.6 4.3 4.3 0 0 1 0-8.6zM3.8 20.2c.6-4.4 4-7 8.2-7s7.6 2.6 8.2 7c.1.5-.3.8-.7.8H4.5c-.4 0-.8-.3-.7-.8z' }
     ];
-    // account="avatar": Account moves to a profile button in each tab's toolbar (Books/Music style).
-    const tabs = all.filter((t) => !(this.props.account === 'avatar' && t.id === 'account')).map((t) => ({
+    // Owner, 2026-10-27: Account lives behind a profile button (Books/Music style) and Writing takes its slot.
+    // account="tab" draws the earlier four tabs (Home, Library, Browse, Account) for the boards that compare them.
+    const legacy = this.props.account === 'tab';
+    const tabs = all.filter((t) => (legacy ? t.id !== 'writing' : t.id !== 'account')).map((t) => ({
       ...t,
       current: t.id === selected ? 'page' : 'false',
       bg: t.id === selected ? tint : 'transparent',

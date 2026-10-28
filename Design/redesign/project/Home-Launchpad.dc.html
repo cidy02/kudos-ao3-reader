@@ -104,7 +104,7 @@ a{color:#990000}a:hover{color:#6E0000}
   </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1600},"account":{"editor":"enum","options":["tab","avatar"],"default":"tab"}}'>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1600},"account":{"editor":"enum","options":["avatar","tab"],"default":"avatar"}}'>
 class Component extends DCLogic {
   renderVals() {
     const seedOf = (s) => { let h = 7; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return h; };
@@ -144,7 +144,7 @@ class Component extends DCLogic {
       { title: 'Keeper of the Northern Light', author: 'saltwindow', fandom: 'Original Work', rating: 'T', category: 'FF', warnings: 'none', status: 'complete', words: '22,410', chapters: '7/7', kudos: '1,804', hits: '19.2k', updated: 'New work · 3h ago', badge: 'New' },
       { title: 'Watson’s Notebook', author: 'fogandlamplight', fandom: 'Sherlock Holmes', rating: 'G', category: 'Gen', warnings: 'none', status: 'wip', words: '12,880', chapters: '4/?', kudos: '960', hits: '8.1k', updated: 'Chapter 4 · yesterday', badge: '+1' }
     ];
-    const account = this.props.account ?? 'tab';
+    const account = this.props.account ?? 'avatar';
     const nexts = [
       ['Summer Reading', '#C25E00', [181, 340, 28, 266], 'Five Times Elizabeth Laughed', 'quietharbor · 6,700 words · about 25 min', 'Start', [100, 100, 60, 0, 0, 0, 0, 0], '5 to go', '2 of 8 finished'],
       ['Re-reads', '#1E63C8', [262, 290, 196, 330], 'The Lighthouse Keepers', 'tidewright · Ch 4 of 10 · 30%', 'Resume', [100, 100, 100, 30, 0], '2 to go', '3 of 5 finished'],
