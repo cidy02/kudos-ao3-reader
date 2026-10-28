@@ -479,6 +479,51 @@ hand-rolling** — "as many dependencies as are necessary". PDF is explicitly *i
   state restoration that target `.account` need new homes; macOS sidebar and the Duo
   rail follow. Card titles (the Resume hero, the Writing draft card) are New York.
   Android parity: its bottom bar and nav graph.
+- **T-461 · Queue and collection covers that can't be confused** 🅿️ *(owner,
+  2026-10-28; canvas `CoverStack`, `Library-Organize`, `Queue`).*
+  `StackedWorkCover.swift` draws both kinds as the same tilted pile. Collections keep
+  the pile (corner tab: grid); queues become covers stacked straight up behind the
+  front one, each a peek higher and a step narrower (corner tab: numbered list). Both
+  must stay inside their frame: the tilted back covers currently overflow into the
+  next item, so Library's collection carousel and grid also get a 20 pt gap. Check
+  Home's queue rows, the Queues organizer, a queue's header and the Duo shelves at
+  AX5.
+- **T-462 · Reading History as a timeline** 🅿️ *(owner, 2026-10-28; canvas
+  `Library-Section`).* History today is a list of work rows by day
+  (`LibraryHistoryGrouping`). Redesign: Week / Month / Year, total time with works,
+  finished and streak, a 7-day bar chart with the average, then each day's sittings
+  on a time rail (fandom, title, chapter cells: read before / this sitting / to come,
+  chapters and minutes, Finished / Started badges). Everything comes from
+  `ReadingSession` (as Reading Insights does); no new tracking. Swipe Remove/Delete and
+  Select stay. VoiceOver reads the chart as a sentence, not bars.
+- **T-463 · Recently Deleted: days left, and "can't be downloaded again"** 🅿️
+  *(owner, 2026-10-28; canvas `Recently-Deleted`, `Delete-Warnings`).* Rows sort
+  soonest-to-go first and every row shows days left (red in the last 7). A work Kudos
+  can't fetch again gets an orange note naming why: `ao3Unavailable` ("No longer on
+  AO3") or a non-AO3 import, using `WorkOrigin` and the import's format ("Imported
+  PDF from FanFiction.net"). The same reason escalates the confirmation on Delete from
+  Library, Delete Permanently and Delete All (extend
+  `PreservedWorkService.deleteConfirmationMessage`; it already escalates for
+  `ao3Unavailable`); bulk deletes count them ("2 of these 5 can't be downloaded
+  again"). When the imported original file is still held, offer "Save the Original
+  File…" (share sheet / Files) before a permanent delete. A work still on AO3 deletes
+  without a question, as today. Never reachable from a network error path (policy).
+- **T-464 · Subscriptions: one Updates list; follow tags through AO3 feeds** 🅿️
+  *(owner, 2026-10-28; canvas `Subscriptions`, `Subscriptions-Plan`).*
+  Subscriptions opens on **Updates**: new chapters (work subscriptions), new parts
+  (series), new works (users) and new works in followed tags, grouped by day, Mark All
+  as Seen. Tabs: Works / Series / Authors (`AO3SubscriptionsScope`, existing) plus
+  **Tags**, new and local to Kudos: a Follow Tag sheet on a tag's works page
+  (Show on Home / Complete only / Hide Explicit, applied locally to feed entries).
+  Tags read AO3's public Atom feed (`/tags/<id>/feed.atom`, the id already parsed in
+  `AO3FandomUnion`); AO3 has no feeds for users, series or subscriptions. Checks:
+  works via the existing chapter-count enrichment; series via the series page; users
+  via the Favorites Authors newest-work check; tags via the feed. **Policy:**
+  foreground only (Home or Subscriptions on screen), through
+  `AO3RequestCoordinator.withSlot`, cancelled on leave, at most every 6 h per source,
+  capped tag count (proposed 20), no cookies on feed requests; update
+  `docs/AO3_NETWORKING_POLICY.md` in the same change. Open (owner): alerts while the
+  app is closed need background checks, which the policy forbids today.
 
 ### Phase 3 — native AO3 writes (most fragile; needs the per-page CSRF token)
 - **Leave kudos · comment · subscribe · AO3-side bookmark** — fetch the work/page,
