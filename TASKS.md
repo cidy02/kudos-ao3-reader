@@ -588,6 +588,16 @@ hand-rolling** — "as many dependencies as are necessary". PDF is explicitly *i
   To Bottom, Share (`Queue`, `MenuTopRow`). New Queue shows a live preview and an
   Add Works picker (`Queues`). Reader menus don't dim the page (`Reader-Menu`).
   End of a work: Give Kudos full width, Comment and Bookmark below (`Reader-End`).
+- **T-472 · Library sections the reader picks** 🅿️ *(owner, 2026-10-28; canvas
+  `Library`, `Edit-Shelves`).* Every shelf (Want to Read, Reading Now, Finished,
+  Downloaded, Favourites, Queues, History, Imported) and Collections can be a
+  section on the Library page, drawn as a carousel or a list (ledger rows), or a
+  button in the Shelves grid; anything not shown as a section is a button. Default:
+  Favourites, Collections, Downloaded as carousels in that order. Edit Shelves:
+  "On the Library page" (remove, reorder, Carousel/List) and "As shelf buttons"
+  (add, reorder); All Works stays in the header. Stored per device and synced with
+  the library. Narrows T-466 for Library only: this is the one place a reader picks
+  a layout.
 
 ### Phase 3 — native AO3 writes (most fragile; needs the per-page CSRF token)
 - **Leave kudos · comment · subscribe · AO3-side bookmark** — fetch the work/page,
