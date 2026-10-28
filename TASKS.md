@@ -574,8 +574,10 @@ hand-rolling** — "as many dependencies as are necessary". PDF is explicitly *i
   `Recently-Deleted`).* Remove Delete All. Deleting everything is Select → Select All
   → Delete Permanently, with the "can't be downloaded again" count (T-463).
 - **T-470 · Account sheet redesign; Create an AO3 Account** 🅿️ *(owner, 2026-10-28;
-  canvas `Account-Sheet`, `Account-SignedOut`).* Centred profile with pseud chevron
-  and View Profile; a Works · Bookmarks · Subscriptions strip linking to each list;
+  canvas `Account-Sheet`, `Account-SignedOut`).* In the spirit of the Author profile
+  (T-468): a left-aligned header tinted in the user's colour with pseud chevron and
+  bio; View Profile, Share, Edit (AO3 profile editor); a Works · Series · Bookmarks ·
+  Subscriptions strip linking to each list; a Your Latest card for the newest chapter;
   an Inbox card with the two latest messages; then AO3 and Kudos groups. Signed out:
   a text line (not a button) "No AO3 account? Create one" under Log In on the
   Account screen and sheet, and under Forgot your password? on the Login sheet,
