@@ -143,15 +143,17 @@ class Component extends DCLogic {
       surfaces: ['System-Surfaces.dc.html', 'Proposed system surfaces'],
       end: ['Reader-End.dc.html', 'Reader · end of the work'],
       ia: ['IA-Map.dc.html', 'Where things live'],
-      accountNew: ['Account-Regrouped.dc.html', 'Account · regrouped']
+      accountNew: ['Account-Regrouped.dc.html', 'Account · regrouped'],
+      sheet: ['Account-Sheet.dc.html', 'Account sheet'],
+      writing: ['Writing.dc.html', 'Writing tab']
     };
     const areas = [
       ['App shell and navigation', [
-        ['Tabs', 'Home, Library, Browse and Account, with Search as its own button', 'tabBar'],
+        ['Tabs', 'Home, Library, Writing and Browse, with Search as its own button; Account behind the profile button on Home', 'tabBar'],
         ['Search from anywhere', 'One global Search, reachable from every tab', 'search'],
         ['Symbols on every work', 'Rating, Category, Warnings and Status in the same place on every card, row and detail page', 'symbols'],
         ['Author and tag links', 'Any byline opens the native author profile; any tag opens a search', 'author'],
-        ['Wide layouts', 'Sidebar tabs; Library, Account and Settings show list and detail side by side', 'duoLibrary'],
+        ['Wide layouts', 'Sidebar tabs; Library, Writing and Settings show list and detail side by side', 'duoLibrary'],
         ['Mac app', 'Keeps its current reader and layout in this pass', null]
       ]],
       ['Home', [
@@ -241,19 +243,19 @@ class Component extends DCLogic {
         ['Pronunciations', 'Add corrections, scan this chapter, words it guessed, copy and paste all', 'readAloudSettings'],
         ['Developer settings', 'Speech tuning and audition tools, hidden by default', 'readAloudSettings']
       ]],
-      ['Account', [
-        ['Account hub', 'Profile, posting-as pseud, shortcuts grid (customise, reset), Reading, Writing, Activity and Account groups', 'account'],
-        ['Account, regrouped (proposal)', 'Profile with counts; Edit to pin and reorder rows replaces the shortcuts grid; AO3 things named as AO3', 'accountNew'],
-        ['Signed out', 'Preview of every row, with Log In', 'signedOut'],
+      ['Account (profile button)', [
+        ['Account sheet', 'Profile, Inbox, AO3 Preferences, Open AO3, Kudos settings, Log Out; the profile button on Home badges unread Inbox', 'sheet'],
+        ['Signed out', 'The button is a plain person; the sheet offers Log In and keeps Kudos settings', 'sheet'],
         ['Log in', "AO3's own form in the app; forgot password; create an account; alternative login", 'login'],
-        ['Marked for Later, Bookmarks, History', 'Filters; unmark; delete from history; clear history; flagged to skip', 'lists'],
-        ['Subscriptions', 'Works, series and users; unsubscribe; mark all as seen', 'subs'],
+        ['Marked for Later, Bookmarks, History', 'Library › On AO3. Filters; unmark; delete from history; clear history; flagged to skip', 'lists'],
+        ['Subscriptions', 'Library › On AO3, and new chapters and works lead Home. Works, series and users; unsubscribe; mark all as seen', 'subs'],
         ['Inbox', 'Unread and replied filters; reply; mark read or unread; delete; copy link; open chapter comments; select', 'inbox'],
-        ['Preferences', 'AO3 site preferences in a native form, with help', 'account'],
-        ['More on AO3', 'Dashboard, claims, co-creator requests, gifts, invitations, import, FAQs, content policy, donate', 'account'],
-        ['Offline', 'Cached AO3 data shown with a notice', 'account']
+        ['Preferences', 'AO3 site preferences in a native form, with help', 'sheet'],
+        ['More on AO3', 'Open AO3 in the sheet: dashboard, claims, co-creator requests, gifts, invitations, import, FAQs, content policy, donate', 'sheet'],
+        ['Offline', 'Cached AO3 data shown with a notice', 'sheet']
       ]],
       ['Writing and collections', [
+        ['Writing tab', 'The draft you were on with Continue; this week\'s kudos, hits and comments; new comments; your works; drafts, series, challenges; pseud switcher', 'writing'],
         ['Works, Series, Drafts', 'Your AO3 works, series and drafts; New Work', 'myWorks'],
         ['Post or edit a work', 'Required tags, fandoms, relationships, characters, tags with suggestions, summary, notes, language, series, collections and gifts, co-creators, inspired by, date, complete, chapter total, moderation, registered users only, preview, post', 'editor'],
         ['Chapters', 'Chapter list; add a chapter with position and date', 'editor'],
@@ -298,7 +300,7 @@ class Component extends DCLogic {
         ['Open Library', 'Sidebar, list and detail side by side', 'duoLibrary'],
         ['Open Search', 'Results beside an inspector with every AO3 filter', 'duoSearch'],
         ['Open Work Detail', 'Two panes: identity, tags, the Resume card and stats beside summary, tags, Series and My copy', 'duoDetail'],
-        ['Open Account', 'Account list beside the selected item, such as the Inbox', 'duoAccount'],
+        ['Open Account sheet', 'The sheet\'s list beside the selected item, such as the Inbox', 'duoAccount'],
         ['Open Settings', 'Categories beside the selected pane, like the iPad Settings app', 'duoSettings'],
         ['Two-page reader', 'Unfolded flat, the book opens to a spread', 'duoReader'],
         ['Book pose reader', 'One page each side of the fold; nothing crosses it', 'duoBook'],
@@ -321,7 +323,7 @@ class Component extends DCLogic {
         ['Resume and listen', 'Home → Reader → Read Aloud → voices → mini player', 'flowResume'],
         ['Organise with queues', 'Add to Queue → queues → select many → the queue → next at The End', 'flowOrganise'],
         ['Thank the author', 'Kudos and bookmark → The End → comments → reply → Inbox', 'flowKudos'],
-        ['Write and post', 'Account → Your Writing → posting form → chapter editor', 'flowWrite'],
+        ['Write and post', 'Writing tab → posting form → chapter editor', 'flowWrite'],
         ['First launch', 'Welcome → sync folder → Home → log in → Backup & Sync', 'flowFirst'],
         ['iPhone Duo', 'Cover → cover reader → two-page spread → Book pose with comments', 'flowDuo']
       ]]
