@@ -25,6 +25,10 @@ body{margin:0}
         <sc-if value="{{t.isCheck}}" hint-placeholder-val="{{false}}">
           <svg width="{{icon}}" height="{{icon}}" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.6 4.6L19.2 7.4"></path></svg>
         </sc-if>
+        <sc-if value="{{t.isShield}}" hint-placeholder-val="{{false}}">
+          <svg width="{{shieldIcon}}" height="{{shieldIcon}}" viewBox="0 0 24 24" fill="none"><path d="M12 2.6 4.4 5.5v6c0 4.7 3.2 8.6 7.6 9.9 4.4-1.3 7.6-5.2 7.6-9.9v-6z" stroke="{{t.fg}}" stroke-width="1.9" stroke-linejoin="round"></path></svg>
+          <span style="position: absolute; inset: 0; padding-top: {{shieldNudge}}px; display: flex; align-items: center; justify-content: center; color: {{t.fg}}; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Rounded', system-ui, sans-serif; font-size: {{shieldFs}}px; font-weight: 800; line-height: 1">{{t.glyph}}</span>
+        </sc-if>
         <sc-if value="{{t.isGen}}" hint-placeholder-val="{{false}}">
           <svg width="{{icon}}" height="{{icon}}" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8" stroke="{{t.fg}}" stroke-width="2.4"></circle><circle cx="12" cy="12" r="2.6" fill="{{t.fg}}"></circle></svg>
         </sc-if>
@@ -59,14 +63,16 @@ class Component extends DCLogic {
     const sans = "-apple-system, BlinkMacSystemFont, 'SF Pro Rounded', 'SF Pro Text', system-ui, sans-serif";
     const sym = "'Apple Symbols', 'Segoe UI Symbol', 'Noto Sans Symbols 2', 'DejaVu Sans', sans-serif";
     const letter = (o, glyph) => ({ ...o, glyph, kind: 'text', font: sans, fs: Math.round(s * 0.6), weight: 800 });
+    // Ratings: the letter inside an outlined shield, as the app draws them (WorkStatLabel.ratingShield).
+    const shield = (o, glyph) => ({ ...o, glyph, kind: 'shield' });
     const mark = (o, glyph, scale) => ({ ...o, glyph, kind: 'text', font: sym, fs: Math.round(s * scale), weight: 400 });
 
     const ratings = {
-      G: { ...letter(solid('#2F8F3A'), 'G'), label: 'General', aria: 'General Audiences' },
-      T: { ...letter(solid('#F5C400', '#3A2C00'), 'T'), label: 'Teen', aria: 'Teen And Up Audiences' },
-      M: { ...letter(solid('#E07000'), 'M'), label: 'Mature', aria: 'Mature' },
-      E: { ...letter(solid('#C8102E'), 'E'), label: 'Explicit', aria: 'Explicit' },
-      NR: { ...letter(soft(), '?'), label: 'Not rated', aria: 'Not Rated' }
+      G: { ...shield(solid('#2F8F3A'), 'G'), label: 'General', aria: 'General Audiences' },
+      T: { ...shield(solid('#F5C400', '#3A2C00'), 'T'), label: 'Teen', aria: 'Teen And Up Audiences' },
+      M: { ...shield(solid('#E07000'), 'M'), label: 'Mature', aria: 'Mature' },
+      E: { ...shield(solid('#C8102E'), 'E'), label: 'Explicit', aria: 'Explicit' },
+      NR: { ...shield(soft(), '?'), label: 'Not rated', aria: 'Not Rated' }
     };
     const categories = {
       FF: { ...mark(solid('#D2264B'), '⚢', 0.8), label: 'F/F' },
@@ -105,6 +111,7 @@ class Component extends DCLogic {
       isCheck: t.kind === 'check',
       isRing: t.kind === 'ring',
       isGen: t.kind === 'gen',
+      isShield: t.kind === 'shield',
       isDash: t.kind === 'dash',
       isMulti: t.kind === 'multi'
     }));
@@ -117,6 +124,9 @@ class Component extends DCLogic {
       size: s,
       radius: Math.round(s * 0.24),
       icon: Math.round(s * 0.68),
+      shieldIcon: Math.round(s * 0.84),
+      shieldFs: Math.max(7, Math.round(s * 0.36)),
+      shieldNudge: Math.max(0, Math.round(s * 0.02)),
       dashH: Math.max(2, Math.round(s * 0.11)),
       gap,
       showLabels,
