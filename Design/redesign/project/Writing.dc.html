@@ -14,7 +14,7 @@ button{cursor:pointer}
 a{text-decoration:none}
 </style>
 </helmet>
-<div style="width: 390px; height: 2140px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+<div style="width: 390px; height: 1950px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
   <div style="position: absolute; right: 16px; top: 54px; z-index: 2; height: 44px; border-radius: 22px; display: flex; align-items: center; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
     <a href="Work-Editor.dc.html" aria-label="New Work" style="width: 46px; height: 44px; color: #1C1C1E; display: flex; align-items: center; justify-content: center">
       <svg aria-hidden="true" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5.5H6.5a1.5 1.5 0 0 0-1.5 1.5v10.5A1.5 1.5 0 0 0 6.5 19H17a1.5 1.5 0 0 0 1.5-1.5V12M16.5 4.5l3 3L12 15l-3.5.5.5-3.5z"></path></svg>
@@ -50,28 +50,25 @@ a{text-decoration:none}
         </sc-for>
       </div>
       <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px">
-        <span style="font-size: 13px; line-height: 18px; opacity: 0.85">3,100 words this week · 6-day streak<br>Chapter 3 posted Oct 20 · readers last 8 days</span>
+        <span style="font-size: 13px; line-height: 18px; opacity: 0.85">3,100 words this week · 6-day streak<br>Chapter 3 posted Oct 20</span>
         <a href="Text-Editor.dc.html" style="height: 44px; padding: 0 20px; flex-shrink: 0; border-radius: 22px; background: #FFFFFF; color: #990000; font-size: 17px; font-weight: 600; display: flex; align-items: center">Continue</a>
       </div>
     </section>
 
-    <section aria-label="This week's response" style="display: flex; flex-direction: column; gap: 10px">
-      <div style="display: flex; align-items: baseline; justify-content: space-between">
-        <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">This Week</h2>
-        <a href="Writing-Stats.dc.html" style="font-size: 17px; color: #990000">Stats</a>
+    <section aria-label="Stats, all years" style="display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; align-items: baseline; gap: 8px">
+        <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">Stats</h2>
+        <span style="font-size: 15px; color: #6C6C70">All Years</span>
+        <a href="Writing-Stats.dc.html" style="margin-left: auto; font-size: 17px; color: #990000">By Work</a>
       </div>
       <a href="Writing-Stats.dc.html" style="color: #000000; border-radius: 18px; background: #F2F2F7; padding: 14px; display: flex; flex-direction: column; gap: 12px">
-        <div style="display: flex; align-items: flex-end; gap: 14px">
-          <div style="display: flex; flex-direction: column; gap: 1px">
-            <span style="font-size: 28px; line-height: 32px; font-weight: 700">+43</span>
-            <span style="font-size: 13px; color: #6C6C70">kudos · up 18% on last week</span>
-          </div>
-          <div role="img" aria-label="Kudos per day this week: 4, 3, 9, 6, 5, 12, 4" style="flex: 1; height: 48px; display: flex; align-items: flex-end; gap: 5px">
-            <sc-for list="{{kudosBars}}" as="b" hint-placeholder-count="7"><span style="flex: 1; height: {{b.h}}px; border-radius: 3px; background: {{b.bg}}"></span></sc-for>
-          </div>
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+          <sc-for list="{{heroTotals}}" as="s" hint-placeholder-count="2">
+            <span style="display: flex; flex-direction: column; gap: 1px"><span style="font-size: 28px; line-height: 32px; font-weight: 700; font-variant-numeric: tabular-nums">{{s.value}}</span><span style="font-size: 13px; color: #6C6C70">{{s.label}}</span></span>
+          </sc-for>
         </div>
-        <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; border-top: 0.5px solid #D1D1D6; padding-top: 10px">
-          <sc-for list="{{stats}}" as="s" hint-placeholder-count="4">
+        <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 8px; border-top: 0.5px solid #D1D1D6; padding-top: 10px">
+          <sc-for list="{{stats}}" as="s" hint-placeholder-count="5">
             <span style="display: flex; flex-direction: column; gap: 1px"><span style="font-size: 17px; line-height: 21px; font-weight: 700; font-variant-numeric: tabular-nums">{{s.value}}</span><span style="font-size: 11px; line-height: 14px; color: #6C6C70">{{s.label}}</span></span>
           </sc-for>
         </div>
@@ -140,29 +137,16 @@ a{text-decoration:none}
           <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px">
             <span style="font-size: 17px; line-height: 22px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{w.title}}</span>
             <span style="font-size: 12px; line-height: 16px; color: #6C6C70">{{w.meta}}</span>
-            <span style="font-size: 12px; line-height: 16px; color: {{w.noteColour}}; font-weight: 600">{{w.note}}</span>
+            <span style="font-size: 12px; line-height: 16px; color: #6C6C70">{{w.line}}</span>
+            <sc-if value="{{w.note}}" hint-placeholder-val="{{false}}"><span style="font-size: 12px; line-height: 16px; color: {{w.noteColour}}; font-weight: 600">{{w.note}}</span></sc-if>
           </span>
-          <span style="width: 74px; flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 2px">
-            <svg role="img" aria-label="{{w.trendLabel}}" width="74" height="26" viewBox="0 0 74 26" preserveAspectRatio="none"><path d="{{w.spark}}" fill="none" stroke="#990000" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"></path></svg>
-            <span style="font-size: 12px; font-weight: 700; color: #990000">{{w.delta}}</span>
+          <span style="flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 1px">
+            <span style="font-size: 17px; line-height: 22px; font-weight: 700; color: #990000; font-variant-numeric: tabular-nums">{{w.kudos}}</span>
+            <span style="font-size: 11px; line-height: 14px; color: #6C6C70">kudos</span>
           </span>
         </a>
       </sc-for>
       <a href="My-Works.dc.html" style="color: #990000; display: flex; align-items: center; gap: 6px; padding: 10px 0 0 63px; border-top: 0.5px solid #E5E5EA; font-size: 15px; font-weight: 600">3 more works<svg aria-hidden="true" width="7" height="12" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg></a>
-    </section>
-
-    <section aria-label="Who's reading" style="display: flex; flex-direction: column; gap: 10px">
-      <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">Who’s Reading</h2>
-      <div style="border-radius: 18px; background: #F2F2F7; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px">
-        <div style="display: flex; align-items: center; gap: 10px">
-          <span aria-hidden="true" style="display: flex">
-            <sc-for list="{{faces}}" as="f" hint-placeholder-count="4"><span style="width: 28px; height: 28px; margin-left: {{f.ml}}px; border-radius: 14px; border: 2px solid #F2F2F7; background: {{f.bg}}; color: #FFFFFF; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center">{{f.i}}</span></sc-for>
-          </span>
-          <span style="flex: 1; font-size: 14px; line-height: 19px"><b>tidewright, marginalia</b> and 36 others left kudos on <i>Keeper of the Northern Light</i> this week</span>
-        </div>
-        <div style="height: 0.5px; background: #D1D1D6"></div>
-        <span style="font-size: 14px; line-height: 19px"><b>2 new subscribers</b> to <i>What the Tide Keeps</i> · <b>4 new bookmarks</b>, one with a rec note</span>
-      </div>
     </section>
 
     <section aria-label="More" style="display: flex; flex-direction: column">
@@ -185,22 +169,17 @@ a{text-decoration:none}
   </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":2140}}'>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1950}}'>
 class Component extends DCLogic {
   renderVals() {
-    const kudos = [4, 3, 9, 6, 5, 12, 4];
     const hue = { 'Original Work': 188, 'Persuasion': 335, 'Sherlock Holmes': 32 };
     const ink = (f) => 'hsl(' + (hue[f] ?? 210) + ', 56%, 33%)';
-    // A 30-day kudos trend, drawn from daily counts.
-    const spark = (vals) => {
-      const max = Math.max(...vals), min = Math.min(...vals);
-      return vals.map((v, i) => (i ? 'L' : 'M') + Math.round(i * 74 / (vals.length - 1)) + ' ' + Math.round(23 - ((v - min) / Math.max(1, max - min)) * 20)).join(' ');
-    };
     const sep = (list) => list.map((x, i) => ({ ...x, sep: i ? '0.5px solid #E5E5EA' : 'none' }));
     return {
       chapters: [1, 1, 1, 2, 0, 0, 0, 0].map((k) => ({ bg: k === 1 ? '#FFFFFF' : k === 2 ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.18)', bd: k === 2 ? '1.5px solid #FFFFFF' : 'none' })),
-      kudosBars: kudos.map((k, i) => ({ h: Math.max(4, Math.round(k / 12 * 46)), bg: i === 6 ? '#990000' : 'rgba(153,0,0,0.35)' })),
-      stats: [['1,280', 'hits'], ['5', 'comments'], ['4', 'bookmarks'], ['2', 'subscribers']].map(([value, label]) => ({ value, label })),
+      // The Totals block of AO3's /users/<name>/stats, all years: AO3 keeps no daily history.
+      heroTotals: [['34,766', 'Hits'], ['3,224', 'Kudos']].map(([value, label]) => ({ value, label })),
+      stats: [['383', 'Comment Threads'], ['515', 'Bookmarks'], ['124', 'Subscriptions'], ['37', 'User Subscriptions'], ['53,990', 'Word Count']].map(([value, label]) => ({ value, label })),
       due: sep([
         { href: 'Challenge.dc.html', tone: '#7B3FA0', mon: 'NOV', day: '12', title: 'Austen Exchange 2026', sub: 'Assignment for quietharbor · 0 of 5,000 words', when: 'in 15 days', whenColour: '#C25E00' },
         { href: 'Challenge.dc.html', tone: '#1E63C8', mon: 'NOV', day: '30', title: 'Persuasion Prompt Meme', sub: '1 prompt claimed · “Anne, rain, a borrowed coat”', when: 'in 33 days', whenColour: '#6C6C70' }
@@ -215,11 +194,10 @@ class Component extends DCLogic {
         { from: 'quietharbor', work: 'Keeper of the Northern Light', when: 'yesterday', body: 'Long-time lurker. This one finally got me to log in to say thank you.', bg: '#3E5B3A' }
       ].map((c) => ({ ...c, initial: c.from.charAt(0).toUpperCase() }))),
       works: sep([
-        { title: 'Keeper of the Northern Light', rating: 'T', category: 'FF', warnings: 'none', status: 'complete', meta: '22,410 words · 7/7 · ♥ 1,804 · 19.2k hits · 286 comments', note: 'Most-read this week', noteColour: '#2F7A4A', vals: [3,4,2,5,6,4,7,5,6,8,7,9,6,8,10,9,7,8,11,10,9,12,10,11,13,12,10,14,12,15], delta: '+38' },
-        { title: 'What the Tide Keeps', rating: 'M', category: 'FF', warnings: 'undisclosed', status: 'wip', meta: '9,800 words · 3/8 · ♥ 412 · 4.1k hits · 2 new subscribers', note: 'Last chapter 8 days ago · you usually post weekly', noteColour: '#C25E00', vals: [6,5,7,4,5,3,4,6,5,4,3,5,4,3,2,4,3,2,3,2,2,3,1,2,2,1,2,1,1,2], delta: '+3' },
-        { title: 'Lantern Season', rating: 'T', category: 'Multi', warnings: 'none', status: 'complete', meta: '15,050 words · 4/4 · ♥ 640 · 7.7k hits', note: '1 new comment', noteColour: '#990000', vals: [1,1,2,1,0,1,2,1,1,0,1,2,1,1,0,1,1,2,1,1,0,1,2,1,1,1,0,1,2,2], delta: '+2' }
-      ].map((w) => ({ ...w, spark: spark(w.vals), trendLabel: 'Kudos over the last 30 days, ' + w.delta + ' this week' }))),
-      faces: [['T', '#2F6D6A'], ['M', '#7A4040'], ['Q', '#3E5B3A'], ['A', '#6B4E23']].map(([i, bg], k) => ({ i, bg, ml: k ? -8 : 0 })),
+        { title: 'Keeper of the Northern Light', rating: 'T', category: 'FF', warnings: 'none', status: 'complete', meta: '22,410 words · 7/7 · 19.2k hits', line: '214 threads · 312 bookmarks · 48 subs', kudos: '1,804', note: '' },
+        { title: 'What the Tide Keeps', rating: 'M', category: 'FF', warnings: 'undisclosed', status: 'wip', meta: '9,800 words · 3/8 · 4.1k hits', line: '63 threads · 58 bookmarks · 61 subs', kudos: '412', note: 'Chapter 4 in draft', noteColour: '#C25E00' },
+        { title: 'Lantern Season', rating: 'T', category: 'Multi', warnings: 'none', status: 'complete', meta: '15,050 words · 4/4 · 7.7k hits', line: '71 threads · 97 bookmarks · 9 subs', kudos: '640', note: '1 new comment', noteColour: '#990000' }
+      ]),
       more: [
         ['Series', 'M4 6h16M4 12h16M4 18h10', '1', 'Writing-Series.dc.html'],
         ['Collections & Challenges', 'M6 8h12v12H6zM8 5h8', '4', 'AO3-Collections.dc.html'],

@@ -14,44 +14,56 @@ button{cursor:pointer}
 a{text-decoration:none}
 </style>
 </helmet>
-<div style="width: 390px; height: 1100px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+<div style="width: 390px; height: 1170px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
   <h1 data-inline-title style="position: absolute; left: 68px; right: 68px; top: 54px; margin: 0; font-size: 17px; line-height: 44px; font-weight: 600; text-align: center">Stats</h1>
   <div style="position: absolute; left: 16px; top: 54px; z-index: 2">
     <button aria-label="Back to Writing" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)">
       <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg>
     </button>
   </div>
-  <main style="padding: 106px 16px 0; display: flex; flex-direction: column; gap: 18px">
-    <div role="tablist" aria-label="Range" style="height: 32px; border-radius: 16px; background: rgba(118,118,128,0.12); padding: 2px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr))">
-      <button role="tab" aria-selected="false" style="border: none; border-radius: 14px; background: transparent; font-family: inherit; font-size: 13px">7 Days</button>
-      <button role="tab" aria-selected="true" style="border: none; border-radius: 14px; background: #FFFFFF; box-shadow: 0 2px 6px rgba(0,0,0,0.12); font-family: inherit; font-size: 13px; font-weight: 600">30 Days</button>
-      <button role="tab" aria-selected="false" style="border: none; border-radius: 14px; background: transparent; font-family: inherit; font-size: 13px">All Time</button>
-    </div>
-    <div role="group" aria-label="Measure" style="display: flex; gap: 8px; overflow: hidden; margin-right: -16px">
-      <sc-for list="{{measures}}" as="m" hint-placeholder-count="5"><button aria-pressed="{{m.on}}" style="flex-shrink: 0; height: 34px; padding: 0 13px; border: none; border-radius: 17px; background: {{m.bg}}; color: {{m.fg}}; font-family: inherit; font-size: 14px; font-weight: 600">{{m.label}}</button></sc-for>
-    </div>
-    <div style="display: flex; flex-direction: column; gap: 1px">
-      <span style="font-size: 13px; color: #6C6C70">Kudos, Sep 29 – Oct 28</span>
-      <span style="font-size: 28px; line-height: 34px; font-weight: 700">+164</span>
-      <span style="font-size: 13px; color: #6C6C70">2,856 in all · best day Oct 21 (+19, after Chapter 3)</span>
-    </div>
-    <div role="img" aria-label="Kudos per day for 30 days, rising after Chapter 3 was posted on October 20" style="position: relative; height: 130px; display: flex; align-items: flex-end; gap: 3px; border-bottom: 0.5px solid #D1D1D6">
-      <sc-for list="{{bars}}" as="b" hint-placeholder-count="30"><span style="flex: 1; height: {{b.h}}px; border-radius: 2px 2px 0 0; background: {{b.bg}}"></span></sc-for>
-      <span aria-hidden="true" style="position: absolute; left: {{markLeft}}%; top: 0; bottom: 0; border-left: 1px dashed #8E8E93"></span>
-      <span aria-hidden="true" style="position: absolute; left: {{markLeft}}%; top: -2px; transform: translateX(4px); font-size: 10px; color: #6C6C70">Ch 3 posted</span>
-    </div>
-    <section aria-label="By work" style="display: flex; flex-direction: column">
-      <div style="display: grid; grid-template-columns: 1fr 52px 52px 52px; gap: 6px; padding: 0 0 6px; font-size: 11px; color: #6C6C70; text-align: right">
-        <span style="text-align: left">Work</span><span>Kudos</span><span>Hits</span><span>Cmts</span>
+  <main style="padding: 110px 16px 0; display: flex; flex-direction: column; gap: 16px">
+    <div style="display: flex; align-items: center; gap: 10px">
+      <button aria-label="Year: All Years" style="height: 32px; padding: 0 10px 0 12px; border: none; border-radius: 16px; background: rgba(118,118,128,0.12); font-family: inherit; font-size: 15px; font-weight: 500; color: #1C1C1E; display: flex; align-items: center; gap: 4px">All Years<svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg></button>
+      <div role="tablist" aria-label="Group works" style="margin-left: auto; width: 176px; height: 32px; border-radius: 16px; background: rgba(118,118,128,0.12); padding: 2px; box-sizing: border-box; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr))">
+        <button role="tab" aria-selected="true" style="border: none; border-radius: 14px; background: #FFFFFF; box-shadow: 0 2px 6px rgba(0,0,0,0.12); font-family: inherit; font-size: 13px; font-weight: 600">By Fandom</button>
+        <button role="tab" aria-selected="false" style="border: none; border-radius: 14px; background: transparent; font-family: inherit; font-size: 13px">Flat</button>
       </div>
-      <sc-for list="{{rows}}" as="r" hint-placeholder-count="6">
-        <a href="iPhone-WorkDetail.dc.html" style="color: #000000; display: grid; grid-template-columns: 1fr 52px 52px 52px; gap: 6px; align-items: center; padding: 10px 0; border-top: 0.5px solid #E5E5EA; font-size: 14px; text-align: right; font-variant-numeric: tabular-nums">
-          <span style="text-align: left; min-width: 0; display: flex; flex-direction: column"><span style="font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{r.title}}</span><span style="font-size: 12px; color: #6C6C70">{{r.sub}}</span></span>
-          <span style="font-weight: 600; color: #990000">{{r.k}}</span><span>{{r.h}}</span><span>{{r.c}}</span>
-        </a>
-      </sc-for>
+    </div>
+
+    <section aria-label="Totals, all years" style="border-radius: 18px; background: #F2F2F7; padding: 14px; display: flex; flex-direction: column; gap: 12px">
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+        <sc-for list="{{heroTotals}}" as="s" hint-placeholder-count="2">
+          <span style="display: flex; flex-direction: column; gap: 1px"><span style="font-size: 28px; line-height: 32px; font-weight: 700; font-variant-numeric: tabular-nums">{{s.value}}</span><span style="font-size: 13px; color: #6C6C70">{{s.label}}</span></span>
+        </sc-for>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 8px; border-top: 0.5px solid #D1D1D6; padding-top: 10px">
+        <sc-for list="{{totals}}" as="s" hint-placeholder-count="5">
+          <span style="display: flex; flex-direction: column; gap: 1px"><span style="font-size: 17px; line-height: 21px; font-weight: 700; font-variant-numeric: tabular-nums">{{s.value}}</span><span style="font-size: 11px; line-height: 14px; color: #6C6C70">{{s.label}}</span></span>
+        </sc-for>
+      </div>
     </section>
-    <p style="margin: 0; font-size: 13px; line-height: 18px; color: #6C6C70">From AO3’s own stats page for saltwindow, read when you open this screen. Daily figures are what Kudos has seen on the days you opened the app.</p>
+
+    <div role="group" aria-label="Sort by" style="display: flex; gap: 8px; overflow: hidden; margin-right: -16px">
+      <sc-for list="{{sorts}}" as="m" hint-placeholder-count="7"><button aria-pressed="{{m.on}}" style="flex-shrink: 0; height: 34px; padding: 0 13px; border: none; border-radius: 17px; background: {{m.bg}}; color: {{m.fg}}; font-family: inherit; font-size: 14px; font-weight: 600">{{m.label}}</button></sc-for>
+    </div>
+
+    <sc-for list="{{groups}}" as="g" hint-placeholder-count="3">
+      <section aria-label="{{g.fandom}}" style="display: flex; flex-direction: column">
+        <h2 style="margin: 0 0 2px; font-size: 13px; line-height: 18px; font-weight: 400; color: #6C6C70">{{g.fandom}} · {{g.count}}</h2>
+        <sc-for list="{{g.works}}" as="w" hint-placeholder-count="3">
+          <a href="iPhone-WorkDetail.dc.html" aria-label="{{w.aria}}" style="color: #000000; display: flex; flex-direction: column; gap: 5px; padding: 10px 0; border-top: {{w.sep}}">
+            <span style="display: flex; align-items: baseline; gap: 10px">
+              <span style="flex: 1; min-width: 0; font-size: 15px; line-height: 20px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{w.title}}</span>
+              <span style="font-size: 15px; font-weight: 700; color: #990000; font-variant-numeric: tabular-nums">{{w.kudos}}</span>
+            </span>
+            <span aria-hidden="true" style="height: 6px; border-radius: 3px; background: rgba(153,0,0,0.12); overflow: hidden"><span style="display: block; width: {{w.bar}}%; height: 6px; border-radius: 3px; background: #990000"></span></span>
+            <span style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px">
+              <sc-for list="{{w.figs}}" as="f" hint-placeholder-count="5"><span style="display: flex; flex-direction: column"><span style="font-size: 13px; line-height: 17px; font-weight: 600; font-variant-numeric: tabular-nums">{{f.v}}</span><span style="font-size: 11px; line-height: 13px; color: #6C6C70">{{f.l}}</span></span></sc-for>
+            </span>
+          </a>
+        </sc-for>
+      </section>
+    </sc-for>
   </main>
   <div aria-hidden="true" style="z-index: 4; position: absolute; left: 0; right: 0; bottom: 0; height: 150px; background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0.94) 72%); pointer-events: none"></div>
   <div style="z-index: 5; position: absolute; left: 16px; bottom: 28px">
@@ -59,23 +71,42 @@ a{text-decoration:none}
   </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1100}}'>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1170}}'>
 class Component extends DCLogic {
   renderVals() {
-    const k = [3,2,4,3,5,2,3,4,2,3,5,4,3,2,4,3,4,3,5,6,19,12,9,7,8,6,5,7,6,5];
-    const max = 19;
+    // Only what AO3's own /users/<name>/stats page holds: totals, a year filter,
+    // sort by one measure, fandom or flat grouping, and each work's figures.
+    // AO3 keeps no daily history, so there are no trends here.
+    const n = (v) => v.toLocaleString('en-GB');
+    const works = [
+      { title: 'Keeper of the Northern Light', fandom: 'Original Work', words: 22410, hits: 19214, kudos: 1804, threads: 214, bookmarks: 312, subs: 48 },
+      { title: 'Lantern Season', fandom: 'Original Work', words: 15050, hits: 7702, kudos: 640, threads: 71, bookmarks: 97, subs: 9 },
+      { title: 'What the Tide Keeps', fandom: 'Original Work', words: 9800, hits: 4108, kudos: 412, threads: 63, bookmarks: 58, subs: 61 },
+      { title: 'Small Weathers', fandom: 'Persuasion', words: 2300, hits: 1912, kudos: 220, threads: 22, bookmarks: 31, subs: 3 },
+      { title: 'A Harbour Light', fandom: 'Persuasion', words: 3050, hits: 1140, kudos: 96, threads: 8, bookmarks: 11, subs: 2 },
+      { title: 'Fog Signal', fandom: 'Sherlock Holmes', words: 1380, hits: 690, kudos: 52, threads: 5, bookmarks: 6, subs: 1 }
+    ];
+    const top = Math.max(...works.map((w) => w.kudos));
+    const fandoms = [...new Set(works.map((w) => w.fandom))];
     return {
-      measures: [['Kudos', true], ['Hits', false], ['Comments', false], ['Bookmarks', false], ['Subscribers', false]].map(([label, on]) => ({ label, on: on ? 'true' : 'false', bg: on ? '#990000' : '#EFEFF4', fg: on ? '#FFFFFF' : '#1C1C1E' })),
-      bars: k.map((v, i) => ({ h: Math.max(3, Math.round(v / max * 122)), bg: i >= 20 ? '#990000' : 'rgba(153,0,0,0.35)' })),
-      markLeft: Math.round(20 / 30 * 100),
-      rows: [
-        ['Keeper of the Northern Light', 'Complete · 7 chapters', '+96', '9.1k', '41'],
-        ['What the Tide Keeps', 'WIP · 3 of 8', '+44', '3.0k', '18'],
-        ['Lantern Season', 'Complete · 4 chapters', '+12', '640', '3'],
-        ['Small Weathers', 'Complete · one-shot', '+8', '410', '2'],
-        ['A Harbour Light', 'Complete · one-shot', '+3', '120', '0'],
-        ['Fog Signal', 'Complete · one-shot', '+1', '88', '1']
-      ].map(([title, sub, kk, h, c]) => ({ title, sub, k: kk, h, c }))
+      heroTotals: [['34,766', 'Hits'], ['3,224', 'Kudos']].map(([value, label]) => ({ value, label })),
+      totals: [['383', 'Comment Threads'], ['515', 'Bookmarks'], ['124', 'Subscriptions'], ['37', 'User Subscriptions'], ['53,990', 'Word Count']].map(([value, label]) => ({ value, label })),
+      sorts: ['Date', 'Word Count', 'Hits', 'Kudos', 'Comment Threads', 'Bookmarks', 'Subscriptions'].map((label) => ({ label, on: label === 'Kudos' ? 'true' : 'false', bg: label === 'Kudos' ? '#990000' : '#EFEFF4', fg: label === 'Kudos' ? '#FFFFFF' : '#1C1C1E' })),
+      groups: fandoms.map((fandom) => {
+        const inFandom = works.filter((w) => w.fandom === fandom);
+        return {
+          fandom,
+          count: inFandom.length === 1 ? '1 work' : inFandom.length + ' works',
+          works: inFandom.map((w, i) => ({
+            title: w.title,
+            kudos: n(w.kudos),
+            bar: Math.max(1, Math.round(w.kudos / top * 100)),
+            figs: [[n(w.words), 'Words'], [n(w.hits), 'Hits'], [w.threads, 'Threads'], [w.bookmarks, 'Bookmarks'], [w.subs, 'Subs']].map(([v, l]) => ({ v, l })),
+            aria: w.title + ', ' + n(w.kudos) + ' kudos',
+            sep: i ? '0.5px solid #E5E5EA' : 'none'
+          }))
+        };
+      })
     };
   }
 }

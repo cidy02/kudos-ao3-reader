@@ -37,13 +37,14 @@ a{color:#990000}a:hover{color:#6E0000}
           <dc-import name="ResumeCard" variant="home" width="380" accent="#990000" hint-size="380px,280px"></dc-import>
           <section aria-label="Reading Now" style="display: flex; flex-direction: column; gap: 10px">
             <div style="display: flex; align-items: center; justify-content: space-between">
-              <h3 style="margin: 0; font-size: 22px; line-height: 28px; font-weight: 400">Reading Now</h3>
-              <a href="Library-Section.dc.html" style="height: 40px; padding: 0 12px; margin-right: -12px; border-radius: 20px; text-decoration: none; font-size: 14px; line-height: 40px; font-weight: 500; letter-spacing: 0.1px">See all</a>
+              <h3 style="margin: 0; font-size: 22px; line-height: 28px; font-weight: 400">Reading Now <span style="font-size: 15px; font-weight: 400; color: #6C6C70">7</span></h3>
+              <a href="Shelf-ReadingNow.dc.html" style="height: 40px; padding: 0 12px; margin-right: -12px; border-radius: 20px; text-decoration: none; font-size: 14px; line-height: 40px; font-weight: 500; letter-spacing: 0.1px">See all</a>
             </div>
             <div style="display: flex; gap: 12px; margin-right: -16px; overflow: hidden">
               <sc-for list="{{reading}}" as="w" hint-placeholder-count="3">
                 <dc-import name="CoverCard" work="{{w}}" width="120" accent="#990000" hint-size="120px,250px"></dc-import>
               </sc-for>
+<a href="Shelf-ReadingNow.dc.html" aria-label="4 more in Reading Now" style="width: 96px; flex-shrink: 0; min-height: 166px; align-self: stretch; border-radius: 12px; background: #F2F2F7; color: #990000; text-decoration: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 15px; font-weight: 600"><span style="font-size: 22px; line-height: 26px; font-weight: 700">+4</span>more<svg aria-hidden="true" width="7" height="12" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg></a>
             </div>
           </section>
         </main>
