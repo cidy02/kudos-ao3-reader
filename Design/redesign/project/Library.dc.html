@@ -13,7 +13,7 @@ body{margin:0}
 button{cursor:pointer}
 </style>
 </helmet>
-<div style="width: 390px; height: 1240px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+<div style="width: 390px; height: 1300px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
   <div style="position: absolute; right: 16px; top: 54px; display: flex; gap: 10px; z-index: 2">
     <div style="height: 44px; border-radius: 22px; display: flex; align-items: center; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
       <button aria-label="New: Collection, Queue, Import EPUB" style="width: 46px; height: 44px; border: none; background: transparent; color: #1C1C1E; display: flex; align-items: center; justify-content: center">
@@ -31,18 +31,6 @@ button{cursor:pointer}
       <h1 style="margin: 0; font-size: 34px; line-height: 41px; font-weight: 700; letter-spacing: 0.4px">Library</h1>
       <a href="Shelf-List.dc.html" style="align-self: flex-start; text-decoration: none; font-size: 15px; line-height: 20px; color: #6C6C70; display: flex; align-items: center; gap: 4px"><span><span style="font-weight: 600; color: #3A3A3C">214 works</span> · 98 downloaded · 2.1 GB</span><svg aria-hidden="true" width="7" height="12" viewBox="0 0 8 14" fill="none" stroke="#AEAEB2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg></a>
     </header>
-
-    <section aria-label="Shelves" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
-      <sc-for list="{{tiles}}" as="t" hint-placeholder-count="6">
-        <a href="{{t.href}}" aria-label="{{t.label}}, {{t.count}}" style="text-decoration: none; color: #000000; height: 62px; box-sizing: border-box; padding: 9px 12px; border-radius: 16px; background: #F2F2F7; display: flex; flex-direction: column; justify-content: space-between">
-          <span style="display: flex; align-items: center; justify-content: space-between">
-            <span aria-hidden="true" style="width: 26px; height: 26px; border-radius: 13px; background: #990000; color: #FFFFFF; display: flex; align-items: center; justify-content: center"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="{{t.d}}"></path></svg></span>
-            <span style="font-size: 20px; line-height: 24px; font-weight: 700; font-variant-numeric: tabular-nums">{{t.count}}</span>
-          </span>
-          <span style="font-size: 15px; line-height: 18px; font-weight: 600; color: #3A3A3C">{{t.label}}</span>
-        </a>
-      </sc-for>
-    </section>
 
     <section aria-label="Collections" style="display: flex; flex-direction: column; gap: 10px">
       <div style="display: flex; align-items: baseline; gap: 8px">
@@ -82,6 +70,24 @@ button{cursor:pointer}
       </div>
     </section>
 
+    <section aria-label="Shelves" style="display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; align-items: baseline; gap: 8px">
+        <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">Shelves</h2>
+        <a href="Edit-Shelves.dc.html" style="margin-left: auto; font-size: 17px; color: #990000; text-decoration: none">Edit</a>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+      <sc-for list="{{tiles}}" as="t" hint-placeholder-count="6">
+        <a href="{{t.href}}" aria-label="{{t.label}}, {{t.count}}" style="text-decoration: none; color: #000000; height: 62px; box-sizing: border-box; padding: 9px 12px; border-radius: 16px; background: #F2F2F7; display: flex; flex-direction: column; justify-content: space-between">
+          <span style="display: flex; align-items: center; justify-content: space-between">
+            <span aria-hidden="true" style="width: 26px; height: 26px; border-radius: 13px; background: #990000; color: #FFFFFF; display: flex; align-items: center; justify-content: center"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="{{t.d}}"></path></svg></span>
+            <span style="font-size: 20px; line-height: 24px; font-weight: 700; font-variant-numeric: tabular-nums">{{t.count}}</span>
+          </span>
+          <span style="font-size: 15px; line-height: 18px; font-weight: 600; color: #3A3A3C">{{t.label}}</span>
+        </a>
+      </sc-for>
+      </div>
+    </section>
+
     <sc-if value="{{isAvatar}}" hint-placeholder-val="{{false}}">
       <section aria-label="On AO3" style="display: flex; flex-direction: column">
         <h2 style="margin: 0 0 4px; font-size: 20px; line-height: 25px; font-weight: 700">On AO3</h2>
@@ -105,7 +111,7 @@ button{cursor:pointer}
   </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"account":{"editor":"enum","options":["avatar","tab"],"default":"avatar"},"$preview":{"width":390,"height":1240}}'>
+<script type="text/x-dc" data-dc-script data-props='{"account":{"editor":"enum","options":["avatar","tab"],"default":"avatar"},"$preview":{"width":390,"height":1300}}'>
 class Component extends DCLogic {
   renderVals() {
     const account = this.props.account ?? 'avatar';
