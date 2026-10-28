@@ -482,7 +482,7 @@ hand-rolling** — "as many dependencies as are necessary". PDF is explicitly *i
 - **T-461 · Queue and collection covers that can't be confused** 🅿️ *(owner,
   2026-10-28; canvas `CoverStack`, `Library-Organize`, `Queue`).*
   `StackedWorkCover.swift` draws both kinds as the same tilted pile. Collections keep
-  the pile (corner tab: grid); queues become covers stacked straight up behind the
+  the pile (corner tab: plain, no icon); queues become covers stacked straight up behind the
   front one, each a peek higher and a step narrower (corner tab: numbered list). Both
   must stay inside their frame: the tilted back covers currently overflow into the
   next item, so Library's collection carousel and grid also get a 20 pt gap. Check
