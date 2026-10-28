@@ -61,10 +61,10 @@
     "Account-Sheet.dc.html": {
       "h": 1260,
       "page": "iphone",
-      "title": "Account sheet (from the profile button)",
+      "title": "Account (sheet from the profile button on Home)",
       "w": 390,
-      "x": 2350,
-      "y": 11920
+      "x": 0,
+      "y": 8600
     },
     "Account-SignedOut.dc.html": {
       "h": 844,
@@ -72,14 +72,6 @@
       "title": "Account · signed out (superseded: Account sheet + Writing tab)",
       "w": 390,
       "x": 470,
-      "y": 8600
-    },
-    "Account.dc.html": {
-      "h": 1360,
-      "page": "iphone",
-      "title": "Account (superseded: Account sheet + Writing tab)",
-      "w": 390,
-      "x": 0,
       "y": 8600
     },
     "Android.dc.html": {
@@ -1670,10 +1662,10 @@
     "Themes-Account-Sheet.dc.html": {
       "h": 1260,
       "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Account sheet (from the profile button)",
+      "title": "Dark · OLED · Sepia — Account (sheet from the profile button on Home)",
       "w": 1250,
-      "x": 6950,
-      "y": 11920
+      "x": 0,
+      "y": 8600
     },
     "Themes-Account-SignedOut.dc.html": {
       "h": 844,
@@ -1681,14 +1673,6 @@
       "title": "Dark · OLED · Sepia — Account · signed out (superseded: Account sheet + Writing tab)",
       "w": 1250,
       "x": 1390,
-      "y": 8600
-    },
-    "Themes-Account.dc.html": {
-      "h": 1360,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Account (superseded: Account sheet + Writing tab)",
-      "w": 1250,
-      "x": 0,
       "y": 8600
     },
     "Themes-Author.dc.html": {
@@ -3020,7 +3004,6 @@
     "Reader-ReadAloud.dc.html",
     "Read-Aloud-Settings.dc.html",
     "Reader-End.dc.html",
-    "Account.dc.html",
     "Account-SignedOut.dc.html",
     "Login.dc.html",
     "AO3-Lists.dc.html",
@@ -3125,7 +3108,6 @@
     "Themes-Account-Regrouped.dc.html",
     "Themes-Account-Sheet.dc.html",
     "Themes-Account-SignedOut.dc.html",
-    "Themes-Account.dc.html",
     "Themes-Author.dc.html",
     "Themes-Browse.dc.html",
     "Themes-Bug-Report.dc.html",
