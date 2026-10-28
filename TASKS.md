@@ -561,6 +561,28 @@ hand-rolling** — "as many dependencies as are necessary". PDF is explicitly *i
   only; one foreground fetch when Writing or Stats opens, through
   `AO3RequestCoordinator.withSlot` (no polling). The draft card's word goal and
   streak stay: they count the user's own writing in the editor.
+- **T-468 · Author profile as one page; Mute and Block** 🅿️ *(owner, 2026-10-28;
+  canvas `Author`).* Replace the Works / Series / Bookmarks / About segmented switch
+  with stacked sections (Works, Series, Bookmarks), each with its count, See All and
+  "N more", plus the profile bio and fandom chips. Pseuds become an up-down chevron
+  beside the name; the button row is Subscribe, Mute, Block (AO3's own mute and
+  block; confirm before Block). Rule (owner): segmented controls only in Settings,
+  filters and data-dense screens such as Insights.
+- **T-469 · Recently Deleted: no Delete All** 🅿️ *(owner, 2026-10-28; canvas
+  `Recently-Deleted`).* Remove Delete All. Deleting everything is Select → Select All
+  → Delete Permanently, with the "can't be downloaded again" count (T-463).
+- **T-470 · Account sheet redesign; Create an AO3 Account** 🅿️ *(owner, 2026-10-28;
+  canvas `Account-Sheet`, `Account-SignedOut`).* Centred profile with pseud chevron
+  and View Profile; a Works · Bookmarks · Subscriptions strip linking to each list;
+  an Inbox card with the two latest messages; then AO3 and Kudos groups. Signed out:
+  **Create an AO3 Account** under Log In, opening AO3's invitation request
+  (`/invite_requests`) in the in-app browser — AO3 accounts need an invitation.
+- **T-471 · Small interaction fixes from the canvas review** 🅿️ *(owner,
+  2026-10-28).* Highlight colours get a colour well for any colour after the five
+  presets (`Reader-Highlight`). A queue item's menu leads with Read, To Top,
+  To Bottom, Share (`Queue`, `MenuTopRow`). New Queue shows a live preview and an
+  Add Works picker (`Queues`). Reader menus don't dim the page (`Reader-Menu`).
+  End of a work: Give Kudos full width, Comment and Bookmark below (`Reader-End`).
 
 ### Phase 3 — native AO3 writes (most fragile; needs the per-page CSRF token)
 - **Leave kudos · comment · subscribe · AO3-side bookmark** — fetch the work/page,
