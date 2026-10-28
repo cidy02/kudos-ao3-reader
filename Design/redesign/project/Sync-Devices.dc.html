@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Settings › Synced devices</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden">
+  <dc-import name="FormScreen" title="Devices" back="Back to Sync" height="844" sections="{{sections}}" hint-size="390px,844px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+  "sections": [
+    {
+      "header": "Syncing with",
+      "rows": [
+        {
+          "label": "This iPhone",
+          "sub": "iPhone 17 · synced just now",
+          "kind": "info",
+          "tile": "#1E63C8",
+          "icon": "M8 3h8a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM11 18h2"
+        },
+        {
+          "label": "iPad",
+          "sub": "iPad Air · synced 2 h ago",
+          "kind": "nav",
+          "tile": "#1E63C8",
+          "icon": "M6 3h12a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM11 18h2"
+        },
+        {
+          "label": "Mac",
+          "sub": "MacBook Air · synced yesterday",
+          "kind": "nav",
+          "tile": "#1E63C8",
+          "icon": "M4 5h16v10H4zM2 19h20"
+        }
+      ]
+    },
+    {
+      "rows": [
+        {
+          "label": "Add a Device…",
+          "kind": "button"
+        }
+      ]
+    },
+    {
+      "rows": [
+        {
+          "label": "Remove This iPhone from Sync",
+          "kind": "destructive"
+        }
+      ],
+      "footer": "Your library stays on this iPhone; it just stops syncing."
+    }
+  ]
+};
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Read Aloud outside the reader</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 1290px; height: 980px; box-sizing: border-box; padding: 24px 30px; background: #FFFFFF; color: #1C1C1E; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; display: flex; flex-direction: column; gap: 16px">
+  <header style="display: flex; align-items: baseline; gap: 16px">
+    <h1 style="margin: 0; font-size: 28px; font-weight: 700">Read Aloud outside the reader</h1>
+    <p style="margin: 0; font-size: 15px; color: #3A3A3C">T-458. Close the reader and it keeps reading: a player above the tab bar in the app, the system’s Now Playing elsewhere.</p>
+  </header>
+  <div style="display: flex; gap: 40px">
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px">
+      <figcaption style="font-size: 13px; font-weight: 600; color: #6C6C70">In the app: above the tab bar, on every tab</figcaption>
+      <div style="width: 390px; height: 844px; border-radius: 48px; overflow: hidden; position: relative; box-shadow: 0 0 0 1px #D1D1D6">
+        <div style="position: absolute; inset: 0"><dc-import name="Home-Launchpad" hint-size="390px,844px"></dc-import></div>
+        <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 190px; background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0.96) 60%)"></div>
+        <a href="Reader-ReadAloud.dc.html" aria-label="Now reading aloud: Salt and Starlight, chapter 16. Opens the reader" style="position: absolute; left: 16px; right: 16px; bottom: 100px; height: 54px; border-radius: 27px; padding: 0 6px 0 10px; box-sizing: border-box; display: flex; align-items: center; gap: 10px; text-decoration: none; color: #1C1C1E; background: rgba(255,255,255,0.8); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 8px 28px rgba(0,0,0,0.12), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
+          <span aria-hidden="true" style="width: 30px; height: 40px; flex-shrink: 0; border-radius: 6px; background: linear-gradient(155deg, hsl(188, 46%, 27%), hsl(210, 50%, 41%))"></span>
+          <span style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+            <span style="font-size: 14px; line-height: 18px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Salt &amp; Starlight</span>
+            <span style="font-size: 12px; line-height: 16px; color: #6C6C70">Chapter 16 · 12 min left</span>
+          </span>
+          <button aria-label="Pause" style="width: 42px; height: 42px; border: none; border-radius: 21px; background: transparent; color: #1C1C1E; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24"><rect x="6" y="4.5" width="4" height="15" rx="1.2" fill="currentColor"></rect><rect x="14" y="4.5" width="4" height="15" rx="1.2" fill="currentColor"></rect></svg></button>
+          <button aria-label="Next chapter" style="width: 42px; height: 42px; border: none; border-radius: 21px; background: transparent; color: #1C1C1E; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24"><path d="M12.5 6v12L21 12zM3.5 6v12L12 12z" fill="currentColor"></path></svg></button>
+        </a>
+      </div>
+    </figure>
+
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px">
+      <figcaption style="font-size: 13px; font-weight: 600; color: #6C6C70">Lock Screen: the system Now Playing</figcaption>
+      <div style="width: 390px; height: 844px; border-radius: 48px; overflow: hidden; position: relative; background: linear-gradient(170deg, #1d3a4a, #3c2a52 60%, #24151f); color: #FFFFFF; box-shadow: 0 0 0 1px #D1D1D6">
+        <div style="position: absolute; left: 0; right: 0; top: 70px; text-align: center; display: flex; flex-direction: column; gap: 2px">
+          <span style="font-size: 18px; font-weight: 600; opacity: 0.85">Tuesday 28 October</span>
+          <span style="font-size: 88px; line-height: 92px; font-weight: 700; letter-spacing: -2px">9:41</span>
+        </div>
+        <section aria-label="Now Playing" style="position: absolute; left: 14px; right: 14px; top: 300px; border-radius: 26px; padding: 14px; background: rgba(40,40,48,0.55); backdrop-filter: blur(30px); -webkit-backdrop-filter: blur(30px); display: flex; flex-direction: column; gap: 12px">
+          <div style="display: flex; gap: 12px; align-items: center">
+            <span aria-hidden="true" style="width: 48px; height: 64px; border-radius: 8px; background: linear-gradient(155deg, hsl(188, 46%, 27%), hsl(210, 50%, 41%))"></span>
+            <span style="flex: 1; display: flex; flex-direction: column; gap: 1px">
+              <span style="font-size: 16px; font-weight: 600">Salt &amp; Starlight</span>
+              <span style="font-size: 14px; opacity: 0.7">wrenfield · Chapter 16</span>
+            </span>
+            <span aria-hidden="true" style="font-size: 12px; opacity: 0.6">Kudos</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px; font-size: 11px; opacity: 0.8">
+            <span>4:12</span><span style="flex: 1; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.25)"><span style="display: block; width: 26%; height: 4px; border-radius: 2px; background: #FFFFFF"></span></span><span>-12:05</span>
+          </div>
+          <div style="display: flex; justify-content: space-around; align-items: center">
+            <svg aria-label="Previous chapter" width="30" height="30" viewBox="0 0 24 24"><path d="M11.5 6v12L3 12zM20.5 6v12L12 12z" fill="#FFFFFF"></path></svg>
+            <svg aria-label="Pause" width="36" height="36" viewBox="0 0 24 24"><rect x="6" y="4.5" width="4" height="15" rx="1.2" fill="#FFFFFF"></rect><rect x="14" y="4.5" width="4" height="15" rx="1.2" fill="#FFFFFF"></rect></svg>
+            <svg aria-label="Next chapter" width="30" height="30" viewBox="0 0 24 24"><path d="M12.5 6v12L21 12zM3.5 6v12L12 12z" fill="#FFFFFF"></path></svg>
+          </div>
+        </section>
+      </div>
+    </figure>
+
+    <section style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 14px; padding-top: 22px">
+      <h2 style="margin: 0; font-size: 17px; font-weight: 700">Dynamic Island, in another app</h2>
+      <div style="height: 120px; border-radius: 20px; background: #F2F2F7; position: relative">
+        <div aria-label="Compact: Kudos reading aloud" style="position: absolute; left: 50%; top: 14px; transform: translateX(-50%); width: 230px; height: 36px; border-radius: 18px; background: #000000; display: flex; align-items: center; justify-content: space-between; padding: 0 10px; box-sizing: border-box">
+          <span aria-hidden="true" style="width: 18px; height: 24px; border-radius: 4px; background: linear-gradient(155deg, hsl(188, 46%, 27%), hsl(210, 50%, 41%))"></span>
+          <svg aria-hidden="true" width="22" height="14" viewBox="0 0 22 14"><rect x="1" y="5" width="3" height="4" rx="1.5" fill="#FF6B5E"></rect><rect x="6" y="2" width="3" height="10" rx="1.5" fill="#FF6B5E"></rect><rect x="11" y="4" width="3" height="6" rx="1.5" fill="#FF6B5E"></rect><rect x="16" y="1" width="3" height="12" rx="1.5" fill="#FF6B5E"></rect></svg>
+        </div>
+        <span style="position: absolute; left: 0; right: 0; bottom: 14px; text-align: center; font-size: 13px; color: #6C6C70">Compact: the work’s cover and a level meter</span>
+      </div>
+      <div style="height: 190px; border-radius: 20px; background: #F2F2F7; position: relative">
+        <div aria-label="Expanded" style="position: absolute; left: 16px; right: 16px; top: 14px; height: 130px; border-radius: 40px; background: #000000; color: #FFFFFF; padding: 16px 22px; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px">
+          <div style="display: flex; gap: 10px; align-items: center">
+            <span aria-hidden="true" style="width: 34px; height: 46px; border-radius: 6px; background: linear-gradient(155deg, hsl(188, 46%, 27%), hsl(210, 50%, 41%))"></span>
+            <span style="flex: 1; display: flex; flex-direction: column"><span style="font-size: 15px; font-weight: 600">Salt &amp; Starlight</span><span style="font-size: 12px; opacity: 0.65">Chapter 16 · 12 min left</span></span>
+          </div>
+          <div style="display: flex; justify-content: space-around"><svg aria-label="Previous chapter" width="24" height="24" viewBox="0 0 24 24"><path d="M11.5 6v12L3 12zM20.5 6v12L12 12z" fill="#FFFFFF"></path></svg><svg aria-label="Pause" width="28" height="28" viewBox="0 0 24 24"><rect x="6" y="4.5" width="4" height="15" rx="1.2" fill="#FFFFFF"></rect><rect x="14" y="4.5" width="4" height="15" rx="1.2" fill="#FFFFFF"></rect></svg><svg aria-label="Next chapter" width="24" height="24" viewBox="0 0 24 24"><path d="M12.5 6v12L21 12zM3.5 6v12L12 12z" fill="#FFFFFF"></path></svg></div>
+        </div>
+        <span style="position: absolute; left: 0; right: 0; bottom: 14px; text-align: center; font-size: 13px; color: #6C6C70">Long-press: expanded with chapter skip</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 6px; font-size: 13px; line-height: 18px; color: #3A3A3C">
+        <p style="margin: 0">The player exists only while something is reading. Tap it to reopen the reader at the spoken sentence; swipe it away to stop.</p>
+        <p style="margin: 0">Skip buttons move by chapter, as in the reader. Lock Screen and Dynamic Island are the system’s Now Playing, fed by Kudos; no Live Activity needed.</p>
+        <p style="margin: 0">The Island never shows Kudos’s own playback while Kudos is open, which is why the in-app player exists.</p>
+      </div>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1290,"height":980}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Form screen (component)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 390px; height: {{height}}px; position: relative; overflow: hidden; background: {{pageBg}}; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+  <sc-if value="{{isSheet}}" hint-placeholder-val="{{false}}">
+    <div aria-hidden="true" style="position: absolute; left: 22px; right: 22px; top: 18px; height: 60px; border-radius: 30px 30px 0 0; background: rgba(255,255,255,0.35)"></div>
+  </sc-if>
+
+  <div style="position: absolute; left: 0; right: 0; top: {{panelTop}}px; bottom: 0; background: #F2F2F7; border-radius: {{panelRadius}}; box-shadow: {{panelShadow}}; overflow: hidden">
+    <sc-if value="{{isSheet}}" hint-placeholder-val="{{false}}">
+      <div aria-hidden="true" style="width: 36px; height: 5px; border-radius: 3px; background: #C7C7CC; margin: 7px auto 0"></div>
+    </sc-if>
+    <header style="position: relative; height: {{barH}}px; margin-top: {{barTop}}px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px">
+      <sc-if value="{{hasBack}}" hint-placeholder-val="{{true}}">
+        <button aria-label="{{backLabel}}" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)">
+          <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg>
+        </button>
+      </sc-if>
+      <sc-if value="{{hasCancel}}" hint-placeholder-val="{{false}}">
+        <button aria-label="{{cancelLabel}}" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.8); box-shadow: 0 4px 14px rgba(0,0,0,0.08), 0 0 0 0.5px rgba(0,0,0,0.06)">
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"></path></svg>
+        </button>
+      </sc-if>
+      <span style="position: absolute; left: 70px; right: 70px; top: 0; height: {{barH}}px; display: flex; flex-direction: column; align-items: center; justify-content: center">
+        <span style="font-size: 17px; line-height: 22px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%">{{title}}</span>
+        <sc-if value="{{hasSubtitle}}" hint-placeholder-val="{{false}}"><span style="font-size: 12px; line-height: 16px; color: #6C6C70">{{subtitle}}</span></sc-if>
+      </span>
+      <span style="flex: 1"></span>
+      <sc-if value="{{hasConfirm}}" hint-placeholder-val="{{false}}">
+        <button aria-label="{{confirmLabel}}" style="width: 44px; height: 44px; border: none; border-radius: 22px; background: #990000; color: #FFFFFF; display: flex; align-items: center; justify-content: center">
+          <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.6 4.6L19.2 7.4"></path></svg>
+        </button>
+      </sc-if>
+      <sc-if value="{{hasTrailingText}}" hint-placeholder-val="{{false}}">
+        <button style="height: 44px; padding: 0 16px; border: none; border-radius: 22px; font-family: inherit; font-size: 16px; color: #1C1C1E; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)">{{trailingText}}</button>
+      </sc-if>
+    </header>
+
+    <main style="padding: 8px 16px 0; display: flex; flex-direction: column; gap: 20px">
+      <sc-if value="{{hasSearch}}" hint-placeholder-val="{{false}}">
+        <label style="height: 38px; border-radius: 19px; background: rgba(118,118,128,0.12); display: flex; align-items: center; gap: 6px; padding: 0 12px; color: #6C6C70">
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="m15.5 15.5 5 5"></path></svg>
+          <input type="search" aria-label="{{search}}" placeholder="{{search}}" style="flex: 1; border: none; background: transparent; font-family: inherit; font-size: 16px; outline: none">
+        </label>
+      </sc-if>
+
+      <sc-if value="{{hasHero}}" hint-placeholder-val="{{false}}">
+        <div style="display: flex; align-items: center; gap: 14px; padding: 2px 4px">
+          <span aria-hidden="true" style="width: 52px; height: 52px; flex-shrink: 0; border-radius: 14px; background: {{heroColour}}; color: #FFFFFF; display: flex; align-items: center; justify-content: center">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{heroD}}"></path></svg>
+          </span>
+          <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+            <span style="font-size: 20px; line-height: 25px; font-weight: 700">{{heroTitle}}</span>
+            <span style="font-size: 13px; line-height: 18px; color: #6C6C70">{{heroSub}}</span>
+          </span>
+        </div>
+      </sc-if>
+
+      <sc-for list="{{sections}}" as="s" hint-placeholder-count="3">
+        <section style="display: flex; flex-direction: column; gap: 6px">
+          <sc-if value="{{s.hasHeader}}" hint-placeholder-val="{{true}}">
+            <h2 style="margin: 0 16px; font-size: 13px; line-height: 18px; font-weight: 400; color: #6C6C70">{{s.header}}</h2>
+          </sc-if>
+          <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
+            <sc-for list="{{s.rows}}" as="r" hint-placeholder-count="3">
+              <div style="display: flex; align-items: center; min-height: {{r.minH}}px; padding-left: {{r.padL}}px; gap: 12px">
+                <sc-if value="{{r.hasHandle}}" hint-placeholder-val="{{false}}">
+                  <span aria-hidden="true" style="width: 22px; flex-shrink: 0; display: flex; justify-content: center; color: #8E8E93"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 9h14M5 15h14"></path></svg></span>
+                </sc-if>
+                <sc-if value="{{r.hasTile}}" hint-placeholder-val="{{false}}">
+                  <span aria-hidden="true" style="width: 29px; height: 29px; flex-shrink: 0; border-radius: 7px; background: {{r.tile}}; color: #FFFFFF; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{r.d}}"></path></svg></span>
+                </sc-if>
+                <sc-if value="{{r.hasIcon}}" hint-placeholder-val="{{false}}">
+                  <svg aria-hidden="true" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="{{r.iconColour}}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0"><path d="{{r.d}}"></path></svg>
+                </sc-if>
+                <sc-if value="{{r.hasAvatar}}" hint-placeholder-val="{{false}}">
+                  <span aria-hidden="true" style="width: 32px; height: 32px; flex-shrink: 0; border-radius: 16px; background: {{r.tile}}; color: #FFFFFF; font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: center">{{r.initial}}</span>
+                </sc-if>
+                <div style="flex: 1; min-width: 0; min-height: {{r.minH}}px; display: flex; align-items: center; gap: 8px; padding: {{r.padV}}px 16px {{r.padV}}px 0; border-top: {{r.sep}}; box-sizing: border-box">
+                  <sc-if value="{{r.isCentered}}" hint-placeholder-val="{{false}}">
+                    <span style="flex: 1; text-align: center; font-size: 16px; font-weight: {{r.weight}}; color: {{r.colour}}">{{r.label}}</span>
+                  </sc-if>
+                  <sc-if value="{{r.isLeft}}" hint-placeholder-val="{{true}}">
+                    <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+                      <span style="font-size: 16px; line-height: 21px; font-weight: {{r.weight}}; color: {{r.colour}}">{{r.label}}</span>
+                      <sc-if value="{{r.hasSub}}" hint-placeholder-val="{{false}}"><span style="font-size: 13px; line-height: 18px; color: #6C6C70">{{r.sub}}</span></sc-if>
+                    </span>
+                  </sc-if>
+                  <sc-if value="{{r.isField}}" hint-placeholder-val="{{false}}">
+                    <span style="flex: 1; min-width: 0; font-size: 16px; line-height: 21px; color: {{r.fieldColour}}; white-space: {{r.wrap}}; overflow: hidden; text-overflow: ellipsis">{{r.text}}</span>
+                  </sc-if>
+                  <sc-if value="{{r.hasChips}}" hint-placeholder-val="{{false}}">
+                    <span style="display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; max-width: 70%">
+                      <sc-for list="{{r.chips}}" as="c" hint-placeholder-count="2"><span style="padding: 3px 10px; border-radius: 13px; background: #EFEFF4; font-size: 13px; line-height: 20px">{{c}}</span></sc-for>
+                    </span>
+                  </sc-if>
+                  <sc-if value="{{r.hasDetail}}" hint-placeholder-val="{{false}}"><span style="font-size: 16px; color: #8E8E93; white-space: nowrap">{{r.detail}}</span></sc-if>
+                  <sc-if value="{{r.hasBadge}}" hint-placeholder-val="{{false}}"><span style="padding: 0 7px; border-radius: 9px; background: #990000; color: #FFFFFF; font-size: 12px; line-height: 18px; font-weight: 700">{{r.badge}}</span></sc-if>
+                  <sc-if value="{{r.isToggle}}" hint-placeholder-val="{{false}}">
+                    <span role="switch" aria-checked="{{r.onText}}" aria-label="{{r.label}}" style="width: 51px; height: 31px; flex-shrink: 0; border-radius: 16px; background: {{r.track}}; position: relative"><span style="position: absolute; left: {{r.knob}}px; top: 2px; width: 27px; height: 27px; border-radius: 14px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.2)"></span></span>
+                  </sc-if>
+                  <sc-if value="{{r.isCheck}}" hint-placeholder-val="{{false}}">
+                    <svg aria-label="Selected" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#990000" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0"><path d="M5 12.5l4.6 4.6L19.2 7.4"></path></svg>
+                  </sc-if>
+                  <sc-if value="{{r.isCircle}}" hint-placeholder-val="{{false}}">
+                    <span aria-hidden="true" style="width: 22px; height: 22px; flex-shrink: 0; box-sizing: border-box; border-radius: 11px; border: {{r.circleBorder}}; background: {{r.circleBg}}; color: #FFFFFF; display: flex; align-items: center; justify-content: center"><sc-if value="{{r.on}}" hint-placeholder-val="{{false}}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.6 4.6L19.2 7.4"></path></svg></sc-if></span>
+                  </sc-if>
+                  <sc-if value="{{r.hasSegments}}" hint-placeholder-val="{{false}}">
+                    <span role="radiogroup" aria-label="{{r.label}}" style="height: 32px; border-radius: 16px; background: rgba(118,118,128,0.12); padding: 2px; box-sizing: border-box; display: flex">
+                      <sc-for list="{{r.segs}}" as="g" hint-placeholder-count="2"><span role="radio" aria-checked="{{g.on}}" style="padding: 0 11px; border-radius: 14px; background: {{g.bg}}; box-shadow: {{g.shadow}}; font-size: 13px; line-height: 28px; font-weight: {{g.weight}}">{{g.label}}</span></sc-for>
+                    </span>
+                  </sc-if>
+                  <sc-if value="{{r.hasSwatches}}" hint-placeholder-val="{{false}}">
+                    <span role="radiogroup" aria-label="{{r.label}}" style="display: flex; gap: 8px">
+                      <sc-for list="{{r.swatches}}" as="w" hint-placeholder-count="5"><span role="radio" aria-checked="{{w.on}}" style="width: 24px; height: 24px; border-radius: 12px; background: {{w.c}}; box-shadow: {{w.ring}}"></span></sc-for>
+                    </span>
+                  </sc-if>
+                  <sc-if value="{{r.isNav}}" hint-placeholder-val="{{true}}">
+                    <svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg>
+                  </sc-if>
+                  <sc-if value="{{r.isOut}}" hint-placeholder-val="{{false}}">
+                    <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#C7C7CC" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0"><path d="M8 4h12v12M20 4 7 17"></path></svg>
+                  </sc-if>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+          <sc-if value="{{s.hasFooter}}" hint-placeholder-val="{{false}}">
+            <p style="margin: 0 16px; font-size: 13px; line-height: 18px; color: #6C6C70">{{s.footer}}</p>
+          </sc-if>
+        </section>
+      </sc-for>
+    </main>
+  </div>
+
+  <sc-if value="{{hasTab}}" hint-placeholder-val="{{false}}">
+    <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 150px; background: linear-gradient(to bottom, rgba(242,242,247,0), rgba(242,242,247,0.94) 72%); pointer-events: none"></div>
+    <div style="position: absolute; left: 16px; bottom: 28px">
+      <dc-import name="TabBar" selected="{{tab}}" accent="#990000" hint-size="358px,62px"></dc-import>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"title":{"editor":"text","default":"Settings"},"subtitle":{"editor":"text","default":""},"mode":{"editor":"enum","options":["push","sheet"],"default":"push"},"tab":{"editor":"enum","options":["none","home","library","writing","browse"],"default":"none"},"confirm":{"editor":"text","default":""},"trailing":{"editor":"text","default":""},"back":{"editor":"text","default":"Back"},"search":{"editor":"text","default":""},"hero":{"editor":null},"sections":{"editor":null},"height":{"editor":"int","default":844,"min":400,"max":2000},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    // One data-driven grouped screen: settings pages, forms, pickers and sheets.
+    // Row kinds: nav (chevron), out (opens elsewhere), value, toggle, check (selected),
+    // circle (multi-select), field (text entry), textarea, chips, segments, swatches,
+    // button (centred, app colour), destructive (centred, red), info (no accessory).
+    const sheet = this.props.mode === 'sheet';
+    const tab = this.props.tab ?? 'none';
+    const hero = this.props.hero;
+    const sections = (this.props.sections || [{ header: 'General', rows: [{ label: 'Example', kind: 'nav' }] }]).map((s) => ({
+      header: s.header || '', hasHeader: !!s.header, footer: s.footer || '', hasFooter: !!s.footer,
+      rows: (s.rows || []).map((r, i) => {
+        const k = r.kind || 'nav';
+        const centred = k === 'button' || k === 'destructive';
+        const field = k === 'field' || k === 'textarea';
+        const tall = !!r.sub || k === 'textarea';
+        const lead = r.handle || r.tile || r.icon || r.avatar;
+        return {
+          label: r.label || '', sub: r.sub || '', hasSub: !!r.sub,
+          detail: r.detail || '', hasDetail: !!r.detail && !field,
+          badge: r.badge || '', hasBadge: !!r.badge,
+          text: r.text || r.placeholder || '', fieldColour: r.text ? '#000000' : '#AEAEB2',
+          wrap: k === 'textarea' ? 'normal' : 'nowrap',
+          chips: r.chips || [], hasChips: k === 'chips',
+          segs: (r.options || []).map((o, j) => ({ label: o, on: j === (r.selected ?? 0) ? 'true' : 'false', bg: j === (r.selected ?? 0) ? '#FFFFFF' : 'transparent', shadow: j === (r.selected ?? 0) ? '0 2px 6px rgba(0,0,0,0.12)' : 'none', weight: j === (r.selected ?? 0) ? 600 : 400 })),
+          hasSegments: k === 'segments',
+          swatches: (r.colours || []).map((c, j) => ({ c, on: j === (r.selected ?? 0) ? 'true' : 'false', ring: j === (r.selected ?? 0) ? '0 0 0 2px #FFFFFF, 0 0 0 4px ' + c : 'none' })),
+          hasSwatches: k === 'swatches',
+          isToggle: k === 'toggle', onText: r.on ? 'true' : 'false', track: r.on ? '#34C759' : '#E9E9EB', knob: r.on ? 22 : 2,
+          isCheck: k === 'check' && !!r.on,
+          isCircle: k === 'circle', on: !!r.on, circleBorder: r.on ? 'none' : '1.5px solid #C7C7CC', circleBg: r.on ? '#990000' : 'transparent',
+          isNav: k === 'nav', isOut: k === 'out',
+          isCentered: centred, isLeft: !centred && !field, isField: field,
+          weight: centred ? 600 : (r.bold ? 600 : 400),
+          colour: k === 'destructive' ? '#D70015' : k === 'button' ? '#990000' : (r.colour || '#000000'),
+          hasHandle: !!r.handle, hasTile: !!r.tile && !r.avatar, tile: r.tile || '#8E8E93', d: r.icon || r.tileIcon || '',
+          hasIcon: !!r.icon && !r.tile, iconColour: r.iconColour || '#990000',
+          hasAvatar: !!r.avatar, initial: (r.label || '?').charAt(0).toUpperCase(),
+          minH: k === 'textarea' ? (r.rows || 4) * 21 + 22 : 46,
+          padV: tall ? 10 : 0,
+          padL: lead ? 14 : 16,
+          sep: i ? '0.5px solid #E5E5EA' : 'none'
+        };
+      })
+    }));
+    return {
+      height: Number(this.props.height ?? 844),
+      pageBg: sheet ? '#7C7C80' : '#F2F2F7',
+      isSheet: sheet,
+      panelTop: sheet ? 62 : 0,
+      panelRadius: sheet ? '38px 38px 0 0' : '0',
+      panelShadow: sheet ? '0 -8px 30px rgba(0,0,0,0.18)' : 'none',
+      barH: 44, barTop: sheet ? 4 : 54,
+      title: this.props.title ?? 'Settings',
+      subtitle: this.props.subtitle ?? '', hasSubtitle: !!this.props.subtitle,
+      hasBack: !sheet, backLabel: this.props.back ?? 'Back',
+      hasCancel: sheet, cancelLabel: 'Cancel',
+      confirmLabel: this.props.confirm || '', hasConfirm: !!this.props.confirm,
+      trailingText: this.props.trailing || '', hasTrailingText: !!this.props.trailing && !this.props.confirm,
+      search: this.props.search || '', hasSearch: !!this.props.search,
+      hasHero: !!hero, heroTitle: hero ? hero.title : '', heroSub: hero ? (hero.sub || '') : '', heroColour: hero ? (hero.colour || '#990000') : '#990000', heroD: hero ? (hero.icon || '') : '',
+      sections,
+      tab, hasTab: !sheet && tab !== 'none'
+    };
+  }
+}
+</script>
+</body>
+</html>

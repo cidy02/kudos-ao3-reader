@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>List screen (component)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 390px; height: {{height}}px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+  <div style="position: absolute; left: 16px; right: 16px; top: 54px; display: flex; align-items: center; gap: 10px; z-index: 2">
+    <button aria-label="{{back}}" style="width: 44px; height: 44px; flex-shrink: 0; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg>
+    </button>
+    <span style="flex: 1; min-width: 0; text-align: center; font-size: 17px; line-height: 22px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{inlineTitle}}</span>
+    <div style="height: 44px; flex-shrink: 0; border-radius: 22px; display: flex; align-items: center; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
+      <sc-for list="{{tools}}" as="t" hint-placeholder-count="2">
+        <button aria-label="{{t.label}}" style="min-width: 44px; height: 44px; padding: 0 {{t.pad}}px; border: none; border-radius: 22px; background: {{t.bg}}; color: #1C1C1E; font-family: inherit; font-size: 16px; display: flex; align-items: center; justify-content: center">
+          <sc-if value="{{t.isIcon}}" hint-placeholder-val="{{true}}"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{t.d}}"></path></svg></sc-if>
+          <sc-if value="{{t.isText}}" hint-placeholder-val="{{false}}">{{t.text}}</sc-if>
+        </button>
+      </sc-for>
+    </div>
+  </div>
+
+  <main style="padding: 106px 16px 0; display: flex; flex-direction: column; gap: 14px">
+    <sc-if value="{{hasLarge}}" hint-placeholder-val="{{false}}">
+      <header style="display: flex; flex-direction: column; gap: 2px; margin-top: -4px">
+        <h1 style="margin: 0; font-size: 28px; line-height: 34px; font-weight: 700; letter-spacing: 0.35px">{{title}}</h1>
+        <sc-if value="{{hasSubtitle}}" hint-placeholder-val="{{true}}"><p style="margin: 0; font-size: 15px; line-height: 20px; color: #6C6C70">{{subtitle}}</p></sc-if>
+      </header>
+    </sc-if>
+    <sc-if value="{{smallSubtitle}}" hint-placeholder-val="{{false}}"><p style="margin: -4px 0 0; font-size: 15px; line-height: 20px; color: #6C6C70">{{subtitle}}</p></sc-if>
+
+    <sc-if value="{{hasSegments}}" hint-placeholder-val="{{false}}">
+      <div role="tablist" aria-label="Show" style="height: 34px; border-radius: 17px; background: rgba(118,118,128,0.12); padding: 2px; display: grid; grid-template-columns: {{segCols}}">
+        <sc-for list="{{segs}}" as="g" hint-placeholder-count="2"><button role="tab" aria-selected="{{g.on}}" style="border: none; border-radius: 15px; background: {{g.bg}}; box-shadow: {{g.shadow}}; font-family: inherit; font-size: 14px; font-weight: {{g.weight}}">{{g.label}}</button></sc-for>
+      </div>
+    </sc-if>
+    <sc-if value="{{hasChips}}" hint-placeholder-val="{{false}}">
+      <div role="group" aria-label="Filters" style="display: flex; gap: 8px; overflow: hidden; margin-right: -16px">
+        <sc-for list="{{chips}}" as="c" hint-placeholder-count="3"><button aria-pressed="{{c.on}}" style="flex-shrink: 0; height: 34px; padding: 0 13px; border: none; border-radius: 17px; background: {{c.bg}}; color: {{c.fg}}; font-family: inherit; font-size: 14px; font-weight: 600">{{c.label}}</button></sc-for>
+      </div>
+    </sc-if>
+
+    <sc-for list="{{sections}}" as="s" hint-placeholder-count="2">
+      <section style="display: flex; flex-direction: column; gap: 4px">
+        <sc-if value="{{s.hasHeader}}" hint-placeholder-val="{{true}}">
+          <div style="display: flex; align-items: baseline; gap: 8px">
+            <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">{{s.header}}</h2>
+            <span style="font-size: 15px; color: #6C6C70">{{s.count}}</span>
+          </div>
+        </sc-if>
+        <sc-if value="{{s.isWorks}}" hint-placeholder-val="{{true}}">
+          <div style="margin: 0 -16px">
+            <sc-for list="{{s.works}}" as="w" hint-placeholder-count="3">
+              <dc-import name="WorkRow" work="{{w}}" divider="{{w.divider}}" ledger="{{s.ledger}}" show-summary="{{s.summary}}" selecting="{{s.selecting}}" selected="{{w.selected}}" accent="#990000" hint-size="100%,120px"></dc-import>
+            </sc-for>
+          </div>
+        </sc-if>
+        <sc-if value="{{s.isGrid}}" hint-placeholder-val="{{false}}">
+          <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 14px; margin-top: 6px">
+            <sc-for list="{{s.works}}" as="w" hint-placeholder-count="4">
+              <dc-import name="CoverCard" work="{{w}}" width="172" accent="#990000" hint-size="172px,330px"></dc-import>
+            </sc-for>
+          </div>
+        </sc-if>
+        <sc-if value="{{s.isRows}}" hint-placeholder-val="{{false}}">
+          <div>
+            <sc-for list="{{s.rows}}" as="r" hint-placeholder-count="3">
+              <div style="display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: {{r.sep}}">
+                <sc-if value="{{r.hasHandle}}" hint-placeholder-val="{{false}}"><span aria-hidden="true" style="color: #8E8E93; display: flex"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 9h14M5 15h14"></path></svg></span></sc-if>
+                <sc-if value="{{r.hasCircle}}" hint-placeholder-val="{{false}}"><span aria-hidden="true" style="width: 22px; height: 22px; flex-shrink: 0; box-sizing: border-box; border-radius: 11px; border: {{r.circleBorder}}; background: {{r.circleBg}}; color: #FFFFFF; display: flex; align-items: center; justify-content: center"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="{{r.tick}}"></path></svg></span></sc-if>
+                <sc-if value="{{r.hasAvatar}}" hint-placeholder-val="{{false}}"><span aria-hidden="true" style="width: {{r.avatarSize}}px; height: {{r.avatarSize}}px; flex-shrink: 0; border-radius: {{r.avatarRadius}}; background: {{r.tone}}; color: #FFFFFF; font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center"><sc-if value="{{r.hasGlyph}}" hint-placeholder-val="{{false}}"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{r.glyph}}"></path></svg></sc-if><sc-if value="{{r.noGlyph}}" hint-placeholder-val="{{true}}">{{r.initial}}</sc-if></span></sc-if>
+                <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+                  <sc-if value="{{r.hasKicker}}" hint-placeholder-val="{{false}}"><span style="font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: 0.6px; text-transform: uppercase; color: {{r.kickerColour}}">{{r.kicker}}</span></sc-if>
+                  <span style="font-size: 17px; line-height: 22px; font-weight: {{r.weight}}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{r.title}}</span>
+                  <sc-if value="{{r.hasSub}}" hint-placeholder-val="{{true}}"><span style="font-size: 13px; line-height: 18px; color: #6C6C70">{{r.sub}}</span></sc-if>
+                  <sc-if value="{{r.hasBar}}" hint-placeholder-val="{{false}}"><span role="img" aria-label="{{r.barLabel}}" style="margin-top: 3px; height: 4px; border-radius: 2px; background: #E5E5EA; overflow: hidden"><span style="display: block; width: {{r.bar}}; height: 4px; background: {{r.barColour}}"></span></span></sc-if>
+                </span>
+                <sc-if value="{{r.hasBadge}}" hint-placeholder-val="{{false}}"><span style="padding: 0 7px; border-radius: 9px; background: {{r.badgeBg}}; color: {{r.badgeFg}}; font-size: 12px; line-height: 18px; font-weight: 700; white-space: nowrap">{{r.badge}}</span></sc-if>
+                <sc-if value="{{r.hasDetail}}" hint-placeholder-val="{{false}}"><span style="font-size: 15px; color: #8E8E93; white-space: nowrap">{{r.detail}}</span></sc-if>
+                <sc-if value="{{r.hasAction}}" hint-placeholder-val="{{false}}"><span style="height: 30px; padding: 0 12px; border-radius: 15px; background: rgba(153,0,0,0.10); color: #990000; font-size: 14px; line-height: 30px; font-weight: 600; white-space: nowrap">{{r.action}}</span></sc-if>
+                <sc-if value="{{r.hasChevron}}" hint-placeholder-val="{{true}}"><svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg></sc-if>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+      </section>
+    </sc-for>
+  </main>
+
+  <sc-if value="{{hasBottom}}" hint-placeholder-val="{{false}}">
+    <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 150px; background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0.94) 72%); pointer-events: none"></div>
+  </sc-if>
+  <sc-if value="{{hasTab}}" hint-placeholder-val="{{false}}">
+    <div style="position: absolute; left: 16px; bottom: 28px">
+      <dc-import name="TabBar" selected="{{tab}}" accent="#990000" hint-size="358px,62px"></dc-import>
+    </div>
+  </sc-if>
+  <sc-if value="{{hasActions}}" hint-placeholder-val="{{false}}">
+    <div role="toolbar" aria-label="{{actionsLabel}}" style="position: absolute; left: 16px; right: 16px; bottom: 28px; height: 62px; border-radius: 31px; padding: 4px; box-sizing: border-box; display: flex; align-items: center; gap: 4px; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 8px 28px rgba(0,0,0,0.12), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
+      <sc-for list="{{actions}}" as="a" hint-placeholder-count="3"><button style="flex: 1; height: 54px; border: none; border-radius: 27px; background: transparent; font-family: inherit; font-size: 15px; font-weight: 600; color: {{a.colour}}">{{a.label}}</button></sc-for>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"title":{"editor":"text","default":"Finished"},"subtitle":{"editor":"text","default":""},"large":{"editor":"boolean","default":true},"back":{"editor":"text","default":"Back"},"tools":{"editor":null},"segments":{"editor":null},"chips":{"editor":null},"sections":{"editor":null},"actions":{"editor":null},"tab":{"editor":"enum","options":["none","home","library","writing","browse"],"default":"library"},"height":{"editor":"int","default":844,"min":400,"max":2000},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    // One data-driven list screen: work lists (rows or a two-up grid) and plain lists
+    // of people, tags, series, chapters and items. Uses WorkRow and CoverCard so a
+    // work looks the same here as everywhere else.
+    const large = this.props.large ?? true;
+    const title = this.props.title ?? 'Finished';
+    const subtitle = this.props.subtitle ?? '';
+    const D = { more: 'M5.5 10.8a1.2 1.2 0 1 1 0 2.4 1.2 1.2 0 0 1 0-2.4zM12 10.8a1.2 1.2 0 1 1 0 2.4 1.2 1.2 0 0 1 0-2.4zM18.5 10.8a1.2 1.2 0 1 1 0 2.4 1.2 1.2 0 0 1 0-2.4z', plus: 'M12 5v14M5 12h14', filter: 'M4 7h16M7 12h10M10 17h4', search: 'M10.5 4a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM15.5 15.5l5 5', grid: 'M4.5 4.5h6v6h-6zM13.5 4.5h6v6h-6zM4.5 13.5h6v6h-6zM13.5 13.5h6v6h-6z', list: 'M8 6.5h12M8 12h12M8 17.5h12M4 6.5h.01M4 12h.01M4 17.5h.01' };
+    const tools = (this.props.tools || [{ label: 'More', icon: 'more' }]).map((t) => ({
+      label: t.label, isIcon: !t.text, isText: !!t.text, text: t.text || '', d: D[t.icon] || t.d || '', pad: t.text ? 16 : 0,
+      bg: t.on ? 'rgba(0,0,0,0.07)' : 'transparent'
+    }));
+    const segsIn = this.props.segments;
+    const chipsIn = this.props.chips;
+    const tab = this.props.tab ?? 'library';
+    const actions = this.props.actions;
+    const tick = 'M5 12.5l4.6 4.6L19.2 7.4';
+    const sections = (this.props.sections || []).map((s) => {
+      const kind = s.kind || 'works';
+      const works = (s.works || []).map((w, i, all) => ({ ...w, divider: i < all.length - 1, selected: !!w.selected }));
+      return {
+        header: s.header || '', count: s.count || '', hasHeader: !!s.header,
+        isWorks: kind === 'works', isGrid: kind === 'grid', isRows: kind === 'rows',
+        ledger: s.ledger ?? true, summary: !!s.summary, selecting: !!s.selecting,
+        works,
+        rows: (s.rows || []).map((r, i) => ({
+          title: r.title, weight: r.light ? 400 : 600, sub: r.sub || '', hasSub: !!r.sub,
+          kicker: r.kicker || '', hasKicker: !!r.kicker, kickerColour: r.kickerColour || '#6C6C70',
+          detail: r.detail || '', hasDetail: !!r.detail,
+          badge: r.badge || '', hasBadge: !!r.badge, badgeBg: r.badgeBg || '#990000', badgeFg: r.badgeFg || '#FFFFFF',
+          action: r.action || '', hasAction: !!r.action,
+          hasAvatar: !!(r.tone || r.glyph), tone: r.tone || '#8E8E93', initial: (r.initial || r.title || '?').charAt(0).toUpperCase(),
+          glyph: r.glyph || '', hasGlyph: !!r.glyph, noGlyph: !r.glyph,
+          avatarSize: r.square ? 44 : 36, avatarRadius: r.square ? '10px' : '50%',
+          hasHandle: !!r.handle, hasCircle: r.circle !== undefined, circleBorder: r.circle ? 'none' : '1.5px solid #C7C7CC', circleBg: r.circle ? '#990000' : 'transparent', tick: r.circle ? tick : '',
+          hasBar: r.bar !== undefined, bar: (r.bar || 0) + '%', barColour: r.barColour || '#990000', barLabel: r.barLabel || '',
+          hasChevron: r.chevron ?? (!r.action && r.circle === undefined && !r.handle),
+          sep: i ? '0.5px solid #E5E5EA' : 'none'
+        }))
+      };
+    });
+    return {
+      height: Number(this.props.height ?? 844),
+      back: this.props.back ?? 'Back',
+      title, subtitle, hasLarge: large, hasSubtitle: !!subtitle, smallSubtitle: !large && !!subtitle,
+      inlineTitle: large ? '' : title,
+      tools,
+      hasSegments: !!segsIn, segCols: 'repeat(' + ((segsIn && segsIn.options.length) || 2) + ', minmax(0, 1fr))',
+      segs: segsIn ? segsIn.options.map((o, j) => ({ label: o, on: j === segsIn.selected ? 'true' : 'false', bg: j === segsIn.selected ? '#FFFFFF' : 'transparent', shadow: j === segsIn.selected ? '0 2px 6px rgba(0,0,0,0.12)' : 'none', weight: j === segsIn.selected ? 600 : 400 })) : [],
+      hasChips: !!chipsIn,
+      chips: (chipsIn || []).map((c) => ({ label: c.label, on: c.on ? 'true' : 'false', bg: c.on ? '#990000' : '#EFEFF4', fg: c.on ? '#FFFFFF' : '#1C1C1E' })),
+      sections,
+      tab, hasTab: !actions && tab !== 'none', hasBottom: !!actions || tab !== 'none',
+      hasActions: !!actions, actionsLabel: 'Actions for the selected works',
+      actions: (actions || []).map((a) => ({ label: a.label || a, colour: a.destructive ? '#D70015' : '#990000' }))
+    };
+  }
+}
+</script>
+</body>
+</html>

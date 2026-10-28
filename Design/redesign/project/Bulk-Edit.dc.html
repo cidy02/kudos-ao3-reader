@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Library › Edit 3 Works (sheet)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 1000px; position: relative; overflow: hidden">
+  <dc-import name="FormScreen" title="Edit 3 Works" mode="sheet" confirm="Done" height="1000" sections="{{sections}}" hint-size="390px,1000px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+  "sections": [
+    {
+      "header": "Organise",
+      "rows": [
+        {
+          "label": "Add to Queue",
+          "kind": "nav",
+          "icon": "M4 6h11M4 12h11M4 18h7M18 15v6M15 18h6"
+        },
+        {
+          "label": "Add to Collection",
+          "kind": "nav",
+          "icon": "M6 8h12v12H6zM8 5h8"
+        },
+        {
+          "label": "Want to Read",
+          "kind": "toggle",
+          "on": false
+        }
+      ]
+    },
+    {
+      "header": "Your tags",
+      "rows": [
+        {
+          "label": "comfort",
+          "kind": "circle",
+          "on": true,
+          "sub": "all 3"
+        },
+        {
+          "label": "slow burn",
+          "kind": "circle",
+          "on": false,
+          "sub": "1 of 3"
+        },
+        {
+          "label": "reread",
+          "kind": "circle",
+          "on": false,
+          "sub": "none"
+        }
+      ]
+    },
+    {
+      "header": "Reading",
+      "rows": [
+        {
+          "label": "Mark as Finished",
+          "kind": "button"
+        },
+        {
+          "label": "Mark as Unread",
+          "kind": "button"
+        },
+        {
+          "label": "Download All",
+          "kind": "button"
+        }
+      ]
+    },
+    {
+      "footer": "1 of these 3 can’t be downloaded again: it is no longer on AO3.",
+      "rows": [
+        {
+          "label": "Delete 3 Works",
+          "kind": "destructive"
+        }
+      ]
+    }
+  ]
+};
+  }
+}
+</script>
+</body>
+</html>

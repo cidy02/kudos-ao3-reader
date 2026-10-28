@@ -165,12 +165,12 @@ class Component extends DCLogic {
     };
     // Top row: Reply, Copy Link, Share. Rows: the thread and chapter; your own comment adds Edit and Delete.
     const commentTop = [{ label: 'Reply', d: 'M9 7 4 12l5 5M4 12h10a6 6 0 0 1 6 6' }, { label: 'Copy Link', d: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1' }, { label: 'Share', d: 'M12 15V4M8 8l4-4 4 4M5 12v8h14v-8' }];
-    const thread = { label: 'Show Thread', d: 'M5 6h14M5 12h10M5 18h6', color: '#1C1C1E', sep: 'none' };
+    const threadRow = { label: 'Show Thread', d: 'M5 6h14M5 12h10M5 18h6', color: '#1C1C1E', sep: 'none' };
     const chapterRow = { label: 'Go to Chapter 7', d: 'M4 5.5c3-1 5.5-.6 8 1 2.5-1.6 5-2 8-1v13c-3-1-5.5-.6-8 1-2.5-1.6-5-2-8-1zM12 6.5v13', color: '#1C1C1E', sep: 'none' };
     // Only saltwindow's own comment (index 0) can be edited or deleted.
     const menuItems = menuIndex === 0
-      ? [thread, chapterRow, { label: 'Edit Comment', d: icons.edit, color: '#1C1C1E', sep }, { label: 'Delete Comment', d: icons.trash, color: '#D70015', sep: 'none' }]
-      : [thread, chapterRow];
+      ? [threadRow, chapterRow, { label: 'Edit Comment', d: icons.edit, color: '#1C1C1E', sep }, { label: 'Delete Comment', d: icons.trash, color: '#D70015', sep: 'none' }]
+      : [threadRow, chapterRow];
     const comments = [
       { author: 'saltwindow', initial: 'S', bg: '#23506B', meta: 'Chapter 7 · 2 days ago', body: 'The single unbroken line across the vellum. I had to put my phone down for a minute.', thread: '3 replies', hasThread: true, isCreator: false, indent: 0 },
       { author: 'inkwell_moth', initial: 'I', bg: '#1F4E5F', meta: 'Chapter 7 · 1 day ago', body: 'That line is the whole story, honestly. Thank you for reading so closely!', thread: '', hasThread: false, isCreator: true, indent: 20 },

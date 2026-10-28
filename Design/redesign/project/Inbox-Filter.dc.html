@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Inbox › Filter (sheet)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden">
+  <dc-import name="FormScreen" title="Filter Inbox" mode="sheet" confirm="Apply" height="844" sections="{{sections}}" hint-size="390px,844px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+  "sections": [
+    {
+      "rows": [
+        {
+          "label": "Show",
+          "kind": "segments",
+          "options": [
+            "All",
+            "Unread",
+            "Replied"
+          ],
+          "selected": 1
+        },
+        {
+          "label": "Sort",
+          "kind": "segments",
+          "options": [
+            "Newest",
+            "Oldest"
+          ],
+          "selected": 0
+        }
+      ]
+    },
+    {
+      "header": "On",
+      "rows": [
+        {
+          "label": "All works",
+          "kind": "check",
+          "on": true
+        },
+        {
+          "label": "Keeper of the Northern Light",
+          "kind": "check"
+        },
+        {
+          "label": "Lantern Season",
+          "kind": "check"
+        },
+        {
+          "label": "What the Tide Keeps",
+          "kind": "check"
+        }
+      ]
+    },
+    {
+      "rows": [
+        {
+          "label": "Reset Filters",
+          "kind": "button"
+        }
+      ]
+    }
+  ]
+};
+  }
+}
+</script>
+</body>
+</html>

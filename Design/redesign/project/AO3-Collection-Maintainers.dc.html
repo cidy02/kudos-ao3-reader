@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AO3 collections › Maintainers</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden">
+  <dc-import name="ListScreen" title="Maintainers" subtitle="Lighthouse Week 2026" back="Back" height="844" tools="{{tools}}" sections="{{sections}}" hint-size="390px,844px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+  "tools": [
+    {
+      "label": "Invite",
+      "icon": "plus"
+    }
+  ],
+  "sections": [
+    {
+      "kind": "rows",
+      "rows": [
+        {
+          "title": "saltwindow",
+          "sub": "You",
+          "tone": "#23506B",
+          "badge": "Owner",
+          "badgeBg": "#990000"
+        },
+        {
+          "title": "tidewright",
+          "sub": "Joined Sep 2024",
+          "tone": "#2F6D6A",
+          "badge": "Moderator",
+          "badgeBg": "#1E63C8"
+        },
+        {
+          "title": "marginalia",
+          "sub": "Invited Oct 20",
+          "tone": "#7A4040",
+          "badge": "Invited",
+          "badgeBg": "#EFEFF4",
+          "badgeFg": "#3A3A3C"
+        }
+      ]
+    }
+  ]
+};
+  }
+}
+</script>
+</body>
+</html>

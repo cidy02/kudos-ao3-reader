@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Subscriptions › Works</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden">
+  <dc-import name="ListScreen" title="Subscriptions" large="False" subtitle="18 works · 2 with new chapters" back="Back to Library" height="844" tools="{{tools}}" chips="{{chips}}" sections="{{sections}}" hint-size="390px,844px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+  "tools": [
+    {
+      "label": "More: Mark All as Seen, Follow a Tag…, Manage on AO3",
+      "icon": "more"
+    }
+  ],
+  "chips": [
+    {
+      "label": "Updates"
+    },
+    {
+      "label": "Works 18",
+      "on": true
+    },
+    {
+      "label": "Series 4"
+    },
+    {
+      "label": "Authors 5"
+    },
+    {
+      "label": "Tags 3"
+    }
+  ],
+  "sections": [
+    {
+      "works": [
+        {
+          "title": "Salt & Starlight",
+          "author": "wrenfield",
+          "fandom": "Original Work",
+          "rating": "M",
+          "category": "Gen",
+          "warnings": "undisclosed",
+          "status": "wip",
+          "words": "118,402",
+          "chapters": "16/30",
+          "kudos": "5,870",
+          "hits": "88.1k",
+          "updated": "Chapter 16 · 2 h ago",
+          "badge": "+1"
+        },
+        {
+          "title": "Northanger Nights",
+          "author": "gothicnovelist",
+          "fandom": "Northanger Abbey",
+          "rating": "T",
+          "category": "FM",
+          "warnings": "none",
+          "status": "wip",
+          "words": "47,300",
+          "chapters": "9/12",
+          "kudos": "980",
+          "hits": "12.1k",
+          "updated": "Chapter 9 · yesterday",
+          "badge": "+1"
+        },
+        {
+          "title": "The Hound, Revisited",
+          "author": "fogandlamplight",
+          "fandom": "Sherlock Holmes",
+          "rating": "T",
+          "category": "MM",
+          "warnings": "present",
+          "status": "wip",
+          "words": "30,600",
+          "chapters": "5/?",
+          "kudos": "760",
+          "hits": "9.3k",
+          "updated": "Chapter 5 · Oct 23"
+        },
+        {
+          "title": "Under the Same Stars",
+          "author": "wrenfield",
+          "fandom": "Original Work",
+          "rating": "NR",
+          "category": "Other",
+          "warnings": "undisclosed",
+          "status": "wip",
+          "words": "22,000",
+          "chapters": "6/?",
+          "kudos": "300",
+          "hits": "4.0k",
+          "updated": "Chapter 6 · Oct 19"
+        }
+      ]
+    }
+  ]
+};
+  }
+}
+</script>
+</body>
+</html>

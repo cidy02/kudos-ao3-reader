@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Work › Bookmark on AO3 (sheet)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 900px; position: relative; overflow: hidden">
+  <dc-import name="FormScreen" title="Edit Bookmark" subtitle="A Map of Small Hours" mode="sheet" confirm="Save" height="900" sections="{{sections}}" hint-size="390px,900px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+  "sections": [
+    {
+      "header": "Notes",
+      "rows": [
+        {
+          "kind": "textarea",
+          "text": "The insomnia ledger. Chapter 6 is the one.",
+          "rows": 3
+        }
+      ]
+    },
+    {
+      "header": "Your tags",
+      "rows": [
+        {
+          "label": "Tags",
+          "kind": "chips",
+          "chips": [
+            "reread",
+            "pemberley"
+          ]
+        }
+      ]
+    },
+    {
+      "rows": [
+        {
+          "label": "Collections",
+          "kind": "nav",
+          "detail": "None"
+        },
+        {
+          "label": "Private",
+          "kind": "toggle",
+          "on": false
+        },
+        {
+          "label": "Rec",
+          "kind": "toggle",
+          "on": true,
+          "sub": "Shows as a recommendation on your AO3 bookmarks"
+        }
+      ]
+    },
+    {
+      "rows": [
+        {
+          "label": "Delete Bookmark",
+          "kind": "destructive"
+        }
+      ]
+    }
+  ]
+};
+  }
+}
+</script>
+</body>
+</html>

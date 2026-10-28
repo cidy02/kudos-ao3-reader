@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AO3 collections › New or edit (form)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 1000px; position: relative; overflow: hidden">
+  <dc-import name="FormScreen" title="New Collection" subtitle="On AO3" mode="sheet" confirm="Create" height="1000" sections="{{sections}}" hint-size="390px,1000px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+  "sections": [
+    {
+      "header": "Names",
+      "rows": [
+        {
+          "label": "Name",
+          "kind": "field",
+          "text": "lighthouse_week_2026"
+        },
+        {
+          "label": "Title",
+          "kind": "field",
+          "text": "Lighthouse Week 2026"
+        }
+      ],
+      "footer": "The name is the address on AO3: letters, digits and underscores."
+    },
+    {
+      "header": "About",
+      "rows": [
+        {
+          "kind": "textarea",
+          "placeholder": "Description",
+          "rows": 3
+        },
+        {
+          "label": "Parent collection",
+          "kind": "nav",
+          "detail": "None"
+        }
+      ]
+    },
+    {
+      "header": "Settings",
+      "rows": [
+        {
+          "label": "Moderated",
+          "kind": "toggle",
+          "on": true
+        },
+        {
+          "label": "Closed",
+          "kind": "toggle",
+          "on": false
+        },
+        {
+          "label": "Unrevealed",
+          "kind": "toggle",
+          "on": false,
+          "sub": "Works stay hidden until you reveal them"
+        },
+        {
+          "label": "Anonymous",
+          "kind": "toggle",
+          "on": false,
+          "sub": "Creators stay hidden until you reveal them"
+        }
+      ]
+    },
+    {
+      "header": "Type",
+      "rows": [
+        {
+          "label": "Challenge",
+          "kind": "segments",
+          "options": [
+            "None",
+            "Gift exchange",
+            "Prompt meme"
+          ],
+          "selected": 0
+        }
+      ]
+    }
+  ]
+};
+  }
+}
+</script>
+</body>
+</html>

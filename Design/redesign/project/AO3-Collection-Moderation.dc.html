@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AO3 collections › Moderation</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden">
+  <dc-import name="ListScreen" title="Moderation" subtitle="Lighthouse Week 2026 · 3 waiting" back="Back" height="844" segments="{{segments}}" sections="{{sections}}" hint-size="390px,844px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+  "segments": {
+    "options": [
+      "Waiting",
+      "Approved",
+      "Rejected"
+    ],
+    "selected": 0
+  },
+  "sections": [
+    {
+      "kind": "rows",
+      "rows": [
+        {
+          "title": "Fog Signal",
+          "kicker": "Original Work",
+          "sub": "by tidewright · submitted 2 h ago",
+          "tone": "#2F6D6A",
+          "glyph": "M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h5",
+          "square": true,
+          "action": "Approve"
+        },
+        {
+          "title": "The Keeper’s Daughter",
+          "kicker": "Original Work",
+          "sub": "by inkwell_moth · yesterday",
+          "tone": "#1F4E5F",
+          "glyph": "M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h5",
+          "square": true,
+          "action": "Approve"
+        },
+        {
+          "title": "Bookmark of “Salt & Starlight”",
+          "kicker": "Bookmark",
+          "sub": "by marginalia · Oct 25",
+          "tone": "#6C6C70",
+          "glyph": "M7 4h10v16l-5-4-5 4z",
+          "square": true,
+          "action": "Approve"
+        }
+      ]
+    }
+  ]
+};
+  }
+}
+</script>
+</body>
+</html>

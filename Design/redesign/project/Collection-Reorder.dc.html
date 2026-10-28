@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Collection › Reorder</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden">
+  <dc-import name="FormScreen" title="Reorder" subtitle="Austen Variations" back="Back to Austen Variations" trailing="Done" height="844" sections="{{sections}}" hint-size="390px,844px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+  "sections": [
+    {
+      "rows": [
+        {
+          "label": "A Map of Small Hours",
+          "sub": "quietharbor",
+          "kind": "info",
+          "handle": true
+        },
+        {
+          "label": "Northanger Nights",
+          "sub": "gothicnovelist",
+          "kind": "info",
+          "handle": true
+        },
+        {
+          "label": "Letters Never Sent",
+          "sub": "marginalia",
+          "kind": "info",
+          "handle": true
+        },
+        {
+          "label": "Half Agony, Half Hope",
+          "sub": "anne_at_lyme",
+          "kind": "info",
+          "handle": true
+        },
+        {
+          "label": "Five Times Elizabeth Laughed",
+          "sub": "quietharbor",
+          "kind": "info",
+          "handle": true
+        },
+        {
+          "label": "The Bath Letters",
+          "sub": "marginalia",
+          "kind": "info",
+          "handle": true
+        },
+        {
+          "label": "A Fortnight at Uppercross",
+          "sub": "quietharbor",
+          "kind": "info",
+          "handle": true
+        }
+      ]
+    }
+  ]
+};
+  }
+}
+</script>
+</body>
+</html>

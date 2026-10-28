@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Subscriptions › Series</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden">
+  <dc-import name="ListScreen" title="Subscriptions" large="False" subtitle="4 series · 1 with a new part" back="Back to Library" height="844" tools="{{tools}}" chips="{{chips}}" sections="{{sections}}" hint-size="390px,844px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+  "tools": [
+    {
+      "label": "More: Mark All as Seen, Follow a Tag…, Manage on AO3",
+      "icon": "more"
+    }
+  ],
+  "chips": [
+    {
+      "label": "Updates"
+    },
+    {
+      "label": "Works 18"
+    },
+    {
+      "label": "Series 4",
+      "on": true
+    },
+    {
+      "label": "Authors 5"
+    },
+    {
+      "label": "Tags 3"
+    }
+  ],
+  "sections": [
+    {
+      "kind": "rows",
+      "rows": [
+        {
+          "title": "Bath & Barouche",
+          "kicker": "Persuasion",
+          "kickerColour": "hsl(335, 56%, 38%)",
+          "sub": "quietharbor · 4 parts · 61,200 words · updated yesterday",
+          "tone": "#1E63C8",
+          "glyph": "M4 6h16M4 12h16M4 18h10",
+          "square": true,
+          "badge": "New part"
+        },
+        {
+          "title": "The Baker Street Casebook",
+          "kicker": "Sherlock Holmes",
+          "kickerColour": "hsl(32, 56%, 33%)",
+          "sub": "fogandlamplight · 7 parts · 88,400 words · Oct 9",
+          "tone": "#1E63C8",
+          "glyph": "M4 6h16M4 12h16M4 18h10",
+          "square": true
+        },
+        {
+          "title": "Lantern Keepers",
+          "kicker": "Original Work",
+          "kickerColour": "hsl(188, 56%, 33%)",
+          "sub": "tidewright · 3 parts · complete",
+          "tone": "#1E63C8",
+          "glyph": "M4 6h16M4 12h16M4 18h10",
+          "square": true
+        },
+        {
+          "title": "Thornfield Letters",
+          "kicker": "Jane Eyre",
+          "kickerColour": "hsl(262, 46%, 40%)",
+          "sub": "brontebird · 2 parts · August",
+          "tone": "#1E63C8",
+          "glyph": "M4 6h16M4 12h16M4 18h10",
+          "square": true
+        }
+      ]
+    }
+  ]
+};
+  }
+}
+</script>
+</body>
+</html>

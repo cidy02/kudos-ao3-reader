@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Post a work › Co-creators</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden">
+  <dc-import name="FormScreen" title="Creators" back="Back to Post" search="Invite a co-creator by name" height="844" sections="{{sections}}" hint-size="390px,844px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+  "sections": [
+    {
+      "header": "Creators",
+      "rows": [
+        {
+          "label": "saltwindow",
+          "sub": "You · this pseud",
+          "kind": "check",
+          "on": true,
+          "avatar": true,
+          "tile": "#23506B"
+        },
+        {
+          "label": "tidewright",
+          "sub": "Invited · they accept on AO3",
+          "kind": "info",
+          "avatar": true,
+          "tile": "#2F6D6A",
+          "badge": "Invited"
+        }
+      ]
+    },
+    {
+      "rows": [
+        {
+          "label": "Post under another pseud",
+          "kind": "nav",
+          "detail": "saltwindow"
+        }
+      ]
+    }
+  ]
+};
+  }
+}
+</script>
+</body>
+</html>

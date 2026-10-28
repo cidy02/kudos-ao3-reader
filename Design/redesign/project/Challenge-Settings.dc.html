@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Challenge › Settings (maintainer)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 1000px; position: relative; overflow: hidden">
+  <dc-import name="FormScreen" title="Challenge Settings" subtitle="Austen Exchange 2026" back="Back" confirm="Save" height="1000" sections="{{sections}}" hint-size="390px,1000px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+  "sections": [
+    {
+      "header": "Dates",
+      "rows": [
+        {
+          "label": "Sign-ups open",
+          "kind": "value",
+          "detail": "Oct 1"
+        },
+        {
+          "label": "Sign-ups close",
+          "kind": "value",
+          "detail": "Nov 1"
+        },
+        {
+          "label": "Works due",
+          "kind": "value",
+          "detail": "Nov 12"
+        },
+        {
+          "label": "Works revealed",
+          "kind": "value",
+          "detail": "Dec 1"
+        }
+      ]
+    },
+    {
+      "header": "Sign-ups",
+      "rows": [
+        {
+          "label": "Sign-up open",
+          "kind": "toggle",
+          "on": true
+        },
+        {
+          "label": "Requests per person",
+          "kind": "value",
+          "detail": "1–3"
+        },
+        {
+          "label": "Offers per person",
+          "kind": "value",
+          "detail": "1–3"
+        },
+        {
+          "label": "Tag sets",
+          "kind": "nav",
+          "detail": "Austen Exchange 2026"
+        }
+      ]
+    },
+    {
+      "header": "Matching",
+      "rows": [
+        {
+          "label": "Match on",
+          "kind": "segments",
+          "options": [
+            "Fandom",
+            "Characters",
+            "Both"
+          ],
+          "selected": 2
+        },
+        {
+          "label": "Generate Potential Matches",
+          "kind": "button"
+        }
+      ]
+    }
+  ]
+};
+  }
+}
+</script>
+</body>
+</html>

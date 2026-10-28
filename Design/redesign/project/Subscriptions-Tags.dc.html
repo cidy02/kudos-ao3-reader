@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Subscriptions › Tags (followed in Kudos)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden">
+  <dc-import name="ListScreen" title="Subscriptions" large="False" subtitle="3 tags followed in Kudos · checked 10 min ago" back="Back to Library" height="844" tools="{{tools}}" chips="{{chips}}" sections="{{sections}}" hint-size="390px,844px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+  "tools": [
+    {
+      "label": "More: Mark All as Seen, Follow a Tag…, Manage on AO3",
+      "icon": "more"
+    }
+  ],
+  "chips": [
+    {
+      "label": "Updates"
+    },
+    {
+      "label": "Works 18"
+    },
+    {
+      "label": "Series 4"
+    },
+    {
+      "label": "Authors 5"
+    },
+    {
+      "label": "Tags 3",
+      "on": true
+    }
+  ],
+  "sections": [
+    {
+      "kind": "rows",
+      "rows": [
+        {
+          "title": "Pride and Prejudice",
+          "kicker": "Fandom",
+          "kickerColour": "#2F7A4A",
+          "sub": "6 new this week · Complete only · on Home",
+          "tone": "#2F7A4A",
+          "glyph": "M3.5 12.5V4.5h8l9 9-8 8zM8 8.5h.01",
+          "square": true,
+          "badge": "6"
+        },
+        {
+          "title": "Anne Elliot/Frederick Wentworth",
+          "kicker": "Relationship",
+          "kickerColour": "#2F7A4A",
+          "sub": "2 new this week · on Home",
+          "tone": "#2F7A4A",
+          "glyph": "M3.5 12.5V4.5h8l9 9-8 8zM8 8.5h.01",
+          "square": true,
+          "badge": "2"
+        },
+        {
+          "title": "Lighthouses",
+          "kicker": "Freeform",
+          "kickerColour": "#2F7A4A",
+          "sub": "Nothing new since Oct 20 · Hide Explicit",
+          "tone": "#2F7A4A",
+          "glyph": "M3.5 12.5V4.5h8l9 9-8 8zM8 8.5h.01",
+          "square": true
+        }
+      ]
+    },
+    {
+      "kind": "rows",
+      "rows": [
+        {
+          "title": "Follow a Tag…",
+          "light": true,
+          "sub": "Fandoms, relationships, characters, freeform tags",
+          "tone": "#990000",
+          "glyph": "M12 5v14M5 12h14",
+          "square": true,
+          "chevron": false
+        }
+      ]
+    }
+  ]
+};
+  }
+}
+</script>
+</body>
+</html>

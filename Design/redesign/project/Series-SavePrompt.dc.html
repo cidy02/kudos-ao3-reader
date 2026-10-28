@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Work › Save the whole series? (sheet)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden">
+  <dc-import name="FormScreen" title="Save Series?" mode="sheet" confirm="Save" height="844" hero="{{hero}}" sections="{{sections}}" hint-size="390px,844px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+  "hero": {
+    "title": "Bath & Barouche",
+    "sub": "Series by quietharbor · 4 parts · 61,200 words",
+    "colour": "#1E63C8",
+    "icon": "M4 6h16M4 12h16M4 18h10"
+  },
+  "sections": [
+    {
+      "rows": [
+        {
+          "label": "Just this work",
+          "sub": "Part 2, A Season at Bath",
+          "kind": "circle",
+          "on": false
+        },
+        {
+          "label": "All 4 parts",
+          "sub": "Downloads 3 more works, about 2.4 MB",
+          "kind": "circle",
+          "on": true
+        }
+      ]
+    },
+    {
+      "rows": [
+        {
+          "label": "Keep new parts too",
+          "kind": "toggle",
+          "on": true,
+          "sub": "Adds new parts when you open the series"
+        }
+      ]
+    }
+  ]
+};
+  }
+}
+</script>
+</body>
+</html>
