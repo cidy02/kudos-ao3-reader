@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>One layout per surface</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1290px; height: 1100px; box-sizing: border-box; padding: 26px 34px; background: #FFFFFF; color: #1C1C1E; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; display: flex; flex-direction: column; gap: 18px">
+  <header style="display: flex; flex-direction: column; gap: 4px">
+    <h1 style="margin: 0; font-size: 26px; font-weight: 700">One layout per surface</h1>
+    <p style="margin: 0; font-size: 15px; color: #3A3A3C; max-width: 1150px">Proposal, 2026-10-28. The Shelves / Ledger switch and the Detailed / Ledger / Compact menu go. Each surface gets the shape that suits it, as in Books and Music; only lists of everything keep one choice, List or Grid. No metadata is dropped anywhere.</p>
+  </header>
+  <div style="display: flex; gap: 22px">
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px; width: 210px">
+      <div style="width: 210px; height: 455px; overflow: hidden; border-radius: 28px; box-shadow: 0 0 0 1px #D1D1D6"><div style="width: 390px; height: 844px; transform: scale(0.5385); transform-origin: 0 0"><dc-import name="Home-Launchpad" hint-size="390px,844px"></dc-import></div></div>
+      <figcaption style="font-size: 13px; line-height: 18px"><b>Home</b> · mixed shapes, no switch: hero, a cover shelf, then rows.</figcaption>
+    </figure>
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px; width: 210px">
+      <div style="width: 210px; height: 455px; overflow: hidden; border-radius: 28px; box-shadow: 0 0 0 1px #D1D1D6"><div style="width: 390px; height: 844px; transform: scale(0.5385); transform-origin: 0 0"><dc-import name="Search" hint-size="390px,844px"></dc-import></div></div>
+      <figcaption style="font-size: 13px; line-height: 18px"><b>Search, Browse</b> · detailed rows with summaries; Show Summaries can hide them.</figcaption>
+    </figure>
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px; width: 210px">
+      <div style="width: 210px; height: 455px; overflow: hidden; border-radius: 28px; box-shadow: 0 0 0 1px #D1D1D6"><div style="width: 390px; height: 844px; transform: scale(0.5385); transform-origin: 0 0"><dc-import name="Queue-Manage" hint-size="390px,844px"></dc-import></div></div>
+      <figcaption style="font-size: 13px; line-height: 18px"><b>Library lists</b> · dense ledger rows; List / Grid in •••, remembered per list.</figcaption>
+    </figure>
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px; width: 210px">
+      <div style="width: 210px; height: 455px; overflow: hidden; border-radius: 28px; box-shadow: 0 0 0 1px #D1D1D6"><div style="width: 390px; height: 844px; transform: scale(0.5385); transform-origin: 0 0"><dc-import name="Library-Section" hint-size="390px,844px"></dc-import></div></div>
+      <figcaption style="font-size: 13px; line-height: 18px"><b>History, Updates, Inbox</b> · their own timeline rows, no choice.</figcaption>
+    </figure>
+    <section style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px">
+      <h2 style="margin: 0; font-size: 17px; font-weight: 700">Why</h2>
+      <div style="display: flex; flex-direction: column; gap: 8px; font-size: 13px; line-height: 18px; color: #3A3A3C">
+        <p style="margin: 0">A switch that restyles a whole page makes every section the same shape: the “one-dimensional” feel the critique named.</p>
+        <p style="margin: 0">Apple keeps a view choice only where you browse everything (Books › Library: List or Grid; Files). Curated pages are drawn once.</p>
+        <p style="margin: 0">Summaries matter most where you choose what to read, so they lead in Search and Browse and step back in your own lists.</p>
+        <p style="margin: 0">Long-press any work, anywhere: the preview shows its summary and tags, so nothing is out of reach.</p>
+      </div>
+    </section>
+  </div>
+  <section style="display: flex; flex-direction: column; gap: 6px">
+    <h2 style="margin: 0; font-size: 17px; font-weight: 700">Every surface</h2>
+    <div style="display: grid; grid-template-columns: 230px 1fr 260px; border-top: 0.5px solid #D1D1D6; font-size: 13px; line-height: 18px">
+      <sc-for list="{{rows}}" as="r" hint-placeholder-count="10">
+        <span style="padding: 6px 0; border-bottom: 0.5px solid #E5E5EA; font-weight: 600">{{r.where}}</span>
+        <span style="padding: 6px 12px 6px 0; border-bottom: 0.5px solid #E5E5EA; color: #3A3A3C">{{r.layout}}</span>
+        <span style="padding: 6px 0; border-bottom: 0.5px solid #E5E5EA; color: {{r.controlColour}}">{{r.control}}</span>
+      </sc-for>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1290,"height":1100}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const none = 'No layout choice';
+    const rows = [
+      ['Home', 'Resume hero, Also Reading cover shelf, Subscriptions and Queues rows, pinned collection shelf', none],
+      ['Library page', 'Shelf tiles, collections grid, On AO3 rows', none],
+      ['Writing tab', 'Draft card, week stats, comments, works rows', none],
+      ['Search results, Browse, a fandom’s works, Author, Series', 'Detailed rows: symbols, title, byline, stats, summary, tags', 'Show Summaries (on by default)'],
+      ['All Works, a shelf, a queue, a collection', 'Ledger rows: symbols, fandom, title, byline, full stat line, progress', 'List / Grid in •••, per list'],
+      ['Marked for Later, Bookmarks, AO3 History, Your Works', 'Ledger rows', 'List / Grid in •••, per list'],
+      ['Subscriptions › Updates, Reading History, Inbox', 'Their own rows: by day, with what changed', none],
+      ['Any work, anywhere', 'Long-press preview with summary and tags', '—'],
+      ['Duo open display, iPad, Mac', 'Same per-surface layouts; grids gain columns with width', 'Same as on iPhone']
+    ];
+    return {
+      rows: rows.map(([where, layout, control]) => ({ where, layout, control, controlColour: control === none ? '#8E8E93' : '#1C1C1E' }))
+    };
+  }
+}
+</script>
+</body>
+</html>
