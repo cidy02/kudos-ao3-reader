@@ -49,7 +49,7 @@ button{cursor:pointer}
         <div style="display: flex; align-items: baseline; gap: 8px">
           <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">{{s.title}}</h2>
           <span style="font-size: 15px; color: #6C6C70">{{s.count}}</span>
-          <button style="margin-left: auto; border: none; background: none; padding: 0; font-family: inherit; font-size: 17px; color: {{accent}}">See All</button>
+          <a href="{{s.href}}" style="margin-left: auto; font-size: 17px; color: {{accent}}; text-decoration: none">See All</a>
         </div>
         <sc-if value="{{s.isList}}" hint-placeholder-val="{{true}}">
           <div style="margin: 0 -16px">
@@ -57,6 +57,7 @@ button{cursor:pointer}
               <dc-import name="WorkRow" work="{{w}}" divider="{{w.divider}}" ledger="{{true}}" accent="{{accent}}" hint-size="100%,120px"></dc-import>
             </sc-for>
           </div>
+          <a href="{{s.href}}" style="margin-left: 63px; padding: 10px 0 2px; border-top: 0.5px solid #E5E5EA; color: {{accent}}; text-decoration: none; display: flex; align-items: center; gap: 6px; font-size: 15px; font-weight: 600">{{s.more}}<svg aria-hidden="true" width="7" height="12" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg></a>
         </sc-if>
         <sc-if value="{{s.isCollections}}" hint-placeholder-val="{{false}}">
           <div style="display: flex; gap: 20px; margin-right: -16px; overflow: hidden">
@@ -67,6 +68,7 @@ button{cursor:pointer}
                 <span style="font-size: 12px; line-height: 16px; color: #6C6C70">{{c.detail}}</span>
               </button>
             </sc-for>
+            <a href="All-Collections.dc.html" aria-label="1 more collection" style="width: 120px; flex-shrink: 0; height: 184px; border-radius: 16px; background: #F2F2F7; color: #990000; text-decoration: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 15px; font-weight: 600"><span style="font-size: 22px; line-height: 26px; font-weight: 700">+1</span>more<svg aria-hidden="true" width="7" height="12" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg></a>
           </div>
         </sc-if>
       </section>
@@ -103,7 +105,13 @@ class Component extends DCLogic {
       { title: 'Downloaded', count: '98', works: list([W.hound]) },
       { title: 'Reading History', count: '412', works: list([W.letters]) },
       { title: 'Favorites', count: '19', works: list([W.moor]) }
-    ].map((s) => ({ ...s, works: s.works || [], isList: !s.collections, isCollections: !!s.collections }));
+    ].map((s) => {
+      // See All and the closing "N more" open the shelf's own page.
+      const href = { 'Reading Now': 'Shelf-ReadingNow.dc.html', 'Want to Read': 'Queue.dc.html', 'Collections': 'All-Collections.dc.html', 'Reading History': 'Library-Section.dc.html' }[s.title] || 'Shelf-List.dc.html';
+      const works = s.works || [];
+      const left = Number(s.count) - works.length;
+      return { ...s, works, href, more: left > 0 ? left + ' more' : '', isList: !s.collections, isCollections: !!s.collections };
+    });
     const art = (hex) => {
       const x = hex.replace('#', '');
       const R = parseInt(x.slice(0, 2), 16) / 255, G = parseInt(x.slice(2, 4), 16) / 255, B = parseInt(x.slice(4, 6), 16) / 255;

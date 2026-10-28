@@ -20,19 +20,20 @@ a{color:#990000}a:hover{color:#6E0000}
     <dc-import name="ResumeCard" variant="home" width="637" accent="#990000" hint-size="637px,280px"></dc-import>
     <section aria-label="Reading Now" style="display: flex; flex-direction: column; gap: 10px">
       <div style="display: flex; align-items: baseline; justify-content: space-between">
-        <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">Reading Now</h2>
-        <a href="Library-Section.dc.html" style="font-size: 17px; text-decoration: none">See All</a>
+        <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">Reading Now <span style="font-size: 15px; font-weight: 400; color: #6C6C70">7</span></h2>
+        <a href="Shelf-ReadingNow.dc.html" style="font-size: 17px; text-decoration: none">See All</a>
       </div>
       <div style="display: flex; gap: 12px; overflow: hidden">
         <sc-for list="{{reading}}" as="w" hint-placeholder-count="4">
           <dc-import name="CoverCard" work="{{w}}" width="112" accent="#990000" hint-size="112px,250px"></dc-import>
         </sc-for>
+<a href="Shelf-ReadingNow.dc.html" aria-label="2 more in Reading Now" style="width: 96px; flex-shrink: 0; min-height: 166px; align-self: stretch; border-radius: 12px; background: #F2F2F7; color: #990000; text-decoration: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 15px; font-weight: 600"><span style="font-size: 22px; line-height: 26px; font-weight: 700">+2</span>more<svg aria-hidden="true" width="7" height="12" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg></a>
       </div>
     </section>
     <section aria-label="Reading Queues" style="display: flex; flex-direction: column; gap: 10px">
       <div style="display: flex; align-items: baseline; justify-content: space-between">
-        <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">Reading Queues</h2>
-        <a href="Queues.dc.html" style="font-size: 17px; text-decoration: none">All Queues</a>
+        <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">Reading Queues <span style="font-size: 15px; font-weight: 400; color: #6C6C70">3</span></h2>
+        <a href="Queues.dc.html" style="font-size: 17px; text-decoration: none">See All</a>
       </div>
       <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px">
         <sc-for list="{{queues}}" as="q" hint-placeholder-count="2">
@@ -49,17 +50,19 @@ a{color:#990000}a:hover{color:#6E0000}
             </div>
           </a>
         </sc-for>
+<a href="Queues.dc.html" style="margin-left: 0px; padding: 10px 0 2px; border-top: 0.5px solid #E5E5EA; color: #990000; text-decoration: none; display: flex; align-items: center; gap: 6px; font-size: 15px; font-weight: 600">1 more<svg aria-hidden="true" width="7" height="12" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg></a>
       </div>
     </section>
     <section aria-label="New Chapters" style="display: flex; flex-direction: column; gap: 2px">
       <div style="display: flex; align-items: baseline; justify-content: space-between">
-        <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">New Chapters</h2>
+        <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">New Chapters <span style="font-size: 15px; font-weight: 400; color: #6C6C70">9</span></h2>
         <a href="Subscriptions.dc.html" style="font-size: 17px; text-decoration: none">See All</a>
       </div>
       <div style="margin: 0 -16px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr))">
         <sc-for list="{{updated}}" as="w" hint-placeholder-count="2">
           <dc-import name="WorkRow" work="{{w}}" accent="#990000" hint-size="100%,100px"></dc-import>
         </sc-for>
+<a href="Subscriptions.dc.html" style="margin-left: 0px; padding: 10px 0 2px; border-top: 0.5px solid #E5E5EA; color: #990000; text-decoration: none; display: flex; align-items: center; gap: 6px; font-size: 15px; font-weight: 600">7 more<svg aria-hidden="true" width="7" height="12" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg></a>
       </div>
     </section>
   </main>

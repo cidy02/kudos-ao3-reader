@@ -37,7 +37,7 @@ button{cursor:pointer}
                   </div>
                   <dc-import name="ResumeCard" variant="home" accent="#990000" hint-size="358px,280px"></dc-import>
                   <div style="display: flex; flex-direction: column; gap: 10px">
-                    <div style="display: flex; align-items: baseline; justify-content: space-between"><span style="font-size: 20px; line-height: 25px; font-weight: 700">Reading Now</span><span style="font-size: 17px; color: {{t.link}}">See All</span></div>
+                    <div style="display: flex; align-items: baseline; justify-content: space-between"><span style="font-size: 20px; line-height: 25px; font-weight: 700">Reading Now <span style="font-size: 15px; font-weight: 400; opacity: 0.6">7</span></span><span style="font-size: 17px; color: {{t.link}}">See All</span></div>
                     <div style="display: flex; gap: 12px; margin-right: -16px; overflow: hidden">
                       <sc-for list="{{covers}}" as="w" hint-placeholder-count="3">
                         <dc-import name="CoverCard" work="{{w}}" width="120" theme="{{t.compTheme}}" accent="#990000" hint-size="120px,250px"></dc-import>

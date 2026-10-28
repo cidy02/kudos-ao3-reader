@@ -25,13 +25,14 @@ a{color:#990000}a:hover{color:#6E0000}
 
     <section aria-label="Reading Now" style="display: flex; flex-direction: column; gap: 10px">
       <div style="display: flex; align-items: baseline; justify-content: space-between">
-        <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">Reading Now</h2>
-        <a href="Library-Section.dc.html" style="font-size: 17px; text-decoration: none">See All</a>
+        <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">Reading Now <span style="font-size: 15px; font-weight: 400; color: #6C6C70">7</span></h2>
+        <a href="Shelf-ReadingNow.dc.html" style="font-size: 17px; text-decoration: none">See All</a>
       </div>
       <div style="width: 364px; display: flex; gap: 12px; overflow: hidden">
         <sc-for list="{{reading}}" as="w" hint-placeholder-count="3">
           <dc-import name="CoverCard" work="{{w}}" width="110" accent="#990000" hint-size="110px,240px"></dc-import>
         </sc-for>
+<a href="Shelf-ReadingNow.dc.html" aria-label="3 more in Reading Now" style="width: 96px; flex-shrink: 0; min-height: 166px; align-self: stretch; border-radius: 12px; background: #F2F2F7; color: #990000; text-decoration: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 15px; font-weight: 600"><span style="font-size: 22px; line-height: 26px; font-weight: 700">+3</span>more<svg aria-hidden="true" width="7" height="12" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg></a>
       </div>
     </section>
 
