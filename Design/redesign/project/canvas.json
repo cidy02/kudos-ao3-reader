@@ -1070,9 +1070,17 @@
     "Library-Tiles.dc.html": {
       "h": 844,
       "page": "iphone",
-      "title": "Library · shelf tiles (compact)",
+      "title": "Library · shelves as tiles (option A)",
       "w": 390,
       "x": 3290,
+      "y": 11300
+    },
+    "Library-Rows.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Library · trimmed shelf rows (option B)",
+      "w": 390,
+      "x": 3760,
       "y": 11300
     }
   },
@@ -1381,7 +1389,8 @@
     "Library-AO3.dc.html",
     "Home-Library-Plan.dc.html",
     "Account-Move.dc.html",
-    "Library-Tiles.dc.html"
+    "Library-Tiles.dc.html",
+    "Library-Rows.dc.html"
   ],
   "pages": [
     {
