@@ -13,47 +13,79 @@ body{margin:0}
 button{cursor:pointer}
 </style>
 </helmet>
-<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+<div style="width: 390px; height: 900px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
   <h1 data-inline-title style="position: absolute; left: 68px; right: 68px; top: 54px; margin: 0; font-size: 17px; line-height: 44px; font-weight: 600; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Subscriptions</h1>
-  <div style="position: absolute; left: 16px; right: 16px; top: 54px; display: flex; justify-content: space-between">
-    <button aria-label="Back to Account" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)">
+  <div style="position: absolute; left: 16px; right: 16px; top: 54px; display: flex; justify-content: space-between; z-index: 2">
+    <button aria-label="Back to Library" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)">
       <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg>
     </button>
-    <button aria-label="More: Mark All as Seen" aria-haspopup="menu" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.7" fill="currentColor"></circle><circle cx="12" cy="12" r="1.7" fill="currentColor"></circle><circle cx="18.5" cy="12" r="1.7" fill="currentColor"></circle></svg></button>
+    <button aria-label="More: Mark All as Seen, Follow a Tag…, Manage on AO3" aria-haspopup="menu" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.7" fill="currentColor"></circle><circle cx="12" cy="12" r="1.7" fill="currentColor"></circle><circle cx="18.5" cy="12" r="1.7" fill="currentColor"></circle></svg></button>
   </div>
-  <main style="padding: 106px 16px 0; display: flex; flex-direction: column; gap: 12px">
-    <header style="padding: 0 4px; display: flex; flex-direction: column; gap: 2px">
-      <p style="margin: 0; font-size: 15px; line-height: 20px; color: #6C6C70">On AO3 · 4 with new chapters</p>
-    </header>
-    <div role="tablist" aria-label="Subscription type" style="height: 34px; border-radius: 17px; background: rgba(118,118,128,0.12); padding: 2px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr))">
-      <button role="tab" aria-selected="true" style="border: none; border-radius: 15px; background: #FFFFFF; box-shadow: 0 2px 6px rgba(0,0,0,0.12); font-family: inherit; font-size: 14px; font-weight: 600">Works · 18</button>
-      <button role="tab" aria-selected="false" style="border: none; border-radius: 15px; background: transparent; font-family: inherit; font-size: 14px">Series · 4</button>
-      <button role="tab" aria-selected="false" style="border: none; border-radius: 15px; background: transparent; font-family: inherit; font-size: 14px">Authors · 5</button>
-    </div>
-    <div style="margin: 0 -16px">
-      <sc-for list="{{works}}" as="w" hint-placeholder-count="4">
-        <dc-import name="WorkRow" work="{{w}}" divider="{{w.divider}}" accent="{{accent}}" hint-size="100%,100px"></dc-import>
+
+  <main style="padding: 106px 16px 0; display: flex; flex-direction: column; gap: 14px">
+    <div role="tablist" aria-label="Show" style="display: flex; gap: 8px; overflow: hidden">
+      <sc-for list="{{scopes}}" as="t" hint-placeholder-count="5">
+        <button role="tab" aria-selected="{{t.selected}}" style="flex-shrink: 0; height: 34px; padding: 0 13px; border: none; border-radius: 17px; background: {{t.bg}}; color: {{t.fg}}; font-family: inherit; font-size: 14px; font-weight: 600">{{t.label}}</button>
       </sc-for>
     </div>
+    <p style="margin: 0; font-size: 13px; line-height: 18px; color: #6C6C70">9 new since you last looked · checked 10 min ago</p>
+
+    <sc-for list="{{groups}}" as="g" hint-placeholder-count="2">
+      <section aria-label="{{g.day}}" style="display: flex; flex-direction: column">
+        <h2 style="margin: 0 0 2px; font-size: 20px; line-height: 25px; font-weight: 700">{{g.day}}</h2>
+        <sc-for list="{{g.items}}" as="u" hint-placeholder-count="3">
+          <a href="{{u.href}}" style="color: #000000; text-decoration: none; display: flex; gap: 12px; padding: 11px 0; border-top: {{u.sep}}">
+            <span aria-hidden="true" style="width: 36px; height: 36px; flex-shrink: 0; border-radius: 10px; background: {{u.tile}}; color: #FFFFFF; display: flex; align-items: center; justify-content: center">
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{u.d}}"></path></svg>
+            </span>
+            <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+              <span style="font-size: 13px; line-height: 18px; color: #6C6C70"><span style="font-weight: 600; color: {{u.kindColour}}">{{u.kind}}</span> · {{u.source}}</span>
+              <span style="font-size: 17px; line-height: 22px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{u.title}}</span>
+              <span style="font-size: 13px; line-height: 18px; color: #3A3A3C">{{u.what}}</span>
+            </span>
+            <span style="align-self: center; display: flex; align-items: center; gap: 8px">
+              <span style="padding: 0 7px; border-radius: 9px; background: #990000; color: #FFFFFF; font-size: 12px; line-height: 18px; font-weight: 700">{{u.badge}}</span>
+            </span>
+          </a>
+        </sc-for>
+      </section>
+    </sc-for>
   </main>
+
   <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 150px; background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0.94) 72%); pointer-events: none"></div>
   <div style="position: absolute; left: 16px; bottom: 28px">
-    <dc-import name="TabBar" selected="library" accent="{{accent}}" hint-size="358px,62px"></dc-import>
+    <dc-import name="TabBar" selected="library" accent="#990000" hint-size="358px,62px"></dc-import>
   </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#990000"},"$preview":{"width":390,"height":844}}'>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":900}}'>
 class Component extends DCLogic {
   renderVals() {
-    const works = [
-      { title: 'Salt & Starlight', author: 'wrenfield', fandom: 'Original Work', rating: 'M', category: 'Gen', warnings: 'undisclosed', status: 'wip', words: '118,402', chapters: '15/30', kudos: '5,870', updated: 'Ch 15 · 2h ago', badge: 'New' },
-      { title: 'Northanger Nights', author: 'gothicnovelist', fandom: 'Northanger Abbey', rating: 'T', category: 'FM', warnings: 'none', status: 'wip', words: '47,300', chapters: '9/12', kudos: '980', updated: 'Ch 9 · yesterday', badge: 'New' },
-      { title: 'The Hound, Revisited', author: 'fogandlamplight', fandom: 'Sherlock Holmes', rating: 'T', category: 'MM', warnings: 'present', status: 'wip', words: '30,600', chapters: '5/?', kudos: '760', updated: 'Ch 5 · Oct 23' },
-      { title: 'Under the Same Stars', author: 'wrenfield', fandom: 'Original Work', rating: 'NR', category: 'Other', warnings: 'undisclosed', status: 'wip', words: '22,000', chapters: '6/?', kudos: '300', updated: 'Ch 6 · Oct 19' }
-    ];
+    // Four kinds of thing you can follow. Works, series and authors are your AO3
+    // subscriptions; tags are followed in Kudos through AO3's public tag feeds.
+    const K = {
+      work: { kind: 'Work', d: 'M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h5', tile: '#990000', kindColour: '#990000' },
+      series: { kind: 'Series', d: 'M4 6h16M4 12h16M4 18h10', tile: '#1E63C8', kindColour: '#1E63C8' },
+      author: { kind: 'Author', d: 'M12 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8zM4.5 20c1.4-3.8 4.2-5.8 7.5-5.8s6.1 2 7.5 5.8', tile: '#7B3FA0', kindColour: '#7B3FA0' },
+      tag: { kind: 'Tag', d: 'M3.5 12.5V4.5h8l9 9-8 8zM8 8.5h.01', tile: '#2F7A4A', kindColour: '#2F7A4A' }
+    };
+    const u = (k, source, title, what, badge, href) => ({ ...K[k], source, title, what, badge, href });
+    const sep = (list) => list.map((x, i) => ({ ...x, sep: i ? '0.5px solid #E5E5EA' : 'none' }));
+    const scopes = [['Updates', true], ['Works 18', false], ['Series 4', false], ['Authors 5', false], ['Tags 3', false]];
     return {
-      accent: this.props.accent ?? '#990000',
-      works: works.map((w, i) => ({ ...w, divider: i < works.length - 1 }))
+      scopes: scopes.map(([label, on]) => ({ label, selected: on ? 'true' : 'false', bg: on ? '#990000' : '#EFEFF4', fg: on ? '#FFFFFF' : '#1C1C1E' })),
+      groups: [
+        { day: 'Today', items: sep([
+          u('work', 'wrenfield', 'Salt & Starlight', 'Chapter 16, “Low Tide”, 4,210 words', '+1', 'iPhone-WorkDetail.dc.html'),
+          u('author', 'fogandlamplight', 'Watson Abroad', 'New work · Sherlock Holmes · 3,800 words', 'New', 'iPhone-WorkDetail.dc.html'),
+          u('tag', 'Pride and Prejudice · fandom', '6 new works', 'Including “Netherfield in Snow” and “A Very Small Ball”', '6', 'Fandom-Works.dc.html')
+        ]) },
+        { day: 'Yesterday', items: sep([
+          u('series', 'Bath & Barouche · quietharbor', 'A Fortnight at Uppercross', 'Part 4 of 4 added to the series', 'New', 'Series.dc.html'),
+          u('work', 'gothicnovelist', 'Northanger Nights', 'Chapter 9 · 5,020 words', '+1', 'iPhone-WorkDetail.dc.html'),
+          u('tag', 'Anne Elliot/Frederick Wentworth · ship', '2 new works', '“Half Agony, Half Hope (Again)” and 1 more', '2', 'Fandom-Works.dc.html')
+        ]) }
+      ]
     };
   }
 }
