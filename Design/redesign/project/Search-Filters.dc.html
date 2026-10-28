@@ -13,7 +13,7 @@ body{margin:0}
 button{cursor:pointer}
 </style>
 </helmet>
-<div style="width: 390px; height: 1960px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+<div style="width: 390px; height: 1980px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
   <div aria-hidden="true" style="position: absolute; left: 16px; right: 16px; top: 54px; display: flex; align-items: center; gap: 10px">
     <span style="width: 44px; height: 44px; border-radius: 22px; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06); display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1C1C1E" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg></span>
     <span style="flex: 1; font-size: 17px; color: #8E8E93">lighthouse</span>
@@ -60,24 +60,31 @@ button{cursor:pointer}
       </div>
       <div style="margin-top: 8px; background: #FFFFFF; border-radius: 16px; padding: 12px; display: flex; flex-direction: column; gap: 10px">
         <span style="margin: 0 4px; font-size: 17px">Categories</span>
-        <div role="group" aria-label="Categories" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px">
+        <div role="group" aria-label="Categories" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
           <sc-for list="{{categories}}" as="c" hint-placeholder-count="6">
-            <button aria-label="{{c.aria}}" aria-pressed="{{c.pressed}}" style="height: 40px; border: {{c.border}}; border-radius: 12px; background: {{c.bg}}; padding: 0 10px; box-sizing: border-box; font-family: inherit; display: flex; align-items: center; gap: 8px; color: {{c.fg}}">
+            <button aria-label="{{c.aria}}" aria-pressed="{{c.pressed}}" style="min-height: 44px; border: {{c.border}}; border-radius: 12px; background: {{c.bg}}; padding: 6px 10px; box-sizing: border-box; font-family: inherit; display: flex; align-items: center; gap: 8px; color: {{c.fg}}">
               <span aria-hidden="true" style="width: 22px; height: 22px; flex-shrink: 0; overflow: hidden; opacity: {{c.dim}}"><dc-import name="Symbols" variant="grid" only="category" category="{{c.code}}" size="22" hint-size="22px,22px"></dc-import></span>
-              <span style="flex: 1; text-align: left; font-size: 15px; font-weight: 600; text-decoration: {{c.strike}}">{{c.label}}</span>
+              <span style="flex: 1; min-width: 0; text-align: left; font-size: 14px; line-height: 18px; font-weight: 600; text-decoration: {{c.strike}}">{{c.label}}</span>
+              <span aria-hidden="true" style="width: 18px; height: 18px; flex-shrink: 0; box-sizing: border-box; border-radius: 9px; border: {{c.ring}}; background: {{c.markBg}}; color: #FFFFFF; display: flex; align-items: center; justify-content: center"><sc-if value="{{c.isIn}}" hint-placeholder-val="{{false}}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.6 4.6L19.2 7.4"></path></svg></sc-if><sc-if value="{{c.isOut}}" hint-placeholder-val="{{false}}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"><path d="M6 12h12"></path></svg></sc-if></span>
             </button>
           </sc-for>
         </div>
       </div>
-      <h3 style="margin: 16px 16px 2px; font-size: 13px; line-height: 18px; font-weight: 400; color: #6C6C70">Warnings</h3>
-      <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
-        <sc-for list="{{warnings}}" as="r" hint-placeholder-count="6">
-          <sc-if value="{{r.sep}}" hint-placeholder-val="{{false}}"><div aria-hidden="true" style="margin-left: 16px; height: 0.5px; background: #D1D1D6"></div></sc-if>
-          <button aria-label="{{r.aria}}" style="width: 100%; min-height: 46px; padding: 8px 16px; box-sizing: border-box; border: none; background: transparent; font-family: inherit; text-align: left; display: flex; align-items: center; gap: 10px; color: #000000">
-            <span style="flex: 1; font-size: 16px; line-height: 21px">{{r.label}}</span>
-            <sc-if value="{{r.isIn}}" hint-placeholder-val="{{false}}"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#990000" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"></path></svg></sc-if>
-            <sc-if value="{{r.isOut}}" hint-placeholder-val="{{false}}"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#990000"></circle><path d="M8 12h8" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round"></path></svg></sc-if>
-          </button>
+      <div style="margin-top: 8px; background: #FFFFFF; border-radius: 16px; padding: 12px; display: flex; flex-direction: column; gap: 10px">
+        <span style="margin: 0 4px; font-size: 17px">Warnings</span>
+        <sc-for list="{{warnGroups}}" as="g" hint-placeholder-count="2">
+          <div role="group" aria-label="{{g.title}} warnings" style="display: flex; flex-direction: column; gap: 6px">
+            <span style="margin: 0 4px; font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: 0.4px; text-transform: uppercase; color: #6C6C70">{{g.title}}</span>
+            <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+              <sc-for list="{{g.chips}}" as="c" hint-placeholder-count="2">
+                <button aria-label="{{c.aria}}" aria-pressed="{{c.pressed}}" style="min-height: 44px; border: {{c.border}}; border-radius: 12px; background: {{c.bg}}; padding: 6px 10px; box-sizing: border-box; font-family: inherit; display: flex; align-items: center; gap: 8px; color: {{c.fg}}">
+                  <span aria-hidden="true" style="width: 22px; height: 22px; flex-shrink: 0; overflow: hidden; opacity: {{c.dim}}"><dc-import name="Symbols" variant="grid" only="warnings" warnings="{{c.code}}" size="22" hint-size="22px,22px"></dc-import></span>
+                  <span style="flex: 1; min-width: 0; text-align: left; font-size: 14px; line-height: 18px; font-weight: 600; text-decoration: {{c.strike}}">{{c.label}}</span>
+                  <span aria-hidden="true" style="width: 18px; height: 18px; flex-shrink: 0; box-sizing: border-box; border-radius: 9px; border: {{c.ring}}; background: {{c.markBg}}; color: #FFFFFF; display: flex; align-items: center; justify-content: center"><sc-if value="{{c.isIn}}" hint-placeholder-val="{{false}}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.6 4.6L19.2 7.4"></path></svg></sc-if><sc-if value="{{c.isOut}}" hint-placeholder-val="{{false}}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"><path d="M6 12h12"></path></svg></sc-if></span>
+                </button>
+              </sc-for>
+            </div>
+          </div>
         </sc-for>
       </div>
       <h3 style="margin: 16px 16px 2px; font-size: 13px; line-height: 18px; font-weight: 400; color: #6C6C70">Tags and text</h3>
@@ -142,34 +149,30 @@ button{cursor:pointer}
   </section>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1960}}'>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1980}}'>
 class Component extends DCLogic {
   renderVals() {
-    const rows = (list) => list.map(([label, state], i) => ({
-      label, sep: i > 0, isIn: state === 'in', isOut: state === 'out',
-      aria: label + (state === 'in' ? ', included' : state === 'out' ? ', excluded' : '')
-    }));
     const list = (items) => items.map((r, i) => ({ ...r, sep: i > 0 }));
+    const tri = (items) => items.map(([label, code, st, full]) => ({
+      label, code, isIn: st === 'in', isOut: st === 'out',
+      pressed: st === 'in' ? 'true' : st === 'out' ? 'mixed' : 'false',
+      aria: (full || label) + (st === 'in' ? ', included' : st === 'out' ? ', excluded' : ', not set'),
+      bg: st === 'in' ? 'rgba(153,0,0,0.10)' : '#F2F2F7', fg: st === 'in' ? '#990000' : st === 'out' ? '#8E8E93' : '#1C1C1E',
+      border: st === 'in' ? '1.5px solid #990000' : '1.5px solid transparent', strike: st === 'out' ? 'line-through' : 'none', dim: st === 'out' ? 0.4 : 1,
+      ring: st ? 'none' : '1.5px solid #C7C7CC', markBg: st === 'in' ? '#990000' : st === 'out' ? '#8E8E93' : 'transparent'
+    }));
     return {
       top: list([{ label: 'Sort by', value: 'Best Match', isPicker: true }]),
       content: list([
         { label: 'Rating', value: 'General, Teen', isPicker: true },
         { label: 'Include Not Rated', isSwitch: true }
       ]),
-      categories: [['F/F', 'FF', 'in'], ['F/M', 'FM', ''], ['Gen', 'Gen', 'in'], ['M/M', 'MM', ''], ['Multi', 'Multi', ''], ['Other', 'Other', 'out']].map(([label, code, st]) => ({
-        label, code, pressed: st === 'in' ? 'true' : st === 'out' ? 'mixed' : 'false',
-        aria: label + (st === 'in' ? ', included' : st === 'out' ? ', excluded' : ''),
-        bg: st === 'in' ? 'rgba(153,0,0,0.10)' : '#F2F2F7', fg: st === 'in' ? '#990000' : st === 'out' ? '#8E8E93' : '#1C1C1E',
-        border: st === 'in' ? '1.5px solid #990000' : '1.5px solid transparent', strike: st === 'out' ? 'line-through' : 'none', dim: st === 'out' ? 0.4 : 1
-      })),
-      warnings: rows([
-        ['No Archive Warnings Apply', 'in'],
-        ['Creator Chose Not To Use Archive Warnings', ''],
-        ['Graphic Depictions Of Violence', ''],
-        ['Major Character Death', 'out'],
-        ['Rape/Non-Con', ''],
-        ['Underage Sex', '']
-      ]),
+      // Tapping a chip cycles Include → Exclude → not set, as AO3's own filters do.
+      categories: tri([['F/F', 'FF', 'in'], ['F/M', 'FM', ''], ['Gen', 'Gen', 'in'], ['M/M', 'MM', ''], ['Multi', 'Multi', ''], ['Other', 'Other', 'out']]),
+      warnGroups: [
+        { title: 'Overall', chips: tri([['No Warnings Apply', 'none', 'in', 'No Archive Warnings Apply'], ['Creator Chose Not To Use', 'undisclosed', '', 'Creator Chose Not To Use Archive Warnings']]) },
+        { title: 'Content', chips: tri([['Graphic Violence', 'present', '', 'Graphic Depictions Of Violence'], ['Major Character Death', 'present', 'out'], ['Rape/Non-Con', 'present', ''], ['Underage Sex', 'present', '']]) }
+      ],
       textRows: list([
         { label: 'Crossovers', value: 'Include', isPicker: true },
         { label: 'Title & creator', value: 'Any', isNav: true }
