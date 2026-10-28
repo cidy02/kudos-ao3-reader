@@ -1090,6 +1090,14 @@
       "w": 270,
       "x": 0,
       "y": 3400
+    },
+    "Layouts-Plan.dc.html": {
+      "h": 1100,
+      "page": "structure",
+      "title": "One layout per surface",
+      "w": 1290,
+      "x": 0,
+      "y": 9040
     }
   },
   "createdOnFiles": {
@@ -1399,7 +1407,8 @@
     "Delete-Warnings.dc.html",
     "Subscriptions-Plan.dc.html",
     "Comment-Menu.dc.html",
-    "MenuTopRow.dc.html"
+    "MenuTopRow.dc.html",
+    "Layouts-Plan.dc.html"
   ],
   "pages": [
     {
