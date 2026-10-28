@@ -1,15 +1,16 @@
-"""Theme variants: every phone screen in Dark, OLED and Sepia.
+"""Theme variants: every phone screen in Dark, OLED and Sepia, side by side.
 
 Boards hard-code Light colours, and the runtime writes every inline colour as
-`rgb(...)`. So one stylesheet per theme (`project/Skin-<Theme>.dc.html`) recolours
-any board by matching those values, and each variant board is a thin wrapper that
-imports the Light board under that skin. Palettes are the Themes board's tokens.
+`rgb(...)`. So one stylesheet per theme (`project/Skin-<Theme>.dc.html`, scoped to
+`.th-<theme>`) recolours any board by matching those values, and each
+`Themes-<Board>.dc.html` imports the Light board three times, once under each skin.
+One board per screen keeps the artifact under its file limit. Palettes are the
+Themes board's tokens.
 
     cd Design/redesign/tools && python3 -I themes.py
 
-Writes the three skins, one `<Theme>-<Board>.dc.html` per screen and theme, and
-the three canvas pages (boards keep their Light positions; Subscreens and Insights
-sit below the iPhone rows).
+Writes the three skins, one triptych per screen, and the "Dark · OLED · Sepia"
+canvas page (rows follow the iPhone page, then Subscreens, then Insights).
 """
 import json, os
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -24,7 +25,7 @@ THEMES = {
 def bg(v): return '[style*="background: %s"]' % v
 def fg(v): return ':is([style^="color: %s"], [style*="; color: %s"])' % (v, v)
 
-def skin(t):
+def skin(t, scope):
     # `.th` is the wrapper; `:not(#z)` lifts a rule over the context rules below it.
     page = ':is(%s[style*="bottom: 0px"], %s[style*="width: 390px"])' % (bg('rgb(242, 242, 247)'), bg('rgb(242, 242, 247)'))
     knob = '[style*="width: 27px"]'
@@ -34,7 +35,7 @@ def skin(t):
     def rule(sel, decl): R.append('%s%s { %s }' % (sel, keep, decl))
     # Surfaces: white is the canvas and #F2F2F7 the card, except on a grouped page,
     # where #F2F2F7 is the canvas and white the cell.
-    R.append('.th { background: %s }' % t['plain'])
+    R.append('%s { background: %s }' % (scope, t['plain']))
     rule('.th %s:not(%s)' % (bg('rgb(255, 255, 255)'), knob), 'background: %s !important' % t['plain'])
     rule('.th %s' % bg('rgb(242, 242, 247)'), 'background: %s !important' % t['card'])
     rule('.th %s' % page, 'background: %s !important' % t['plain'])
@@ -79,7 +80,7 @@ def skin(t):
         rule('.th [fill="%s"]' % v, 'fill: %s' % t['ink2'])
     rule('.th [stroke="#1C1C1E"]', 'stroke: %s' % t['ink'])
     rule('.th [stroke="#990000"]', 'stroke: %s' % t['link'])
-    return '\n'.join(R)
+    return '\n'.join(r.replace('.th ', scope + ' ') for r in R)
 
 def write_skin(name, t):
     src = f'''<!doctype html>
@@ -93,7 +94,7 @@ def write_skin(name, t):
 <x-dc>
 <helmet>
 <style>
-{skin(t)}
+{skin(t, '.th-' + name.lower())}
 </style>
 </helmet>
 <span hidden></span>
@@ -108,13 +109,19 @@ class Component extends DCLogic {{
 '''
     open(os.path.join(OUT, 'Skin-%s.dc.html' % name), 'w').write(src)
 
-def write_variant(theme, board, h, title):
+def write_triptych(board, h, title):
     base = board[:-len('.dc.html')]
+    panels = ''.join(f'''
+  <div class="th-{n.lower()}" style="width: 390px; height: {h}px; position: relative; overflow: hidden; flex-shrink: 0">
+    <dc-import name="{base}" hint-size="390px,{h}px"></dc-import>
+  </div>''' for n in THEMES)
+    skins = ''.join(f'''
+  <dc-import name="Skin-{n}" hint-size="0px,0px"></dc-import>''' for n in THEMES)
     src = f'''<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>{theme} · {title}</title>
+<title>Dark, OLED, Sepia · {title}</title>
 <script src="./support.js"></script>
 </head>
 <body>
@@ -124,12 +131,10 @@ def write_variant(theme, board, h, title):
 body{{margin:0}}
 </style>
 </helmet>
-<div class="th" style="width: 390px; height: {h}px; position: relative; overflow: hidden">
-  <dc-import name="Skin-{theme}" hint-size="0px,0px"></dc-import>
-  <dc-import name="{base}" hint-size="390px,{h}px"></dc-import>
+<div style="width: {W}px; height: {h}px; position: relative; display: flex; gap: {GAP}px">{skins}{panels}
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{{"$preview":{{"width":390,"height":{h}}}}}'>
+<script type="text/x-dc" data-dc-script data-props='{{"$preview":{{"width":{W},"height":{h}}}}}'>
 class Component extends DCLogic {{
   renderVals() {{ return {{}}; }}
 }}
@@ -137,40 +142,48 @@ class Component extends DCLogic {{
 </body>
 </html>
 '''
-    open(os.path.join(OUT, '%s-%s' % (theme, board)), 'w').write(src)
+    open(os.path.join(OUT, 'Themes-%s' % board), 'w').write(src)
+
+GAP = 40
+W = 390 * 3 + GAP * 2
 
 if __name__ == '__main__':
     canvas_path = os.path.join(OUT, 'canvas.json')
     c = json.load(open(canvas_path))
     pages = ['iphone', 'subscreens', 'insights']
-    src = {p: {k: v for k, v in c['boards'].items() if v.get('page') == p and v['w'] == 390 and not k.startswith(tuple(t + '-' for t in THEMES))} for p in pages}
+    src = {p: {k: v for k, v in c['boards'].items() if v.get('page') == p and v['w'] == 390} for p in pages}
     for name, t in THEMES.items():
         write_skin(name, t)
-    # Stack the three pages: iPhone rows, then Subscreens, then Insights.
-    offset, y0 = {}, 0
+    # Retire the per-theme pages an earlier version wrote.
+    old = [k for k in c['boards'] if k.split('-', 1)[0] in THEMES]
+    for k in old:
+        del c['boards'][k]
+        if k in c['order']: c['order'].remove(k)
+        f = os.path.join(OUT, k)
+        if os.path.exists(f): os.remove(f)
+    c['pages'] = [p for p in c['pages'] if not p['id'].startswith('theme-')]
+    for k in [k for k in c['notes'] if any(k.startswith('theme' + n) for n in THEMES)]:
+        del c['notes'][k]
+        if k in c['noteOrder']: c['noteOrder'].remove(k)
+    pid = 'themes-all'
+    if not any(p['id'] == pid for p in c['pages']):
+        c['pages'].append({'id': pid, 'name': 'Dark · OLED · Sepia'})
+    section = {'iphone': 'iPhone screens', 'subscreens': 'Subscreens', 'insights': 'Reading Insights'}
+    # Light columns are 470 apart; a triptych column is W + 140.
+    col = W + 140
+    y0, n = 0, 0
     for p in pages:
         if not src[p]: continue
         top = min(v['y'] for v in src[p].values())
-        offset[p] = y0 - top
+        key = 'themesAll' + p.capitalize()
+        c['notes'][key] = {'x': 0, 'y': y0 - 260, 'text': 'Dark · OLED · Sepia — ' + section[p], 'kind': 'title1', 'page': pid, 'maxW': 12000}
+        if key not in c['noteOrder']: c['noteOrder'].append(key)
+        for board, v in src[p].items():
+            write_triptych(board, v['h'], v.get('title', board))
+            k = 'Themes-' + board
+            c['boards'][k] = {'h': v['h'], 'page': pid, 'title': 'Dark · OLED · Sepia — ' + v.get('title', board), 'w': W, 'x': round(v['x'] / 470) * col, 'y': v['y'] - top + y0}
+            if k not in c['order']: c['order'].append(k)
+            n += 1
         y0 += max(v['y'] + v['h'] for v in src[p].values()) - top + 600
-    n = 0
-    section = {'iphone': 'iPhone screens', 'subscreens': 'Subscreens', 'insights': 'Reading Insights'}
-    for name in THEMES:
-        for p in pages:
-            if p not in offset: continue
-            top = min(v['y'] for v in src[p].values()) + offset[p]
-            key = 'theme%s%s' % (name, p.capitalize())
-            c['notes'][key] = {'x': 0, 'y': top - 260, 'text': '%s · %s' % (name, section[p]), 'kind': 'title1', 'page': 'theme-' + name.lower(), 'maxW': 6500}
-            if key not in c['noteOrder']: c['noteOrder'].append(key)
-        pid = 'theme-' + name.lower()
-        if not any(p['id'] == pid for p in c['pages']):
-            c['pages'].append({'id': pid, 'name': name})
-        for p in pages:
-            for board, v in src[p].items():
-                write_variant(name, board, v['h'], v.get('title', board))
-                key = '%s-%s' % (name, board)
-                c['boards'][key] = {'h': v['h'], 'page': pid, 'title': '%s · %s' % (name, v.get('title', board)), 'w': 390, 'x': v['x'], 'y': v['y'] + offset[p]}
-                if key not in c['order']: c['order'].append(key)
-                n += 1
     json.dump(c, open(canvas_path, 'w'), ensure_ascii=False, indent=2)
-    print(n, 'variant boards')
+    print(n, 'triptychs;', len(old), 'old variants removed')
