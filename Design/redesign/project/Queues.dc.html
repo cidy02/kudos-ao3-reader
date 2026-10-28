@@ -74,10 +74,11 @@ button{cursor:pointer}
         </label>
         <div style="display: flex; align-items: center; height: 50px; padding: 0 16px; gap: 12px; border-bottom: 0.5px solid #E5E5EA">
           <span style="width: 70px; font-size: 16px">Colour</span>
-          <div role="radiogroup" aria-label="Colour" style="display: flex; gap: 10px">
+          <div role="radiogroup" aria-label="Colour" style="display: flex; gap: 8px">
             <sc-for list="{{colours}}" as="c" hint-placeholder-count="6">
-              <button role="radio" aria-checked="{{c.checked}}" aria-label="{{c.name}}" style="width: 28px; height: 28px; border: none; border-radius: 14px; background: {{c.hex}}; box-shadow: {{c.ring}}"></button>
+              <button role="radio" aria-checked="{{c.checked}}" aria-label="{{c.name}}" style="width: 26px; height: 26px; border: none; border-radius: 13px; background: {{c.hex}}; box-shadow: {{c.ring}}"></button>
             </sc-for>
+            <button aria-label="More colours" style="width: 26px; height: 26px; flex-shrink: 0; border: none; border-radius: 13px; padding: 0; background: conic-gradient(#F5C400, #5FBF5F, #5A9BE0, #A57BD8, #E86AA0, #E5484D, #F5C400); display: flex; align-items: center; justify-content: center"><span style="width: 20px; height: 20px; border-radius: 10px; background: #FFFFFF; color: #1C1C1E; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></span></button>
           </div>
         </div>
         <div style="display: flex; align-items: center; min-height: 46px; padding: 6px 16px; gap: 8px; flex-wrap: wrap">
