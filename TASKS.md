@@ -579,8 +579,9 @@ hand-rolling** — "as many dependencies as are necessary". PDF is explicitly *i
   "No AO3 account? Create one", opening AO3's invitation request
   (`/invite_requests`) in the in-app browser — AO3 accounts need an invitation.
 - **T-471 · Small interaction fixes from the canvas review** 🅿️ *(owner,
-  2026-10-28).* Highlight colours get a colour well for any colour after the five
-  presets (`Reader-Highlight`). A queue item's menu leads with Read, To Top,
+  2026-10-28).* Every colour picker ends with a colour well for any colour after the
+  presets: highlights (`Reader-Highlight`), queues and collections (`Queues`,
+  `Queue-Edit`, `Collection-New`) and custom reader themes. A queue item's menu leads with Read, To Top,
   To Bottom, Share (`Queue`, `MenuTopRow`). New Queue shows a live preview and an
   Add Works picker (`Queues`). Reader menus don't dim the page (`Reader-Menu`).
   End of a work: Give Kudos full width, Comment and Bookmark below (`Reader-End`).
