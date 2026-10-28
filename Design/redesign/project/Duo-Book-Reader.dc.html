@@ -49,8 +49,9 @@ button{cursor:pointer}
 
 
   <sc-if value="{{moreOpen}}" hint-placeholder-val="{{false}}">
-    <div role="menu" aria-label="Reader" style="position: absolute; z-index: 4; right: 84px; top: 196px; width: 268px; border-radius: 24px; padding: 6px 0; background: rgba(252,250,245,0.9); backdrop-filter: blur(30px) saturate(160%); -webkit-backdrop-filter: blur(30px) saturate(160%); box-shadow: 0 18px 50px rgba(40,30,10,0.24), 0 0 0 0.5px rgba(60,40,10,0.1)">
-      <sc-for list="{{menuItems}}" as="m" hint-placeholder-count="5">
+    <div role="menu" aria-label="Reader" style="position: absolute; z-index: 4; right: 84px; top: 196px; width: 268px; border-radius: 24px; padding: 0 0 6px; overflow: hidden; background: rgba(252,250,245,0.9); backdrop-filter: blur(30px) saturate(160%); -webkit-backdrop-filter: blur(30px) saturate(160%); box-shadow: 0 18px 50px rgba(40,30,10,0.24), 0 0 0 0.5px rgba(60,40,10,0.1)">
+      <dc-import name="MenuTopRow" items="{{menuTop}}" theme="paper" width="268" hint-size="268px,66px"></dc-import>
+        <sc-for list="{{menuItems}}" as="m" hint-placeholder-count="5">
         <button role="menuitem" style="width: 100%; height: 44px; border: none; border-top: {{m.sep}}; background: transparent; padding: 0 16px; display: flex; align-items: center; gap: 12px; font-family: inherit; font-size: 16px; color: #1F1B16; text-align: left">
           <svg aria-hidden="true" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="{{m.d}}"></path></svg>
           <span style="flex: 1">{{m.label}}</span>
@@ -86,12 +87,11 @@ class Component extends DCLogic {
       bookmark: 'M7 4h10v16l-5-4-5 4z',
       listen: 'M4 9.5h3.5L12 5.5v13l-4.5-4H4zM15.5 9a4.5 4.5 0 0 1 0 6M18 6.5a8 8 0 0 1 0 11'
     };
+    // Top row: Find, Comments, Share. Contents, Add Bookmark and Read Aloud are on the side rail.
+    const menuTop = [{ label: 'Find', d: 'M10.5 4a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM15.5 15.5l5 5' }, { label: 'Comments', d: 'M4 5h16v11H9l-5 4z' }, { label: 'Share', d: 'M12 15V4M8 8l4-4 4 4M5 12v8h14v-8' }];
     const items = [
       ['Bookmarks & Highlights', 'M7 4h10v16l-5-4-5 4z', '5', 'none'],
-      ['Find in Work', 'M10.5 4a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM15.5 15.5l5 5', '', 'none'],
-      ['Comments', 'M4 5h16v11H9l-5 4z', '286', 'none'],
-      ['Rebuild from Original', 'M19 12a7 7 0 1 1-2.1-5M19 4v4h-4', '', sep],
-      ['Share', 'M12 15V4M8 8l4-4 4 4M5 12v8h14v-8', '', 'none']
+      ['Rebuild from Original', 'M19 12a7 7 0 1 1-2.1-5M19 4v4h-4', '', sep]
     ];
     return {
       accent: this.props.accent ?? '#990000',
@@ -102,6 +102,7 @@ class Component extends DCLogic {
       moreBg: open ? 'rgba(0,0,0,0.07)' : 'transparent',
       toggleMore: () => this.setState({ moreOpen: !open }),
       closeMore: () => this.setState({ moreOpen: false }),
+      menuTop,
       menuItems: items.map(([label, d, detail, s]) => ({ label, d, detail, sep: s }))
     };
   }
