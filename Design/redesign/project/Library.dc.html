@@ -79,7 +79,7 @@ button{cursor:pointer}
       <sc-for list="{{tiles}}" as="t" hint-placeholder-count="6">
         <a href="{{t.href}}" aria-label="{{t.label}}, {{t.count}}" style="text-decoration: none; color: #000000; height: 62px; box-sizing: border-box; padding: 9px 12px; border-radius: 16px; background: #F2F2F7; display: flex; flex-direction: column; justify-content: space-between">
           <span style="display: flex; align-items: center; justify-content: space-between">
-            <span aria-hidden="true" style="width: 26px; height: 26px; border-radius: 13px; background: #990000; color: #FFFFFF; display: flex; align-items: center; justify-content: center"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="{{t.d}}"></path></svg></span>
+            <span aria-hidden="true" style="width: 30px; height: 30px; border-radius: 15px; background: {{t.colour}}; color: #FFFFFF; display: flex; align-items: center; justify-content: center"><svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="{{t.glyph}}"></path></svg></span>
             <span style="font-size: 20px; line-height: 24px; font-weight: 700; font-variant-numeric: tabular-nums">{{t.count}}</span>
           </span>
           <span style="font-size: 15px; line-height: 18px; font-weight: 600; color: #3A3A3C">{{t.label}}</span>
@@ -151,7 +151,19 @@ class Component extends DCLogic {
     ]);
     // Six shelves by default; Edit Shelves (••• menu) shows, hides and orders them, as Music's Library does.
     const pick = ['Want to Read', 'Reading Now', 'Finished', 'Downloaded', 'Favourites', 'Queues'];
-    const tiles = pick.map((n) => shelves.find((x) => x.label === n));
+    // Each shelf has its own colour and a solid glyph, as Reminders' smart lists do (shared with Edit Shelves).
+    const SHELF = {
+      'Want to Read': ['#1E63C8', 'M7 3.5h10a1 1 0 0 1 1 1V21l-6-4-6 4V4.5a1 1 0 0 1 1-1z'],
+      'Reading Now': ['#E07000', 'M3 5.2c3-1.1 6-.9 8.5 1v13.3c-2.5-1.7-5.5-1.9-8.5-1zM12.5 6.2c2.5-1.9 5.5-2.1 8.5-1v13.3c-3-.9-6-.7-8.5 1z'],
+      'Finished': ['#2F8F3A', 'M9.6 17.4 4.6 12.4l1.9-1.9 3.1 3.1 7.9-7.9 1.9 1.9z'],
+      'Downloaded': ['#5856D6', 'M10.4 3.5h3.2v8.2h4.1L12 18l-5.7-6.3h4.1zM5 19h14v2H5z'],
+      'Favourites': ['#E0A100', 'm12 3.2 2.7 5.5 6 .9-4.4 4.2 1.1 6L12 17l-5.4 2.8 1.1-6-4.4-4.2 6-.9z'],
+      'Queues': ['#7B3FA0', 'M4.5 5h15v3.2h-15zM4.5 10.4h15v3.2h-15zM4.5 15.8h9v3.2h-9z'],
+      'History': ['#6C6C70', 'M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18zm-1.2 4.2v6.1l4.8 2.9.9-1.5-3.9-2.3V7.2z'],
+      'All Works': ['#6C6C70', 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z'],
+      'Imported': ['#6C6C70', 'M10.4 3.5h3.2v8.2h4.1L12 18l-5.7-6.3h4.1zM5 19h14v2H5z']
+    };
+    const tiles = pick.map((n) => shelves.find((x) => x.label === n)).map((t) => ({ ...t, colour: SHELF[t.label][0], glyph: SHELF[t.label][1] }));
     // Newest downloads first; each says when it came down and how much room it takes.
     const downloaded = [
       { title: 'The Hound, Revisited', author: 'fogandlamplight', fandom: 'Sherlock Holmes', rating: 'T', category: 'MM', warnings: 'present', status: 'wip', meta: 'Oct 22 · 1.4 MB' },

@@ -106,6 +106,9 @@ button{cursor:pointer}
                 <sc-if value="{{r.hasIcon}}" hint-placeholder-val="{{false}}">
                   <svg aria-hidden="true" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="{{r.iconColour}}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0"><path d="{{r.d}}"></path></svg>
                 </sc-if>
+                <sc-if value="{{r.hasDot}}" hint-placeholder-val="{{false}}">
+                  <span aria-hidden="true" style="width: 29px; height: 29px; flex-shrink: 0; border-radius: 15px; background: {{r.dot}}; color: #FFFFFF; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="{{r.dotD}}"></path></svg></span>
+                </sc-if>
                 <sc-if value="{{r.hasCover}}" hint-placeholder-val="{{false}}">
                   <span aria-hidden="true" style="width: 30px; height: 40px; flex-shrink: 0; border-radius: 5px; background: {{r.cover}}; color: rgba(255,255,255,0.9); font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: 18px; font-weight: 600; display: flex; align-items: flex-end; justify-content: flex-end; padding: 0 3px 1px 0; box-sizing: border-box">{{r.initial}}</span>
                 </sc-if>
@@ -204,7 +207,7 @@ class Component extends DCLogic {
         const centred = k === 'button' || k === 'destructive';
         const field = k === 'field' || k === 'textarea';
         const tall = !!r.sub || !!r.meta || k === 'textarea';
-        const lead = r.handle || r.tile || r.icon || r.avatar || r.cover;
+        const lead = r.handle || r.tile || r.icon || r.avatar || r.cover || r.dot;
         return {
           label: r.label || '', sub: r.sub || '', hasSub: !!r.sub,
           detail: r.detail || '', hasDetail: !!r.detail && !field,
@@ -212,6 +215,7 @@ class Component extends DCLogic {
           meta: r.meta || '', hasMeta: !!r.meta, metaColour: r.metaColour || '#8E8E93', metaWeight: r.metaColour ? 600 : 400,
           hasBar: r.bar !== undefined, bar: (r.bar || 0) + '%', barColour: r.barColour || '#990000',
           hasCover: !!r.cover, cover: r.cover || '',
+          hasDot: !!r.dot, dot: r.dot || '', dotD: r.dotD || '',
           text: r.text || r.placeholder || '', fieldColour: r.text ? '#000000' : '#AEAEB2',
           wrap: k === 'textarea' ? 'normal' : 'nowrap',
           chips: r.chips || [], hasChips: k === 'chips',
