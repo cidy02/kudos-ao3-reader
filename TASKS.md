@@ -533,6 +533,20 @@ hand-rolling** — "as many dependencies as are necessary". PDF is explicitly *i
   contrast at the smallest tile size, Dark/Sepia/OLED and AX5; the VoiceOver label is
   unchanged. Android parity: `WorkStats.kt` uses `Icons.Outlined.Shield` → the filled
   icon with the same knock-out.
+- **T-466 · One layout per surface; retire the card-mode switches** 🅿️ *(owner,
+  2026-10-28; canvas `Layouts-Plan`).* Remove `WorkSectionLayout` (Shelves / Ledger
+  per dashboard, `WorkCarouselSection.swift`) and the three-way `WorkListDisplayMode`
+  menu (Detailed / Ledger / Compact, `WorkCardListControls.swift`; stored per screen
+  as `account.displayMode`, `authorProfile.displayMode`, `collection.displayMode`…).
+  Each surface draws its own layout: Home, Library, Writing fixed; Search, Browse,
+  fandom works, Author, Series → detailed rows with a **Show Summaries** switch (on by
+  default); All Works, shelves, queues, collections, Marked for Later, Bookmarks,
+  AO3 History, Your Works → ledger rows with **List / Grid** in •••, remembered per
+  list; Updates, History, Inbox → their own rows. Long-press preview shows summary
+  and tags everywhere. Migration: a stored Compact → Grid on that list; Detailed or
+  Ledger → List; dashboard Shelves/Ledger keys are ignored. Touches the 17 files that
+  read either enum plus `LibrarySectionKindTests`. Density rule (AGENTS.md): no
+  metadata leaves a surface without the owner's approval; screenshot gate applies.
 
 ### Phase 3 — native AO3 writes (most fragile; needs the per-page CSRF token)
 - **Leave kudos · comment · subscribe · AO3-side bookmark** — fetch the work/page,
