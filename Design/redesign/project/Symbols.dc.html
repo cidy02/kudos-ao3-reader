@@ -26,8 +26,8 @@ body{margin:0}
           <svg width="{{icon}}" height="{{icon}}" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.6 4.6L19.2 7.4"></path></svg>
         </sc-if>
         <sc-if value="{{t.isShield}}" hint-placeholder-val="{{false}}">
-          <svg width="{{shieldIcon}}" height="{{shieldIcon}}" viewBox="0 0 24 24" fill="none"><path d="M12 2.6 4.4 5.5v6c0 4.7 3.2 8.6 7.6 9.9 4.4-1.3 7.6-5.2 7.6-9.9v-6z" stroke="{{t.fg}}" stroke-width="1.9" stroke-linejoin="round"></path></svg>
-          <span style="position: absolute; inset: 0; padding-top: {{shieldNudge}}px; display: flex; align-items: center; justify-content: center; color: {{t.fg}}; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Rounded', system-ui, sans-serif; font-size: {{shieldFs}}px; font-weight: 800; line-height: 1">{{t.glyph}}</span>
+          <svg width="{{shieldIcon}}" height="{{shieldIcon}}" viewBox="0 0 24 24" fill="none"><path d="M12 2.6 4.4 5.5v6c0 4.7 3.2 8.6 7.6 9.9 4.4-1.3 7.6-5.2 7.6-9.9v-6z" fill="{{t.fg}}" stroke="{{t.fg}}" stroke-width="1.4" stroke-linejoin="round"></path></svg>
+          <span style="position: absolute; inset: 0; padding-top: {{shieldNudge}}px; display: flex; align-items: center; justify-content: center; color: {{t.bg}}; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Rounded', system-ui, sans-serif; font-size: {{shieldFs}}px; font-weight: 800; line-height: 1">{{t.glyph}}</span>
         </sc-if>
         <sc-if value="{{t.isGen}}" hint-placeholder-val="{{false}}">
           <svg width="{{icon}}" height="{{icon}}" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8" stroke="{{t.fg}}" stroke-width="2.4"></circle><circle cx="12" cy="12" r="2.6" fill="{{t.fg}}"></circle></svg>
@@ -63,7 +63,7 @@ class Component extends DCLogic {
     const sans = "-apple-system, BlinkMacSystemFont, 'SF Pro Rounded', 'SF Pro Text', system-ui, sans-serif";
     const sym = "'Apple Symbols', 'Segoe UI Symbol', 'Noto Sans Symbols 2', 'DejaVu Sans', sans-serif";
     const letter = (o, glyph) => ({ ...o, glyph, kind: 'text', font: sans, fs: Math.round(s * 0.6), weight: 800 });
-    // Ratings: the letter inside an outlined shield, as the app draws them (WorkStatLabel.ratingShield).
+    // Ratings: the letter cut out of a filled shield (owner, 2026-10-28; the app draws an outline today).
     const shield = (o, glyph) => ({ ...o, glyph, kind: 'shield' });
     const mark = (o, glyph, scale) => ({ ...o, glyph, kind: 'text', font: sym, fs: Math.round(s * scale), weight: 400 });
 
