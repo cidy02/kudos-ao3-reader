@@ -524,6 +524,15 @@ hand-rolling** — "as many dependencies as are necessary". PDF is explicitly *i
   capped tag count (proposed 20), no cookies on feed requests; update
   `docs/AO3_NETWORKING_POLICY.md` in the same change. Open (owner): alerts while the
   app is closed need background checks, which the policy forbids today.
+- **T-465 · Rating symbol: filled shield, letter cut out** 🅿️ *(owner, 2026-10-28;
+  canvas `Symbols`).* `WorkStatLabel.ratingShield` draws `Image(systemName: "shield")`
+  (outline) with the letter in the rating colour on the tile's 30% tint. Switch to
+  `shield.fill` in the rating colour with the letter knocked out in a contrasting
+  ink (white on G/M/E/NR; dark on T's yellow, as the canvas does). Re-measure the
+  letter's centring (the 0.3 pt x-offset was tuned against the outline) and check
+  contrast at the smallest tile size, Dark/Sepia/OLED and AX5; the VoiceOver label is
+  unchanged. Android parity: `WorkStats.kt` uses `Icons.Outlined.Shield` → the filled
+  icon with the same knock-out.
 
 ### Phase 3 — native AO3 writes (most fragile; needs the per-page CSRF token)
 - **Leave kudos · comment · subscribe · AO3-side bookmark** — fetch the work/page,
