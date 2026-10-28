@@ -42,6 +42,14 @@
       "x": 3760,
       "y": 9900
     },
+    "Account-Move.dc.html": {
+      "h": 660,
+      "page": "structure",
+      "title": "Account behind a profile button, Writing as a tab",
+      "w": 1290,
+      "x": 0,
+      "y": 7180
+    },
     "Account-Regrouped.dc.html": {
       "h": 1240,
       "page": "iphone",
@@ -49,6 +57,14 @@
       "w": 390,
       "x": 6030,
       "y": 7980
+    },
+    "Account-Sheet.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Account sheet (from the profile button)",
+      "w": 390,
+      "x": 2350,
+      "y": 11300
     },
     "Account-SignedOut.dc.html": {
       "h": 844,
@@ -73,6 +89,14 @@
       "w": 1460,
       "x": 0,
       "y": 0
+    },
+    "AppIcon.dc.html": {
+      "h": 96,
+      "page": "system",
+      "title": "App icon (component)",
+      "w": 96,
+      "x": 1540,
+      "y": 1940
     },
     "Author.dc.html": {
       "h": 1240,
@@ -106,6 +130,14 @@
       "x": 5560,
       "y": 7980
     },
+    "ChapterEditor.dc.html": {
+      "h": 844,
+      "page": "system",
+      "title": "Chapter editor (component)",
+      "w": 390,
+      "x": 1800,
+      "y": 2420
+    },
     "Collection.dc.html": {
       "h": 844,
       "page": "iphone",
@@ -122,6 +154,14 @@
       "x": 1410,
       "y": 3960
     },
+    "CommentThread.dc.html": {
+      "h": 520,
+      "page": "system",
+      "title": "Comment thread (component)",
+      "w": 390,
+      "x": 1360,
+      "y": 2160
+    },
     "Comments.dc.html": {
       "h": 844,
       "page": "iphone",
@@ -137,6 +177,14 @@
       "w": 132,
       "x": 1360,
       "y": 498
+    },
+    "CoverStack.dc.html": {
+      "h": 170,
+      "page": "system",
+      "title": "Cover stack, queues and collections (component)",
+      "w": 150,
+      "x": 1360,
+      "y": 1940
     },
     "Coverage.dc.html": {
       "expand": "fill",
@@ -219,12 +267,28 @@
       "x": 0,
       "y": 1098
     },
+    "Duo-Open-Insights.dc.html": {
+      "h": 669,
+      "page": "duo",
+      "title": "Open · Reading Insights",
+      "w": 951,
+      "x": 8248,
+      "y": 1098
+    },
     "Duo-Open-Library.dc.html": {
       "h": 669,
       "page": "duo",
       "title": "Open · Library",
       "w": 951,
       "x": 1031,
+      "y": 1098
+    },
+    "Duo-Open-Reader-Immersive.dc.html": {
+      "h": 669,
+      "page": "duo",
+      "title": "Open · Reader, immersive (controls hidden)",
+      "w": 951,
+      "x": 7217,
       "y": 1098
     },
     "Duo-Open-Reader.dc.html": {
@@ -259,6 +323,14 @@
       "x": 3093,
       "y": 1098
     },
+    "Duo-Portrait-Account.dc.html": {
+      "h": 951,
+      "page": "duo",
+      "title": "Open portrait · Account (superseded: Account sheet + Writing tab)",
+      "w": 669,
+      "x": 3745,
+      "y": 3276
+    },
     "Duo-Portrait-Browse.dc.html": {
       "h": 951,
       "page": "duo",
@@ -267,6 +339,86 @@
       "x": 7490,
       "y": 3276
     },
+    "Duo-Portrait-Home.dc.html": {
+      "h": 951,
+      "page": "duo",
+      "title": "Open portrait · Home",
+      "w": 669,
+      "x": 0,
+      "y": 3276
+    },
+    "Duo-Portrait-Insights.dc.html": {
+      "h": 951,
+      "page": "duo",
+      "title": "Open portrait · Reading Insights",
+      "w": 669,
+      "x": 6741,
+      "y": 3276
+    },
+    "Duo-Portrait-Library.dc.html": {
+      "h": 951,
+      "page": "duo",
+      "title": "Open portrait · Library",
+      "w": 669,
+      "x": 749,
+      "y": 3276
+    },
+    "Duo-Portrait-Reader-Immersive.dc.html": {
+      "h": 951,
+      "page": "duo",
+      "title": "Open portrait · Reader, immersive (controls hidden)",
+      "w": 669,
+      "x": 5992,
+      "y": 3276
+    },
+    "Duo-Portrait-Reader.dc.html": {
+      "h": 951,
+      "page": "duo",
+      "title": "Open portrait · Reader",
+      "w": 669,
+      "x": 5243,
+      "y": 3276
+    },
+    "Duo-Portrait-Search-Filters.dc.html": {
+      "h": 951,
+      "page": "duo",
+      "title": "Open portrait · Search filters (form sheet)",
+      "w": 669,
+      "x": 2247,
+      "y": 3276
+    },
+    "Duo-Portrait-Search.dc.html": {
+      "h": 951,
+      "page": "duo",
+      "title": "Open portrait · Search",
+      "w": 669,
+      "x": 1498,
+      "y": 3276
+    },
+    "Duo-Portrait-Settings.dc.html": {
+      "h": 951,
+      "page": "duo",
+      "title": "Open portrait · Settings (list beside detail)",
+      "w": 669,
+      "x": 4494,
+      "y": 3276
+    },
+    "Duo-Portrait-WorkDetail.dc.html": {
+      "h": 951,
+      "page": "duo",
+      "title": "Open portrait · Work Detail",
+      "w": 669,
+      "x": 2996,
+      "y": 3276
+    },
+    "DuoSideBar.dc.html": {
+      "h": 669,
+      "page": "system",
+      "title": "Duo side controls: status, toolbar, tab bar on the trailing edge (component)",
+      "w": 64,
+      "x": 2230,
+      "y": 2420
+    },
     "DuoSidebar.dc.html": {
       "h": 649,
       "page": "system",
@@ -274,6 +426,14 @@
       "w": 232,
       "x": 1504,
       "y": 1248
+    },
+    "DuoTopBar.dc.html": {
+      "h": 80,
+      "page": "system",
+      "title": "Duo portrait top bar: status bar, Back/Close, toolbar group (component)",
+      "w": 669,
+      "x": 2340,
+      "y": 2420
     },
     "Fandom-Works.dc.html": {
       "h": 844,
@@ -347,6 +507,22 @@
       "x": 0,
       "y": 4180
     },
+    "Home-Launchpad.dc.html": {
+      "h": 1600,
+      "page": "iphone",
+      "title": "Home · launchpad, profile button",
+      "w": 390,
+      "x": 0,
+      "y": 11300
+    },
+    "Home-Library-Plan.dc.html": {
+      "h": 640,
+      "page": "structure",
+      "title": "Home launches, Library organises",
+      "w": 1290,
+      "x": 0,
+      "y": 6440
+    },
     "IA-Map.dc.html": {
       "h": 1100,
       "page": "structure",
@@ -363,6 +539,70 @@
       "x": 2350,
       "y": 7980
     },
+    "Insights-Data.dc.html": {
+      "h": 3440,
+      "page": "insights",
+      "title": "The data Insights needs · D1–D11",
+      "w": 1280,
+      "x": 2400,
+      "y": 0
+    },
+    "Insights-Habits.dc.html": {
+      "h": 2200,
+      "page": "insights",
+      "title": "Habits · time of day, reading days, sittings, rereads, stopped",
+      "w": 390,
+      "x": 940,
+      "y": 0
+    },
+    "Insights-Library.dc.html": {
+      "h": 2450,
+      "page": "insights",
+      "title": "Library · unread, statuses, WIPs, kudos, series, authors",
+      "w": 390,
+      "x": 1410,
+      "y": 0
+    },
+    "Insights-Metrics.dc.html": {
+      "h": 3840,
+      "page": "insights",
+      "title": "What each card counts · rule, data, status",
+      "w": 1280,
+      "x": 3760,
+      "y": 0
+    },
+    "Insights-Options.dc.html": {
+      "h": 920,
+      "page": "insights",
+      "title": "Insights Options (sheet from •••)",
+      "w": 390,
+      "x": 1880,
+      "y": 0
+    },
+    "Insights-Overview.dc.html": {
+      "h": 1830,
+      "page": "insights",
+      "title": "Overview · words, time, fandoms, records, finished",
+      "w": 390,
+      "x": 0,
+      "y": 0
+    },
+    "Insights-Stopped.dc.html": {
+      "h": 844,
+      "page": "insights",
+      "title": "Stopped Reading? (sheet)",
+      "w": 390,
+      "x": 1880,
+      "y": 1020
+    },
+    "Insights-Taste.dc.html": {
+      "h": 2750,
+      "page": "insights",
+      "title": "Taste · your usual fic, fandoms, relationships, tags, AO3 labels",
+      "w": 390,
+      "x": 470,
+      "y": 0
+    },
     "Insights.dc.html": {
       "h": 844,
       "page": "iphone",
@@ -371,6 +611,14 @@
       "x": 3290,
       "y": 0
     },
+    "InsightsTop.dc.html": {
+      "h": 204,
+      "page": "system",
+      "title": "Reading Insights header (component)",
+      "w": 390,
+      "x": 1360,
+      "y": 2760
+    },
     "Library-Filters.dc.html": {
       "h": 1400,
       "page": "iphone",
@@ -378,6 +626,14 @@
       "w": 390,
       "x": 1410,
       "y": 0
+    },
+    "Library-Organize.dc.html": {
+      "h": 1240,
+      "page": "iphone",
+      "title": "Library · organise, shelf tiles, On AO3",
+      "w": 390,
+      "x": 470,
+      "y": 11300
     },
     "Library-Section.dc.html": {
       "h": 844,
@@ -427,6 +683,14 @@
       "x": 2820,
       "y": 7980
     },
+    "Needs-Work.dc.html": {
+      "h": 2020,
+      "page": "coverage",
+      "title": "Needs more work · app features, not the redesign",
+      "w": 1280,
+      "x": 1360,
+      "y": 0
+    },
     "Onboarding.dc.html": {
       "h": 844,
       "page": "iphone",
@@ -450,6 +714,14 @@
       "w": 390,
       "x": 1880,
       "y": 9900
+    },
+    "Queue-Manage.dc.html": {
+      "h": 1000,
+      "page": "iphone",
+      "title": "Queue · swipe and drag",
+      "w": 390,
+      "x": 1880,
+      "y": 11300
     },
     "Queue.dc.html": {
       "h": 844,
@@ -739,6 +1011,14 @@
       "x": 470,
       "y": 3960
     },
+    "Work-AddTo.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Work menu · Add to queue or collection",
+      "w": 390,
+      "x": 1410,
+      "y": 11300
+    },
     "Work-Editor.dc.html": {
       "h": 1500,
       "page": "iphone",
@@ -755,6 +1035,14 @@
       "x": 1360,
       "y": 306
     },
+    "Writing.dc.html": {
+      "h": 1240,
+      "page": "iphone",
+      "title": "Writing tab",
+      "w": 390,
+      "x": 940,
+      "y": 11300
+    },
     "iPhone-Reader.dc.html": {
       "h": 844,
       "page": "iphone",
@@ -770,294 +1058,6 @@
       "w": 390,
       "x": 0,
       "y": 3960
-    },
-    "CoverStack.dc.html": {
-      "x": 1360,
-      "y": 1940,
-      "w": 150,
-      "h": 170,
-      "title": "Cover stack, queues and collections (component)",
-      "page": "system"
-    },
-    "AppIcon.dc.html": {
-      "h": 96,
-      "page": "system",
-      "title": "App icon (component)",
-      "w": 96,
-      "x": 1540,
-      "y": 1940
-    },
-    "CommentThread.dc.html": {
-      "h": 520,
-      "page": "system",
-      "title": "Comment thread (component)",
-      "w": 390,
-      "x": 1360,
-      "y": 2160
-    },
-    "ChapterEditor.dc.html": {
-      "h": 844,
-      "page": "system",
-      "title": "Chapter editor (component)",
-      "w": 390,
-      "x": 1800,
-      "y": 2420
-    },
-    "DuoSideBar.dc.html": {
-      "h": 669,
-      "page": "system",
-      "title": "Duo side controls: status, toolbar, tab bar on the trailing edge (component)",
-      "w": 64,
-      "x": 2230,
-      "y": 2420
-    },
-    "Needs-Work.dc.html": {
-      "h": 2020,
-      "page": "coverage",
-      "title": "Needs more work · app features, not the redesign",
-      "w": 1280,
-      "x": 1360,
-      "y": 0
-    },
-    "Insights-Overview.dc.html": {
-      "h": 1830,
-      "page": "insights",
-      "title": "Overview · words, time, fandoms, records, finished",
-      "w": 390,
-      "x": 0,
-      "y": 0
-    },
-    "Insights-Taste.dc.html": {
-      "h": 2750,
-      "page": "insights",
-      "title": "Taste · your usual fic, fandoms, relationships, tags, AO3 labels",
-      "w": 390,
-      "x": 470,
-      "y": 0
-    },
-    "Insights-Habits.dc.html": {
-      "h": 2200,
-      "page": "insights",
-      "title": "Habits · time of day, reading days, sittings, rereads, stopped",
-      "w": 390,
-      "x": 940,
-      "y": 0
-    },
-    "Insights-Library.dc.html": {
-      "h": 2450,
-      "page": "insights",
-      "title": "Library · unread, statuses, WIPs, kudos, series, authors",
-      "w": 390,
-      "x": 1410,
-      "y": 0
-    },
-    "Insights-Options.dc.html": {
-      "h": 920,
-      "page": "insights",
-      "title": "Insights Options (sheet from •••)",
-      "w": 390,
-      "x": 1880,
-      "y": 0
-    },
-    "Insights-Stopped.dc.html": {
-      "h": 844,
-      "page": "insights",
-      "title": "Stopped Reading? (sheet)",
-      "w": 390,
-      "x": 1880,
-      "y": 1020
-    },
-    "Insights-Data.dc.html": {
-      "h": 3440,
-      "page": "insights",
-      "title": "The data Insights needs · D1–D11",
-      "w": 1280,
-      "x": 2400,
-      "y": 0
-    },
-    "Insights-Metrics.dc.html": {
-      "h": 3840,
-      "page": "insights",
-      "title": "What each card counts · rule, data, status",
-      "w": 1280,
-      "x": 3760,
-      "y": 0
-    },
-    "InsightsTop.dc.html": {
-      "h": 204,
-      "page": "system",
-      "title": "Reading Insights header (component)",
-      "w": 390,
-      "x": 1360,
-      "y": 2760
-    },
-    "Duo-Open-Reader-Immersive.dc.html": {
-      "h": 669,
-      "page": "duo",
-      "title": "Open · Reader, immersive (controls hidden)",
-      "w": 951,
-      "x": 7217,
-      "y": 1098
-    },
-    "Duo-Open-Insights.dc.html": {
-      "h": 669,
-      "page": "duo",
-      "title": "Open · Reading Insights",
-      "w": 951,
-      "x": 8248,
-      "y": 1098
-    },
-    "Duo-Portrait-Home.dc.html": {
-      "h": 951,
-      "page": "duo",
-      "title": "Open portrait · Home",
-      "w": 669,
-      "x": 0,
-      "y": 3276
-    },
-    "Duo-Portrait-Library.dc.html": {
-      "h": 951,
-      "page": "duo",
-      "title": "Open portrait · Library",
-      "w": 669,
-      "x": 749,
-      "y": 3276
-    },
-    "Duo-Portrait-Search.dc.html": {
-      "h": 951,
-      "page": "duo",
-      "title": "Open portrait · Search",
-      "w": 669,
-      "x": 1498,
-      "y": 3276
-    },
-    "Duo-Portrait-WorkDetail.dc.html": {
-      "h": 951,
-      "page": "duo",
-      "title": "Open portrait · Work Detail",
-      "w": 669,
-      "x": 2996,
-      "y": 3276
-    },
-    "Duo-Portrait-Account.dc.html": {
-      "h": 951,
-      "page": "duo",
-      "title": "Open portrait · Account (superseded: Account sheet + Writing tab)",
-      "w": 669,
-      "x": 3745,
-      "y": 3276
-    },
-    "Duo-Portrait-Settings.dc.html": {
-      "h": 951,
-      "page": "duo",
-      "title": "Open portrait · Settings (list beside detail)",
-      "w": 669,
-      "x": 4494,
-      "y": 3276
-    },
-    "Duo-Portrait-Reader.dc.html": {
-      "h": 951,
-      "page": "duo",
-      "title": "Open portrait · Reader",
-      "w": 669,
-      "x": 5243,
-      "y": 3276
-    },
-    "Duo-Portrait-Reader-Immersive.dc.html": {
-      "h": 951,
-      "page": "duo",
-      "title": "Open portrait · Reader, immersive (controls hidden)",
-      "w": 669,
-      "x": 5992,
-      "y": 3276
-    },
-    "Duo-Portrait-Insights.dc.html": {
-      "h": 951,
-      "page": "duo",
-      "title": "Open portrait · Reading Insights",
-      "w": 669,
-      "x": 6741,
-      "y": 3276
-    },
-    "DuoTopBar.dc.html": {
-      "h": 80,
-      "page": "system",
-      "title": "Duo portrait top bar: status bar, Back/Close, toolbar group (component)",
-      "w": 669,
-      "x": 2340,
-      "y": 2420
-    },
-    "Duo-Portrait-Search-Filters.dc.html": {
-      "h": 951,
-      "page": "duo",
-      "title": "Open portrait · Search filters (form sheet)",
-      "w": 669,
-      "x": 2247,
-      "y": 3276
-    },
-    "Home-Launchpad.dc.html": {
-      "h": 1600,
-      "page": "iphone",
-      "title": "Home · launchpad, profile button",
-      "w": 390,
-      "x": 0,
-      "y": 11300
-    },
-    "Library-Organize.dc.html": {
-      "h": 1240,
-      "page": "iphone",
-      "title": "Library · organise, shelf tiles, On AO3",
-      "w": 390,
-      "x": 470,
-      "y": 11300
-    },
-    "Work-AddTo.dc.html": {
-      "h": 844,
-      "page": "iphone",
-      "title": "Work menu · Add to queue or collection",
-      "w": 390,
-      "x": 1410,
-      "y": 11300
-    },
-    "Queue-Manage.dc.html": {
-      "h": 1000,
-      "page": "iphone",
-      "title": "Queue · swipe and drag",
-      "w": 390,
-      "x": 1880,
-      "y": 11300
-    },
-    "Account-Sheet.dc.html": {
-      "h": 844,
-      "page": "iphone",
-      "title": "Account sheet (from the profile button)",
-      "w": 390,
-      "x": 2350,
-      "y": 11300
-    },
-    "Home-Library-Plan.dc.html": {
-      "h": 640,
-      "page": "structure",
-      "title": "Home launches, Library organises",
-      "w": 1290,
-      "x": 0,
-      "y": 6440
-    },
-    "Account-Move.dc.html": {
-      "h": 660,
-      "page": "structure",
-      "title": "Account behind a profile button, Writing as a tab",
-      "w": 1290,
-      "x": 0,
-      "y": 7180
-    },
-    "Writing.dc.html": {
-      "h": 1240,
-      "page": "iphone",
-      "title": "Writing tab",
-      "w": 390,
-      "x": 940,
-      "y": 11300
     }
   },
   "createdOnFiles": {
@@ -1088,6 +1088,16 @@
     "rowInsightsSpec"
   ],
   "notes": {
+    "note-47ewmx": {
+      "bold": false,
+      "kind": "title1",
+      "page": "iphone",
+      "size": 24,
+      "text": "",
+      "w": 240,
+      "x": -1114,
+      "y": 7387
+    },
     "rowAccount": {
       "kind": "title1",
       "maxW": 5560,
@@ -1133,9 +1143,27 @@
       "x": 0,
       "y": -300
     },
+    "rowInsightsScreens": {
+      "kind": "title1",
+      "maxW": 2270,
+      "page": "insights",
+      "text": "Reading Insights · four screens and two sheets",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "rowInsightsSpec": {
+      "kind": "title1",
+      "maxW": 2640,
+      "page": "insights",
+      "text": "Data spec · what the code needs to record",
+      "w": 240,
+      "x": 2400,
+      "y": -300
+    },
     "rowOpen": {
       "kind": "title1",
-      "maxW": 9199,
+      "maxW": 8000,
       "page": "duo",
       "text": "Open, flat",
       "w": 240,
@@ -1144,7 +1172,7 @@
     },
     "rowPortrait": {
       "kind": "title1",
-      "maxW": 8159,
+      "maxW": 8000,
       "page": "duo",
       "text": "Open, portrait",
       "w": 240,
@@ -1201,34 +1229,6 @@
       "w": 380,
       "x": 4700,
       "y": 0
-    },
-    "note-47ewmx": {
-      "bold": false,
-      "kind": "title1",
-      "page": "iphone",
-      "size": 24,
-      "text": "",
-      "w": 240,
-      "x": -1114,
-      "y": 7387
-    },
-    "rowInsightsScreens": {
-      "kind": "title1",
-      "maxW": 2270,
-      "page": "insights",
-      "text": "Reading Insights · four screens and two sheets",
-      "w": 240,
-      "x": 0,
-      "y": -300
-    },
-    "rowInsightsSpec": {
-      "kind": "title1",
-      "maxW": 2640,
-      "page": "insights",
-      "text": "Data spec · what the code needs to record",
-      "w": 240,
-      "x": 2400,
-      "y": -300
     }
   },
   "order": [

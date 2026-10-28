@@ -26,7 +26,7 @@ a{color:#990000}a:hover{color:#6E0000}
     <figure style="margin: 0; width: 412px; display: flex; flex-direction: column; gap: 14px">
       <div style="position: relative; width: 412px; height: 915px; border-radius: 36px; overflow: hidden; background: #FFF8F7; box-shadow: 0 0 0 1px rgba(0,0,0,0.12), 0 24px 60px rgba(0,0,0,0.10)">
         <div style="position: absolute; right: 8px; top: 44px; display: flex">
-          <button aria-label="Select" style="width: 48px; height: 48px; border: none; border-radius: 24px; background: transparent; color: #534341; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m4 7 2 2 3.5-3.5M4 15l2 2 3.5-3.5M13 8h7M13 16h7"></path></svg></button>
+          <a href="Account-Sheet.dc.html" aria-label="Account, saltwindow, 3 unread in Inbox" style="position: relative; width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; text-decoration: none"><span style="width: 32px; height: 32px; border-radius: 16px; background: #23506B; color: #FFFFFF; font-size: 15px; font-weight: 500; display: flex; align-items: center; justify-content: center">S</span><span aria-hidden="true" style="position: absolute; top: 6px; right: 4px; min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box; border-radius: 8px; background: #990000; color: #FFFFFF; font-size: 10px; line-height: 16px; font-weight: 500; text-align: center">3</span></a>
           <button aria-label="More options" style="width: 48px; height: 48px; border: none; border-radius: 24px; background: transparent; color: #534341; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="5.5" r="1.8" fill="currentColor"></circle><circle cx="12" cy="12" r="1.8" fill="currentColor"></circle><circle cx="12" cy="18.5" r="1.8" fill="currentColor"></circle></svg></button>
         </div>
         <main style="padding: 104px 16px 0; display: flex; flex-direction: column; gap: 20px">
@@ -63,7 +63,7 @@ a{color:#990000}a:hover{color:#6E0000}
         </div>
         <span aria-hidden="true" style="position: absolute; left: 50%; bottom: 8px; width: 108px; height: 4px; margin-left: -54px; border-radius: 2px; background: #1D1B1B; opacity: 0.85"></span>
       </div>
-      <figcaption style="font-size: 15px; line-height: 22px; color: #534341"><span style="font-weight: 700; color: #1D1B1B">Home.</span> LargeTopAppBar (headline, actions as IconButtons), plain surface, the Resume card and cover shelf drawn in Compose. A floating navigation bar, placed like iPhone’s tab bar: a fully rounded surfaceContainer with shadow elevation holding NavigationBarItems (pill indicator in secondaryContainer, filled icon when selected), Search as its own round button beside it. It collapses to the current destination on scroll.</figcaption>
+      <figcaption style="font-size: 15px; line-height: 22px; color: #534341"><span style="font-weight: 700; color: #1D1B1B">Home.</span> LargeTopAppBar (headline; the account avatar as its action, badged with unread Inbox, opening the Account sheet as a ModalBottomSheet), plain surface, the Resume card and cover shelf drawn in Compose. A floating navigation bar, placed like iPhone’s tab bar: a fully rounded surfaceContainer with shadow elevation holding NavigationBarItems (pill indicator in secondaryContainer, filled icon when selected), Search as its own round button beside it. It collapses to the current destination on scroll.</figcaption>
     </figure>
 
     <!-- Android · Work Detail -->
@@ -155,8 +155,8 @@ class Component extends DCLogic {
     const navItems = [
       { id: 'home', label: 'Home', d: 'M12 2.8 2.6 11.2c-.5.5-.2 1.3.5 1.3H5v7.3c0 .6.4 1 1 1h4v-6h4v6h4c.6 0 1-.4 1-1v-7.3h1.9c.7 0 1-.8.5-1.3z', line: 'M3.5 10.5 12 3.5l8.5 7M5.5 9v11h5v-6h3v6h5V9' },
       { id: 'library', label: 'Library', d: 'M3.5 4h4v16h-4zM9.5 4h4v16h-4zM15.6 5.4l3.4-.9 3 15.2-3.4.9z' },
-      { id: 'browse', label: 'Browse', d: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z' },
-      { id: 'account', label: 'Account', d: 'M12 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8zM4.5 20c1.4-3.8 4.2-5.8 7.5-5.8s6.1 2 7.5 5.8' }
+      { id: 'writing', label: 'Writing', d: 'M16 4.5l3.5 3.5L9 18.5 4.5 19.5l1-4.5zM12.5 20h7' },
+      { id: 'browse', label: 'Browse', d: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z' }
     ];
     const stats = [
       ['Words', '84,210'], ['Chapters', '12/20'], ['Kudos', '♥ 3,104'],
