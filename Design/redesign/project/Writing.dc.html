@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Writing tab</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 390px; height: 1240px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+  <div style="position: absolute; right: 16px; top: 54px; z-index: 2; height: 44px; border-radius: 22px; display: flex; align-items: center; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
+    <a href="Work-Editor.dc.html" aria-label="New Work" style="width: 46px; height: 44px; color: #1C1C1E; display: flex; align-items: center; justify-content: center">
+      <svg aria-hidden="true" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5.5H6.5a1.5 1.5 0 0 0-1.5 1.5v10.5A1.5 1.5 0 0 0 6.5 19H17a1.5 1.5 0 0 0 1.5-1.5V12M16.5 4.5l3 3L12 15l-3.5.5.5-3.5z"></path></svg>
+    </a>
+    <button aria-label="More: Select, Sort, Stats" style="width: 46px; height: 44px; border: none; background: transparent; color: #1C1C1E; display: flex; align-items: center; justify-content: center">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.7" fill="currentColor"></circle><circle cx="12" cy="12" r="1.7" fill="currentColor"></circle><circle cx="18.5" cy="12" r="1.7" fill="currentColor"></circle></svg>
+    </button>
+  </div>
+
+  <main style="padding: 56px 16px 0; display: flex; flex-direction: column; gap: 24px">
+    <header style="display: flex; flex-direction: column; gap: 2px">
+      <h1 style="margin: 0; font-size: 34px; line-height: 41px; font-weight: 700; letter-spacing: 0.4px">Writing</h1>
+      <button aria-label="Posting as saltwindow. Change pseud" style="align-self: flex-start; border: none; background: none; padding: 0; font-family: inherit; font-size: 15px; line-height: 20px; color: #6C6C70; display: flex; align-items: center; gap: 4px">Posting as <span style="font-weight: 600; color: #3A3A3C">saltwindow</span>
+        <svg aria-hidden="true" width="9" height="13" viewBox="0 0 12 16" fill="none" stroke="#8E8E93" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6 6 2.5 9.5 6M2.5 10 6 13.5 9.5 10"></path></svg>
+      </button>
+    </header>
+
+    <section aria-label="Keep writing" style="border-radius: 22px; padding: 16px; display: flex; flex-direction: column; gap: 12px; color: #FFFFFF; background: linear-gradient(155deg, hsl(182, 46%, 27%), hsl(204, 50%, 41%))">
+      <div style="display: flex; flex-direction: column; gap: 2px">
+        <span style="font-size: 13px; line-height: 18px; font-weight: 600; opacity: 0.85">Draft · edited yesterday</span>
+        <span style="font-family: 'New York', 'Iowan Old Style', Georgia, serif; font-size: 24px; line-height: 29px; font-weight: 600">What the Tide Keeps</span>
+        <span style="font-size: 15px; line-height: 20px; opacity: 0.9">Chapter 4, “Slack Water” · 1,240 words so far</span>
+      </div>
+      <div role="img" aria-label="3 of 8 chapters posted, chapter 4 in draft" style="display: flex; gap: 3px">
+        <sc-for list="{{chapters}}" as="c" hint-placeholder-count="8">
+          <span style="flex: 1; height: 5px; border-radius: 3px; background: {{c.bg}}; border: {{c.bd}}; box-sizing: border-box"></span>
+        </sc-for>
+      </div>
+      <div style="display: flex; align-items: center; justify-content: space-between">
+        <span style="font-size: 13px; line-height: 18px; opacity: 0.85">3 of 8 chapters posted · Original Work</span>
+        <a href="Text-Editor.dc.html" style="height: 44px; padding: 0 20px; border-radius: 22px; background: #FFFFFF; color: #990000; text-decoration: none; font-size: 17px; font-weight: 600; display: flex; align-items: center">Continue</a>
+      </div>
+    </section>
+
+    <section aria-label="This week" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px">
+      <sc-for list="{{stats}}" as="s" hint-placeholder-count="3">
+        <div style="border-radius: 16px; background: #F2F2F7; padding: 10px 12px; display: flex; flex-direction: column; gap: 1px">
+          <span style="font-size: 20px; line-height: 24px; font-weight: 700; font-variant-numeric: tabular-nums">{{s.value}}</span>
+          <span style="font-size: 13px; line-height: 18px; color: #6C6C70">{{s.label}}</span>
+        </div>
+      </sc-for>
+    </section>
+
+    <section aria-label="New comments" style="display: flex; flex-direction: column; gap: 4px">
+      <div style="display: flex; align-items: baseline; justify-content: space-between">
+        <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">New Comments</h2>
+        <a href="Inbox.dc.html" style="font-size: 17px; color: #990000; text-decoration: none">Inbox</a>
+      </div>
+      <sc-for list="{{comments}}" as="c" hint-placeholder-count="2">
+        <a href="Comment-Thread.dc.html" style="color: #000000; text-decoration: none; display: flex; gap: 10px; padding: 10px 0; border-top: {{c.sep}}">
+          <span aria-hidden="true" style="width: 32px; height: 32px; flex-shrink: 0; border-radius: 16px; background: {{c.bg}}; color: #FFFFFF; font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: center">{{c.initial}}</span>
+          <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+            <span style="font-size: 13px; line-height: 18px; color: #6C6C70"><span style="font-weight: 600; color: #000000">{{c.from}}</span> on {{c.work}} · {{c.when}}</span>
+            <span style="font-size: 15px; line-height: 20px">{{c.body}}</span>
+          </span>
+          <span aria-label="Unread" style="width: 8px; height: 8px; margin-top: 6px; border-radius: 4px; background: #990000; flex-shrink: 0"></span>
+        </a>
+      </sc-for>
+    </section>
+
+    <section aria-label="Your works" style="display: flex; flex-direction: column; gap: 2px">
+      <div style="display: flex; align-items: baseline; gap: 8px">
+        <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">Your Works</h2>
+        <span style="font-size: 15px; color: #6C6C70">6</span>
+        <a href="My-Works.dc.html" style="margin-left: auto; font-size: 17px; color: #990000; text-decoration: none">See All</a>
+      </div>
+      <div style="margin: 0 -16px">
+        <sc-for list="{{works}}" as="w" hint-placeholder-count="2">
+          <dc-import name="WorkRow" work="{{w}}" divider="{{w.divider}}" accent="#990000" hint-size="100%,100px"></dc-import>
+        </sc-for>
+      </div>
+    </section>
+
+    <section aria-label="More" style="display: flex; flex-direction: column">
+      <sc-for list="{{more}}" as="l" hint-placeholder-count="3">
+        <a href="{{l.href}}" style="color: #000000; text-decoration: none; display: flex; align-items: center; gap: 14px; min-height: 48px">
+          <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#990000" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="{{l.d}}"></path></svg>
+          <span style="flex: 1; min-height: 48px; display: flex; align-items: center; gap: 8px; border-bottom: {{l.sep}}">
+            <span style="flex: 1; font-size: 17px; line-height: 22px">{{l.label}}</span>
+            <span style="font-size: 17px; color: #8E8E93">{{l.count}}</span>
+            <svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg>
+          </span>
+        </a>
+      </sc-for>
+    </section>
+  </main>
+
+  <div aria-hidden="true" style="z-index: 4; position: absolute; left: 0; right: 0; bottom: 0; height: 150px; background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0.94) 72%); pointer-events: none"></div>
+  <div style="z-index: 5; position: absolute; left: 16px; bottom: 28px">
+    <dc-import name="TabBar" selected="writing" accent="#990000" hint-size="358px,62px"></dc-import>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1240}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const works = [
+      { title: 'Keeper of the Northern Light', author: 'saltwindow', fandom: 'Original Work', rating: 'T', category: 'FF', warnings: 'none', status: 'complete', words: '22,410', chapters: '7/7', kudos: '1,804', hits: '19.2k', updated: '+38 kudos this week' },
+      { title: 'What the Tide Keeps', author: 'saltwindow', fandom: 'Original Work', rating: 'M', category: 'FF', warnings: 'undisclosed', status: 'wip', words: '9,800', chapters: '3/8', kudos: '412', hits: '4.1k', updated: 'Chapter 3 · Oct 20' },
+      { title: 'Lantern Season', author: 'saltwindow', fandom: 'Original Work', rating: 'T', category: 'Multi', warnings: 'none', status: 'complete', words: '15,050', chapters: '4/4', kudos: '640', hits: '7.7k' }
+    ];
+    const rows = (list) => list.map(([label, d, count, href], i) => ({ label, d, count, href, sep: i < list.length - 1 ? '0.5px solid #E5E5EA' : 'none' }));
+    return {
+      // Posted chapters solid, the one in draft outlined, planned ones faint.
+      chapters: [1, 1, 1, 2, 0, 0, 0, 0].map((k) => ({
+        bg: k === 1 ? '#FFFFFF' : k === 2 ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.18)',
+        bd: k === 2 ? '1.5px solid #FFFFFF' : 'none'
+      })),
+      stats: [['+43', 'kudos'], ['1,280', 'hits'], ['5', 'comments']].map(([value, label]) => ({ value, label: label + ' this week' })),
+      comments: [
+        ['anne_at_lyme', 'Lantern Season', '2 h', 'Bookmarking for the winter. The first line alone sold me.', '#6B4E23'],
+        ['quietharbor', 'Keeper of the Northern Light', 'yesterday', 'Long-time lurker. This one finally got me to log in to say thank you.', '#3E5B3A']
+      ].map(([from, work, when, body, bg], i) => ({ from, work, when, body, bg, initial: from.charAt(0).toUpperCase(), sep: i ? '0.5px solid #E5E5EA' : 'none' })),
+      works: works.map((w, i) => ({ ...w, divider: i < works.length - 1 })),
+      more: rows([
+        ['Drafts', 'M5 19h4L19 9l-4-4L5 15zM13 7l4 4', '2', 'My-Works.dc.html'],
+        ['Series', 'M4 6h16M4 12h16M4 18h16', '1', 'Series.dc.html'],
+        ['Collections & Challenges', 'M6 8h12v12H6zM8 5h8', '4', 'AO3-Collections.dc.html']
+      ])
+    };
+  }
+}
+</script>
+</body>
+</html>

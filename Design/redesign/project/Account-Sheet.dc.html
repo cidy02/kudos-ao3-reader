@@ -16,7 +16,7 @@ a{color:inherit;text-decoration:none}
 </helmet>
 <div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #000000; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
   <div aria-hidden="true" style="position: absolute; left: 0; top: 0; width: 390px; height: 844px; transform: translateY(10px) scale(0.92); transform-origin: 50% 0; border-radius: 38px; overflow: hidden; pointer-events: none">
-    <dc-import name="Home-Avatar" signed-in="{{signedIn}}" hint-size="390px,844px"></dc-import>
+    <dc-import name="Home-Launchpad" hint-size="390px,844px"></dc-import>
     <div style="position: absolute; inset: 0; background: rgba(0,0,0,0.22)"></div>
   </div>
 
@@ -108,8 +108,6 @@ class Component extends DCLogic {
     const row = (label, d, tile, href, extra) => ({ label, d, tile, href, detail: '', badge: '', hasBadge: false, chev, ...extra });
     const ao3 = { title: 'On AO3', rows: [
       row('Inbox', I.inbox, '#990000', 'Inbox.dc.html', { badge: '3', hasBadge: true }),
-      row('Your Works', I.works, '#C25E00', 'My-Works.dc.html', { detail: '6' }),
-      row('Collections & Challenges', I.stack, '#7B3FA0', 'AO3-Collections.dc.html', { detail: '4' }),
       row('AO3 Preferences', I.prefs, '#6C6C70', 'Settings.dc.html'),
       row('Open AO3 in Kudos', I.web, '#1E63C8', 'AO3-Web.dc.html', { chev: out })
     ] };

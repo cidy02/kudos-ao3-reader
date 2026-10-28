@@ -26,7 +26,7 @@ body{margin:0}
   </button>
 </nav>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"selected":{"editor":"enum","options":["home","library","browse","account"],"default":"home"},"accent":{"editor":null,"default":"#990000"},"$preview":{"width":64,"height":312}}'>
+<script type="text/x-dc" data-dc-script data-props='{"selected":{"editor":"enum","options":["home","library","writing","browse"],"default":"home"},"accent":{"editor":null,"default":"#990000"},"$preview":{"width":64,"height":312}}'>
 class Component extends DCLogic {
   renderVals() {
     const accent = this.props.accent ?? '#990000';
@@ -36,8 +36,8 @@ class Component extends DCLogic {
     const all = [
       { id: 'home', label: 'Home', d: 'M3.5 10.5 12 3.5l8.5 7M5.5 9v11h5v-6h3v6h5V9' },
       { id: 'library', label: 'Library', d: 'M3.5 4h4v16h-4zM9.5 4h4v16h-4zM15.6 5.4l3.4-.9 3 15.2-3.4.9z' },
-      { id: 'browse', label: 'Browse', d: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z' },
-      { id: 'account', label: 'Account', d: 'M12 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8zM4.5 20c1.4-3.8 4.2-5.8 7.5-5.8s6.1 2 7.5 5.8' }
+      { id: 'writing', label: 'Writing', d: 'M16 4.5l3.5 3.5L9 18.5 4.5 19.5l1-4.5zM12.5 20h7' },
+      { id: 'browse', label: 'Browse', d: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z' }
     ];
     return {
       tabs: all.map((t) => ({ ...t, current: t.id === selected ? 'page' : 'false', bg: t.id === selected ? tint : 'transparent', fg: t.id === selected ? accent : '#1C1C1E' }))
