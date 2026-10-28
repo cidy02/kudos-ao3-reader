@@ -13,7 +13,7 @@ body{margin:0}
 button{cursor:pointer}
 </style>
 </helmet>
-<div style="width: 390px; height: 1600px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+<div style="width: 390px; height: 1520px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
   <div style="position: absolute; left: 16px; right: 16px; top: 54px; display: flex; justify-content: space-between">
     <button aria-label="Back" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)">
       <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg>
@@ -29,16 +29,18 @@ button{cursor:pointer}
   </div>
   <div aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 0; height: 330px; background: linear-gradient(to bottom, rgba(138,90,18,0.22), rgba(138,90,18,0.08) 60%, rgba(138,90,18,0))"></div>
   <main style="position: relative; padding: 100px 16px 0; display: flex; flex-direction: column; gap: 24px">
-    <header style="display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center">
-      <span aria-hidden="true" style="width: 88px; height: 88px; border-radius: 44px; background: #8A5A12; color: #FFFFFF; font-size: 38px; font-weight: 600; display: flex; align-items: center; justify-content: center; box-shadow: 0 6px 18px rgba(80,50,10,0.28)">F</span>
-      <span style="display: flex; flex-direction: column; align-items: center; gap: 2px">
-        <button aria-label="fogandlamplight. Choose a pseud: all 3 pseuds" style="border: none; background: none; padding: 0; font-family: inherit; color: #000000; display: flex; align-items: center; gap: 5px">
-          <h1 style="margin: 0; font-size: 26px; line-height: 32px; font-weight: 700">fogandlamplight</h1>
-          <svg aria-hidden="true" width="11" height="15" viewBox="0 0 12 16" fill="none" stroke="#8E8E93" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6 6 2.5 9.5 6M2.5 10 6 13.5 9.5 10"></path></svg>
-        </button>
-        <p style="margin: 0; font-size: 14px; line-height: 19px; color: #6C6C70">Joined March 2014 · 3 pseuds · London</p>
-      </span>
-      <p style="margin: 0; max-width: 320px; font-size: 15px; line-height: 21px; color: #3A3A3C">Victorian mysteries, mostly Baker Street. Updates on Sundays, fog permitting.</p>
+    <header style="display: flex; flex-direction: column; gap: 12px">
+      <div style="display: flex; align-items: center; gap: 14px">
+        <span aria-hidden="true" style="width: 72px; height: 72px; flex-shrink: 0; border-radius: 36px; background: #8A5A12; color: #FFFFFF; font-size: 32px; font-weight: 600; display: flex; align-items: center; justify-content: center; box-shadow: 0 6px 18px rgba(80,50,10,0.28)">F</span>
+        <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+          <button aria-label="fogandlamplight. Choose a pseud: all 3 pseuds" style="align-self: flex-start; border: none; background: none; padding: 0; font-family: inherit; color: #000000; display: flex; align-items: center; gap: 5px">
+            <h1 style="margin: 0; font-size: 24px; line-height: 30px; font-weight: 700">fogandlamplight</h1>
+            <svg aria-hidden="true" width="11" height="15" viewBox="0 0 12 16" fill="none" stroke="#8E8E93" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6 6 2.5 9.5 6M2.5 10 6 13.5 9.5 10"></path></svg>
+          </button>
+          <p style="margin: 0; font-size: 14px; line-height: 19px; color: #6C6C70">Joined March 2014 · 3 pseuds · London</p>
+        </span>
+      </div>
+      <p style="margin: 0; font-size: 15px; line-height: 21px; color: #3A3A3C">Victorian mysteries, mostly Baker Street. Updates on Sundays, fog permitting.</p>
       <div style="align-self: stretch; display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 8px">
         <button style="height: 36px; border: none; border-radius: 18px; background: {{accent}}; color: #FFFFFF; font-family: inherit; font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 6px">
           <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"></path></svg>Subscribe
@@ -147,7 +149,7 @@ button{cursor:pointer}
   </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#990000"},"$preview":{"width":390,"height":1600}}'>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#990000"},"$preview":{"width":390,"height":1520}}'>
 class Component extends DCLogic {
   renderVals() {
     const art = (h) => 'linear-gradient(155deg, hsl(' + h + ', 46%, 27%), hsl(' + ((h + 22) % 360) + ', 50%, 41%))';
