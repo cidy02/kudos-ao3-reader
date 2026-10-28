@@ -13,7 +13,7 @@ body{margin:0}
 button{cursor:pointer}
 </style>
 </helmet>
-<div style="width: 390px; height: 1240px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+<div style="width: 390px; height: 1960px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
   <div aria-hidden="true" style="position: absolute; left: 16px; right: 16px; top: 54px; display: flex; align-items: center; gap: 10px">
     <span style="width: 44px; height: 44px; border-radius: 22px; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06); display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1C1C1E" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg></span>
     <span style="flex: 1; font-size: 17px; color: #8E8E93">lighthouse</span>
@@ -38,45 +38,49 @@ button{cursor:pointer}
           <sc-if value="{{r.sep}}" hint-placeholder-val="{{false}}"><div aria-hidden="true" style="margin-left: 16px; height: 0.5px; background: #D1D1D6"></div></sc-if>
           <div style="min-height: 48px; padding: 0 16px; display: flex; align-items: center; gap: 8px">
             <span style="flex: 1; font-size: 17px">{{r.label}}</span>
-            <sc-if value="{{r.isPicker}}" hint-placeholder-val="{{true}}">
-              <button style="border: none; background: none; padding: 0; font-family: inherit; font-size: 17px; color: #990000; display: flex; align-items: center; gap: 4px">{{r.value}}<svg aria-hidden="true" width="12" height="16" viewBox="0 0 12 16" fill="none" stroke="#990000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6 6 2.5 9.5 6M2.5 10 6 13.5 9.5 10"></path></svg></button>
-            </sc-if>
-            <sc-if value="{{r.isSwitch}}" hint-placeholder-val="{{false}}">
-              <span role="switch" aria-checked="true" aria-label="{{r.label}}" style="width: 51px; height: 31px; border-radius: 16px; background: #990000; position: relative"><span style="position: absolute; right: 2px; top: 2px; width: 27px; height: 27px; border-radius: 14px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.2)"></span></span>
-            </sc-if>
+            <sc-if value="{{r.isPicker}}" hint-placeholder-val="{{true}}"><button style="border: none; background: none; padding: 0; font-family: inherit; font-size: 17px; color: #990000; display: flex; align-items: center; gap: 4px">{{r.value}}<svg aria-hidden="true" width="12" height="16" viewBox="0 0 12 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6 6 2.5 9.5 6M2.5 10 6 13.5 9.5 10"></path></svg></button></sc-if>
+            <sc-if value="{{r.isNav}}" hint-placeholder-val="{{false}}"><span style="font-size: 17px; color: #6C6C70">{{r.value}}</span><svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg></sc-if>
+            <sc-if value="{{r.isSwitch}}" hint-placeholder-val="{{false}}"><span role="switch" aria-checked="true" aria-label="{{r.label}}" style="width: 51px; height: 31px; border-radius: 16px; background: #990000; position: relative"><span style="position: absolute; right: 2px; top: 2px; width: 27px; height: 27px; border-radius: 14px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.2)"></span></span></sc-if>
+            <sc-if value="{{r.isSegments}}" hint-placeholder-val="{{false}}"><span role="radiogroup" aria-label="{{r.label}}" style="height: 32px; border-radius: 16px; background: rgba(118,118,128,0.12); padding: 2px; box-sizing: border-box; display: flex"><sc-for list="{{r.segs}}" as="g" hint-placeholder-count="3"><span role="radio" aria-checked="{{g.on}}" style="padding: 0 11px; border-radius: 14px; background: {{g.bg}}; box-shadow: {{g.shadow}}; font-size: 13px; line-height: 28px; font-weight: {{g.weight}}">{{g.label}}</span></sc-for></span></sc-if>
           </div>
         </sc-for>
       </div>
-
-      <sc-for list="{{facets}}" as="g" hint-placeholder-count="2">
-        <h3 style="margin: 16px 16px 2px; font-size: 13px; line-height: 18px; font-weight: 400; color: #6C6C70">{{g.title}}</h3>
-        <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
-          <sc-for list="{{g.rows}}" as="r" hint-placeholder-count="6">
-            <sc-if value="{{r.sep}}" hint-placeholder-val="{{false}}"><div aria-hidden="true" style="margin-left: 16px; height: 0.5px; background: #D1D1D6"></div></sc-if>
-            <button aria-label="{{r.aria}}" style="width: 100%; min-height: 48px; padding: 8px 16px; box-sizing: border-box; border: none; background: transparent; font-family: inherit; text-align: left; display: flex; align-items: center; gap: 10px; color: #000000">
-              <span style="flex: 1; font-size: 17px; line-height: 22px">{{r.label}}</span>
-              <sc-if value="{{r.isIn}}" hint-placeholder-val="{{false}}">
-                <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#990000" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"></path></svg>
-              </sc-if>
-              <sc-if value="{{r.isOut}}" hint-placeholder-val="{{false}}">
-                <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#990000"></circle><path d="M8 12h8" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round"></path></svg>
-              </sc-if>
-            </button>
-          </sc-for>
-        </div>
-      </sc-for>
-
-      <div style="margin-top: 16px; background: #FFFFFF; border-radius: 16px; overflow: hidden">
-        <sc-for list="{{more}}" as="r" hint-placeholder-count="5">
+      <h3 style="margin: 16px 16px 2px; font-size: 13px; line-height: 18px; font-weight: 400; color: #6C6C70">Content</h3>
+      <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
+        <sc-for list="{{content}}" as="r" hint-placeholder-count="3">
           <sc-if value="{{r.sep}}" hint-placeholder-val="{{false}}"><div aria-hidden="true" style="margin-left: 16px; height: 0.5px; background: #D1D1D6"></div></sc-if>
           <div style="min-height: 48px; padding: 0 16px; display: flex; align-items: center; gap: 8px">
             <span style="flex: 1; font-size: 17px">{{r.label}}</span>
-            <button style="border: none; background: none; padding: 0; font-family: inherit; font-size: 17px; color: #990000; display: flex; align-items: center; gap: 4px">{{r.value}}<svg aria-hidden="true" width="12" height="16" viewBox="0 0 12 16" fill="none" stroke="#990000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6 6 2.5 9.5 6M2.5 10 6 13.5 9.5 10"></path></svg></button>
+            <sc-if value="{{r.isPicker}}" hint-placeholder-val="{{true}}"><button style="border: none; background: none; padding: 0; font-family: inherit; font-size: 17px; color: #990000; display: flex; align-items: center; gap: 4px">{{r.value}}<svg aria-hidden="true" width="12" height="16" viewBox="0 0 12 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6 6 2.5 9.5 6M2.5 10 6 13.5 9.5 10"></path></svg></button></sc-if>
+            <sc-if value="{{r.isNav}}" hint-placeholder-val="{{false}}"><span style="font-size: 17px; color: #6C6C70">{{r.value}}</span><svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg></sc-if>
+            <sc-if value="{{r.isSwitch}}" hint-placeholder-val="{{false}}"><span role="switch" aria-checked="true" aria-label="{{r.label}}" style="width: 51px; height: 31px; border-radius: 16px; background: #990000; position: relative"><span style="position: absolute; right: 2px; top: 2px; width: 27px; height: 27px; border-radius: 14px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.2)"></span></span></sc-if>
+            <sc-if value="{{r.isSegments}}" hint-placeholder-val="{{false}}"><span role="radiogroup" aria-label="{{r.label}}" style="height: 32px; border-radius: 16px; background: rgba(118,118,128,0.12); padding: 2px; box-sizing: border-box; display: flex"><sc-for list="{{r.segs}}" as="g" hint-placeholder-count="3"><span role="radio" aria-checked="{{g.on}}" style="padding: 0 11px; border-radius: 14px; background: {{g.bg}}; box-shadow: {{g.shadow}}; font-size: 13px; line-height: 28px; font-weight: {{g.weight}}">{{g.label}}</span></sc-for></span></sc-if>
           </div>
         </sc-for>
       </div>
-
-      <h3 style="margin: 16px 16px 2px; font-size: 13px; line-height: 18px; font-weight: 400; color: #6C6C70">Tags</h3>
+      <div style="margin-top: 8px; background: #FFFFFF; border-radius: 16px; padding: 12px; display: flex; flex-direction: column; gap: 10px">
+        <span style="margin: 0 4px; font-size: 17px">Categories</span>
+        <div role="group" aria-label="Categories" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px">
+          <sc-for list="{{categories}}" as="c" hint-placeholder-count="6">
+            <button aria-label="{{c.aria}}" aria-pressed="{{c.pressed}}" style="height: 40px; border: {{c.border}}; border-radius: 12px; background: {{c.bg}}; padding: 0 10px; box-sizing: border-box; font-family: inherit; display: flex; align-items: center; gap: 8px; color: {{c.fg}}">
+              <span aria-hidden="true" style="width: 22px; height: 22px; flex-shrink: 0; overflow: hidden; opacity: {{c.dim}}"><dc-import name="Symbols" variant="grid" only="category" category="{{c.code}}" size="22" hint-size="22px,22px"></dc-import></span>
+              <span style="flex: 1; text-align: left; font-size: 15px; font-weight: 600; text-decoration: {{c.strike}}">{{c.label}}</span>
+            </button>
+          </sc-for>
+        </div>
+      </div>
+      <h3 style="margin: 16px 16px 2px; font-size: 13px; line-height: 18px; font-weight: 400; color: #6C6C70">Warnings</h3>
+      <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
+        <sc-for list="{{warnings}}" as="r" hint-placeholder-count="6">
+          <sc-if value="{{r.sep}}" hint-placeholder-val="{{false}}"><div aria-hidden="true" style="margin-left: 16px; height: 0.5px; background: #D1D1D6"></div></sc-if>
+          <button aria-label="{{r.aria}}" style="width: 100%; min-height: 46px; padding: 8px 16px; box-sizing: border-box; border: none; background: transparent; font-family: inherit; text-align: left; display: flex; align-items: center; gap: 10px; color: #000000">
+            <span style="flex: 1; font-size: 16px; line-height: 21px">{{r.label}}</span>
+            <sc-if value="{{r.isIn}}" hint-placeholder-val="{{false}}"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#990000" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"></path></svg></sc-if>
+            <sc-if value="{{r.isOut}}" hint-placeholder-val="{{false}}"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#990000"></circle><path d="M8 12h8" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round"></path></svg></sc-if>
+          </button>
+        </sc-for>
+      </div>
+      <h3 style="margin: 16px 16px 2px; font-size: 13px; line-height: 18px; font-weight: 400; color: #6C6C70">Tags and text</h3>
       <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
         <sc-for list="{{tagFields}}" as="t" hint-placeholder-count="4">
           <sc-if value="{{t.sep}}" hint-placeholder-val="{{false}}"><div aria-hidden="true" style="margin-left: 16px; height: 0.5px; background: #D1D1D6"></div></sc-if>
@@ -89,26 +93,56 @@ button{cursor:pointer}
           </div>
         </sc-for>
       </div>
-
-      <h3 style="margin: 16px 16px 2px; font-size: 13px; line-height: 18px; font-weight: 400; color: #6C6C70">Word count</h3>
-      <div style="background: #FFFFFF; border-radius: 16px; display: flex; overflow: hidden">
-        <label style="flex: 1; min-height: 48px; padding: 0 16px; display: flex; align-items: center; gap: 8px"><span style="font-size: 17px">From</span><input type="text" value="10,000" aria-label="Word count from" style="flex: 1; min-width: 0; border: none; background: transparent; font-family: inherit; font-size: 17px; text-align: right; outline: none"></label>
-        <span aria-hidden="true" style="width: 0.5px; background: #D1D1D6"></span>
-        <label style="flex: 1; min-height: 48px; padding: 0 16px; display: flex; align-items: center; gap: 8px"><span style="font-size: 17px">To</span><input type="text" placeholder="Any" aria-label="Word count to" style="flex: 1; min-width: 0; border: none; background: transparent; font-family: inherit; font-size: 17px; text-align: right; outline: none"></label>
-      </div>
-      <div style="margin-top: 16px; background: #FFFFFF; border-radius: 16px; overflow: hidden">
-        <sc-for list="{{ranges}}" as="r" hint-placeholder-count="5">
+      <div style="margin-top: 8px; background: #FFFFFF; border-radius: 16px; overflow: hidden">
+        <sc-for list="{{textRows}}" as="r" hint-placeholder-count="3">
           <sc-if value="{{r.sep}}" hint-placeholder-val="{{false}}"><div aria-hidden="true" style="margin-left: 16px; height: 0.5px; background: #D1D1D6"></div></sc-if>
-          <div style="min-height: 48px; padding: 0 16px; display: flex; align-items: center; gap: 8px"><span style="flex: 1; font-size: 17px">{{r.label}}</span><span style="font-size: 17px; color: #6C6C70">{{r.value}}</span><svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg></div>
+          <div style="min-height: 48px; padding: 0 16px; display: flex; align-items: center; gap: 8px">
+            <span style="flex: 1; font-size: 17px">{{r.label}}</span>
+            <sc-if value="{{r.isPicker}}" hint-placeholder-val="{{true}}"><button style="border: none; background: none; padding: 0; font-family: inherit; font-size: 17px; color: #990000; display: flex; align-items: center; gap: 4px">{{r.value}}<svg aria-hidden="true" width="12" height="16" viewBox="0 0 12 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6 6 2.5 9.5 6M2.5 10 6 13.5 9.5 10"></path></svg></button></sc-if>
+            <sc-if value="{{r.isNav}}" hint-placeholder-val="{{false}}"><span style="font-size: 17px; color: #6C6C70">{{r.value}}</span><svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg></sc-if>
+            <sc-if value="{{r.isSwitch}}" hint-placeholder-val="{{false}}"><span role="switch" aria-checked="true" aria-label="{{r.label}}" style="width: 51px; height: 31px; border-radius: 16px; background: #990000; position: relative"><span style="position: absolute; right: 2px; top: 2px; width: 27px; height: 27px; border-radius: 14px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.2)"></span></span></sc-if>
+            <sc-if value="{{r.isSegments}}" hint-placeholder-val="{{false}}"><span role="radiogroup" aria-label="{{r.label}}" style="height: 32px; border-radius: 16px; background: rgba(118,118,128,0.12); padding: 2px; box-sizing: border-box; display: flex"><sc-for list="{{r.segs}}" as="g" hint-placeholder-count="3"><span role="radio" aria-checked="{{g.on}}" style="padding: 0 11px; border-radius: 14px; background: {{g.bg}}; box-shadow: {{g.shadow}}; font-size: 13px; line-height: 28px; font-weight: {{g.weight}}">{{g.label}}</span></sc-for></span></sc-if>
+          </div>
+        </sc-for>
+      </div>
+      <h3 style="margin: 16px 16px 2px; font-size: 13px; line-height: 18px; font-weight: 400; color: #6C6C70">Length and status</h3>
+      <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
+        <sc-for list="{{length}}" as="r" hint-placeholder-count="3">
+          <sc-if value="{{r.sep}}" hint-placeholder-val="{{false}}"><div aria-hidden="true" style="margin-left: 16px; height: 0.5px; background: #D1D1D6"></div></sc-if>
+          <div style="min-height: 48px; padding: 0 16px; display: flex; align-items: center; gap: 8px">
+            <span style="flex: 1; font-size: 17px">{{r.label}}</span>
+            <sc-if value="{{r.isPicker}}" hint-placeholder-val="{{true}}"><button style="border: none; background: none; padding: 0; font-family: inherit; font-size: 17px; color: #990000; display: flex; align-items: center; gap: 4px">{{r.value}}<svg aria-hidden="true" width="12" height="16" viewBox="0 0 12 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6 6 2.5 9.5 6M2.5 10 6 13.5 9.5 10"></path></svg></button></sc-if>
+            <sc-if value="{{r.isNav}}" hint-placeholder-val="{{false}}"><span style="font-size: 17px; color: #6C6C70">{{r.value}}</span><svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg></sc-if>
+            <sc-if value="{{r.isSwitch}}" hint-placeholder-val="{{false}}"><span role="switch" aria-checked="true" aria-label="{{r.label}}" style="width: 51px; height: 31px; border-radius: 16px; background: #990000; position: relative"><span style="position: absolute; right: 2px; top: 2px; width: 27px; height: 27px; border-radius: 14px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.2)"></span></span></sc-if>
+            <sc-if value="{{r.isSegments}}" hint-placeholder-val="{{false}}"><span role="radiogroup" aria-label="{{r.label}}" style="height: 32px; border-radius: 16px; background: rgba(118,118,128,0.12); padding: 2px; box-sizing: border-box; display: flex"><sc-for list="{{r.segs}}" as="g" hint-placeholder-count="3"><span role="radio" aria-checked="{{g.on}}" style="padding: 0 11px; border-radius: 14px; background: {{g.bg}}; box-shadow: {{g.shadow}}; font-size: 13px; line-height: 28px; font-weight: {{g.weight}}">{{g.label}}</span></sc-for></span></sc-if>
+          </div>
+        </sc-for>
+      </div>
+      <div style="margin-top: 8px; background: #FFFFFF; border-radius: 16px; display: flex; overflow: hidden">
+        <label style="flex: 1; min-height: 48px; padding: 0 16px; display: flex; align-items: center; gap: 8px"><span style="font-size: 17px; color: #6C6C70">Words</span><input type="text" value="10,000" aria-label="Word count from" style="flex: 1; min-width: 0; border: none; background: transparent; font-family: inherit; font-size: 17px; text-align: right; outline: none"></label>
+        <span aria-hidden="true" style="width: 0.5px; background: #D1D1D6"></span>
+        <label style="flex: 1; min-height: 48px; padding: 0 16px; display: flex; align-items: center; gap: 8px"><span style="font-size: 17px; color: #6C6C70">to</span><input type="text" placeholder="Any" aria-label="Word count to" style="flex: 1; min-width: 0; border: none; background: transparent; font-family: inherit; font-size: 17px; text-align: right; outline: none"></label>
+      </div>
+      <h3 style="margin: 16px 16px 2px; font-size: 13px; line-height: 18px; font-weight: 400; color: #6C6C70">Popularity</h3>
+      <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
+        <sc-for list="{{ranges}}" as="r" hint-placeholder-count="3">
+          <sc-if value="{{r.sep}}" hint-placeholder-val="{{false}}"><div aria-hidden="true" style="margin-left: 16px; height: 0.5px; background: #D1D1D6"></div></sc-if>
+          <div style="min-height: 48px; padding: 0 16px; display: flex; align-items: center; gap: 8px">
+            <span style="flex: 1; font-size: 17px">{{r.label}}</span>
+            <sc-if value="{{r.isPicker}}" hint-placeholder-val="{{true}}"><button style="border: none; background: none; padding: 0; font-family: inherit; font-size: 17px; color: #990000; display: flex; align-items: center; gap: 4px">{{r.value}}<svg aria-hidden="true" width="12" height="16" viewBox="0 0 12 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6 6 2.5 9.5 6M2.5 10 6 13.5 9.5 10"></path></svg></button></sc-if>
+            <sc-if value="{{r.isNav}}" hint-placeholder-val="{{false}}"><span style="font-size: 17px; color: #6C6C70">{{r.value}}</span><svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg></sc-if>
+            <sc-if value="{{r.isSwitch}}" hint-placeholder-val="{{false}}"><span role="switch" aria-checked="true" aria-label="{{r.label}}" style="width: 51px; height: 31px; border-radius: 16px; background: #990000; position: relative"><span style="position: absolute; right: 2px; top: 2px; width: 27px; height: 27px; border-radius: 14px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.2)"></span></span></sc-if>
+            <sc-if value="{{r.isSegments}}" hint-placeholder-val="{{false}}"><span role="radiogroup" aria-label="{{r.label}}" style="height: 32px; border-radius: 16px; background: rgba(118,118,128,0.12); padding: 2px; box-sizing: border-box; display: flex"><sc-for list="{{r.segs}}" as="g" hint-placeholder-count="3"><span role="radio" aria-checked="{{g.on}}" style="padding: 0 11px; border-radius: 14px; background: {{g.bg}}; box-shadow: {{g.shadow}}; font-size: 13px; line-height: 28px; font-weight: {{g.weight}}">{{g.label}}</span></sc-for></span></sc-if>
+          </div>
         </sc-for>
       </div>
       <button style="margin-top: 16px; width: 100%; min-height: 48px; border: none; border-radius: 16px; background: #FFFFFF; font-family: inherit; font-size: 17px; color: #D70015; display: flex; align-items: center; justify-content: center">Reset Filters</button>
-      <a href="Search.dc.html" style="margin-top: 8px; min-height: 48px; border-radius: 16px; background: #FFFFFF; text-decoration: none; font-size: 17px; color: #990000; display: flex; align-items: center; justify-content: center">Save Search…</a>
+      <a href="Search-Save.dc.html" style="margin-top: 8px; min-height: 48px; border-radius: 16px; background: #FFFFFF; text-decoration: none; font-size: 17px; color: #990000; display: flex; align-items: center; justify-content: center">Save Search…</a>
     </div>
   </section>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1240}}'>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1960}}'>
 class Component extends DCLogic {
   renderVals() {
     const rows = (list) => list.map(([label, state], i) => ({
@@ -117,32 +151,36 @@ class Component extends DCLogic {
     }));
     const list = (items) => items.map((r, i) => ({ ...r, sep: i > 0 }));
     return {
-      top: list([
-        { label: 'Sort by', value: 'Best Match', isPicker: true, isSwitch: false },
-        { label: 'Rating', value: 'General, Teen', isPicker: true, isSwitch: false },
-        { label: 'Include Not Rated', isPicker: false, isSwitch: true }
+      top: list([{ label: 'Sort by', value: 'Best Match', isPicker: true }]),
+      content: list([
+        { label: 'Rating', value: 'General, Teen', isPicker: true },
+        { label: 'Include Not Rated', isSwitch: true }
       ]),
-      facets: [
-        { title: 'Warnings', rows: rows([
-          ['No Archive Warnings Apply', 'in'],
-          ['Creator Chose Not To Use Archive Warnings', ''],
-          ['Graphic Depictions Of Violence', ''],
-          ['Major Character Death', 'out'],
-          ['Rape/Non-Con', ''],
-          ['Underage Sex', '']
-        ]) },
-        { title: 'Categories', rows: rows([
-          ['F/F', 'in'], ['F/M', ''], ['Gen', 'in'], ['M/M', ''], ['Multi', ''], ['Other', '']
-        ]) }
-      ],
-      more: list([
-        { label: 'Crossovers', value: 'Include' },
-        { label: 'Completion', value: 'Complete only' },
-        { label: 'Chapters', value: 'Any' },
-        { label: 'Updated', value: 'Past month' },
-        { label: 'Language', value: 'English' }
+      categories: [['F/F', 'FF', 'in'], ['F/M', 'FM', ''], ['Gen', 'Gen', 'in'], ['M/M', 'MM', ''], ['Multi', 'Multi', ''], ['Other', 'Other', 'out']].map(([label, code, st]) => ({
+        label, code, pressed: st === 'in' ? 'true' : st === 'out' ? 'mixed' : 'false',
+        aria: label + (st === 'in' ? ', included' : st === 'out' ? ', excluded' : ''),
+        bg: st === 'in' ? 'rgba(153,0,0,0.10)' : '#F2F2F7', fg: st === 'in' ? '#990000' : st === 'out' ? '#8E8E93' : '#1C1C1E',
+        border: st === 'in' ? '1.5px solid #990000' : '1.5px solid transparent', strike: st === 'out' ? 'line-through' : 'none', dim: st === 'out' ? 0.4 : 1
+      })),
+      warnings: rows([
+        ['No Archive Warnings Apply', 'in'],
+        ['Creator Chose Not To Use Archive Warnings', ''],
+        ['Graphic Depictions Of Violence', ''],
+        ['Major Character Death', 'out'],
+        ['Rape/Non-Con', ''],
+        ['Underage Sex', '']
       ]),
-      ranges: list([{ label: 'Kudos', value: '100 or more' }, { label: 'Hits', value: 'Any' }, { label: 'Comments', value: 'Any' }, { label: 'Bookmarks', value: 'Any' }, { label: 'Title & creator', value: 'Any' }]),
+      textRows: list([
+        { label: 'Crossovers', value: 'Include', isPicker: true },
+        { label: 'Title & creator', value: 'Any', isNav: true }
+      ]),
+      length: list([
+        { label: 'Completion', isSegments: true, segs: [{"label": "Any", "on": "false", "bg": "transparent", "shadow": "none", "weight": 400}, {"label": "Complete", "on": "true", "bg": "#FFFFFF", "shadow": "0 2px 6px rgba(0,0,0,0.12)", "weight": 600}, {"label": "WIP", "on": "false", "bg": "transparent", "shadow": "none", "weight": 400}] },
+        { label: 'Chapters', value: 'Any', isPicker: true },
+        { label: 'Updated', value: 'Past month', isPicker: true },
+        { label: 'Language', value: 'English', isNav: true }
+      ]),
+      ranges: list([{ label: 'Kudos', value: '100 or more', isNav: true }, { label: 'Hits', value: 'Any', isNav: true }, { label: 'Comments', value: 'Any', isNav: true }, { label: 'Bookmarks', value: 'Any', isNav: true }]),
       tagFields: list([
         { label: 'Fandoms', chips: [], placeholder: 'Add' },
         { label: 'Characters', chips: [], placeholder: 'Add' },

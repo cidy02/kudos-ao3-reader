@@ -8,3 +8,8 @@ regenerate rather than editing the generated boards by hand:
 
 `gen.py` writes one `project/<Name>.dc.html` per `add(...)`; `data.py` holds the shared
 sample works and icon paths. Canvas placement lives in `project/canvas.json`.
+
+`themes.py` writes the Dark, OLED and Sepia variant of every phone screen: three
+`project/Skin-<Theme>.dc.html` stylesheets and one `project/<Theme>-<Board>.dc.html`
+wrapper per screen, plus the three canvas pages. Run it again after changing a Light
+board's height or position, or after adding a screen.

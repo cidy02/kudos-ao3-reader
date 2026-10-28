@@ -36,7 +36,7 @@ button{cursor:pointer}
           <sc-for list="{{s.rows}}" as="r" hint-placeholder-count="3">
             <div style="display: flex; align-items: center; min-height: 46px; padding: 7px 16px; gap: 10px; border-top: {{r.sep}}; flex-wrap: wrap">
               <sc-if value="{{r.hasSymbol}}" hint-placeholder-val="{{false}}">
-                <dc-import name="Symbols" variant="grid" only="{{r.only}}" rating="{{r.rating}}" category="{{r.category}}" warnings="{{r.warnings}}" status="{{r.status}}" size="22" hint-size="22px,22px"></dc-import>
+                <span aria-hidden="true" style="width: 22px; height: 22px; flex-shrink: 0; overflow: hidden"><dc-import name="Symbols" variant="grid" only="{{r.only}}" rating="{{r.rating}}" category="{{r.category}}" warnings="{{r.warnings}}" status="{{r.status}}" size="22" hint-size="22px,22px"></dc-import></span>
               </sc-if>
               <span style="font-size: 16px; color: {{r.labelColor}}; flex: {{r.labelFlex}}">{{r.label}}</span>
               <sc-if value="{{r.isValue}}" hint-placeholder-val="{{true}}">

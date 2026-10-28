@@ -14,8 +14,8 @@ button{cursor:pointer}
 a{color:inherit;text-decoration:none}
 </style>
 </helmet>
-<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #000000; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
-  <div aria-hidden="true" style="position: absolute; left: 0; top: 0; width: 390px; height: 844px; transform: translateY(10px) scale(0.92); transform-origin: 50% 0; border-radius: 38px; overflow: hidden; pointer-events: none">
+<div style="width: 390px; height: 1040px; position: relative; overflow: hidden; background: #000000; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+  <div aria-hidden="true" style="position: absolute; left: 0; top: 0; width: 390px; height: 1040px; transform: translateY(10px) scale(0.92); transform-origin: 50% 0; border-radius: 38px; overflow: hidden; pointer-events: none">
     <dc-import name="Home-Launchpad" hint-size="390px,844px"></dc-import>
     <div style="position: absolute; inset: 0; background: rgba(0,0,0,0.22)"></div>
   </div>
@@ -32,14 +32,41 @@ a{color:inherit;text-decoration:none}
 
     <div style="padding: 4px 16px 0; display: flex; flex-direction: column; gap: 22px">
       <sc-if value="{{signedIn}}" hint-placeholder-val="{{true}}">
-        <a href="Author.dc.html" style="color: #000000; text-decoration: none; background: #FFFFFF; border-radius: 16px; padding: 14px 16px; display: flex; align-items: center; gap: 14px">
-          <span aria-hidden="true" style="width: 60px; height: 60px; flex-shrink: 0; border-radius: 30px; background: #23506B; color: #FFFFFF; font-size: 24px; font-weight: 600; display: flex; align-items: center; justify-content: center">S</span>
-          <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
-            <span style="font-size: 22px; line-height: 28px; font-weight: 700">saltwindow</span>
-            <span style="font-size: 15px; line-height: 20px; color: #6C6C70">Your AO3 profile</span>
-          </span>
-          <svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg>
-        </a>
+        <div style="display: flex; flex-direction: column; gap: 14px">
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center">
+            <span aria-hidden="true" style="width: 76px; height: 76px; border-radius: 38px; background: #23506B; color: #FFFFFF; font-size: 32px; font-weight: 600; display: flex; align-items: center; justify-content: center">S</span>
+            <span style="display: flex; flex-direction: column; align-items: center; gap: 1px">
+              <button aria-label="saltwindow. Switch pseud: 3 pseuds" style="border: none; background: none; padding: 0; font-family: inherit; color: #000000; display: flex; align-items: center; gap: 5px"><span style="font-size: 24px; line-height: 30px; font-weight: 700">saltwindow</span><svg aria-hidden="true" width="11" height="15" viewBox="0 0 12 16" fill="none" stroke="#8E8E93" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6 6 2.5 9.5 6M2.5 10 6 13.5 9.5 10"></path></svg></button>
+              <span style="font-size: 14px; line-height: 19px; color: #6C6C70">On AO3 since 2019 · 3 pseuds</span>
+            </span>
+            <a href="Author.dc.html" style="height: 32px; padding: 0 14px; border-radius: 16px; background: rgba(153,0,0,0.1); color: #990000; text-decoration: none; font-size: 15px; font-weight: 600; display: flex; align-items: center">View Profile</a>
+          </div>
+          <div role="list" aria-label="Your AO3 account" style="background: #FFFFFF; border-radius: 16px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr))">
+            <sc-for list="{{counts}}" as="k" hint-placeholder-count="3">
+              <a role="listitem" href="{{k.href}}" style="color: #000000; text-decoration: none; padding: 12px 6px; display: flex; flex-direction: column; align-items: center; gap: 1px; border-left: {{k.sep}}">
+                <span style="font-size: 20px; line-height: 25px; font-weight: 700; font-variant-numeric: tabular-nums">{{k.n}}</span>
+                <span style="font-size: 12px; line-height: 16px; color: #6C6C70">{{k.label}}</span>
+              </a>
+            </sc-for>
+          </div>
+          <section aria-label="Inbox" style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
+            <a href="Inbox.dc.html" style="color: #000000; text-decoration: none; display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 16px">
+              <span aria-hidden="true" style="width: 29px; height: 29px; flex-shrink: 0; border-radius: 7px; background: #990000; color: #FFFFFF; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13l2.5-8h11L20 13v6H4zM4 13h5l1 2h4l1-2h5"></path></svg></span>
+              <span style="flex: 1; font-size: 17px; font-weight: 600">Inbox</span>
+              <span style="min-width: 22px; height: 22px; padding: 0 7px; box-sizing: border-box; border-radius: 11px; background: #990000; color: #FFFFFF; font-size: 13px; line-height: 22px; font-weight: 700; text-align: center">3</span>
+              <svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg>
+            </a>
+            <sc-for list="{{inbox}}" as="m" hint-placeholder-count="2">
+              <a href="Comment-Thread.dc.html" style="color: #000000; text-decoration: none; display: flex; gap: 10px; margin-left: 16px; padding: 10px 16px 10px 0; border-top: 0.5px solid #E5E5EA">
+                <span aria-hidden="true" style="width: 29px; height: 29px; flex-shrink: 0; border-radius: 15px; background: {{m.tone}}; color: #FFFFFF; font-size: 13px; font-weight: 600; display: flex; align-items: center; justify-content: center">{{m.i}}</span>
+                <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px">
+                  <span style="display: flex; gap: 6px; font-size: 13px; line-height: 18px; color: #6C6C70"><span style="flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis"><b style="color: #000000">{{m.from}}</b> on {{m.work}}</span><span>{{m.when}}</span></span>
+                  <span style="font-size: 15px; line-height: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{m.body}}</span>
+                </span>
+              </a>
+            </sc-for>
+          </section>
+        </div>
       </sc-if>
       <sc-if value="{{signedOut}}" hint-placeholder-val="{{false}}">
         <div style="background: #FFFFFF; border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 14px">
@@ -53,6 +80,7 @@ a{color:inherit;text-decoration:none}
             </span>
           </div>
           <a href="Login.dc.html" style="text-decoration: none; height: 50px; border-radius: 25px; background: #990000; color: #FFFFFF; font-size: 17px; font-weight: 600; display: flex; align-items: center; justify-content: center">Log In to AO3</a>
+          <a href="AO3-Web.dc.html" aria-label="Create an AO3 Account. Opens AO3’s invitation request" style="text-decoration: none; height: 50px; border-radius: 25px; background: rgba(153,0,0,0.1); color: #990000; font-size: 17px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 7px">Create an AO3 Account<svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4h12v12M20 4 7 17"></path></svg></a>
         </div>
       </sc-if>
 
@@ -89,7 +117,7 @@ a{color:inherit;text-decoration:none}
   </section>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"signedIn":{"editor":"boolean","default":true},"$preview":{"width":390,"height":844}}'>
+<script type="text/x-dc" data-dc-script data-props='{"signedIn":{"editor":"boolean","default":true},"$preview":{"width":390,"height":1040}}'>
 class Component extends DCLogic {
   renderVals() {
     const signedIn = this.props.signedIn ?? true;
@@ -104,24 +132,29 @@ class Component extends DCLogic {
       info: 'M12 3.5a8.5 8.5 0 1 1 0 17 8.5 8.5 0 0 1 0-17zM12 11v5.5M12 7.8v.1'
     };
     const chev = 'm1.5 1.5 5 5.5-5 5.5';
-    const out = 'M2 6V2h4M2 2l4.5 4.5M6 12H2V8';
     const row = (label, d, tile, href, extra) => ({ label, d, tile, href, detail: '', badge: '', hasBadge: false, chev, ...extra });
     const ao3 = { title: 'On AO3', rows: [
-      row('Inbox', I.inbox, '#990000', 'Inbox.dc.html', { badge: '3', hasBadge: true }),
       row('AO3 Preferences', I.prefs, '#6C6C70', 'Settings.dc.html'),
-      row('Open AO3 in Kudos', I.web, '#1E63C8', 'AO3-Web.dc.html', { chev: out })
+      row('Open AO3 in Kudos', I.web, '#1E63C8', 'AO3-Web.dc.html')
     ] };
     const kudos = { title: 'Kudos', rows: [
       row('Settings', I.gear, '#8E8E93', 'Settings.dc.html'),
-      row('Backup & Sync', I.sync, '#2F8F3A', 'Settings-Backup-Sync.dc.html', { detail: 'On' }),
-      row('About Kudos', I.info, '#1E63C8', 'About.dc.html')
+      row('Backup & Sync', I.sync, '#2F8F3A', 'Settings-Backup-Sync.dc.html', { detail: 'Oct 21' }),
+      row('About Kudos', I.info, '#1E63C8', 'About.dc.html', { detail: '1.6' })
     ] };
     const groups = (signedIn ? [ao3, kudos] : [kudos]).map((g) => ({
       ...g,
       hasTitle: true,
       rows: g.rows.map((r, i) => ({ ...r, sep: i ? '0.5px solid #E5E5EA' : 'none' }))
     }));
-    return { signedIn, signedOut: !signedIn, groups };
+    return {
+      signedIn, signedOut: !signedIn, groups,
+      counts: [['6', 'Works', 'My-Works.dc.html'], ['128', 'Bookmarks', 'AO3-Lists.dc.html'], ['27', 'Subscriptions', 'Subscriptions.dc.html']].map(([n, label, href], i) => ({ n, label, href, sep: i ? '0.5px solid #E5E5EA' : 'none' })),
+      inbox: [
+        { from: 'anne_at_lyme', work: 'Lantern Season', when: '2 h', body: 'Bookmarking for the winter. The first line alone sold me.', tone: '#6B4E23', i: 'A' },
+        { from: 'quietharbor', work: 'Keeper of the Northern Light', when: 'Yesterday', body: 'Long-time lurker. This one finally got me to log in.', tone: '#3E5B3A', i: 'Q' }
+      ]
+    };
   }
 }
 </script>

@@ -72,8 +72,9 @@ button{cursor:pointer}
     <dc-import name="TabBar" selected="library" accent="#990000" hint-size="358px,62px"></dc-import>
   </div>
   <div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(0,0,0,0.12)"></div>
-  <div role="menu" aria-label="Work actions" style="position: absolute; right: 24px; top: 560px; width: 250px; border-radius: 22px; padding: 6px 0; background: rgba(250,250,252,0.86); backdrop-filter: blur(30px) saturate(180%); -webkit-backdrop-filter: blur(30px) saturate(180%); box-shadow: 0 18px 50px rgba(0,0,0,0.22), 0 0 0 0.5px rgba(0,0,0,0.08)">
-    <sc-for list="{{menu}}" as="m" hint-placeholder-count="7">
+  <div role="menu" aria-label="Work actions" style="position: absolute; right: 24px; top: 424px; width: 270px; border-radius: 24px; padding: 0 0 4px; overflow: hidden; background: rgba(250,250,252,0.86); backdrop-filter: blur(30px) saturate(180%); -webkit-backdrop-filter: blur(30px) saturate(180%); box-shadow: 0 18px 50px rgba(0,0,0,0.22), 0 0 0 0.5px rgba(0,0,0,0.08)">
+    <dc-import name="MenuTopRow" items="{{top}}" width="270" hint-size="270px,66px"></dc-import>
+    <sc-for list="{{menu}}" as="m" hint-placeholder-count="4">
       <button role="menuitem" style="width: 100%; height: 44px; border: none; background: transparent; padding: 0 16px; display: flex; align-items: center; justify-content: space-between; font-family: inherit; font-size: 16px; color: {{m.color}}; border-top: {{m.sep}}">
         {{m.label}}
         <svg aria-hidden="true" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="{{m.d}}"></path></svg>
@@ -96,17 +97,23 @@ class Component extends DCLogic {
     ];
     const art = (h) => 'linear-gradient(155deg, hsl(' + h + ', 46%, 27%), hsl(' + ((h + 22) % 360) + ', 50%, 41%))';
     const sep = '0.5px solid rgba(60,60,67,0.18)';
+    // Long-press a work in the queue: the top row holds what you do most with it.
+    const top = [
+      { label: 'Read', d: 'M3 5.5c3-1 6-1 9 1 3-2 6-2 9-1v13c-3-1-6-1-9 1-3-2-6-2-9-1zM12 6.5v13' },
+      { label: 'To Top', aria: 'Move to Top', d: 'M12 19V7M6.5 12.5 12 7l5.5 5.5M5 4h14' },
+      { label: 'To Bottom', aria: 'Move to Bottom', d: 'M12 5v12M6.5 11.5 12 17l5.5-5.5M5 20h14' },
+      { label: 'Share', d: 'M12 15V4M8 8l4-4 4 4M5 12v8h14v-8' }
+    ];
     const menu = [
-      ['Move to Top', 'M12 19V7M6.5 12.5 12 7l5.5 5.5M5 4h14', '#000000', 'none'],
       ['Move Up', 'M12 19V6M6.5 11.5 12 6l5.5 5.5', '#000000', 'none'],
       ['Move Down', 'M12 5v13M6.5 12.5 12 18l5.5-5.5', '#000000', 'none'],
-      ['Move to Bottom', 'M12 5v12M6.5 11.5 12 17l5.5-5.5M5 20h14', '#000000', 'none'],
+      ['Move to Another Queue', 'M4 6h11M4 12h11M4 18h7M15 15l3 3-3 3M18 18h-6', '#000000', 'none'],
       ['Work Details', 'M12 3.5a8.5 8.5 0 1 1 0 17 8.5 8.5 0 0 1 0-17zM12 11v5.5M12 7.8v.1', '#000000', sep],
-      ['Read', 'M3 5.5c3-1 6-1 9 1 3-2 6-2 9-1v13c-3-1-6-1-9 1-3-2-6-2-9-1zM12 6.5v13', '#000000', 'none'],
       ['Remove from Queue', 'M12 3.5a8.5 8.5 0 1 1 0 17 8.5 8.5 0 0 1 0-17zM8 12h8', '#D70015', sep]
     ].map(([label, d, color, s]) => ({ label, d, color, sep: s }));
     return {
       accent,
+      top,
       accentTint: tint,
       works: works.map((w, i) => ({ ...w, n: i + 2, divider: i < works.length - 1 })),
       tiles: [150, 181, 32, 335].map(art),

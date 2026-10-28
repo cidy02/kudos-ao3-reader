@@ -50,7 +50,7 @@ button{cursor:pointer}
   </main>
 
   <div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(0,0,0,0.24)"></div>
-  <section role="dialog" aria-label="New Queue" style="position: absolute; left: 0; right: 0; top: 330px; bottom: 0; border-radius: 38px 38px 0 0; background: #F2F2F7; box-shadow: 0 -8px 30px rgba(0,0,0,0.18); display: flex; flex-direction: column">
+  <section role="dialog" aria-label="New Queue" style="position: absolute; left: 0; right: 0; top: 64px; bottom: 0; border-radius: 38px 38px 0 0; background: #F2F2F7; box-shadow: 0 -8px 30px rgba(0,0,0,0.18); display: flex; flex-direction: column">
     <div aria-hidden="true" style="width: 36px; height: 5px; border-radius: 3px; background: #C7C7CC; margin: 7px auto 0"></div>
     <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 16px 8px">
       <button aria-label="Cancel" style="width: 44px; height: 44px; border: none; border-radius: 22px; background: rgba(118,118,128,0.14); color: #1C1C1E; display: flex; align-items: center; justify-content: center">
@@ -60,6 +60,13 @@ button{cursor:pointer}
       <button style="height: 44px; padding: 0 18px; border: none; border-radius: 22px; background: {{accent}}; color: #FFFFFF; font-family: inherit; font-size: 16px; font-weight: 600">Add</button>
     </div>
     <div style="padding: 0 16px; display: flex; flex-direction: column; gap: 14px">
+      <div aria-label="Preview" style="display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 2px 0 4px">
+        <dc-import name="CoverStack" tiles="{{newTiles}}" colour="{{chosen}}" initial="A" kind="queue" width="76" height="76" hint-size="76px,76px"></dc-import>
+        <span style="display: flex; flex-direction: column; align-items: center; gap: 1px">
+          <span style="font-size: 22px; line-height: 28px; font-weight: 700">Autumn Rereads</span>
+          <span style="font-size: 13px; line-height: 18px; color: #6C6C70">2 works · about 3 h 50 min</span>
+        </span>
+      </div>
       <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
         <label style="display: flex; align-items: center; height: 46px; padding: 0 16px; gap: 12px; border-bottom: 0.5px solid #E5E5EA">
           <span style="width: 70px; font-size: 16px">Name</span>
@@ -73,15 +80,10 @@ button{cursor:pointer}
             </sc-for>
           </div>
         </div>
-        <div style="display: flex; align-items: center; min-height: 46px; padding: 6px 16px; gap: 8px; border-bottom: 0.5px solid #E5E5EA; flex-wrap: wrap">
+        <div style="display: flex; align-items: center; min-height: 46px; padding: 6px 16px; gap: 8px; flex-wrap: wrap">
           <span style="width: 70px; font-size: 16px">Tags</span>
           <span style="height: 30px; padding: 0 11px; border-radius: 15px; background: #EFEFF4; font-size: 15px; line-height: 30px">reread</span>
           <button style="border: none; background: none; padding: 4px 6px; font-family: inherit; font-size: 14px; color: {{accent}}">Add…</button>
-        </div>
-        <div style="display: flex; align-items: center; height: 46px; padding: 0 16px; gap: 8px">
-          <span style="flex: 1; font-size: 16px">Start from</span>
-          <span style="font-size: 16px; color: #6C6C70">Empty</span>
-          <svg aria-hidden="true" width="12" height="16" viewBox="0 0 12 16" fill="none" stroke="#8E8E93" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6 6 2.5 9.5 6M2.5 10 6 13.5 9.5 10"></path></svg>
         </div>
       </div>
       <div style="display: flex; flex-direction: column; gap: 6px">
@@ -91,6 +93,25 @@ button{cursor:pointer}
         </div>
         <p style="margin: 0 16px; font-size: 13px; line-height: 18px; color: #6C6C70">Kudos downloads each work you add and keeps it while it's in this queue.</p>
       </div>
+      <section aria-label="Add works" style="display: flex; flex-direction: column; gap: 6px">
+        <div style="display: flex; align-items: baseline; margin: 0 16px"><h3 style="flex: 1; margin: 0; font-size: 13px; line-height: 18px; font-weight: 400; color: #6C6C70">Add works</h3><span style="font-size: 13px; color: #6C6C70">2 selected</span></div>
+        <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
+          <label style="display: flex; align-items: center; gap: 6px; height: 44px; margin: 0 12px; color: #6C6C70; border-bottom: 0.5px solid #E5E5EA">
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="m15.5 15.5 5 5"></path></svg>
+            <input type="search" aria-label="Search your library" placeholder="Search your library" style="flex: 1; border: none; background: transparent; font-family: inherit; font-size: 16px; outline: none">
+          </label>
+          <sc-for list="{{suggest}}" as="w" hint-placeholder-count="4">
+            <div style="display: flex; align-items: center; gap: 12px; padding: 8px 16px 8px 12px; border-top: {{w.sep}}">
+              <span aria-hidden="true" style="width: 34px; height: 46px; flex-shrink: 0; border-radius: 5px; background: {{w.art}}"></span>
+              <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px">
+                <span style="font-size: 16px; line-height: 21px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{w.title}}</span>
+                <span style="font-size: 13px; line-height: 18px; color: #6C6C70">{{w.meta}}</span>
+              </span>
+              <span aria-label="{{w.aria}}" style="width: 22px; height: 22px; flex-shrink: 0; box-sizing: border-box; border-radius: 11px; border: {{w.ring}}; background: {{w.fill}}; color: #FFFFFF; display: flex; align-items: center; justify-content: center"><sc-if value="{{w.on}}" hint-placeholder-val="{{false}}"><svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.6 4.6L19.2 7.4"></path></svg></sc-if></span>
+            </div>
+          </sc-for>
+        </div>
+      </section>
     </div>
   </section>
 </div>
@@ -113,6 +134,14 @@ class Component extends DCLogic {
       accent,
       accentTint: tint,
       queues: queues.map((q, i) => ({ ...q, sep: i ? '0.5px solid #E5E5EA' : 'none' })),
+      chosen: colours[3][1],
+      newTiles: [262, 32].map(art),
+      suggest: [
+        ['Moor and Mist', 'Finished 2024 · 54,200 words · tagged reread', 262, true],
+        ['Letters Never Sent', 'Finished twice · 21,880 words', 32, true],
+        ['The Lighthouse Keepers', 'Finished Oct 3 · 40,900 words', 188, false],
+        ['A Map of Small Hours', 'Finished Oct 12 · 32,050 words', 150, false]
+      ].map(([title, meta, h, on], i) => ({ title, meta, art: art(h), on, aria: on ? 'Selected' : 'Not selected', ring: on ? 'none' : '1.5px solid #C7C7CC', fill: on ? '#990000' : 'transparent', sep: i ? '0.5px solid #E5E5EA' : 'none' })),
       colours: colours.map(([name, h], i) => ({ name, hex: h, checked: i === 3 ? 'true' : 'false', ring: i === 3 ? '0 0 0 2px #FFFFFF, 0 0 0 4px ' + h : 'none' }))
     };
   }
