@@ -111,7 +111,7 @@ private struct AboutSettingsSection: View {
                 }
             }
         } footer: {
-            // 1ab's closing line. The last sentence is the one worth stating:
+            // 1ab's closing line.
             Text("These settings only change Kudos. Change anything AO3 stores about your "
                 + "account in AO3 Preferences.")
         }

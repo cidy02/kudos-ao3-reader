@@ -62,9 +62,9 @@ extension Color {
 
     /// WCAG relative luminance (0 = black, 1 = white). Used to pick a readable
     /// foreground for an arbitrary background color — unlike the `ReaderTheme` role
-    /// colors, an app accent isn't one of a few fixed cases (the user can set it to
-    /// arbitrary subject colours and control fills, so contrast has to be computed from
-    /// the actual chosen color rather than switched on a case.
+    /// colors, subject colours (fandoms, queues, collections) aren't a few fixed
+    /// cases, so contrast has to be computed from the actual color rather than
+    /// switched on a case.
     var relativeLuminance: Double {
         let platform = PlatformColor(self)
         var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
