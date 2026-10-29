@@ -565,7 +565,7 @@ enum DebugLaunchRoute {
         case "bookmarks": .bookmarks
         case "history": .history
         case "subscriptions": .subscriptions
-        default: return nil
+        default: nil
         }
     }
 
