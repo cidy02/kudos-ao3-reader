@@ -71,4 +71,17 @@ class SettingsDefaultsTest {
         assertEquals("hide", backup.matureContentMode)
         assertEquals(settings, backup.toSettings())
     }
+
+    @Test
+    fun backupsDecodeLegacyAccentButExportAndApplyAo3Red() {
+        val custom = KudosSettings.Defaults.copy(
+            app = KudosSettings.Defaults.app.copy(accentColorHex = "#0B57D0")
+        )
+
+        assertEquals("#990000", BackupSettings.fromSettings(custom).accentColorHex)
+        assertEquals(
+            "#990000",
+            BackupSettings(accentColorHex = "#0B57D0").toSettings().app.accentColorHex
+        )
+    }
 }

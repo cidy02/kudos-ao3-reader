@@ -142,7 +142,7 @@ fun KudosApp(container: KudosAppContainer) {
         )
     }
 
-    KudosTheme(themeMode = themeMode, accentColorHex = settings.app.accentColorHex) {
+    KudosTheme(themeMode = themeMode) {
         // App-wide shake-to-report (iOS UIWindow.motionEnded parity). Sensor
         // listener is lifecycle-bound to this composition and unregistered on leave.
         ShakeToReportEffect { showBugReport = true }

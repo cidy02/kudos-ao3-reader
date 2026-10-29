@@ -41,7 +41,7 @@ data class BackupSettings(
             app = AppSettings(
                 confirmBeforeDelete = confirmBeforeDelete,
                 appTheme = AppThemeSetting.fromStorage(appTheme),
-                accentColorHex = accentColorHex
+                accentColorHex = KudosSettings.Defaults.app.accentColorHex
             ),
             privacy = PrivacySettings(
                 hideMatureContent = hideMatureContent,
@@ -72,7 +72,7 @@ data class BackupSettings(
                 appTheme = settings.app.appTheme.storageValue,
                 readerTheme = settings.reader.readerTheme.storageValue,
                 matchAppReaderTheme = settings.reader.matchAppReaderTheme,
-                accentColorHex = settings.app.accentColorHex
+                accentColorHex = KudosSettings.Defaults.app.accentColorHex
             )
         }
     }

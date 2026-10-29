@@ -455,7 +455,6 @@ struct SettingsBackupPage: View {
         themeManager.matchAppAndReader = false
         themeManager.appTheme = ReaderTheme(rawValue: settings.appTheme) ?? .light
         themeManager.readerTheme = ReaderTheme(rawValue: settings.readerTheme) ?? .light
-        themeManager.accentHex = settings.accentColorHex
         themeManager.matchAppAndReader = settings.matchAppReaderTheme
     }
 

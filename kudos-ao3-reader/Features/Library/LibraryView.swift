@@ -644,22 +644,11 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             SubjectChip(
                 text: text,
                 style: .pill(isSelected: selected),
-                palette: washPalette
+                palette: themeManager.scopePalette
             )
         }
         .buttonStyle(.plain)
         .minimumHitTarget(28)
-    }
-
-    /// The page's wash as a palette, for the chips at its top (owner,
-    /// 2026-10-11: "the accent color for the chips at the top should also follow
-    /// the wash"). The work `heroWash` takes its colour from; the app's own
-    /// palette when there is none.
-    private var washPalette: SubjectPalette {
-        guard let work = dashboardWorks(for: .readingNow).first else { return themeManager.scopePalette }
-        return themeManager.appTheme.subjectPalette(
-            hue: CoverArt.workHue(fandoms: work.workFandoms, title: work.title)
-        )
     }
 
     // MARK: Card details

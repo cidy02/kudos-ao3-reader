@@ -5,7 +5,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 
 enum class KudosThemeMode(val label: String) {
@@ -83,18 +82,14 @@ private val SepiaScheme = lightColorScheme(
 @Composable
 fun KudosTheme(
     themeMode: KudosThemeMode,
-    accentColorHex: String = DefaultAccentHex,
     content: @Composable () -> Unit
 ) {
     val systemDark = isSystemInDarkTheme()
-    val accent = remember(accentColorHex) { parseAccentColor(accentColorHex) }
     val colorScheme = when (themeMode) {
-        KudosThemeMode.System -> if (systemDark) darkScheme(accent) else lightScheme(accent)
-        KudosThemeMode.Light -> lightScheme(accent)
-        // Apple suppresses the user's accent choice in Sepia too (see SepiaScheme
-        // above) — Sepia always uses its own warm-brown tint, by design.
-        KudosThemeMode.Dark -> darkScheme(accent)
-        KudosThemeMode.Oled -> oledScheme(accent)
+        KudosThemeMode.System -> if (systemDark) darkScheme(Ao3Red) else lightScheme(Ao3Red)
+        KudosThemeMode.Light -> lightScheme(Ao3Red)
+        KudosThemeMode.Dark -> darkScheme(Ao3Red)
+        KudosThemeMode.Oled -> oledScheme(Ao3Red)
         KudosThemeMode.Sepia -> SepiaScheme
     }
 
@@ -106,15 +101,6 @@ fun KudosTheme(
 }
 
 const val DefaultAccentHex = "#990000"
-
-/** Settings validates/normalizes to #RRGGBB before persisting; fall back to the AO3 red default for anything else. */
-fun parseAccentColor(hex: String): Color {
-    return try {
-        Color(android.graphics.Color.parseColor(hex))
-    } catch (_: IllegalArgumentException) {
-        Ao3Red
-    }
-}
 
 private object ColorTokens {
     val SepiaSurface = androidx.compose.ui.graphics.Color(0xFFFFF6E8)

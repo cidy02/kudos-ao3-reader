@@ -51,10 +51,8 @@ struct HomeSectionListView: View {
         kind.works(from: works, visible: passesPrivacy)
     }
 
-    /// This page is scoped to a Home section, not to one work, so its wash comes
-    /// from the app accent rather than from any fandom — spec 1m: "the header
-    /// wash is the user's app accent colour ... not a fixed value". The red in
-    /// artboards 1ad/1af is the default AO3 red seen through that rule.
+    /// This page is scoped to a Home section, not to one work, so its wash uses
+    /// the app's fixed AO3 red (Sepia keeps its warm brown), not a fandom colour.
     private var scopePalette: SubjectPalette {
         themeManager.scopePalette
     }

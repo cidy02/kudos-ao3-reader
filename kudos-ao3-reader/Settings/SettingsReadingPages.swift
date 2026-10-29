@@ -4,8 +4,8 @@ import SwiftUI
 // Listening are the same sections the reader's options sheet shows
 // (`ReaderOptionsForm`), so the two can never drift apart.
 
-/// App-wide theme, accent and text size — moved as-is from the old single page's
-/// Theme section. The reader's own theme picker stays in the reader's sheet.
+/// App-wide theme and text size. The reader's own theme picker stays in the
+/// reader's sheet; app controls use the fixed AO3-red brand colour.
 struct SettingsAppearancePage: View {
     @Environment(ThemeManager.self) private var themeManager
     @State private var showCustomize = false
@@ -24,10 +24,6 @@ struct SettingsAppearancePage: View {
                 set: { themeManager.matchAppAndReader = $0 })
     }
 
-    private var accentBinding: Binding<Color> {
-        Binding(get: { themeManager.accentColor }, set: { themeManager.setAccent($0) })
-    }
-
     var body: some View {
         SettingsPageForm(route: .appearance) {
             Section {
@@ -36,10 +32,6 @@ struct SettingsAppearancePage: View {
                 if !themeManager.matchAppAndReader {
                     ReaderThemePicker(title: "Reader Theme", selection: readerThemeBinding)
                 }
-                ColorPicker("Accent Color", selection: accentBinding, supportsOpacity: false)
-                Button("Reset to AO3 Red") { themeManager.resetAccent() }
-                    .disabled(themeManager.accentHex.caseInsensitiveCompare(ThemeManager.ao3Red)
-                        == .orderedSame)
                 #if os(iOS)
                 Button {
                     showCustomize = true
@@ -54,7 +46,7 @@ struct SettingsAppearancePage: View {
                 Text((themeManager.matchAppAndReader
                         ? "Choose Light, Sepia, Dark, or OLED for Kudos and the reader."
                         : "You can choose different themes for Kudos and the reader.")
-                    + " Your accent colour appears in Light, Dark, and OLED; Sepia keeps its warm tint.")
+                    + " Controls use AO3 red; Sepia keeps its warm tint.")
             }
         }
         #if DEBUG

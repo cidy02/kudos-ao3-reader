@@ -112,11 +112,8 @@ private struct AboutSettingsSection: View {
             }
         } footer: {
             // 1ab's closing line. The last sentence is the one worth stating:
-            // the accent chosen on the Appearance page is what tints the Account
-            // tab's wash, which neither screen says on its own.
             Text("These settings only change Kudos. Change anything AO3 stores about your "
-                + "account in AO3 Preferences. Your accent colour from Appearance also colours "
-                + "this tab.")
+                + "account in AO3 Preferences.")
         }
     }
 }

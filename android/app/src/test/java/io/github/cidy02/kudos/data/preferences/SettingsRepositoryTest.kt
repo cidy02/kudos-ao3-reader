@@ -74,7 +74,6 @@ class SettingsRepositoryTest {
         repository.updateMatureContentMode(MatureContentMode.Hide)
         repository.updateRequireBiometricToReveal(true)
         repository.updateConfirmBeforeDelete(false)
-        repository.updateAccentColor("#0B57D0")
 
         val settings = repository.snapshot()
 
@@ -82,7 +81,18 @@ class SettingsRepositoryTest {
         assertEquals(MatureContentMode.Hide, settings.privacy.matureContentMode)
         assertTrue(settings.privacy.requireBiometricToReveal)
         assertFalse(settings.app.confirmBeforeDelete)
-        assertEquals("#0B57D0", settings.app.accentColorHex)
+        assertEquals("#990000", settings.app.accentColorHex)
+    }
+
+    @Test
+    fun restoredCustomAccentIsIgnored() = runBlocking {
+        repository.replaceAll(
+            KudosSettings.Defaults.copy(
+                app = KudosSettings.Defaults.app.copy(accentColorHex = "#0B57D0")
+            )
+        )
+
+        assertEquals("#990000", repository.snapshot().app.accentColorHex)
     }
 
     @Test

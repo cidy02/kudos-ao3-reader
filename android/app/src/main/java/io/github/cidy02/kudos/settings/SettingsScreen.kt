@@ -45,7 +45,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -89,8 +88,6 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
-
-private val AccentPresets = listOf("#990000", "#0B57D0", "#0F6B46", "#7A3E00", "#5B2C6F")
 
 private const val FontPtMin = 12f
 private const val FontPtMax = 28f
@@ -457,17 +454,11 @@ fun SettingsScreen(
                         launchUpdate { repository.updateMatchAppReaderTheme(it) }
                     }
                 )
-                AccentColorEditor(
-                    accentHex = settings.app.accentColorHex,
-                    onCommit = { hex -> launchUpdate { repository.updateAccentColor(hex) } },
-                    onReset = {
-                        launchUpdate { repository.updateAccentColor("#990000") }
-                    }
-                )
             }
             SettingsFooter(
                 "Light, Sepia, Dark, OLED, or System across the app. OLED uses " +
-                    "true-black surfaces for AMOLED panels. Sepia keeps its warm tint."
+                    "true-black surfaces for AMOLED panels. Controls use AO3 red; " +
+                    "Sepia keeps its warm tint."
             )
         }
 
@@ -1379,74 +1370,6 @@ private fun SettingSliderRow(
         )
     }
 }
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun AccentColorEditor(
-    accentHex: String,
-    onCommit: (String) -> Unit,
-    onReset: () -> Unit
-) {
-    var draft by remember { mutableStateOf(accentHex) }
-    LaunchedEffect(accentHex) {
-        draft = accentHex
-    }
-
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(text = "Accent color", style = MaterialTheme.typography.bodyMedium)
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            AccentPresets.forEach { preset ->
-                FilterChip(
-                    selected = accentHex.equals(preset, ignoreCase = true),
-                    onClick = {
-                        draft = preset
-                        onCommit(preset)
-                    },
-                    label = { Text(preset) }
-                )
-            }
-        }
-        OutlinedTextField(
-            value = draft,
-            onValueChange = { draft = it },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            label = { Text("Hex") },
-            supportingText = { Text("e.g. #990000") }
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            OutlinedButton(
-                onClick = {
-                    normalizeAccentHex(draft)?.let { onCommit(it) }
-                },
-                enabled = normalizeAccentHex(draft) != null
-            ) {
-                Text("Apply accent")
-            }
-            TextButton(onClick = onReset) {
-                Text("Reset to AO3 Red")
-            }
-        }
-    }
-}
-
-/** Accepts #RGB or #RRGGBB (optional #). Returns canonical #RRGGBB or null. */
-private fun normalizeAccentHex(raw: String): String? {
-    val trimmed = raw.trim()
-    val hex = if (trimmed.startsWith("#")) trimmed.drop(1) else trimmed
-    if (hex.length != 3 && hex.length != 6) return null
-    if (!hex.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }) return null
-    val expanded = if (hex.length == 3) {
-        hex.map { "$it$it" }.joinToString("")
-    } else {
-        hex
-    }
-    return "#${expanded.uppercase()}"
-}
-
 
 /**
  * Compact multi-file import summary: successes first, then each failure.
