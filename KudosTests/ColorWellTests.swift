@@ -49,6 +49,52 @@ struct ColorWellTests {
         #expect(page.colorScheme == .light)
     }
 
+    @Test func aPresetCancelsAPendingDragSoFlushReportsNothing() throws {
+        let green = try #require(Color(hex: "#00FF00"))
+        let blue = try #require(Color(hex: "#0000FF"))
+        var machine = CustomColorWellMachine(committedHex: "#FF0000")
+        machine.noteDrag(green)
+        machine.adoptExternal(blue)
+        #expect(machine.flush() == nil)
+        #expect(machine.committedHex == "#0000FF")
+        #expect(machine.pending == nil)
+    }
+
+    @Test func flushReportsThePendingColourOnce() throws {
+        let green = try #require(Color(hex: "#00FF00"))
+        var machine = CustomColorWellMachine(committedHex: "#FF0000")
+        machine.noteDrag(green)
+        #expect(machine.flush()?.hexString == "#00FF00")
+        #expect(machine.committedHex == "#00FF00")
+        #expect(machine.flush() == nil)
+    }
+
+    @Test func flushIgnoresADragThatMatchesTheCommittedColour() throws {
+        let red = try #require(Color(hex: "#FF0000"))
+        var machine = CustomColorWellMachine(committedHex: "#FF0000")
+        machine.noteDrag(red)
+        #expect(machine.flush() == nil)
+    }
+
+    @Test func discardDropsThePendingColourAndDisappearDoesNotFlush() throws {
+        let green = try #require(Color(hex: "#00FF00"))
+        var machine = CustomColorWellMachine(committedHex: "#FF0000")
+        machine.noteDrag(green)
+        machine.discard()
+        #expect(machine.discarded)
+        #expect(machine.pending == nil)
+        #expect(machine.flush() == nil)
+        #expect(machine.committedHex == "#FF0000")
+    }
+
+    @Test func discardThenANewDragIsIgnored() throws {
+        let green = try #require(Color(hex: "#00FF00"))
+        var machine = CustomColorWellMachine(committedHex: "#FF0000")
+        machine.discard()
+        machine.noteDrag(green)
+        #expect(machine.flush() == nil)
+    }
+
     @Test func stylesheetUsesPaperAndKeepsThePresetLinkColour() {
         let css = ReaderStylesheet.css(
             theme: .light,
