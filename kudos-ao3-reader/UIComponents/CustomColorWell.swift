@@ -1,5 +1,61 @@
 import SwiftUI
 
+/// Debounce/commit rules for `CustomColorWell`. A drag is pending until flush;
+/// a preset (or any other external writer) drops it so it cannot overwrite that
+/// choice; Cancel discards it so disappear does not save a colour the user
+/// threw away. Extracted so the state machine can be tested without a picker.
+struct CustomColorWellMachine {
+    var pending: Color?
+    var committedHex: String
+    var discarded = false
+
+    mutating func noteDrag(_ color: Color) {
+        guard !discarded else { return }
+        pending = color
+    }
+
+    /// Preset taps and other writers of `current`. Drops an unfinished drag so
+    /// it cannot overwrite the external colour after the debounce.
+    mutating func adoptExternal(_ color: Color) {
+        pending = nil
+        committedHex = color.hexString
+    }
+
+    mutating func flush() -> Color? {
+        defer { pending = nil }
+        guard !discarded, let color = pending else { return nil }
+        let hex = color.hexString
+        guard hex != committedHex else { return nil }
+        committedHex = hex
+        return color
+    }
+
+    mutating func discard() {
+        pending = nil
+        discarded = true
+    }
+}
+
+/// Lets a parent flush or discard the well's pending drag before it reads the
+/// value or dismisses. Create calls `flush()` so `options` already holds the
+/// dragged colour; Cancel calls `discard()` so disappear does not write it.
+@MainActor
+final class CustomColorWellSession {
+    var flush: () -> Void = {}
+    var discard: () -> Void = {}
+}
+
+private struct CustomColorWellSessionKey: EnvironmentKey {
+    static let defaultValue: CustomColorWellSession? = nil
+}
+
+extension EnvironmentValues {
+    var customColorWellSession: CustomColorWellSession? {
+        get { self[CustomColorWellSessionKey.self] }
+        set { self[CustomColorWellSessionKey.self] = newValue }
+    }
+}
+
 /// The last swatch of every colour row (T-471): a SwiftUI `ColorPicker` well for
 /// any colour, drawn as the system's rainbow ring with the current colour in its
 /// middle — the boards' "More colours" button. Opacity is not offered: every
@@ -9,7 +65,8 @@ import SwiftUI
 /// The picker's binding fires on every step of a slider drag, and the callers
 /// write straight to the store (a highlight redraws the page, a collection saves),
 /// so a pick is reported once the person pauses — or when the well leaves the
-/// screen — rather than on every step. The unfinished drag is never lost.
+/// screen — rather than on every step. The unfinished drag is never lost, unless
+/// Cancel discarded it.
 struct CustomColorWell: View {
     /// Spoken by VoiceOver ("Custom colour").
     let label: String
@@ -23,14 +80,10 @@ struct CustomColorWell: View {
     var size: CGFloat = 28
     let onPick: (Color) -> Void
 
+    @Environment(\.customColorWellSession) private var session
     @State private var draft: Color
-    @State private var pending: Color?
+    @State private var machine: CustomColorWellMachine
     @State private var commitTask: Task<Void, Never>?
-    /// The hex last reported, or the colour the well opened on. `ColorPicker`
-    /// writes its opening colour back into the binding; that is not a choice,
-    /// and storing it would turn a preset into a custom colour just by showing
-    /// the well.
-    @State private var committedHex: String
 
     init(
         label: String,
@@ -48,7 +101,7 @@ struct CustomColorWell: View {
         self.onPick = onPick
         let opening = current ?? fallback
         _draft = State(initialValue: opening)
-        _committedHex = State(initialValue: opening.hexString)
+        _machine = State(initialValue: CustomColorWellMachine(committedHex: opening.hexString))
     }
 
     var body: some View {
@@ -65,20 +118,24 @@ struct CustomColorWell: View {
             .accessibilityValue(current?.hexString ?? "")
             .accessibilityAddTraits(current != nil ? .isSelected : [])
             .onChange(of: draft) { _, newValue in
-                pending = newValue
+                machine.noteDrag(newValue)
+                bindSession()
                 commitTask?.cancel()
                 commitTask = Task { @MainActor in
                     try? await Task.sleep(for: .milliseconds(350))
                     guard !Task.isCancelled else { return }
-                    flush()
+                    reportFlush()
                 }
             }
             .onChange(of: externalColorToken) { _, _ in
                 adoptExternalColor()
             }
+            .onAppear { bindSession() }
             .onDisappear {
                 commitTask?.cancel()
-                flush()
+                session?.flush = {}
+                session?.discard = {}
+                reportFlush()
             }
     }
 
@@ -89,20 +146,27 @@ struct CustomColorWell: View {
     }
 
     private func adoptExternalColor() {
-        guard pending == nil else { return }
+        commitTask?.cancel()
         let adopted = current ?? fallback
-        let hex = adopted.hexString
-        guard hex != committedHex else { return }
-        committedHex = hex
+        machine.adoptExternal(adopted)
         draft = adopted
+        bindSession()
     }
 
-    private func flush() {
-        guard let color = pending else { return }
-        pending = nil
-        let hex = color.hexString
-        guard hex != committedHex else { return }
-        committedHex = hex
-        onPick(color)
+    private func reportFlush() {
+        commitTask?.cancel()
+        if let color = machine.flush() {
+            onPick(color)
+        }
+    }
+
+    private func discardPending() {
+        commitTask?.cancel()
+        machine.discard()
+    }
+
+    private func bindSession() {
+        session?.flush = reportFlush
+        session?.discard = discardPending
     }
 }

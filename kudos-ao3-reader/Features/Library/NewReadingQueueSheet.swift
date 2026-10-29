@@ -77,6 +77,7 @@ struct NewReadingQueueSheet: View {
     @State private var seedCount: Int?
     @State private var saveFailed = false
     @State private var showingAddWorks = false
+    @State private var colorWellSession = CustomColorWellSession()
 
     @ScaledMetric(relativeTo: .subheadline) private var nameFieldSize: CGFloat = 16
     @ScaledMetric(relativeTo: .subheadline) private var seedTitleSize: CGFloat = 14.5
@@ -157,15 +158,20 @@ struct NewReadingQueueSheet: View {
                 .subjectScreenWash(palette: palette)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel", action: onCancel)
+                        Button("Cancel") {
+                            colorWellSession.discard()
+                            onCancel()
+                        }
                     }
                     ToolbarItem(placement: .confirmationAction) {
                         Button(isEditing ? "Save" : "Create") {
+                            colorWellSession.flush()
                             if !onCreate(options) { saveFailed = true }
                         }
                         .disabled(trimmedName.isEmpty)
                     }
                 }
+                .environment(\.customColorWellSession, colorWellSession)
         }
         // Outside the stack so the Create button, the toggle and the caret all
         // take the swatch too, not just the rows.
@@ -336,6 +342,7 @@ struct NewReadingQueueSheet: View {
             // does nothing, as the disabled Create.
             .onSubmit {
                 guard !trimmedName.isEmpty else { return }
+                colorWellSession.flush()
                 if !onCreate(options) { saveFailed = true }
             }
             .padding(.horizontal, 13)

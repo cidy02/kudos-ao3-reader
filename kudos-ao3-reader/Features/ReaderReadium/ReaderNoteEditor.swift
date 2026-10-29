@@ -18,6 +18,7 @@ struct ReaderNoteEditor: View {
     /// Only Cancel throws a typed note away. A swipe down dismissed the sheet and
     /// lost it; it is kept now, as the colour already was.
     @State private var finished = false
+    @State private var colorWellSession = CustomColorWellSession()
     @FocusState private var isEditorFocused: Bool
 
     var body: some View {
@@ -73,6 +74,9 @@ struct ReaderNoteEditor: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
                         finished = true
+                        // Drop an unfinished drag so the well's disappear flush
+                        // cannot write back a colour Cancel just threw away.
+                        colorWellSession.discard()
                         // A swatch writes straight to the highlight so the page shows
                         // it at once; Cancel has to take that back too (audit A12-6).
                         if let colorRawOnOpen, annotation.colorRaw != colorRawOnOpen {
@@ -94,6 +98,7 @@ struct ReaderNoteEditor: View {
                 }
             }
         }
+        .environment(\.customColorWellSession, colorWellSession)
         .onAppear {
             draft = annotation.note
             colorRawOnOpen = annotation.colorRaw

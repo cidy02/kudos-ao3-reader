@@ -28,6 +28,7 @@ struct NewCollectionSheet: View {
     @State private var keepsWorksOffline = false
     @State private var showsOnHome = false
     @State private var saveFailed = false
+    @State private var colorWellSession = CustomColorWellSession()
 
     @ScaledMetric(relativeTo: .caption) private var footnoteSize: CGFloat = 11.5
 
@@ -79,13 +80,17 @@ struct NewCollectionSheet: View {
                 .subjectScreenWash(palette: palette)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel") { dismiss() }
+                        Button("Cancel") {
+                            colorWellSession.discard()
+                            dismiss()
+                        }
                     }
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Create", action: create)
                             .disabled(trimmedName.isEmpty)
                     }
                 }
+                .environment(\.customColorWellSession, colorWellSession)
         }
         // Outside the stack, as New queue: the Create button, the toggles and
         // the caret take the swatch too.
@@ -156,6 +161,7 @@ struct NewCollectionSheet: View {
     private func create() {
         let trimmed = trimmedName
         guard !trimmed.isEmpty else { return }
+        colorWellSession.flush()
         let collection = WorkCollection(name: trimmed)
         collection.hue = hue
         collection.colorHex = colorHex
