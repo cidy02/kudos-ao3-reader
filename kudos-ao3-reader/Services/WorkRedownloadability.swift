@@ -159,9 +159,13 @@ nonisolated enum WorkRedownloadability: Equatable, Sendable {
         }
     }
 
+    /// "an HTML", "a PDF", "an RTF", "an EPUB": an all-capitals format is said
+    /// letter by letter, so its first letter's name decides; a word ("Word
+    /// document", "unrecognized file") goes by its first vowel.
     private static func article(_ format: String) -> String {
-        let first = format.lowercased().first
-        let an = first == "a" || first == "e" || first == "i" || first == "o" || first == "u"
+        guard let first = format.first else { return "a \(format)" }
+        let spelledOut = format.allSatisfy { $0.isUppercase || $0.isNumber }
+        let an = spelledOut ? "AEFHILMNORSX".contains(first) : "aeiou".contains(first.lowercased())
         return an ? "an \(format)" : "a \(format)"
     }
 
