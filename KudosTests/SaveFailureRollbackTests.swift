@@ -32,6 +32,49 @@ struct SaveFailureRollbackTests {
         #expect(try context.fetch(FetchDescriptor<ReadingQueue>()).isEmpty)
     }
 
+    @Test func aSeededCreateThatFailsOnTheSecondSaveLeavesNoPrefix() throws {
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
+            SavedSearch.self, SyncTombstone.self
+        ])
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let context = ModelContext(try ModelContainer(for: schema, configurations: [configuration]))
+        let first = SavedWork(
+            title: "First", author: "W", sourceURL: "https://archiveofourown.org/works/1"
+        )
+        let second = SavedWork(
+            title: "Second", author: "W", sourceURL: "https://archiveofourown.org/works/2"
+        )
+        context.insert(first)
+        context.insert(second)
+        try context.save()
+
+        // One save is allowed: the old path committed the queue on the first
+        // membership and left it behind when the second save failed. Create now
+        // saves once; that one save either takes the whole queue or none of it.
+        SaveBestEffortTesting.$budget.withValue(SaveBestEffortTesting.SaveBudget(1)) {
+            _ = ReadingQueueService.createQueue(
+                named: "Seeded",
+                seedWorkIDs: [first.id, second.id],
+                in: context
+            )
+            if !context.saveBestEffort(reason: "test") {
+                context.rollback()
+            }
+        }
+
+        let queues = try context.fetch(FetchDescriptor<ReadingQueue>())
+            .filter { $0.name == "Seeded" }
+        let memberships = try context.fetch(FetchDescriptor<ReadingQueueMembership>())
+        #expect(queues.count <= 1)
+        if let queue = queues.first {
+            #expect(ReadingQueueService.orderedWorks(in: queue).count == 2)
+        } else {
+            #expect(memberships.isEmpty)
+        }
+    }
+
     @Test func aRefusedCollectionSaveRollsBack() throws {
         let context = try refusingContext()
         context.insert(WorkCollection(name: "Comfort reads"))

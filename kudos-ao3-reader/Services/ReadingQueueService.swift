@@ -174,6 +174,13 @@ enum ReadingQueueService {
         in context: ModelContext
     ) -> ReadingQueue {
         let trimmed = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Membership `add` saves as it goes. Hold the commit until the queue
+        // and every seeded membership are in, so a failed Create cannot leave a
+        // committed prefix that a retry would duplicate.
+        let previousAutosave = context.autosaveEnabled
+        context.autosaveEnabled = false
+        defer { context.autosaveEnabled = previousAutosave }
+
         let queue = ReadingQueue(
             name: trimmed.isEmpty ? "Reading Queue" : trimmed,
             kind: .custom,
@@ -203,6 +210,12 @@ enum ReadingQueueService {
             }
             append(picked, to: queue, in: context)
         }
+        guard previousAutosave else { return queue }
+        context.autosaveEnabled = previousAutosave
+        // One save. On failure the inserts stay pending so the sheet's
+        // `saveBestEffort` + `rollback` can drop the whole prefix; an
+        // in-method rollback would make that second save a success on an
+        // empty context and the sheet would close as if Create worked.
         context.saveBestEffort(reason: "Saving reading queue failed")
         return queue
     }

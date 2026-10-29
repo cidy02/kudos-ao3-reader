@@ -2,6 +2,18 @@ import Foundation
 import OSLog
 import SwiftData
 
+/// Test seam: when set, `saveBestEffort` returns false once `remaining` hits
+/// zero, so a Create that used to save once per membership can be shown to
+/// leave a committed prefix. Production never sets this.
+enum SaveBestEffortTesting {
+    @TaskLocal static var budget: SaveBudget?
+    @MainActor
+    final class SaveBudget {
+        var remaining: Int
+        init(_ remaining: Int) { self.remaining = remaining }
+    }
+}
+
 extension ModelContext {
     /// Saves, logging (not throwing) on failure — the app's convention for
     /// derived/background state changes where a save failure shouldn't block
@@ -35,6 +47,10 @@ extension ModelContext {
     @discardableResult
     func saveBestEffort(reason: StaticString) -> Bool {
         guard autosaveEnabled else { return true }
+        if let budget = SaveBestEffortTesting.budget {
+            if budget.remaining <= 0 { return false }
+            budget.remaining -= 1
+        }
         do {
             try save()
             return true
