@@ -300,7 +300,8 @@ final class AO3AuthorProfileModel {
             authenticationScope = scope
             resetForAuthenticationChange()
         }
-        guard headerPhase != .loaded || (!dashboardOnly && !overviewMode && !loadedTabs.contains(selectedTab)) else { return }
+        let needsContent = !dashboardOnly && !overviewMode && !loadedTabs.contains(selectedTab)
+        guard headerPhase != .loaded || needsContent else { return }
         launch {
             await self.loadHeader(auth: auth)
             guard self.headerPhase == .loaded else { return }
@@ -652,6 +653,9 @@ final class AO3AuthorProfileModel {
         activeTask?.cancel()
         activeTask = nil
         cancelSectionTasks()
+        if popularPhase == .loading {
+            popularPhase = popularWorks.isEmpty ? .idle : .loaded
+        }
     }
 
     /// Lets deterministic tests await the model's current load without changing
@@ -693,7 +697,11 @@ final class AO3AuthorProfileModel {
         sectionTasks[section]?.cancel()
         let task = Task {
             await operation()
-            self.sectionTasks[section] = nil
+            // A cancelled section must not nil a replacement started after
+            // `cancel()`; otherwise Most Kudos can hang on `.loading`.
+            if !Task.isCancelled {
+                self.sectionTasks[section] = nil
+            }
         }
         sectionTasks[section] = task
     }
@@ -864,6 +872,7 @@ final class AO3AuthorProfileModel {
             isShowingStaleCache = isShowingStaleCache || cached.isStale
             popularPhase = .loaded
         } catch is CancellationError {
+            if popularWorks.isEmpty { popularPhase = .idle }
             return
         } catch {
             guard route == expectedRoute else { return }

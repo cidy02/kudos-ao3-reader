@@ -271,8 +271,8 @@ struct AuthorProfileOverviewSections: View {
                                         .accessibilityHidden(true)
                                     Text(FandomDisplayName.bareTitle(fandom.name))
                                         .font(.subheadline)
-                                    if let n = fandom.workCount {
-                                        Text(n.compactCount)
+                                    if let count = fandom.workCount {
+                                        Text(count.compactCount)
                                             .font(.subheadline)
                                             .foregroundStyle(.secondary)
                                     }
