@@ -267,6 +267,18 @@ struct AO3AuthorWorksSection: View {
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
 
+    private var isGiftsList: Bool {
+        model.selectedTab == .gifts || model.worksScope == .gifts
+    }
+
+    private var worksEmptyTitle: String { isGiftsList ? "No gifts" : "No works" }
+
+    private var worksEmptyMessage: String {
+        isGiftsList
+            ? "No gifts for this user are visible to you on AO3."
+            : "No works by this author are visible to you on AO3."
+    }
+
     var body: some View {
         Group {
             if layout == .scroll, displayMode == .compact, !isSelecting {
@@ -279,7 +291,7 @@ struct AO3AuthorWorksSection: View {
 
     private var scrollCompactBody: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Works")
+            Text(isGiftsList ? "Gifts" : "Works")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, CardListMetrics.sideMargin + CardListMetrics.innerHorizontal)
@@ -292,8 +304,8 @@ struct AO3AuthorWorksSection: View {
                 AccountScrollChromeCard {
                     AO3AuthorContentMessage(
                         model: model,
-                        emptyTitle: "No works",
-                        emptyMessage: "No works by this author are visible to you on AO3.",
+                        emptyTitle: worksEmptyTitle,
+                        emptyMessage: worksEmptyMessage,
                         emptySymbol: "books.vertical"
                     )
                 }
@@ -317,8 +329,8 @@ struct AO3AuthorWorksSection: View {
             } else if model.works.isEmpty {
                 AO3AuthorContentMessage(
                     model: model,
-                    emptyTitle: "No works",
-                    emptyMessage: "No works by this author are visible to you on AO3.",
+                    emptyTitle: worksEmptyTitle,
+                    emptyMessage: worksEmptyMessage,
                     emptySymbol: "books.vertical"
                 )
             } else {
