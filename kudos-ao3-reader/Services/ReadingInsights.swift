@@ -23,6 +23,15 @@ nonisolated struct ReadingSessionFacts: Equatable, Sendable {
     /// What this sitting read, in words (owner Q27, 2026-10-20): see
     /// `ReadingLogService.wordsRead(sessions:)`.
     var wordsRead: Int = 0
+    /// The rest are for Reading History's timeline (T-462), which draws each
+    /// sitting rather than a total. Defaulted so the statistics' fixtures need
+    /// not spell them out.
+    var sessionID: UUID?
+    var title: String = ""
+    /// 0…1 at the end of the sitting (`ReadingSession.endingProgress`).
+    var endingProgress: Double = 0
+    /// Chapters posted at this visit; 0 when unknown.
+    var chapterCount: Int = 0
 }
 
 /// What the log knows about one work, for a history or favourites row.
@@ -202,6 +211,30 @@ nonisolated struct ReadingInsights: Equatable, Sendable {
         guard !startedWorkIDs.isEmpty else { return nil }
         let finishedWorkIDs = Set(facts.filter(\.didFinish).map(\.workID))
         return Double(finishedWorkIDs.count) / Double(startedWorkIDs.count)
+    }
+
+    /// Where each sitting began in its work, 0…1, in `facts` order (owner Q27,
+    /// 2026-10-20): where the work's sitting before it ended, or the start for
+    /// its first sitting and for one after a sitting that finished it. A sitting
+    /// that went back is where the next one starts from.
+    ///
+    /// One rule for the words each sitting read (`ReadingLogService.wordsRead`)
+    /// and the chapters History draws it reading, so the two cannot disagree.
+    static func startingProgress(of facts: [ReadingSessionFacts]) -> [Double] {
+        var starts = Array(repeating: 0.0, count: facts.count)
+        for indices in Dictionary(grouping: facts.indices, by: { facts[$0].workID }).values {
+            var start = 0.0
+            for index in indices.sorted(by: { sittingOrder(facts[$0], facts[$1]) }) {
+                starts[index] = start
+                start = facts[index].didFinish ? 0 : min(1, max(0, facts[index].endingProgress))
+            }
+        }
+        return starts
+    }
+
+    /// Oldest first, the session id breaking a tie so the order is stable.
+    static func sittingOrder(_ lhs: ReadingSessionFacts, _ rhs: ReadingSessionFacts) -> Bool {
+        (lhs.startedAt, lhs.sessionID?.uuidString ?? "") < (rhs.startedAt, rhs.sessionID?.uuidString ?? "")
     }
 
     /// Longest run of consecutive calendar days carrying at least one session.
