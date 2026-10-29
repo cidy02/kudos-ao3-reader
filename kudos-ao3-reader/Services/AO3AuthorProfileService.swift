@@ -1000,6 +1000,9 @@ final class AO3AuthorProfileModel {
     }
 
     private func resetForAuthenticationChange() {
+        // A section load started under the old account would otherwise land its
+        // page in the reset profile (R468).
+        cancelSectionTasks()
         header = nil
         headerFailureSystemImage = "exclamationmark.triangle"
         about = nil
