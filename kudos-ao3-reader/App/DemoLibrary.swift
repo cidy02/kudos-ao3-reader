@@ -479,7 +479,16 @@ enum DebugLaunchRoute {
         if libraryRoutes.contains(where: value.hasPrefix) {
             router.selection = .library
         } else if value.hasPrefix("acct:") {
-            router.selection = .account
+            let target = String(value.dropFirst("acct:".count))
+            if target.hasPrefix("settings:") {
+                router.showAccount()
+            } else if target.hasPrefix("ao3collection:") || target.hasPrefix("workedit:") {
+                router.selection = .writing
+            } else if let route = legacyAccountRoute(target) {
+                router.openLegacyAccountRoute(route)
+            } else {
+                router.showAccount()
+            }
         } else if value.hasPrefix("section:"),
            let kind = LibrarySectionKind(rawValue: String(value.dropFirst("section:".count))) {
             router.showLibrarySection(kind)
@@ -513,12 +522,6 @@ enum DebugLaunchRoute {
     /// Appends by concrete type — navigation matches destinations by type, so
     /// an `AnyHashable` would find none.
     static func applyAccount(to path: inout NavigationPath) {
-        // `acct:ao3collection:<slug>` — an AO3 collection's page (fixture-served).
-        if let value = pageRoute, value.hasPrefix("acct:ao3collection:") {
-            let slug = String(value.dropFirst("acct:ao3collection:".count))
-            path.append(AO3CollectionDestination(slug: slug, title: slug))
-            return
-        }
         // `acct:settings:<page>` — a Settings page by its `SettingsRoute` case name (backup,
         // syncFolder, about, …), for side-by-side screenshots with Android.
         if let value = pageRoute, value.hasPrefix("acct:settings:") {
@@ -529,10 +532,14 @@ enum DebugLaunchRoute {
             }
             return
         }
-        switch accountTarget() {
-        case let route as AccountView.Route: path.append(route)
-        case let kind as AO3AccountWorksList.Kind: path.append(kind)
-        default: break
+    }
+
+    /// Old Account debug routes keep working after their content moved tabs.
+    static func applyWriting(to path: inout NavigationPath) {
+        guard let value = pageRoute else { return }
+        if value.hasPrefix("acct:ao3collection:") {
+            let slug = String(value.dropFirst("acct:ao3collection:".count))
+            path.append(AO3CollectionDestination(slug: slug, title: slug))
         }
     }
 
@@ -543,22 +550,21 @@ enum DebugLaunchRoute {
         return Int(value.dropFirst("acct:workedit:".count))
     }
 
-    private static func accountTarget() -> Any? {
-        guard let value = pageRoute, value.hasPrefix("acct:") else { return nil }
-        switch String(value.dropFirst("acct:".count)) {
-        case "dashboard": return AccountView.Route.dashboard
-        case "drafts": return AccountView.Route.drafts
-        case "works": return AccountView.Route.myWorks
-        case "series", "seriesedit": return AccountView.Route.mySeries
-        case "inbox": return AccountView.Route.inbox
-        case "preferences": return AccountView.Route.preferences
-        case "more": return AccountView.Route.moreOnAO3
-        case "settings": return AccountView.Route.settings
-        case "collections": return AccountView.Route.myCollections
-        case "later": return AO3AccountWorksList.Kind.markedForLater
-        case "bookmarks": return AO3AccountWorksList.Kind.bookmarks
-        case "history": return AO3AccountWorksList.Kind.history
-        case "subscriptions": return AO3AccountWorksList.Kind.subscriptions
+    private static func legacyAccountRoute(_ target: String) -> LegacyAccountRoute? {
+        switch target {
+        case "dashboard": .dashboard
+        case "drafts": .drafts
+        case "works": .works
+        case "series", "seriesedit": .series
+        case "inbox": .inbox
+        case "preferences": .preferences
+        case "more": .moreOnAO3
+        case "settings": .settings
+        case "collections": .collections
+        case "later": .markedForLater
+        case "bookmarks": .bookmarks
+        case "history": .history
+        case "subscriptions": .subscriptions
         default: return nil
         }
     }

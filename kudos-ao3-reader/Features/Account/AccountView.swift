@@ -1,25 +1,15 @@
 import SwiftData
 import SwiftUI
 
-/// The Account tab: the signed-in user's native AO3 profile hub, one flat page
-/// with no segmented control (flattened per the owner — see `tabSections`):
-///
-/// - **Shortcuts** — the reader's chosen dashboard tiles
-/// - **Reading** — Marked for Later / Bookmarks / Collections / Subscriptions
-/// - **Writing** — Works / Series / Drafts (native draft forms)
-/// - **Activity** — History / Inbox
-/// - **Account** — Preferences, More on AO3
-///
-/// Each row opens its own screen. The row orders are `readingRowOrder`,
-/// `writingRowOrder` and `activityRowOrder`, which the signed-out preview (1n)
-/// lists too. `libraryStyleCompactRoot` is unreachable while
-/// `showsWorkListControls` is false for every scope; it is kept, not deleted.
-///
-/// App settings stay behind the toolbar gear.
+/// The self-contained Account sheet presented by Home's profile button. T-460
+/// moves the existing profile, Inbox, AO3 preferences, website entry, Settings
+/// and session actions here; its larger visual restyle belongs to T-470.
 struct AccountView: View {
     @Environment(AO3AuthService.self) private var auth
+    @Environment(AO3InboxModel.self) private var inboxModel
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var theme
+    @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Query private var localWorks: [SavedWork]
@@ -38,8 +28,6 @@ struct AccountView: View {
     @State private var activityTab: AccountActivityTab = .history
     /// The signed-in user's own profile content (Works / Series / Bookmarks).
     @State private var profileModel: AO3AuthorProfileModel?
-    /// Activity › Inbox feed state.
-    @State private var inboxModel = AO3InboxModel()
     @State private var showingInboxFilters = false
     @State private var filters = AO3SearchFilters()
     @State private var showingFilters = false
@@ -54,12 +42,14 @@ struct AccountView: View {
     @State private var postingPseudName: String?
     /// Bumped by pull-to-refresh on list-style Reading/Activity segments.
     @State private var listReloadToken = 0
+    @State private var confirmingLogOut = false
 
     enum Route: Hashable {
         case myCollections
         case preferences
         case moreOnAO3
         case settings
+        case backupAndSync
         /// Native AO3 own-user dashboard (sidebar destinations).
         case dashboard
         /// Artboard 1x, which `WritingDraftsView` already is.
@@ -157,28 +147,7 @@ struct AccountView: View {
                     standardListRoot
                 }
             }
-            // 1m has no navigation bar at all. Its content column starts at the
-            // safe area and its chrome is a glass circle floating over the wash,
-            // with the page scrolling underneath — which is the whole 44pt of
-            // dead space an empty inline bar was reserving above the header.
-            //
-            // The bar comes back for the inbox's selection mode, and only that:
-            // Select All is a `.confirmationAction`, which has nowhere to live
-            // without a bar, and it is a distinct, self-contained state.
-            // `.navigationBar` is an iOS toolbar placement; macOS has no
-            // navigation bar to hide, and the floating chrome below already
-            // stands on its own there.
-            #if os(iOS)
-            .toolbar(inboxModel.isSelecting ? .visible : .hidden, for: .navigationBar)
-            #endif
-                .scrollAwayTopChrome(isHidden: $chromeScrolledAway)
-                .overlay(alignment: .topTrailing) {
-                    if !inboxModel.isSelecting {
-                        floatingChromeRow
-                            .opacity(chromeScrolledAway ? 0 : 1)
-                            .allowsHitTesting(!chromeScrolledAway)
-                    }
-                }
+            .navigationTitle("Account")
                 .navigationDestination(for: Route.self, destination: destination)
                 #if DEBUG
                 .task {
@@ -226,8 +195,12 @@ struct AccountView: View {
                         onResolveWorkContext: { inboxModel.cacheWorkContext($0, for: destination, auth: auth) }
                     )
                 }
-                .ao3AuthorNavigation(path: $path, tab: .account)
-                .toolbar { accountToolbarContent }
+                .ao3AuthorNavigation(path: $path, tab: .home)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Done") { dismissAccount() }
+                    }
+                }
                 .sheet(isPresented: $showingLogin) { AO3LoginView() }
                 .sheet(isPresented: $editingShortcuts) {
                     AccountShortcutsEditor(raw: $shortcutsRaw)
@@ -257,6 +230,11 @@ struct AccountView: View {
                     Text(inboxModel.actionError ?? "AO3 couldn't update your Inbox.")
                 }
                 .task(id: activationKey) { activateVisibleContent() }
+                .onChange(of: router.pendingAccountRoute, initial: true) { _, route in
+                    guard let route else { return }
+                    openAccountRoute(route)
+                    router.pendingAccountRoute = nil
+                }
                 .onChange(of: auth.username, initial: true) { _, username in
                     syncProfileModel(username: username)
                 }
@@ -289,13 +267,11 @@ struct AccountView: View {
             profileCardSection
 
             if auth.isLoggedIn {
-                tabSections
-            } else {
-                signedOutPreviewSection
+                accountSheetSections
             }
         }
         .cardList()
-        .refreshable { await refreshCurrentTab() }
+        .refreshable { await refreshAccountSheet() }
     }
 
     /// Account is app-scoped rather than work-scoped, so its identity and wash
@@ -376,7 +352,7 @@ struct AccountView: View {
         [
             auth.username ?? "",
             String(auth.sessionGeneration),
-            String(router.selection == .account),
+            String(router.isPresentingAccount),
             selectedTab.rawValue,
             readingTab.rawValue,
             writingTab.rawValue,
@@ -385,34 +361,9 @@ struct AccountView: View {
     }
 
     private func activateVisibleContent() {
-        guard router.selection == .account, auth.isLoggedIn else { return }
-        switch selectedTab {
-        case .overview:
-            // Profile header only — do not prefetch Inbox here (that would hit
-            // AO3 on every Account open for a badge the user may never use).
-            profileModel?.activate(auth: auth)
-        case .reading:
-            switch readingTab {
-            case .bookmarks:
-                syncProfileTab(.bookmarks)
-            case .later, .subscriptions, .collections:
-                profileModel?.activate(auth: auth)
-            }
-        case .writing:
-            switch writingTab {
-            case .works:
-                syncProfileTab(.works)
-            case .series:
-                syncProfileTab(.series)
-            case .drafts:
-                profileModel?.activate(auth: auth)
-            }
-        case .activity:
-            profileModel?.activate(auth: auth)
-            if activityTab == .inbox {
-                inboxModel.activate(auth: auth)
-            }
-        }
+        guard router.isPresentingAccount, auth.isLoggedIn else { return }
+        profileModel?.activate(auth: auth)
+        inboxModel.activate(auth: auth)
     }
 
     private func syncProfileModel(username: String?) {
@@ -476,6 +427,7 @@ struct AccountView: View {
         case .preferences: AO3PreferencesView()
         case .moreOnAO3: AccountMoreOnAO3View()
         case .settings: SettingsHubView()
+        case .backupAndSync: AccountBackupSyncView()
         case .dashboard: AO3DashboardView()
         case .drafts: WritingDraftsView()
         case .myWorks: ownProfile(title: "Works", tab: .works)
@@ -575,6 +527,104 @@ struct AccountView: View {
         }
     }
 
+    /// T-460 moves the existing Account content into a compact Home sheet.
+    /// The richer visual restyle remains T-470; these rows reuse the existing
+    /// profile, Inbox, preferences and Settings destinations unchanged.
+    @ViewBuilder
+    private var accountSheetSections: some View {
+        Section {
+            VStack(spacing: 0) {
+                panelNavRow(
+                    title: "Inbox",
+                    systemImage: "tray",
+                    count: inboxModel.unreadCount.map(String.init),
+                    value: Route.inbox
+                )
+            }
+            .subjectPanel()
+            .pageBodyRow(top: 10, gutter: SubjectMetrics.accountGutter)
+        } header: {
+            SectionRuleHeader(title: "Activity")
+                .pageBodyRow(top: 18, gutter: 0)
+        }
+
+        Section {
+            VStack(spacing: 0) {
+                panelNavRow(
+                    title: "AO3 Preferences",
+                    systemImage: "slider.horizontal.3",
+                    value: Route.preferences
+                )
+                SubjectRowSeparator()
+                panelActionRow(title: "Open AO3", systemImage: "safari", action: openAO3FromAccount)
+            }
+            .subjectPanel()
+            .pageBodyRow(top: 10, gutter: SubjectMetrics.accountGutter)
+        } header: {
+            SectionRuleHeader(title: "On AO3")
+                .pageBodyRow(top: 18, gutter: 0)
+        }
+
+        Section {
+            VStack(spacing: 0) {
+                panelNavRow(title: "Settings", systemImage: "gearshape", value: Route.settings)
+                SubjectRowSeparator()
+                panelNavRow(
+                    title: "Backup & Sync",
+                    systemImage: "arrow.triangle.2.circlepath.icloud",
+                    value: Route.backupAndSync
+                )
+                SubjectRowSeparator()
+                panelNavRow(title: "About", systemImage: "info.circle", value: SettingsRoute.about)
+            }
+            .subjectPanel()
+            .pageBodyRow(top: 10, gutter: SubjectMetrics.accountGutter)
+        } header: {
+            SectionRuleHeader(title: "Kudos Settings")
+                .pageBodyRow(top: 18, gutter: 0)
+        }
+
+        Section {
+            Button(role: .destructive) {
+                confirmingLogOut = true
+            } label: {
+                Label("Log Out", systemImage: "rectangle.portrait.and.arrow.right")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .accountControlCardRow()
+            .logOutConfirmation(isPresented: $confirmingLogOut) {
+                Task { await auth.logout() }
+            }
+        }
+    }
+
+    private func refreshAccountSheet() async {
+        guard auth.isLoggedIn else { return }
+        if let profileModel { await profileModel.refresh(auth: auth) }
+        await inboxModel.refresh(auth: auth)
+    }
+
+    private func dismissAccount() {
+        router.isPresentingAccount = false
+        dismiss()
+    }
+
+    private func openAO3FromAccount() {
+        router.openWebsiteAfterDismissingAccount()
+    }
+
+    private func openAccountRoute(_ route: AccountSheetRoute) {
+        switch route {
+        case .profile: openOwnProfile()
+        case .inbox: path.append(Route.inbox)
+        case .preferences: path.append(Route.preferences)
+        case .openAO3: openAO3FromAccount()
+        case .settings: path.append(Route.settings)
+        case .backup: path.append(Route.backupAndSync)
+        case .about: path.append(SettingsRoute.about)
+        }
+    }
+
     private func openOwnProfile() {
         guard let username = auth.username,
               let route = AO3AuthorRoute(username: username) else { return }
@@ -582,7 +632,6 @@ struct AccountView: View {
     }
 
     // MARK: Primary segments
-
 
     /// The whole hub, in one list.
     ///
@@ -828,11 +877,21 @@ struct AccountView: View {
     /// A row *inside* a `subjectPanel`, as 1m's Account group draws them — the
     /// panel owns the background, so the row only owns its own padding.
     private func panelNavRow(
-        title: String, systemImage: String, value: some Hashable
+        title: String, systemImage: String, count: String? = nil, value: some Hashable
     ) -> some View {
         Button {
             path.append(value)
         } label: {
+            AccountNavCardLabel(title: title, systemImage: systemImage, count: count)
+                .padding(.horizontal, 14)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func panelActionRow(
+        title: String, systemImage: String, action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
             AccountNavCardLabel(title: title, systemImage: systemImage)
                 .padding(.horizontal, 14)
         }
@@ -851,6 +910,22 @@ struct AccountView: View {
         .accountControlCardRow()
     }
 
+}
+
+/// A small bridge to the two existing settings pages named by the Account row.
+/// It introduces no settings or storage of its own.
+private struct AccountBackupSyncView: View {
+    var body: some View {
+        List {
+            NavigationLink(value: SettingsRoute.backup) {
+                Label("Backup", systemImage: "externaldrive")
+            }
+            NavigationLink(value: SettingsRoute.syncFolder) {
+                Label("Sync Folder", systemImage: "folder.badge.gearshape")
+            }
+        }
+        .navigationTitle("Backup & Sync")
+    }
 }
 
 private extension AccountView {

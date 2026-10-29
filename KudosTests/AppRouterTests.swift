@@ -4,6 +4,53 @@ import Testing
 
 @MainActor
 struct AppRouterTests {
+    @Test func mainTabsMatchTheT460InformationArchitecture() {
+        #expect(AppTab.mainTabs == [.home, .library, .writing, .browse])
+        #expect(!AppTab.mainTabs.contains(.account))
+    }
+
+    @Test func legacyAccountRoutesMapToTheirNewHomes() {
+        #expect(LegacyAccountRoute.dashboard.destination == .account(.profile))
+        #expect(LegacyAccountRoute.inbox.destination == .account(.inbox))
+        #expect(LegacyAccountRoute.preferences.destination == .account(.preferences))
+        #expect(LegacyAccountRoute.moreOnAO3.destination == .account(.openAO3))
+        #expect(LegacyAccountRoute.settings.destination == .account(.settings))
+        #expect(LegacyAccountRoute.works.destination == .writing(.works))
+        #expect(LegacyAccountRoute.drafts.destination == .writing(.drafts))
+        #expect(LegacyAccountRoute.series.destination == .writing(.series))
+        #expect(LegacyAccountRoute.collections.destination == .writing(.collectionsAndChallenges))
+        #expect(LegacyAccountRoute.markedForLater.destination == .library(.markedForLater))
+        #expect(LegacyAccountRoute.bookmarks.destination == .library(.bookmarks))
+        #expect(LegacyAccountRoute.subscriptions.destination == .library(.subscriptions))
+        #expect(LegacyAccountRoute.history.destination == .library(.history))
+    }
+
+    @Test func restoredAccountSelectionMovesToHomeAndPresentsAccount() {
+        let restored = AppRouter.restoredSelection(from: AppTab.account.rawValue)
+        #expect(restored == .init(tab: .home, presentsAccount: true))
+
+        let router = AppRouter()
+        router.restoreSelection(from: AppTab.account.rawValue)
+        #expect(router.selection == .home)
+        #expect(router.isPresentingAccount)
+    }
+
+    @Test func legacyRouteUpdatesTheOwningTabState() {
+        let router = AppRouter()
+        router.openLegacyAccountRoute(.drafts)
+        #expect(router.selection == .writing)
+        #expect(router.consumePendingWritingRoute() == .drafts)
+
+        router.openLegacyAccountRoute(.history)
+        #expect(router.selection == .library)
+        #expect(router.consumePendingLibraryAO3Route() == .history)
+
+        router.openLegacyAccountRoute(.inbox)
+        #expect(router.selection == .home)
+        #expect(router.isPresentingAccount)
+        #expect(router.consumePendingAccountRoute() == .inbox)
+    }
+
     @Test func unmungesTagSlug() {
         #expect(AppRouter.unmungeTag("Kara%20Danvers*s*Lena%20Luthor") == "Kara Danvers/Lena Luthor")
         #expect(AppRouter.unmungeTag("Fluff") == "Fluff")

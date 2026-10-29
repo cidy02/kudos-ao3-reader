@@ -13,6 +13,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
     @Environment(\.modelContext) private var context
     @Environment(AppRouter.self) private var router
     @Environment(AO3AuthService.self) private var auth
+    @Environment(AO3InboxModel.self) private var inboxModel
     @Environment(PrivacyGate.self) private var gate
     @Environment(ThemeManager.self) private var themeManager
     @AppStorage("hideMatureContent") private var hideMature = true
@@ -32,6 +33,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
     @State private var path = NavigationPath()
     @Namespace private var cardZoomNamespace
     @State private var subscriptions: [AO3WorkSummary] = []
+    @State private var accountProfileModel: AO3AuthorProfileModel?
     /// True only while the remote subscriptions request is actually in flight, so the
     /// carousel can show cover skeletons instead of briefly flashing its empty state.
     @State private var isLoadingSubscriptions = false
@@ -238,6 +240,10 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                     await Task.yield()
                     await loadSubscriptions()
                 }
+                .task(id: auth.sessionGeneration) {
+                    syncAccountProfile()
+                    inboxModel.activate(auth: auth)
+                }
                 .task {
                     // Defer network/update polling until after the Home tab paints —
                     // don't compete with tab-switch Liquid Glass for the main actor.
@@ -270,6 +276,9 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                         #endif
                     } else {
                         let hasMature = hideMature
+                        ToolbarItem(placement: .primaryAction) {
+                            profileButton
+                        }
                         // Gated as a whole, not just its inner pieces — an empty HStack
                         // still reserves an (empty-looking) toolbar slot, which is
                         // exactly what showed a blank button when the Library was empty.
@@ -324,6 +333,51 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
         // pushed from it resolve the same namespace — that pairing is what the
         // zoom transition matches on.
         .environment(\.workCardTransitionNamespace, cardZoomNamespace)
+    }
+
+    /// T-460 replaces the Account tab with this persistent Home identity control.
+    /// Its badge shares the Inbox model with the sheet, so reads clear immediately.
+    private var profileButton: some View {
+        Button {
+            router.showAccount()
+        } label: {
+            ZStack(alignment: .topTrailing) {
+                Group {
+                    HomeProfileAvatar(
+                        url: accountProfileModel?.header?.identity.avatarURL,
+                        username: auth.username
+                    )
+                }
+                .frame(width: 30, height: 30)
+
+                if let unreadCount = inboxModel.unreadCount, unreadCount > 0 {
+                    Text(unreadCount > 99 ? "99+" : "\(unreadCount)")
+                        .font(.caption2.bold())
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, unreadCount > 9 ? 4 : 3)
+                        .frame(minWidth: 15, minHeight: 15)
+                        .background(.accentFill, in: Capsule())
+                        .offset(x: 7, y: -6)
+                        .accessibilityHidden(true)
+                }
+            }
+            .frame(width: 44, height: 44)
+            .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(auth.isLoggedIn ? "Account" : "Log in to AO3")
+        .accessibilityValue(inboxModel.unreadCount.map { "\($0) unread Inbox comments" } ?? "")
+    }
+
+    private func syncAccountProfile() {
+        guard let username = auth.username, let route = AO3AuthorRoute(username: username) else {
+            accountProfileModel = nil
+            return
+        }
+        if accountProfileModel?.route.username.localizedCaseInsensitiveCompare(username) != .orderedSame {
+            accountProfileModel = AO3AuthorProfileModel(route: route, dashboardOnly: true)
+        }
+        accountProfileModel?.activate(auth: auth)
     }
 
     // MARK: Sections
@@ -663,5 +717,44 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
     /// chapter count, falling back to the in-chapter scroll fraction.
     private func progress(_ kind: HomeSectionKind, _ work: SavedWork) -> Double? {
         kind == .readingNow ? work.readingProgress : nil
+    }
+}
+
+private struct HomeProfileAvatar: View {
+    let url: URL?
+    let username: String?
+
+    @Environment(\.accentFill) private var accentFill
+
+    var body: some View {
+        Group {
+            if let url {
+                AsyncImage(url: url) { phase in
+                    if let image = phase.image {
+                        image.resizable().scaledToFill()
+                    } else {
+                        fallback
+                    }
+                }
+            } else {
+                fallback
+            }
+        }
+        .frame(width: 30, height: 30)
+        .background(accentFill.opacity(0.16))
+        .clipShape(Circle())
+    }
+
+    @ViewBuilder
+    private var fallback: some View {
+        if let initial = username?.first {
+            Text(String(initial).uppercased())
+                .font(.system(size: 15, weight: .bold, design: .rounded))
+                .foregroundStyle(.accentInk)
+        } else {
+            Image(systemName: "person.crop.circle")
+                .font(.system(size: 27, weight: .regular))
+                .foregroundStyle(.primary)
+        }
     }
 }
