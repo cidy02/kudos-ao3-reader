@@ -24,6 +24,30 @@ enum AO3AuthorProfileFetcher {
         "\(authenticationScope(for: auth))#session-\(auth.sessionGeneration)"
     }
 
+    /// Reads an own-profile avatar from an already-cached dashboard page. This
+    /// never falls through to `page(at:)`, so Home chrome cannot cause AO3 traffic.
+    static func cachedDashboardAvatarURL(
+        for route: AO3AuthorRoute,
+        auth: AO3AuthService
+    ) async -> URL? {
+        let scopes = [
+            sessionScopedCacheScope(for: auth),
+            authenticationScope(for: auth)
+        ]
+        for scope in scopes {
+            let key = AO3AuthorPageCache.Key(
+                url: route.dashboardURL,
+                authenticationScope: scope
+            )
+            guard let html = await AO3AuthorPageCache.shared.staleValue(for: key),
+                  let header = try? AO3Client.parseAuthorDashboard(html, route: route),
+                  let avatarURL = header.identity.avatarURL
+            else { continue }
+            return avatarURL
+        }
+        return nil
+    }
+
     static func page(
         at url: URL,
         auth: AO3AuthService,

@@ -195,7 +195,7 @@ struct AccountView: View {
                         onResolveWorkContext: { inboxModel.cacheWorkContext($0, for: destination, auth: auth) }
                     )
                 }
-                .ao3AuthorNavigation(path: $path, tab: .home)
+                .ao3AuthorNavigation(path: $path, tab: .account)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Done") { dismissAccount() }
@@ -551,6 +551,18 @@ struct AccountView: View {
         Section {
             VStack(spacing: 0) {
                 panelNavRow(
+                    title: "My Dashboard",
+                    systemImage: "square.grid.2x2",
+                    value: Route.dashboard
+                )
+                SubjectRowSeparator()
+                panelNavRow(
+                    title: "More on AO3",
+                    systemImage: "ellipsis.circle",
+                    value: Route.moreOnAO3
+                )
+                SubjectRowSeparator()
+                panelNavRow(
                     title: "AO3 Preferences",
                     systemImage: "slider.horizontal.3",
                     value: Route.preferences
@@ -561,7 +573,7 @@ struct AccountView: View {
             .subjectPanel()
             .pageBodyRow(top: 10, gutter: SubjectMetrics.accountGutter)
         } header: {
-            SectionRuleHeader(title: "On AO3")
+            SectionRuleHeader(title: "AO3")
                 .pageBodyRow(top: 18, gutter: 0)
         }
 
@@ -615,9 +627,11 @@ struct AccountView: View {
 
     private func openAccountRoute(_ route: AccountSheetRoute) {
         switch route {
+        case .dashboard: path.append(Route.dashboard)
         case .profile: openOwnProfile()
         case .inbox: path.append(Route.inbox)
         case .preferences: path.append(Route.preferences)
+        case .moreOnAO3: path.append(Route.moreOnAO3)
         case .openAO3: openAO3FromAccount()
         case .settings: path.append(Route.settings)
         case .backup: path.append(Route.backupAndSync)

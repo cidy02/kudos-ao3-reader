@@ -10,10 +10,9 @@ struct AppRouterTests {
     }
 
     @Test func legacyAccountRoutesMapToTheirNewHomes() {
-        #expect(LegacyAccountRoute.dashboard.destination == .account(.profile))
+        #expect(LegacyAccountRoute.dashboard.destination == .account(.dashboard))
         #expect(LegacyAccountRoute.inbox.destination == .account(.inbox))
         #expect(LegacyAccountRoute.preferences.destination == .account(.preferences))
-        #expect(LegacyAccountRoute.moreOnAO3.destination == .account(.openAO3))
         #expect(LegacyAccountRoute.settings.destination == .account(.settings))
         #expect(LegacyAccountRoute.works.destination == .writing(.works))
         #expect(LegacyAccountRoute.drafts.destination == .writing(.drafts))
@@ -23,6 +22,10 @@ struct AppRouterTests {
         #expect(LegacyAccountRoute.bookmarks.destination == .library(.bookmarks))
         #expect(LegacyAccountRoute.subscriptions.destination == .library(.subscriptions))
         #expect(LegacyAccountRoute.history.destination == .library(.history))
+    }
+
+    @Test func legacyMoreOnAO3RouteOpensTheDirectory() {
+        #expect(LegacyAccountRoute.moreOnAO3.destination == .account(.moreOnAO3))
     }
 
     @Test func restoredAccountSelectionMovesToHomeAndPresentsAccount() {
@@ -138,6 +141,35 @@ struct AppRouterTests {
         #expect(router.isPresentingWebBrowser)
         #expect(router.pendingURL == nil)
         #expect(router.selection == .home)
+    }
+
+    @Test func openingAURLFromAccountWaitsForAccountDismissal() throws {
+        let router = AppRouter()
+        let url = try #require(URL(string: "https://archiveofourown.org/users/someone"))
+        router.showAccount()
+
+        router.open(url)
+
+        #expect(router.isPresentingAccount == false)
+        #expect(router.isPresentingWebBrowser == false)
+        #expect(router.pendingURL == nil)
+
+        router.accountDidDismiss()
+
+        #expect(router.isPresentingWebBrowser)
+        #expect(router.pendingURL == url)
+    }
+
+    @Test func authorNavigationTargetsTheAccountSheetWhileItIsPresented() {
+        let router = AppRouter()
+        #expect(router.authorNavigationTarget == .home)
+
+        router.showAccount()
+        #expect(router.authorNavigationTarget == .account)
+
+        router.isPresentingAccount = false
+        router.selection = .writing
+        #expect(router.authorNavigationTarget == .writing)
     }
 
     // MARK: - Deferred author push (T-139 / UI-8)
