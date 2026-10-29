@@ -713,7 +713,7 @@ private struct RecentlyDeletedRow: View {
                 remaining
                 if let title = entry.redownloadability.rowTitle,
                    let body = entry.redownloadability.rowBody {
-                    RedownloadWarningNote(title: title, body: body)
+                    RedownloadWarningNote(title: title, message: body)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -773,7 +773,7 @@ private struct RecentlyDeletedRow: View {
 /// Light-only.
 private struct RedownloadWarningNote: View {
     let title: String
-    let body: String
+    let message: String
 
     @ScaledMetric(relativeTo: .footnote) private var size: CGFloat = 13
 
@@ -783,7 +783,7 @@ private struct RedownloadWarningNote: View {
                 .font(.system(size: size, weight: .semibold))
                 .foregroundStyle(Color.orange)
                 .accessibilityHidden(true)
-            (Text(title).fontWeight(.semibold) + Text(" ") + Text(body))
+            (Text(title).fontWeight(.semibold) + Text(" ") + Text(message))
                 .font(.system(size: size))
                 .fixedSize(horizontal: false, vertical: true)
         }
