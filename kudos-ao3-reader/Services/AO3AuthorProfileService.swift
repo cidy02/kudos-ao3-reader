@@ -304,8 +304,12 @@ final class AO3AuthorProfileModel {
             ? AO3AuthorProfileFetcher.sessionScopedCacheScope(for: auth)
             : AO3AuthorProfileFetcher.authenticationScope(for: auth)
         if authenticationScope != scope {
+            // The first activation only learns the scope; resetting then would
+            // throw away an initial tab, scope or sort the destination just
+            // applied (Most Kudos > See All lost its kudos sort, R468).
+            let isFirstActivation = authenticationScope.isEmpty
             authenticationScope = scope
-            resetForAuthenticationChange()
+            if !isFirstActivation { resetForAuthenticationChange() }
         }
         let needsContent = !dashboardOnly && !overviewMode && !loadedTabs.contains(selectedTab)
         guard headerPhase != .loaded || needsContent else { return }

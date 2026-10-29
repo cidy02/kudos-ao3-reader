@@ -409,38 +409,60 @@ extension AO3Client {
         _ links: Elements,
         username: String
     ) throws -> [AO3AuthorWebAction] {
-        var seen = Set<String>()
-        return try links.array().compactMap { link in
-            let label = try clean(link.text())
-            guard !label.isEmpty, let url = try absoluteAO3URL(link.attr("href")),
-                  seen.insert(url.absoluteString).inserted else { return nil }
-            let lowerLabel = label.lowercased()
-            let path = url.path.lowercased()
-            let usernamePath = "/users/\(username.lowercased())"
-            let kind: AO3AuthorWebAction.Kind
-            if lowerLabel.contains("block") || path.contains("blocked") {
-                kind = .block
-            } else if lowerLabel.contains("mute") || path.contains("muted") {
-                kind = .mute
-            } else if path == "\(usernamePath)/profile"
-                        || path == "\(usernamePath)/profile/edit" {
-                kind = .profile
-            } else if path == "\(usernamePath)/pseuds"
-                        || path == "\(usernamePath)/profile/pseuds" {
-                kind = .pseuds
-            } else if path.contains("/gifts") {
-                kind = .gifts
-            } else if path.contains("/works") {
-                kind = .works
-            } else if path.contains("/preferences") {
-                kind = .preferences
-            } else if path == usernamePath {
-                kind = .dashboard
+        // SwiftSoup returns a comma-grouped selector's matches in document order,
+        // so the header's uncounted "Works" can come before the dashboard's
+        // "Works (42)". A repeated URL keeps its first position but takes the
+        // label that carries a count (R468).
+        var actions: [AO3AuthorWebAction] = []
+        var positions: [String: Int] = [:]
+        for link in links.array() {
+            guard let action = try authorAction(link, username: username) else { continue }
+            let key = action.url.absoluteString
+            if let index = positions[key] {
+                if !Self.labelHasCount(actions[index].label), Self.labelHasCount(action.label) {
+                    actions[index] = action
+                }
             } else {
-                kind = .other
+                positions[key] = actions.count
+                actions.append(action)
             }
-            return AO3AuthorWebAction(label: label, url: url, kind: kind)
         }
+        return actions
+    }
+
+    private static func labelHasCount(_ label: String) -> Bool {
+        label.range(of: #"\(\s*[\d,]+\s*\)"#, options: .regularExpression) != nil
+    }
+
+    private static func authorAction(_ link: Element, username: String) throws -> AO3AuthorWebAction? {
+        let label = try clean(link.text())
+        guard !label.isEmpty, let url = try absoluteAO3URL(link.attr("href")) else { return nil }
+        let lowerLabel = label.lowercased()
+        let path = url.path.lowercased()
+        let usernamePath = "/users/\(username.lowercased())"
+        let kind: AO3AuthorWebAction.Kind
+        if lowerLabel.contains("block") || path.contains("blocked") {
+            kind = .block
+        } else if lowerLabel.contains("mute") || path.contains("muted") {
+            kind = .mute
+        } else if path == "\(usernamePath)/profile"
+                    || path == "\(usernamePath)/profile/edit" {
+            kind = .profile
+        } else if path == "\(usernamePath)/pseuds"
+                    || path == "\(usernamePath)/profile/pseuds" {
+            kind = .pseuds
+        } else if path.contains("/gifts") {
+            kind = .gifts
+        } else if path.contains("/works") {
+            kind = .works
+        } else if path.contains("/preferences") {
+            kind = .preferences
+        } else if path == usernamePath {
+            kind = .dashboard
+        } else {
+            kind = .other
+        }
+        return AO3AuthorWebAction(label: label, url: url, kind: kind)
     }
 
     private static func metadataValue(in doc: Document, labelContaining needle: String) -> String {
