@@ -12,7 +12,7 @@ import androidx.compose.material.icons.outlined.Book
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.RadioButtonUnchecked
-import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.outlined.TextFields
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -165,7 +165,7 @@ object AO3StatusTint {
 }
 
 object WorkStatIcons {
-    val rating: ImageVector get() = Icons.Outlined.Shield
+    val rating: ImageVector get() = Icons.Filled.Shield
     val chapters: ImageVector get() = Icons.Outlined.Book
     val complete: ImageVector get() = Icons.Outlined.CheckCircle
     val inProgress: ImageVector get() = Icons.Outlined.RadioButtonUnchecked
