@@ -163,7 +163,7 @@ struct AO3DashboardSections: View {
         case .works: .myWorks
         case .series: .series
         case .bookmarks: .bookmarks
-        case .about: nil
+        case .gifts, .about: nil
         }
     }
 

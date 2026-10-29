@@ -270,9 +270,33 @@ nonisolated enum AO3AuthorProfileTab: String, CaseIterable, Hashable, Identifiab
     case works = "Works"
     case series = "Series"
     case bookmarks = "Bookmarks"
+    case gifts = "Gifts"
     case about = "About"
 
     var id: String { rawValue }
+}
+
+/// Whether a section's "See All" should appear: only when the preview is
+/// hiding something, either because AO3 has more pages or because the nav
+/// count is larger than the rows on screen.
+nonisolated enum AuthorProfileSeeAll {
+    static let worksPreviewLimit = 3
+    static let seriesPreviewLimit = 2
+    static let bookmarksPreviewLimit = 2
+    static let seriesPartsLimit = 4
+
+    static func isShown(visibleCount: Int, totalCount: Int?, hasMore: Bool) -> Bool {
+        if hasMore { return true }
+        if let totalCount { return totalCount > visibleCount }
+        return false
+    }
+}
+
+nonisolated enum AuthorProfileOverviewSection: String, Hashable, Sendable {
+    case about
+    case popular
+    case series
+    case bookmarks
 }
 
 nonisolated struct AO3AuthorPseud: Identifiable, Hashable {
@@ -298,6 +322,7 @@ nonisolated struct AO3AuthorWebAction: Identifiable, Hashable {
         case profile
         case pseuds
         case works
+        case gifts
         case preferences
         case dashboard
         case other
@@ -417,6 +442,13 @@ nonisolated struct AO3AuthorHeader: Hashable {
     var recentWorks: [AO3WorkSummary]? = []
     var recentSeries: [AO3SeriesSummary]? = []
     var recentBookmarks: [AO3AuthorBookmark]? = []
+
+    /// Sidebar nav counts ("Works (42)") matched on the exact list path so
+    /// `/works` is not confused with `/works/collected`.
+    func listCount(for content: AO3AuthorRoute.Content, route: AO3AuthorRoute) -> Int? {
+        let expected = route.contentURL(content).path.lowercased()
+        return actions.first { $0.url.path.lowercased() == expected }?.listCount
+    }
 }
 
 nonisolated struct AO3RichText: Hashable {
@@ -443,6 +475,14 @@ nonisolated struct AO3RichText: Hashable {
                 $0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             }
         }
+    }
+
+    var plainText: String {
+        blocks.map { block in
+            block.runs.map(\.text).joined()
+        }
+        .joined(separator: "\n")
+        .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 
