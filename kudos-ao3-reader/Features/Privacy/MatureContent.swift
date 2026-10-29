@@ -123,6 +123,9 @@ struct SensitiveWorkRow: View {
     /// so tapping the card's padding reveals/selects exactly like its content.
     var usesInlineNavigation: Bool = false
     var contentInsets = EdgeInsets()
+    /// Queue rows only. Passed through to the one context menu this row owns.
+    var scopedRemoval: ScopedRemoval?
+    var queueMenu: QueueItemMenuActions?
     @Environment(PrivacyGate.self) private var gate
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var mode: MaturePrivacyMode = .obscure
@@ -228,7 +231,9 @@ struct SensitiveWorkRow: View {
         )
         .padding(contentInsets)
         .contentShape(Rectangle())
-        .localWorkContextMenu(work: work, onSelect: onSelect)
+        .localWorkContextMenu(
+            work: work, onSelect: onSelect, scopedRemoval: scopedRemoval, queueMenu: queueMenu
+        )
         if isSelecting {
             // A tap while selecting must always toggle selection, never open an
             // author profile — matches the blurred branch's own

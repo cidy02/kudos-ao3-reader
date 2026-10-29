@@ -2007,11 +2007,12 @@ extension ReadiumReaderView {
     /// 3. failing any link, the EPUB itself — which is the whole point of a
     ///    community copy, and the only way to hand it on.
     private var shareURL: URL? {
-        if let ao3WorkID { return AO3AuthService.workURL(ao3WorkID) }
-        if let source = URL(string: work.sourceURL), source.scheme?.hasPrefix("http") == true {
-            return source
-        }
-        return WorkReaderPreparation.hasReadableEPUB(for: work) ? work.fileURL : nil
+        WorkShareLink.url(
+            ao3WorkID: ao3WorkID,
+            sourceURL: work.sourceURL,
+            epubFileURL: work.fileURL,
+            hasReadableEPUB: WorkReaderPreparation.hasReadableEPUB(for: work)
+        )
     }
 
     /// The file this work was converted from, when it was converted and the original is
