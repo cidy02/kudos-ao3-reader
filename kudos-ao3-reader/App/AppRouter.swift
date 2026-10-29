@@ -15,7 +15,8 @@ enum AppTab: String, Hashable, CaseIterable, Identifiable {
 
     /// The four core tabs in the main tab bar / sidebar. `search` is a global action
     /// presented separately (the iOS search-role slot / a macOS sidebar button).
-    /// `account` remains decodable only to migrate old restored selections.
+    /// `account` remains as the Account sheet's navigation scope and to migrate
+    /// old restored selections; it is not a tab-bar item.
     static let mainTabs: [AppTab] = [.home, .library, .writing, .browse]
 
     var title: String {
@@ -59,9 +60,11 @@ enum WritingRoute: String, Hashable, CaseIterable {
 
 /// Destinations owned by the Home profile/account sheet.
 enum AccountSheetRoute: String, Hashable, CaseIterable {
+    case dashboard
     case profile
     case inbox
     case preferences
+    case moreOnAO3
     case openAO3
     case settings
     case backup
@@ -93,14 +96,14 @@ enum LegacyAccountRoute: String, Hashable, CaseIterable {
 
     var destination: Destination {
         switch self {
-        case .dashboard: .account(.profile)
+        case .dashboard: .account(.dashboard)
         case .works: .writing(.works)
         case .drafts: .writing(.drafts)
         case .series: .writing(.series)
         case .collections: .writing(.collectionsAndChallenges)
         case .inbox: .account(.inbox)
         case .preferences: .account(.preferences)
-        case .moreOnAO3: .account(.openAO3)
+        case .moreOnAO3: .account(.moreOnAO3)
         case .markedForLater: .library(.markedForLater)
         case .bookmarks: .library(.bookmarks)
         case .subscriptions: .library(.subscriptions)
@@ -220,6 +223,7 @@ final class AppRouter {
     /// Home presents Account as a sheet; it is no longer a root tab.
     var isPresentingAccount = false
     private var opensWebsiteAfterAccountDismiss = false
+    private var websiteURLAfterAccountDismiss: URL?
     var pendingAccountRoute: AccountSheetRoute?
     var pendingWritingRoute: WritingRoute?
     var pendingLibraryAO3Route: LibraryAO3Route?
@@ -255,6 +259,12 @@ final class AppRouter {
     /// profile is not buried under it.
     private(set) var cardNavigationSuppressed = false
 
+    /// The one stack allowed to consume the pending author route. Account owns a
+    /// separate sheet stack even though Home remains the selected root tab.
+    var authorNavigationTarget: AppTab {
+        isPresentingAccount ? .account : selection
+    }
+
     /// The one right-hand inspector panel open anywhere in the app. Routing every
     /// panel (Search filters, Reader chapters/display) through a single
     /// shared value guarantees only one inspector is ever presented at a time —
@@ -276,6 +286,10 @@ final class AppRouter {
         guard let scheme = url.scheme?.lowercased(),
               scheme == "http" || scheme == "https"
         else { return }
+        if isPresentingAccount || opensWebsiteAfterAccountDismiss {
+            openWebsiteAfterDismissingAccount(url)
+            return
+        }
         if !AO3AuthorRoute.isAO3URL(url) {
             #if os(macOS)
             NSWorkspace.shared.open(url)
@@ -417,15 +431,22 @@ final class AppRouter {
         isPresentingAccount = true
     }
 
-    func openWebsiteAfterDismissingAccount() {
+    func openWebsiteAfterDismissingAccount(_ url: URL? = nil) {
         opensWebsiteAfterAccountDismiss = true
+        websiteURLAfterAccountDismiss = url
         isPresentingAccount = false
     }
 
     func accountDidDismiss() {
         guard opensWebsiteAfterAccountDismiss else { return }
+        let url = websiteURLAfterAccountDismiss
         opensWebsiteAfterAccountDismiss = false
-        openWebsite()
+        websiteURLAfterAccountDismiss = nil
+        if let url {
+            open(url)
+        } else {
+            openWebsite()
+        }
     }
 
     func openLegacyAccountRoute(_ route: LegacyAccountRoute) {

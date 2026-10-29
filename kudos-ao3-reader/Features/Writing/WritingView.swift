@@ -190,18 +190,27 @@ struct WritingView: View {
     @ViewBuilder
     private var commentsSection: some View {
         Section {
-            if newComments.isEmpty {
-                Text("No unread comments in your AO3 Inbox.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+            switch inboxModel.phase {
+            case .idle, .loading:
+                ProgressView("Loading comments…").frame(maxWidth: .infinity, alignment: .leading)
                     .cardRow()
-            } else {
-                ForEach(newComments.prefix(3)) { item in
-                    Button { openInboxItem(item) } label: {
-                        WritingCommentPreviewRow(item: item)
+            case let .failed(message):
+                Text(message).font(.footnote).foregroundStyle(.secondary)
+                    .cardRow()
+            case .loaded, .paginationFailed:
+                if newComments.isEmpty {
+                    Text("No unread comments in your AO3 Inbox.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .cardRow()
+                } else {
+                    ForEach(newComments.prefix(3)) { item in
+                        Button { openInboxItem(item) } label: {
+                            WritingCommentPreviewRow(item: item)
+                        }
+                        .buttonStyle(.plain)
+                        .cardRow()
                     }
-                    .buttonStyle(.plain)
-                    .cardRow()
                 }
             }
         } header: {

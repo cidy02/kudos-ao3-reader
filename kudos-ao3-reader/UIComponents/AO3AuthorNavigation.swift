@@ -278,16 +278,16 @@ private struct AO3AuthorNavigationModifier: ViewModifier {
             }
             // Observe the epoch (not the Optional route): @Observable + Optional
             // equality skips same-route re-taps. Epoch always changes; only the
-            // selected tab consumes.
+            // router's active root/sheet scope consumes.
             .onChange(of: router.authorProfileNavigationEpoch, initial: true) { _, epoch in
-                guard epoch > 0, router.selection == tab,
+                guard epoch > 0, router.authorNavigationTarget == tab,
                       let route = router.consumePendingAuthorProfile() else { return }
                 // Wait out the same-touch row NavigationLink (and its deferred
                 // dismiss). Then push author so it ends up on top of the stack —
                 // not under reader/detail, and not lost if dismiss races path.
                 Task { @MainActor in
                     try? await Task.sleep(for: .milliseconds(100))
-                    guard router.selection == tab else { return }
+                    guard router.authorNavigationTarget == tab else { return }
                     var next = path
                     next.append(route)
                     path = next

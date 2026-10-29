@@ -1,6 +1,12 @@
+import Foundation
 import OSLog
 import SwiftData
 import SwiftUI
+#if os(iOS)
+import UIKit
+#elseif os(macOS)
+import AppKit
+#endif
 
 /// The Home tab: a personal, Books-style dashboard. Every section is a collapsible
 /// horizontal card carousel with a `>` chevron that opens its full vertical list.
@@ -33,7 +39,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
     @State private var path = NavigationPath()
     @Namespace private var cardZoomNamespace
     @State private var subscriptions: [AO3WorkSummary] = []
-    @State private var accountProfileModel: AO3AuthorProfileModel?
+    @State private var accountAvatarURL: URL?
     /// True only while the remote subscriptions request is actually in flight, so the
     /// carousel can show cover skeletons instead of briefly flashing its empty state.
     @State private var isLoadingSubscriptions = false
@@ -240,9 +246,11 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                     await Task.yield()
                     await loadSubscriptions()
                 }
-                .task(id: auth.sessionGeneration) {
-                    syncAccountProfile()
-                    inboxModel.activate(auth: auth)
+                .task(id: accountAvatarCacheKey) { await loadCachedAccountAvatar() }
+                .onChange(of: auth.sessionGeneration, initial: true) { _, _ in
+                    // Keep a previous account's loaded count out of Home without
+                    // activating Inbox or issuing a request for the new session.
+                    inboxModel.syncAuthenticationContext(auth: auth)
                 }
                 .task {
                     // Defer network/update polling until after the Home tab paints —
@@ -344,7 +352,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
             ZStack(alignment: .topTrailing) {
                 Group {
                     HomeProfileAvatar(
-                        url: accountProfileModel?.header?.identity.avatarURL,
+                        url: accountAvatarURL,
                         username: auth.username
                     )
                 }
@@ -369,15 +377,23 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
         .accessibilityValue(inboxModel.unreadCount.map { "\($0) unread Inbox comments" } ?? "")
     }
 
-    private func syncAccountProfile() {
+    private var accountAvatarCacheKey: String {
+        "\(auth.sessionGeneration)|\(auth.username ?? "")|\(router.isPresentingAccount)"
+    }
+
+    private func loadCachedAccountAvatar() async {
         guard let username = auth.username, let route = AO3AuthorRoute(username: username) else {
-            accountProfileModel = nil
+            accountAvatarURL = nil
             return
         }
-        if accountProfileModel?.route.username.localizedCaseInsensitiveCompare(username) != .orderedSame {
-            accountProfileModel = AO3AuthorProfileModel(route: route, dashboardOnly: true)
-        }
-        accountProfileModel?.activate(auth: auth)
+        accountAvatarURL = nil
+        let generation = auth.sessionGeneration
+        let avatarURL = await AO3AuthorProfileFetcher.cachedDashboardAvatarURL(for: route, auth: auth)
+        guard !Task.isCancelled,
+              generation == auth.sessionGeneration,
+              auth.username?.localizedCaseInsensitiveCompare(username) == .orderedSame
+        else { return }
+        accountAvatarURL = avatarURL
     }
 
     // MARK: Sections
@@ -725,17 +741,12 @@ private struct HomeProfileAvatar: View {
     let username: String?
 
     @Environment(\.accentFill) private var accentFill
+    @State private var cachedImage: Image?
 
     var body: some View {
         Group {
-            if let url {
-                AsyncImage(url: url) { phase in
-                    if let image = phase.image {
-                        image.resizable().scaledToFill()
-                    } else {
-                        fallback
-                    }
-                }
+            if let cachedImage {
+                cachedImage.resizable().scaledToFill()
             } else {
                 fallback
             }
@@ -743,6 +754,22 @@ private struct HomeProfileAvatar: View {
         .frame(width: 30, height: 30)
         .background(accentFill.opacity(0.16))
         .clipShape(Circle())
+        .task(id: url) { cachedImage = Self.cachedImage(for: url) }
+    }
+
+    /// Home chrome is cache-only: if the profile screen's image load is not in
+    /// URLCache, initials are more honest than issuing a decorative request.
+    private static func cachedImage(for url: URL?) -> Image? {
+        guard let url,
+              let data = URLCache.shared.cachedResponse(for: URLRequest(url: url))?.data
+        else { return nil }
+        #if os(iOS)
+        return UIImage(data: data).map(Image.init(uiImage:))
+        #elseif os(macOS)
+        return NSImage(data: data).map(Image.init(nsImage:))
+        #else
+        return nil
+        #endif
     }
 
     @ViewBuilder
