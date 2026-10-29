@@ -12,7 +12,9 @@ struct ReaderNoteEditor: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var draft: String = ""
-    @State private var colorOnOpen: ReadingAnnotationColor?
+    /// The raw colour on open, including a well colour's `#RRGGBB`. Cancel
+    /// writes this back; going through `color` would turn a custom colour yellow.
+    @State private var colorRawOnOpen: String?
     /// Only Cancel throws a typed note away. A swipe down dismissed the sheet and
     /// lost it; it is kept now, as the colour already was.
     @State private var finished = false
@@ -29,7 +31,7 @@ struct ReaderNoteEditor: View {
                                 .padding(.leading, 10)
                                 .overlay(alignment: .leading) {
                                     Capsule()
-                                        .fill(annotation.color.tint)
+                                        .fill(annotation.displayTint)
                                         .frame(width: 3)
                                 }
                         }
@@ -42,10 +44,10 @@ struct ReaderNoteEditor: View {
                     }
 
                     Section("Colour") {
-                        ReadingAnnotationColorPicker(selected: annotation.color) { option in
-                            annotation.color = option
+                        ReadingAnnotationColorPicker(selectedRaw: annotation.colorRaw) { raw in
+                            annotation.colorRaw = ReadingAnnotationColorStorage.normalizedRaw(raw)
                             annotation.markModified()
-                            ReadingAnnotationColor.lastUsed = option
+                            ReadingAnnotationColor.lastUsedRaw = annotation.colorRaw
                             onCommit()
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -73,8 +75,8 @@ struct ReaderNoteEditor: View {
                         finished = true
                         // A swatch writes straight to the highlight so the page shows
                         // it at once; Cancel has to take that back too (audit A12-6).
-                        if let colorOnOpen, annotation.color != colorOnOpen {
-                            annotation.color = colorOnOpen
+                        if let colorRawOnOpen, annotation.colorRaw != colorRawOnOpen {
+                            annotation.colorRaw = colorRawOnOpen
                             onCommit()
                         }
                         dismiss()
@@ -94,7 +96,7 @@ struct ReaderNoteEditor: View {
         }
         .onAppear {
             draft = annotation.note
-            colorOnOpen = annotation.color
+            colorRawOnOpen = annotation.colorRaw
             isEditorFocused = true
         }
         .onDisappear {

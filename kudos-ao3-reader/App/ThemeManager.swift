@@ -11,7 +11,11 @@ import SwiftUI
 final class ThemeManager {
     /// Whole-app theme.
     var appTheme: ReaderTheme {
-        didSet { store(appTheme, forKey: "appTheme") }
+        didSet {
+            store(appTheme, forKey: "appTheme")
+            // While the reader follows the app, this *is* picking a reader preset.
+            if matchAppAndReader { readerCustomPaperHex = nil }
+        }
     }
 
     /// When on, the reader mirrors the app theme.
@@ -27,6 +31,14 @@ final class ThemeManager {
     /// AO3's signature dark red — the fixed app accent.
     static let ao3Red = "#990000"
     private static let matchKey = "matchAppReaderTheme"
+    /// Reader-only paper colour from the theme well. Not a `ReaderTheme` raw
+    /// value, and not written into `.kudosbackup` (the backup has no field for it).
+    static let paperKey = "readerCustomPaperHex"
+
+    /// Exact page colour (`#RRGGBB`), or `nil` while a preset theme is in use.
+    var readerCustomPaperHex: String? {
+        didSet { storePaperHex() }
+    }
 
     init() {
         let defaults = UserDefaults.standard
@@ -40,6 +52,20 @@ final class ThemeManager {
         }
         matchAppAndReader = (defaults.object(forKey: Self.matchKey) as? Bool) ?? true
         readerThemeStored = storedReader
+        // `didSet` does not run from `init`, so a stored custom paper survives
+        // launch. An unreadable value is dropped here rather than left to fight
+        // the preset.
+        let storedPaper = ReadingAnnotationColorStorage.customHex(
+            fromRaw: defaults.string(forKey: Self.paperKey) ?? ""
+        )
+        readerCustomPaperHex = storedPaper
+        if defaults.string(forKey: Self.paperKey) != storedPaper {
+            if let storedPaper {
+                defaults.set(storedPaper, forKey: Self.paperKey)
+            } else {
+                defaults.removeObject(forKey: Self.paperKey)
+            }
+        }
     }
 
     /// The exact control fill for the whole app: Sepia keeps its cohesive warm
@@ -88,11 +114,36 @@ final class ThemeManager {
     var readerTheme: ReaderTheme {
         get { matchAppAndReader ? appTheme : readerThemeStored }
         set {
+            // A preset replaces a paper chosen in the well. Assigning
+            // `readerThemeStored` in `init` does not come through here, so a
+            // stored paper is not wiped on launch.
+            readerCustomPaperHex = nil
             if matchAppAndReader { appTheme = newValue } else { readerThemeStored = newValue }
         }
     }
 
+    /// Page colour for both readers: the preset, or the well's paper.
+    var readerPage: ReaderPageColors {
+        ReaderPageColors.resolve(theme: readerTheme, paperHex: readerCustomPaperHex)
+    }
+
+    /// Chrome rules for the page that's actually showing. A custom paper is
+    /// light or dark from its luminance; it is not Sepia and not OLED.
+    var readerChromeTheme: ReaderTheme {
+        let page = readerPage
+        guard page.isCustom else { return readerTheme }
+        return page.colorScheme == .dark ? .dark : .light
+    }
+
     private func store(_ theme: ReaderTheme, forKey key: String) {
         UserDefaults.standard.set(theme.rawValue, forKey: key)
+    }
+
+    private func storePaperHex() {
+        if let readerCustomPaperHex {
+            UserDefaults.standard.set(readerCustomPaperHex, forKey: Self.paperKey)
+        } else {
+            UserDefaults.standard.removeObject(forKey: Self.paperKey)
+        }
     }
 }

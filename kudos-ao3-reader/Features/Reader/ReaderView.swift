@@ -89,8 +89,18 @@ struct ReaderView: View {
         )
     }
 
+    private var pageColors: ReaderPageColors {
+        themeManager.readerPage
+    }
+
     private var css: String {
-        ReaderStylesheet.css(theme: theme, font: currentFont, style: textStyle)
+        ReaderStylesheet.css(
+            theme: theme,
+            font: currentFont,
+            style: textStyle,
+            pageBackgroundHex: pageColors.backgroundHex,
+            pageTextHex: pageColors.textHex
+        )
     }
 
     /// Horizontal page margin in px, shared by scrolled (CSS) and paged (column) modes.
@@ -105,7 +115,7 @@ struct ReaderView: View {
 
     /// Changes to any of these require re-applying layout to the loaded page.
     private var renderToken: String {
-        "\(theme.rawValue)|\(fontID)|\(readingMode.rawValue)|\(columns)|\(textStyle.token)"
+        "\(theme.rawValue)|\(pageColors.backgroundHex)|\(fontID)|\(readingMode.rawValue)|\(columns)|\(textStyle.token)"
     }
 
     /// The reader's chapters/display panels share the app-wide inspector (via
@@ -139,11 +149,12 @@ struct ReaderView: View {
                 )
             }
         }
-        .background(theme.backgroundColor)
+        .background(pageColors.background)
         .background { widthReader }
         // The reader's own theme drives its chrome/Liquid Glass appearance (and the
         // window while reading) — independent of the app theme when they're unlinked.
-        .preferredColorScheme(theme.colorScheme)
+        // A custom paper follows its own luminance instead of the preset's scheme.
+        .preferredColorScheme(pageColors.colorScheme)
         .ao3WorkActions(workActions, workID: WorkTags.ao3WorkID(from: work.sourceURL) ?? 0, auth: auth)
         .navigationTitle(work.title)
             .toolbar {

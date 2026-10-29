@@ -15,10 +15,12 @@ enum ReadiumReaderStyleMapper {
         theme: ReaderTheme,
         fontFamily: FontFamily?,
         readingMode: ReadingMode,
-        twoPageSpread: Bool
+        twoPageSpread: Bool,
+        backgroundHex: String? = nil,
+        textHex: String? = nil
     ) -> EPUBPreferences {
         EPUBPreferences(
-            backgroundColor: ReadiumNavigator.Color(hex: theme.backgroundHex),
+            backgroundColor: ReadiumNavigator.Color(hex: backgroundHex ?? theme.backgroundHex),
             // Only set a column count in paged mode. Forcing `.one` in scroll mode makes
             // Readium lay the text out in screen-height columns (page breaks mid-text +
             // dead space top/bottom) instead of one continuous flow.
@@ -42,7 +44,7 @@ enum ReadiumReaderStyleMapper {
             publisherStyles: false,
             scroll: readingMode == .scroll,
             textAlign: style.justify ? .justify : nil,
-            textColor: ReadiumNavigator.Color(hex: theme.textHex),
+            textColor: ReadiumNavigator.Color(hex: textHex ?? theme.textHex),
             theme: theme.readiumTheme,
             wordSpacing: max(0, style.wordSpacing)
         )

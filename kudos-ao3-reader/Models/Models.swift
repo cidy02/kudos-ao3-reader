@@ -1125,6 +1125,8 @@ nonisolated enum ReadingAnnotationColor: String, Codable, CaseIterable {
 
     var color: ReadingAnnotationColor {
         get { ReadingAnnotationColor(rawValue: colorRaw) ?? .yellow }
+        // A well colour lives in `colorRaw` as `#RRGGBB` and is not a case of
+        // this enum. Assigning here replaces it with the preset's name.
         set { colorRaw = newValue.rawValue }
     }
 

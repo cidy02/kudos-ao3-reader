@@ -18,6 +18,14 @@ extension ReadingAnnotationColor {
     }
 }
 
+extension ReadingAnnotation {
+    /// Preset tint, or the exact colour stored from the well.
+    var displayTint: Color {
+        if let hex = customColorHex, let color = Color(hex: hex) { return color }
+        return color.tint
+    }
+}
+
 /// The reader's Contents sheet segments: the chapter list, plus the in-book
 /// Bookmarks and Highlights lists.
 enum ReaderContentsSegment: String, CaseIterable, Identifiable {
@@ -240,7 +248,7 @@ private struct ReaderAnnotationRow: View {
                     // as "this is what I marked" rather than a generic accent.
                     .padding(.leading, 10)
                     .overlay(alignment: .leading) {
-                        Capsule().fill(annotation.color.tint).frame(width: 3)
+                        Capsule().fill(annotation.displayTint).frame(width: 3)
                     }
             }
 

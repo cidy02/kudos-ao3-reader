@@ -229,6 +229,17 @@ struct ReadingQueueSettingsView: View {
             .buttonStyle(.plain)
             .accessibilityLabel("Colour")
             SubjectRowSeparator()
+            // The menu lists the presets; this is the colour well that ends them
+            // for any other colour, stored as `colorHex` like New Queue's.
+            SubjectFormRow(label: "Custom colour") {
+                CustomColorWell(
+                    label: "Custom colour",
+                    current: queue.colorHex.flatMap(Color.init(hex:)),
+                    fallback: themeManager.appTheme.subjectPalette(hue: queue.displayHue).accent,
+                    onPick: setCustomColour
+                )
+            }
+            SubjectRowSeparator()
             SubjectFormRow(label: "Keep works offline", arrangement: .control) {
                 Toggle("Keep works offline", isOn: Binding(
                     // nil is "never asked", and a never-asked queue keeps its
@@ -282,7 +293,15 @@ struct ReadingQueueSettingsView: View {
         )
     }
 
-    /// A preset or the name hash replaces a picked "+" colour.
+    /// A colour picked in the well: stored exactly, with its hue beside it.
+    private func setCustomColour(_ color: Color) {
+        queue.hue = color.hueComponent
+        queue.colorHex = color.hexString
+        queue.markModified()
+        context.saveBestEffort(reason: "Saving queue colour failed")
+    }
+
+    /// A preset or the name hash replaces a picked custom colour.
     private func setHue(_ hue: Double?) {
         queue.hue = hue
         queue.colorHex = nil
