@@ -50,6 +50,9 @@ enum CarouselCardMetrics {
     /// rows, 12 between columns (the same 12 the shelves put between cards).
     static let compactGridSpacing: CGFloat = 14
     static let compactGridColumnSpacing: CGFloat = 12
+    /// Between collection piles, side by side (T-461): a pile fills its frame
+    /// to the edge, so 12pt read as one pile running into the next.
+    static let coverStackSpacing: CGFloat = 20
 }
 
 /// Scales `CarouselCardMetrics`'s fixed sqrt(2):1 tile size in proportion to the

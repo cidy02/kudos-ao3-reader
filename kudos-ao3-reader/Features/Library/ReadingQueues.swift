@@ -62,30 +62,37 @@ struct ReadingQueueCard: View {
         .frame(width: cardSize.width, alignment: .leading)
     }
 
-    /// Spec 1b: a short deck, not a full-height card — two faint cards fanned
-    /// up and to the right behind the next-up work's face, 96pt in all. Each
-    /// card is 148×88; the back one sits 16pt in, the middle 8pt in and 4pt
-    /// down, the face flush left and 8pt down. The owner caught the app
-    /// drawing a 232pt work-sized card here instead (2026-10-01).
+    /// Spec 1b's short deck, as a queue's cover stack (T-461): the next-up work's
+    /// face in front, the works after it stacked straight up behind, each a peek
+    /// higher and a step narrower, with the queue's numbered-list corner tab. The
+    /// face keeps 1b's landscape shape (88pt tall at 164pt), not a portrait cover:
+    /// it carries the next-up work's fandom, title and the queue's progress. The
+    /// owner caught the app drawing a 232pt work-sized card here once (2026-10-01).
     private var deck: some View {
-        let width = 148 * scale
-        let height = 88 * scale
-        let shape = RoundedRectangle(cornerRadius: 12 * scale, style: .continuous)
-        let theme = themeManager.appTheme
-        return ZStack(alignment: .topLeading) {
-            shape.fill(theme.glassFill(0.06))
-                .overlay(shape.strokeBorder(theme.glassStroke(0.07), lineWidth: 0.5))
-                .frame(width: width, height: height)
-                .offset(x: 16 * scale)
-            shape.fill(theme.glassFill(0.09))
-                .overlay(shape.strokeBorder(theme.glassStroke(0.09), lineWidth: 0.5))
-                .frame(width: width, height: height)
-                .offset(x: 8 * scale, y: 4 * scale)
-            face(shape: shape)
-                .frame(width: width, height: height)
-                .offset(y: 8 * scale)
+        let queued = works
+        let face = ReadingQueueFacts.cardFace(
+            in: queued,
+            isHidden: { gate.isHidden($0, enabled: hideMature, mode: matureMode) },
+            isBlurred: { gate.isBlurred($0, enabled: hideMature, mode: matureMode) }
+        )
+        // Two peeks (7% each) above an 89pt face; wider than the card, so the face
+        // fills its width and lines up with the name below.
+        return StackedWorkCover(
+            kind: .queue,
+            size: CGSize(width: cardSize.width, height: 104 * scale),
+            backs: worksBehind(face.work, in: queued),
+            frontAspect: 2
+        ) { layout in
+            faceContent(face, queued: queued, layout: layout)
         }
-        .frame(width: cardSize.width, height: 96 * scale, alignment: .topLeading)
+    }
+
+    /// The covers behind the face: the works after it in the queue's order. A cover
+    /// is its work's fandom colour, so a work the privacy setting keeps back is left out.
+    private func worksBehind(_ face: SavedWork?, in queued: [SavedWork]) -> [SavedWork] {
+        guard let face, let index = queued.firstIndex(where: { $0.id == face.id }) else { return [] }
+        let after = queued[queued.index(after: index)...].filter { !gate.isConcealed($0, enabled: hideMature) }
+        return Array(after.prefix(CoverStackLayout.maxBacks))
     }
 
     /// The next-up work's fandom and title over its own gradient — the work
@@ -94,13 +101,14 @@ struct ReadingQueueCard: View {
     /// work; an empty one says so. The queue page's Up next row is this same
     /// work (`ReadingQueueFacts.upNext`).
     @ViewBuilder
-    private func face(shape: RoundedRectangle) -> some View {
-        let queued = works
-        let face = ReadingQueueFacts.cardFace(
-            in: queued,
-            isHidden: { gate.isHidden($0, enabled: hideMature, mode: matureMode) },
-            isBlurred: { gate.isBlurred($0, enabled: hideMature, mode: matureMode) }
-        )
+    private func faceContent(
+        _ face: (work: SavedWork?, blurred: Bool),
+        queued: [SavedWork],
+        layout: CoverStackLayout
+    ) -> some View {
+        // The first line steps around the corner tab (4pt clear of it); the lines
+        // below start under the tab's foot.
+        let tabClearance = layout.ribbon.map { max(0, layout.front.width - $0.minX - 6 * scale) } ?? 0
         if let work = face.work {
             // A blurred work gives the face neither its colour, its fandom nor its title.
             let hiddenTitle = "Hidden mature work"
@@ -115,11 +123,13 @@ struct ReadingQueueCard: View {
             VStack(alignment: .leading, spacing: 6 * scale) {
                 if let fandom {
                     SubjectKicker(text: fandom, palette: palette, size: 8.5, ruleWidth: 18 * scale, ruleSpacing: 5)
+                        .padding(.trailing, tabClearance)
                 }
                 Text(face.blurred ? hiddenTitle : work.title)
                     .font(.system(size: 13 * scale, weight: .bold))
                     .lineLimit(2)
                     .foregroundStyle(.primary)
+                    .padding(.trailing, fandom == nil ? tabClearance : 0)
                 Spacer(minLength: 0)
                 QueueProgressStrip(
                     progress: ReadingQueueFacts.progress(of: queued.map(\.readingState)),
@@ -130,8 +140,7 @@ struct ReadingQueueCard: View {
             }
             .padding(10 * scale)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .background(shape.fill(palette.cardWash))
-            .overlay(shape.strokeBorder(themeManager.appTheme.glassStroke(0.12), lineWidth: 0.5))
+            .background(palette.cardWash)
         } else {
             // A queue whose every work is hidden is not empty, and says nothing.
             Text(queued.isEmpty ? "No works yet" : "")
@@ -139,45 +148,8 @@ struct ReadingQueueCard: View {
                 .foregroundStyle(.secondary)
                 .padding(10 * scale)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .background(shape.fill(themeManager.appTheme.glassFill(0.12)))
-                .overlay(shape.strokeBorder(themeManager.appTheme.glassStroke(0.12), lineWidth: 0.5))
+                .background(themeManager.appTheme.glassFill(0.12))
         }
-    }
-}
-
-/// A queue's 2×2 "tab group" tile: padding, glass, hairline and shadow around
-/// four cells. `ReadingQueueCard` fills it with skeleton cells for an empty
-/// queue; 1i's organizer rows fill it with the queue's first four works at 44pt.
-/// One frame, so the two stay the same shape at any size.
-struct QueuePeekTile<Cell: View>: View {
-    var spacing: CGFloat = 4
-    var inset: CGFloat = 6
-    var cornerRadius: CGFloat = CarouselCardMetrics.cornerRadius
-    /// The queue's own colour over the glass (`carouselQueueTint`); nil is plain glass.
-    var tint: Color?
-    /// Cell 0 is top-left, then reading order.
-    @ViewBuilder var cell: (Int) -> Cell
-
-    var body: some View {
-        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-        VStack(spacing: spacing) {
-            HStack(spacing: spacing) {
-                cell(0)
-                cell(1)
-            }
-            HStack(spacing: spacing) {
-                cell(2)
-                cell(3)
-            }
-        }
-        .padding(inset)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background {
-            shape.fill(.regularMaterial)
-                .overlay(shape.fill(tint ?? .clear))
-        }
-        .overlay { shape.strokeBorder(.quaternary, lineWidth: 0.75) }
-        .shadow(color: .black.opacity(0.12), radius: 5, x: 0, y: 2)
     }
 }
 

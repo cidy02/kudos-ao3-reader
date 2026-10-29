@@ -66,10 +66,14 @@ nonisolated struct AdaptiveContentRegions: Equatable {
         }
     }
 
-    @MainActor static func columns(in width: CGFloat, cardWidth: CGFloat, gutter: CGFloat = 16) -> Int {
+    @MainActor static func columns(
+        in width: CGFloat,
+        cardWidth: CGFloat,
+        gutter: CGFloat = 16,
+        spacing: CGFloat = CarouselCardMetrics.compactGridColumnSpacing
+    ) -> Int {
         let usable = max(0, width - 2 * gutter)
-        return max(1, Int((usable + CarouselCardMetrics.compactGridColumnSpacing)
-            / (max(1, cardWidth) + CarouselCardMetrics.compactGridColumnSpacing)))
+        return max(1, Int((usable + spacing) / (max(1, cardWidth) + spacing)))
     }
 
     @MainActor static func hasDashboardHeight(_ height: CGFloat) -> Bool {

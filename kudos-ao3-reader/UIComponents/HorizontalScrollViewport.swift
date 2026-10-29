@@ -89,6 +89,7 @@ struct CarouselCardGrid<Content: View>: View {
     let uniformHeights: Bool
     var columnCount: Int?
     var containerWidth: CGFloat?
+    var columnSpacing: CGFloat
     @ViewBuilder var content: () -> Content
     @State private var availableWidth: CGFloat?
     private var cardSize = ScaledCarouselCardSize()
@@ -97,11 +98,13 @@ struct CarouselCardGrid<Content: View>: View {
         uniformHeights: Bool = false,
         columnCount: Int? = nil,
         containerWidth: CGFloat? = nil,
+        columnSpacing: CGFloat = CarouselCardMetrics.compactGridColumnSpacing,
         @ViewBuilder content: @escaping () -> Content
     ) {
         self.uniformHeights = uniformHeights
         self.columnCount = columnCount
         self.containerWidth = containerWidth
+        self.columnSpacing = columnSpacing
         self.content = content
     }
 
@@ -131,9 +134,8 @@ struct CarouselCardGrid<Content: View>: View {
     private func cells(minimum: CGFloat) -> some View {
         LazyVGrid(
             columns: columnCount.map { count in
-                Array(repeating: GridItem(.fixed(minimum), spacing: CarouselCardMetrics.compactGridColumnSpacing),
-                      count: count)
-            } ?? CarouselCardMetrics.adaptiveCardColumns(minimum: minimum),
+                Array(repeating: GridItem(.fixed(minimum), spacing: columnSpacing), count: count)
+            } ?? CarouselCardMetrics.adaptiveCardColumns(minimum: minimum, spacing: columnSpacing),
             alignment: columnCount == nil ? .center : .leading,
             spacing: CarouselCardMetrics.compactGridSpacing
         ) {
@@ -147,6 +149,8 @@ struct CarouselCardGrid<Content: View>: View {
 struct DashboardCardShelf<Content: View>: View {
     var groupsInSinglePane: Bool = false
     var compactSpacing: CGFloat = 12
+    /// Between cards side by side in the wide grids; the column count allows for it.
+    var columnSpacing: CGFloat = CarouselCardMetrics.compactGridColumnSpacing
     @ViewBuilder var content: () -> Content
     @Environment(\.dashboardContentRegions) private var regions
     @Environment(\.layoutDirection) private var direction
@@ -159,11 +163,11 @@ struct DashboardCardShelf<Content: View>: View {
         // of the next; the compact scroll keeps it in view.
         if let regions, regions.viewportPanes.count > 1
             || (groupsInSinglePane && AdaptiveContentRegions.columns(
-                in: regions.viewport.width, cardWidth: cardSize.width(in: nil)) > 1)
+                in: regions.viewport.width, cardWidth: cardSize.width(in: nil), spacing: columnSpacing) > 1)
             || AdaptiveContentRegions.usesGroupedShelves(in: regions.viewport.size) {
             let panes = direction == .rightToLeft ? Array(regions.viewportPanes.reversed()) : regions.viewportPanes
             let columns = panes.map {
-                AdaptiveContentRegions.columns(in: $0.width, cardWidth: cardSize.width(in: nil))
+                AdaptiveContentRegions.columns(in: $0.width, cardWidth: cardSize.width(in: nil), spacing: columnSpacing)
             }
             Group(subviews: content()) { cards in
                 let pages = AdaptiveContentRegions.shelfPages(count: cards.count, columns: columns)
@@ -204,7 +208,9 @@ struct DashboardCardShelf<Content: View>: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(alignment: .top, spacing: 0) {
                 ForEach(pages.indices, id: \.self) { page in
-                    CarouselCardGrid(columnCount: columns, containerWidth: max(0, width - 32)) {
+                    CarouselCardGrid(
+                        columnCount: columns, containerWidth: max(0, width - 32), columnSpacing: columnSpacing
+                    ) {
                         ForEach(pages[page][pane], id: \.self) { index in
                             cards[index]
                                 .accessibilitySortPriority(Double(cards.count - index))

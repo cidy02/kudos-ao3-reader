@@ -548,6 +548,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             hasItems: !collections.isEmpty,
             itemCount: collections.count,
             layout: dashboardLayout,
+            cardSpacing: CarouselCardMetrics.coverStackSpacing,
             onSeeAll: !collections.isEmpty ? { path.append(AllCollectionsDestination()) } : nil
         ) {
             // The "New collection" card is the toolbar's "+" now (owner,

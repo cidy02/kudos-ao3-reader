@@ -6,11 +6,10 @@ struct AllCollectionsDestination: Hashable {}
 
 // MARK: - Cards
 
-/// A Library Collections carousel card: a 2×2 preview of the works inside, the
-/// collection name, and a work count. Empty collections keep their own hue tile.
+/// A Library Collections carousel card: the collection's cover pile
+/// (`StackedWorkCover`, `.collection`), its name, and a work count.
 struct CollectionCard: View {
     @AppStorage("hideMatureContent") private var hideMature = true
-    @Environment(ThemeManager.self) private var themeManager
     @Environment(PrivacyGate.self) private var gate
     let collection: WorkCollection
 
@@ -33,19 +32,28 @@ struct CollectionCard: View {
         works.count
     }
 
-    /// The small covers carry a title and an author, so a work Blur mode blurs is left
-    /// off the tile like one Hide mode hides. The count still counts it.
+    /// A cover behind the pile is its work's fandom colour, so a work Blur mode blurs is
+    /// left off it like one Hide mode hides. The count still counts it.
     private var previewWorks: [SavedWork] {
         works.filter { !gate.isConcealed($0, enabled: hideMature) }
     }
 
     private var scale: CGFloat { cardSize.width / CarouselCardMetrics.width }
-    private var tileHeight: CGFloat { 221 * scale }
+    /// Board 01 draws the pile 150×140; the card keeps that shape at its own width.
+    private var tileHeight: CGFloat { cardSize.width * 140 / 150 }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 9 * scale) {
-            tile
-                .frame(width: cardSize.width, height: tileHeight)
+            // T-461: the collection's own card with the newest works tilted behind it.
+            // An empty collection is its own card alone.
+            StackedWorkCover(
+                kind: .collection,
+                name: collection.name,
+                hue: collection.displayHue,
+                pickedHex: collection.colorHex,
+                backs: Array(previewWorks.prefix(CoverStackLayout.maxBacks)),
+                size: CGSize(width: cardSize.width, height: tileHeight)
+            )
             VStack(alignment: .leading, spacing: 2 * scale) {
                 Text(collection.name)
                     .font(.system(size: 15 * scale, weight: .semibold))
@@ -61,36 +69,6 @@ struct CollectionCard: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(collection.name), \(workCount) work\(workCount == 1 ? "" : "s")")
         .accessibilityHint("Opens collection.")
-    }
-
-    // Empty collections keep the collection's own hue; any works fill the mosaic
-    // from the top-left, with placeholders preserving the 2×2 structure.
-    @ViewBuilder
-    private var tile: some View {
-        if workCount > 0 {
-            StackedWorkCover(works: previewWorks, cardSize: cardSize)
-        } else {
-            singleTile
-        }
-    }
-
-    private var singleTile: some View {
-        let hue = collection.displayHue
-        let gradient = themeManager.appTheme.carouselCollectionGradient(hue: hue, pickedHex: collection.colorHex)
-        return RoundedRectangle(
-            cornerRadius: CarouselCardMetrics.cornerRadius * scale,
-            style: .continuous
-        )
-            .fill(LinearGradient(
-                colors: [gradient.start, gradient.end],
-                startPoint: .topLeading, endPoint: .bottomTrailing
-            ))
-            .overlay {
-                Image(systemName: "square.stack.fill")
-                    .font(.system(size: 38))
-                    .foregroundStyle(.white.opacity(0.6))
-            }
-            .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
     }
 }
 

@@ -20,8 +20,7 @@ import SwiftUI
 /// buttons — New Queue, and the overflow menu carrying select mode with bulk
 /// Pin / Tag / Delete (`QueueOrganizerSelection`) — and always-live drag,
 /// switched off under a filter with the header line saying so. Each row leads
-/// with a 44pt 2×2 peek of its first four works (`QueuePeekTile`, the frame
-/// `ReadingQueueCard` draws) over the queue's own colour.
+/// with the queue's 48pt cover stack (`StackedWorkCover`, `.queue`; T-461).
 ///
 /// **What 1i draws that this does not build, and why:**
 /// - The tag rail's "Edit tags" chip — tags are edited per queue in Queue
@@ -556,29 +555,19 @@ struct AllReadingQueuesGridView: View {
         .accessibilityAddTraits(isSelecting && isSelected ? .isSelected : [])
     }
 
-    /// 1i: "a 2×2 peek tile of the queue's first four works (ReadingQueueCard's
-    /// idea, at 44px)". The queue's colour is the card's wash and the dot, so
-    /// the tile's glass stays plain and each cell is a work's colour.
+    /// Board 05: the queue's 48pt cover stack (T-461) — its own colour and initial
+    /// in front, its first works stacked straight up behind. A cover is its work's
+    /// fandom colour, so a work the privacy setting keeps back is left out.
     private func peekTile(_ queue: ReadingQueue, works: [SavedWork]) -> some View {
-        QueuePeekTile(
-            spacing: 2.5,
-            inset: 3,
-            cornerRadius: 9,
-            tint: nil
-        ) { index in
-            let shape = RoundedRectangle(cornerRadius: 4, style: .continuous)
-            if index < works.count {
-                let work = works[index]
-                shape.fill(
-                    themeManager.appTheme.subjectPalette(
-                        hue: CoverArt.workHue(fandoms: work.workFandoms, title: work.title)
-                    ).accent.opacity(0.4)
-                )
-            } else {
-                shape.fill(Color.primary.opacity(0.05))
-            }
-        }
-        .frame(width: 44, height: 44)
+        StackedWorkCover(
+            kind: .queue,
+            name: queue.displayName,
+            hue: queue.displayHue,
+            pickedHex: queue.colorHex,
+            backs: Array(works.filter { !gate.isConcealed($0, enabled: hideMature) }
+                .prefix(CoverStackLayout.maxBacks)),
+            size: CGSize(width: 48, height: 48)
+        )
         .accessibilityHidden(true)
     }
 
