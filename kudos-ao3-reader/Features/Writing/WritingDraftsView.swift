@@ -63,7 +63,7 @@ struct WritingDraftsView: View {
                     footnote(errorMessage)
                     Button("Try Again") { reload += 1 }
                         .font(.system(size: retryButtonSize, weight: .semibold))
-                        .foregroundStyle(theme.scopePalette.accent)
+                        .foregroundStyle(theme.accentInk)
                         .buttonStyle(.plain)
                         .padding(.horizontal, 14)
                         .pageBodyRow(top: 8, gutter: gutter)

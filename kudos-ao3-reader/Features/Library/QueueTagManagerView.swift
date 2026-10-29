@@ -234,7 +234,7 @@ struct QueueTagManagerView: View {
         HStack(spacing: 10) {
             Image(systemName: "plus")
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(palette.accent)
+                .foregroundStyle(themeManager.accentInk)
                 .frame(width: 20)
                 .accessibilityHidden(true)
             TextField("New tag", text: $newTagName)
@@ -245,7 +245,7 @@ struct QueueTagManagerView: View {
             // panel VoiceOver had already read past.
             Button("Add", action: addTypedTag)
                 .font(.system(size: buttonLabelSize, weight: .semibold))
-                .foregroundStyle(palette.accent)
+                .foregroundStyle(themeManager.accentInk)
                 .buttonStyle(.plain)
                 .disabled(trimmedNewTag.isEmpty)
                 .opacity(trimmedNewTag.isEmpty ? 0.35 : 1)

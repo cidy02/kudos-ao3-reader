@@ -350,7 +350,7 @@ struct WritingTagsEditor: View {
 
                 Image(systemName: "plus")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(palette.accent)
+                    .foregroundStyle(theme.accentInk)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 11)
@@ -402,7 +402,7 @@ struct WritingTagsEditor: View {
                     if isOn {
                         Image(systemName: "checkmark")
                             .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(palette.accent)
+                            .foregroundStyle(theme.accentInk)
                     }
                 }
                 .accessibilityLabel(option.title)

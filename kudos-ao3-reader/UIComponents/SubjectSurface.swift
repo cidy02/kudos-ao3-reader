@@ -873,8 +873,9 @@ private struct SubjectStatStripContent: View {
     /// a strip of four counts does not announce four buttons to VoiceOver.
     @ViewBuilder
     private func cellBody(_ cell: SubjectStatStrip.Cell) -> some View {
-        // 1a: the one cell that goes somewhere looks it — accent label and a
-        // chevron on the figure; the counts beside it stay plain.
+        // 1a: the one cell that goes somewhere looks it — app-colour label and a
+        // chevron on the figure; the counts beside it stay plain. A tap target is
+        // the app colour, not the subject's.
         let opens = cell.action != nil
         let figure = VStack(spacing: 5) {
             HStack(spacing: 3) {
@@ -890,12 +891,12 @@ private struct SubjectStatStripContent: View {
                 }
             }
             .foregroundStyle(
-                cell.tint ?? (opens ? palette.accent : cell.isHighlighted ? palette.accentOnFill : Color.primary)
+                cell.tint ?? (opens ? themeManager.accentInk : cell.isHighlighted ? palette.accentOnFill : Color.primary)
             )
             Text(cell.label.uppercased())
                 .font(.system(size: labelSize))
                 .tracking(labelSize * 0.07)
-                .foregroundStyle(opens ? AnyShapeStyle(palette.accent) : AnyShapeStyle(.secondary))
+                .foregroundStyle(opens ? AnyShapeStyle(themeManager.accentInk) : AnyShapeStyle(.secondary))
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
         }
@@ -1061,7 +1062,7 @@ struct SubjectChip: View {
         case neutral
         case tinted
         case dashed
-        /// A tappable quick filter. Selected takes the subject accent as a solid
+        /// A tappable quick filter. Selected takes the app colour as a solid
         /// fill, per spec 1ad's "All 4" chip.
         case pill(isSelected: Bool)
     }
@@ -1084,6 +1085,11 @@ struct SubjectChip: View {
     @ScaledMetric(relativeTo: .caption2) private var trailingImageSize: CGFloat = 10
 
     private var theme: ReaderTheme { themeManager.appTheme }
+
+    /// A chip is something the user taps or sets, so its colour is the app's — a
+    /// `palette` here only says which subject the chip sits on, never what colour
+    /// it is (`SubjectPalette.tint` is the app tint on every subject).
+    private var controlFill: Color { palette?.tint ?? fill }
 
     var body: some View {
         HStack(spacing: 6) {
@@ -1119,14 +1125,14 @@ struct SubjectChip: View {
     private var foreground: Color {
         switch style {
         case .neutral: .primary
-        case .tinted: palette?.accentOnFill ?? .primary
+        case .tinted: theme.accentInk(for: controlFill)
         case .dashed: .secondary
         case .pill(let isSelected):
             // A filled pill needs a foreground picked for its own fill, not for
             // the page — `onEffectiveTint`'s problem, solved the same way: from
             // the fill's luminance rather than from a per-theme case.
             isSelected
-                ? ThemeManager.label(on: palette?.tint ?? fill)
+                ? ThemeManager.label(on: controlFill)
                 : .primary
         }
     }
@@ -1141,10 +1147,10 @@ struct SubjectChip: View {
                 .overlay(shape.strokeBorder(theme.glassStroke(0.14), lineWidth: 0.5))
         case .tinted:
             shape
-                .fill(palette?.chipFill ?? themeManager.effectiveTint.opacity(0.24))
+                .fill(controlFill.opacity(theme.isDarkFamily ? 0.24 : 0.16))
                 .overlay(
                     shape.strokeBorder(
-                        palette?.chipStroke ?? themeManager.effectiveTint.opacity(0.5),
+                        controlFill.opacity(theme.isDarkFamily ? 0.50 : 0.40),
                         lineWidth: 0.5
                     )
                 )
@@ -1157,7 +1163,7 @@ struct SubjectChip: View {
         case .pill(let isSelected):
             Capsule()
                 .fill(isSelected
-                    ? AnyShapeStyle(palette?.tint ?? fill)
+                    ? AnyShapeStyle(controlFill)
                     : AnyShapeStyle(theme.glassFill()))
         }
     }
@@ -1172,7 +1178,6 @@ struct SubjectChip: View {
 /// that is the point of it (Filter on results, + on a queue).
 struct GlassCircleButton<Label: View>: View {
     var isAccented: Bool = false
-    var palette: SubjectPalette?
     /// Rides the top-trailing corner — the active-filter count in spec 1k.
     var badge: String?
     /// Spoken name for the control. Carried as a parameter rather than left to

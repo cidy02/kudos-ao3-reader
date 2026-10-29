@@ -165,6 +165,53 @@ struct AccentInkTests {
         }
     }
 
+    /// A chip is a control: whatever subject it sits on, its selected pill and its
+    /// tinted fill are the app colour, never that subject's `accent`/`chipFill`.
+    @MainActor @Test func selectedChipsTakeTheAppTintNotTheSubjectsColour() throws {
+        let defaults = UserDefaults.standard
+        let previous = defaults.object(forKey: "appTheme")
+        defer { defaults.set(previous, forKey: "appTheme") }
+        let manager = ThemeManager()
+        for theme in ReaderTheme.allCases {
+            manager.appTheme = theme
+            let tint = manager.effectiveTint
+            // A teal fandom: nowhere near AO3 red or Sepia's brown.
+            let subject = SubjectPalette(hue: 0.5, theme: theme)
+            let tintPixel = try renderedPixels(tint.frame(width: 1, height: 1)).pixel(x: 0, y: 0)
+            let subjectPixel = try renderedPixels(subject.accent.frame(width: 1, height: 1)).pixel(x: 0, y: 0)
+            #expect(tintPixel != subjectPixel)
+
+            func rendered(_ style: SubjectChip.Style) throws -> AccentRenderedPixels {
+                try renderedPixels(
+                    SubjectChip(text: "All", style: style, palette: subject)
+                        .fixedSize()
+                        .accentTint(tint, on: theme)
+                        .background(theme.cardBackdrop)
+                        .environment(manager)
+                        .environment(\.colorScheme, theme.colorScheme)
+                )
+            }
+
+            let pill = try rendered(.pill(isSelected: true))
+            #expect(pill.pixel(x: pill.width / 2, y: 2) == tintPixel)
+
+            // The tinted chip is the app tint at the theme's chip strength over the page.
+            let strength = theme.isDarkFamily ? 0.24 : 0.16
+            let expected = try renderedPixels(
+                tint.opacity(strength).frame(width: 1, height: 1).background(theme.cardBackdrop)
+            ).pixel(x: 0, y: 0)
+            let tinted = try rendered(.tinted)
+            let actual = tinted.pixel(x: tinted.width / 2, y: 2)
+            for channel in 0 ..< 3 {
+                #expect(abs(Int(actual[channel]) - Int(expected[channel])) <= 2)
+            }
+            let oldFill = try renderedPixels(
+                subject.chipFill.frame(width: 1, height: 1).background(theme.cardBackdrop)
+            ).pixel(x: 0, y: 0)
+            #expect(actual != oldFill)
+        }
+    }
+
     @Test func backupsKeepDecodingLegacyAccentWithoutExportingOrApplyingIt() throws {
         let suite = "AccentInkTests.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suite))

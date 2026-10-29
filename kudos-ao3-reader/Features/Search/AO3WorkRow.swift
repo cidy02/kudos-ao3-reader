@@ -475,13 +475,13 @@ struct AO3WorkRow: View {
                 .font(.caption.weight(.semibold))
         }
         if presentation == .searchLedger {
-            // Spec 1k draws this inline with the kicker as a bare 20pt glyph in
-            // the subject's own light tint. It gets a 30pt hit target rather
+            // Spec 1k draws this inline with the kicker as a bare 20pt glyph; it is
+            // a control, so it takes the app colour. It gets a 30pt hit target rather
             // than the full 44: the fandom button sits 5pt to its left, and a
             // 44pt region here reached back over that button's own label.
             button
                 .buttonStyle(.plain)
-                .foregroundStyle(palette.accentOnFill)
+                .foregroundStyle(themeManager.accentInk)
                 .frame(width: 20, height: 20)
                 .minimumHitTarget(30)
                 .accessibilityLabel(expanded ? "Show less" : "Show more")

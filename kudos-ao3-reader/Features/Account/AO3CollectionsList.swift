@@ -733,7 +733,7 @@ struct AO3CollectionCard: View {
             }
             Image(systemName: "chevron.right")
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(palette.accent)
+                .foregroundStyle(theme.accentInk)
                 .padding(.top, 4)
                 .accessibilityHidden(true)
         }

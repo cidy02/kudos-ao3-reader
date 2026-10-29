@@ -31,7 +31,8 @@ struct ChallengeSettingsEditView: View {
     var challengeKind: AO3ChallengeKind?
 
     @Environment(AO3AuthService.self) private var auth
-    @Environment(ThemeManager.self) private var theme
+    /// Not private: the options menu in `ChallengeSettingsEditSections.swift` takes the app colour from it.
+    @Environment(ThemeManager.self) var theme
     @Environment(AppRouter.self) private var router
 
     @ScaledMetric(relativeTo: .headline) private var stateTitleSize: CGFloat = 15
@@ -304,7 +305,7 @@ struct ChallengeSettingsEditView: View {
                 if instant.wireString.isEmpty {
                     Button("Set") { form?.settings[keyPath: keyPath].wallClock = Date() }
                         .font(.system(size: bodySize, weight: .semibold))
-                        .foregroundStyle(palette.accent)
+                        .foregroundStyle(theme.accentInk)
                         .buttonStyle(.plain)
                 }
             }
@@ -593,17 +594,17 @@ struct ChallengeSettingsEditView: View {
                 if isSaving {
                     ProgressView()
                         .controlSize(.small)
-                        .tint(palette.labelOnAccent)
+                        .tint(theme.onEffectiveTint)
                 }
                 Text("Save changes")
                     .font(.system(size: saveButtonSize, weight: .semibold))
-                    .foregroundStyle(palette.labelOnAccent)
+                    .foregroundStyle(theme.onEffectiveTint)
             }
             .frame(maxWidth: .infinity)
             .frame(minHeight: 44)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(palette.accent)
+                    .fill(theme.effectiveTint)
             )
         }
         .buttonStyle(.plain)

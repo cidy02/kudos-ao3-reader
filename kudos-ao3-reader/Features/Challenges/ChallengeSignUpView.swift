@@ -419,7 +419,7 @@ extension ChallengeSignUpView {
                     HStack(spacing: 8) {
                         Image(systemName: "plus.circle")
                             .font(.system(size: 15))
-                            .foregroundStyle(palette.accent)
+                            .foregroundStyle(theme.accentInk)
 
                         Text("Add an offer")
                             .font(.system(size: rowTitleSize))
@@ -520,17 +520,17 @@ extension ChallengeSignUpView {
                     if isSubmitting {
                         ProgressView()
                             .controlSize(.small)
-                            .tint(palette.labelOnAccent)
+                            .tint(theme.onEffectiveTint)
                     }
                     Text("Submit sign-up")
                         .font(.system(size: buttonLabelSize, weight: .semibold))
-                        .foregroundStyle(palette.labelOnAccent)
+                        .foregroundStyle(theme.onEffectiveTint)
                 }
                 .frame(maxWidth: .infinity)
                 .frame(minHeight: 44)
                 .background(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(palette.accent)
+                        .fill(theme.effectiveTint)
                 )
             }
             .buttonStyle(.plain)

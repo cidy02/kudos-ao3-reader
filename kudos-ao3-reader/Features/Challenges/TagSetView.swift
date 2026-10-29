@@ -346,18 +346,18 @@ struct TagSetView: View {
                 if isSavingFields {
                     ProgressView()
                         .controlSize(.small)
-                        .tint(palette.labelOnAccent)
+                        .tint(theme.onEffectiveTint)
                 }
                 Text("Save tags")
                     .font(.system(size: buttonLabelSize, weight: .semibold))
-                    .foregroundStyle(palette.labelOnAccent)
+                    .foregroundStyle(theme.onEffectiveTint)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity)
             .frame(height: 44)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(palette.accent)
+                    .fill(theme.effectiveTint)
             )
         }
         .buttonStyle(.plain)

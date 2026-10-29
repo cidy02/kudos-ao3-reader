@@ -350,13 +350,13 @@ struct ChallengeAssignmentsView: View {
                     .lineLimit(1)
                     .fixedSize()
             }
-            .foregroundStyle(palette.accent)
+            .foregroundStyle(theme.accentInk)
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
             .background(
                 Capsule()
-                    .fill(palette.accent.opacity(0.16))
-                    .overlay(Capsule().strokeBorder(palette.accent.opacity(0.32), lineWidth: 0.5))
+                    .fill(theme.effectiveTint.opacity(0.16))
+                    .overlay(Capsule().strokeBorder(theme.effectiveTint.opacity(0.32), lineWidth: 0.5))
             )
         }
         .buttonStyle(.plain)
@@ -718,11 +718,11 @@ extension ChallengeAssignmentsView {
             } label: {
                 Text("Claim a pinch hit")
                     .font(.system(size: buttonLabelSize, weight: .semibold))
-                    .foregroundStyle(palette.labelOnAccent)
+                    .foregroundStyle(theme.onEffectiveTint)
                     .frame(maxWidth: .infinity)
                     .frame(minHeight: 44)
                     .fixedSize(horizontal: false, vertical: true)
-                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(palette.accent))
+                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(theme.effectiveTint))
             }
             .buttonStyle(.plain)
             .disabled(unmatched.isEmpty || itemInFlight != nil)

@@ -143,7 +143,7 @@ struct AO3DashboardSections: View {
         let parts = ["See all", count(for: tab)?.displayText, tab.rawValue.lowercased()].compactMap { $0 }
         return Button(parts.joined(separator: " ")) { onSeeAll(tab) }
             .font(.subheadline.weight(.medium))
-            .foregroundStyle(theme.scopePalette.accent)
+            .foregroundStyle(theme.accentInk)
             .minimumHitTarget()
             .pageBodyRow(top: 0, gutter: SubjectMetrics.accountGutter)
     }

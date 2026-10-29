@@ -71,7 +71,7 @@ struct LibraryFilterCollisionCard: View {
                                     Text(workCountText(drop.remainingCount))
                                         .font(.system(size: countSize, weight: .semibold))
                                         .monospacedDigit()
-                                        .foregroundStyle(palette.accent)
+                                        .foregroundStyle(themeManager.accentInk)
                                         .fixedSize()
                                 }
                                 .padding(.horizontal, 12)

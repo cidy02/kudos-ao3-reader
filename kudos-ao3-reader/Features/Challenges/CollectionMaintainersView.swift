@@ -340,7 +340,7 @@ struct CollectionMaintainersView: View {
                     }
                     Text("Send invitation to \(username)")
                         .font(.system(size: buttonLabelSize, weight: .semibold))
-                        .foregroundStyle(palette.accent)
+                        .foregroundStyle(theme.accentInk)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .center)
