@@ -338,6 +338,31 @@ enum LoadedWorksRanker {
     }
 }
 
+// MARK: - Search's session
+
+/// Search's ranking for one session: the Sort By choices and Momentum's baseline.
+struct SearchRankingSession {
+    var settings = LoadedWorksRanking()
+    private var sightings = KudosSightings()
+
+    /// `works` in the order `settings` asks for — AO3's own while ranking is off.
+    func ranked(_ works: [AO3WorkSummary]) -> [RankedWork] {
+        LoadedWorksRanker.rank(works, by: settings, previousKudos: sightings.previousKudos)
+    }
+
+    /// The figure a row shows, when the reader has "Show the signal" on.
+    func signal(for entry: RankedWork) -> String? {
+        settings.showsSignal ? entry.signal : nil
+    }
+
+    /// Notes a loaded page in Momentum's record and hands it back. Every page is
+    /// noted, whatever the rank, so the figure is there once Momentum is picked.
+    mutating func noting(_ works: [AO3WorkSummary]) -> [AO3WorkSummary] {
+        LastSeenKudosStore.save(sightings.record(works, in: LastSeenKudosStore.load()))
+        return works
+    }
+}
+
 // MARK: - Momentum's record
 
 /// The kudos a work had the last time it appeared in Search's results.

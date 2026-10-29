@@ -58,7 +58,7 @@ enum SearchWaysToFind: String, CaseIterable, Identifiable {
         case .hiddenGems:
             filters.sort == .kudos && filters.hitsFrom == "300" && filters.hitsTo == "5000"
         case .activeWIPs:
-            filters.sort == .dateUpdated && filters.completion == .incomplete && filters.dateFrom != nil
+            filters.sort == .dateUpdated && filters.completion == .inProgress && filters.dateFrom != nil
         }
     }
 
@@ -93,7 +93,7 @@ enum SearchWaysToFind: String, CaseIterable, Identifiable {
             filters.hitsTo = "5000"
             filters.sort = .kudos
         case .activeWIPs:
-            filters.completion = .incomplete
+            filters.completion = .inProgress
             // An absolute `date_from`: AO3's relative windows stop at a week, a
             // month, six months and a year.
             filters.dateFrom = Calendar.current.date(byAdding: .day, value: -activeWindowDays, to: now)

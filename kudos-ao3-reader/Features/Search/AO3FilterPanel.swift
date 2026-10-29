@@ -276,6 +276,13 @@ struct AO3FilterPanel: View {
                                 value: SearchSortBySummary.value(filters: filters, ranking: ranking?.wrappedValue)
                             )
                         }
+                        .onChange(of: filters.sort) { _, newValue in
+                            // Picking a column re-seeds the direction to the one a
+                            // reader expects from it (A-Z for names, most-first for
+                            // counts) — from Sort By or from Search's own sort menu
+                            // while the panel is open. Still overridable on Sort By.
+                            filters.sortDirection = newValue.naturalDirection
+                        }
                     }
                     Picker("Rating", selection: $filters.rating) {
                         ForEach(AO3SearchFilters.Rating.searchCases) { Text($0.title).tag($0) }

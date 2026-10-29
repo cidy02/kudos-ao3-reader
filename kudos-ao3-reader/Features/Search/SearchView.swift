@@ -26,11 +26,9 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     @Query(sort: \SavedSearch.dateAdded, order: .reverse) private var savedSearches: [SavedSearch]
 
     @State private var filters = AO3SearchFilters()
-    /// T-473: how the loaded results are ranked (Filters › Sort By). Kept for the
-    /// session beside `filters`; none of it is sent to AO3.
-    @State private var ranking = LoadedWorksRanking()
-    /// Momentum's baseline: each work's kudos when this session first saw it.
-    @State private var kudosSightings = KudosSightings()
+    /// T-473: how the loaded results are ranked (Filters › Sort By) and Momentum's
+    /// baseline. Kept for the session beside `filters`; none of it is sent to AO3.
+    @State private var ranking = SearchRankingSession()
     /// Name-entry alert for saving the current search.
     @State private var showingSaveDialog = false
     @State private var saveName = ""
@@ -361,9 +359,6 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                                     set: { sort in
                                         guard filters.sort != sort else { return }
                                         filters.sort = sort
-                                        // What the panel's Sort By does when a column
-                                        // is picked: A to Z for names, most first for counts.
-                                        filters.sortDirection = sort.naturalDirection
                                         bulkSelection.selection.removeAll()
                                         runSearch()
                                     }
@@ -381,18 +376,16 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
 
                     Section {
                         // Ranked from whatever is loaded, so it re-ranks as `results` changes.
-                        ForEach(rankedResults) { entry in
-                            let work = entry.work
+                        ForEach(ranking.ranked(results)) { entry in
                             SelectableAO3WorkRow(
-                                work: work,
+                                work: entry.work,
                                 expandAll: expandAllCards,
                                 controller: bulkSelection,
-                                presentation: .searchLedger,
-                                signal: ranking.showsSignal ? entry.signal : nil
+                                presentation: .searchLedger, signal: ranking.signal(for: entry)
                             )
                             .cardRow(
-                                isSelected: bulkSelection.isSelecting && bulkSelection.selection.contains(work.id),
-                                tintHue: CoverArt.workHue(fandoms: work.fandoms, title: work.title)
+                                isSelected: bulkSelection.isSelecting && bulkSelection.selection.contains(entry.id),
+                                tintHue: CoverArt.workHue(fandoms: entry.work.fandoms, title: entry.work.title)
                             )
                         }
                     }
@@ -425,18 +418,6 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 }
             }
         }
-    }
-
-    /// `results` in the order Sort By's ranking asks for — AO3's own when it is off.
-    private var rankedResults: [RankedWork] {
-        LoadedWorksRanker.rank(results, by: ranking, previousKudos: kudosSightings.previousKudos)
-    }
-
-    /// Momentum's record: every loaded page notes each work's kudos, whatever the
-    /// rank, so the figure is there once the reader picks Momentum.
-    private func recordKudosSightings(_ works: [AO3WorkSummary]) {
-        let stored = LastSeenKudosStore.load()
-        LastSeenKudosStore.save(kudosSightings.record(works, in: stored))
     }
 
     // MARK: Local-first results
@@ -725,7 +706,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                     router.panel = .none
                 }
             },
-            ranking: $ranking
+            ranking: $ranking.settings
         )
     }
 
@@ -948,8 +929,8 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 // Cancellation is cooperative, so this token check still matters as a
                 // second line of defence when a cancel loses the race.
                 guard token == loadToken else { return }
-                results = result.works
-                recordKudosSightings(result.works)
+                // Noted in Momentum's record on the way in (T-473).
+                results = ranking.noting(result.works)
                 currentPage = result.currentPage
                 totalPages = result.totalPages
                 resultSummary = result.summary
