@@ -632,6 +632,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
             keepsWorksOffline: options.keepsWorksOffline,
             seededFrom: options.seed,
             tagNames: options.tagNames,
+            seedWorkIDs: options.seedWorkIDs,
             in: context
         )
         // `createQueue` saved best-effort; this asks whether that stuck (a no-op when it

@@ -1094,4 +1094,30 @@ struct ReadingQueueTests {
         #expect(try context.fetch(FetchDescriptor<SavedWork>()).count == 1)
         #expect(kept.isQueuedForLater)
     }
+
+    @Test func createQueueAppendsChosenWorksAfterTheSavedForLaterCopy() throws {
+        let context = try makeContext()
+        let saved = ReadingQueueService.ensureSavedForLaterQueue(in: context)
+        let holding = ReadingQueueService.createQueue(named: "Hold", in: context)
+        let later = SavedWork(title: "Later", author: "W", sourceURL: "https://archiveofourown.org/works/1")
+        let first = SavedWork(title: "First", author: "W", sourceURL: "https://archiveofourown.org/works/2")
+        let second = SavedWork(title: "Second", author: "W", sourceURL: "https://archiveofourown.org/works/3")
+        let queueOnly = SavedWork(title: "Queue Only", author: "W", sourceURL: "https://archiveofourown.org/works/4")
+        for work in [later, first, second, queueOnly] {
+            context.insert(work)
+        }
+        ReadingQueueService.add(later, to: saved, in: context)
+        ReadingQueueService.add(queueOnly, to: holding, in: context)
+
+        let queue = ReadingQueueService.createQueue(
+            named: "Picked",
+            seededFrom: .savedForLater,
+            seedWorkIDs: [second.id, queueOnly.id, first.id, later.id],
+            in: context
+        )
+
+        // Later is copied by the seed and not added again. Queue Only is not a
+        // library work, so the id list cannot put it in. First follows Second.
+        #expect(ReadingQueueService.orderedWorks(in: queue).map(\.title) == ["Later", "Second", "First"])
+    }
 }

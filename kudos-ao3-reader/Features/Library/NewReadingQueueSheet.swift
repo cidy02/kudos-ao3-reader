@@ -31,9 +31,9 @@ import SwiftUI
 /// nothing is created until Create. The wash, the Create tint, the radio and the
 /// selected tag chips take the tapped swatch's hue.
 ///
-/// **The colour row's dashed "+" is built** in `SubjectHueSwatchRow`: the system
-/// colour picker, stored exactly as `ReadingQueue.colorHex` (`options.colorHex`
-/// here) with its hue in `hue` beside it.
+/// **The colour row ends in the "More colours" well** (`SubjectHueSwatchRow`):
+/// any colour, stored exactly as `ReadingQueue.colorHex` (`options.colorHex`
+/// here) with its hue in `hue` beside it. A preset clears the hex.
 ///
 /// **Edit Queue is this sheet too** (`EditReadingQueueSheet`, owner request
 /// 2026-10-01): the same fields over an existing queue, saved rather than
@@ -63,6 +63,10 @@ struct NewReadingQueueSheet: View {
     @Environment(\.modelContext) private var context
     @Environment(ThemeManager.self) private var theme
     @Query(sort: \Tag.name) private var allTags: [Tag]
+    @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }, sort: \SavedWork.title)
+    private var libraryWorks: [SavedWork]
+    @Environment(PrivacyGate.self) private var gate
+    @AppStorage("hideMatureContent") private var hideMature = true
 
     @State private var options = NewQueueOptions()
     @State private var showingNewTag = false
@@ -72,6 +76,7 @@ struct NewReadingQueueSheet: View {
     /// memberships on every body evaluation would walk the whole shelf.
     @State private var seedCount: Int?
     @State private var saveFailed = false
+    @State private var showingAddWorks = false
 
     @ScaledMetric(relativeTo: .subheadline) private var nameFieldSize: CGFloat = 16
     @ScaledMetric(relativeTo: .subheadline) private var seedTitleSize: CGFloat = 14.5
@@ -93,6 +98,13 @@ struct NewReadingQueueSheet: View {
     var body: some View {
         NavigationStack {
             List {
+                if !isEditing {
+                    Section {
+                        groupLabel("Preview")
+                        coverPreview.pageBodyRow(top: 8, gutter: gutter)
+                    }
+                }
+
                 Section {
                     groupLabel("Name")
                     namePanel.pageBodyRow(top: 8, gutter: gutter)
@@ -126,6 +138,12 @@ struct NewReadingQueueSheet: View {
                     Section {
                         groupLabel("Start from")
                         seedPanel.pageBodyRow(top: 8, gutter: gutter)
+                    }
+
+                    Section {
+                        groupLabel("Add works")
+                        addWorksRow.pageBodyRow(top: 8, gutter: gutter)
+                        footnote("Chosen from your library. They are added when you create the queue.")
                     }
                 }
             }
@@ -174,6 +192,87 @@ struct NewReadingQueueSheet: View {
         } message: {
             Text("The queue wasn't saved. Try again.")
         }
+        .sheet(isPresented: $showingAddWorks) {
+            AddLibraryWorksSheet(
+                destinationName: previewName,
+                scopeName: "queue",
+                candidates: { $0.filter { !$0.isQueueOnlyWork } },
+                onAdd: { options.seedWorkIDs = $0.map(\.id) },
+                initialSelection: Set(options.seedWorkIDs)
+            )
+        }
+    }
+
+    /// Placeholder until a name is typed. Create stays disabled while it is empty.
+    /// The colour follows `ReadingQueue.displayHue`: the swatch, or a hue of the name.
+    private var previewName: String {
+        trimmedName.isEmpty ? "New queue" : trimmedName
+    }
+
+    private var previewHue: Double {
+        hue ?? CoverArt.hue(for: trimmedName.isEmpty ? "Reading Queue" : trimmedName)
+    }
+
+    /// Works the sheet will add, in the order they were picked.
+    private var seedWorks: [SavedWork] {
+        let byID = Dictionary(libraryWorks.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        return options.seedWorkIDs.compactMap { byID[$0] }
+    }
+
+    private var coverPreview: some View {
+        let backs = seedWorks
+            .filter { !gate.isConcealed($0, enabled: hideMature) }
+            .prefix(CoverStackLayout.maxBacks)
+        let footer = ReadingQueueFacts.cardFooter(states: seedWorks.map(\.readingState))
+        return VStack(spacing: 8) {
+            StackedWorkCover(
+                kind: .queue,
+                name: previewName,
+                hue: previewHue,
+                pickedHex: options.colorHex,
+                backs: Array(backs),
+                size: CGSize(width: 88, height: 120)
+            )
+            Text(previewName)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+            Text(footer)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+        }
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Queue cover, \(previewName), \(footer)")
+    }
+
+    private var addWorksRow: some View {
+        Button {
+            showingAddWorks = true
+        } label: {
+            HStack(spacing: 12) {
+                Text(options.seedWorkIDs.isEmpty
+                    ? "Choose works"
+                    : "\(options.seedWorkIDs.count) selected")
+                    .font(.system(size: seedTitleSize))
+                    .foregroundStyle(.primary)
+                Spacer(minLength: 8)
+                Image(systemName: "plus")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(theme.effectiveTint)
+                    .accessibilityHidden(true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Add works")
+        .accessibilityValue(options.seedWorkIDs.isEmpty
+            ? "None selected"
+            : "\(options.seedWorkIDs.count) selected")
+        .accessibilityHint("Opens your library to choose works for this queue.")
     }
 
     /// Every existing tag, then any new names typed here that are not one yet.
@@ -434,7 +533,11 @@ nonisolated struct NewQueueOptions: Equatable, Sendable {
     var seed: NewQueueSeed = .empty
     /// Tag names, resolved to `Tag`s only when the queue is created.
     var tagNames: [String] = []
-    /// The exact "+" colour (`ReadingQueue.colorHex`); the hue travels in the
+    /// The exact well colour (`ReadingQueue.colorHex`); the hue travels in the
     /// sheet's `hue` binding beside it.
     var colorHex: String?
+    /// Library works to add when the queue is created, in pick order.
+    /// Edit Queue leaves this empty: seeding only means something for a queue
+    /// that does not exist yet.
+    var seedWorkIDs: [UUID] = []
 }

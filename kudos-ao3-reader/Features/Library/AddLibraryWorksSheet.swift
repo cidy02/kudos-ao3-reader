@@ -29,8 +29,22 @@ struct AddLibraryWorksSheet: View {
     @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }, sort: \SavedWork.dateAdded, order: .reverse)
     private var allWorks: [SavedWork]
 
-    @State private var selection = Set<UUID>()
+    @State private var selection: Set<UUID>
     @State private var query = ""
+
+    init(
+        destinationName: String,
+        scopeName: String,
+        candidates: @escaping ([SavedWork]) -> [SavedWork],
+        onAdd: @escaping ([SavedWork]) -> Void,
+        initialSelection: Set<UUID> = []
+    ) {
+        self.destinationName = destinationName
+        self.scopeName = scopeName
+        self.candidates = candidates
+        self.onAdd = onAdd
+        _selection = State(initialValue: initialSelection)
+    }
 
     /// The destination's candidates, minus what Hide mode keeps out of the
     /// Library — the same universe LibraryView's select mode uses, so the picker
