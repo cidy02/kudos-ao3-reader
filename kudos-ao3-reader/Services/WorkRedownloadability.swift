@@ -78,12 +78,15 @@ nonisolated enum WorkRedownloadability: Equatable, Sendable {
         )
     }
 
+    /// Reads the import's format from disk only for a non-AO3 work: rows and
+    /// delete taps call this for every work, and an AO3 work never needs it.
     @MainActor
     static func of(_ work: SavedWork) -> WorkRedownloadability {
-        of(
-            origin: work.origin,
+        let origin = work.origin
+        return of(
+            origin: origin,
             ao3Unavailable: work.ao3Unavailable,
-            importFormatDisplayName: importFormatDisplayName(for: work.id)
+            importFormatDisplayName: origin.supportsLiveLookup ? nil : importFormatDisplayName(for: work.id)
         )
     }
 
