@@ -99,6 +99,13 @@ nonisolated struct AO3WorksSort: Equatable, Sendable {
         completion: .any
     )
 
+    /// Author-overview "Most Kudos": AO3 sorts this index server-side.
+    static let mostKudos = AO3WorksSort(
+        column: .kudos,
+        direction: .descending,
+        completion: .any
+    )
+
     /// Nine, not ten. `WorkSearchForm#sort_options` returns `SORT_OPTIONS[1..-1]`
     /// when the index is faceted or collected, dropping "Best Match" — there is
     /// no relevance to score when nothing was searched for. 1v's own note says

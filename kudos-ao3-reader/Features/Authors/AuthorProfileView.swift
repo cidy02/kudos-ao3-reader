@@ -53,12 +53,17 @@ struct AuthorProfileView: View {
         initialTab: AO3AuthorProfileTab? = nil,
         showsDashboard: Bool = false
     ) {
-        let model = AO3AuthorProfileModel(route: route, dashboardOnly: showsDashboard)
-        if let initialTab { model.selectedTab = initialTab }
+        isContentDestination = initialTab != nil
+        let overviewMode = !showsDashboard && initialTab == nil
+        let model = AO3AuthorProfileModel(
+            route: route,
+            dashboardOnly: showsDashboard,
+            overviewMode: overviewMode
+        )
+        if let initialTab { model.applyInitialTab(initialTab) }
         _model = State(initialValue: model)
         self.navigationTitle = navigationTitle
         self.showsDashboard = showsDashboard
-        isContentDestination = initialTab != nil
     }
 
     var body: some View {
@@ -210,10 +215,26 @@ private extension AuthorProfileView {
             : AO3AuthorProfileFetcher.authenticationScope(for: auth)
     }
 
+    private var isOverview: Bool { !showsDashboard && !isContentDestination }
+
+    private var authorPalette: SubjectPalette {
+        theme.appTheme.subjectPalette(hue: CoverArt.hue(for: model.route.username))
+    }
+
     private var profileList: some View {
         List {
             if usesAccountHeader {
                 accountHeader
+            } else if isOverview {
+                AuthorProfileOverviewHeader(
+                    model: model,
+                    isOwnProfile: isOwnProfile,
+                    muteAction: muteAction,
+                    blockAction: blockAction,
+                    onSubscription: subscriptionTapped,
+                    onModeration: moderationTapped,
+                    onSelectScope: { model.selectScope($0, auth: auth) }
+                )
             } else {
                 Section {
                     if let header = model.header {
@@ -234,21 +255,10 @@ private extension AuthorProfileView {
                 }
             }
 
-            if !usesAccountHeader, let header = model.header, header.pseuds.count > 1 {
+            if !usesAccountHeader, !isOverview, let header = model.header, header.pseuds.count > 1 {
                 Section {
                     pseudSelector(header.pseuds)
                         .cardRow()
-                }
-            }
-
-            if !showsDashboard, !isContentDestination {
-                Section {
-                    SubjectSegmentedControl(
-                        options: AO3AuthorProfileTab.allCases,
-                        title: { $0.rawValue },
-                        selection: tabSelection
-                    )
-                    .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
                 }
             }
 
@@ -269,6 +279,14 @@ private extension AuthorProfileView {
                     displayMode: displayMode,
                     onSeeAll: { dashboardDestination = $0 }
                 )
+            } else if isOverview {
+                AuthorProfileOverviewSections(
+                    model: model,
+                    onSeeAll: { dashboardDestination = $0 },
+                    onOpenFandom: { fandom in
+                        if let url = fandom.url { router.open(url) }
+                    }
+                )
             } else {
                 AO3AuthorWorksScopeSection(
                     model: model,
@@ -285,7 +303,7 @@ private extension AuthorProfileView {
             }
         }
         .cardList()
-        .subjectScreenWash(palette: theme.scopePalette)
+        .subjectScreenWash(palette: isOverview ? authorPalette : theme.scopePalette)
         .refreshable { await model.refresh(auth: auth) }
         // The writer's own series list after a series was saved, reordered or lost a work.
         .onChange(of: auth.lastSeriesWrite) { _, write in
@@ -375,18 +393,9 @@ private extension AuthorProfileView {
         case .works: exact == 1 ? "work" : "works"
         case .series: "series"
         case .bookmarks: exact == 1 ? "bookmark" : "bookmarks"
+        case .gifts: exact == 1 ? "gift" : "gifts"
         case .about: "about"
         }
-    }
-
-    private var tabSelection: Binding<AO3AuthorProfileTab> {
-        Binding(
-            get: { model.selectedTab },
-            set: { tab in
-                bulkSelection.exitSelectMode()
-                model.selectTab(tab, auth: auth)
-            }
-        )
     }
 
     private func pseudSelector(_ pseuds: [AO3AuthorPseud]) -> some View {
@@ -441,7 +450,7 @@ private extension AuthorProfileView {
     @ViewBuilder
     private var contentRows: some View {
         switch model.selectedTab {
-        case .works:
+        case .works, .gifts:
             AO3AuthorWorksSection(
                 model: model,
                 expandAll: expandAll,
@@ -842,7 +851,7 @@ private extension AuthorProfileView {
     /// The works funnel, moved up from the scope row (owner, 2026-10-01: global
     /// actions live in the top-right chrome). Wherever the works list is.
     private var showsWorksFilter: Bool {
-        !showsDashboard && model.selectedTab == .works
+        !showsDashboard && !isOverview && model.selectedTab == .works
     }
 
     /// The badge counts both halves: the sort, which refetches, and the facets,
@@ -864,7 +873,7 @@ private extension AuthorProfileView {
     }
 
     private var showsNewWork: Bool {
-        isOwnProfile && (showsDashboard || model.selectedTab == .works)
+        isOwnProfile && !isOverview && (showsDashboard || model.selectedTab == .works)
     }
 
     private var ownWorksBar: OwnWorksBulkBar {
@@ -896,15 +905,15 @@ private extension AuthorProfileView {
     /// then the page's own items.
     private var profileMenu: some View {
         WorkListMoreMenu {
-            if (model.selectedTab != .about || showsDashboard) && hideMature {
+            if !isOverview, (model.selectedTab != .about || showsDashboard) && hideMature {
                 MatureRevealToggle()
             }
-            if !showsDashboard, !showsSelectButton, model.selectedTab == .works, !model.works.isEmpty {
+            if !isOverview, !showsDashboard, !showsSelectButton, model.selectedTab == .works, !model.works.isEmpty {
                 Button { bulkSelection.isSelecting = true } label: {
                     Label("Select Works", systemImage: "checklist")
                 }
             }
-            if showsDashboard || (!currentContentIsEmpty && model.selectedTab != .about) {
+            if !isOverview, showsDashboard || (!currentContentIsEmpty && model.selectedTab != .about) {
                 // A List page: no cover grid (1u / 1w draw the ledger).
                 DisplayModeMenuPicker(mode: $displayMode, modes: [.ledger, .detailed])
                 // Expand All acts on cards, so it has nothing to do in Compact.
@@ -965,6 +974,7 @@ private extension AuthorProfileView {
         case .profile: "person.text.rectangle"
         case .pseuds: "person.2"
         case .works: "doc.text"
+        case .gifts: "gift"
         case .preferences: "slider.horizontal.3"
         case .dashboard: "rectangle.grid.2x2"
         case .other: "safari"
@@ -973,7 +983,7 @@ private extension AuthorProfileView {
 
     private var currentContentIsEmpty: Bool {
         switch model.selectedTab {
-        case .works: model.works.isEmpty
+        case .works, .gifts: model.works.isEmpty
         case .series: model.series.isEmpty
         case .bookmarks: model.bookmarks.isEmpty
         case .about: model.about == nil

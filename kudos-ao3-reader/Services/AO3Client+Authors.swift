@@ -7,7 +7,12 @@ extension AO3Client {
         let blurbs = try doc.select("li.work.blurb").array()
         let result = try parseSearchPage(html, page: page)
         if blurbs.isEmpty {
-            let recognizedPage = try doc.select("ol.work.index, h2.heading, p.message, .flash").first() != nil
+            // Gifts is `ul.gift.work.index` (`gifts/index.html.erb`); the
+            // `ul.work.index` half also matches that list so an empty gifts
+            // page is empty, not a parse error.
+            let recognizedPage = try doc.select(
+                "ol.work.index, ul.work.index, h2.heading, p.message, .flash"
+            ).first() != nil
             guard recognizedPage else { throw AO3Error.parse }
         } else if result.works.isEmpty {
             throw AO3Error.parse
@@ -63,7 +68,9 @@ extension AO3Client {
 
         let subscription = try parseAuthorSubscriptionForm(doc, referer: route.dashboardURL)
         let actions = try parseAuthorActions(
-            doc.select("div.primary.header.module ul.navigation.actions a, #dashboard a"),
+            // Dashboard first so "Works (42)" wins over the header's uncounted
+            // Works link at the same path.
+            doc.select("#dashboard a, div.primary.header.module ul.navigation.actions a"),
             username: route.username
         )
         if let userID = parseUserID(from: doc) {
@@ -421,6 +428,8 @@ extension AO3Client {
             } else if path == "\(usernamePath)/pseuds"
                         || path == "\(usernamePath)/profile/pseuds" {
                 kind = .pseuds
+            } else if path.contains("/gifts") {
+                kind = .gifts
             } else if path.contains("/works") {
                 kind = .works
             } else if path.contains("/preferences") {
