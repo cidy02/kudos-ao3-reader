@@ -76,7 +76,10 @@ enum SearchWaysToFind: String, CaseIterable, Identifiable {
         now: Date = Date()
     ) {
         let wasOn = preset.isApplied(in: filters)
-        for applied in allCases where applied.isApplied(in: filters) {
+        // Read before clearing: clearing one resets the sort, which would hide a
+        // second one that was also on and leave its fields behind.
+        let on = allCases.filter { $0.isApplied(in: filters) }
+        for applied in on {
             applied.clear(from: &filters, defaultSort: defaultSort)
         }
         guard !wasOn else { return }
