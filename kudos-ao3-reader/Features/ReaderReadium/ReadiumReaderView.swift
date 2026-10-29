@@ -1068,11 +1068,12 @@ struct ReadiumReaderView: View {
     }
 
     /// Bottom chrome stack:
-    /// - **At the end of the work:** the end card, in place of the position card
+    /// - **Chrome up, at the end of the work:** the end card, in place of the position card
     /// - **Chrome up + speech:** colour bar (optional) + position card with mini player inside
     /// - **Chrome down + speech:** mini player alone (decoupled; seek card hidden)
     /// - **Chrome up, no speech:** position card only
-    /// - **Chrome down, no speech:** empty
+    /// - **Chrome down, no speech:** empty (the end card hides with the chrome so
+    ///   it cannot cover the last lines in paged mode, or stack over the mini player)
     ///
     /// Colour bar lives in this VStack (not a magic `+ 88` offset) so it always
     /// clears the card cleanly.
@@ -1081,10 +1082,10 @@ struct ReadiumReaderView: View {
         let speechActive = speech.isSessionActive
         let atEnd = book.isAtPublicationEnd
         VStack(spacing: 10) {
-            if atEnd {
-                endOfWorkCard
-            }
             if chromeVisible {
+                if atEnd {
+                    endOfWorkCard
+                }
                 highlightColorBar
                 // The end card takes this slot. The position card would cover it.
                 if !atEnd {
@@ -1097,7 +1098,7 @@ struct ReadiumReaderView: View {
         }
         .padding(.horizontal, Self.chromeInset)
         .padding(.bottom, book.pageBoxChromeSafeBottom + Self.chromeInset)
-        .allowsHitTesting(chromeVisible || speechActive || atEnd)
+        .allowsHitTesting(chromeVisible || speechActive)
     }
 
     private var endOfWorkCard: some View {
