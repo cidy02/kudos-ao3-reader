@@ -247,7 +247,8 @@ struct ReadingQueueBrowserView: View {
             isSelecting: isSelecting,
             isSelected: selection.contains(work.id),
             onToggleSelection: { toggleSelection(work) },
-            presentation: presentation ?? rowPresentation
+            presentation: presentation ?? rowPresentation,
+            queueMenu: queueMenu(for: work)
         )
         .swipeActions(edge: .trailing) {
             if !isSelecting {
@@ -639,15 +640,13 @@ extension ReadingQueueBrowserView {
                             contentInsets: EdgeInsets(
                                 top: CardListMetrics.innerVertical, leading: CardListMetrics.innerHorizontal,
                                 bottom: CardListMetrics.innerVertical, trailing: CardListMetrics.innerHorizontal
-                            )
+                            ),
+                            scopedRemoval: ScopedRemoval(title: "Remove from Queue") {
+                                pendingRemoval = upNextWork
+                            },
+                            queueMenu: queueMenu(for: upNextWork)
                         )
                         .background(WorkLedgerCardBackground(work: upNextWork))
-                        // The front work leaves the queue the way the covers
-                        // below it do, asking first (L3 B2 #5).
-                        .localWorkContextMenu(
-                            work: upNextWork,
-                            scopedRemoval: ScopedRemoval(title: "Remove from Queue") { pendingRemoval = upNextWork }
-                        )
                         .padding(.horizontal, CardListMetrics.sideMargin)
                         .padding(.top, Self.afterRule)
                     }
@@ -728,7 +727,8 @@ extension ReadingQueueBrowserView {
             .buttonStyle(.plain)
             .localWorkContextMenu(
                 work: work,
-                scopedRemoval: ScopedRemoval(title: "Remove from Queue") { pendingRemoval = work }
+                scopedRemoval: ScopedRemoval(title: "Remove from Queue") { pendingRemoval = work },
+                queueMenu: queueMenu(for: work)
             )
         }
     }
@@ -943,6 +943,17 @@ extension ReadingQueueBrowserView {
     }
     #endif
 
+    /// The row menu's leading queue actions. To Top and To Bottom use the same
+    /// reorder as the drag handles; they are not gated on a drag being live,
+    /// or the menu would do nothing most of the time.
+    private func queueMenu(for work: SavedWork) -> QueueItemMenuActions {
+        QueueItemMenuActions(
+            moveToTop: { moveWork(work, toIndex: 0, requireDragLive: false) },
+            moveToBottom: { moveWork(work, toIndex: works.count - 1, requireDragLive: false) },
+            shareURL: WorkShareLink.url(for: work)
+        )
+    }
+
     private func moveWorks(from source: IndexSet, to destination: Int) {
         guard isDragLive, let queue = selectedQueue else { return }
         var ids = works.map(\.id)
@@ -954,8 +965,8 @@ extension ReadingQueueBrowserView {
         works.firstIndex(where: { $0.id == work.id }) ?? 0
     }
 
-    private func moveWork(_ work: SavedWork, toIndex newIndex: Int) {
-        guard isDragLive,
+    private func moveWork(_ work: SavedWork, toIndex newIndex: Int, requireDragLive: Bool = true) {
+        guard !requireDragLive || isDragLive,
               let queue = selectedQueue,
               let (from, to) = ReadingQueueService.moveOffsets(
                   currentIndex: currentIndex(of: work),

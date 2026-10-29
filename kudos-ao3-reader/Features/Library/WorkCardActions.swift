@@ -320,6 +320,9 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
     /// The container this card sits in ("Remove from Queue"), above Delete —
     /// a grid of the same works must offer what its list rows swipe to.
     var scopedRemoval: ScopedRemoval?
+    /// Queue rows lead with To Top, To Bottom and Share. Nil everywhere else,
+    /// so a library or home menu stays as it was.
+    var queueMenu: QueueItemMenuActions?
 
     @Environment(\.modelContext) private var context
     @Environment(PrivacyGate.self) private var gate
@@ -347,6 +350,20 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
                 if !isBlurred {
                     NavigationLink(value: LocalWorkDestination.reader(work)) {
                         Label("Read", systemImage: "book")
+                    }
+
+                    if let queueMenu {
+                        Button(action: queueMenu.moveToTop) {
+                            Label("To Top", systemImage: "arrow.up.to.line")
+                        }
+                        Button(action: queueMenu.moveToBottom) {
+                            Label("To Bottom", systemImage: "arrow.down.to.line")
+                        }
+                        if let shareURL = queueMenu.shareURL {
+                            ShareLink(item: shareURL) {
+                                Label("Share", systemImage: "square.and.arrow.up")
+                            }
+                        }
                     }
 
                     if commentsWorkID != nil {
@@ -824,9 +841,14 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
 
 extension View {
     func localWorkContextMenu(
-        work: SavedWork, onSelect: (() -> Void)? = nil, scopedRemoval: ScopedRemoval? = nil
+        work: SavedWork,
+        onSelect: (() -> Void)? = nil,
+        scopedRemoval: ScopedRemoval? = nil,
+        queueMenu: QueueItemMenuActions? = nil
     ) -> some View {
-        modifier(LocalWorkContextMenuModifier(work: work, onSelect: onSelect, scopedRemoval: scopedRemoval))
+        modifier(LocalWorkContextMenuModifier(
+            work: work, onSelect: onSelect, scopedRemoval: scopedRemoval, queueMenu: queueMenu
+        ))
     }
 
     func remoteWorkContextMenu(work: AO3WorkSummary) -> some View {
@@ -839,4 +861,12 @@ extension View {
 struct ScopedRemoval {
     let title: String
     let action: () -> Void
+}
+
+/// Leading actions on a queue row's menu. Share is omitted when `shareURL` is
+/// nil — there is nothing to hand on — the same rule as the reader's fan.
+struct QueueItemMenuActions {
+    var moveToTop: () -> Void
+    var moveToBottom: () -> Void
+    var shareURL: URL?
 }
