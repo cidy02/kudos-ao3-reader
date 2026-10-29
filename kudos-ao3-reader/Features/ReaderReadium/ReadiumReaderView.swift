@@ -258,7 +258,8 @@ struct ReadiumReaderView: View {
                 isPresented: $showingComments,
                 workID: ao3WorkID ?? 0,
                 context: .init(savedWork: work),
-                initialChapterPosition: currentAO3Chapter
+                initialChapterPosition: currentAO3Chapter,
+                undimmed: true
             )
             // `onDismiss` is what makes the Speed slider in this sheet reach
             // the running engine: `setRate` is only ever called from
@@ -297,6 +298,7 @@ struct ReadiumReaderView: View {
                 }
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
+                .presentationBackgroundInteraction(.enabled(upThrough: .large))
                 .preferredColorScheme(readerPageColors.colorScheme)
             }
             // Title pill → work details as a *sheet*, not a navigation push.
@@ -1702,6 +1704,8 @@ extension ReadiumReaderView {
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
         .presentationContentInteraction(.scrolls)
+        // No dim over the page (board 27). The fan's own backdrop is already clear.
+        .presentationBackgroundInteraction(.enabled(upThrough: .large))
         // Annotation rows and the segmented control tint from the theme, not the
         // raw accent, so Sepia keeps its warm brown.
         .accentTint(themeManager.effectiveTint, on: themeManager.readerChromeTheme)

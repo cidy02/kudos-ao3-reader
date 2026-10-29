@@ -1169,6 +1169,9 @@ private struct CommentsSheetModifier: ViewModifier {
     let workID: Int
     let context: AO3CommentsWorkContext
     var initialChapterPosition: Int?
+    /// The reader keeps the page undimmed under this sheet. Every other caller
+    /// leaves the system scrim, so a comments sheet over the library still dims.
+    var undimmed = false
 
     @Environment(AppRouter.self) private var router
 
@@ -1225,6 +1228,7 @@ private struct CommentsSheetModifier: ViewModifier {
                         }
                     )
                 }
+                .presentationBackgroundInteraction(undimmed ? .enabled(upThrough: .large) : .automatic)
             }
             .fullScreenCover(isPresented: $isFullScreen, onDismiss: {
                 router.openPendingAuthorProfileAfterDismiss()
@@ -1254,11 +1258,13 @@ extension View {
     /// `CommentsSheetModifier`.
     func commentsSheet(
         isPresented: Binding<Bool>, workID: Int, context: AO3CommentsWorkContext,
-        initialChapterPosition: Int? = nil
+        initialChapterPosition: Int? = nil,
+        undimmed: Bool = false
     ) -> some View {
         modifier(CommentsSheetModifier(
             isPresented: isPresented, workID: workID, context: context,
-            initialChapterPosition: initialChapterPosition
+            initialChapterPosition: initialChapterPosition,
+            undimmed: undimmed
         ))
     }
 }
