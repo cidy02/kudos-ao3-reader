@@ -45,7 +45,9 @@ enum ReadiumReaderStyleMapper {
             scroll: readingMode == .scroll,
             textAlign: style.justify ? .justify : nil,
             textColor: ReadiumNavigator.Color(hex: textHex ?? theme.textHex),
-            theme: theme.readiumTheme,
+            theme: ReaderPageColors.appearanceTheme(
+                preset: theme, backgroundHex: backgroundHex
+            ).readiumTheme,
             wordSpacing: max(0, style.wordSpacing)
         )
     }

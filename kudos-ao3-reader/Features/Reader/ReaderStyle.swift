@@ -339,9 +339,14 @@ enum ReaderStylesheet {
         let fontSize = Int(resolvedStyle.fontSizePt.rounded())
         let marginPx = Int(resolvedStyle.margin)
         // A paper colour from the theme well replaces the preset's page and body
-        // text. Links stay the preset's — the well is the page, not a re-theme.
+        // text. Links follow the paper's luminance so a light paper on Dark does
+        // not keep night links; a hex that is the preset's own page keeps that
+        // preset (Sepia stays Sepia).
         let backgroundHex = pageBackgroundHex ?? theme.backgroundHex
         let textHex = pageTextHex ?? theme.textHex
+        let linkHex = ReaderPageColors.appearanceTheme(
+            preset: theme, backgroundHex: pageBackgroundHex
+        ).linkHex
 
         return """
         \(fontFace)
@@ -395,7 +400,7 @@ enum ReaderStylesheet {
         }
         \(blockRule)
         \(boldRule)
-        a { color: \(theme.linkHex) !important; text-decoration: none; }
+        a { color: \(linkHex) !important; text-decoration: none; }
         img, svg { max-width: 100% !important; height: auto !important; }
         hr { border-color: \(textHex); opacity: 0.25; }
         """

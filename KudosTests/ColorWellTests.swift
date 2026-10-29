@@ -32,6 +32,8 @@ struct ColorWellTests {
         #expect(page.backgroundHex == "#FFFFFF")
         #expect(page.textHex == "#000000")
         #expect(page.colorScheme == .light)
+        #expect(page.appearanceTheme == .light)
+        #expect(page.linkHex == ReaderTheme.light.linkHex)
     }
 
     @Test func darkPaperGetsWhiteText() {
@@ -39,6 +41,8 @@ struct ColorWellTests {
         #expect(page.isCustom)
         #expect(page.textHex == "#FFFFFF")
         #expect(page.colorScheme == .dark)
+        #expect(page.appearanceTheme == .dark)
+        #expect(page.linkHex == ReaderTheme.dark.linkHex)
     }
 
     @Test func garbagePaperHexKeepsThePreset() {
@@ -47,6 +51,19 @@ struct ColorWellTests {
         #expect(page.backgroundHex == ReaderTheme.sepia.backgroundHex)
         #expect(page.textHex == ReaderTheme.sepia.textHex)
         #expect(page.colorScheme == .light)
+        #expect(page.appearanceTheme == .sepia)
+        #expect(page.linkHex == ReaderTheme.sepia.linkHex)
+    }
+
+    @Test func appearanceThemeFollowsPaperLuminanceNotThePreset() {
+        #expect(ReaderPageColors.appearanceTheme(preset: .dark, backgroundHex: "#FFFFFF") == .light)
+        #expect(ReaderPageColors.appearanceTheme(preset: .light, backgroundHex: "#000000") == .dark)
+        #expect(ReaderPageColors.appearanceTheme(preset: .sepia, backgroundHex: nil) == .sepia)
+        #expect(
+            ReaderPageColors.appearanceTheme(
+                preset: .sepia, backgroundHex: ReaderTheme.sepia.backgroundHex
+            ) == .sepia
+        )
     }
 
     @Test func aPresetCancelsAPendingDragSoFlushReportsNothing() throws {
@@ -95,7 +112,7 @@ struct ColorWellTests {
         #expect(machine.flush() == nil)
     }
 
-    @Test func stylesheetUsesPaperAndKeepsThePresetLinkColour() {
+    @Test func stylesheetUsesPaperAndLinkColourFromLuminance() {
         let css = ReaderStylesheet.css(
             theme: .light,
             font: ReaderFontOption.builtIns[0],
@@ -104,7 +121,18 @@ struct ColorWellTests {
         )
         #expect(css.contains("background-color: #112233"))
         #expect(css.contains("color: #FFFFFF"))
-        #expect(css.contains(ReaderTheme.light.linkHex))
+        #expect(css.contains("a { color: \(ReaderTheme.dark.linkHex)"))
+        #expect(!css.contains("a { color: \(ReaderTheme.light.linkHex)"))
         #expect(!css.contains("background-color: \(ReaderTheme.light.backgroundHex)"))
+    }
+
+    @Test func stylesheetKeepsSepiaLinksWhenThePaperIsThePreset() {
+        let css = ReaderStylesheet.css(
+            theme: .sepia,
+            font: ReaderFontOption.builtIns[0],
+            pageBackgroundHex: ReaderTheme.sepia.backgroundHex,
+            pageTextHex: ReaderTheme.sepia.textHex
+        )
+        #expect(css.contains("a { color: \(ReaderTheme.sepia.linkHex)"))
     }
 }

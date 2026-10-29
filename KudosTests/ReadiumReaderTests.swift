@@ -46,6 +46,34 @@ struct ReadiumReaderTests {
         #expect(properties["--RS__pageGutter"] == "1.00000px")
     }
 
+    @Test func customLightPaperOnDarkUsesTheLightReadiumTheme() {
+        let preferences = ReadiumReaderStyleMapper.preferences(
+            style: ReaderTextStyle(),
+            theme: .dark,
+            fontFamily: nil,
+            readingMode: .scroll,
+            twoPageSpread: false,
+            backgroundHex: "#FFFFFF",
+            textHex: "#000000"
+        )
+        #expect(preferences.theme == .light)
+        #expect(preferences.backgroundColor?.rawValue == 0xFFFFFF)
+        #expect(preferences.textColor?.rawValue == 0x000000)
+    }
+
+    @Test func sepiaPaperKeepsTheSepiaReadiumTheme() {
+        let preferences = ReadiumReaderStyleMapper.preferences(
+            style: ReaderTextStyle(),
+            theme: .sepia,
+            fontFamily: nil,
+            readingMode: .scroll,
+            twoPageSpread: false,
+            backgroundHex: ReaderTheme.sepia.backgroundHex,
+            textHex: ReaderTheme.sepia.textHex
+        )
+        #expect(preferences.theme == .sepia)
+    }
+
     @Test func pagedColumnsHonorSpreadDecision() {
         let spread = ReadiumReaderStyleMapper.preferences(
             style: ReaderTextStyle(), theme: .light, fontFamily: nil,
