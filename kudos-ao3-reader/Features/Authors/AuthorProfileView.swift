@@ -1,6 +1,22 @@
 import SwiftData
 import SwiftUI
 
+private enum AuthorProfileContentDestination: Hashable {
+    case tab(AO3AuthorProfileTab)
+    case mostKudos
+
+    var tab: AO3AuthorProfileTab {
+        switch self {
+        case let .tab(tab): tab
+        case .mostKudos: .works
+        }
+    }
+
+    var initialWorksSort: AO3WorksSort? {
+        self == .mostKudos ? .mostKudos : nil
+    }
+}
+
 struct AuthorProfileView: View {
     @AppStorage("hideMatureContent") private var hideMature = true
     @Environment(AO3AuthService.self) private var auth
@@ -35,7 +51,7 @@ struct AuthorProfileView: View {
     @State private var showingLogin = false
     /// Resume after the login sheet succeeds (cleared on cancel / failed login).
     @State private var pendingAuthAction: PendingAuthAction?
-    @State private var dashboardDestination: AO3AuthorProfileTab?
+    @State private var dashboardDestination: AuthorProfileContentDestination?
     /// The works sort-and-refine panel, opened from the toolbar Filter.
     @State private var showingWorksFilters = false
     /// Nav bar title. Account's **My Dashboard** reuses this surface for the
@@ -51,6 +67,7 @@ struct AuthorProfileView: View {
         route: AO3AuthorRoute,
         navigationTitle: String = "Author",
         initialTab: AO3AuthorProfileTab? = nil,
+        initialWorksSort: AO3WorksSort? = nil,
         showsDashboard: Bool = false
     ) {
         isContentDestination = initialTab != nil
@@ -61,6 +78,7 @@ struct AuthorProfileView: View {
             overviewMode: overviewMode
         )
         if let initialTab { model.applyInitialTab(initialTab) }
+        if let initialWorksSort { model.applyInitialWorksSort(initialWorksSort) }
         _model = State(initialValue: model)
         self.navigationTitle = navigationTitle
         self.showsDashboard = showsDashboard
@@ -85,8 +103,13 @@ struct AuthorProfileView: View {
         #endif
             .hidesFloatingTabBar()
             .toolbar { toolbarContent }
-            .navigationDestination(item: $dashboardDestination) { tab in
-                AuthorProfileView(route: model.route, navigationTitle: tab.rawValue, initialTab: tab)
+            .navigationDestination(item: $dashboardDestination) { destination in
+                AuthorProfileView(
+                    route: model.route,
+                    navigationTitle: destination.tab.rawValue,
+                    initialTab: destination.tab,
+                    initialWorksSort: destination.initialWorksSort
+                )
             }
             .navigationDestination(isPresented: $isBulkEditing) { bulkEditDestination }
             #if DEBUG
@@ -277,12 +300,13 @@ private extension AuthorProfileView {
                     route: model.route,
                     expandAll: expandAll,
                     displayMode: displayMode,
-                    onSeeAll: { dashboardDestination = $0 }
+                    onSeeAll: { dashboardDestination = .tab($0) }
                 )
             } else if isOverview {
                 AuthorProfileOverviewSections(
                     model: model,
-                    onSeeAll: { dashboardDestination = $0 },
+                    onSeeAll: { dashboardDestination = .tab($0) },
+                    onSeeAllMostKudos: { dashboardDestination = .mostKudos },
                     onOpenFandom: { fandom in
                         if let url = fandom.url { router.open(url) }
                     }
@@ -643,11 +667,11 @@ private extension AuthorProfileView {
     /// Opens the author-page shot once the profile's own data is in.
     private func applyAuthorDebugShot() async {
         if DebugLaunchRoute.takeSheet("authorabout") {
-            dashboardDestination = .about
+            dashboardDestination = .tab(.about)
             return
         }
         if DebugLaunchRoute.takeSheet("authorbookmarks") {
-            dashboardDestination = .bookmarks
+            dashboardDestination = .tab(.bookmarks)
             return
         }
         if DebugLaunchRoute.takeSheet("authorworksfilter") {
@@ -923,7 +947,7 @@ private extension AuthorProfileView {
                 Divider()
             }
             if showsDashboard {
-                Button { dashboardDestination = .about } label: {
+                Button { dashboardDestination = .tab(.about) } label: {
                     Label("About", systemImage: "person.text.rectangle")
                 }
             }

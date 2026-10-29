@@ -12,7 +12,8 @@ nonisolated struct AO3AuthorRoute: Hashable, Sendable, Codable, Identifiable {
         /// on the nested works resource — `/users/:id/works/collected` — which
         /// is why it is two path segments rather than one.
         case collectedWorks = "works/collected"
-        /// 1u's third segment: `resources :gifts, only: [:index]`. These are
+        /// 1u's third segment: `resources :gifts, only: [:index]`. AO3 mounts
+        /// this only at `/users/:id/gifts`, never beneath a pseud. These are
         /// works given TO this user, not works they wrote.
         case gifts
 
@@ -130,7 +131,8 @@ nonisolated struct AO3AuthorRoute: Hashable, Sendable, Codable, Identifiable {
         filters: AO3SearchFilters = AO3SearchFilters()
     ) -> URL {
         var segments = ["users", username]
-        if let pseud {
+        // Gifts is a user resource, not one of AO3's pseud-scoped indexes.
+        if let pseud, content != .gifts {
             segments += ["pseuds", pseud]
         }
         segments += content.pathSegments
@@ -444,10 +446,14 @@ nonisolated struct AO3AuthorHeader: Hashable {
     var recentBookmarks: [AO3AuthorBookmark]? = []
 
     /// Sidebar nav counts ("Works (42)") matched on the exact list path so
-    /// `/works` is not confused with `/works/collected`.
+    /// `/works` is not confused with `/works/collected`. An uncounted header
+    /// link at the same path never hides the dashboard's counted link.
     func listCount(for content: AO3AuthorRoute.Content, route: AO3AuthorRoute) -> Int? {
         let expected = route.contentURL(content).path.lowercased()
-        return actions.first { $0.url.path.lowercased() == expected }?.listCount
+        return actions.lazy
+            .filter { $0.url.path.lowercased() == expected }
+            .compactMap(\.listCount)
+            .first
     }
 }
 
