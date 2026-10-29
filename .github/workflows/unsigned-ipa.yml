@@ -77,12 +77,14 @@ jobs:
         with:
           ref: ${{ github.event.inputs.ref || github.ref }}
 
-      - name: Select newest Xcode
+      - name: Select Xcode 27.2 or newer
         run: |
           ls /Applications | grep -i '^Xcode' || true
           sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
           xcodebuild -version
-          xcodebuild -showsdks | grep -i iphoneos || true
+          SDK_VERSION="$(xcrun --sdk iphoneos --show-sdk-version)"
+          printf 'iOS SDK %s\n' "$SDK_VERSION"
+          [ "$(printf '%s\n' 27.2 "$SDK_VERSION" | sort -V | head -1)" = "27.2" ]
 
       # Both prerequisites are gitignored: MuPDF is ~48 MB of built binaries and
       # FluidAudio is a patched checkout of a pinned upstream revision. Cache the
@@ -92,7 +94,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: Vendor/MuPDF.xcframework
-          key: mupdf-${{ runner.os }}-${{ hashFiles('Scripts/build-mupdf.sh') }}-xcode26
+          key: mupdf-${{ runner.os }}-${{ hashFiles('Scripts/build-mupdf.sh') }}-xcode27.2
 
       # build-mupdf.sh writes to build-mupdf/ and deliberately does not install
       # anywhere — it is normally run by hand. The project links the framework

@@ -22,7 +22,7 @@ Kudos gives you a dedicated Apple-native experience for AO3: search and browse w
 
 There is **no App Store or TestFlight distribution** published from this repository for Apple platforms. Use the latest source on `main` and build with Xcode (see [Build from source](#build-from-source)).
 
-Minimum OS versions follow the Xcode project deployment targets (currently iOS/iPadOS **26.5** and macOS **26.5** for the app target).
+Minimum OS versions follow the Xcode project deployment targets (currently iOS/iPadOS **27.2** and macOS **26.5** for the app target). Build with Xcode **27.2** or newer.
 
 ## Key capabilities
 

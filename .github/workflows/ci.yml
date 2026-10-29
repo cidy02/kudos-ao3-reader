@@ -7,8 +7,8 @@ name: CI
 # warning baseline is cleaned up). SwiftFormat is advisory (continue-on-error):
 # the codebase is hand-wrapped, so enforcing it would mean a bulk reformat.
 #
-# A build job is intentionally omitted for now: the project targets the iOS 26 /
-# Xcode 27 SDK, which GitHub-hosted runners don't yet provide. Add a build job
+# A build job is intentionally omitted for now: the project targets the iOS 27.2 /
+# Xcode 27.2 SDK, which the lint runner doesn't provide. Add a build job
 # (xcodebuild ... CODE_SIGNING_ALLOWED=NO) once a runner image ships that SDK.
 
 on:
