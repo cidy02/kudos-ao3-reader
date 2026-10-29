@@ -1068,6 +1068,7 @@ struct ReadiumReaderView: View {
     }
 
     /// Bottom chrome stack:
+    /// - **At the end of the work:** the end card, in place of the position card
     /// - **Chrome up + speech:** colour bar (optional) + position card with mini player inside
     /// - **Chrome down + speech:** mini player alone (decoupled; seek card hidden)
     /// - **Chrome up, no speech:** position card only
@@ -1078,11 +1079,17 @@ struct ReadiumReaderView: View {
     @ViewBuilder
     private var bottomChromeLayer: some View {
         let speechActive = speech.isSessionActive
+        let atEnd = book.isAtPublicationEnd
         VStack(spacing: 10) {
+            if atEnd {
+                endOfWorkCard
+            }
             if chromeVisible {
                 highlightColorBar
-                // Coupled: mini player rides inside the position card when speaking.
-                positionCard(includeMiniPlayer: speechActive)
+                // The end card takes this slot. The position card would cover it.
+                if !atEnd {
+                    positionCard(includeMiniPlayer: speechActive)
+                }
             } else if speechActive {
                 // Decoupled: transport stays reachable while full chrome is hidden.
                 standaloneMiniPlayer
@@ -1090,7 +1097,21 @@ struct ReadiumReaderView: View {
         }
         .padding(.horizontal, Self.chromeInset)
         .padding(.bottom, book.pageBoxChromeSafeBottom + Self.chromeInset)
-        .allowsHitTesting(chromeVisible || speechActive)
+        .allowsHitTesting(chromeVisible || speechActive || atEnd)
+    }
+
+    private var endOfWorkCard: some View {
+        ReaderEndCard(
+            title: work.title,
+            showsAO3Actions: ao3WorkID != nil,
+            kudosGiven: work.hasGivenKudos,
+            kudosEnabled: !kudosWorking && !work.hasGivenKudos,
+            isBookmarked: bookmarkAtCurrentPosition != nil,
+            bookmarkEnabled: currentReadingPosition != nil,
+            onKudos: { if let ao3WorkID { giveKudos(workID: ao3WorkID) } },
+            onComment: { showingComments = true },
+            onBookmark: { toggleBookmarkAtCurrentPosition() }
+        )
     }
 
     @ViewBuilder
