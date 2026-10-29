@@ -113,10 +113,10 @@ button{cursor:pointer}
   </sc-if>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#990000"},"view":{"editor":"enum","options":["controls","more","readAloud"],"default":"controls"},"textSize":{"editor":"range","default":18,"min":15,"max":26,"step":1,"unit":"px"},"$preview":{"width":466,"height":678}}'>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#821019"},"view":{"editor":"enum","options":["controls","more","readAloud"],"default":"controls"},"textSize":{"editor":"range","default":18,"min":15,"max":26,"step":1,"unit":"px"},"$preview":{"width":466,"height":678}}'>
 class Component extends DCLogic {
   renderVals() {
-    const accent = this.props.accent ?? '#990000';
+    const accent = this.props.accent ?? '#821019';
     const view = this.props.view ?? 'controls';
     const hex = accent.replace('#', '');
     const sep = '0.5px solid rgba(60,40,10,0.14)';

@@ -1,8 +1,9 @@
 import sys; sys.path.insert(0,'.')
 from gen import board
+from polish import polish
 from data import W, I, works
 B=[]
-def add(name,title,comp,attrs,data,h=844): board(name,title,comp,attrs,data,h); B.append((name,title,h))
+def add(name,title,comp,attrs,data,h=844): attrs,data=polish(name,attrs,data); board(name,title,comp,attrs,data,h); B.append((name,title,h))
 add('Settings-Library','Settings › Library','FormScreen',{'title':'Library','back':'Back to Settings'},{
  'sections':[{'header':'Opening a work','rows':[{'label':'Open straight into the reader','kind':'toggle','on':True,'sub':'Off: open Work Detail first'},{'label':'Ask before downloading on cellular','kind':'toggle','on':True}]},
   {'header':'When you finish a work','rows':[{'label':'Mark as Finished at the last page','kind':'toggle','on':True},{'label':'Keep the download','kind':'segments','options':['Always','30 days','Never'],'selected':1}]},

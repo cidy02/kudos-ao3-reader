@@ -13,7 +13,7 @@ body{margin:0}
 </style>
 </helmet>
 <div style="width: 390px; height: 900px; position: relative; overflow: hidden">
-  <dc-import name="FormScreen" title="Edit Bookmark" subtitle="A Map of Small Hours" mode="sheet" confirm="Save" height="900" sections="{{sections}}" hint-size="390px,900px"></dc-import>
+  <dc-import name="FormScreen" title="Edit Bookmark" mode="sheet" confirm="Save" height="900" sections="{{sections}}" context="{{context}}" hint-size="390px,900px"></dc-import>
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":900}}'>
@@ -49,18 +49,24 @@ class Component extends DCLogic {
         {
           "label": "Collections",
           "kind": "nav",
-          "detail": "None"
+          "detail": "None",
+          "tile": "#9C2F6B",
+          "icon": "M6 8h12v12H6zM8 5h8"
         },
         {
           "label": "Private",
           "kind": "toggle",
-          "on": false
+          "on": false,
+          "tile": "#8E8E93",
+          "icon": "M6 11h12v9H6zM8.5 11V8a3.5 3.5 0 0 1 7 0v3"
         },
         {
           "label": "Rec",
           "kind": "toggle",
           "on": true,
-          "sub": "Shows as a recommendation on your AO3 bookmarks"
+          "sub": "Shows as a recommendation on your AO3 bookmarks",
+          "tile": "#E0A100",
+          "icon": "m12 3.8 2.5 5.2 5.6.8-4.1 3.9 1 5.6-5-2.7-5 2.7 1-5.6-4.1-3.9 5.6-.8z"
         }
       ]
     },
@@ -72,7 +78,14 @@ class Component extends DCLogic {
         }
       ]
     }
-  ]
+  ],
+  "context": {
+    "kicker": "Pride and Prejudice",
+    "kickerColour": "hsl(150, 56%, 33%)",
+    "title": "A Map of Small Hours",
+    "meta": "quietharbor · 18,420 words · 6/6",
+    "cover": "linear-gradient(155deg, hsl(150, 46%, 27%), hsl(172, 50%, 41%))"
+  }
 };
   }
 }

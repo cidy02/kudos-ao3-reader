@@ -37,10 +37,10 @@ body{margin:0}
   </sc-for>
 </nav>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"selected":{"editor":"enum","options":["home","all","reading","want","finished","downloaded","history","favorites","collections","browse","account"],"default":"home"},"height":{"editor":"int","default":649,"min":300,"max":1000},"accent":{"editor":null,"default":"#990000"},"$preview":{"width":232,"height":649}}'>
+<script type="text/x-dc" data-dc-script data-props='{"selected":{"editor":"enum","options":["home","all","reading","want","finished","downloaded","history","favorites","collections","browse","account"],"default":"home"},"height":{"editor":"int","default":649,"min":300,"max":1000},"accent":{"editor":null,"default":"#821019"},"$preview":{"width":232,"height":649}}'>
 class Component extends DCLogic {
   renderVals() {
-    const accent = this.props.accent ?? '#990000';
+    const accent = this.props.accent ?? '#821019';
     const selected = this.props.selected ?? 'home';
     const icons = {
       home: 'M3.5 10.5 12 3.5l8.5 7M5.5 9v11h5v-6h3v6h5V9',

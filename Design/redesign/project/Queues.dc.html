@@ -14,7 +14,7 @@ button{cursor:pointer}
 </style>
 </helmet>
 <div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #F2F2F7; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
-  <h1 data-inline-title style="position: absolute; left: 68px; right: 68px; top: 54px; margin: 0; font-size: 17px; line-height: 44px; font-weight: 600; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Reading Queues</h1>
+  <h1 data-inline-title="" style="position: absolute; left: 68px; right: 68px; top: 54px; margin: 0; font-size: 17px; line-height: 44px; font-weight: 600; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Reading Queues</h1>
   <div style="position: absolute; left: 16px; right: 16px; top: 54px; display: flex; justify-content: space-between">
     <button aria-label="Back" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)">
       <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg>
@@ -27,7 +27,7 @@ button{cursor:pointer}
       <input type="search" aria-label="Search queues" placeholder="Search queues" style="flex: 1; border: none; background: transparent; font-family: inherit; font-size: 16px; outline: none">
     </label>
     <div role="group" aria-label="Filter by tag" style="display: flex; gap: 8px">
-      <button aria-pressed="true" style="height: 32px; padding: 0 14px; border: none; border-radius: 16px; background: #990000; color: #FFFFFF; font-family: inherit; font-size: 15px; font-weight: 600">All</button>
+      <button aria-pressed="true" style="height: 32px; padding: 0 14px; border: none; border-radius: 16px; background: #821019; color: #FFFFFF; font-family: inherit; font-size: 15px; font-weight: 600">All</button>
       <button aria-pressed="false" style="height: 32px; padding: 0 14px; border: none; border-radius: 16px; background: #FFFFFF; font-family: inherit; font-size: 15px">fluff</button>
       <button aria-pressed="false" style="height: 32px; padding: 0 14px; border: none; border-radius: 16px; background: #FFFFFF; font-family: inherit; font-size: 15px">under 20k</button>
       <button aria-pressed="false" style="height: 32px; padding: 0 14px; border: none; border-radius: 16px; background: #FFFFFF; font-family: inherit; font-size: 15px">Unused</button>
@@ -90,7 +90,7 @@ button{cursor:pointer}
       <div style="display: flex; flex-direction: column; gap: 6px">
         <div style="background: #FFFFFF; border-radius: 16px; display: flex; align-items: center; height: 50px; padding: 0 16px">
           <span style="flex: 1; font-size: 16px">Keep works offline</span>
-          <span role="switch" aria-checked="true" aria-label="Keep works offline" style="width: 51px; height: 31px; border-radius: 16px; background: #990000; position: relative"><span style="position: absolute; right: 2px; top: 2px; width: 27px; height: 27px; border-radius: 14px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.2)"></span></span>
+          <span role="switch" aria-checked="true" aria-label="Keep works offline" style="width: 51px; height: 31px; border-radius: 16px; background: #821019; position: relative"><span style="position: absolute; right: 2px; top: 2px; width: 27px; height: 27px; border-radius: 14px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.2)"></span></span>
         </div>
         <p style="margin: 0 16px; font-size: 13px; line-height: 18px; color: #6C6C70">Kudos downloads each work you add and keeps it while it's in this queue.</p>
       </div>
@@ -117,10 +117,10 @@ button{cursor:pointer}
   </section>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#990000"},"$preview":{"width":390,"height":844}}'>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#821019"},"$preview":{"width":390,"height":844}}'>
 class Component extends DCLogic {
   renderVals() {
-    const accent = this.props.accent ?? '#990000';
+    const accent = this.props.accent ?? '#821019';
     const hex = accent.replace('#', '');
     const tint = 'rgba(' + parseInt(hex.slice(0, 2), 16) + ',' + parseInt(hex.slice(2, 4), 16) + ',' + parseInt(hex.slice(4, 6), 16) + ',0.10)';
     const art = (h) => 'linear-gradient(155deg, hsl(' + h + ', 46%, 27%), hsl(' + ((h + 22) % 360) + ', 50%, 41%))';
@@ -142,7 +142,7 @@ class Component extends DCLogic {
         ['Letters Never Sent', 'Finished twice · 21,880 words', 32, true],
         ['The Lighthouse Keepers', 'Finished Oct 3 · 40,900 words', 188, false],
         ['A Map of Small Hours', 'Finished Oct 12 · 32,050 words', 150, false]
-      ].map(([title, meta, h, on], i) => ({ title, meta, art: art(h), on, aria: on ? 'Selected' : 'Not selected', ring: on ? 'none' : '1.5px solid #C7C7CC', fill: on ? '#990000' : 'transparent', sep: i ? '0.5px solid #E5E5EA' : 'none' })),
+      ].map(([title, meta, h, on], i) => ({ title, meta, art: art(h), on, aria: on ? 'Selected' : 'Not selected', ring: on ? 'none' : '1.5px solid #C7C7CC', fill: on ? '#821019' : 'transparent', sep: i ? '0.5px solid #E5E5EA' : 'none' })),
       colours: colours.map(([name, h], i) => ({ name, hex: h, checked: i === 3 ? 'true' : 'false', ring: i === 3 ? '0 0 0 2px #FFFFFF, 0 0 0 4px ' + h : 'none' }))
     };
   }

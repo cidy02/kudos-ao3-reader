@@ -14,7 +14,7 @@ button{cursor:pointer}
 </style>
 </helmet>
 <div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #F2F2F7; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
-  <h1 data-inline-title style="position: absolute; left: 68px; right: 68px; top: 54px; margin: 0; font-size: 17px; line-height: 44px; font-weight: 600; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Privacy</h1>
+  <h1 data-inline-title="" style="position: absolute; left: 68px; right: 68px; top: 54px; margin: 0; font-size: 17px; line-height: 44px; font-weight: 600; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Privacy</h1>
   <div style="position: absolute; left: 16px; top: 54px">
     <button aria-label="Back to Settings" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)">
       <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg>
@@ -27,7 +27,7 @@ button{cursor:pointer}
         <div style="display: flex; align-items: center; height: 46px; padding: 0 16px; gap: 10px">
           <dc-import name="Symbols" only="rating" rating="E" size="22" hint-size="22px,22px"></dc-import>
           <span style="flex: 1; font-size: 16px">Hide mature content</span>
-          <span role="switch" aria-checked="true" aria-label="Hide mature content" style="width: 51px; height: 31px; border-radius: 16px; background: #990000; position: relative"><span style="position: absolute; right: 2px; top: 2px; width: 27px; height: 27px; border-radius: 16px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.2)"></span></span>
+          <span role="switch" aria-checked="true" aria-label="Hide mature content" style="width: 51px; height: 31px; border-radius: 16px; background: #821019; position: relative"><span style="position: absolute; right: 2px; top: 2px; width: 27px; height: 27px; border-radius: 16px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.2)"></span></span>
         </div>
         <div style="padding: 8px 12px; border-top: 0.5px solid #E5E5EA">
           <div role="radiogroup" aria-label="How to hide" style="height: 32px; border-radius: 9px; background: rgba(118,118,128,0.12); padding: 2px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr))">
@@ -37,7 +37,7 @@ button{cursor:pointer}
         </div>
         <div style="display: flex; align-items: center; height: 46px; padding: 0 16px; border-top: 0.5px solid #E5E5EA">
           <span style="flex: 1; font-size: 16px">Require Face ID to reveal</span>
-          <span role="switch" aria-checked="true" aria-label="Require Face ID to reveal" style="width: 51px; height: 31px; border-radius: 16px; background: #990000; position: relative"><span style="position: absolute; right: 2px; top: 2px; width: 27px; height: 27px; border-radius: 16px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.2)"></span></span>
+          <span role="switch" aria-checked="true" aria-label="Require Face ID to reveal" style="width: 51px; height: 31px; border-radius: 16px; background: #821019; position: relative"><span style="position: absolute; right: 2px; top: 2px; width: 27px; height: 27px; border-radius: 16px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.2)"></span></span>
         </div>
       </div>
       <p style="margin: 0 16px; font-size: 13px; line-height: 18px; color: #6C6C70">Applies to your Library, Home and history. Revealed works hide again when Kudos locks.</p>
@@ -57,14 +57,14 @@ button{cursor:pointer}
   </main>
   <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 150px; background: linear-gradient(to bottom, #F2F2F700, #F2F2F7F0 72%); pointer-events: none"></div>
   <div style="position: absolute; left: 16px; bottom: 28px; z-index: 3">
-    <dc-import name="TabBar" selected="account" accent="#990000" hint-size="358px,62px"></dc-import>
+    <dc-import name="TabBar" selected="account" accent="#821019" hint-size="358px,62px"></dc-import>
   </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#990000"},"$preview":{"width":390,"height":844}}'>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#821019"},"$preview":{"width":390,"height":844}}'>
 class Component extends DCLogic {
   renderVals() {
-    const accent = this.props.accent ?? '#990000';
+    const accent = this.props.accent ?? '#821019';
     const rows = [
       ['AO3 page cache', '118 MB', 'Clear', accent],
       ['Reading history', '412 works', 'Clear…', '#D70015'],

@@ -31,17 +31,17 @@ button{cursor:pointer}
 
       <div aria-label="Sent to AO3" style="padding: 0 4px; display: flex; flex-wrap: wrap; gap: 6px">
         <sc-for list="{{sent}}" as="c" hint-placeholder-count="2">
-          <button aria-label="Remove {{c}}" style="height: 30px; padding: 0 6px 0 10px; border: none; border-radius: 15px; background: rgba(153,0,0,0.10); color: #990000; font-family: inherit; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 4px">{{c}}<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" style="opacity: 0.7"><path d="M7 7l10 10M17 7 7 17"></path></svg></button>
+          <button aria-label="Remove {{c}}" style="height: 30px; padding: 0 6px 0 10px; border: none; border-radius: 15px; background: rgba(130,16,25,0.10); color: #821019; font-family: inherit; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 4px">{{c}}<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" style="opacity: 0.7"><path d="M7 7l10 10M17 7 7 17"></path></svg></button>
         </sc-for>
       </div>
 
       <div role="status" aria-label="Ranking the top 100, page {{page}} of 5" style="margin: 0 4px; padding: 10px 12px; border-radius: 14px; background: #F2F2F7; display: flex; align-items: center; gap: 12px">
         <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px">
           <span style="font-size: 14px; line-height: 18px; font-weight: 600">Ranking the top 100 · page {{page}} of 5</span>
-          <span aria-hidden="true" style="height: 4px; border-radius: 2px; background: #E5E5EA; overflow: hidden"><span style="display: block; width: {{progress}}; height: 4px; background: #990000"></span></span>
+          <span aria-hidden="true" style="height: 4px; border-radius: 2px; background: #E5E5EA; overflow: hidden"><span style="display: block; width: {{progress}}; height: 4px; background: #821019"></span></span>
           <span style="font-size: 12px; line-height: 16px; color: #6C6C70">One page every 3 seconds · {{loaded}} works so far</span>
         </span>
-        <button style="height: 32px; padding: 0 12px; border: none; border-radius: 16px; background: #FFFFFF; color: #990000; font-family: inherit; font-size: 14px; font-weight: 600; box-shadow: 0 0 0 0.5px rgba(0,0,0,0.06)">Cancel</button>
+        <button style="height: 32px; padding: 0 12px; border: none; border-radius: 16px; background: #FFFFFF; color: #821019; font-family: inherit; font-size: 14px; font-weight: 600; box-shadow: 0 0 0 0.5px rgba(0,0,0,0.06)">Cancel</button>
       </div>
 
       <div style="margin: 0 -16px">
@@ -74,7 +74,7 @@ button{cursor:pointer}
   </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#990000"},"$preview":{"width":390,"height":1240}}'>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#821019"},"$preview":{"width":390,"height":1240}}'>
 class Component extends DCLogic {
   renderVals() {
     // Rank Top 100 (owner approved 2026-10-28; notes/quality-signals-spec.md section 13): one tap
@@ -85,7 +85,7 @@ class Component extends DCLogic {
     // r1 9.4% vs 3.9% -> 2.4x (cautious 2.3x); r2 10.8% vs 5.6% -> 1.8x (1.7x);
     // r3 6.8% vs 4.3% -> 1.6x (1.5x). The set-aside row has more kudos than hits.
     return {
-      accent: this.props.accent ?? '#990000',
+      accent: this.props.accent ?? '#821019',
       total: '1,284',
       loaded: '60',
       page: '3',

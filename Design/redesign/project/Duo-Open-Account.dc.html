@@ -117,14 +117,14 @@ button{cursor:pointer}
     </div>
   </section>
   <div style="position: absolute; right: 8px; top: 0; z-index: 3">
-    <dc-import name="DuoSideBar" height="669" nav="none" tabs="account" actions="{{side}}" accent="#990000" hint-size="64px,669px"></dc-import>
+    <dc-import name="DuoSideBar" height="669" nav="none" tabs="account" actions="{{side}}" accent="#821019" hint-size="64px,669px"></dc-import>
   </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#990000"},"$preview":{"width":951,"height":669}}'>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#821019"},"$preview":{"width":951,"height":669}}'>
 class Component extends DCLogic {
   renderVals() {
-    const accent = this.props.accent ?? '#990000';
+    const accent = this.props.accent ?? '#821019';
     const hex = accent.replace('#', '');
     const accentTint = 'rgba(' + parseInt(hex.slice(0, 2), 16) + ',' + parseInt(hex.slice(2, 4), 16) + ',' + parseInt(hex.slice(4, 6), 16) + ',0.10)';
     const S = {

@@ -12,11 +12,11 @@
 body{margin:0}
 </style>
 </helmet>
-<div style="width: 390px; height: 1000px; position: relative; overflow: hidden">
-  <dc-import name="FormScreen" title="Edit Queue" mode="sheet" confirm="Save" height="1000" sections="{{sections}}" hint-size="390px,1000px"></dc-import>
+<div style="width: 390px; height: 1120px; position: relative; overflow: hidden">
+  <dc-import name="FormScreen" title="Edit Queue" mode="sheet" confirm="Save" height="1120" sections="{{sections}}" context="{{context}}" hint-size="390px,1120px"></dc-import>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1000}}'>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1120}}'>
 class Component extends DCLogic {
   renderVals() {
     return {
@@ -92,12 +92,16 @@ class Component extends DCLogic {
           "label": "Keep works offline",
           "kind": "toggle",
           "on": true,
-          "sub": "6 of 8 downloaded · 41 MB"
+          "sub": "6 of 8 downloaded · 41 MB",
+          "tile": "#5856D6",
+          "icon": "M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19.5h14"
         },
         {
           "label": "Storage",
           "kind": "nav",
-          "detail": "41 MB"
+          "detail": "41 MB",
+          "tile": "#8E8E93",
+          "icon": "M4 7h16v10H4zM4 12h16M8 9.5h.01"
         }
       ]
     },
@@ -109,7 +113,15 @@ class Component extends DCLogic {
         }
       ]
     }
-  ]
+  ],
+  "context": {
+    "kicker": "Queue · 8 works",
+    "kickerColour": "#C25E00",
+    "title": "Summer Reading",
+    "meta": "About 9 h 40 min · 2 finished · 6 offline",
+    "tile": "#C25E00",
+    "icon": "M4 6h11M4 12h11M4 18h7M18 15v6M15 18h6"
+  }
 };
   }
 }

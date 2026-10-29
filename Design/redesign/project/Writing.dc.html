@@ -51,7 +51,7 @@ a{text-decoration:none}
       </div>
       <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px">
         <span style="font-size: 13px; line-height: 18px; opacity: 0.85">3,100 words this week · 6-day streak<br>Chapter 3 posted Oct 20</span>
-        <a href="Text-Editor.dc.html" style="height: 44px; padding: 0 20px; flex-shrink: 0; border-radius: 22px; background: #FFFFFF; color: #990000; font-size: 17px; font-weight: 600; display: flex; align-items: center">Continue</a>
+        <a href="Text-Editor.dc.html" style="height: 44px; padding: 0 20px; flex-shrink: 0; border-radius: 22px; background: #FFFFFF; color: #821019; font-size: 17px; font-weight: 600; display: flex; align-items: center">Continue</a>
       </div>
     </section>
 
@@ -59,7 +59,7 @@ a{text-decoration:none}
       <div style="display: flex; align-items: baseline; gap: 8px">
         <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">Stats</h2>
         <span style="font-size: 15px; color: #6C6C70">All Years</span>
-        <a href="Writing-Stats.dc.html" style="margin-left: auto; font-size: 17px; color: #990000">By Work</a>
+        <a href="Writing-Stats.dc.html" style="margin-left: auto; font-size: 17px; color: #821019">By Work</a>
       </div>
       <a href="Writing-Stats.dc.html" style="color: #000000; border-radius: 18px; background: #F2F2F7; padding: 14px; display: flex; flex-direction: column; gap: 12px">
         <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
@@ -110,7 +110,7 @@ a{text-decoration:none}
       <div style="display: flex; align-items: baseline; gap: 8px">
         <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">New Comments</h2>
         <span style="font-size: 15px; color: #6C6C70">5</span>
-        <a href="Inbox.dc.html" style="margin-left: auto; font-size: 17px; color: #990000">See All</a>
+        <a href="Inbox.dc.html" style="margin-left: auto; font-size: 17px; color: #821019">See All</a>
       </div>
       <sc-for list="{{comments}}" as="c" hint-placeholder-count="2">
         <a href="Comment-Thread.dc.html" style="color: #000000; display: flex; gap: 10px; padding: 10px 0; border-top: {{c.sep}}">
@@ -119,21 +119,21 @@ a{text-decoration:none}
             <span style="font-size: 13px; line-height: 18px; color: #6C6C70"><span style="font-weight: 600; color: #000000">{{c.from}}</span> on {{c.work}} · {{c.when}}</span>
             <span style="font-size: 15px; line-height: 20px">{{c.body}}</span>
           </span>
-          <span aria-label="Unread" style="width: 8px; height: 8px; margin-top: 6px; border-radius: 4px; background: #990000; flex-shrink: 0"></span>
+          <span aria-label="Unread" style="width: 8px; height: 8px; margin-top: 6px; border-radius: 4px; background: #821019; flex-shrink: 0"></span>
         </a>
       </sc-for>
-      <a href="Inbox.dc.html" style="color: #990000; display: flex; align-items: center; gap: 6px; padding: 10px 0 0 42px; border-top: 0.5px solid #E5E5EA; font-size: 15px; font-weight: 600">3 more in Inbox<svg aria-hidden="true" width="7" height="12" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg></a>
+      <a href="Inbox.dc.html" style="color: #821019; display: flex; align-items: center; gap: 6px; padding: 10px 0 0 42px; border-top: 0.5px solid #E5E5EA; font-size: 15px; font-weight: 600">3 more in Inbox<svg aria-hidden="true" width="7" height="12" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg></a>
     </section>
 
     <section aria-label="Your works" style="display: flex; flex-direction: column; gap: 4px">
       <div style="display: flex; align-items: baseline; gap: 8px">
         <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">Your Works</h2>
         <span style="font-size: 15px; color: #6C6C70">6</span>
-        <a href="My-Works.dc.html" style="margin-left: auto; font-size: 17px; color: #990000">See All</a>
+        <a href="My-Works.dc.html" style="margin-left: auto; font-size: 17px; color: #821019">See All</a>
       </div>
       <sc-for list="{{works}}" as="w" hint-placeholder-count="3">
         <a href="iPhone-WorkDetail.dc.html" style="color: #000000; display: flex; gap: 12px; padding: 11px 0; border-top: {{w.sep}}">
-          <dc-import name="Symbols" variant="grid" rating="{{w.rating}}" category="{{w.category}}" warnings="{{w.warnings}}" status="{{w.status}}" size="24" hint-size="51px,51px"></dc-import>
+          <dc-import name="Symbols" variant="grid" rating="{{w.rating}}" category="{{w.category}}" warnings="{{w.warnings}}" status="{{w.status}}" size="24" hint-size="63px,63px"></dc-import>
           <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px">
             <span style="font-size: 17px; line-height: 22px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{w.title}}</span>
             <span style="font-size: 12px; line-height: 16px; color: #6C6C70">{{w.meta}}</span>
@@ -141,18 +141,18 @@ a{text-decoration:none}
             <sc-if value="{{w.note}}" hint-placeholder-val="{{false}}"><span style="font-size: 12px; line-height: 16px; color: {{w.noteColour}}; font-weight: 600">{{w.note}}</span></sc-if>
           </span>
           <span style="flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 1px">
-            <span style="font-size: 17px; line-height: 22px; font-weight: 700; color: #990000; font-variant-numeric: tabular-nums">{{w.kudos}}</span>
+            <span style="font-size: 17px; line-height: 22px; font-weight: 700; color: #821019; font-variant-numeric: tabular-nums">{{w.kudos}}</span>
             <span style="font-size: 11px; line-height: 14px; color: #6C6C70">kudos</span>
           </span>
         </a>
       </sc-for>
-      <a href="My-Works.dc.html" style="color: #990000; display: flex; align-items: center; gap: 6px; padding: 10px 0 0 63px; border-top: 0.5px solid #E5E5EA; font-size: 15px; font-weight: 600">3 more works<svg aria-hidden="true" width="7" height="12" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg></a>
+      <a href="My-Works.dc.html" style="color: #821019; display: flex; align-items: center; gap: 6px; padding: 10px 0 0 63px; border-top: 0.5px solid #E5E5EA; font-size: 15px; font-weight: 600">3 more works<svg aria-hidden="true" width="7" height="12" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg></a>
     </section>
 
     <section aria-label="More" style="display: flex; flex-direction: column">
       <sc-for list="{{more}}" as="l" hint-placeholder-count="3">
         <a href="{{l.href}}" style="color: #000000; display: flex; align-items: center; gap: 14px; min-height: 48px">
-          <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#990000" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="{{l.d}}"></path></svg>
+          <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#821019" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="{{l.d}}"></path></svg>
           <span style="flex: 1; min-height: 48px; display: flex; align-items: center; gap: 8px; border-bottom: {{l.sep}}">
             <span style="flex: 1; font-size: 17px; line-height: 22px">{{l.label}}</span>
             <span style="font-size: 17px; color: #8E8E93">{{l.count}}</span>
@@ -165,7 +165,7 @@ a{text-decoration:none}
 
   <div aria-hidden="true" style="z-index: 4; position: absolute; left: 0; right: 0; bottom: 0; height: 150px; background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0.94) 72%); pointer-events: none"></div>
   <div style="z-index: 5; position: absolute; left: 16px; bottom: 28px">
-    <dc-import name="TabBar" selected="writing" accent="#990000" hint-size="358px,62px"></dc-import>
+    <dc-import name="TabBar" selected="writing" accent="#821019" hint-size="358px,62px"></dc-import>
   </div>
 </div>
 </x-dc>
@@ -196,7 +196,7 @@ class Component extends DCLogic {
       works: sep([
         { title: 'Keeper of the Northern Light', rating: 'T', category: 'FF', warnings: 'none', status: 'complete', meta: '22,410 words · 7/7 · 19.2k hits', line: '214 threads · 312 bookmarks · 48 subs', kudos: '1,804', note: '' },
         { title: 'What the Tide Keeps', rating: 'M', category: 'FF', warnings: 'undisclosed', status: 'wip', meta: '9,800 words · 3/8 · 4.1k hits', line: '63 threads · 58 bookmarks · 61 subs', kudos: '412', note: 'Chapter 4 in draft', noteColour: '#C25E00' },
-        { title: 'Lantern Season', rating: 'T', category: 'Multi', warnings: 'none', status: 'complete', meta: '15,050 words · 4/4 · 7.7k hits', line: '71 threads · 97 bookmarks · 9 subs', kudos: '640', note: '1 new comment', noteColour: '#990000' }
+        { title: 'Lantern Season', rating: 'T', category: 'Multi', warnings: 'none', status: 'complete', meta: '15,050 words · 4/4 · 7.7k hits', line: '71 threads · 97 bookmarks · 9 subs', kudos: '640', note: '1 new comment', noteColour: '#821019' }
       ]),
       more: [
         ['Series', 'M4 6h16M4 12h16M4 18h10', '1', 'Writing-Series.dc.html'],

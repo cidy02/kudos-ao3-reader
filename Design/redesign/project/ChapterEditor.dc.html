@@ -123,14 +123,14 @@ button{cursor:pointer}
   </sc-if>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"view":{"editor":"enum","options":["keyboard","format","preview"],"default":"keyboard"},"accent":{"editor":null,"default":"#990000"},"$preview":{"width":390,"height":844}}'>
+<script type="text/x-dc" data-dc-script data-props='{"view":{"editor":"enum","options":["keyboard","format","preview"],"default":"keyboard"},"accent":{"editor":null,"default":"#821019"},"$preview":{"width":390,"height":844}}'>
 class Component extends DCLogic {
   renderVals() {
     // The app's chapter editor (WritingTextEditor): a plain AO3 HTML buffer in a serif,
     // every control labelled with the tag it writes (AO3Markup.writing, all 17 tags).
     // Pages-style chrome: a shortcut bar over the keyboard, a Format panel that takes the
     // keyboard's place, and a reading view (the app's Preview).
-    const accent = this.props.accent ?? '#990000';
+    const accent = this.props.accent ?? '#821019';
     const view = this.props.view ?? 'keyboard';
     const edit = view !== 'preview';
     const mono = "'SF Mono', ui-monospace, Menlo, monospace";
@@ -155,7 +155,7 @@ class Component extends DCLogic {
     const sans = '-apple-system, system-ui, sans-serif';
     const q = (label, glyph, o) => ({ label, glyph, pressed: 'false', bg: 'transparent', fg: '#1C1C1E', font: sans, weight: 500, style: 'normal', deco: 'none', ...o });
     const ch = (name, glyph, tag, o) => ({ name, glyph, tag: '<' + tag + '>', pressed: 'false', bg: 'transparent', fg: '#1C1C1E', tagColor: '#8E8E93', font: sans, weight: 500, style: 'normal', deco: 'none', ...o });
-    const on = { pressed: 'true', bg: 'rgba(153,0,0,0.10)', fg: accent, tagColor: accent };
+    const on = { pressed: 'true', bg: 'rgba(130,16,25,0.10)', fg: accent, tagColor: accent };
     const st = (name, tag, sample, o) => ({ name, tag: '<' + tag + '>', sample, checked: 'false', ring: '0 0 0 0.5px rgba(0,0,0,0.06)', nameColor: '#1C1C1E', ps: 14, pw: 400, pi: 'normal', bar: 'none', padL: '0', ...o });
     const keys = (s, o) => s.split(' ').map((t) => ({ t, flex: 1, bg: '#FFFFFF', fs: '22px', ...o }));
     return {
@@ -168,7 +168,7 @@ class Component extends DCLogic {
       fmtPressed: view === 'format' ? 'true' : 'false', fmtBg: view === 'format' ? accent : 'transparent', fmtFg: view === 'format' ? '#FFFFFF' : '#1C1C1E',
       quick: [
         q('Bold, strong', 'B', { weight: 800 }),
-        q('Italic, em', 'I', { style: 'italic', font: 'Georgia, serif', pressed: 'true', bg: 'rgba(153,0,0,0.10)', fg: accent }),
+        q('Italic, em', 'I', { style: 'italic', font: 'Georgia, serif', pressed: 'true', bg: 'rgba(130,16,25,0.10)', fg: accent }),
         q('Underline, u', 'U', { deco: 'underline' }),
         q('Strike, s', 'S', { deco: 'line-through' })
       ],

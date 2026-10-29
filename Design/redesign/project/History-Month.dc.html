@@ -43,7 +43,7 @@ button{cursor:pointer}
           </span>
         </sc-for>
       </div>
-      <div aria-hidden="true" style="display: flex; align-items: center; justify-content: flex-end; gap: 4px; font-size: 11px; color: #6C6C70">Less <span style="width: 12px; height: 12px; border-radius: 3px; background: #F2F2F7"></span><span style="width: 12px; height: 12px; border-radius: 3px; background: rgba(153,0,0,0.18)"></span><span style="width: 12px; height: 12px; border-radius: 3px; background: rgba(153,0,0,0.42)"></span><span style="width: 12px; height: 12px; border-radius: 3px; background: rgba(153,0,0,0.75)"></span> More</div>
+      <div aria-hidden="true" style="display: flex; align-items: center; justify-content: flex-end; gap: 4px; font-size: 11px; color: #6C6C70">Less <span style="width: 12px; height: 12px; border-radius: 3px; background: #F2F2F7"></span><span style="width: 12px; height: 12px; border-radius: 3px; background: rgba(130,16,25,0.18)"></span><span style="width: 12px; height: 12px; border-radius: 3px; background: rgba(130,16,25,0.42)"></span><span style="width: 12px; height: 12px; border-radius: 3px; background: rgba(130,16,25,0.75)"></span> More</div>
     </div>
     <section aria-label="Most read this month" style="display: flex; flex-direction: column">
       <h2 style="margin: 0 0 4px; font-size: 20px; line-height: 25px; font-weight: 700">Most Read</h2>
@@ -59,7 +59,7 @@ button{cursor:pointer}
 
   <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 150px; background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0.94) 72%); pointer-events: none"></div>
   <div style="position: absolute; left: 16px; bottom: 28px">
-    <dc-import name="TabBar" selected="library" accent="#990000" hint-size="358px,62px"></dc-import>
+    <dc-import name="TabBar" selected="library" accent="#821019" hint-size="358px,62px"></dc-import>
   </div>
 </div>
 </x-dc>
@@ -67,7 +67,7 @@ button{cursor:pointer}
 class Component extends DCLogic {
   renderVals() {
     const mins = [0,0,48,22,0,65,31, 74,55,40,12,90,35,20, 0,44,61,30,25,70,48, 33,0,52,41,66,28,74, 55,0,0,0,0,0,0];
-    const lvl = (m) => (m === 0 ? '#F2F2F7' : m < 30 ? 'rgba(153,0,0,0.18)' : m < 60 ? 'rgba(153,0,0,0.42)' : 'rgba(153,0,0,0.75)');
+    const lvl = (m) => (m === 0 ? '#F2F2F7' : m < 30 ? 'rgba(130,16,25,0.18)' : m < 60 ? 'rgba(130,16,25,0.42)' : 'rgba(130,16,25,0.75)');
     const hue = { 'Original Work': 188, 'Persuasion': 335, 'Sherlock Holmes': 32, 'Jane Eyre': 262 };
     return {
       calLabel: 'Reading in October 2026: read on 24 of 28 days so far, most on Oct 12 (1 h 30 m)',
@@ -76,7 +76,7 @@ class Component extends DCLogic {
         const day = i - 2; // October 2026 starts on a Thursday
         const real = day >= 1 && day <= 31;
         const future = day > 28;
-        return { day: real ? String(day) : '', mins: real && m ? m + 'm' : '', bg: !real || future ? 'transparent' : lvl(m), fg: !real ? 'transparent' : future ? '#C7C7CC' : m >= 60 ? '#FFFFFF' : '#1C1C1E', sub: m >= 60 ? 'rgba(255,255,255,0.85)' : '#6C6C70', ring: day === 28 ? '0 0 0 2px #990000' : 'none' };
+        return { day: real ? String(day) : '', mins: real && m ? m + 'm' : '', bg: !real || future ? 'transparent' : lvl(m), fg: !real ? 'transparent' : future ? '#C7C7CC' : m >= 60 ? '#FFFFFF' : '#1C1C1E', sub: m >= 60 ? 'rgba(255,255,255,0.85)' : '#6C6C70', ring: day === 28 ? '0 0 0 2px #821019' : 'none' };
       }),
       top: [['Original Work', 'Salt & Starlight', '4 h 10 m'], ['Persuasion', 'Letters Never Sent', '2 h 5 m'], ['Jane Eyre', 'Moor and Mist', '1 h 50 m']].map(([fandom, title, time], i) => ({ n: i + 1, fandom, title, time, ink: 'hsl(' + hue[fandom] + ', 56%, 33%)', sep: i ? '0.5px solid #E5E5EA' : 'none' }))
     };

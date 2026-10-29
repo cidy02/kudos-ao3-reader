@@ -54,9 +54,9 @@ a{text-decoration:none}
           <a href="iPhone-WorkDetail.dc.html" aria-label="{{w.aria}}" style="color: #000000; display: flex; flex-direction: column; gap: 5px; padding: 10px 0; border-top: {{w.sep}}">
             <span style="display: flex; align-items: baseline; gap: 10px">
               <span style="flex: 1; min-width: 0; font-size: 15px; line-height: 20px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{w.title}}</span>
-              <span style="font-size: 15px; font-weight: 700; color: #990000; font-variant-numeric: tabular-nums">{{w.kudos}}</span>
+              <span style="font-size: 15px; font-weight: 700; color: #821019; font-variant-numeric: tabular-nums">{{w.kudos}}</span>
             </span>
-            <span aria-hidden="true" style="height: 6px; border-radius: 3px; background: rgba(153,0,0,0.12); overflow: hidden"><span style="display: block; width: {{w.bar}}%; height: 6px; border-radius: 3px; background: #990000"></span></span>
+            <span aria-hidden="true" style="height: 6px; border-radius: 3px; background: rgba(130,16,25,0.12); overflow: hidden"><span style="display: block; width: {{w.bar}}%; height: 6px; border-radius: 3px; background: #821019"></span></span>
             <span style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px">
               <sc-for list="{{w.figs}}" as="f" hint-placeholder-count="5"><span style="display: flex; flex-direction: column"><span style="font-size: 13px; line-height: 17px; font-weight: 600; font-variant-numeric: tabular-nums">{{f.v}}</span><span style="font-size: 11px; line-height: 13px; color: #6C6C70">{{f.l}}</span></span></sc-for>
             </span>
@@ -67,7 +67,7 @@ a{text-decoration:none}
   </main>
   <div aria-hidden="true" style="z-index: 4; position: absolute; left: 0; right: 0; bottom: 0; height: 150px; background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0.94) 72%); pointer-events: none"></div>
   <div style="z-index: 5; position: absolute; left: 16px; bottom: 28px">
-    <dc-import name="TabBar" selected="writing" accent="#990000" hint-size="358px,62px"></dc-import>
+    <dc-import name="TabBar" selected="writing" accent="#821019" hint-size="358px,62px"></dc-import>
   </div>
 </div>
 </x-dc>
@@ -91,7 +91,7 @@ class Component extends DCLogic {
     return {
       heroTotals: [['34,766', 'Hits'], ['3,224', 'Kudos']].map(([value, label]) => ({ value, label })),
       totals: [['383', 'Comment Threads'], ['515', 'Bookmarks'], ['124', 'Subscriptions'], ['37', 'User Subscriptions'], ['53,990', 'Word Count']].map(([value, label]) => ({ value, label })),
-      sorts: ['Date', 'Word Count', 'Hits', 'Kudos', 'Comment Threads', 'Bookmarks', 'Subscriptions'].map((label) => ({ label, on: label === 'Kudos' ? 'true' : 'false', bg: label === 'Kudos' ? '#990000' : '#EFEFF4', fg: label === 'Kudos' ? '#FFFFFF' : '#1C1C1E' })),
+      sorts: ['Date', 'Word Count', 'Hits', 'Kudos', 'Comment Threads', 'Bookmarks', 'Subscriptions'].map((label) => ({ label, on: label === 'Kudos' ? 'true' : 'false', bg: label === 'Kudos' ? '#821019' : '#EFEFF4', fg: label === 'Kudos' ? '#FFFFFF' : '#1C1C1E' })),
       groups: fandoms.map((fandom) => {
         const inFandom = works.filter((w) => w.fandom === fandom);
         return {

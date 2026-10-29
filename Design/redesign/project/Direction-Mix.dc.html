@@ -11,7 +11,7 @@
 <style>
 body{margin:0}
 button{cursor:pointer}
-a{color:#990000}a:hover{color:#6E0000}
+a{color:#821019}a:hover{color:#6E0000}
 </style>
 </helmet>
 <div style="width: 1500px; height: 1640px; box-sizing: border-box; padding: 64px; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; display: flex; gap: 48px; align-items: flex-start">
@@ -62,7 +62,7 @@ a{color:#990000}a:hover{color:#6E0000}
               <button aria-label="Read aloud" style="width: 44px; height: 44px; border: none; border-radius: 22px; background: rgba(255,255,255,0.18); color: #FFFFFF; display: flex; align-items: center; justify-content: center">
                 <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"></path><path d="M15.5 9a4.5 4.5 0 0 1 0 6"></path><path d="M18 6.5a8 8 0 0 1 0 11"></path></svg>
               </button>
-              <button style="height: 44px; padding: 0 22px; border: none; border-radius: 22px; background: #FFFFFF; color: #990000; font-family: inherit; font-size: 17px; font-weight: 600; display: flex; align-items: center; gap: 8px">
+              <button style="height: 44px; padding: 0 22px; border: none; border-radius: 22px; background: #FFFFFF; color: #821019; font-family: inherit; font-size: 17px; font-weight: 600; display: flex; align-items: center; gap: 8px">
                 <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5z" fill="currentColor"></path></svg>Resume
               </button>
             </div>
@@ -109,12 +109,12 @@ a{color:#990000}a:hover{color:#6E0000}
                         <span style="position: relative; margin-top: 4px; text-align: right; font-size: 11px; line-height: 13px; font-style: italic; color: rgba(255,255,255,0.88)">{{w.author}}</span>
                       </sc-if>
                     </div>
-                    <div role="progressbar" aria-label="Reading progress" aria-valuenow="{{w.pctNum}}" aria-valuemin="0" aria-valuemax="100" style="height: 3px; border-radius: 2px; background: #E5E5EA"><div style="width: {{w.pct}}; height: 3px; border-radius: 2px; background: #990000"></div></div>
+                    <div role="progressbar" aria-label="Reading progress" aria-valuenow="{{w.pctNum}}" aria-valuemin="0" aria-valuemax="100" style="height: 3px; border-radius: 2px; background: #E5E5EA"><div style="width: {{w.pct}}; height: 3px; border-radius: 2px; background: #821019"></div></div>
                     <dc-import name="Symbols" variant="strip" rating="{{w.rating}}" category="{{w.category}}" warnings="{{w.warnings}}" status="{{w.status}}" warning-count="{{w.wc}}" size="26" hint-size="113px,26px"></dc-import>
                     <div style="display: flex; align-items: center; gap: 6px">
                       <span style="flex: 1; min-width: 0; font-size: 12px; line-height: 16px; color: #6C6C70; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{w.meta}}</span>
                       <sc-if value="{{w.hasBadge}}" hint-placeholder-val="{{false}}">
-                        <span style="padding: 0 6px; border-radius: 8px; background: #990000; color: #FFFFFF; font-size: 11px; line-height: 16px; font-weight: 700">{{w.badge}}</span>
+                        <span style="padding: 0 6px; border-radius: 8px; background: #821019; color: #FFFFFF; font-size: 11px; line-height: 16px; font-weight: 700">{{w.badge}}</span>
                       </sc-if>
                     </div>
                   </sc-if>
@@ -130,9 +130,9 @@ a{color:#990000}a:hover{color:#6E0000}
             </div>
             <div style="margin: 0 -16px; display: flex; flex-direction: column">
               <sc-for list="{{newWorks}}" as="w" hint-placeholder-count="3">
-                <sc-if value="{{w.sep}}" hint-placeholder-val="{{false}}"><div aria-hidden="true" style="margin-left: 79px; height: 0.5px; background: #E5E5EA"></div></sc-if>
+                <sc-if value="{{w.sep}}" hint-placeholder-val="{{false}}"><div aria-hidden="true" style="margin-left: 89px; height: 0.5px; background: #E5E5EA"></div></sc-if>
                 <div style="display: flex; align-items: center; gap: 12px; padding: 11px 16px">
-                  <dc-import name="Symbols" variant="grid" rating="{{w.rating}}" category="{{w.category}}" warnings="{{w.warnings}}" status="{{w.status}}" warning-count="{{w.wc}}" size="24" hint-size="51px,51px"></dc-import>
+                  <dc-import name="Symbols" variant="grid" rating="{{w.rating}}" category="{{w.category}}" warnings="{{w.warnings}}" status="{{w.status}}" warning-count="{{w.wc}}" size="24" hint-size="63px,63px"></dc-import>
                   <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px">
                     <span style="font-size: 17px; line-height: 22px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{w.title}}</span>
                     <div role="img" aria-label="{{w.update}}" style="height: 16px; display: flex; align-items: flex-end; gap: 2px; max-width: {{w.newBarsW}}">
@@ -142,7 +142,7 @@ a{color:#990000}a:hover{color:#6E0000}
                     </div>
                     <span style="font-size: 13px; line-height: 18px; color: #6C6C70; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{w.author}} · {{w.fandom}} · {{w.update}}</span>
                   </div>
-                  <span style="padding: 0 7px; border-radius: 9px; background: #990000; color: #FFFFFF; font-size: 12px; line-height: 18px; font-weight: 700">{{w.badge}}</span>
+                  <span style="padding: 0 7px; border-radius: 9px; background: #821019; color: #FFFFFF; font-size: 12px; line-height: 18px; font-weight: 700">{{w.badge}}</span>
                 </div>
               </sc-for>
             </div>
@@ -173,7 +173,7 @@ a{color:#990000}a:hover{color:#6E0000}
         </main>
         <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 150px; background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0.94) 72%); pointer-events: none"></div>
         <div style="position: absolute; left: 16px; bottom: 28px">
-          <dc-import name="TabBar" selected="home" accent="#990000" hint-size="358px,62px"></dc-import>
+          <dc-import name="TabBar" selected="home" accent="#821019" hint-size="358px,62px"></dc-import>
         </div>
       </div>
     </div>
@@ -216,7 +216,7 @@ a{color:#990000}a:hover{color:#6E0000}
             </div>
             <span style="position: relative; font-size: 13px; line-height: 18px; color: rgba(255,255,255,0.85)">Published Mar 3 · updated Oct 21</span>
             <div style="position: relative; display: flex; gap: 10px">
-              <button style="flex: 1; height: 50px; border: none; border-radius: 25px; background: #FFFFFF; color: #990000; font-family: inherit; font-size: 17px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px">
+              <button style="flex: 1; height: 50px; border: none; border-radius: 25px; background: #FFFFFF; color: #821019; font-family: inherit; font-size: 17px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px">
                 <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5z" fill="currentColor"></path></svg>Resume Chapter 7
               </button>
               <button aria-label="Read aloud" style="width: 50px; height: 50px; border: none; border-radius: 25px; background: rgba(255,255,255,0.18); color: #FFFFFF; display: flex; align-items: center; justify-content: center">
@@ -224,7 +224,7 @@ a{color:#990000}a:hover{color:#6E0000}
               </button>
               <button aria-label="Update download: 2 new chapters" style="position: relative; width: 50px; height: 50px; border: none; border-radius: 25px; background: rgba(255,255,255,0.18); color: #FFFFFF; display: flex; align-items: center; justify-content: center">
                 <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"></path><path d="m7 10.5 5 5 5-5"></path><path d="M5 20h14"></path></svg>
-                <span style="position: absolute; top: 0; right: 0; min-width: 18px; height: 18px; border-radius: 9px; background: #990000; color: #FFFFFF; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 2px #FFFFFF">2</span>
+                <span style="position: absolute; top: 0; right: 0; min-width: 18px; height: 18px; border-radius: 9px; background: #821019; color: #FFFFFF; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 2px #FFFFFF">2</span>
               </button>
             </div>
           </section>
@@ -262,14 +262,14 @@ a{color:#990000}a:hover{color:#6E0000}
             <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg>
           </button>
           <div style="height: 44px; border-radius: 22px; display: flex; align-items: center; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
-            <button aria-label="Kudos given" aria-pressed="true" style="width: 46px; height: 44px; border: none; background: transparent; color: #990000; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="21" height="21" viewBox="0 0 24 24" fill="currentColor"><path d="M12 20s-7.5-4.6-7.5-10.2A4.2 4.2 0 0 1 12 7.2a4.2 4.2 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20z"></path></svg></button>
+            <button aria-label="Kudos given" aria-pressed="true" style="width: 46px; height: 44px; border: none; background: transparent; color: #821019; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="21" height="21" viewBox="0 0 24 24" fill="currentColor"><path d="M12 20s-7.5-4.6-7.5-10.2A4.2 4.2 0 0 1 12 7.2a4.2 4.2 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20z"></path></svg></button>
             <button aria-label="Bookmark on AO3" style="width: 46px; height: 44px; border: none; background: transparent; color: #1C1C1E; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M7 4h10v16l-5-4-5 4z"></path></svg></button>
             <button aria-label="More actions" style="width: 46px; height: 44px; border: none; background: transparent; color: #1C1C1E; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.7" fill="currentColor"></circle><circle cx="12" cy="12" r="1.7" fill="currentColor"></circle><circle cx="18.5" cy="12" r="1.7" fill="currentColor"></circle></svg></button>
           </div>
         </div>
         <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 140px; background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0.94) 70%); pointer-events: none"></div>
         <div style="position: absolute; left: 16px; bottom: 28px">
-          <dc-import name="TabBar" selected="library" variant="minimized" accent="#990000" hint-size="358px,54px"></dc-import>
+          <dc-import name="TabBar" selected="library" variant="minimized" accent="#821019" hint-size="358px,54px"></dc-import>
         </div>
       </div>
     </div>
@@ -302,7 +302,7 @@ a{color:#990000}a:hover{color:#6E0000}
           <button aria-label="Back" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg></button>
           <span style="flex: 1; min-width: 0; padding: 0 10px; text-align: center; font-size: 17px; line-height: 22px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">The Cartographer’s Daughter</span>
           <div aria-hidden="true" style="width: 138px; height: 44px; flex-shrink: 0; border-radius: 22px; display: flex; align-items: center; justify-content: space-around; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
-            <svg width="21" height="21" viewBox="0 0 24 24" fill="#990000"><path d="M12 20s-7.5-4.6-7.5-10.2A4.2 4.2 0 0 1 12 7.2a4.2 4.2 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20z"></path></svg>
+            <svg width="21" height="21" viewBox="0 0 24 24" fill="#821019"><path d="M12 20s-7.5-4.6-7.5-10.2A4.2 4.2 0 0 1 12 7.2a4.2 4.2 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20z"></path></svg>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1C1C1E" stroke-width="1.9" stroke-linejoin="round"><path d="M7 4h10v16l-5-4-5 4z"></path></svg>
             <svg width="20" height="20" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.7" fill="#1C1C1E"></circle><circle cx="12" cy="12" r="1.7" fill="#1C1C1E"></circle><circle cx="18.5" cy="12" r="1.7" fill="#1C1C1E"></circle></svg>
           </div>
@@ -361,7 +361,7 @@ class Component extends DCLogic {
         hasBadge: !!w.badge, badge: w.badge || '',
         wc: w.wc || 1,
         pct: pctNum + '%', pctNum,
-        shapeNew: bars(w, { dash: '#C7C7CC', fill: (j) => j >= w.posted - (w.newCount || 0) ? '#990000' : '#D1D1D6' }),
+        shapeNew: bars(w, { dash: '#C7C7CC', fill: (j) => j >= w.posted - (w.newCount || 0) ? '#821019' : '#D1D1D6' }),
         newBarsW: Math.min(100, w.planned * 9) + '%',
         sep: i > 0
       };

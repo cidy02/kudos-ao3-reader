@@ -17,9 +17,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, '..', 'project')
 
 THEMES = {
- 'Dark':  dict(plain='#16161B', card='#222228', ink='#F2F2F7', ink3='#D1D1D6', ink2='#AEAEB2', faint='#636366', sep='#38383E', chip='#2E2E35', fill='rgba(118,118,128,0.24)', track='#3A3A40', toggle='#39393D', glass='rgba(44,44,50,0.78)', link='#FF7A70', chev='#55555C', seg='#5A5A62', page='#16161B', pageInk='#CFCFD4', pageInk2='#9A9AA2', paperGlass='rgba(44,44,50,0.80)', paperFill='rgba(255,255,255,0.08)', rgb='22,22,27', grouped='22,22,27'),
- 'OLED':  dict(plain='#000000', card='#1C1C1E', ink='#F2F2F7', ink3='#D1D1D6', ink2='#AEAEB2', faint='#636366', sep='#38383A', chip='#2C2C2E', fill='rgba(118,118,128,0.24)', track='#3A3A3C', toggle='#39393D', glass='rgba(36,36,38,0.80)', link='#FF7A70', chev='#545458', seg='#636366', page='#000000', pageInk='#CFCFD4', pageInk2='#9A9AA2', paperGlass='rgba(36,36,38,0.82)', paperFill='rgba(255,255,255,0.08)', rgb='0,0,0', grouped='0,0,0'),
- 'Sepia': dict(plain='#FBF0D9', card='#F1E3C5', ink='#2E241B', ink3='#4A3B2C', ink2='#6B645A', faint='#A39580', sep='#E2D2B2', chip='#EADBBC', fill='rgba(60,40,10,0.08)', track='#E5D5B5', toggle='#E3D3B3', glass='rgba(251,240,217,0.80)', link='#990000', chev='#B8A88C', seg='#FFF9EC', page='#FBF0D9', pageInk='#5B4636', pageInk2='#7A6A58', paperGlass='rgba(251,240,217,0.82)', paperFill='rgba(60,40,10,0.07)', rgb='251,240,217', grouped='251,240,217'),
+ 'Dark':  dict(plain='#16161B', card='#222228', ink='#F2F2F7', ink3='#D1D1D6', ink2='#AEAEB2', faint='#636366', sep='#38383E', chip='#2E2E35', fill='rgba(118,118,128,0.24)', track='#3A3A40', toggle='#39393D', glass='rgba(44,44,50,0.78)', link='#EE8A93', chev='#55555C', seg='#5A5A62', page='#16161B', pageInk='#CFCFD4', pageInk2='#9A9AA2', paperGlass='rgba(44,44,50,0.80)', paperFill='rgba(255,255,255,0.08)', rgb='22,22,27', grouped='22,22,27'),
+ 'OLED':  dict(plain='#000000', card='#1C1C1E', ink='#F2F2F7', ink3='#D1D1D6', ink2='#AEAEB2', faint='#636366', sep='#38383A', chip='#2C2C2E', fill='rgba(118,118,128,0.24)', track='#3A3A3C', toggle='#39393D', glass='rgba(36,36,38,0.80)', link='#EE8A93', chev='#545458', seg='#636366', page='#000000', pageInk='#CFCFD4', pageInk2='#9A9AA2', paperGlass='rgba(36,36,38,0.82)', paperFill='rgba(255,255,255,0.08)', rgb='0,0,0', grouped='0,0,0'),
+ 'Sepia': dict(plain='#FBF0D9', card='#F1E3C5', ink='#2E241B', ink3='#4A3B2C', ink2='#6B645A', faint='#A39580', sep='#E2D2B2', chip='#EADBBC', fill='rgba(60,40,10,0.08)', track='#E5D5B5', toggle='#E3D3B3', glass='rgba(251,240,217,0.80)', link='#821019', chev='#B8A88C', seg='#FFF9EC', page='#FBF0D9', pageInk='#5B4636', pageInk2='#7A6A58', paperGlass='rgba(251,240,217,0.82)', paperFill='rgba(60,40,10,0.07)', rgb='251,240,217', grouped='251,240,217'),
 }
 
 def bg(v): return '[style*="background: %s"]' % v
@@ -61,7 +61,7 @@ def skin(t, scope):
     rule('.th %s' % fg('rgb(58, 58, 60)'), 'color: %s !important' % t['ink3'])
     for v in ['rgb(108, 108, 112)', 'rgb(142, 142, 147)']: rule('.th %s' % fg(v), 'color: %s !important' % t['ink2'])
     for v in ['rgb(174, 174, 178)', 'rgb(199, 199, 204)']: rule('.th %s' % fg(v), 'color: %s !important' % t['faint'])
-    rule('.th %s' % fg('rgb(153, 0, 0)'), 'color: %s !important' % t['link'])
+    rule('.th %s' % fg('rgb(130, 16, 25)'), 'color: %s !important' % t['link'])
     rule('.th a:not([style*="color"])', 'color: %s !important' % t['link'])
     # The reader's paper.
     rule('.th %s' % bg('rgb(250, 247, 240)'), 'background: %s !important' % t['page'])
@@ -79,7 +79,7 @@ def skin(t, scope):
         rule('.th [stroke="%s"]' % v, 'stroke: %s' % t['ink2'])
         rule('.th [fill="%s"]' % v, 'fill: %s' % t['ink2'])
     rule('.th [stroke="#1C1C1E"]', 'stroke: %s' % t['ink'])
-    rule('.th [stroke="#990000"]', 'stroke: %s' % t['link'])
+    rule('.th [stroke="#821019"]', 'stroke: %s' % t['link'])
     return '\n'.join(r.replace('.th ', scope + ' ') for r in R)
 
 def write_skin(name, t):

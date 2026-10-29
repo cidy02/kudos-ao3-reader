@@ -74,7 +74,7 @@ button{cursor:pointer}
         <span role="button" aria-label="Read The Hound, Revisited" style="position: absolute; right: 14px; top: 14px; z-index: 1; width: 40px; height: 40px; border-radius: 20px; background: #FFFFFF; color: {{accent}}; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,0,0,0.2)"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24"><path d="M7.5 4.5v15L20 12z" fill="currentColor"></path></svg></span>
         <span style="position: relative; display: flex; align-items: center; gap: 12px">
           <span style="flex-shrink: 0; padding: 7px; border-radius: 15px; background: rgba(0,0,0,0.22); box-shadow: inset 0 0 0 0.5px rgba(255,255,255,0.12); display: flex">
-            <dc-import name="Symbols" variant="grid" rating="T" category="MM" warnings="present" status="wip" size="26" hint-size="55px,55px"></dc-import>
+            <dc-import name="Symbols" variant="grid" backed="false" rating="T" category="MM" warnings="present" status="wip" size="26" hint-size="55px,55px"></dc-import>
           </span>
           <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; padding-right: 40px">
             <span style="font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: 0.6px; text-transform: uppercase; opacity: 0.88; white-space: nowrap">Sherlock Holmes · Chapter 5</span>
@@ -136,7 +136,7 @@ button{cursor:pointer}
             <span style="display: flex; align-items: center; gap: 10px; border-top: 0.5px solid #D1D1D6; padding-top: 10px">
               <span aria-hidden="true" style="width: 28px; height: 38px; flex-shrink: 0; border-radius: 4px; background: {{b.art}}"></span>
               <span style="flex: 1; min-width: 0; display: flex; flex-direction: column">
-                <span style="display: flex; align-items: center; gap: 6px"><span style="flex: 1; min-width: 0; font-size: 15px; line-height: 20px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{b.title}}</span><sc-if value="{{b.rec}}" hint-placeholder-val="{{false}}"><span style="padding: 0 7px; border-radius: 9px; background: rgba(153,0,0,0.1); color: {{accent}}; font-size: 11px; line-height: 18px; font-weight: 700">Rec</span></sc-if></span>
+                <span style="display: flex; align-items: center; gap: 6px"><span style="flex: 1; min-width: 0; font-size: 15px; line-height: 20px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{b.title}}</span><sc-if value="{{b.rec}}" hint-placeholder-val="{{false}}"><span style="padding: 0 7px; border-radius: 9px; background: rgba(130,16,25,0.1); color: {{accent}}; font-size: 11px; line-height: 18px; font-weight: 700">Rec</span></sc-if></span>
                 <span style="font-size: 12px; line-height: 16px; color: #6C6C70; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{b.meta}}</span>
               </span>
             </span>
@@ -151,7 +151,7 @@ button{cursor:pointer}
   </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#990000"},"$preview":{"width":390,"height":1520}}'>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#821019"},"$preview":{"width":390,"height":1520}}'>
 class Component extends DCLogic {
   renderVals() {
     const art = (h) => 'linear-gradient(155deg, hsl(' + h + ', 46%, 27%), hsl(' + ((h + 22) % 360) + ', 50%, 41%))';
@@ -161,7 +161,7 @@ class Component extends DCLogic {
       { title: 'Fog Season', author: 'fogandlamplight', fandom: 'Original Work', rating: 'M', category: 'FF', warnings: 'undisclosed', status: 'complete', meta: '♥ 1,320 · 48,000 words' }
     ];
     return {
-      accent: this.props.accent ?? '#990000',
+      accent: this.props.accent ?? '#821019',
       popular,
       counts: [['42', 'Works', 'Fandom-Works.dc.html'], ['6', 'Series', 'Series.dc.html'], ['128', 'Bookmarks', 'AO3-Lists.dc.html'], ['9', 'Gifts', 'AO3-Lists.dc.html']].map(([n, label, href], i) => ({ n, label, href, sep: i ? '0.5px solid #D1D1D6' : 'none' })),
       fandoms: [['Sherlock Holmes', '31', '#B07D12'], ['Original Work', '8', '#2F7A4A'], ['Jane Eyre', '2', '#2C6DB0'], ['Persuasion', '1', '#9C2F6B']].map(([name, n, colour]) => ({ name, n, colour })),

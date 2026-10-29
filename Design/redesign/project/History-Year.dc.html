@@ -33,13 +33,13 @@ button{cursor:pointer}
       <div style="height: 140px; display: flex; align-items: flex-end; gap: 6px; border-bottom: 0.5px solid #D1D1D6">
         <sc-for list="{{months}}" as="m" hint-placeholder-count="12">
           <span style="flex: 1; display: flex; flex-direction: column; justify-content: flex-end; height: 100%">
-            <span style="height: {{m.fin}}px; background: #990000; border-radius: 4px 4px 0 0"></span>
+            <span style="height: {{m.fin}}px; background: #821019; border-radius: 4px 4px 0 0"></span>
             <span style="height: {{m.rest}}px; background: {{m.restBg}}"></span>
           </span>
         </sc-for>
       </div>
       <div aria-hidden="true" style="display: flex; gap: 6px"><sc-for list="{{months}}" as="m" hint-placeholder-count="12"><span style="flex: 1; text-align: center; font-size: 11px; color: {{m.fg}}; font-weight: {{m.weight}}">{{m.l}}</span></sc-for></div>
-      <div aria-hidden="true" style="display: flex; gap: 14px; font-size: 11px; color: #6C6C70"><span style="display: flex; align-items: center; gap: 4px"><span style="width: 10px; height: 10px; border-radius: 3px; background: #990000"></span>Finished works</span><span style="display: flex; align-items: center; gap: 4px"><span style="width: 10px; height: 10px; border-radius: 3px; background: rgba(153,0,0,0.3)"></span>Hours read</span></div>
+      <div aria-hidden="true" style="display: flex; gap: 14px; font-size: 11px; color: #6C6C70"><span style="display: flex; align-items: center; gap: 4px"><span style="width: 10px; height: 10px; border-radius: 3px; background: #821019"></span>Finished works</span><span style="display: flex; align-items: center; gap: 4px"><span style="width: 10px; height: 10px; border-radius: 3px; background: rgba(130,16,25,0.3)"></span>Hours read</span></div>
     </div>
     <section aria-label="Your year" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
       <sc-for list="{{facts}}" as="f" hint-placeholder-count="4">
@@ -53,7 +53,7 @@ button{cursor:pointer}
 
   <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 150px; background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0.94) 72%); pointer-events: none"></div>
   <div style="position: absolute; left: 16px; bottom: 28px">
-    <dc-import name="TabBar" selected="library" accent="#990000" hint-size="358px,62px"></dc-import>
+    <dc-import name="TabBar" selected="library" accent="#821019" hint-size="358px,62px"></dc-import>
   </div>
 </div>
 </x-dc>
@@ -65,7 +65,7 @@ class Component extends DCLogic {
     const L = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
     return {
       chartLabel: 'Hours read by month in 2026, highest in June with 25 hours and 11 finished works',
-      months: hrs.map((h, i) => ({ fin: fin[i] * 4, rest: Math.max(0, h * 5 - fin[i] * 4), restBg: i > 9 ? 'transparent' : 'rgba(153,0,0,0.3)', l: L[i], fg: i === 9 ? '#990000' : '#6C6C70', weight: i === 9 ? 700 : 400 })),
+      months: hrs.map((h, i) => ({ fin: fin[i] * 4, rest: Math.max(0, h * 5 - fin[i] * 4), restBg: i > 9 ? 'transparent' : 'rgba(130,16,25,0.3)', l: L[i], fg: i === 9 ? '#821019' : '#6C6C70', weight: i === 9 ? 700 : 400 })),
       facts: [['Longest streak', '23 days'], ['Most-read fandom', 'Persuasion'], ['Longest work finished', '118k words'], ['Favourite time', 'After 10 pm']].map(([label, value]) => ({ label, value }))
     };
   }

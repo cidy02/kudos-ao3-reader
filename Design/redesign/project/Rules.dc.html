@@ -22,8 +22,8 @@ body{margin:0}
     <section style="display: flex; flex-direction: column; gap: 14px">
       <h2 style="margin: 0; font-size: 22px; line-height: 28px; font-weight: 700">Colour has a job</h2>
       <div style="display: flex; gap: 12px; align-items: flex-start">
-        <span aria-hidden="true" style="width: 44px; height: 44px; flex-shrink: 0; border-radius: 22px; background: #990000"></span>
-        <div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 17px; line-height: 22px; font-weight: 600">App colour</span><span style="font-size: 15px; line-height: 21px; color: #3A3A3C">Everything you tap (buttons, links, the tab bar, toolbars, selected chips, switches) and states about you: progress, kudos given, new chapters. One colour, AO3 red, fixed: there is no colour setting. On Dark and OLED, text and links take a lighter step of it (#FF7A70); filled controls keep #990000.</span></div>
+        <span aria-hidden="true" style="width: 44px; height: 44px; flex-shrink: 0; border-radius: 22px; background: #821019"></span>
+        <div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 17px; line-height: 22px; font-weight: 600">App colour</span><span style="font-size: 15px; line-height: 21px; color: #3A3A3C">Everything you tap (buttons, links, the tab bar, toolbars, selected chips, switches) and states about you: progress, kudos given, new chapters. One accent at a time: AO3 red by default (#821019, deepened from the archive’s #990000 so it never reads as Delete). Settings › Appearance offers Plum, Ink Blue, Deep Teal, Forest and Ochre too, and a custom colour after a warning. On Dark and OLED, text and links take each accent’s lighter step (#EE8A93 for AO3 red); filled controls keep the main colour. Destructive actions are always system red.</span></div>
       </div>
       <div style="display: flex; gap: 12px; align-items: flex-start">
         <span aria-hidden="true" style="width: 44px; height: 44px; flex-shrink: 0; border-radius: 22px; background: linear-gradient(155deg, hsl(188, 46%, 27%), hsl(210, 50%, 41%))"></span>
@@ -93,9 +93,9 @@ body{margin:0}
         </div>
       </div>
       <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap">
-        <button style="height: 44px; padding: 0 22px; border: none; border-radius: 22px; background: #990000; color: #FFFFFF; font-family: inherit; font-size: 17px; font-weight: 600">Resume</button>
-        <button aria-label="Read aloud" style="width: 44px; height: 44px; border: none; border-radius: 22px; background: rgba(153,0,0,0.10); color: #990000; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"></path><path d="M15.5 9a4.5 4.5 0 0 1 0 6"></path><path d="M18 6.5a8 8 0 0 1 0 11"></path></svg></button>
-        <span style="height: 52px; padding: 0 4px 0 10px; border-radius: 26px; background: linear-gradient(155deg, hsl(188, 46%, 27%), hsl(210, 50%, 41%)); display: flex; align-items: center"><button style="height: 40px; padding: 0 18px; border: none; border-radius: 20px; background: #FFFFFF; color: #990000; font-family: inherit; font-size: 16px; font-weight: 600">Resume</button></span>
+        <button style="height: 44px; padding: 0 22px; border: none; border-radius: 22px; background: #821019; color: #FFFFFF; font-family: inherit; font-size: 17px; font-weight: 600">Resume</button>
+        <button aria-label="Read aloud" style="width: 44px; height: 44px; border: none; border-radius: 22px; background: rgba(130,16,25,0.10); color: #821019; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"></path><path d="M15.5 9a4.5 4.5 0 0 1 0 6"></path><path d="M18 6.5a8 8 0 0 1 0 11"></path></svg></button>
+        <span style="height: 52px; padding: 0 4px 0 10px; border-radius: 26px; background: linear-gradient(155deg, hsl(188, 46%, 27%), hsl(210, 50%, 41%)); display: flex; align-items: center"><button style="height: 40px; padding: 0 18px; border: none; border-radius: 20px; background: #FFFFFF; color: #821019; font-family: inherit; font-size: 16px; font-weight: 600">Resume</button></span>
       </div>
       <span style="font-size: 13px; line-height: 18px; color: #6C6C70">One main button: the filled capsule. Secondary: a tinted circle. On a gradient: a white capsule with the app-colour label.</span>
     </section>
@@ -131,7 +131,7 @@ body{margin:0}
       <div style="display: flex; flex-direction: column; gap: 8px">
         <div style="display: flex; gap: 12px">
           <sc-for list="{{covers}}" as="w" hint-placeholder-count="4">
-            <dc-import name="CoverCard" work="{{w}}" width="120" accent="#990000" hint-size="120px,250px"></dc-import>
+            <dc-import name="CoverCard" work="{{w}}" width="120" accent="#821019" hint-size="120px,250px"></dc-import>
           </sc-for>
         </div>
         <span style="font-size: 13px; line-height: 18px; color: #6C6C70; max-width: 540px">Generated covers: the fandom picks the colour family, the title picks the shade and where the letter and title sit, so a work always looks the same and two works never match. Tags under every cover.</span>
@@ -146,7 +146,7 @@ body{margin:0}
           <span style="font-size: 13px; line-height: 18px; color: #6C6C70">Strip: under covers.</span>
         </div>
         <div style="display: flex; flex-direction: column; gap: 6px">
-          <dc-import name="Symbols" variant="grid" rating="E" category="MM" warnings="present" status="complete" size="24" hint-size="51px,51px"></dc-import>
+          <dc-import name="Symbols" variant="grid" rating="E" category="MM" warnings="present" status="complete" size="24" hint-size="63px,63px"></dc-import>
           <span style="font-size: 13px; line-height: 18px; color: #6C6C70">Grid: leads every row.</span>
         </div>
         <div style="display: flex; flex-direction: column; gap: 6px">

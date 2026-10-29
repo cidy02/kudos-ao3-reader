@@ -48,7 +48,7 @@ mark{background:rgba(245,196,0,0.45);color:inherit;border-radius:3px;padding:0 1
   </section>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#990000"},"$preview":{"width":390,"height":844}}'>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#821019"},"$preview":{"width":390,"height":844}}'>
 class Component extends DCLogic {
   renderVals() {
     const sep = (i) => (i ? '0.5px solid #EDE7DC' : 'none');
@@ -63,7 +63,7 @@ class Component extends DCLogic {
       ] }
     ];
     return {
-      accent: this.props.accent ?? '#990000',
+      accent: this.props.accent ?? '#821019',
       groups: groups.map((g) => ({ ...g, hits: g.hits.map((h, i) => ({ ...h, sep: sep(i) })) }))
     };
   }

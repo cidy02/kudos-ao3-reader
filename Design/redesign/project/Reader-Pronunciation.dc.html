@@ -13,7 +13,7 @@ body{margin:0}
 </style>
 </helmet>
 <div style="width: 390px; height: 844px; position: relative; overflow: hidden">
-  <dc-import name="FormScreen" title="Pronunciations" back="Back to Read Aloud" trailing="Edit" height="844" sections="{{sections}}" hint-size="390px,844px"></dc-import>
+  <dc-import name="FormScreen" title="Pronunciations" back="Back to Read Aloud" trailing="Edit" height="844" sections="{{sections}}" context="{{context}}" hint-size="390px,844px"></dc-import>
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
@@ -27,12 +27,16 @@ class Component extends DCLogic {
         {
           "label": "Wentworth",
           "sub": "Said as “WENT-wurth”",
-          "kind": "nav"
+          "kind": "nav",
+          "tile": "#5856D6",
+          "icon": "M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2"
         },
         {
           "label": "Uppercross",
           "sub": "Said as “UP-per-cross”",
-          "kind": "nav"
+          "kind": "nav",
+          "tile": "#5856D6",
+          "icon": "M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2"
         }
       ]
     },
@@ -42,17 +46,23 @@ class Component extends DCLogic {
         {
           "label": "AU",
           "sub": "Said as “alternate universe”",
-          "kind": "nav"
+          "kind": "nav",
+          "tile": "#5856D6",
+          "icon": "M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2"
         },
         {
           "label": "POV",
           "sub": "Said as “point of view”",
-          "kind": "nav"
+          "kind": "nav",
+          "tile": "#5856D6",
+          "icon": "M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2"
         },
         {
           "label": "Mx.",
           "sub": "Said as “mix”",
-          "kind": "nav"
+          "kind": "nav",
+          "tile": "#5856D6",
+          "icon": "M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2"
         }
       ]
     },
@@ -64,7 +74,14 @@ class Component extends DCLogic {
         }
       ]
     }
-  ]
+  ],
+  "context": {
+    "kicker": "Read Aloud · Persuasion",
+    "kickerColour": "hsl(335, 56%, 33%)",
+    "title": "Letters Never Sent",
+    "meta": "marginalia · 21,880 words",
+    "cover": "linear-gradient(155deg, hsl(335, 46%, 27%), hsl(357, 50%, 41%))"
+  }
 };
   }
 }

@@ -51,7 +51,7 @@ button{cursor:pointer}
   </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#990000"},"$preview":{"width":390,"height":844}}'>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#821019"},"$preview":{"width":390,"height":844}}'>
 class Component extends DCLogic {
   renderVals() {
     const sep = '0.5px solid rgba(60,40,10,0.14)';
@@ -64,7 +64,7 @@ class Component extends DCLogic {
       ['Rebuild from Original', 'M19 12a7 7 0 1 1-2.1-5M19 4v4h-4', '', sep]
     ];
     return {
-      accent: this.props.accent ?? '#990000',
+      accent: this.props.accent ?? '#821019',
       top,
       items: items.map(([label, d, detail, s]) => ({ label, d, detail, sep: s }))
     };

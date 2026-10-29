@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Appearance › custom accent warning</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 390px; height: 940px; position: relative; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; color: #000000">
+  <div aria-hidden="true" style="position: absolute; inset: 0; pointer-events: none">
+    <dc-import name="Settings-Appearance" hint-size="390px,940px"></dc-import>
+  </div>
+  <div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(0,0,0,0.24)"></div>
+  <div role="alertdialog" aria-label="Use a custom colour?" style="position: absolute; left: 34px; right: 34px; top: 300px; border-radius: 30px; padding: 22px 18px 16px; background: rgba(250,250,252,0.95); backdrop-filter: blur(30px); -webkit-backdrop-filter: blur(30px); box-shadow: 0 20px 60px rgba(0,0,0,0.25); display: flex; flex-direction: column; gap: 8px; text-align: center">
+    <svg aria-hidden="true" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#C25E00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="align-self: center"><path d="M12 4 2.8 19.5h18.4zM12 10v4.5M12 17.2v.1"></path></svg>
+    <h2 style="margin: 0; font-size: 17px; font-weight: 600">Use a Custom Colour?</h2>
+    <p style="margin: 0; font-size: 14px; line-height: 19px; color: #3A3A3C">Kudos is designed around its six accent colours. They keep text readable in Light, Sepia, Dark and OLED, and stay clear of the red used for Delete. A custom colour may make some buttons and links harder to read.</p>
+    <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px">
+      <button style="height: 44px; border: none; border-radius: 22px; background: #821019; color: #FFFFFF; font-family: inherit; font-size: 16px; font-weight: 600">Choose a Colour</button>
+      <button style="height: 44px; border: none; border-radius: 22px; background: rgba(118,118,128,0.14); color: #000000; font-family: inherit; font-size: 16px">Keep AO3 Red</button>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":940}}'>
+class Component extends DCLogic {
+  renderVals() {
+    // Shown when the reader taps the (+) colour well in Settings › Appearance › Accent colour,
+    // before the system colour picker opens. "Keep AO3 Red" names the colour that stays.
+    return {};
+  }
+}
+</script>
+</body>
+</html>

@@ -137,13 +137,13 @@ button{cursor:pointer}
   </sc-if>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#990000"},"view":{"editor":"enum","options":["controls","more","settings","immersive"],"default":"controls"},"$preview":{"width":951,"height":669}}'>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#821019"},"view":{"editor":"enum","options":["controls","more","settings","immersive"],"default":"controls"},"$preview":{"width":951,"height":669}}'>
 class Component extends DCLogic {
   componentDidUpdate(prev) {
     if (prev.view !== this.props.view && this.state && this.state.view) this.setState({ view: null });
   }
   renderVals() {
-    const accent = this.props.accent ?? '#990000';
+    const accent = this.props.accent ?? '#821019';
     const view = (this.state && this.state.view) || this.props.view || 'controls';
     const go = (v) => () => this.setState({ view: v });
     const sep = '0.5px solid rgba(60,40,10,0.14)';
@@ -179,7 +179,7 @@ class Component extends DCLogic {
       menuTop,
       menuItems: items.map(([label, d, detail, s]) => ({ label, d, detail, sep: s, pick: go(label === 'Themes & Settings' ? 'settings' : 'controls') })),
       themes: themes.map(([name, bg, fg], i) => ({ name, bg, fg, checked: i === 1 ? 'true' : 'false', weight: i === 1 ? 600 : 400, ring: i === 1 ? '0 0 0 2.5px ' + accent : '0 0 0 0.5px #D1D1D6' })),
-      toggles: toggles.map(([label, on]) => ({ label, on: on ? 'true' : 'false', track: on ? '#990000' : '#E9E9EB', knob: on ? 22 : 2 }))
+      toggles: toggles.map(([label, on]) => ({ label, on: on ? 'true' : 'false', track: on ? '#821019' : '#E9E9EB', knob: on ? 22 : 2 }))
     };
   }
 }

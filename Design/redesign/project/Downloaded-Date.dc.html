@@ -13,7 +13,7 @@ body{margin:0}
 </style>
 </helmet>
 <div style="width: 390px; height: 844px; position: relative; overflow: hidden">
-  <dc-import name="FormScreen" title="Downloaded" subtitle="Imported works" mode="sheet" confirm="Save" height="844" sections="{{sections}}" hint-size="390px,844px"></dc-import>
+  <dc-import name="FormScreen" title="Downloaded" mode="sheet" confirm="Save" height="844" sections="{{sections}}" context="{{context}}" hint-size="390px,844px"></dc-import>
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
@@ -26,12 +26,16 @@ class Component extends DCLogic {
         {
           "label": "Date",
           "kind": "value",
-          "detail": "Oct 22, 2026"
+          "detail": "Oct 22, 2026",
+          "tile": "#E07000",
+          "icon": "M5 6h14v14H5zM5 10h14M9 3.5v4M15 3.5v4"
         },
         {
           "label": "Time",
           "kind": "value",
-          "detail": "21:40"
+          "detail": "21:40",
+          "tile": "#E07000",
+          "icon": "M12 4a8 8 0 1 1 0 16 8 8 0 0 1 0-16zM12 8v4l3 2"
         }
       ]
     },
@@ -44,7 +48,14 @@ class Component extends DCLogic {
       ],
       "footer": "Imports take the date you imported them."
     }
-  ]
+  ],
+  "context": {
+    "kicker": "Imported · PDF",
+    "kickerColour": "hsl(44, 56%, 33%)",
+    "title": "The Boy Who Lived Twice",
+    "meta": "From FanFiction.net · Harry Potter",
+    "cover": "linear-gradient(155deg, hsl(44, 46%, 27%), hsl(66, 50%, 41%))"
+  }
 };
   }
 }

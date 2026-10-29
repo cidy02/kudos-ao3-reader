@@ -77,7 +77,7 @@ button{cursor:pointer}
         <div style="display: flex; align-items: baseline; justify-content: space-between; padding: 0 4px"><h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">Finished <span style="font-size: 15px; font-weight: 400; color: #6C6C70">6</span></h2><a href="Shelf-List.dc.html" style="text-decoration: none; font-size: 15px; color: {{accent}}">See All</a></div>
         <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
           <sc-for list="{{finished}}" as="w" hint-placeholder-count="3"><button style="width: 100%; border: none; background: transparent; padding: 10px 16px; display: flex; align-items: center; gap: 12px; font-family: inherit; text-align: left; border-top: {{w.sep}}"><span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px"><span style="display: flex; align-items: center; gap: 6px; font-size: 12px; line-height: 16px; color: #6C6C70"><span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 4px; background: {{w.color}}"></span>{{w.fandom}}</span><span style="font-size: 16px; line-height: 21px; color: #000000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{w.title}}</span><span style="font-size: 13px; line-height: 17px; color: #6C6C70">{{w.detail}}</span></span><svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg></button></sc-for>
-        <a href="Shelf-List.dc.html" style="margin-left: 16px; padding: 12px 0; border-top: 0.5px solid #E5E5EA; color: #990000; text-decoration: none; display: flex; align-items: center; gap: 6px; font-size: 15px; font-weight: 600">3 more<svg aria-hidden="true" width="7" height="12" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg></a>
+        <a href="Shelf-List.dc.html" style="margin-left: 16px; padding: 12px 0; border-top: 0.5px solid #E5E5EA; color: #821019; text-decoration: none; display: flex; align-items: center; gap: 6px; font-size: 15px; font-weight: 600">3 more<svg aria-hidden="true" width="7" height="12" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg></a>
         </div>
       </section>
   </section>
@@ -86,11 +86,11 @@ button{cursor:pointer}
   </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#990000"},"$preview":{"width":951,"height":669}}'>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#821019"},"$preview":{"width":951,"height":669}}'>
 class Component extends DCLogic {
   renderVals() {
     // Open flat: Overview split at the fold, the leading pane carrying the section and period controls; Back and More on the side controls.
-    const accent = this.props.accent ?? '#990000';
+    const accent = this.props.accent ?? '#821019';
     const k = [6.2, 9.8, 0, 12.4, 4.1, 7.7, 10.9, 15.2, 0, 3.4, 8.8, 5.1, 9.6, 11.2, 14.7, 6.0, 31.4, 8.2, 7.4, 12.9, 0, 0, 5.6, 9.1, 4.9, 0, 8.0];
     const max = Math.max(...k);
     const chartH = 96;

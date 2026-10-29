@@ -144,11 +144,11 @@ button{cursor:pointer}
   </section>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#990000"},"textSize":{"editor":"range","default":18,"min":15,"max":24,"step":1,"unit":"px"},"$preview":{"width":951,"height":669}}'>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#821019"},"textSize":{"editor":"range","default":18,"min":15,"max":24,"step":1,"unit":"px"},"$preview":{"width":951,"height":669}}'>
 class Component extends DCLogic {
   renderVals() {
     const s = this.state || {};
-    const accent = this.props.accent ?? '#990000';
+    const accent = this.props.accent ?? '#821019';
     const n = parseInt(accent.slice(1), 16);
     const accentTint = 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',0.1)';
     const set = (o) => () => this.setState(o);

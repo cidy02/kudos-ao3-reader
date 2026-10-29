@@ -11,7 +11,7 @@
 <style>
 body{margin:0}
 button{cursor:pointer}
-a{color:#990000}a:hover{color:#6E0000}
+a{color:#821019}a:hover{color:#6E0000}
 </style>
 </helmet>
 <div style="width: 951px; height: 669px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
@@ -27,7 +27,7 @@ a{color:#990000}a:hover{color:#6E0000}
       <a href="Author.dc.html" style="align-self: flex-start; font-size: 17px; line-height: 22px; text-decoration: none">inkwell_moth</a>
     </div>
     <dc-import name="Symbols" variant="inline" rating="T" category="FM" warnings="none" status="wip" size="20" hint-size="439px,20px"></dc-import>
-    <dc-import name="ResumeCard" variant="detail" width="439" accent="#990000" hint-size="439px,320px"></dc-import>
+    <dc-import name="ResumeCard" variant="detail" width="439" accent="#821019" hint-size="439px,320px"></dc-import>
     <dl style="margin: 0; background: #F2F2F7; border-radius: 16px; padding: 12px 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 12px">
       <sc-for list="{{stats}}" as="s" hint-placeholder-count="9">
         <div style="display: flex; flex-direction: column; align-items: center; gap: 2px; border-right: {{s.border}}">
@@ -70,7 +70,7 @@ a{color:#990000}a:hover{color:#6E0000}
   </section>
 
   <div style="position: absolute; right: 8px; top: 0; z-index: 3">
-    <dc-import name="DuoSideBar" height="669" nav="back" tabs="library" actions="{{side}}" accent="#990000" hint-size="64px,669px"></dc-import>
+    <dc-import name="DuoSideBar" height="669" nav="back" tabs="library" actions="{{side}}" accent="#821019" hint-size="64px,669px"></dc-import>
   </div>
 </div>
 </x-dc>
@@ -78,7 +78,7 @@ a{color:#990000}a:hover{color:#6E0000}
 class Component extends DCLogic {
   renderVals() {
     const side = [
-      { label: 'Kudos given', d: 'M12 20s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.4a4.3 4.3 0 0 1 7.5 2.4C19.5 15.4 12 20 12 20z', on: true, fill: '#990000' },
+      { label: 'Kudos given', d: 'M12 20s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.4a4.3 4.3 0 0 1 7.5 2.4C19.5 15.4 12 20 12 20z', on: true, fill: '#821019' },
       { label: 'Bookmark on AO3', d: 'M7 4h10v16l-5-4-5 4z' },
       { label: 'More actions', d: 'dots' }
     ];

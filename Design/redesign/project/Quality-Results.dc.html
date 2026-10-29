@@ -31,12 +31,12 @@ button{cursor:pointer}
 
       <div aria-label="Sent to AO3" style="padding: 0 4px; display: flex; flex-wrap: wrap; gap: 6px">
         <sc-for list="{{sent}}" as="c" hint-placeholder-count="2">
-          <button aria-label="Remove {{c}}" style="height: 30px; padding: 0 6px 0 10px; border: none; border-radius: 15px; background: rgba(153,0,0,0.10); color: #990000; font-family: inherit; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 4px">{{c}}<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" style="opacity: 0.7"><path d="M7 7l10 10M17 7 7 17"></path></svg></button>
+          <button aria-label="Remove {{c}}" style="height: 30px; padding: 0 6px 0 10px; border: none; border-radius: 15px; background: rgba(130,16,25,0.10); color: #821019; font-family: inherit; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 4px">{{c}}<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" style="opacity: 0.7"><path d="M7 7l10 10M17 7 7 17"></path></svg></button>
         </sc-for>
       </div>
 
       <p style="margin: 0 4px; display: flex; align-items: center; gap: 6px; font-size: 13px; line-height: 18px; color: #6C6C70">
-        <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#990000" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0"><path d="M12 20s-7.5-4.6-7.5-10.2A4.2 4.2 0 0 1 12 7.2a4.2 4.2 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20z"></path></svg>
+        <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#821019" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0"><path d="M12 20s-7.5-4.6-7.5-10.2A4.2 4.2 0 0 1 12 7.2a4.2 4.2 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20z"></path></svg>
         <span>Ranked {{loaded}} loaded works by kudos per hit against similar works</span>
       </p>
 
@@ -54,8 +54,8 @@ button{cursor:pointer}
       <div style="display: flex; flex-direction: column; gap: 8px; padding: 6px 4px">
         <span style="font-size: 13px; line-height: 18px; color: #6C6C70">{{loaded}} of {{total}} loaded</span>
         <div style="display: flex; gap: 8px">
-          <button style="height: 36px; padding: 0 16px; border: none; border-radius: 18px; background: #EFEFF4; color: #990000; font-family: inherit; font-size: 15px; font-weight: 600">Load Page 3</button>
-          <button style="height: 36px; padding: 0 16px 0 12px; border: none; border-radius: 18px; background: rgba(153,0,0,0.10); color: #990000; font-family: inherit; font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 6px">
+          <button style="height: 36px; padding: 0 16px; border: none; border-radius: 18px; background: #EFEFF4; color: #821019; font-family: inherit; font-size: 15px; font-weight: 600">Load Page 3</button>
+          <button style="height: 36px; padding: 0 16px 0 12px; border: none; border-radius: 18px; background: rgba(130,16,25,0.10); color: #821019; font-family: inherit; font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 6px">
             <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h11M4 12h8M4 17h5M18 6v12M15 15l3 3 3-3"></path></svg>Rank Top 100
           </button>
         </div>
@@ -78,7 +78,7 @@ button{cursor:pointer}
   </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#990000"},"$preview":{"width":390,"height":1240}}'>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#821019"},"$preview":{"width":390,"height":1240}}'>
 class Component extends DCLogic {
   renderVals() {
     // Hidden Gems: AO3 sorts by kudos with "hits 300 to 5,000" in the query; Kudos re-ranks
@@ -86,7 +86,7 @@ class Component extends DCLogic {
     // r1 9.4% vs 3.9% -> 2.4x (cautious 2.3x); r2 10.8% vs 5.6% -> 1.8x (1.7x);
     // r3 6.8% vs 4.3% -> 1.6x (1.5x). The set-aside row has more kudos than hits.
     return {
-      accent: this.props.accent ?? '#990000',
+      accent: this.props.accent ?? '#821019',
       total: '1,284',
       loaded: '40',
       sent: ['Hits 300 to 5,000', 'Most kudos first'],

@@ -35,12 +35,12 @@ button{cursor:pointer}
                     <span style="font-size: 34px; line-height: 41px; font-weight: 700; letter-spacing: 0.4px">Home</span>
                     <span style="font-size: 15px; line-height: 20px; color: {{t.ink2}}"><span style="font-weight: 600; color: {{t.ink}}">4 h 10 m</span> this week · <span style="font-weight: 600; color: {{t.ink}}">9-day</span> streak ›</span>
                   </div>
-                  <dc-import name="ResumeCard" variant="home" accent="#990000" hint-size="358px,280px"></dc-import>
+                  <dc-import name="ResumeCard" variant="home" accent="#821019" hint-size="358px,280px"></dc-import>
                   <div style="display: flex; flex-direction: column; gap: 10px">
                     <div style="display: flex; align-items: baseline; justify-content: space-between"><span style="font-size: 20px; line-height: 25px; font-weight: 700">Reading Now <span style="font-size: 15px; font-weight: 400; opacity: 0.6">7</span></span><span style="font-size: 17px; color: {{t.link}}">See All</span></div>
                     <div style="display: flex; gap: 12px; margin-right: -16px; overflow: hidden">
                       <sc-for list="{{covers}}" as="w" hint-placeholder-count="3">
-                        <dc-import name="CoverCard" work="{{w}}" width="120" theme="{{t.compTheme}}" accent="#990000" hint-size="120px,250px"></dc-import>
+                        <dc-import name="CoverCard" work="{{w}}" width="120" theme="{{t.compTheme}}" accent="#821019" hint-size="120px,250px"></dc-import>
                       </sc-for>
                     </div>
                   </div>
@@ -67,7 +67,7 @@ button{cursor:pointer}
                     <span style="font-size: 17px; line-height: 22px; color: {{t.link}}">inkwell_moth</span>
                   </div>
                   <dc-import name="Symbols" variant="inline" rating="T" category="FM" warnings="none" status="wip" size="20" theme="{{t.compTheme}}" hint-size="358px,20px"></dc-import>
-                  <dc-import name="ResumeCard" variant="detail" accent="#990000" hint-size="358px,330px"></dc-import>
+                  <dc-import name="ResumeCard" variant="detail" accent="#821019" hint-size="358px,330px"></dc-import>
                   <div style="background: {{t.card}}; border-radius: 16px; padding: 14px 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 14px">
                     <sc-for list="{{stats}}" as="s" hint-placeholder-count="6">
                       <div style="display: flex; flex-direction: column; align-items: center; gap: 2px">
@@ -118,9 +118,9 @@ class Component extends DCLogic {
   renderVals() {
     const wash = (rgb, a) => 'linear-gradient(to bottom, rgba(' + rgb + ',' + a[0] + '), rgba(' + rgb + ',' + a[1] + ') 35%, rgba(' + rgb + ',' + a[2] + ') 65%, rgba(' + rgb + ',0))';
     const themes = [
-      { name: 'Sepia', compTheme: 'sepia', plain: '#FBF0D9', card: '#F1E3C5', ink: '#2E241B', ink2: '#6B645A', sep: 'rgba(60,40,10,0.14)', glass: 'rgba(251,240,217,0.80)', link: '#990000', kicker: 'hsl(188, 43%, 30%)', wash: wash('37,119,132', [0.14, 0.10, 0.05]), page: '#FBF0D9', pageInk: '#5B4636', pageInk2: '#7A6A58', paperGlass: 'rgba(251,240,217,0.82)', track: 'rgba(60,40,10,0.16)' },
-      { name: 'Dark', compTheme: 'dark', plain: '#16161B', card: '#222228', ink: '#F2F2F7', ink2: '#AEAEB2', sep: 'rgba(255,255,255,0.10)', glass: 'rgba(44,44,50,0.78)', link: '#FF7A70', kicker: 'hsl(188, 60%, 65%)', wash: wash('37,119,132', [0.36, 0.24, 0.12]), page: '#16161B', pageInk: '#CFCFD4', pageInk2: '#9A9AA2', paperGlass: 'rgba(44,44,50,0.80)', track: 'rgba(255,255,255,0.18)' },
-      { name: 'OLED', compTheme: 'dark', plain: '#000000', card: '#1C1C1E', ink: '#F2F2F7', ink2: '#AEAEB2', sep: 'rgba(255,255,255,0.10)', glass: 'rgba(36,36,38,0.80)', link: '#FF7A70', kicker: 'hsl(188, 60%, 65%)', wash: wash('37,119,132', [0.40, 0.28, 0.14]), page: '#000000', pageInk: '#CFCFD4', pageInk2: '#9A9AA2', paperGlass: 'rgba(36,36,38,0.82)', track: 'rgba(255,255,255,0.18)' }
+      { name: 'Sepia', compTheme: 'sepia', plain: '#FBF0D9', card: '#F1E3C5', ink: '#2E241B', ink2: '#6B645A', sep: 'rgba(60,40,10,0.14)', glass: 'rgba(251,240,217,0.80)', link: '#821019', kicker: 'hsl(188, 43%, 30%)', wash: wash('37,119,132', [0.14, 0.10, 0.05]), page: '#FBF0D9', pageInk: '#5B4636', pageInk2: '#7A6A58', paperGlass: 'rgba(251,240,217,0.82)', track: 'rgba(60,40,10,0.16)' },
+      { name: 'Dark', compTheme: 'dark', plain: '#16161B', card: '#222228', ink: '#F2F2F7', ink2: '#AEAEB2', sep: 'rgba(255,255,255,0.10)', glass: 'rgba(44,44,50,0.78)', link: '#EE8A93', kicker: 'hsl(188, 60%, 65%)', wash: wash('37,119,132', [0.36, 0.24, 0.12]), page: '#16161B', pageInk: '#CFCFD4', pageInk2: '#9A9AA2', paperGlass: 'rgba(44,44,50,0.80)', track: 'rgba(255,255,255,0.18)' },
+      { name: 'OLED', compTheme: 'dark', plain: '#000000', card: '#1C1C1E', ink: '#F2F2F7', ink2: '#AEAEB2', sep: 'rgba(255,255,255,0.10)', glass: 'rgba(36,36,38,0.80)', link: '#EE8A93', kicker: 'hsl(188, 60%, 65%)', wash: wash('37,119,132', [0.40, 0.28, 0.14]), page: '#000000', pageInk: '#CFCFD4', pageInk2: '#9A9AA2', paperGlass: 'rgba(36,36,38,0.82)', track: 'rgba(255,255,255,0.18)' }
     ];
     return {
       rows: [

@@ -31,7 +31,7 @@ button{cursor:pointer}
 
       <div aria-label="Sent to AO3" style="padding: 0 4px; display: flex; flex-wrap: wrap; gap: 6px">
         <sc-for list="{{sent}}" as="c" hint-placeholder-count="2">
-          <button aria-label="Remove {{c}}" style="height: 30px; padding: 0 6px 0 10px; border: none; border-radius: 15px; background: rgba(153,0,0,0.10); color: #990000; font-family: inherit; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 4px">{{c}}<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" style="opacity: 0.7"><path d="M7 7l10 10M17 7 7 17"></path></svg></button>
+          <button aria-label="Remove {{c}}" style="height: 30px; padding: 0 6px 0 10px; border: none; border-radius: 15px; background: rgba(130,16,25,0.10); color: #821019; font-family: inherit; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 4px">{{c}}<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" style="opacity: 0.7"><path d="M7 7l10 10M17 7 7 17"></path></svg></button>
         </sc-for>
       </div>
 
@@ -49,7 +49,7 @@ button{cursor:pointer}
 
       <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 4px">
         <span style="font-size: 13px; line-height: 18px; color: #6C6C70">{{loaded}} of {{total}} loaded</span>
-        <button style="height: 36px; padding: 0 16px; border: none; border-radius: 18px; background: #EFEFF4; color: #990000; font-family: inherit; font-size: 15px; font-weight: 600">Load Page 3</button>
+        <button style="height: 36px; padding: 0 16px; border: none; border-radius: 18px; background: #EFEFF4; color: #821019; font-family: inherit; font-size: 15px; font-weight: 600">Load Page 3</button>
       </div>
     </section>
   </main>
@@ -69,7 +69,7 @@ button{cursor:pointer}
   </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#990000"},"$preview":{"width":390,"height":1240}}'>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#821019"},"$preview":{"width":390,"height":1240}}'>
 class Component extends DCLogic {
   renderVals() {
     // Active WIPs: AO3 gets "complete:false revised_at:>now-60d", sorted by date updated.
@@ -77,7 +77,7 @@ class Component extends DCLogic {
     // w1 8 / 14 = 0.6 on schedule; w2 12 / 14 = 0.9 and 18 of 20 posted -> nearly done;
     // w3 31 / 14 = 2.2 running late; w4 one chapter, so no interval yet. Today is Oct 28.
     return {
-      accent: this.props.accent ?? '#990000',
+      accent: this.props.accent ?? '#821019',
       total: '212',
       loaded: '40',
       sent: ['Updated in the last 60 days', 'Works in progress'],

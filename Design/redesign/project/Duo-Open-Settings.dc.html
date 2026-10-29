@@ -135,14 +135,14 @@ button{cursor:pointer}
     </div>
   </main>
   <div style="position: absolute; right: 8px; top: 0; z-index: 3">
-    <dc-import name="DuoSideBar" height="669" nav="back" tabs="account" actions="{{side}}" accent="#990000" hint-size="64px,669px"></dc-import>
+    <dc-import name="DuoSideBar" height="669" nav="back" tabs="account" actions="{{side}}" accent="#821019" hint-size="64px,669px"></dc-import>
   </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#990000"},"$preview":{"width":951,"height":669}}'>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#821019"},"$preview":{"width":951,"height":669}}'>
 class Component extends DCLogic {
   renderVals() {
-    const accent = this.props.accent ?? '#990000';
+    const accent = this.props.accent ?? '#821019';
     const s = this.state || {};
     const autoSync = s.autoSync ?? true;
     const paused = s.paused ?? false;
@@ -155,7 +155,7 @@ class Component extends DCLogic {
         r('Listening', 'Kokoro · Bella', '#FF2D55', 'M4 9.5h3.5L12 5.5v13l-4.5-4H4zM15.5 9a4.5 4.5 0 0 1 0 6')
       ] },
       { title: 'Downloads & storage', rows: [
-        r('Downloads', 'Keep what you read', '#990000', 'M12 4v11M7 10.5l5 5 5-5M5 20h14'),
+        r('Downloads', 'Keep what you read', '#821019', 'M12 4v11M7 10.5l5 5 5-5M5 20h14'),
         r('Preservation', 'Auto up to 10 works', '#30B0C7', 'M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z'),
         r('Reading Queues', '412 MB', '#007AFF', 'M4 6h12M4 11h12M4 16h7M17 14v6M14 17h6')
       ] },
@@ -185,7 +185,7 @@ class Component extends DCLogic {
         sep: i === 0 || x.selected || (g.rows[i - 1] && g.rows[i - 1].selected) ? 'none' : '0.5px solid #E5E5EA'
       }))
     }));
-    const toggle = (label, on, key) => ({ label, isToggle: true, isNav: false, isAction: false, on: on ? 'true' : 'false', track: on ? '#990000' : '#E9E9EB', knob: on ? 22 : 2, toggle: () => this.setState({ [key]: !on }), value: '', color: '#000000' });
+    const toggle = (label, on, key) => ({ label, isToggle: true, isNav: false, isAction: false, on: on ? 'true' : 'false', track: on ? '#821019' : '#E9E9EB', knob: on ? 22 : 2, toggle: () => this.setState({ [key]: !on }), value: '', color: '#000000' });
     const nav = (label, value) => ({ label, isToggle: false, isNav: true, isAction: false, value: value || '', color: '#000000' });
     const action = (label, color) => ({ label, isToggle: false, isNav: false, isAction: true, value: '', color });
     const G = '#6C6C70';

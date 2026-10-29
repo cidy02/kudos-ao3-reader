@@ -13,121 +13,166 @@ body{margin:0}
 button{cursor:pointer}
 </style>
 </helmet>
-<div style="width: 390px; height: 1400px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+<div style="width: 390px; height: 1900px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
   <div aria-hidden="true" style="padding: 18px 16px 0">
     <span style="font-size: 34px; line-height: 41px; font-weight: 700">Library</span>
   </div>
   <div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(0,0,0,0.20)"></div>
 
-  <section role="dialog" aria-label="Filters" style="position: absolute; left: 0; right: 0; top: 62px; bottom: 0; border-radius: 38px 38px 0 0; background: #F2F2F7; box-shadow: 0 -8px 30px rgba(0,0,0,0.18); overflow: hidden">
+  <section role="dialog" aria-label="Filters" style="position: absolute; left: 0; right: 0; top: 64px; bottom: 0; border-radius: 38px 38px 0 0; background: #F2F2F7; box-shadow: 0 -8px 30px rgba(0,0,0,0.18); overflow: hidden">
     <div aria-hidden="true" style="width: 36px; height: 5px; border-radius: 3px; background: #C7C7CC; margin: 7px auto 0"></div>
     <header style="display: flex; align-items: center; justify-content: space-between; padding: 6px 16px 10px">
       <button aria-label="Close" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.8); box-shadow: 0 4px 14px rgba(0,0,0,0.08), 0 0 0 0.5px rgba(0,0,0,0.06)">
         <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"></path></svg>
       </button>
-      <div style="display: flex; flex-direction: column; align-items: center">
-        <h2 style="margin: 0; font-size: 17px; line-height: 22px; font-weight: 600">Filters</h2>
-        <span style="font-size: 13px; line-height: 18px; color: #6C6C70">42 works</span>
-      </div>
-      <button aria-label="Apply filters" style="width: 44px; height: 44px; border: none; border-radius: 22px; background: #990000; color: #FFFFFF; display: flex; align-items: center; justify-content: center">
-        <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.6 4.6L19.2 7.4"></path></svg>
-      </button>
+      <h2 style="margin: 0; font-size: 17px; line-height: 22px; font-weight: 600">Filters</h2>
+      <span aria-hidden="true" style="width: 44px"></span>
     </header>
 
     <div style="padding: 4px 16px 0; display: flex; flex-direction: column; gap: 6px">
+      <section aria-label="Active filters" style="background: #FFFFFF; border-radius: 16px; padding: 12px; margin-bottom: 10px; display: flex; flex-direction: column; gap: 10px">
+        <div style="display: flex; align-items: baseline; gap: 8px; margin: 0 4px">
+          <span style="font-size: 17px; font-weight: 600">Active</span>
+          <span style="font-size: 15px; color: #6C6C70">{{activeCount}} filters</span>
+          <button style="margin-left: auto; border: none; background: none; padding: 0; font-family: inherit; font-size: 15px; color: #D70015">Clear All</button>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 6px">
+          <sc-for list="{{active}}" as="a" hint-placeholder-count="8">
+            <button aria-label="{{a.aria}}" style="height: 30px; padding: 0 10px 0 9px; border: none; border-radius: 15px; background: {{a.bg}}; color: {{a.fg}}; font-family: inherit; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 4px"><sc-if value="{{a.hasGlyph}}" hint-placeholder-val="{{true}}"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="{{a.glyph}}"></path></svg></sc-if><span style="text-decoration: {{a.strike}}">{{a.label}}</span></button>
+          </sc-for>
+        </div>
+      </section>
+
       <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
-        <sc-for list="{{top}}" as="r" hint-placeholder-count="3">
-          <sc-if value="{{r.sep}}" hint-placeholder-val="{{false}}"><div aria-hidden="true" style="margin-left: 16px; height: 0.5px; background: #D1D1D6"></div></sc-if>
-          <div style="min-height: 48px; padding: 0 16px; display: flex; align-items: center; gap: 8px">
+        <sc-for list="{{top}}" as="r" hint-placeholder-count="2">
+          <sc-if value="{{r.sep}}" hint-placeholder-val="{{false}}"><div aria-hidden="true" style="margin-left: 57px; height: 0.5px; background: #D1D1D6"></div></sc-if>
+          <div style="min-height: 48px; padding: 0 16px 0 14px; display: flex; align-items: center; gap: 12px">
+            <span aria-hidden="true" style="width: 29px; height: 29px; flex-shrink: 0; border-radius: 7px; background: {{r.tile}}; color: #FFFFFF; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="{{r.fill}}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{r.d}}"></path></svg></span>
             <span style="flex: 1; font-size: 17px">{{r.label}}</span>
-            <button style="border: none; background: none; padding: 0; font-family: inherit; font-size: 17px; color: #990000; display: flex; align-items: center; gap: 4px">{{r.value}}<svg aria-hidden="true" width="12" height="16" viewBox="0 0 12 16" fill="none" stroke="#990000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6 6 2.5 9.5 6M2.5 10 6 13.5 9.5 10"></path></svg></button>
+            <button style="border: none; background: none; padding: 0; font-family: inherit; font-size: 17px; color: #6C6C70; display: flex; align-items: center; gap: 4px">{{r.value}}<svg aria-hidden="true" width="12" height="16" viewBox="0 0 12 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6 6 2.5 9.5 6M2.5 10 6 13.5 9.5 10"></path></svg></button>
           </div>
         </sc-for>
       </div>
 
-      <h3 style="margin: 16px 16px 2px; font-size: 13px; line-height: 18px; font-weight: 400; color: #6C6C70">Authors</h3>
-      <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
-        <button style="width: 100%; min-height: 52px; padding: 0 16px; border: none; background: transparent; font-family: inherit; text-align: left; display: flex; align-items: center; gap: 10px">
-          <span aria-hidden="true" style="display: flex; padding-left: 6px">
-            <sc-for list="{{authors}}" as="a" hint-placeholder-count="2"><span style="width: 28px; height: 28px; margin-left: -6px; border-radius: 14px; box-shadow: 0 0 0 2px #FFFFFF; background: {{a.bg}}; color: #FFFFFF; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center">{{a.initial}}</span></sc-for>
-          </span>
-          <span style="flex: 1; font-size: 17px; color: #000000">quietharbor, wrenfield</span>
-          <svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg>
-        </button>
-      </div>
-
-      <sc-for list="{{facets}}" as="g" hint-placeholder-count="2">
-        <h3 style="margin: 16px 16px 2px; font-size: 13px; line-height: 18px; font-weight: 400; color: #6C6C70">{{g.title}}</h3>
-        <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
-          <sc-for list="{{g.rows}}" as="r" hint-placeholder-count="6">
-            <sc-if value="{{r.sep}}" hint-placeholder-val="{{false}}"><div aria-hidden="true" style="margin-left: 16px; height: 0.5px; background: #D1D1D6"></div></sc-if>
-            <button aria-label="{{r.aria}}" style="width: 100%; min-height: 48px; padding: 8px 16px; box-sizing: border-box; border: none; background: transparent; font-family: inherit; text-align: left; display: flex; align-items: center; gap: 10px; color: #000000">
-              <span style="flex: 1; font-size: 17px; line-height: 22px">{{r.label}}</span>
-              <sc-if value="{{r.isIn}}" hint-placeholder-val="{{false}}">
-                <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#990000" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"></path></svg>
-              </sc-if>
-              <sc-if value="{{r.isOut}}" hint-placeholder-val="{{false}}">
-                <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#990000"></circle><path d="M8 12h8" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round"></path></svg>
-              </sc-if>
+      <div style="margin-top: 8px; background: #FFFFFF; border-radius: 16px; padding: 12px; display: flex; flex-direction: column; gap: 10px">
+        <span style="margin: 0 4px; font-size: 17px">Categories</span>
+        <div role="group" aria-label="Categories" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+          <sc-for list="{{categories}}" as="c" hint-placeholder-count="6">
+            <button aria-label="{{c.aria}}" aria-pressed="{{c.pressed}}" style="min-height: 44px; border: {{c.border}}; border-radius: 12px; background: {{c.bg}}; padding: 6px 10px; box-sizing: border-box; font-family: inherit; display: flex; align-items: center; gap: 8px; color: {{c.fg}}">
+              <span aria-hidden="true" style="width: 22px; height: 22px; flex-shrink: 0; overflow: hidden; opacity: {{c.dim}}"><dc-import name="Symbols" variant="grid" only="category" category="{{c.code}}" size="22" hint-size="22px,22px"></dc-import></span>
+              <span style="flex: 1; min-width: 0; text-align: left; font-size: 14px; line-height: 18px; font-weight: 600; text-decoration: {{c.strike}}">{{c.label}}</span>
+              <span aria-hidden="true" style="width: 18px; height: 18px; flex-shrink: 0; box-sizing: border-box; border-radius: 9px; border: {{c.ring}}; background: {{c.markBg}}; color: #FFFFFF; display: flex; align-items: center; justify-content: center"><sc-if value="{{c.isIn}}" hint-placeholder-val="{{false}}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.6 4.6L19.2 7.4"></path></svg></sc-if><sc-if value="{{c.isOut}}" hint-placeholder-val="{{false}}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"><path d="M6 12h12"></path></svg></sc-if></span>
             </button>
           </sc-for>
         </div>
-      </sc-for>
-
-      <div style="margin-top: 16px; background: #FFFFFF; border-radius: 16px; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px">
-        <div style="display: flex; justify-content: space-between; font-size: 17px"><span>Word count</span><span style="color: #6C6C70">10k – 150k</span></div>
-        <div role="group" aria-label="Word count range" style="position: relative; height: 26px">
-          <div style="position: absolute; left: 0; right: 0; top: 11px; height: 4px; border-radius: 2px; background: #E5E5EA"></div>
-          <div style="position: absolute; left: 12%; right: 30%; top: 11px; height: 4px; border-radius: 2px; background: #990000"></div>
-          <span style="position: absolute; left: 12%; top: 0; width: 26px; height: 26px; margin-left: -13px; border-radius: 13px; background: #FFFFFF; box-shadow: 0 1px 4px rgba(0,0,0,0.3)"></span>
-          <span style="position: absolute; left: 70%; top: 0; width: 26px; height: 26px; margin-left: -13px; border-radius: 13px; background: #FFFFFF; box-shadow: 0 1px 4px rgba(0,0,0,0.3)"></span>
-        </div>
+      </div>
+      <div style="margin-top: 8px; background: #FFFFFF; border-radius: 16px; padding: 12px; display: flex; flex-direction: column; gap: 10px">
+        <span style="margin: 0 4px; font-size: 17px">Warnings</span>
+        <sc-for list="{{warnGroups}}" as="g" hint-placeholder-count="2">
+          <div role="group" aria-label="{{g.title}} warnings" style="display: flex; flex-direction: column; gap: 6px">
+            <span style="margin: 0 4px; font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: 0.4px; text-transform: uppercase; color: #6C6C70">{{g.title}}</span>
+            <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+              <sc-for list="{{g.chips}}" as="c" hint-placeholder-count="2">
+                <button aria-label="{{c.aria}}" aria-pressed="{{c.pressed}}" style="min-height: 44px; border: {{c.border}}; border-radius: 12px; background: {{c.bg}}; padding: 6px 10px; box-sizing: border-box; font-family: inherit; display: flex; align-items: center; gap: 8px; color: {{c.fg}}">
+                  <span aria-hidden="true" style="width: 22px; height: 22px; flex-shrink: 0; overflow: hidden; opacity: {{c.dim}}"><dc-import name="Symbols" variant="grid" only="warnings" warnings="{{c.code}}" size="22" hint-size="22px,22px"></dc-import></span>
+                  <span style="flex: 1; min-width: 0; text-align: left; font-size: 14px; line-height: 18px; font-weight: 600; text-decoration: {{c.strike}}">{{c.label}}</span>
+                  <span aria-hidden="true" style="width: 18px; height: 18px; flex-shrink: 0; box-sizing: border-box; border-radius: 9px; border: {{c.ring}}; background: {{c.markBg}}; color: #FFFFFF; display: flex; align-items: center; justify-content: center"><sc-if value="{{c.isIn}}" hint-placeholder-val="{{false}}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.6 4.6L19.2 7.4"></path></svg></sc-if><sc-if value="{{c.isOut}}" hint-placeholder-val="{{false}}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"><path d="M6 12h12"></path></svg></sc-if></span>
+                </button>
+              </sc-for>
+            </div>
+          </div>
+        </sc-for>
       </div>
 
-      <div style="margin-top: 16px; background: #FFFFFF; border-radius: 16px; overflow: hidden">
-        <div style="min-height: 48px; padding: 0 16px; display: flex; align-items: center; gap: 8px; border-bottom: 0.5px solid #D1D1D6">
-          <span style="flex: 1; font-size: 17px">Language</span>
-          <button style="border: none; background: none; padding: 0; font-family: inherit; font-size: 17px; color: #990000; display: flex; align-items: center; gap: 4px">Any<svg aria-hidden="true" width="12" height="16" viewBox="0 0 12 16" fill="none" stroke="#990000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6 6 2.5 9.5 6M2.5 10 6 13.5 9.5 10"></path></svg></button>
-        </div>
-        <div style="min-height: 48px; padding: 8px 16px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
-          <span style="width: 120px; font-size: 17px">Tags</span>
-          <span style="height: 30px; padding: 0 10px; border-radius: 15px; background: rgba(153,0,0,0.10); color: #990000; font-size: 15px; line-height: 30px">✓ Slow Burn</span>
-          <span style="font-size: 17px; color: #8E8E93">Add</span>
-        </div>
+      <h3 style="margin: 16px 16px 2px; font-size: 13px; line-height: 18px; font-weight: 400; color: #6C6C70">Tags and creators</h3>
+      <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
+        <sc-for list="{{tagFields}}" as="t" hint-placeholder-count="3">
+          <sc-if value="{{t.sep}}" hint-placeholder-val="{{false}}"><div aria-hidden="true" style="margin-left: 16px; height: 0.5px; background: #D1D1D6"></div></sc-if>
+          <div style="min-height: 48px; padding: 8px 16px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
+            <span style="width: 120px; font-size: 17px">{{t.label}}</span>
+            <sc-for list="{{t.chips}}" as="c" hint-placeholder-count="1">
+              <span style="height: 30px; padding: 0 10px; border-radius: 15px; background: {{c.bg}}; color: {{c.fg}}; font-size: 15px; line-height: 30px; font-weight: 600; display: flex; align-items: center; gap: 5px">{{c.mark}} {{c.name}}</span>
+            </sc-for>
+            <span style="font-size: 17px; color: #8E8E93">{{t.placeholder}}</span>
+          </div>
+        </sc-for>
       </div>
-      <button style="margin-top: 16px; width: 100%; min-height: 48px; border: none; border-radius: 16px; background: #FFFFFF; font-family: inherit; font-size: 17px; color: #D70015; display: flex; align-items: center; justify-content: center">Reset Filters</button>
+
+      <h3 style="margin: 16px 16px 2px; font-size: 13px; line-height: 18px; font-weight: 400; color: #6C6C70">Length and status</h3>
+      <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
+        <sc-for list="{{length}}" as="r" hint-placeholder-count="2">
+          <sc-if value="{{r.sep}}" hint-placeholder-val="{{false}}"><div aria-hidden="true" style="margin-left: 57px; height: 0.5px; background: #D1D1D6"></div></sc-if>
+          <div style="min-height: 48px; padding: 0 16px 0 14px; display: flex; align-items: center; gap: 12px">
+            <span aria-hidden="true" style="width: 29px; height: 29px; flex-shrink: 0; border-radius: 7px; background: {{r.tile}}; color: #FFFFFF; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="{{r.fill}}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{r.d}}"></path></svg></span>
+            <span style="flex: 1; font-size: 17px">{{r.label}}</span>
+            <button style="border: none; background: none; padding: 0; font-family: inherit; font-size: 17px; color: #6C6C70; display: flex; align-items: center; gap: 4px">{{r.value}}<svg aria-hidden="true" width="12" height="16" viewBox="0 0 12 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6 6 2.5 9.5 6M2.5 10 6 13.5 9.5 10"></path></svg></button>
+          </div>
+        </sc-for>
+      </div>
+      <div role="radiogroup" aria-label="Length" style="margin-top: 8px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px">
+        <sc-for list="{{lengths}}" as="l" hint-placeholder-count="6"><button role="radio" aria-checked="{{l.on}}" style="flex-shrink: 0; height: 32px; padding: 0 12px; border: none; border-radius: 16px; background: {{l.bg}}; color: {{l.fg}}; font-family: inherit; font-size: 14px; font-weight: 600">{{l.label}}</button></sc-for>
+      </div>
+      <div style="margin-top: 8px; background: #FFFFFF; border-radius: 16px; display: flex; overflow: hidden">
+        <label style="flex: 1; min-width: 0; min-height: 48px; padding: 0 16px; display: flex; align-items: center; gap: 8px"><span style="flex-shrink: 0; font-size: 17px; color: #6C6C70">Words</span><input type="text" value="10,000" aria-label="Word count from" style="flex: 1; width: 0; min-width: 0; border: none; background: transparent; font-family: inherit; font-size: 17px; text-align: right; outline: none"></label>
+        <span aria-hidden="true" style="width: 0.5px; background: #D1D1D6"></span>
+        <label style="flex: 1; min-width: 0; min-height: 48px; padding: 0 16px; display: flex; align-items: center; gap: 8px"><span style="flex-shrink: 0; font-size: 17px; color: #6C6C70">to</span><input type="text" value="150,000" aria-label="Word count to" style="flex: 1; width: 0; min-width: 0; border: none; background: transparent; font-family: inherit; font-size: 17px; text-align: right; outline: none"></label>
+      </div>
+      <div aria-hidden="true" style="height: 100px"></div>
+    </div>
+    <div style="position: absolute; left: 0; right: 0; bottom: 0; height: 130px; background: linear-gradient(to bottom, rgba(242,242,247,0), rgba(242,242,247,0.96) 45%); pointer-events: none"></div>
+    <div role="toolbar" aria-label="Results" style="position: absolute; left: 16px; right: 16px; bottom: 28px; display: flex; align-items: center; gap: 10px">
+      <button style="flex: 1; height: 52px; border: none; border-radius: 26px; background: #821019; color: #FFFFFF; font-family: inherit; font-size: 17px; font-weight: 600">Show 42 Works</button>
     </div>
   </section>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1400}}'>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1900}}'>
 class Component extends DCLogic {
   renderVals() {
-    const rows = (list) => list.map(([label, state], i) => ({
-      label, sep: i > 0, isIn: state === 'in', isOut: state === 'out',
-      aria: label + (state === 'in' ? ', included' : state === 'out' ? ', excluded' : '')
+    // Library's filters in Search › AO3 filters' form, over the works in your library: the same
+    // active strip, symbol tiles, tri-state category and warning cards (tap cycles Include →
+    // Exclude → not set; included green, excluded red) and length presets. No AO3-only rows
+    // (popularity, crossovers, chapters); creators are the authors in your library.
+    const GREEN_BG = 'rgba(36,138,61,0.12)', GREEN_FG = '#1E6B34', GREEN = '#248A3D';
+    const RED_BG = 'rgba(215,0,21,0.08)', RED = '#D70015';
+    const list = (items) => items.map((r, i) => ({ ...r, sep: i > 0, fill: r.fill || 'none' }));
+    const tri = (items) => items.map(([label, code, st, full]) => ({
+      label, code, isIn: st === 'in', isOut: st === 'out',
+      pressed: st === 'in' ? 'true' : st === 'out' ? 'mixed' : 'false',
+      aria: (full || label) + (st === 'in' ? ', included' : st === 'out' ? ', excluded' : ', not set'),
+      bg: st === 'in' ? GREEN_BG : st === 'out' ? RED_BG : '#F2F2F7', fg: st === 'in' ? GREEN_FG : st === 'out' ? RED : '#1C1C1E',
+      border: st === 'in' ? '1.5px solid ' + GREEN : st === 'out' ? '1.5px solid ' + RED : '1.5px solid transparent', strike: st === 'out' ? 'line-through' : 'none', dim: st === 'out' ? 0.4 : 1,
+      ring: st ? 'none' : '1.5px solid #C7C7CC', markBg: st === 'in' ? GREEN : st === 'out' ? RED : 'transparent'
     }));
-    const list = (items) => items.map((r, i) => ({ ...r, sep: i > 0 }));
+    const chip = (label, kind) => ({ label,
+      bg: kind === 'out' ? RED_BG : kind === 'value' ? '#EFEFF4' : GREEN_BG,
+      fg: kind === 'out' ? RED : kind === 'value' ? '#1C1C1E' : GREEN_FG,
+      strike: kind === 'out' ? 'line-through' : 'none', hasGlyph: kind !== 'value',
+      glyph: kind === 'out' ? 'M6 12h12' : 'M5 12.5l4.6 4.6L19.2 7.4',
+      aria: label + (kind === 'out' ? ', excluded' : kind === 'value' ? '' : ', included') });
+    const tag = (name, kind) => ({ name, mark: kind === 'out' ? '–' : '✓', bg: kind === 'out' ? RED_BG : GREEN_BG, fg: kind === 'out' ? RED : GREEN_FG });
+    const active = [chip('General, Teen', 'value'), chip('F/M'), chip('Gen'), chip('No Warnings Apply'), chip('Major Character Death', 'out'), chip('quietharbor'), chip('wrenfield'), chip('Slow Burn'), chip('10k–150k words', 'value')];
     return {
+      active, activeCount: active.length,
       top: list([
-        { label: 'Sort by', value: 'Recently read' },
-        { label: 'Rating', value: 'General, Teen' },
-        { label: 'Completion', value: 'Any' }
+        { label: 'Sort by', tile: '#1E63C8', d: 'M7 4v16M3.5 16.5 7 20l3.5-3.5M17 20V4M13.5 7.5 17 4l3.5 3.5', value: 'Recently Read' },
+        { label: 'Rating', tile: '#E0A100', d: 'M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z', fill: 'currentColor', value: 'General, Teen' }
       ]),
-      authors: [{ initial: 'Q', bg: '#5B2A4E' }, { initial: 'W', bg: '#2E5339' }],
-      facets: [
-        { title: 'Warnings', rows: rows([
-          ['No Archive Warnings Apply', 'in'],
-          ['Creator Chose Not To Use Archive Warnings', ''],
-          ['Graphic Depictions Of Violence', ''],
-          ['Major Character Death', ''],
-          ['Rape/Non-Con', ''],
-          ['Underage Sex', '']
-        ]) },
-        { title: 'Categories', rows: rows([
-          ['F/F', ''], ['F/M', 'in'], ['Gen', 'in'], ['M/M', ''], ['Multi', ''], ['Other', '']
-        ]) }
-      ]
+      categories: tri([['F/F', 'FF', ''], ['F/M', 'FM', 'in'], ['Gen', 'Gen', 'in'], ['M/M', 'MM', ''], ['Multi', 'Multi', ''], ['Other', 'Other', '']]),
+      warnGroups: [
+        { title: 'Overall', chips: tri([['No Warnings Apply', 'none', 'in', 'No Archive Warnings Apply'], ['Creator Chose Not To Use', 'undisclosed', '', 'Creator Chose Not To Use Archive Warnings']]) },
+        { title: 'Content', chips: tri([['Graphic Violence', 'present', '', 'Graphic Depictions Of Violence'], ['Major Character Death', 'present', 'out'], ['Rape/Non-Con', 'present', ''], ['Underage Sex', 'present', '']]) }
+      ],
+      tagFields: list([
+        { label: 'Creators', chips: [tag('quietharbor'), tag('wrenfield')], placeholder: '' },
+        { label: 'Fandoms', chips: [], placeholder: 'Add' },
+        { label: 'Additional Tags', chips: [tag('Slow Burn')], placeholder: 'Add' }
+      ]),
+      length: list([
+        { label: 'Completion', tile: '#2F8F3A', d: 'M12 3.5a8.5 8.5 0 1 1 0 17 8.5 8.5 0 0 1 0-17zM8 12.3l2.8 2.8L16.3 9.5', value: 'Any' },
+        { label: 'Language', tile: '#1E63C8', d: 'M12 3.5a8.5 8.5 0 1 1 0 17 8.5 8.5 0 0 1 0-17zM3.5 12h17M12 3.5c2.4 2.6 3.4 5.4 3.4 8.5s-1 5.9-3.4 8.5c-2.4-2.6-3.4-5.4-3.4-8.5s1-5.9 3.4-8.5z', value: 'Any' }
+      ]),
+      lengths: ['Any', 'Under 1k', '1k–10k', '10k+', '50k+', 'Custom'].map((label) => ({ label, on: label === 'Custom' ? 'true' : 'false', bg: label === 'Custom' ? '#821019' : '#FFFFFF', fg: label === 'Custom' ? '#FFFFFF' : '#1C1C1E' }))
     };
   }
 }

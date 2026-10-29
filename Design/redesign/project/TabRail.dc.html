@@ -26,10 +26,10 @@ body{margin:0}
   </button>
 </nav>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"selected":{"editor":"enum","options":["home","library","writing","browse"],"default":"home"},"accent":{"editor":null,"default":"#990000"},"$preview":{"width":64,"height":312}}'>
+<script type="text/x-dc" data-dc-script data-props='{"selected":{"editor":"enum","options":["home","library","writing","browse"],"default":"home"},"accent":{"editor":null,"default":"#821019"},"$preview":{"width":64,"height":312}}'>
 class Component extends DCLogic {
   renderVals() {
-    const accent = this.props.accent ?? '#990000';
+    const accent = this.props.accent ?? '#821019';
     const x = accent.replace('#', '');
     const tint = 'rgba(' + parseInt(x.slice(0, 2), 16) + ',' + parseInt(x.slice(2, 4), 16) + ',' + parseInt(x.slice(4, 6), 16) + ',0.10)';
     const selected = this.props.selected ?? 'home';
