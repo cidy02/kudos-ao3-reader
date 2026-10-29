@@ -251,7 +251,7 @@ struct WritingView: View {
         } header: {
             SectionRuleHeader(
                 title: "Your Works",
-                count: cachedCount(.myWorks),
+                countText: cachedCount(.myWorks),
                 onSeeAll: { path.append(WritingRoute.works) }
             )
             .pageBodyRow(top: 18, gutter: 0)
