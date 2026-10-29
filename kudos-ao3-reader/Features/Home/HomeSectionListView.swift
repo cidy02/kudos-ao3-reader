@@ -277,7 +277,10 @@ struct HomeSectionListView: View {
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                             if !work.isQueueOnlyWork {
                                 Button(role: .destructive) {
-                                    if confirmBeforeDelete {
+                                    if PreservedWorkService.shouldConfirmDelete(
+                                        work,
+                                        settingOn: confirmBeforeDelete
+                                    ) {
                                         pendingDelete = work
                                     } else {
                                         PreservedWorkService.softDelete(work, in: context)

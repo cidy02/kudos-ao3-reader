@@ -13,16 +13,98 @@ enum PreservedWorkService {
     /// The window in the words every ask uses, so they follow the constant.
     static var recoveryWindowText: String { "\(Int(recoveryWindow / 86_400)) days" }
 
-    /// Delete-confirmation copy for a work, escalated when AO3 no longer has it
-    /// (`SavedWork.ao3Unavailable`, set from a prior 404 during a tag refresh — no
-    /// extra network call needed here): losing the local copy after the recovery
-    /// window would mean losing the work entirely, so the user is told plainly.
-    static func deleteConfirmationMessage(for work: SavedWork) -> String {
-        if work.ao3Unavailable {
-            return "“\(work.title)” is no longer available on AO3. If you don't restore it within 90 days, "
-                + "Kudos will permanently remove this copy, and you can't download it from AO3 again."
+    /// Delete-confirmation copy for a work. Escalated when Kudos cannot fetch the
+    /// work again (`WorkRedownloadability`) — gone from AO3, or a non-AO3 import.
+    /// A work still on AO3 keeps the ordinary Recently Deleted sentence. Never
+    /// called from a network error path: the reason is a durable flag / origin.
+    static func deleteConfirmationMessage(for work: SavedWork, permanently: Bool = false) -> String {
+        deleteConfirmationMessage(
+            title: work.title,
+            reason: WorkRedownloadability.of(work),
+            permanently: permanently
+        )
+    }
+
+    /// Bulk Delete from Library / Delete Permanently. Counts the works that
+    /// cannot be fetched again: "2 of these 5 can't be downloaded again".
+    static func deleteConfirmationMessage(for works: [SavedWork], permanently: Bool = false) -> String {
+        if works.count == 1, let work = works.first {
+            return deleteConfirmationMessage(for: work, permanently: permanently)
         }
-        return "Kudos will move “\(work.title)” to Recently Deleted. You can restore it for the next 90 days."
+        let irreplaceable = works.reduce(into: 0) { count, work in
+            if !WorkRedownloadability.of(work).canRedownload { count += 1 }
+        }
+        return deleteConfirmationMessage(
+            itemCount: works.count,
+            irreplaceableCount: irreplaceable,
+            permanently: permanently
+        )
+    }
+
+    /// Same builder the bulk UI uses when the selection mixes works with
+    /// collections or queues — `itemCount` is the selection, `irreplaceableCount`
+    /// is how many of those works Kudos cannot fetch again.
+    static func deleteConfirmationMessage(
+        itemCount: Int,
+        irreplaceableCount: Int,
+        permanently: Bool
+    ) -> String {
+        if itemCount == 1, irreplaceableCount == 0 {
+            return permanently
+                ? "Kudos will permanently remove this item and any download, progress, or notes stored with it. "
+                    + "The work stays on AO3. You can't undo this."
+                : "Kudos will move this work to Recently Deleted. You can restore it for the next \(recoveryWindowText)."
+        }
+        let base: String
+        if permanently {
+            let ao3Clause = irreplaceableCount == 0
+                ? " The works stay on AO3."
+                : ""
+            base = "Kudos will permanently remove each item and any download, progress, or notes stored with it."
+                + ao3Clause
+                + " You can't undo this."
+        } else {
+            base = "Kudos will move the selected works to Recently Deleted. "
+                + "You can restore them for the next \(recoveryWindowText)."
+        }
+        guard irreplaceableCount > 0, itemCount > 0 else { return base }
+        return base + " \(irreplaceableCount) of these \(itemCount) can't be downloaded again."
+    }
+
+    static func deleteConfirmationMessage(
+        title: String,
+        reason: WorkRedownloadability,
+        permanently: Bool = false
+    ) -> String {
+        switch reason {
+        case .canRedownload:
+            if permanently {
+                return "Kudos will permanently remove “\(title)” and any download, progress, or notes "
+                    + "stored with it. The work stays on AO3. You can't undo this."
+            }
+            return "Kudos will move “\(title)” to Recently Deleted. You can restore it for the next "
+                + "\(recoveryWindowText)."
+        case .noLongerOnAO3:
+            if permanently {
+                return "“\(title)” is no longer on AO3, so Kudos can't download it again. You can't undo this."
+            }
+            return "“\(title)” is no longer on AO3, so Kudos can't download it again. It stays in Recently "
+                + "Deleted for \(recoveryWindowText), then it's gone for good."
+        case .imported:
+            let source = reason.importSourcePhrase ?? "a file"
+            if permanently {
+                return "“\(title)” was imported from \(source). Kudos only downloads from AO3, so this "
+                    + "is the only copy."
+            }
+            return "“\(title)” was imported from \(source). Kudos only downloads from AO3, so this is "
+                + "the only copy. It stays in Recently Deleted for \(recoveryWindowText), then it's gone for good."
+        }
+    }
+
+    /// A work still on AO3 follows the Confirm-before-deleting setting. A work
+    /// Kudos cannot fetch again always asks.
+    static func shouldConfirmDelete(_ work: SavedWork, settingOn: Bool) -> Bool {
+        WorkRedownloadability.of(work).shouldConfirmDelete(settingOn: settingOn)
     }
 
     // MARK: - Soft delete
@@ -206,9 +288,11 @@ enum PreservedWorkService {
         return count
     }
 
-    /// Recently Deleted's "Delete All Permanently" (1bj): every pending record,
-    /// whatever is left of its window, through the same per-kind `hardDelete`s the
-    /// per-item action and the sweep use — not a second way to delete.
+    /// Permanently deletes every pending record, whatever is left of its window,
+    /// through the same per-kind `hardDelete`s the per-item action and the sweep
+    /// use. The Recently Deleted UI no longer offers Delete All (T-469); Select →
+    /// Select All → Delete Permanently is the path, and still goes through each
+    /// entry's own `deletePermanently`.
     @discardableResult
     static func hardDeleteAllPending(in context: ModelContext) -> Int {
         WorkLifecycle.sweepHeldCopies(in: context, everything: true)

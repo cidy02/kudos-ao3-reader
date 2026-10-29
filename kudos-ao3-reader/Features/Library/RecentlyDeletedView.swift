@@ -1,5 +1,7 @@
+import CoreTransferable
 import SwiftData
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Navigation-path marker for `LibraryView`'s Recently Deleted row — a plain button
 /// rather than a `NavigationLink`, since it's conditionally shown, so it pushes onto
@@ -21,9 +23,10 @@ struct RecentlyDeletedDestination: Hashable {}
 /// The reassurance line at the top is the spec's and is the most important sentence
 /// here: readers reach this screen worried they have deleted something off AO3.
 ///
-/// **Select** (1bj's glass pill) picks several rows for Restore or Delete
-/// Permanently, each through the row's own per-kind path; the permanent one asks
-/// once, naming the count.
+/// **Select** picks several rows for Restore or Delete Permanently, each through
+/// the row's own per-kind path; the permanent one asks once, naming the count
+/// and how many cannot be downloaded again. There is no Delete All — emptying
+/// the list is Select → Select All → Delete Permanently (T-469).
 struct RecentlyDeletedView: View {
     @Environment(\.modelContext) private var context
     @Environment(ThemeManager.self) private var theme
@@ -42,14 +45,16 @@ struct RecentlyDeletedView: View {
     /// The row whose Delete Permanently is waiting on its alert. One slot for all
     /// three kinds: each entry carries its own message and its own delete.
     @State private var pendingPermanent: RecentlyDeletedEntry?
-    @State private var confirmingDeleteAll = false
     @State private var isSelecting = false
     @State private var selection = Set<UUID>()
     /// The selection waiting on the bulk alert, captured when it was asked for.
     @State private var pendingBulkDelete: Set<UUID> = []
+    /// The imported original waiting on the Files exporter, after "Save the
+    /// Original File…" on a permanent-delete ask.
+    @State private var originalExport: OriginalImportExport?
+    @State private var exportingOriginal = false
 
     @ScaledMetric(relativeTo: .caption) private var sectionNoteSize: CGFloat = 11.5
-    @ScaledMetric(relativeTo: .footnote) private var deleteButtonSize: CGFloat = 14
     @ScaledMetric(relativeTo: .footnote) private var reassuranceSize: CGFloat = 12.5
 
     var body: some View {
@@ -95,6 +100,16 @@ struct RecentlyDeletedView: View {
             // control that quietly does nothing teaches people not to trust it.
             presenting: pendingPermanent
         ) { entry in
+            if let original = entry.originalFile {
+                Button("Save the Original File…") {
+                    originalExport?.cleanUp()
+                    originalExport = OriginalImportExport.prepare(
+                        url: original.url,
+                        suggestedName: original.suggestedName
+                    )
+                    exportingOriginal = originalExport != nil
+                }
+            }
             Button(entry.deleteLabel, role: .destructive) {
                 entry.deletePermanently()
                 pendingPermanent = nil
@@ -102,19 +117,6 @@ struct RecentlyDeletedView: View {
             Button("Cancel", role: .cancel) { pendingPermanent = nil }
         } message: { entry in
             Text(entry.deletionMessage())
-        }
-        .alert(
-            entries.count == 1 ? "Delete 1 item permanently?" : "Delete all \(entries.count) items permanently?",
-            isPresented: $confirmingDeleteAll
-        ) {
-            Button("Delete All Permanently", role: .destructive) {
-                PreservedWorkService.hardDeleteAllPending(in: context)
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Kudos will permanently remove every item here and any download, progress, or notes "
-                + "stored with it, and the copies of finished works. The works stay on AO3. "
-                + "You can't undo this.")
         }
         // One alert for the whole selection, naming the count. `presenting:`
         // for the same reason as the per-item alert above.
@@ -132,9 +134,20 @@ struct RecentlyDeletedView: View {
                 exitSelectMode()
             }
             Button("Cancel", role: .cancel) { pendingBulkDelete = [] }
-        } message: { _ in
-            Text("Kudos will permanently remove each item and any download, progress, or notes stored with it. "
-                + "The works stay on AO3. You can't undo this.")
+        } message: { ids in
+            Text(Self.bulkPermanentMessage(ids: ids, in: entries))
+        }
+        .fileExporter(
+            isPresented: $exportingOriginal,
+            item: originalExport,
+            contentTypes: [.data],
+            defaultFilename: originalExport?.suggestedName
+        ) { _ in
+            originalExport?.cleanUp()
+            originalExport = nil
+        } onCancellation: {
+            originalExport?.cleanUp()
+            originalExport = nil
         }
     }
 
@@ -206,7 +219,8 @@ struct RecentlyDeletedView: View {
         return List {
             Section {
                 header(count: entries.count).pageBodyRow(top: 20, gutter: 0)
-                reassurance.pageBodyRow(top: 12, gutter: SubjectMetrics.accountGutter)
+                reassurance(irreplaceableCount: Self.irreplaceableCount(in: entries))
+                    .pageBodyRow(top: 12, gutter: SubjectMetrics.accountGutter)
             }
 
             if !deleted.isEmpty {
@@ -230,12 +244,6 @@ struct RecentlyDeletedView: View {
                     ForEach(held) { entry in
                         row(entry)
                     }
-                }
-            }
-
-            if !isSelecting {
-                Section {
-                    deleteAllButton.pageBodyRow(top: 24, gutter: SubjectMetrics.accountGutter)
                 }
             }
         }
@@ -280,21 +288,6 @@ struct RecentlyDeletedView: View {
             .pageBodyRow(top: 6, gutter: SubjectMetrics.accountGutter + 6)
     }
 
-    /// 1bj's footer: an outlined red capsule, behind its own confirmation.
-    private var deleteAllButton: some View {
-        Button {
-            confirmingDeleteAll = true
-        } label: {
-            Label("Delete All Permanently", systemImage: "trash")
-                .font(.system(size: deleteButtonSize, weight: .semibold))
-                .foregroundStyle(.red)
-                .frame(maxWidth: .infinity, minHeight: 44)
-                .overlay(Capsule().strokeBorder(Color.red.opacity(0.42), lineWidth: 0.5))
-                .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-    }
-
     private func header(count: Int) -> some View {
         SubjectHeaderBlock(
             kicker: "Library",
@@ -307,17 +300,26 @@ struct RecentlyDeletedView: View {
 
     /// The sentence readers come here for. Kept verbatim from the spec, because the
     /// worry it answers — "have I deleted this off AO3?" — is exactly what makes the
-    /// screen frightening without it.
-    private var reassurance: some View {
-        Text("Deleting an item here removes only the copy in Kudos, including its download, your progress, "
-            + "and your notes. The work stays on AO3.")
-            .font(.system(size: reassuranceSize))
-            .foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            .subjectPanel()
+    /// screen frightening without it. When some of these cannot be fetched again,
+    /// a second line names how many.
+    private func reassurance(irreplaceableCount: Int) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Deleting an item here removes only the copy in Kudos, including its download, your progress, "
+                + "and your notes. The work stays on AO3.")
+            if irreplaceableCount > 0 {
+                Text(irreplaceableCount == 1
+                     ? "1 of these can't be downloaded again once it's gone."
+                     : "\(irreplaceableCount) of these can't be downloaded again once they're gone.")
+                    .fontWeight(.medium)
+            }
+        }
+        .font(.system(size: reassuranceSize))
+        .foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .subjectPanel()
     }
 
     private var palette: SubjectPalette {
@@ -349,7 +351,7 @@ struct RecentlyDeletedView: View {
             + deletedQueues.map { RecentlyDeletedEntry.queue($0, in: context) }
             + heldWorks.filter { $0.isFinished && !$0.isProtected && $0.hasEPUB }
                 .map { RecentlyDeletedEntry.heldCopy($0, in: context) }
-        return all.sorted { $0.daysRemaining < $1.daysRemaining }
+        return Self.sortedSoonestFirst(all)
     }
 
     // MARK: Select mode
@@ -371,6 +373,29 @@ struct RecentlyDeletedView: View {
 
     static func bulkDeleteTitle(count: Int) -> String {
         count == 1 ? "Delete 1 item permanently?" : "Delete \(count) items permanently?"
+    }
+
+    static func sortedSoonestFirst(_ entries: [RecentlyDeletedEntry]) -> [RecentlyDeletedEntry] {
+        entries.sorted { $0.daysRemaining < $1.daysRemaining }
+    }
+
+    static func irreplaceableCount(in entries: [RecentlyDeletedEntry]) -> Int {
+        entries.reduce(into: 0) { count, entry in
+            if !entry.redownloadability.canRedownload { count += 1 }
+        }
+    }
+
+    static func bulkPermanentMessage(ids: Set<UUID>, in entries: [RecentlyDeletedEntry]) -> String {
+        let chosen = entries.filter { ids.contains($0.id) }
+        return PreservedWorkService.deleteConfirmationMessage(
+            itemCount: chosen.count,
+            irreplaceableCount: irreplaceableCount(in: chosen),
+            permanently: true
+        )
+    }
+
+    static func daysLeftLabel(_ days: Int) -> String {
+        days == 1 ? "1 day left" : "\(days) days left"
     }
 
     static func restoreFailureMessage(_ failed: [RecentlyDeletedEntry]) -> String {
@@ -412,10 +437,9 @@ struct RecentlyDeletedView: View {
         return works + " You can't undo this."
     }
 
-    /// 1bj: "amber under a week". Amber, not red — red is the destructive
-    /// action's colour on this screen, and a countdown is a warning, not an act.
+    /// Spec board 08: app/destructive red in the last 7 days, inclusive.
     static func isUrgent(daysRemaining: Int) -> Bool {
-        daysRemaining < 7
+        daysRemaining <= 7
     }
 
     static func daysRemaining(_ date: Date?) -> Int {
@@ -449,6 +473,8 @@ struct RecentlyDeletedEntry: Identifiable {
     let deletePermanently: () -> Void
     /// A finished, un-kept work's copy, not something deleted.
     var isHeldCopy = false
+    var redownloadability: WorkRedownloadability = .canRedownload
+    var originalFile: (url: URL, suggestedName: String)?
 
     var deleteTitle: String {
         isHeldCopy ? "Remove the copy of “\(title)”?" : "Delete “\(title)” permanently?"
@@ -470,7 +496,9 @@ extension RecentlyDeletedEntry {
             daysRemaining: RecentlyDeletedView.daysRemaining(work.permanentDeletionScheduledAt),
             restore: { PreservedWorkService.restore(work, in: context) },
             deletionMessage: { workDeletionMessage(work, in: context) },
-            deletePermanently: { PreservedWorkService.deletePermanently(work, in: context) }
+            deletePermanently: { PreservedWorkService.deletePermanently(work, in: context) },
+            redownloadability: WorkRedownloadability.of(work),
+            originalFile: WorkRedownloadability.originalFile(for: work.id)
         )
     }
 
@@ -490,12 +518,11 @@ extension RecentlyDeletedEntry {
                 WorkLifecycle.restoreHeldCopy(work, in: context)
                 return true
             },
-            deletionMessage: {
-                "Kudos removes this work's copy from your device now. The work stays in your "
-                    + "reading history, and you can download it again from AO3."
-            },
+            deletionMessage: { heldCopyDeletionMessage(work) },
             deletePermanently: { WorkLifecycle.freeHeldCopy(work, in: context) },
-            isHeldCopy: true
+            isHeldCopy: true,
+            redownloadability: WorkRedownloadability.of(work),
+            originalFile: WorkRedownloadability.originalFile(for: work.id)
         )
     }
 
@@ -559,7 +586,16 @@ extension RecentlyDeletedEntry {
     /// The per-item alert's real numbers for a work. Read only when the alert is
     /// up, so the annotation fetch is not paid for every row on every render —
     /// fetched the same way `WorkLifecycle.hardDelete` finds what it deletes.
+    /// A work Kudos cannot fetch again uses the shared escalated copy instead.
     private static func workDeletionMessage(_ work: SavedWork, in context: ModelContext) -> String {
+        let reason = WorkRedownloadability.of(work)
+        if !reason.canRedownload {
+            return PreservedWorkService.deleteConfirmationMessage(
+                title: work.title,
+                reason: reason,
+                permanently: true
+            )
+        }
         let workID = work.id
         let marks = ((try? context.fetch(FetchDescriptor<ReadingAnnotation>())) ?? [])
             .filter { $0.work?.id == workID && !$0.isPendingDeletion }
@@ -569,6 +605,19 @@ extension RecentlyDeletedEntry {
             highlights: marks.filter { $0.kind == .highlight }.count,
             bookmarks: marks.filter { $0.kind == .bookmark }.count
         )
+    }
+
+    private static func heldCopyDeletionMessage(_ work: SavedWork) -> String {
+        let reason = WorkRedownloadability.of(work)
+        if !reason.canRedownload {
+            return PreservedWorkService.deleteConfirmationMessage(
+                title: work.title,
+                reason: reason,
+                permanently: true
+            )
+        }
+        return "Kudos removes this work's copy from your device now. The work stays in your "
+            + "reading history, and you can download it again from AO3."
     }
 }
 
@@ -583,7 +632,6 @@ private struct RecentlyDeletedRow: View {
     @ScaledMetric(relativeTo: .headline) private var titleSize: CGFloat = 16.5
     @ScaledMetric(relativeTo: .caption) private var detailSize: CGFloat = 11.5
     @ScaledMetric(relativeTo: .footnote) private var daysSize: CGFloat = 13
-    @ScaledMetric(relativeTo: .caption2) private var daysLabelSize: CGFloat = 9
 
     let entry: RecentlyDeletedEntry
     let palette: SubjectPalette
@@ -647,23 +695,29 @@ private struct RecentlyDeletedRow: View {
 
     private var rowContent: some View {
         HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
-                SubjectKicker(
-                    text: entry.kicker,
-                    palette: palette,
-                    ruleWidth: SubjectMetrics.kickerRuleWidth,
-                    ruleSpacing: 5
-                )
-                Text(entry.title)
-                    .font(.system(size: titleSize, weight: .semibold))
-                    .lineLimit(2)
-                if !entry.detail.isEmpty {
-                    detailLine
+            VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 3) {
+                    SubjectKicker(
+                        text: entry.kicker,
+                        palette: palette,
+                        ruleWidth: SubjectMetrics.kickerRuleWidth,
+                        ruleSpacing: 5
+                    )
+                    Text(entry.title)
+                        .font(.system(size: titleSize, weight: .semibold))
+                        .lineLimit(2)
+                    if !entry.detail.isEmpty {
+                        detailLine
+                    }
+                }
+                remaining
+                if let title = entry.redownloadability.rowTitle,
+                   let body = entry.redownloadability.rowBody {
+                    RedownloadWarningNote(title: title, body: body)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            remaining
             if isSelecting {
                 WorkSelectionBubble(isSelected: isSelected)
             }
@@ -697,25 +751,83 @@ private struct RecentlyDeletedRow: View {
         }
     }
 
-    /// Spec 1bj stacks the figure over the word — "3d" over "left" — so the number
-    /// carries at a glance down a column of rows.
+    /// Board 08: clock + "N days left". App/destructive red in the last 7 days.
     private var remaining: some View {
-        VStack(spacing: 1) {
-            Text("\(entry.daysRemaining)d")
-                .font(.system(size: daysSize, weight: .bold))
+        let urgent = RecentlyDeletedView.isUrgent(daysRemaining: entry.daysRemaining)
+        let label = RecentlyDeletedView.daysLeftLabel(entry.daysRemaining)
+        return HStack(alignment: .center, spacing: 6) {
+            Image(systemName: "clock")
+                .font(.system(size: daysSize, weight: .semibold))
+            Text(label)
+                .font(.system(size: daysSize, weight: .semibold))
                 .monospacedDigit()
-                .foregroundStyle(
-                    RecentlyDeletedView.isUrgent(daysRemaining: entry.daysRemaining)
-                        ? Color.subjectAmber
-                        : Color.primary
-                )
-            Text("LEFT")
-                .font(.system(size: daysLabelSize))
-                .foregroundStyle(.secondary)
         }
+        .foregroundStyle(urgent ? Color.red : Color.secondary)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(
-            entry.daysRemaining == 1 ? "1 day left" : "\(entry.daysRemaining) days left"
+        .accessibilityLabel(label)
+    }
+}
+
+/// Orange note on a Recently Deleted row for a work Kudos cannot fetch again.
+/// Adaptive fill so Dark / Sepia / OLED keep contrast; the spec's cream tile is
+/// Light-only.
+private struct RedownloadWarningNote: View {
+    let title: String
+    let body: String
+
+    @ScaledMetric(relativeTo: .footnote) private var size: CGFloat = 13
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: size, weight: .semibold))
+                .foregroundStyle(Color.orange)
+                .accessibilityHidden(true)
+            (Text(title).fontWeight(.semibold) + Text(" ") + Text(body))
+                .font(.system(size: size))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            Color.orange.opacity(0.14),
+            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
         )
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// Copies the preserved original to a uniquely named temp file so the item-based
+/// `fileExporter` has a real `preferredFilename` (the same trap `KudosBackupArchiveFile`
+/// documents). Cleaned up when the exporter finishes or is cancelled.
+private struct OriginalImportExport: Transferable, Sendable {
+    let url: URL
+    let suggestedName: String
+    let cleanupURL: URL
+
+    static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(exportedContentType: .data) {
+            SentTransferredFile($0.url, allowAccessingOriginalFile: true)
+        }
+        .suggestedFileName("Original")
+    }
+
+    static func prepare(url: URL, suggestedName: String) -> OriginalImportExport? {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("kudos-original-\(UUID().uuidString)", isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            let dest = dir.appendingPathComponent((suggestedName as NSString).lastPathComponent)
+            try FileManager.default.copyItem(at: url, to: dest)
+            return OriginalImportExport(url: dest, suggestedName: suggestedName, cleanupURL: dir)
+        } catch {
+            try? FileManager.default.removeItem(at: dir)
+            return nil
+        }
+    }
+
+    func cleanUp() {
+        try? FileManager.default.removeItem(at: cleanupURL)
     }
 }
