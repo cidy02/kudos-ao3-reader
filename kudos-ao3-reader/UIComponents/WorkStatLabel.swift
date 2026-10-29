@@ -509,42 +509,30 @@ private struct WorkStatusIconGridContent: View {
         // characters — cramped at this size, and "?" already reads as
         // "unrated/unknown" without needing to fit two glyphs.
         let letter = item.text == "NR" ? "?" : item.text
+        let color = item.iconColor ?? .gray
         return ZStack {
-            // Unfilled outline, not `.shield.fill` — a solid block was the odd
-            // one out next to the other 3 tiles' own colored-line-on-tinted-
-            // background treatment. The letter now sits on that same tint
-            // rather than a solid fill, so it's colored to match instead of
-            // needing white for contrast.
-            Image(systemName: "shield")
+            // Filled, with the letter knocked out (owner, 2026-10-28, T-465):
+            // the outline read as an empty frame next to the other tiles'
+            // solid glyphs. White on G/M/E/NR; dark on Teen's yellow, which
+            // white can't hold contrast on in either appearance.
+            Image(systemName: "shield.fill")
                 .font(.system(size: shieldSize))
-                .foregroundStyle(item.iconColor ?? .gray)
-            // No vertical offset: an earlier version pushed this up by
-            // -tileSize/36 on the theory that the shield's taper shifts its
-            // visual centroid above geometric center, but rasterizing both
-            // layers with ImageRenderer and measuring their actual ink
-            // bounding boxes (at 8x supersampling, two tile sizes) found the
-            // opposite — the unfilled shield's ink is already dead-centered
-            // in its layout frame (SF Symbols bake balanced bounding-box
-            // padding into asymmetric shapes like this one), and so is every
-            // rating letter (G/T/M/E/?) vertically, to within a quarter point
-            // of sub-pixel rendering noise that changes sign between sizes
-            // rather than tracking the taper.
-            //
-            // The same measurement did find a real *horizontal* bias, though:
-            // every letter's ink sits left of the shield's (dead-centered)
-            // ink by ~0.3pt, consistently in the same direction at both
-            // 18pt and 27pt tiles — small enough to read as noise on its
-            // own, but visible once the eye has the shield's edges as a
-            // reference (reported: "more space to the right than the
-            // left"). Unlike the vertical bias this one didn't scale with
-            // tileSize between the two sizes tested, so it's a small fixed
-            // point offset rather than a proportional one.
+                .foregroundStyle(color)
+            // Centring: no vertical offset (an ImageRenderer ink measurement
+            // found the shield's symbol frame balances its taper, and every
+            // letter centres in it vertically); the letters' ink sits ~0.3pt
+            // left of the shield's at both 18pt and 27pt tiles, a fixed
+            // offset rather than a proportional one.
             Text(letter)
                 .font(.system(size: letterSize, weight: .bold, design: .rounded))
-                .foregroundStyle(item.iconColor ?? .gray)
+                .foregroundStyle(item.text == "T" ? Self.teenLetterInk : .white)
                 .offset(x: 0.3)
         }
     }
+
+    /// The dark ink the canvas cuts Teen's letter in (#3A2C00), for both the
+    /// light-appearance mustard and the dark-appearance system yellow.
+    private static let teenLetterInk = Color(red: 0x3A / 255, green: 0x2C / 255, blue: 0)
 
     /// Category (AO3's own quadrant pairs a gender symbol per orientation, not
     /// one generic icon for all of them): no SF Symbol ships literal gender
