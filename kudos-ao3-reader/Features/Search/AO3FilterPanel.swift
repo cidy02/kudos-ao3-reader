@@ -87,6 +87,9 @@ struct AO3FilterPanel: View {
     var worksSort: AO3WorksSort?
     /// Commits `worksSort` when Apply finds it changed. The host refetches.
     var onApplyWorksSort: ((AO3WorksSort) -> Void)?
+    /// Search's computed ranking (T-473), edited on the Sort By screen. Nil where
+    /// the host has no loaded-works ranking (Browse), which hides those sections.
+    var ranking: Binding<LoadedWorksRanking>?
     @State private var sortPresentation: WorksSortPresentation
     #if DEBUG
     @State private var debugLanguage = false
@@ -106,7 +109,8 @@ struct AO3FilterPanel: View {
         refineMatchCount: Int? = nil,
         refinePendingCount: Int = 0,
         worksSort: AO3WorksSort? = nil,
-        onApplyWorksSort: ((AO3WorksSort) -> Void)? = nil
+        onApplyWorksSort: ((AO3WorksSort) -> Void)? = nil,
+        ranking: Binding<LoadedWorksRanking>? = nil
     ) {
         _filters = filters
         self.mode = mode
@@ -121,6 +125,7 @@ struct AO3FilterPanel: View {
         self.refinePendingCount = refinePendingCount
         self.worksSort = worksSort
         self.onApplyWorksSort = onApplyWorksSort
+        self.ranking = ranking
         _sortPresentation = State(initialValue: WorksSortPresentation(applied: worksSort))
     }
 
@@ -255,24 +260,21 @@ struct AO3FilterPanel: View {
                 worksSortSections
                 Section {
                     // Sort needs AO3 to re-order results, so it only appears when the panel
-                    // actually issues a query. Search's menu, not 1v's nine columns.
+                    // actually issues a query. Search's menu, not 1v's nine columns. The
+                    // board pushes it (T-473): Ways to Find, the AO3 column, Search's
+                    // computed ranking and the one Order all live on Sort By.
                     if mode == .search {
-                        Picker("Sort by", selection: $filters.sort) {
-                            ForEach(sortOptions) { Text($0.title).tag($0) }
-                        }
-                        .onChange(of: filters.sort) { _, newValue in
-                            // Picking a column re-seeds the direction to the one a
-                            // reader expects from it (A-Z for names, most-first for
-                            // counts). Still overridable right below.
-                            filters.sortDirection = newValue.naturalDirection
-                        }
-                        // Relevance has no meaningful direction — AO3 orders by score.
-                        if filters.sort != .relevance {
-                            Picker("Order", selection: $filters.sortDirection) {
-                                ForEach(AO3SearchFilters.SortDirection.allCases) { Text($0.title).tag($0) }
-                            }
-                            .pickerStyle(.segmented)
-                            .accentFill()
+                        NavigationLink {
+                            SearchSortByView(
+                                filters: $filters,
+                                ranking: ranking,
+                                allowsRelevanceSort: allowsRelevanceSort
+                            )
+                        } label: {
+                            LabeledContent(
+                                "Sort by",
+                                value: SearchSortBySummary.value(filters: filters, ranking: ranking?.wrappedValue)
+                            )
                         }
                     }
                     Picker("Rating", selection: $filters.rating) {
@@ -539,12 +541,6 @@ struct AO3FilterPanel: View {
 
     /// The fandoms currently chosen in the filters, used to seed the other tag pickers
     /// with that fandom's popular tags.
-    private var sortOptions: [AO3SearchFilters.Sort] {
-        allowsRelevanceSort
-            ? AO3SearchFilters.Sort.allCases
-            : AO3SearchFilters.Sort.allCases.filter { $0 != .relevance }
-    }
-
     private var selectedFandoms: [String] {
         filters.fandom.split(separator: ",")
             .map { $0.trimmingCharacters(in: .whitespaces) }

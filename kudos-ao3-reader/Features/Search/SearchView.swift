@@ -26,6 +26,11 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     @Query(sort: \SavedSearch.dateAdded, order: .reverse) private var savedSearches: [SavedSearch]
 
     @State private var filters = AO3SearchFilters()
+    /// T-473: how the loaded results are ranked (Filters › Sort By). Kept for the
+    /// session beside `filters`; none of it is sent to AO3.
+    @State private var ranking = LoadedWorksRanking()
+    /// Momentum's baseline: each work's kudos when this session first saw it.
+    @State private var kudosSightings = KudosSightings()
     /// Name-entry alert for saving the current search.
     @State private var showingSaveDialog = false
     @State private var saveName = ""
@@ -356,6 +361,9 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                                     set: { sort in
                                         guard filters.sort != sort else { return }
                                         filters.sort = sort
+                                        // What the panel's Sort By does when a column
+                                        // is picked: A to Z for names, most first for counts.
+                                        filters.sortDirection = sort.naturalDirection
                                         bulkSelection.selection.removeAll()
                                         runSearch()
                                     }
@@ -372,12 +380,15 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                     }
 
                     Section {
-                        ForEach(results) { work in
+                        // Ranked from whatever is loaded, so it re-ranks as `results` changes.
+                        ForEach(rankedResults) { entry in
+                            let work = entry.work
                             SelectableAO3WorkRow(
                                 work: work,
                                 expandAll: expandAllCards,
                                 controller: bulkSelection,
-                                presentation: .searchLedger
+                                presentation: .searchLedger,
+                                signal: ranking.showsSignal ? entry.signal : nil
                             )
                             .cardRow(
                                 isSelected: bulkSelection.isSelecting && bulkSelection.selection.contains(work.id),
@@ -414,6 +425,18 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 }
             }
         }
+    }
+
+    /// `results` in the order Sort By's ranking asks for — AO3's own when it is off.
+    private var rankedResults: [RankedWork] {
+        LoadedWorksRanker.rank(results, by: ranking, previousKudos: kudosSightings.previousKudos)
+    }
+
+    /// Momentum's record: every loaded page notes each work's kudos, whatever the
+    /// rank, so the figure is there once the reader picks Momentum.
+    private func recordKudosSightings(_ works: [AO3WorkSummary]) {
+        let stored = LastSeenKudosStore.load()
+        LastSeenKudosStore.save(kudosSightings.record(works, in: stored))
     }
 
     // MARK: Local-first results
@@ -701,7 +724,8 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                     forgetSearch()
                     router.panel = .none
                 }
-            }
+            },
+            ranking: $ranking
         )
     }
 
@@ -925,6 +949,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 // second line of defence when a cancel loses the race.
                 guard token == loadToken else { return }
                 results = result.works
+                recordKudosSightings(result.works)
                 currentPage = result.currentPage
                 totalPages = result.totalPages
                 resultSummary = result.summary
