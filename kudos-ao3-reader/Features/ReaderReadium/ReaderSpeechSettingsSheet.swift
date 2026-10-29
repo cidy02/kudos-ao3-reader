@@ -45,6 +45,7 @@ struct ReaderSpeechSettingsSheet: View {
         // section is long once a pack is installed.
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+        .presentationBackgroundInteraction(.enabled(upThrough: .large))
     }
 }
 #endif
