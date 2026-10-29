@@ -79,9 +79,9 @@ struct SearchSortByView: View {
         } header: {
             SubjectFieldLabel(text: "Then Rank Loaded Works by", style: .formGroup)
         } footer: {
-            // Not the spec's "or up to 100 at once with Rank Top 100": loading
-            // several pages at once needs the owner's approval first
-            // (docs/AO3_NETWORKING_POLICY.md), so it is not offered.
+            // Not yet the spec's "or up to 100 at once with Rank Top 100": the owner
+            // has approved it in principle (2026-10-29), but how to load several
+            // pages respectfully (docs/AO3_NETWORKING_POLICY.md) is its own task.
             Text("Ranks only the works already loaded from AO3. Kudos never loads extra pages to rank.")
         }
     }

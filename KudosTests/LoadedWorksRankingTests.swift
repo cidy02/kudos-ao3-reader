@@ -6,7 +6,7 @@ import Testing
 /// on each blurb. Every one must survive a zero denominator, keep AO3's order for
 /// ties, and push set-aside and unrankable works to the end.
 struct LoadedWorksRankingTests {
-    private let now = WorkStat.date(from: "29 Oct 2026") ?? Date(timeIntervalSince1970: 0)
+    private var now: Date { WorkStat.date(from: "29 Oct 2026") ?? Date(timeIntervalSince1970: 0) }
 
     private func work(
         _ id: Int,
@@ -187,6 +187,21 @@ struct LoadedWorksRankingTests {
         #expect(SearchWaysToFind.applied(in: filters) == nil)
     }
 
+    /// Two on at once (a reader can set both by hand): switching clears both.
+    @Test func switchingClearsEveryWayToFindThatWasOn() {
+        var filters = AO3SearchFilters()
+        filters.sort = .kudos
+        filters.updated = .sixMonths
+        filters.hitsFrom = "300"
+        filters.hitsTo = "5000"
+        #expect(SearchWaysToFind.newAndLoved.isApplied(in: filters))
+        #expect(SearchWaysToFind.hiddenGems.isApplied(in: filters))
+        SearchWaysToFind.toggle(.readerFavourites, in: &filters, now: now)
+        #expect(filters.updated == .any)
+        #expect(filters.hitsFrom == "1000" && filters.hitsTo.isEmpty)
+        #expect(SearchWaysToFind.applied(in: filters) == .readerFavourites)
+    }
+
     @Test func aTagListingFallsBackToDateUpdatedNotBestMatch() {
         var filters = AO3SearchFilters()
         filters.sort = .dateUpdated
@@ -198,7 +213,8 @@ struct LoadedWorksRankingTests {
 
     @Test func cutOffMenuShowsAValueSetElsewhere() {
         #expect(SearchWaysToFind.minimumHitsOptions(including: "500") == ["", "100", "300", "500", "1000", "5000"])
-        #expect(SearchWaysToFind.minimumHitsOptions(including: "250") == ["", "100", "250", "300", "500", "1000", "5000"])
+        #expect(SearchWaysToFind.minimumHitsOptions(including: "250")
+            == ["", "100", "250", "300", "500", "1000", "5000"])
         #expect(SearchWaysToFind.minimumHitsTitle("") == "Off")
     }
 
@@ -286,8 +302,8 @@ struct LoadedWorksRankingTests {
     }
 
     @Test func shrinkWeighsHitsAgainstThePseudoCount() {
-        #expect(LoadedWorksRanker.shrink(0.6, toward: 0.3, hits: 0) == 0.3)
-        #expect(LoadedWorksRanker.shrink(0.6, toward: 0.3, hits: nil) == 0.3)
+        #expect(isClose(LoadedWorksRanker.shrink(0.6, toward: 0.3, hits: 0), 0.3))
+        #expect(isClose(LoadedWorksRanker.shrink(0.6, toward: 0.3, hits: nil), 0.3))
         #expect(isClose(LoadedWorksRanker.shrink(0.6, toward: 0.3, hits: 500), 0.45))
         #expect(LoadedWorksRanker.shrink(0.6, toward: 0.3, hits: 1_000_000) > 0.599)
     }
@@ -356,7 +372,9 @@ struct LoadedWorksRankingTests {
     // MARK: - Momentum
 
     @Test func momentumCountsKudosSinceTheLastSighting() {
-        let firstLook = [work(1, kudos: 100, hits: 1_000), work(2, kudos: 50, hits: 1_000), work(3, kudos: 80, hits: 900)]
+        let firstLook = [
+            work(1, kudos: 100, hits: 1_000), work(2, kudos: 50, hits: 1_000), work(3, kudos: 80, hits: 900),
+        ]
         var session = KudosSightings()
         let stored = session.record(firstLook, in: [:], now: now)
         #expect(session.previousKudos.isEmpty)
