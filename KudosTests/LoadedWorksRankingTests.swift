@@ -75,7 +75,7 @@ struct LoadedWorksRankingTests {
             #expect(ids(ranked) == [3, 2, 1], "cautious: \(cautious)")
             #expect(ranked.last?.score == nil)
             #expect(ranked.last?.signal == "Not enough figures to rank")
-            #expect(ranked.compactMap(\.score).allSatisfy(\.isFinite))
+            #expect(ranked.compactMap(\.score).allSatisfy { $0.isFinite })
         }
         // Kudos with no hits at all is "more kudos than hits": set aside, or, with
         // that off, still unranked rather than infinite.
@@ -319,14 +319,14 @@ struct LoadedWorksRankingTests {
         ]
         let ranked = LoadedWorksRanker.rank(works, by: settings(.kudosPerHitAdjusted), now: now)
         #expect(ids(ranked) == [2, 4, 1, 3])
-        #expect(ranked.suffix(2).allSatisfy(\.isSetAside))
+        #expect(ranked.suffix(2).allSatisfy { $0.isSetAside })
         #expect(ranked.last?.signal == "Unusual stats, set aside")
         // Left out of the median too: 0.1 against the median of 0.1 and 0.05.
         #expect(isClose(ranked.first?.score, 0.1 / 0.075))
 
         let off = LoadedWorksRanker.rank(works, by: settings(.kudosPerHitAdjusted, setAside: false), now: now)
         #expect(off.first?.work.id == 1)
-        #expect(!off.contains(where: \.isSetAside))
+        #expect(!off.contains { $0.isSetAside })
     }
 
     @Test func almostNoBookmarksMeansUnderOnePerHundredKudos() {

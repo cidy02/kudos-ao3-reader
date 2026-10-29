@@ -67,10 +67,10 @@ struct ReadingHistoryTimelineTests {
             scope: .week, containing: date(5), facts: [late], now: date(6), calendar: cal
         )
         #expect(timeline.days.map(\.start) == [date(4, 0)])
-        #expect(timeline.days.first?.totalSeconds == 70 * 60)
+        #expect(timeline.days.first?.totalSeconds == 70 * 60.0)
         let tuesday = timeline.buckets.first { $0.start == date(4, 0) }
         let wednesday = timeline.buckets.first { $0.start == date(5, 0) }
-        #expect(tuesday?.seconds == 70 * 60)
+        #expect(tuesday?.seconds == 70 * 60.0)
         #expect(wednesday?.seconds == 0)
         #expect(timeline.daysRead == 1)
     }
@@ -170,7 +170,7 @@ struct ReadingHistoryTimelineTests {
             calendar: cal
         )
         #expect(timeline.buckets.count == 12)
-        #expect(timeline.buckets.last?.seconds == 30 * 60)
+        #expect(timeline.buckets.last?.seconds == 30 * 60.0)
         #expect(timeline.totalSeconds == 30 * 60)
         #expect(!timeline.isCurrent)
     }
