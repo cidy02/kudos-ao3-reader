@@ -1095,11 +1095,15 @@ enum WorkStat {
     }()
 
     static func displayDate(_ rawText: String) -> String {
+        date(from: rawText).map(displayFormatter.string(from:)) ?? rawText
+    }
+
+    /// The same date as a `Date`, for arithmetic on it (T-473's age groups); nil
+    /// when neither of AO3's formats parses.
+    static func date(from rawText: String) -> Date? {
         for formatter in parseFormatters {
-            if let date = formatter.date(from: rawText) {
-                return displayFormatter.string(from: date)
-            }
+            if let date = formatter.date(from: rawText) { return date }
         }
-        return rawText
+        return nil
     }
 }

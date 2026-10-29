@@ -26,6 +26,9 @@ struct AO3WorkRow: View {
     /// replaces the work summary, its tags are always visible, and its date
     /// closes the metadata row.
     var bookmark: AO3AuthorBookmark?
+    /// Search's computed-sort figure (T-473 "Show the signal on each result"),
+    /// drawn under the ledger's figures in their style. Nil draws nothing.
+    var signal: String?
 
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var themeManager
@@ -253,7 +256,10 @@ struct AO3WorkRow: View {
                 chipGroup("Additional Tags", additionalTags, field: .freeform)
             }
 
-            searchLedgerMetadataRow
+            VStack(alignment: .leading, spacing: 4) {
+                searchLedgerMetadataRow
+                searchLedgerSignal
+            }
             if showsPerformance {
                 AO3AuthorPerformanceStrip(work: work)
             }
@@ -346,6 +352,18 @@ struct AO3WorkRow: View {
             .accessibilityLabel(
                 (metadata + (updated.isEmpty ? [] : ["Updated \(updated)"])).joined(separator: ", ")
             )
+        }
+    }
+
+    /// One more figure, so it reads as the row's stats do: same size, same grey.
+    @ViewBuilder
+    private var searchLedgerSignal: some View {
+        if let signal {
+            Text(signal)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityLabel("Ranking: \(signal)")
         }
     }
 

@@ -200,6 +200,8 @@ struct SelectableAO3WorkRow: View {
     let expandAll: Bool
     let controller: RemoteWorkSelectionController
     var presentation: AO3WorkRow.Presentation = .standard
+    /// Search's computed-sort figure for this work, when the reader shows it.
+    var signal: String?
 
     var body: some View {
         let row = AO3WorkRow(
@@ -207,7 +209,8 @@ struct SelectableAO3WorkRow: View {
             expandAll: expandAll,
             isSelecting: controller.isSelecting,
             isSelected: controller.selection.contains(work.id),
-            presentation: presentation
+            presentation: presentation,
+            signal: signal
         )
         if controller.isSelecting {
             let isSelected = controller.selection.contains(work.id)
