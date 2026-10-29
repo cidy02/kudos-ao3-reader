@@ -191,11 +191,11 @@ struct PromptMemeView: View {
         } label: {
             Text("New prompt")
                 .font(.system(size: buttonLabelSize, weight: .semibold))
-                .foregroundStyle(palette.labelOnAccent)
+                .foregroundStyle(theme.onEffectiveTint)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity)
                 .frame(minHeight: 44)
-                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(palette.accent))
+                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(theme.effectiveTint))
         }
         .buttonStyle(.plain)
         .padding(.horizontal, 16)
@@ -379,11 +379,11 @@ struct PromptMemeView: View {
                     .lineLimit(1)
                     .fixedSize()
             }
-            .foregroundStyle(isProminent ? palette.labelOnAccent : palette.accent)
+            .foregroundStyle(isProminent ? theme.onEffectiveTint : theme.accentInk)
             .padding(.horizontal, 14)
             .frame(height: 34)
             .background(
-                Capsule().fill(isProminent ? palette.accent : palette.accent.opacity(0.14))
+                Capsule().fill(isProminent ? theme.effectiveTint : theme.effectiveTint.opacity(0.14))
             )
         }
         .buttonStyle(.plain)

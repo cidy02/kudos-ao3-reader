@@ -175,10 +175,10 @@ struct FandomListFilterSheet: View {
                 .monospacedDigit()
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 15)
-                .foregroundStyle(palette.labelOnAccent)
+                .foregroundStyle(themeManager.onEffectiveTint)
                 .background(
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(palette.accent)
+                        .fill(themeManager.effectiveTint)
                 )
         }
         .buttonStyle(.plain)

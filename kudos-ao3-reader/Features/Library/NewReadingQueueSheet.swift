@@ -308,14 +308,14 @@ struct NewReadingQueueSheet: View {
     private func radioMark(isSelected: Bool) -> some View {
         Circle()
             .strokeBorder(
-                isSelected ? palette.accent : Color.secondary.opacity(0.4),
+                isSelected ? theme.effectiveTint : Color.secondary.opacity(0.4),
                 lineWidth: 1.6
             )
             .frame(width: 19, height: 19)
             .overlay {
                 if isSelected {
                     Circle()
-                        .fill(palette.accent)
+                        .fill(theme.effectiveTint)
                         .frame(width: 9, height: 9)
                 }
             }

@@ -79,7 +79,7 @@ struct FandomFamilyBlock: View {
 
                 Text("All \(family.memberCount) tags")
                     .font(.system(size: allTagsSize, weight: .medium, design: .monospaced))
-                    .foregroundStyle(palette.accent)
+                    .foregroundStyle(themeManager.accentInk)
                     .monospacedDigit()
             }
 

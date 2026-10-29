@@ -126,7 +126,7 @@ struct QueueTagSheet: View {
         HStack(spacing: 10) {
             Image(systemName: "plus")
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(palette.accent)
+                .foregroundStyle(themeManager.accentInk)
                 .frame(width: 20)
                 .accessibilityHidden(true)
             TextField("New tag", text: $newTagName)
@@ -134,7 +134,7 @@ struct QueueTagSheet: View {
                 .onSubmit(addTypedTag)
             Button("Add", action: addTypedTag)
                 .font(.system(size: buttonLabelSize, weight: .semibold))
-                .foregroundStyle(palette.accent)
+                .foregroundStyle(themeManager.accentInk)
                 .buttonStyle(.plain)
                 .disabled(trimmedNewTag.isEmpty)
                 .opacity(trimmedNewTag.isEmpty ? 0.35 : 1)
@@ -161,7 +161,7 @@ struct QueueTagSheet: View {
             case .all:
                 Image(systemName: "checkmark")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(palette.accent)
+                    .foregroundStyle(themeManager.accentInk)
             case .some:
                 Text("some")
                     .font(.system(size: someCoverageSize))

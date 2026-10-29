@@ -184,7 +184,7 @@ struct EditTagsView: View {
         SubjectFormRow(label: option.title, action: action) {
             Image(systemName: "checkmark")
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(accountPalette.accent)
+                .foregroundStyle(theme.accentInk)
                 .opacity(isOn ? 1 : 0)
                 .frame(width: 15, height: 15)
                 .accessibilityHidden(true)

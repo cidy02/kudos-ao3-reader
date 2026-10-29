@@ -35,9 +35,9 @@ struct SearchPaginationBar: View {
     /// tap read as ignored and the app as slow. It also let a second tap queue a
     /// second fetch a slot behind the first, which genuinely made it slower.
     var isLoading: Bool = false
-    /// The subject the results belong to, so the sheet's confirm button and its
-    /// selected tile take the same hue as the page around them. Nil falls back
-    /// to the app accent.
+    /// The subject the results belong to. No longer read: the forward arrow, the
+    /// sheet's confirm button and its selected tile are controls, so they take the
+    /// app colour whatever the page around them is. Kept so call sites stay as they are.
     var palette: SubjectPalette?
     let onSelect: (Int) -> Void
 
@@ -46,10 +46,6 @@ struct SearchPaginationBar: View {
     @Environment(ThemeManager.self) private var themeManager
     @ScaledMetric(relativeTo: .footnote) private var currentPageSize: CGFloat = 14
     @ScaledMetric(relativeTo: .caption) private var totalPagesSize: CGFloat = 12
-
-    private var resolvedPalette: SubjectPalette {
-        palette ?? themeManager.scopePalette
-    }
 
     var body: some View {
         HStack(spacing: 3) {
@@ -200,6 +196,7 @@ struct SearchPaginationBar: View {
         )
         let endLabel = isBackward ? "First page" : "Last page"
         let isAccentedForward = !isBackward && enabled
+        let isDark = themeManager.appTheme.isDarkFamily
 
         return Button {
             onSelect(page)
@@ -207,15 +204,18 @@ struct SearchPaginationBar: View {
             Image(systemName: isBackward ? "chevron.backward" : "chevron.forward")
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(
-                    isAccentedForward ? resolvedPalette.accentOnFill : Color.primary
+                    isAccentedForward ? themeManager.accentInk : Color.primary
                 )
                 .frame(width: 32, height: 32)
                 .background {
                     if isAccentedForward {
                         Circle()
-                            .fill(resolvedPalette.chipFill)
+                            .fill(themeManager.effectiveTint.opacity(isDark ? 0.24 : 0.16))
                             .overlay(
-                                Circle().strokeBorder(resolvedPalette.chipStroke, lineWidth: 0.5)
+                                Circle().strokeBorder(
+                                    themeManager.effectiveTint.opacity(isDark ? 0.50 : 0.40),
+                                    lineWidth: 0.5
+                                )
                             )
                     }
                 }
@@ -316,8 +316,9 @@ private struct PageJumpSheet: View {
         _draftText = State(initialValue: String(currentPage))
     }
 
-    private var resolvedPalette: SubjectPalette {
-        palette ?? themeManager.scopePalette
+    /// The app colour at the strength a selected chip takes (`SubjectChip.tinted`).
+    private func selectedFill(_ opacity: Double) -> Color {
+        themeManager.effectiveTint.opacity(opacity)
     }
 
     /// The typed page, clamped. An empty or unparseable field reads as the page
@@ -366,7 +367,6 @@ private struct PageJumpSheet: View {
 
             GlassCircleButton(
                 isAccented: true,
-                palette: resolvedPalette,
                 accessibilityName: "Go to page \(draftPage)",
                 action: {
                     if draftPage != currentPage { onSelect(draftPage) }
@@ -439,7 +439,7 @@ private struct PageJumpSheet: View {
                             .minimumScaleFactor(0.6)
                             .frame(maxWidth: .infinity, minHeight: 44)
                             .background(tileBackground(isSelected: page == draftPage))
-                            .foregroundStyle(page == draftPage ? resolvedPalette.accentOnFill : Color.primary)
+                            .foregroundStyle(page == draftPage ? themeManager.accentInk : Color.primary)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Page \(page)")
@@ -451,11 +451,12 @@ private struct PageJumpSheet: View {
 
     private func tileBackground(isSelected: Bool) -> some View {
         let shape = RoundedRectangle(cornerRadius: 11, style: .continuous)
+        let isDark = themeManager.appTheme.isDarkFamily
         return shape
-            .fill(isSelected ? resolvedPalette.chipFill : themeManager.appTheme.glassFill(0.08))
+            .fill(isSelected ? selectedFill(isDark ? 0.24 : 0.16) : themeManager.appTheme.glassFill(0.08))
             .overlay(
                 shape.strokeBorder(
-                    isSelected ? resolvedPalette.chipStroke : themeManager.appTheme.glassStroke(0.13),
+                    isSelected ? selectedFill(isDark ? 0.50 : 0.40) : themeManager.appTheme.glassStroke(0.13),
                     lineWidth: 0.5
                 )
             )

@@ -165,7 +165,7 @@ struct WorkCollectionsGiftsView: View {
             searchResults.removeAll { $0.id == offer.id }
         } label: {
             HStack(spacing: 11) {
-                Image(systemName: "plus.circle").foregroundStyle(palette.accent)
+                Image(systemName: "plus.circle").foregroundStyle(theme.accentInk)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(offer.title.isEmpty ? offer.name : offer.title)
                         .font(.system(size: rowTitleSize, weight: .medium))
@@ -195,7 +195,7 @@ struct WorkCollectionsGiftsView: View {
         } label: {
             HStack(spacing: 11) {
                 Image(systemName: offer.isSelected ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(offer.isSelected ? palette.accent : Color.secondary)
+                    .foregroundStyle(offer.isSelected ? theme.accentInk : Color.secondary)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(offer.title.isEmpty ? offer.name : offer.title)
                         .font(.system(size: rowTitleSize, weight: .medium))
@@ -448,7 +448,7 @@ struct WorkSeriesPickerView: View {
         } label: {
             HStack(spacing: 11) {
                 Image(systemName: isCurrent ? "checkmark" : membership.isSelected ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(membership.isSelected ? palette.accent : Color.secondary)
+                    .foregroundStyle(membership.isSelected ? theme.accentInk : Color.secondary)
                     .frame(minWidth: 17)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(membership.title)

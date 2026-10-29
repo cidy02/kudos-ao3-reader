@@ -343,7 +343,7 @@ struct ChallengeSignUpsView: View { // swiftlint:disable:this type_body_length
                 }
                 Text("Load page \(pages.loadedPages + 1) of \(pages.totalPages)")
                     .font(.system(size: loadMoreSize, weight: .medium))
-                    .foregroundStyle(palette.accent)
+                    .foregroundStyle(theme.accentInk)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .center)
@@ -388,13 +388,13 @@ struct ChallengeSignUpsView: View { // swiftlint:disable:this type_body_length
             } label: {
                 Text("Create sign-up")
                     .font(.system(size: buttonLabelSize, weight: .semibold))
-                    .foregroundStyle(palette.labelOnAccent)
+                    .foregroundStyle(theme.onEffectiveTint)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity)
                     .frame(minHeight: 44)
                     .background(
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(palette.accent)
+                            .fill(theme.effectiveTint)
                     )
             }
             .buttonStyle(.plain)

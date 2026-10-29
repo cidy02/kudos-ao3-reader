@@ -420,6 +420,7 @@ struct CollectionModerationView: View {
                     .lineLimit(1)
                     .fixedSize()
             }
+            .foregroundStyle(isProminent ? ThemeManager.label(on: palette.tint) : Color.primary)
             .padding(.horizontal, 14)
             .frame(minHeight: 34)
             .background(

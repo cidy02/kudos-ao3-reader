@@ -124,7 +124,7 @@ extension ChallengeSettingsEditView {
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.system(size: 11, weight: .semibold))
             }
-            .foregroundStyle(palette.accent)
+            .foregroundStyle(theme.accentInk)
         }
         .menuStyle(.button)
         .buttonStyle(.plain)

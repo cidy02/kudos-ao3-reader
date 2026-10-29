@@ -73,7 +73,7 @@ struct PromptTagsEditorView: View {
                         dismiss()
                     }
                     .font(.system(size: doneButtonSize, weight: .semibold))
-                    .foregroundStyle(palette.accent)
+                    .foregroundStyle(theme.accentInk)
                 }
             }
             .onAppear {

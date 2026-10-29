@@ -903,11 +903,11 @@ struct CommentsView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .foregroundStyle(palette.solidButtonLabel)
+            .foregroundStyle(theme.onEffectiveTint)
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
             .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous).fill(palette.accent)
+                RoundedRectangle(cornerRadius: 14, style: .continuous).fill(theme.effectiveTint)
             )
         }
         .buttonStyle(.plain)
@@ -922,9 +922,8 @@ struct CommentsView: View {
 
     @ViewBuilder
     private var floatingWriteCommentBar: some View {
-        // Spec 1f's centred 44pt pill, in the page's own accent rather than the
-        // app tint — this is the one filled control on a washed screen, which
-        // is exactly what `solidButton*` names. Still floating over the page
+        // Spec 1f's centred 44pt pill, in the app colour — a control is never the
+        // page's subject colour, even on a washed screen. Still floating over the page
         // backdrop with no opaque slab behind it: the safe-area inset (plus the
         // list's trailing spacer) keeps content from sitting underneath, and
         // the artboard's scrim would put the slab back. Shown whether or not
@@ -947,10 +946,10 @@ struct CommentsView: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
                 }
-                .foregroundStyle(palette.solidButtonLabel)
+                .foregroundStyle(theme.onEffectiveTint)
                 .padding(.horizontal, 20)
                 .frame(minHeight: 44)
-                .background(Capsule().fill(palette.accent))
+                .background(Capsule().fill(theme.effectiveTint))
             }
             .buttonStyle(.plain)
             .disabled(model.isOffline)
@@ -1569,7 +1568,7 @@ struct CommentComposerSheet: View {
         .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
     }
 
-    /// "{author} · {chapter}" in the page accent — the parent's own byline. The
+    /// "{author} · {chapter}" in the app colour (the author is a link) — the parent's own byline. The
     /// "Replying to" half of it moved into the sheet title (spec 1ba), so
     /// repeating it here would say the same thing twice in 40 points of sheet.
     @ViewBuilder
@@ -1587,20 +1586,20 @@ struct CommentComposerSheet: View {
                 } label: {
                     Text(parent.author)
                         .font(.system(size: quoteAuthorSize, weight: .semibold))
-                        .foregroundStyle(palette.accent)
+                        .foregroundStyle(theme.accentInk)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("View \(parent.author)'s profile")
                 if !chapterSuffix.isEmpty {
                     Text(chapterSuffix)
                         .font(.system(size: quoteAuthorSize, weight: .semibold))
-                        .foregroundStyle(palette.accent)
+                        .foregroundStyle(theme.accentInk)
                 }
             }
         } else {
             Text(parent.author + chapterSuffix)
                 .font(.system(size: quoteAuthorSize, weight: .semibold))
-                .foregroundStyle(palette.accent)
+                .foregroundStyle(theme.accentInk)
         }
     }
 
