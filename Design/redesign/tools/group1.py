@@ -1,8 +1,9 @@
 import sys; sys.path.insert(0,'.')
 from gen import board
+from polish import polish
 from data import W, I, works, SHELF
 B=[]
-def add(name,title,comp,attrs,data,h=844,**kw): board(name,title,comp,attrs,data,h,**kw); B.append((name,title,h))
+def add(name,title,comp,attrs,data,h=844,**kw): attrs,data=polish(name,attrs,data); board(name,title,comp,attrs,data,h,**kw); B.append((name,title,h))
 
 # Library › a shelf (list and grid)
 add('Shelf-List','Library › Finished (list)','ListScreen',{'title':'Finished','subtitle':'74 works · most recently finished first','back':'Back to Library'},{
@@ -15,16 +16,16 @@ add('Shelf-Grid','Library › Finished (grid)','ListScreen',{'title':'Finished',
  'sections':[{'kind':'grid','works':works('letters','baker','moor','map')}]},1000)
 EDIT_SHELVES = {
  'sections':[{'header':'On the Library page','rows':[
-   {'label':'Favourites','kind':'segments','options':['Carousel','List'],'selected':0,'edit':'remove','handle':True,'dot':SHELF['Favourites'][0],'dotD':SHELF['Favourites'][1]},
-   {'label':'Collections','kind':'segments','options':['Carousel','List'],'selected':0,'edit':'remove','handle':True,'dot':SHELF['Collections'][0],'dotD':SHELF['Collections'][1]},
-   {'label':'Downloaded','kind':'segments','options':['Carousel','List'],'selected':0,'edit':'remove','handle':True,'dot':SHELF['Downloaded'][0],'dotD':SHELF['Downloaded'][1]}]},
+   {'label':'Favourites','kind':'segments','options':['Carousel','List'],'selected':0,'edit':'remove','handle':'trailing','dot':SHELF['Favourites'][0],'dotD':SHELF['Favourites'][1]},
+   {'label':'Collections','kind':'segments','options':['Carousel','List'],'selected':0,'edit':'remove','handle':'trailing','dot':SHELF['Collections'][0],'dotD':SHELF['Collections'][1]},
+   {'label':'Downloaded','kind':'segments','options':['Carousel','List'],'selected':0,'edit':'remove','handle':'trailing','dot':SHELF['Downloaded'][0],'dotD':SHELF['Downloaded'][1]}]},
   {'header':'As shelf buttons','rows':[
-   {'label':'Want to Read','kind':'value','detail':'31','edit':'add','handle':True,'dot':SHELF['Want to Read'][0],'dotD':SHELF['Want to Read'][1]},
-   {'label':'Reading Now','kind':'value','detail':'6','edit':'add','handle':True,'dot':SHELF['Reading Now'][0],'dotD':SHELF['Reading Now'][1]},
-   {'label':'Finished','kind':'value','detail':'74','edit':'add','handle':True,'dot':SHELF['Finished'][0],'dotD':SHELF['Finished'][1]},
-   {'label':'Queues','kind':'value','detail':'3','edit':'add','handle':True,'dot':SHELF['Queues'][0],'dotD':SHELF['Queues'][1]},
-   {'label':'History','kind':'value','detail':'412','edit':'add','handle':True,'dot':SHELF['History'][0],'dotD':SHELF['History'][1]},
-   {'label':'Imported','kind':'value','detail':'12','edit':'add','handle':True,'dot':SHELF['Imported'][0],'dotD':SHELF['Imported'][1]}]},
+   {'label':'Want to Read','kind':'value','detail':'31','edit':'add','handle':'trailing','dot':SHELF['Want to Read'][0],'dotD':SHELF['Want to Read'][1]},
+   {'label':'Reading Now','kind':'value','detail':'6','edit':'add','handle':'trailing','dot':SHELF['Reading Now'][0],'dotD':SHELF['Reading Now'][1]},
+   {'label':'Finished','kind':'value','detail':'74','edit':'add','handle':'trailing','dot':SHELF['Finished'][0],'dotD':SHELF['Finished'][1]},
+   {'label':'Queues','kind':'value','detail':'3','edit':'add','handle':'trailing','dot':SHELF['Queues'][0],'dotD':SHELF['Queues'][1]},
+   {'label':'History','kind':'value','detail':'412','edit':'add','handle':'trailing','dot':SHELF['History'][0],'dotD':SHELF['History'][1]},
+   {'label':'Imported','kind':'value','detail':'12','edit':'add','handle':'trailing','dot':SHELF['Imported'][0],'dotD':SHELF['Imported'][1]}]},
   {'rows':[{'label':'All Works','sub':'Always in the Library header','kind':'value','detail':'214','dot':SHELF['All Works'][0],'dotD':SHELF['All Works'][1]}]}]}
 add('Edit-Shelves','Library › Edit Shelves (sheet)','FormScreen',{'title':'Edit Shelves','mode':'sheet','confirm':'Done'},EDIT_SHELVES)
 add('Library-Edit','Library › Edit (over Library)','FormScreen',{'title':'Edit Shelves','mode':'sheet','confirm':'Done'},EDIT_SHELVES,backdrop='Library')
@@ -47,7 +48,7 @@ add('Subscriptions-Tags','Subscriptions › Tags (followed in Kudos)','ListScree
   {'title':'Pride and Prejudice','kicker':'Fandom','kickerColour':'#2F7A4A','sub':'6 new this week · Complete only · on Home','tone':'#2F7A4A','glyph':I['tag'],'square':True,'badge':'6'},
   {'title':'Anne Elliot/Frederick Wentworth','kicker':'Relationship','kickerColour':'#2F7A4A','sub':'2 new this week · on Home','tone':'#2F7A4A','glyph':I['tag'],'square':True,'badge':'2'},
   {'title':'Lighthouses','kicker':'Freeform','kickerColour':'#2F7A4A','sub':'Nothing new since Oct 20 · Hide Explicit','tone':'#2F7A4A','glyph':I['tag'],'square':True}]},
-  {'kind':'rows','rows':[{'title':'Follow a Tag…','light':True,'sub':'Fandoms, relationships, characters, freeform tags','tone':'#990000','glyph':'M12 5v14M5 12h14','square':True,'chevron':False}]}]})
+  {'kind':'rows','rows':[{'title':'Follow a Tag…','light':True,'sub':'Fandoms, relationships, characters, freeform tags','tone':'#821019','glyph':'M12 5v14M5 12h14','square':True,'chevron':False}]}]})
 
 # Writing drill-ins
 add('Writing-Drafts','Writing › Drafts','ListScreen',{'title':'Drafts','subtitle':'2 on AO3 · 1 in Kudos only','back':'Back to Writing','tab':'writing'},{
@@ -61,9 +62,9 @@ add('Writing-Series','Writing › Series','ListScreen',{'title':'Series','subtit
  'tools':[{'label':'New Series','icon':'plus'}],
  'sections':[{'kind':'rows','rows':[{'title':'Lantern Season','kicker':'Original Work','kickerColour':'hsl(188, 56%, 33%)','sub':'3 parts · 37,250 words · 1,712 kudos','tone':'#1E63C8','glyph':I['series'],'square':True}]},
   {'header':'Lantern Season','count':'3 parts','kind':'rows','rows':[
-   {'title':'1. Keeper of the Northern Light','sub':'22,410 words · complete','handle':True},
-   {'title':'2. Lantern Season','sub':'15,050 words · complete','handle':True},
-   {'title':'3. What the Tide Keeps','sub':'9,800 words · 3/8 · draft chapter 4','handle':True}]}]})
+   {'title':'1. Keeper of the Northern Light','sub':'22,410 words · complete','handle':'trailing'},
+   {'title':'2. Lantern Season','sub':'15,050 words · complete','handle':'trailing'},
+   {'title':'3. What the Tide Keeps','sub':'9,800 words · 3/8 · draft chapter 4','handle':'trailing'}]}]})
 
 # Account sheet pages
 add('AO3-Preferences','Account › AO3 Preferences','FormScreen',{'title':'AO3 Preferences','back':'Back to Account'},{
@@ -74,7 +75,7 @@ add('AO3-Preferences','Account › AO3 Preferences','FormScreen',{'title':'AO3 P
   {'header':'Privacy on AO3','rows':[{'label':'Allow others to invite your works to collections','kind':'toggle','on':True},{'label':'Hide your email','kind':'toggle','on':True}]}]},1100)
 add('Open-AO3','Account › Open AO3','FormScreen',{'title':'Open AO3','back':'Back to Account'},{
  'sections':[
-  {'header':'Your account','rows':[{'label':'Dashboard','kind':'out','tile':'#990000','icon':I['dash']},{'label':'Gifts','kind':'out','tile':'#B3127A','icon':I['gift']},{'label':'Claims','kind':'out','tile':'#C25E00','icon':I['book']},{'label':'Co-creator requests','kind':'out','tile':'#7B3FA0','icon':I['users'],'badge':'1'},{'label':'Invitations','kind':'out','tile':'#1E63C8','icon':I['mail']},{'label':'Import works','kind':'out','tile':'#2F8F3A','icon':I['import']}]},
-  {'header':'AO3','rows':[{'label':'FAQ','kind':'out','tile':'#6C6C70','icon':I['help']},{'label':'Terms of Service','kind':'out','tile':'#6C6C70','icon':I['doc']},{'label':'Content Policy','kind':'out','tile':'#6C6C70','icon':I['doc']},{'label':'Donate to the OTW','kind':'out','tile':'#990000','icon':I['heart']}],'footer':'These open AO3 in the in-app browser.'}]})
+  {'header':'Your account','rows':[{'label':'Dashboard','kind':'out','tile':'#821019','icon':I['dash']},{'label':'Gifts','kind':'out','tile':'#B3127A','icon':I['gift']},{'label':'Claims','kind':'out','tile':'#C25E00','icon':I['book']},{'label':'Co-creator requests','kind':'out','tile':'#7B3FA0','icon':I['users'],'badge':'1'},{'label':'Invitations','kind':'out','tile':'#1E63C8','icon':I['mail']},{'label':'Import works','kind':'out','tile':'#2F8F3A','icon':I['import']}]},
+  {'header':'AO3','rows':[{'label':'FAQ','kind':'out','tile':'#6C6C70','icon':I['help']},{'label':'Terms of Service','kind':'out','tile':'#6C6C70','icon':I['doc']},{'label':'Content Policy','kind':'out','tile':'#6C6C70','icon':I['doc']},{'label':'Donate to the OTW','kind':'out','tile':'#821019','icon':I['heart']}],'footer':'These open AO3 in the in-app browser.'}]})
 open('group1.list','w').write('\n'.join(f'{n}|{t}|{h}' for n,t,h in B))
 print(len(B),'boards')

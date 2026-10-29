@@ -26,7 +26,7 @@ button{cursor:pointer}
     </header>
     <div style="margin: 0 -16px">
       <sc-for list="{{works}}" as="w" hint-placeholder-count="5">
-        <dc-import name="WorkRow" work="{{w}}" selecting="{{true}}" selected="{{w.selected}}" divider="{{w.divider}}" accent="{{accent}}" hint-size="100%,100px"></dc-import>
+        <dc-import name="WorkRow" work="{{w}}" selecting="{{true}}" selected="{{w.selected}}" fandom-top="{{true}}" divider="{{w.divider}}" accent="{{accent}}" hint-size="100%,116px"></dc-import>
       </sc-for>
     </div>
   </main>
@@ -41,7 +41,7 @@ button{cursor:pointer}
   </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#990000"},"$preview":{"width":390,"height":844}}'>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#821019"},"$preview":{"width":390,"height":844}}'>
 class Component extends DCLogic {
   renderVals() {
     const works = [
@@ -52,7 +52,7 @@ class Component extends DCLogic {
       { title: 'Five Orange Pips and a Kettle', author: 'mrshudsonsays', fandom: 'Sherlock Holmes', rating: 'G', category: 'Gen', warnings: 'none', status: 'complete', words: '2,100', chapters: '1/1', kudos: '1,010', hits: '8.0k' }
     ];
     return {
-      accent: this.props.accent ?? '#990000',
+      accent: this.props.accent ?? '#821019',
       works: works.map((w, i) => ({ ...w, selected: !!w.selected, divider: i < works.length - 1 })),
       actions: [
         { label: 'Download', d: 'M12 4v11M7 10.5l5 5 5-5M5 20h14' },

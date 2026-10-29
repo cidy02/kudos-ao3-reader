@@ -34,7 +34,7 @@ button{cursor:pointer}
         <span style="font-size: 15px; color: #6C6C70">3</span>
       </div>
       <div style="display: flex; align-items: center; gap: 10px">
-        <dc-import name="Symbols" rating="T" category="FF" warnings="none" status="complete" size="18" hint-size="38px,38px"></dc-import>
+        <dc-import name="Symbols" rating="T" category="FF" warnings="none" status="complete" size="18" hint-size="48px,48px"></dc-import>
         <div style="flex: 1; min-width: 0; display: flex; flex-direction: column"><span style="font-size: 15px; font-weight: 600">The Second Lamp</span><span style="font-size: 13px; color: #6C6C70">tidewright · 4,800 words</span></div>
       </div>
       <div style="display: flex; gap: 8px">
@@ -59,7 +59,7 @@ button{cursor:pointer}
   </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#990000"},"$preview":{"width":390,"height":844}}'>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#821019"},"$preview":{"width":390,"height":844}}'>
 class Component extends DCLogic {
   renderVals() {
     const rows = [
@@ -72,7 +72,7 @@ class Component extends DCLogic {
       ['Challenge settings', '', 'M4 7h10M18 7h2M4 17h4M12 17h8M14 4v6M8 14v6']
     ];
     return {
-      accent: this.props.accent ?? '#990000',
+      accent: this.props.accent ?? '#821019',
       rows: rows.map(([label, value, d], i) => ({ label, value, d, sep: i ? '0.5px solid #E5E5EA' : 'none' }))
     };
   }

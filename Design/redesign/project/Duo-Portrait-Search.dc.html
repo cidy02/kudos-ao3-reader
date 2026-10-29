@@ -11,7 +11,7 @@
 <style>
 body{margin:0}
 button{cursor:pointer}
-a{color:#990000}a:hover{color:#6E0000}
+a{color:#821019}a:hover{color:#6E0000}
 </style>
 </helmet>
 <div style="width: 669px; height: 951px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
@@ -20,7 +20,7 @@ a{color:#990000}a:hover{color:#6E0000}
       <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">In your library <span style="font-weight: 400; color: #6C6C70">2</span></h2>
       <div style="margin: 0 -16px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr))">
         <sc-for list="{{mine}}" as="w" hint-placeholder-count="2">
-          <dc-import name="WorkRow" work="{{w}}" accent="#990000" hint-size="100%,100px"></dc-import>
+          <dc-import name="WorkRow" work="{{w}}" accent="#821019" hint-size="100%,100px"></dc-import>
         </sc-for>
       </div>
     </section>
@@ -36,11 +36,11 @@ a{color:#990000}a:hover{color:#6E0000}
       <div style="display: flex; align-items: center; gap: 8px">
         <h2 style="margin: 0; flex: 1; font-size: 20px; line-height: 25px; font-weight: 700">On AO3 <span style="font-weight: 400; color: #6C6C70">1,284 works</span></h2>
         <button style="height: 34px; padding: 0 12px; border: none; border-radius: 17px; background: #EFEFF4; color: #000000; font-family: inherit; font-size: 15px">Best match ▾</button>
-        <button aria-pressed="true" style="height: 34px; padding: 0 12px; border: none; border-radius: 17px; background: #990000; color: #FFFFFF; font-family: inherit; font-size: 15px; font-weight: 600">Filters · 2</button>
+        <button aria-pressed="true" style="height: 34px; padding: 0 12px; border: none; border-radius: 17px; background: #821019; color: #FFFFFF; font-family: inherit; font-size: 15px; font-weight: 600">Filters · 2</button>
       </div>
       <div style="margin: 0 -16px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr))">
         <sc-for list="{{results}}" as="w" hint-placeholder-count="2">
-          <dc-import name="WorkRow" work="{{w}}" show-summary="{{true}}" accent="#990000" hint-size="100%,130px"></dc-import>
+          <dc-import name="WorkRow" work="{{w}}" show-summary="{{true}}" accent="#821019" hint-size="100%,130px"></dc-import>
         </sc-for>
       </div>
     </section>
@@ -58,7 +58,7 @@ a{color:#990000}a:hover{color:#6E0000}
 
 
   <div style="position: absolute; left: 0; top: 0; z-index: 2">
-    <dc-import name="DuoTopBar" nav="back" title-style="none" accent="#990000" hint-size="669px,80px"></dc-import>
+    <dc-import name="DuoTopBar" nav="back" title-style="none" accent="#821019" hint-size="669px,80px"></dc-import>
   </div>
   <div style="position: absolute; left: 70px; right: 16px; top: 34px; z-index: 3; display: flex">
     <label style="flex: 1; min-width: 0; height: 44px; padding: 0 6px 0 14px; box-sizing: border-box; border-radius: 22px; display: flex; align-items: center; gap: 8px; color: #6C6C70; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
@@ -69,7 +69,7 @@ a{color:#990000}a:hover{color:#6E0000}
   </div>
   <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 130px; background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0.94) 72%); pointer-events: none"></div>
   <div style="position: absolute; left: 0; right: 0; bottom: 24px; display: flex; justify-content: center">
-    <dc-import name="TabBar" selected="search" accent="#990000" hint-size="358px,62px"></dc-import>
+    <dc-import name="TabBar" selected="search" accent="#821019" hint-size="358px,62px"></dc-import>
   </div>
   <sc-if value="{{showFilters}}" hint-placeholder-val="{{false}}">
     <div aria-hidden="true" style="position: absolute; inset: 0; z-index: 4; background: rgba(0,0,0,0.24)"></div>
@@ -77,17 +77,17 @@ a{color:#990000}a:hover{color:#6E0000}
       <header style="position: relative; height: 64px; padding: 0 12px; display: flex; align-items: center; justify-content: space-between">
         <button aria-label="Close" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.8); box-shadow: 0 4px 14px rgba(0,0,0,0.08), 0 0 0 0.5px rgba(0,0,0,0.06)"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"></path></svg></button>
         <h2 style="position: absolute; left: 80px; right: 80px; margin: 0; text-align: center; font-size: 17px; line-height: 22px; font-weight: 600">Filters</h2>
-        <button aria-label="Apply filters" style="width: 44px; height: 44px; border: none; border-radius: 22px; background: #990000; color: #FFFFFF; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="m15.5 15.5 5 5"></path></svg></button>
+        <button aria-label="Apply filters" style="width: 44px; height: 44px; border: none; border-radius: 22px; background: #821019; color: #FFFFFF; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="m15.5 15.5 5 5"></path></svg></button>
       </header>
       <div style="padding: 0 16px; display: flex; flex-direction: column; gap: 14px">
         <div style="background: #FFFFFF; border-radius: 16px; overflow: hidden">
-        <div style="min-height: 46px; padding: 0 16px; display: flex; align-items: center; gap: 8px"><span style="flex: 1; font-size: 17px">Sort by</span><span style="font-size: 17px; color: #990000">Date updated ⌃⌄</span></div>
+        <div style="min-height: 46px; padding: 0 16px; display: flex; align-items: center; gap: 8px"><span style="flex: 1; font-size: 17px">Sort by</span><span style="font-size: 17px; color: #821019">Date updated ⌃⌄</span></div>
         <div aria-hidden="true" style="margin-left: 16px; height: 0.5px; background: #D1D1D6"></div>
-        <div style="min-height: 46px; padding: 0 16px; display: flex; align-items: center; gap: 8px"><span style="flex: 1; font-size: 17px">Order</span><span style="font-size: 17px; color: #990000">Newest first ⌃⌄</span></div>
+        <div style="min-height: 46px; padding: 0 16px; display: flex; align-items: center; gap: 8px"><span style="flex: 1; font-size: 17px">Order</span><span style="font-size: 17px; color: #821019">Newest first ⌃⌄</span></div>
         <div aria-hidden="true" style="margin-left: 16px; height: 0.5px; background: #D1D1D6"></div>
-        <div style="min-height: 46px; padding: 0 16px; display: flex; align-items: center; gap: 8px"><span style="flex: 1; font-size: 17px">Rating</span><span style="font-size: 17px; color: #990000">General, Teen ⌃⌄</span></div>
+        <div style="min-height: 46px; padding: 0 16px; display: flex; align-items: center; gap: 8px"><span style="flex: 1; font-size: 17px">Rating</span><span style="font-size: 17px; color: #821019">General, Teen ⌃⌄</span></div>
         <div aria-hidden="true" style="margin-left: 16px; height: 0.5px; background: #D1D1D6"></div>
-        <div style="min-height: 46px; padding: 0 16px; display: flex; align-items: center; gap: 8px"><span style="flex: 1; font-size: 17px">Completion</span><span style="font-size: 17px; color: #990000">Complete only ⌃⌄</span></div>
+        <div style="min-height: 46px; padding: 0 16px; display: flex; align-items: center; gap: 8px"><span style="flex: 1; font-size: 17px">Completion</span><span style="font-size: 17px; color: #821019">Complete only ⌃⌄</span></div>
       </div>
         <sc-for list="{{facets}}" as="g" hint-placeholder-count="2">
         <div style="display: flex; flex-direction: column; gap: 6px">
@@ -97,8 +97,8 @@ a{color:#990000}a:hover{color:#6E0000}
               <sc-if value="{{r.sep}}" hint-placeholder-val="{{false}}"><div aria-hidden="true" style="margin-left: 16px; height: 0.5px; background: #D1D1D6"></div></sc-if>
               <button aria-label="{{r.aria}}" style="width: 100%; min-height: 44px; padding: 6px 16px; box-sizing: border-box; border: none; background: transparent; font-family: inherit; text-align: left; display: flex; align-items: center; gap: 10px; color: #000000">
                 <span style="flex: 1; font-size: 17px; line-height: 22px">{{r.label}}</span>
-                <sc-if value="{{r.isIn}}" hint-placeholder-val="{{false}}"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#990000" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"></path></svg></sc-if>
-                <sc-if value="{{r.isOut}}" hint-placeholder-val="{{false}}"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#990000"></circle><path d="M8 12h8" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round"></path></svg></sc-if>
+                <sc-if value="{{r.isIn}}" hint-placeholder-val="{{false}}"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#821019" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"></path></svg></sc-if>
+                <sc-if value="{{r.isOut}}" hint-placeholder-val="{{false}}"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#821019"></circle><path d="M8 12h8" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round"></path></svg></sc-if>
               </button>
             </sc-for>
           </div>
@@ -120,7 +120,7 @@ a{color:#990000}a:hover{color:#6E0000}
 class Component extends DCLogic {
   renderVals() {
     const facetRows = (list) => list.map(([label, state], i) => ({ label, sep: i > 0, isIn: state === 'in', isOut: state === 'out', aria: label + (state === 'in' ? ', included' : state === 'out' ? ', excluded' : '') }));
-    const chip = (o, on) => ({ rating: 'T', category: 'FM', warnings: 'none', status: 'wip', ...o, pressed: on ? 'true' : 'false', ring: on ? 'inset 0 0 0 2px #990000' : 'none' });
+    const chip = (o, on) => ({ rating: 'T', category: 'FM', warnings: 'none', status: 'wip', ...o, pressed: on ? 'true' : 'false', ring: on ? 'inset 0 0 0 2px #821019' : 'none' });
     let results = [
       { title: 'Keeper of the Northern Light', author: 'saltwindow', fandom: 'Original Work', rating: 'T', category: 'FF', warnings: 'none', status: 'complete', words: '22,410', chapters: '7/7', kudos: '1,804', hits: '19.2k', updated: 'Oct 22', summary: 'The last keeper on the coast trains her replacement, who has never once been afraid of the dark.' },
       { title: 'What the Lamp Saw', author: 'tidewright', fandom: 'To the Lighthouse', rating: 'G', category: 'Gen', warnings: 'none', status: 'complete', words: '8,050', chapters: '1/1', kudos: '940', hits: '7.7k', updated: 'Oct 19', summary: 'Ten years of a house by the sea, told by the light that swept across it every night.' }

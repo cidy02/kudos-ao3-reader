@@ -71,16 +71,16 @@ button{cursor:pointer}
   </section>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#990000"},"$preview":{"width":390,"height":844}}'>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#821019"},"$preview":{"width":390,"height":844}}'>
 class Component extends DCLogic {
   renderVals() {
-    const accent = this.props.accent ?? '#990000';
+    const accent = this.props.accent ?? '#821019';
     const themes = [['Light', '#FFFFFF', '#000000'], ['Sepia', '#F4ECD8', '#3B2F1E'], ['Dark', '#1C1C1E', '#E5E5EA'], ['OLED', '#000000', '#C7C7CC']];
     const toggles = [['Justify text', true], ['Bold text', false], ['Keep screen awake', true]];
     return {
       accent,
       themes: themes.map(([name, bg, fg], i) => ({ name, bg, fg, checked: i === 1 ? 'true' : 'false', weight: i === 1 ? 600 : 400, ring: i === 1 ? '0 0 0 2.5px ' + accent : '0 0 0 0.5px #D1D1D6' })),
-      toggles: toggles.map(([label, on], i) => ({ label, on: on ? 'true' : 'false', track: on ? '#990000' : '#E9E9EB', knob: on ? 22 : 2, sep: i ? '0.5px solid #E5E5EA' : 'none' }))
+      toggles: toggles.map(([label, on], i) => ({ label, on: on ? 'true' : 'false', track: on ? '#821019' : '#E9E9EB', knob: on ? 22 : 2, sep: i ? '0.5px solid #E5E5EA' : 'none' }))
     };
   }
 }

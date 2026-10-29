@@ -76,7 +76,7 @@ body{margin:0}
   </sc-if>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"work":{"editor":null},"variant":{"editor":"enum","options":["cover","text"],"default":"cover"},"theme":{"editor":"enum","options":["light","sepia","dark"],"default":"light"},"width":{"editor":"int","default":132,"min":80,"max":220},"accent":{"editor":null,"default":"#990000"},"$preview":{"width":132,"height":310}}'>
+<script type="text/x-dc" data-dc-script data-props='{"work":{"editor":null},"variant":{"editor":"enum","options":["cover","text"],"default":"cover"},"theme":{"editor":"enum","options":["light","sepia","dark"],"default":"light"},"width":{"editor":"int","default":132,"min":80,"max":220},"accent":{"editor":null,"default":"#821019"},"$preview":{"width":132,"height":310}}'>
 class Component extends DCLogic {
   renderVals() {
     const width = Number(this.props.width ?? 132);
@@ -126,7 +126,7 @@ class Component extends DCLogic {
       ink2: { dark: '#AEAEB2', sepia: '#6B645A' }[this.props.theme] || '#6C6C70',
       track: { dark: '#3A3A3C', sepia: 'rgba(60,40,10,0.14)' }[this.props.theme] || '#E5E5EA',
       v0: layout === 0, v1: layout === 1, v2: layout === 2,
-      accent: this.props.accent ?? '#990000',
+      accent: this.props.accent ?? '#821019',
       meta: w.meta || [w.words, w.chapters].filter(Boolean).join(' · '),
       hasBadge: !!w.badge,
       hasProgress,

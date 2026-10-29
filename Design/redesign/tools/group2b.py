@@ -1,8 +1,9 @@
 import sys; sys.path.insert(0,'.')
 from gen import board
+from polish import polish
 from data import W, I, works
 B=[]
-def add(name,title,comp,attrs,data,h=844): board(name,title,comp,attrs,data,h); B.append((name,title,h))
+def add(name,title,comp,attrs,data,h=844): attrs,data=polish(name,attrs,data); board(name,title,comp,attrs,data,h); B.append((name,title,h))
 
 # AO3 collections, challenges and posting screens live in group4.py.
 
@@ -13,7 +14,7 @@ add('Reader-PageJump','Reader › Go to Page (sheet)','FormScreen',{'title':'Go 
   {'rows':[{'label':'Back to Where I Was','kind':'button'}]}]})
 add('Reader-CustomizeTheme','Reader › Customize Theme','FormScreen',{'title':'Customize Theme','subtitle':'Sepia','back':'Back to Themes','confirm':'Save'},{
  'hero':{'title':'Aa · The road to the coast','sub':'Preview in New York, 19 pt','colour':'#9A6732','icon':'M4 19 9 5l5 14M6 14h6M15 19l3-8 3 8M16 16.5h4'},
- 'sections':[{'header':'Colours','rows':[{'label':'Paper','kind':'swatches','colours':['#FBF0D9','#F4ECD8','#EDE3CC','#FFFFFF'],'selected':0},{'label':'Text','kind':'swatches','colours':['#5B4636','#3B2F1E','#1F1B16'],'selected':0},{'label':'Links','kind':'swatches','colours':['#9A6732','#990000','#1E63C8'],'selected':0}]},
+ 'sections':[{'header':'Colours','rows':[{'label':'Paper','kind':'swatches','colours':['#FBF0D9','#F4ECD8','#EDE3CC','#FFFFFF'],'selected':0},{'label':'Text','kind':'swatches','colours':['#5B4636','#3B2F1E','#1F1B16'],'selected':0},{'label':'Links','kind':'swatches','colours':['#9A6732','#821019','#1E63C8'],'selected':0}]},
   {'header':'Highlights','rows':[{'label':'Highlight','kind':'swatches','colours':['#F5D76E','#9ED8A0','#9CC6F0','#F4A6C0'],'selected':0}]},
   {'rows':[{'label':'Reset to Sepia','kind':'button'}]}]})
 add('Reader-Pronunciation','Read Aloud › Pronunciations','FormScreen',{'title':'Pronunciations','back':'Back to Read Aloud','trailing':'Edit'},{

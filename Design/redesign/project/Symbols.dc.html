@@ -12,7 +12,7 @@
 body{margin:0}
 </style>
 </helmet>
-<div role="img" aria-label="{{aria}}" style="display: {{display}}; grid-template-columns: {{cols}}; flex-wrap: wrap; gap: {{gap}}px; align-items: center; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif; color: {{ink}}">
+<div role="img" aria-label="{{aria}}" style="display: {{display}}; grid-template-columns: {{cols}}; flex-wrap: wrap; gap: {{gap}}px; align-items: center; padding: {{backPad}}px; border-radius: {{backR}}px; background: {{backBg}}; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif; color: {{ink}}">
   <sc-for list="{{tiles}}" as="t" hint-placeholder-count="4">
     <div aria-hidden="true" style="display: flex; align-items: center; gap: {{labelGap}}px; padding: {{chipPad}}; border-radius: 999px; background: {{chipBg}}">
       <div style="width: {{size}}px; height: {{size}}px; flex-shrink: 0; position: relative; overflow: hidden; border-radius: {{radius}}px; background: {{t.bg}}; box-shadow: {{t.shadow}}; display: flex; align-items: center; justify-content: center">
@@ -49,7 +49,7 @@ body{margin:0}
   </sc-for>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"rating":{"editor":"enum","options":["G","T","M","E","NR"],"default":"T"},"category":{"editor":"enum","options":["FF","FM","MM","Gen","Multi","Other","NA"],"default":"FM"},"warnings":{"editor":"enum","options":["none","undisclosed","present"],"default":"none"},"status":{"editor":"enum","options":["complete","wip","unknown"],"default":"wip"},"variant":{"editor":"enum","options":["grid","strip","labeled","inline"],"default":"grid"},"size":{"editor":"int","default":40,"min":10,"max":64},"only":{"editor":"enum","options":["all","rating","category","warnings","status"],"default":"all"},"warningCount":{"editor":null,"default":1},"chapters":{"editor":null,"default":""},"theme":{"editor":"enum","options":["light","sepia","dark"],"default":"light"},"$preview":{"width":84,"height":84}}'>
+<script type="text/x-dc" data-dc-script data-props='{"rating":{"editor":"enum","options":["G","T","M","E","NR"],"default":"T"},"category":{"editor":"enum","options":["FF","FM","MM","Gen","Multi","Other","NA"],"default":"FM"},"warnings":{"editor":"enum","options":["none","undisclosed","present"],"default":"none"},"status":{"editor":"enum","options":["complete","wip","unknown"],"default":"wip"},"variant":{"editor":"enum","options":["grid","strip","labeled","inline"],"default":"grid"},"backed":{"editor":"boolean","default":true},"size":{"editor":"int","default":40,"min":10,"max":64},"only":{"editor":"enum","options":["all","rating","category","warnings","status"],"default":"all"},"warningCount":{"editor":null,"default":1},"chapters":{"editor":null,"default":""},"theme":{"editor":"enum","options":["light","sepia","dark"],"default":"light"},"$preview":{"width":84,"height":84}}'>
 class Component extends DCLogic {
   renderVals() {
     const s = Math.max(10, Number(this.props.size ?? 40));
@@ -117,6 +117,10 @@ class Component extends DCLogic {
     }));
     const only = { rating: 0, category: 1, warnings: 2, status: 3 }[this.props.only ?? 'all'];
     const gap = inline ? 10 : (showLabels ? 8 : Math.max(2, Math.round(s * 0.12)));
+    // The full 2×2 grid sits on a rounded backing everywhere (owner, 2026-10-29), as on the
+    // Author card. Single tiles (only=) and boards that draw their own backing (backed=false) don't.
+    const backed = variant === 'grid' && only === undefined && this.props.backed !== false && this.props.backed !== 'false';
+    const backPad = backed ? Math.round(s * 0.27) : 0;
     return {
       ink: { dark: '#F2F2F7', sepia: '#3B2F25' }[this.props.theme] || '#1C1C1E',
       ink2: { dark: '#AEAEB2', sepia: '#6B645A' }[this.props.theme] || '#6C6C70',
@@ -129,6 +133,9 @@ class Component extends DCLogic {
       shieldNudge: Math.max(0, Math.round(s * 0.02)),
       dashH: Math.max(2, Math.round(s * 0.11)),
       gap,
+      backPad,
+      backR: backed ? Math.round(s * 0.58) : 0,
+      backBg: backed ? ({ dark: 'rgba(118, 118, 128, 0.24)', sepia: 'rgba(120, 92, 56, 0.12)' }[this.props.theme] || 'rgba(118, 118, 128, 0.12)') : 'transparent',
       showLabels,
       labelGap: inline ? 5 : (showLabels ? 7 : 0),
       chipPad: variant === 'labeled' ? '3px 11px 3px 3px' : '0',

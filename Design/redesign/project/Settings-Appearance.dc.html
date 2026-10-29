@@ -13,8 +13,8 @@ body{margin:0}
 button{cursor:pointer}
 </style>
 </helmet>
-<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #F2F2F7; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
-  <h1 data-inline-title style="position: absolute; left: 68px; right: 68px; top: 54px; margin: 0; font-size: 17px; line-height: 44px; font-weight: 600; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Appearance</h1>
+<div style="width: 390px; height: 940px; position: relative; overflow: hidden; background: #F2F2F7; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
+  <h1 data-inline-title="" style="position: absolute; left: 68px; right: 68px; top: 54px; margin: 0; font-size: 17px; line-height: 44px; font-weight: 600; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Appearance</h1>
   <div style="position: absolute; left: 16px; top: 54px">
     <button aria-label="Back to Settings" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)">
       <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg>
@@ -40,8 +40,24 @@ button{cursor:pointer}
       </div>
       <div style="background: #FFFFFF; border-radius: 16px; display: flex; align-items: center; height: 46px; padding: 0 16px">
         <span style="flex: 1; font-size: 16px">Match app and reader theme</span>
-        <span role="switch" aria-checked="true" aria-label="Match app and reader theme" style="width: 51px; height: 31px; border-radius: 16px; background: #990000; position: relative"><span style="position: absolute; right: 2px; top: 2px; width: 27px; height: 27px; border-radius: 16px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.2)"></span></span>
+        <span role="switch" aria-checked="true" aria-label="Match app and reader theme" style="width: 51px; height: 31px; border-radius: 16px; background: #821019; position: relative"><span style="position: absolute; right: 2px; top: 2px; width: 27px; height: 27px; border-radius: 16px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.2)"></span></span>
       </div>
+    </section>
+    <section style="display: flex; flex-direction: column; gap: 6px">
+      <h2 style="margin: 0 16px; font-size: 13px; font-weight: 400; color: #6C6C70">Accent colour</h2>
+      <div style="background: #FFFFFF; border-radius: 16px; padding: 12px 16px 14px; display: flex; flex-direction: column; gap: 12px">
+        <div style="display: flex; align-items: baseline; gap: 8px">
+          <span style="flex: 1; font-size: 16px">{{accentName}}</span>
+          <span style="font-size: 15px; color: #8E8E93">Default</span>
+        </div>
+        <div role="radiogroup" aria-label="Accent colour" style="display: flex; align-items: center; justify-content: space-between">
+          <sc-for list="{{accents}}" as="a" hint-placeholder-count="6">
+            <button role="radio" aria-checked="{{a.checked}}" aria-label="{{a.name}}" style="width: 32px; height: 32px; border: none; padding: 0; border-radius: 16px; background: {{a.c}}; box-shadow: {{a.ring}}"></button>
+          </sc-for>
+          <button aria-label="Custom colour" style="width: 32px; height: 32px; border: none; padding: 0; border-radius: 16px; background: conic-gradient(#F5C400, #5FBF5F, #5A9BE0, #A57BD8, #E86AA0, #E5484D, #F5C400); display: flex; align-items: center; justify-content: center"><span style="width: 24px; height: 24px; border-radius: 12px; background: #FFFFFF; color: #1C1C1E; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></span></button>
+        </div>
+      </div>
+      <p style="margin: 0 16px; font-size: 13px; line-height: 18px; color: #6C6C70">Delete and other destructive actions stay system red with every colour.</p>
     </section>
     <section style="display: flex; flex-direction: column; gap: 6px">
       <h2 style="margin: 0 16px; font-size: 13px; font-weight: 400; color: #6C6C70">Reading fonts</h2>
@@ -64,18 +80,21 @@ button{cursor:pointer}
   </main>
   <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 150px; background: linear-gradient(to bottom, #F2F2F700, #F2F2F7F0 72%); pointer-events: none"></div>
   <div style="position: absolute; left: 16px; bottom: 28px; z-index: 3">
-    <dc-import name="TabBar" selected="account" accent="#990000" hint-size="358px,62px"></dc-import>
+    <dc-import name="TabBar" selected="account" accent="#821019" hint-size="358px,62px"></dc-import>
   </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#990000"},"$preview":{"width":390,"height":844}}'>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#821019"},"$preview":{"width":390,"height":940}}'>
 class Component extends DCLogic {
   renderVals() {
-    const accent = this.props.accent ?? '#990000';
+    const accent = this.props.accent ?? '#821019';
     const themes = [['Light', '#FFFFFF', '#000000'], ['Sepia', '#F4ECD8', '#3B2F1E'], ['Dark', '#1C1C1E', '#E5E5EA'], ['OLED', '#000000', '#C7C7CC']];
     const fonts = [['New York', "'New York', 'Iowan Old Style', Georgia, serif", true], ['Georgia', 'Georgia, serif', false], ['San Francisco', '-apple-system, system-ui, sans-serif', false], ['Atkinson Hyperlegible', "'Atkinson Hyperlegible', system-ui, sans-serif", false]];
+    const accents = [['AO3 Red', '#821019'], ['Plum', '#7B2D6B'], ['Ink Blue', '#24508F'], ['Deep Teal', '#11707A'], ['Forest', '#2F6B4F'], ['Ochre', '#9A5B00']];
     return {
       accent,
+      accentName: accents[0][0],
+      accents: accents.map(([name, c], i) => ({ name, c, checked: i === 0 ? 'true' : 'false', ring: i === 0 ? '0 0 0 2px #FFFFFF, 0 0 0 4px ' + c : 'none' })),
       themes: themes.map(([name, bg, fg], i) => ({ name, bg, fg, checked: i === 1 ? 'true' : 'false', weight: i === 1 ? 600 : 400, ring: i === 1 ? '0 0 0 2.5px ' + accent : '0 0 0 0.5px #D1D1D6' })),
       fonts: fonts.map(([name, family, checked], i) => ({ name, family, checked, sep: i ? '0.5px solid #E5E5EA' : 'none' }))
     };

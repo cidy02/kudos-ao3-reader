@@ -42,7 +42,7 @@ button{cursor:pointer}
                     <span style="font-size: 17px; line-height: 22px; font-weight: 600">{{a.name}}</span>
                     <span style="font-size: 13px; line-height: 18px; color: #6C6C70; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{a.latest}}</span>
                   </span>
-                  <sc-if value="{{a.hasNew}}" hint-placeholder-val="{{false}}"><span style="padding: 0 7px; border-radius: 9px; background: #990000; color: #FFFFFF; font-size: 12px; line-height: 18px; font-weight: 700">{{a.badge}}</span></sc-if>
+                  <sc-if value="{{a.hasNew}}" hint-placeholder-val="{{false}}"><span style="padding: 0 7px; border-radius: 9px; background: #821019; color: #FFFFFF; font-size: 12px; line-height: 18px; font-weight: 700">{{a.badge}}</span></sc-if>
                 </div>
               </div>
             </sc-for>
@@ -63,7 +63,7 @@ button{cursor:pointer}
           <header style="display: flex; align-items: center; justify-content: space-between; padding: 6px 16px 10px">
             <button aria-label="Cancel" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.8); box-shadow: 0 4px 14px rgba(0,0,0,0.08), 0 0 0 0.5px rgba(0,0,0,0.06)"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"></path></svg></button>
             <h2 style="margin: 0; font-size: 17px; line-height: 22px; font-weight: 600">Follow Tag</h2>
-            <button aria-label="Follow" style="width: 44px; height: 44px; border: none; border-radius: 22px; background: #990000; color: #FFFFFF; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.6 4.6L19.2 7.4"></path></svg></button>
+            <button aria-label="Follow" style="width: 44px; height: 44px; border: none; border-radius: 22px; background: #821019; color: #FFFFFF; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.6 4.6L19.2 7.4"></path></svg></button>
           </header>
           <div style="padding: 0 16px; display: flex; flex-direction: column; gap: 18px">
             <div style="display: flex; align-items: center; gap: 12px; padding: 0 4px">
@@ -120,7 +120,7 @@ class Component extends DCLogic {
     ];
     const toggles = [['Show new works on Home', true], ['Complete works only', false], ['Hide works rated Explicit', false]];
     return {
-      scopes: scopes.map(([label, on]) => ({ label, selected: on ? 'true' : 'false', bg: on ? '#990000' : '#EFEFF4', fg: on ? '#FFFFFF' : '#1C1C1E' })),
+      scopes: scopes.map(([label, on]) => ({ label, selected: on ? 'true' : 'false', bg: on ? '#821019' : '#EFEFF4', fg: on ? '#FFFFFF' : '#1C1C1E' })),
       authors: authors.map(([name, bg, latest, badge], i) => ({
         name, bg, latest, badge, hasNew: !!badge, initial: name.charAt(0).toUpperCase(),
         swiped: i === 3, shift: i === 3 ? 'translateX(-104px)' : 'none',
@@ -128,7 +128,7 @@ class Component extends DCLogic {
       })),
       toggles: toggles.map(([label, on], i) => ({ label, on: on ? 'true' : 'false', bg: on ? '#34C759' : '#E9E9EB', knob: on ? 22 : 2, sep: i ? '0.5px solid #E5E5EA' : 'none' })),
       how: [
-        ['Works', '#990000', 'Your AO3 work subscriptions. The chapter count Kudos already reads for the subscriptions page (anonymous, page-bounded) shows new chapters.'],
+        ['Works', '#821019', 'Your AO3 work subscriptions. The chapter count Kudos already reads for the subscriptions page (anonymous, page-bounded) shows new chapters.'],
         ['Series', '#1E63C8', 'Your AO3 series subscriptions. The series page lists its parts; a new part is a new work in the series.'],
         ['Authors', '#7B3FA0', 'Your AO3 user subscriptions. The same newest-work check Favourites › Authors already makes, foreground and cancellable.'],
         ['Tags', '#2F7A4A', 'Followed in Kudos, not on AO3. Each tag’s public Atom feed (/tags/<id>/feed.atom) lists its newest works; Kudos keeps the ids it has shown you.']

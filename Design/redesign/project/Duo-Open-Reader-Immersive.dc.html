@@ -16,13 +16,13 @@ body{margin:0}
   <dc-import name="Duo-Open-Reader" view="immersive" accent="{{accent}}" hint-size="951px,669px"></dc-import>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#990000"},"$preview":{"width":951,"height":669}}'>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#821019"},"$preview":{"width":951,"height":669}}'>
 class Component extends DCLogic {
   renderVals() {
     // Immersive reading: the side controls, the status bar and the position pill
     // are hidden; both pages take even margins. A tap in the middle brings the
     // controls back (Duo-Open-Reader).
-    return { accent: this.props.accent ?? '#990000' };
+    return { accent: this.props.accent ?? '#821019' };
   }
 }
 </script>

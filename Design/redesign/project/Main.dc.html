@@ -11,7 +11,7 @@
 <style>
 body{margin:0}
 button{cursor:pointer}
-a{color:#990000}a:hover{color:#6E0000}
+a{color:#821019}a:hover{color:#6E0000}
 </style>
 </helmet>
 <div style="width: 390px; height: 2080px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
@@ -25,7 +25,7 @@ a{color:#990000}a:hover{color:#6E0000}
       <a href="Insights.dc.html" style="align-self: flex-start; text-decoration: none; font-size: 15px; line-height: 20px; color: #6C6C70; display: flex; align-items: center; gap: 4px"><span><span style="font-weight: 600; color: #3A3A3C">4 h 10 m</span> this week · <span style="font-weight: 600; color: #3A3A3C">2</span> finished · <span style="font-weight: 600; color: #3A3A3C">9-day</span> streak</span><svg aria-hidden="true" width="7" height="12" viewBox="0 0 8 14" fill="none" stroke="#AEAEB2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg></a>
     </header>
 
-    <dc-import name="ResumeCard" variant="home" accent="#990000" hint-size="358px,280px"></dc-import>
+    <dc-import name="ResumeCard" variant="home" accent="#821019" hint-size="358px,280px"></dc-import>
 
     <section aria-label="Reading Now" style="display: flex; flex-direction: column; gap: 10px">
       <div style="display: flex; align-items: baseline; justify-content: space-between">
@@ -34,9 +34,9 @@ a{color:#990000}a:hover{color:#6E0000}
       </div>
       <div style="display: flex; gap: 12px; margin-right: -16px; overflow: hidden">
         <sc-for list="{{reading}}" as="w" hint-placeholder-count="3">
-          <dc-import name="CoverCard" work="{{w}}" width="120" accent="#990000" hint-size="120px,250px"></dc-import>
+          <dc-import name="CoverCard" work="{{w}}" width="120" accent="#821019" hint-size="120px,250px"></dc-import>
         </sc-for>
-<a href="Shelf-ReadingNow.dc.html" aria-label="3 more in Reading Now" style="width: 96px; flex-shrink: 0; min-height: 166px; align-self: stretch; border-radius: 12px; background: #F2F2F7; color: #990000; text-decoration: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 15px; font-weight: 600"><span style="font-size: 22px; line-height: 26px; font-weight: 700">+3</span>more<svg aria-hidden="true" width="7" height="12" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg></a>
+<a href="Shelf-ReadingNow.dc.html" aria-label="3 more in Reading Now" style="width: 96px; flex-shrink: 0; min-height: 166px; align-self: stretch; border-radius: 12px; background: #F2F2F7; color: #821019; text-decoration: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 15px; font-weight: 600"><span style="font-size: 22px; line-height: 26px; font-weight: 700">+3</span>more<svg aria-hidden="true" width="7" height="12" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg></a>
       </div>
     </section>
 
@@ -47,9 +47,9 @@ a{color:#990000}a:hover{color:#6E0000}
       </div>
       <div style="margin: 0 -16px; display: flex; flex-direction: column">
         <sc-for list="{{updated}}" as="w" hint-placeholder-count="3">
-          <sc-if value="{{w.sep}}" hint-placeholder-val="{{false}}"><div aria-hidden="true" style="margin-left: 79px; height: 0.5px; background: #E5E5EA"></div></sc-if>
+          <sc-if value="{{w.sep}}" hint-placeholder-val="{{false}}"><div aria-hidden="true" style="margin-left: 89px; height: 0.5px; background: #E5E5EA"></div></sc-if>
           <a href="iPhone-WorkDetail.dc.html" style="display: flex; align-items: center; gap: 12px; padding: 11px 16px; text-decoration: none; color: #000000">
-            <dc-import name="Symbols" variant="grid" rating="{{w.rating}}" category="{{w.category}}" warnings="{{w.warnings}}" status="{{w.status}}" warning-count="{{w.wc}}" size="24" hint-size="51px,51px"></dc-import>
+            <dc-import name="Symbols" variant="grid" rating="{{w.rating}}" category="{{w.category}}" warnings="{{w.warnings}}" status="{{w.status}}" warning-count="{{w.wc}}" size="24" hint-size="63px,63px"></dc-import>
             <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px">
               <span style="font-size: 17px; line-height: 22px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{w.title}}</span>
               <div role="img" aria-label="{{w.barsLabel}}" style="height: 16px; display: flex; align-items: flex-end; gap: 2px; max-width: {{w.barsW}}">
@@ -59,10 +59,10 @@ a{color:#990000}a:hover{color:#6E0000}
               </div>
               <span style="font-size: 13px; line-height: 18px; color: #6C6C70; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{w.author}} · {{w.fandom}} · {{w.when}}</span>
             </div>
-            <span style="padding: 0 7px; border-radius: 9px; background: #990000; color: #FFFFFF; font-size: 12px; line-height: 18px; font-weight: 700">{{w.badge}}</span>
+            <span style="padding: 0 7px; border-radius: 9px; background: #821019; color: #FFFFFF; font-size: 12px; line-height: 18px; font-weight: 700">{{w.badge}}</span>
           </a>
         </sc-for>
-<a href="Subscriptions.dc.html" style="margin-left: 63px; padding: 10px 0 2px; border-top: 0.5px solid #E5E5EA; color: #990000; text-decoration: none; display: flex; align-items: center; gap: 6px; font-size: 15px; font-weight: 600">6 more<svg aria-hidden="true" width="7" height="12" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg></a>
+<a href="Subscriptions.dc.html" style="margin-left: 73px; padding: 10px 0 2px; border-top: 0.5px solid #E5E5EA; color: #821019; text-decoration: none; display: flex; align-items: center; gap: 6px; font-size: 15px; font-weight: 600">6 more<svg aria-hidden="true" width="7" height="12" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg></a>
       </div>
     </section>
 
@@ -86,7 +86,7 @@ a{color:#990000}a:hover{color:#6E0000}
             </div>
           </a>
         </sc-for>
-<a href="Queues.dc.html" style="margin-left: 0px; padding: 10px 0 2px; border-top: 0.5px solid #E5E5EA; color: #990000; text-decoration: none; display: flex; align-items: center; gap: 6px; font-size: 15px; font-weight: 600">1 more<svg aria-hidden="true" width="7" height="12" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg></a>
+<a href="Queues.dc.html" style="margin-left: 0px; padding: 10px 0 2px; border-top: 0.5px solid #E5E5EA; color: #821019; text-decoration: none; display: flex; align-items: center; gap: 6px; font-size: 15px; font-weight: 600">1 more<svg aria-hidden="true" width="7" height="12" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg></a>
       </div>
     </section>
 
@@ -97,9 +97,9 @@ a{color:#990000}a:hover{color:#6E0000}
       </div>
       <div style="display: flex; gap: 12px; margin-right: -16px; overflow: hidden">
         <sc-for list="{{collection}}" as="w" hint-placeholder-count="3">
-          <dc-import name="CoverCard" work="{{w}}" width="120" accent="#990000" hint-size="120px,250px"></dc-import>
+          <dc-import name="CoverCard" work="{{w}}" width="120" accent="#821019" hint-size="120px,250px"></dc-import>
         </sc-for>
-<a href="Collection.dc.html" aria-label="8 more in Austen Variations" style="width: 96px; flex-shrink: 0; min-height: 166px; align-self: stretch; border-radius: 12px; background: #F2F2F7; color: #990000; text-decoration: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 15px; font-weight: 600"><span style="font-size: 22px; line-height: 26px; font-weight: 700">+8</span>more<svg aria-hidden="true" width="7" height="12" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg></a>
+<a href="Collection.dc.html" aria-label="8 more in Austen Variations" style="width: 96px; flex-shrink: 0; min-height: 166px; align-self: stretch; border-radius: 12px; background: #F2F2F7; color: #821019; text-decoration: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 15px; font-weight: 600"><span style="font-size: 22px; line-height: 26px; font-weight: 700">+8</span>more<svg aria-hidden="true" width="7" height="12" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg></a>
       </div>
     </section>
 
@@ -110,16 +110,16 @@ a{color:#990000}a:hover{color:#6E0000}
       </div>
       <div style="margin: 0 -16px">
         <sc-for list="{{subs}}" as="w" hint-placeholder-count="2">
-          <dc-import name="WorkRow" work="{{w}}" divider="{{w.divider}}" accent="#990000" hint-size="100%,100px"></dc-import>
+          <dc-import name="WorkRow" work="{{w}}" divider="{{w.divider}}" accent="#821019" hint-size="100%,100px"></dc-import>
         </sc-for>
-<a href="Subscriptions-Works.dc.html" style="margin-left: 16px; padding: 10px 0 2px; border-top: 0.5px solid #E5E5EA; color: #990000; text-decoration: none; display: flex; align-items: center; gap: 6px; font-size: 15px; font-weight: 600">25 more<svg aria-hidden="true" width="7" height="12" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg></a>
+<a href="Subscriptions-Works.dc.html" style="margin-left: 16px; padding: 10px 0 2px; border-top: 0.5px solid #E5E5EA; color: #821019; text-decoration: none; display: flex; align-items: center; gap: 6px; font-size: 15px; font-weight: 600">25 more<svg aria-hidden="true" width="7" height="12" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg></a>
       </div>
     </section>
   </main>
 
   <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 150px; background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0.94) 72%); pointer-events: none"></div>
   <div style="position: absolute; left: 16px; bottom: 28px">
-    <dc-import name="TabBar" selected="home" accent="#990000" hint-size="358px,62px"></dc-import>
+    <dc-import name="TabBar" selected="home" accent="#821019" hint-size="358px,62px"></dc-import>
   </div>
 </div>
 </x-dc>
@@ -137,7 +137,7 @@ class Component extends DCLogic {
       for (let i = 0; i < w.planned; i++) {
         const height = Math.round(42 + r() * 58);
         if (i >= w.posted) out.push({ h: '46%', bg: 'transparent', bd: '1.5px dashed #C7C7CC' });
-        else out.push({ h: height + '%', bg: i >= w.posted - w.fresh ? '#990000' : '#D1D1D6', bd: 'none' });
+        else out.push({ h: height + '%', bg: i >= w.posted - w.fresh ? '#821019' : '#D1D1D6', bd: 'none' });
       }
       return out;
     };

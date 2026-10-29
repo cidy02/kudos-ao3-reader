@@ -14,7 +14,7 @@ button{cursor:pointer}
 </style>
 </helmet>
 <div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #F2F2F7; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
-  <h1 data-inline-title style="position: absolute; left: 68px; right: 68px; top: 54px; margin: 0; font-size: 17px; line-height: 44px; font-weight: 600; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">About</h1>
+  <h1 data-inline-title="" style="position: absolute; left: 68px; right: 68px; top: 54px; margin: 0; font-size: 17px; line-height: 44px; font-weight: 600; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">About</h1>
   <div style="position: absolute; left: 16px; top: 54px">
     <button aria-label="Back to Settings" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)">
       <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg>
@@ -53,16 +53,16 @@ button{cursor:pointer}
   </main>
   <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 150px; background: linear-gradient(to bottom, #F2F2F700, #F2F2F7F0 72%); pointer-events: none"></div>
   <div style="position: absolute; left: 16px; bottom: 28px; z-index: 3">
-    <dc-import name="TabBar" selected="account" accent="#990000" hint-size="358px,62px"></dc-import>
+    <dc-import name="TabBar" selected="account" accent="#821019" hint-size="358px,62px"></dc-import>
   </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#990000"},"$preview":{"width":390,"height":844}}'>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#821019"},"$preview":{"width":390,"height":844}}'>
 class Component extends DCLogic {
   renderVals() {
     const rows = [['Help & Feedback', ''], ['Report a Bug', ''], ['Source on GitHub', ''], ['Licence', 'AGPL-3.0'], ['Open-Source Components', ''], ['Legal Notices', '']];
     return {
-      accent: this.props.accent ?? '#990000',
+      accent: this.props.accent ?? '#821019',
       news: [
         { title: 'Natural Read Aloud', text: 'Voices that run on your iPhone, and keep reading when you close the reader.', d: 'M4 9.5h3.5L12 6v12l-4.5-3.5H4zM15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11' },
         { title: 'Made for iPhone Duo', text: 'Two pages when open, one page each side in Book pose.', d: 'M3 5.5c3-1 6-1 9 1 3-2 6-2 9-1v13c-3-1-6-1-9 1-3-2-6-2-9-1zM12 6.5v13' },

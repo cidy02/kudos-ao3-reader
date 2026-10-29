@@ -51,11 +51,11 @@ button{cursor:pointer}
   </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#990000"},"$preview":{"width":1290,"height":960}}'>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#821019"},"$preview":{"width":1290,"height":960}}'>
 class Component extends DCLogic {
   renderVals() {
     return {
-      accent: this.props.accent ?? '#990000',
+      accent: this.props.accent ?? '#821019',
       phones: [
         { caption: 'Library on first launch', screen: 'Library', isRoot: true, isPushed: false, pad: 56, tab: 'library', hasChips: false, d: 'M3.5 4h4v16h-4zM9.5 4h4v16h-4zM15.6 5.4l3.4-.9 3 15.2-3.4.9z', title: 'Your library is empty', body: 'Works you download from AO3 or import from Files appear here, ready to read offline.', primary: 'Browse AO3', secondary: 'Import Files', hasSecondary: true },
         { caption: 'Filters with no matches', screen: 'Reading Now', isRoot: false, isPushed: true, pad: 106, tab: 'library', hasChips: true, d: 'M4 7h16M7 12h10M10 17h4', title: 'No matching works', body: 'Nothing in Reading Now is both complete and rated Explicit.', primary: 'Clear Filters', secondary: '', hasSecondary: false },

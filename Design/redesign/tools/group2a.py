@@ -1,8 +1,9 @@
 import sys; sys.path.insert(0,'.')
 from gen import board
+from polish import polish
 from data import W, I, works
 B=[]
-def add(name,title,comp,attrs,data,h=844): board(name,title,comp,attrs,data,h); B.append((name,title,h))
+def add(name,title,comp,attrs,data,h=844): attrs,data=polish(name,attrs,data); board(name,title,comp,attrs,data,h); B.append((name,title,h))
 COL=['#C25E00','#1E63C8','#2F8F3A','#7B3FA0','#B3127A','#6C6C70']
 
 # Queues and collections
@@ -12,7 +13,7 @@ add('Queue-Edit','Queue › Edit Queue (sheet)','FormScreen',{'title':'Edit Queu
   {'rows':[{'label':'Colour','kind':'swatches','colours':COL,'selected':0},{'label':'Tags','kind':'chips','chips':['fluff','under 20k']}]},
   {'header':'Reading','rows':[{'label':'When I finish a work','kind':'segments','options':['Remove','Keep'],'selected':0},{'label':'Pin to Home','kind':'toggle','on':True}]},
   {'header':'Offline','footer':'Queued works download on Wi‑Fi and stay until you remove them.','rows':[{'label':'Keep works offline','kind':'toggle','on':True,'sub':'6 of 8 downloaded · 41 MB'},{'label':'Storage','kind':'nav','detail':'41 MB'}]},
-  {'rows':[{'label':'Delete Queue','kind':'destructive'}]}]},1000)
+  {'rows':[{'label':'Delete Queue','kind':'destructive'}]}]},1120)
 add('Queue-Tags','Queues › Manage Tags','FormScreen',{'title':'Queue Tags','back':'Back to Queues','trailing':'Edit'},{
  'sections':[{'header':'Tags on your queues','rows':[{'label':'fluff','kind':'nav','detail':'3 queues'},{'label':'under 20k','kind':'nav','detail':'2 queues'},{'label':'comfort','kind':'nav','detail':'1 queue'},{'label':'rereads','kind':'nav','detail':'1 queue'},{'label':'long haul','kind':'nav','detail':'unused'}]},
   {'rows':[{'label':'New Tag…','kind':'button'}]}]})
@@ -30,7 +31,7 @@ add('Collection-AddWorks','Collection › Add Works (sheet)','FormScreen',{'titl
    {'label':'Five Times Elizabeth Laughed','sub':'quietharbor · Pride and Prejudice','kind':'circle','on':False},
    {'label':'The Bath Letters','sub':'marginalia · Persuasion','kind':'circle','on':False}]}]})
 add('Collection-Reorder','Collection › Reorder','FormScreen',{'title':'Reorder','subtitle':'Austen Variations','back':'Back to Austen Variations','trailing':'Done'},{
- 'sections':[{'rows':[{'label':t,'sub':s,'kind':'info','handle':True} for t,s in [('A Map of Small Hours','quietharbor'),('Northanger Nights','gothicnovelist'),('Letters Never Sent','marginalia'),('Half Agony, Half Hope','anne_at_lyme'),('Five Times Elizabeth Laughed','quietharbor'),('The Bath Letters','marginalia'),('A Fortnight at Uppercross','quietharbor')]]}]})
+ 'sections':[{'rows':[{'label':t,'sub':s,'kind':'info','handle':'trailing'} for t,s in [('A Map of Small Hours','quietharbor'),('Northanger Nights','gothicnovelist'),('Letters Never Sent','marginalia'),('Half Agony, Half Hope','anne_at_lyme'),('Five Times Elizabeth Laughed','quietharbor'),('The Bath Letters','marginalia'),('A Fortnight at Uppercross','quietharbor')]]}]})
 add('Bulk-Edit','Library › Edit 3 Works (sheet)','FormScreen',{'title':'Edit 3 Works','mode':'sheet','confirm':'Done'},{
  'sections':[{'header':'Organise','rows':[{'label':'Add to Queue','kind':'nav','icon':I['queue']},{'label':'Add to Collection','kind':'nav','icon':'M6 8h12v12H6zM8 5h8'},{'label':'Want to Read','kind':'toggle','on':False}]},
   {'header':'Your tags','rows':[{'label':'comfort','kind':'circle','on':True,'sub':'all 3'},{'label':'slow burn','kind':'circle','on':False,'sub':'1 of 3'},{'label':'reread','kind':'circle','on':False,'sub':'none'}]},
@@ -41,16 +42,16 @@ add('Bulk-Edit','Library › Edit 3 Works (sheet)','FormScreen',{'title':'Edit 3
 add('Search-Saved','Search › Saved Searches','ListScreen',{'title':'Saved Searches','subtitle':'4 searches · new results since you last ran each','back':'Back to Search','tab':'none'},{
  'tools':[{'label':'Edit','text':'Edit'}],
  'sections':[{'kind':'rows','rows':[
-  {'title':'Persuasion · Anne/Wentworth · complete','sub':'Fandom, relationship, complete only · sorted by kudos','tone':'#990000','glyph':I['tag'],'square':True,'badge':'12 new'},
-  {'title':'Holmes casefic under 20k','sub':'Sherlock Holmes · Gen · under 20,000 words','tone':'#990000','glyph':I['tag'],'square':True,'badge':'3 new'},
-  {'title':'Lighthouses (any fandom)','sub':'Freeform tag · English','tone':'#990000','glyph':I['tag'],'square':True},
-  {'title':'“epistolary” in summaries','sub':'Text search · Teen and below','tone':'#990000','glyph':'M10.5 4a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM15.5 15.5l5 5','square':True}]}]})
+  {'title':'Persuasion · Anne/Wentworth · complete','sub':'Fandom, relationship, complete only · sorted by kudos','tone':'#821019','glyph':I['tag'],'square':True,'badge':'12 new'},
+  {'title':'Holmes casefic under 20k','sub':'Sherlock Holmes · Gen · under 20,000 words','tone':'#821019','glyph':I['tag'],'square':True,'badge':'3 new'},
+  {'title':'Lighthouses (any fandom)','sub':'Freeform tag · English','tone':'#821019','glyph':I['tag'],'square':True},
+  {'title':'“epistolary” in summaries','sub':'Text search · Teen and below','tone':'#821019','glyph':'M10.5 4a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM15.5 15.5l5 5','square':True}]}]})
 # Sort: ways to find (each sets both lists), AO3's own columns, then how Kudos ranks
 # the works already loaded. Method and sources: notes/quality-signals-spec.md.
 add('Search-Sort','Search filters › Sort By','FormScreen',{'title':'Sort By','back':'Back to Filters'},{
  'sections':[
   {'header':'Ways to Find','rows':[
-   {'label':'Reader Favourites','sub':'Most kudos on AO3, at least 1,000 hits','kind':'check','tile':'#990000','icon':'M12 20s-7.5-4.6-7.5-10.2A4.2 4.2 0 0 1 12 7.2a4.2 4.2 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20z'},
+   {'label':'Reader Favourites','sub':'Most kudos on AO3, at least 1,000 hits','kind':'check','tile':'#821019','icon':'M12 20s-7.5-4.6-7.5-10.2A4.2 4.2 0 0 1 12 7.2a4.2 4.2 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20z'},
    {'label':'New and Loved','sub':'Posted in the last 6 months, most kudos first','kind':'check','tile':'#E07000','icon':'M5 6h14v14H5zM5 10h14M9 3.5v4M15 3.5v4'},
    {'label':'Hidden Gems','sub':'300 to 5,000 hits, most kudos first','kind':'check','on':True,'tile':'#5856D6','icon':'M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8zM18 15l.8 2.2 2.2.8-2.2.8L18 21l-.8-2.2-2.2-.8 2.2-.8z'},
    {'label':'Active WIPs','sub':'Updated in the last 60 days, on schedule first','kind':'check','tile':'#2F8F3A','icon':'M12 4a8 8 0 1 1 0 16 8 8 0 0 1 0-16zM12 8v4l3 2'}]},
@@ -62,12 +63,12 @@ add('Search-Sort','Search filters › Sort By','FormScreen',{'title':'Sort By','
    ('Creator','#6C6C70','M12 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8zM4.5 20c1.4-3.8 4.2-5.8 7.5-5.8s6.1 2 7.5 5.8'),
    ('Word Count','#7B3FA0','M5 6h14M5 12h14M5 18h9'),
    ('Hits','#5856D6','M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12zM12 9a3 3 0 1 1 0 6 3 3 0 0 1 0-6z'),
-   ('Kudos','#990000','M12 20s-7.5-4.6-7.5-10.2A4.2 4.2 0 0 1 12 7.2a4.2 4.2 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20z'),
+   ('Kudos','#821019','M12 20s-7.5-4.6-7.5-10.2A4.2 4.2 0 0 1 12 7.2a4.2 4.2 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20z'),
    ('Comments','#2F8F3A','M4 5h16v11H9l-5 4z'),
    ('Bookmarks','#C25E00','M7 4h10v16l-5-4-5 4z')]]},
   {'header':'Then Rank Loaded Works by','rows':[
    {'label':'AO3’s Order','sub':'As AO3 sent them','kind':'check','tile':'#6C6C70','icon':'M4 6h16M4 12h16M4 18h16'},
-   {'label':'Kudos per Hit, Adjusted','sub':'Against works of the same length, chapters and age','meta':'Top loaded result: 2.4× typical','metaColour':'#990000','kind':'check','on':True,'tile':'#990000','icon':'M12 20s-7.5-4.6-7.5-10.2A4.2 4.2 0 0 1 12 7.2a4.2 4.2 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20z'},
+   {'label':'Kudos per Hit, Adjusted','sub':'Against works of the same length, chapters and age','meta':'Top loaded result: 2.4× typical','metaColour':'#821019','kind':'check','on':True,'tile':'#821019','icon':'M12 20s-7.5-4.6-7.5-10.2A4.2 4.2 0 0 1 12 7.2a4.2 4.2 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20z'},
    {'label':'Saves per Kudos','sub':'Public bookmarks ÷ kudos','kind':'check','tile':'#C25E00','icon':'M7 4h10v16l-5-4-5 4z'},
    {'label':'Comments per Kudos','sub':'Comments, replies included, ÷ kudos','kind':'check','tile':'#2F8F3A','icon':'M4 5h16v11H9l-5 4z'},
    {'label':'Momentum','sub':'Kudos gained since you last saw each work','kind':'check','tile':'#1E63C8','icon':'M4 16l5-5 4 4 7-7M15 8h5v5'},

@@ -13,7 +13,7 @@ body{margin:0}
 </style>
 </helmet>
 <div style="width: 390px; height: 844px; position: relative; overflow: hidden">
-  <dc-import name="FormScreen" title="Save Search" mode="sheet" confirm="Save" height="844" sections="{{sections}}" hint-size="390px,844px"></dc-import>
+  <dc-import name="FormScreen" title="Save Search" mode="sheet" confirm="Save" height="844" sections="{{sections}}" context="{{context}}" hint-size="390px,844px"></dc-import>
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
@@ -37,8 +37,14 @@ class Component extends DCLogic {
           "label": "Filters",
           "kind": "chips",
           "chips": [
-            "Persuasion",
-            "Anne/Wentworth",
+            {
+              "label": "Persuasion",
+              "tone": "in"
+            },
+            {
+              "label": "Anne/Wentworth",
+              "tone": "in"
+            },
             "Complete",
             "Kudos ↓"
           ]
@@ -51,11 +57,21 @@ class Component extends DCLogic {
         {
           "label": "Show new results on Home",
           "kind": "toggle",
-          "on": true
+          "on": true,
+          "tile": "#1E63C8",
+          "icon": "M3.5 10.5 12 3.5l8.5 7M5.5 9v11h5v-6h3v6h5V9"
         }
       ]
     }
-  ]
+  ],
+  "context": {
+    "kicker": "AO3 search · 1,284 works",
+    "kickerColour": "#821019",
+    "title": "Persuasion · Anne/Wentworth",
+    "meta": "Complete only · sorted by kudos",
+    "tile": "#821019",
+    "icon": "M10.5 4a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM15.5 15.5l5 5"
+  }
 };
   }
 }

@@ -36,13 +36,13 @@ button{cursor:pointer}
       <div style="display: flex; align-items: baseline; gap: 8px">
         <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">Favourites</h2>
         <span style="font-size: 15px; color: #6C6C70">19</span>
-        <a href="Shelf-List.dc.html" style="margin-left: auto; font-size: 17px; color: #990000; text-decoration: none">See All</a>
+        <a href="Shelf-List.dc.html" style="margin-left: auto; font-size: 17px; color: #821019; text-decoration: none">See All</a>
       </div>
       <div style="display: flex; gap: 12px; margin-right: -16px; overflow: hidden">
         <sc-for list="{{favourites}}" as="w" hint-placeholder-count="3">
-          <dc-import name="CoverCard" work="{{w}}" width="112" accent="#990000" hint-size="112px,240px"></dc-import>
+          <dc-import name="CoverCard" work="{{w}}" width="112" accent="#821019" hint-size="112px,240px"></dc-import>
         </sc-for>
-        <a href="Shelf-List.dc.html" aria-label="15 more favourites" style="width: 96px; flex-shrink: 0; min-height: 160px; align-self: stretch; border-radius: 12px; background: #F2F2F7; color: #990000; text-decoration: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 15px; font-weight: 600"><span style="font-size: 22px; line-height: 26px; font-weight: 700">+15</span>more</a>
+        <a href="Shelf-List.dc.html" aria-label="15 more favourites" style="width: 96px; flex-shrink: 0; min-height: 160px; align-self: stretch; border-radius: 12px; background: #F2F2F7; color: #821019; text-decoration: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 15px; font-weight: 600"><span style="font-size: 22px; line-height: 26px; font-weight: 700">+15</span>more</a>
       </div>
     </section>
 
@@ -50,7 +50,7 @@ button{cursor:pointer}
       <div style="display: flex; align-items: baseline; gap: 8px">
         <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">Collections</h2>
         <span style="font-size: 15px; color: #6C6C70">4</span>
-        <a href="All-Collections.dc.html" style="margin-left: auto; font-size: 17px; color: #990000; text-decoration: none">See All</a>
+        <a href="All-Collections.dc.html" style="margin-left: auto; font-size: 17px; color: #821019; text-decoration: none">See All</a>
       </div>
       <div style="display: flex; gap: 16px; margin-right: -16px; overflow: hidden">
         <sc-for list="{{collections}}" as="c" hint-placeholder-count="3">
@@ -62,10 +62,10 @@ button{cursor:pointer}
             </span>
           </a>
         </sc-for>
-        <a href="All-Collections.dc.html" aria-label="1 more collection" style="width: 96px; flex-shrink: 0; height: 140px; border-radius: 16px; background: #F2F2F7; color: #990000; text-decoration: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 15px; font-weight: 600"><span style="font-size: 22px; line-height: 26px; font-weight: 700">+1</span>more</a>
+        <a href="All-Collections.dc.html" aria-label="1 more collection" style="width: 96px; flex-shrink: 0; height: 140px; border-radius: 16px; background: #F2F2F7; color: #821019; text-decoration: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 15px; font-weight: 600"><span style="font-size: 22px; line-height: 26px; font-weight: 700">+1</span>more</a>
         <button style="width: 112px; flex-shrink: 0; border: none; background: none; padding: 0; font-family: inherit; display: flex; flex-direction: column; gap: 8px; text-align: left">
-          <span aria-hidden="true" style="width: 100%; height: 140px; box-sizing: border-box; border-radius: 16px; border: 1.5px dashed #C7C7CC; color: #990000; display: flex; align-items: center; justify-content: center"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></span>
-          <span style="font-size: 15px; line-height: 20px; font-weight: 600; color: #990000">New Collection</span>
+          <span aria-hidden="true" style="width: 100%; height: 140px; box-sizing: border-box; border-radius: 16px; border: 1.5px dashed #C7C7CC; color: #821019; display: flex; align-items: center; justify-content: center"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></span>
+          <span style="font-size: 15px; line-height: 20px; font-weight: 600; color: #821019">New Collection</span>
         </button>
       </div>
     </section>
@@ -74,20 +74,20 @@ button{cursor:pointer}
       <div style="display: flex; align-items: baseline; gap: 8px">
         <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">Downloaded</h2>
         <span style="font-size: 15px; color: #6C6C70">98 · 2.1 GB</span>
-        <a href="Shelf-List.dc.html" style="margin-left: auto; font-size: 17px; color: #990000; text-decoration: none">See All</a>
+        <a href="Shelf-List.dc.html" style="margin-left: auto; font-size: 17px; color: #821019; text-decoration: none">See All</a>
       </div>
       <div style="display: flex; gap: 12px; margin-right: -16px; overflow: hidden">
         <sc-for list="{{downloaded}}" as="w" hint-placeholder-count="3">
-          <dc-import name="CoverCard" work="{{w}}" width="112" accent="#990000" hint-size="112px,240px"></dc-import>
+          <dc-import name="CoverCard" work="{{w}}" width="112" accent="#821019" hint-size="112px,240px"></dc-import>
         </sc-for>
-        <a href="Shelf-List.dc.html" aria-label="94 more downloaded works" style="width: 96px; flex-shrink: 0; min-height: 160px; align-self: stretch; border-radius: 12px; background: #F2F2F7; color: #990000; text-decoration: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 15px; font-weight: 600"><span style="font-size: 22px; line-height: 26px; font-weight: 700">+94</span>more</a>
+        <a href="Shelf-List.dc.html" aria-label="94 more downloaded works" style="width: 96px; flex-shrink: 0; min-height: 160px; align-self: stretch; border-radius: 12px; background: #F2F2F7; color: #821019; text-decoration: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 15px; font-weight: 600"><span style="font-size: 22px; line-height: 26px; font-weight: 700">+94</span>more</a>
       </div>
     </section>
 
     <section aria-label="Shelves" style="display: flex; flex-direction: column; gap: 10px">
       <div style="display: flex; align-items: baseline; gap: 8px">
         <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">Shelves</h2>
-        <a href="Edit-Shelves.dc.html" style="margin-left: auto; font-size: 17px; color: #990000; text-decoration: none">Edit</a>
+        <a href="Edit-Shelves.dc.html" style="margin-left: auto; font-size: 17px; color: #821019; text-decoration: none">Edit</a>
       </div>
       <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
       <sc-for list="{{tiles}}" as="t" hint-placeholder-count="6">
@@ -107,7 +107,7 @@ button{cursor:pointer}
         <h2 style="margin: 0 0 4px; font-size: 20px; line-height: 25px; font-weight: 700">On AO3</h2>
         <sc-for list="{{ao3}}" as="l" hint-placeholder-count="4">
           <a href="AO3-Lists.dc.html" style="color: #000000; text-decoration: none; display: flex; align-items: center; gap: 14px; min-height: 48px">
-            <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#990000" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="{{l.d}}"></path></svg>
+            <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#821019" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="{{l.d}}"></path></svg>
             <span style="flex: 1; min-height: 48px; display: flex; align-items: center; gap: 8px; border-bottom: {{l.sep}}">
               <span style="flex: 1; font-size: 17px; line-height: 22px">{{l.label}}</span>
               <span style="font-size: 17px; color: #8E8E93">{{l.count}}</span>
@@ -121,7 +121,7 @@ button{cursor:pointer}
 
   <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 150px; background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0.94) 72%); pointer-events: none"></div>
   <div style="position: absolute; left: 16px; bottom: 28px">
-    <dc-import name="TabBar" selected="library" account="{{account}}" accent="#990000" hint-size="358px,62px"></dc-import>
+    <dc-import name="TabBar" selected="library" account="{{account}}" accent="#821019" hint-size="358px,62px"></dc-import>
   </div>
 </div>
 </x-dc>

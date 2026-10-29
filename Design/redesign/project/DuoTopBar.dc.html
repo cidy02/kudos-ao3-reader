@@ -56,13 +56,13 @@ button{cursor:pointer}
   </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"width":{"editor":"int","default":669},"title":{"editor":"text","default":"Home"},"titleStyle":{"editor":"enum","options":["large","inline","none"],"default":"large"},"nav":{"editor":"enum","options":["back","close","none"],"default":"none"},"primary":{"editor":"enum","options":["none","done","post","play"],"default":"none"},"actions":{"editor":null},"status":{"editor":"boolean","default":true},"theme":{"editor":"enum","options":["light","sepia","dark"],"default":"light"},"accent":{"editor":null,"default":"#990000"},"$preview":{"width":669,"height":80}}'>
+<script type="text/x-dc" data-dc-script data-props='{"width":{"editor":"int","default":669},"title":{"editor":"text","default":"Home"},"titleStyle":{"editor":"enum","options":["large","inline","none"],"default":"large"},"nav":{"editor":"enum","options":["back","close","none"],"default":"none"},"primary":{"editor":"enum","options":["none","done","post","play"],"default":"none"},"actions":{"editor":null},"status":{"editor":"boolean","default":true},"theme":{"editor":"enum","options":["light","sepia","dark"],"default":"light"},"accent":{"editor":null,"default":"#821019"},"$preview":{"width":669,"height":80}}'>
 class Component extends DCLogic {
   renderVals() {
     // iPhone Duo, inner display in portrait: the one pose that keeps standard
     // horizontal bars (HIG: Vertical controls). Same order as DuoSideBar, laid
     // out left to right: navigation, title, toolbar group, prominent action.
-    const accent = this.props.accent ?? '#990000';
+    const accent = this.props.accent ?? '#821019';
     const theme = this.props.theme ?? 'light';
     const T = {
       light: { glass: 'rgba(255,255,255,0.78)', fg: '#1C1C1E', shadow: '0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06)' },

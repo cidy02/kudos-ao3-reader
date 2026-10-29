@@ -16,13 +16,13 @@ GREEN = {'badgeBg': '#E3F1E6', 'badgeFg': '#1E6B34'}
 # 1,804 kudos / 19,200 hits = 9.4%; similar works 3.9%.
 # Shrunk estimate (1,804 + 20) / (19,200 x 0.039 + 20) = 2.37x; cautious x exp(-1.28 / sqrt(1,824)) = 2.30x.
 board('Quality-Response', 'Work › Reader Response (sheet)', 'FormScreen', {'title': 'Reader Response', 'mode': 'sheet'}, {
- 'context': {'kicker': 'Hidden Gems · 1st of 40 loaded', 'kickerColour': '#990000', 'title': 'Keeper of the Northern Light',
+ 'context': {'kicker': 'Hidden Gems · 1st of 40 loaded', 'kickerColour': '#821019', 'title': 'Keeper of the Northern Light',
              'meta': 'saltwindow · 22,410 words · 7/7 · complete', 'cover': art(OW)},
- 'stats': [{'n': '2.4×', 'label': 'Kudos per hit vs similar', 'colour': '#990000'}, {'n': '1,804', 'label': 'Kudos'},
+ 'stats': [{'n': '2.4×', 'label': 'Kudos per hit vs similar', 'colour': '#821019'}, {'n': '1,804', 'label': 'Kudos'},
            {'n': '19.2k', 'label': 'Hits'}, {'n': '26%', 'label': 'Saved'}],
  'sections': [
   {'header': 'Kudos per Hit', 'rows': [
-   {'label': 'This work', 'sub': '1,804 kudos ÷ 19,200 hits', 'detail': '9.4%', 'kind': 'info', 'bar': 100, 'barColour': '#990000'},
+   {'label': 'This work', 'sub': '1,804 kudos ÷ 19,200 hits', 'detail': '9.4%', 'kind': 'info', 'bar': 100, 'barColour': '#821019'},
    {'label': 'Similar works', 'sub': '6 to 10 chapters · 15,000 to 30,000 words · complete · posted 2026', 'detail': '3.9%', 'kind': 'info', 'bar': 41, 'barColour': '#AEAEB2'}],
    'footer': 'AO3 counts one hit per reader per day, so long and serialized works collect more hits for each reader. Similar works share this one’s length, chapters, status and year.'},
   {'header': 'How Sure', 'rows': [
@@ -35,5 +35,5 @@ board('Quality-Response', 'Work › Reader Response (sheet)', 'FormScreen', {'ti
   {'header': 'Dates', 'rows': [
    {'label': 'Posted', 'sub': 'Estimated from the work’s number on AO3', 'detail': 'About Mar 2026', 'kind': 'info'},
    {'label': 'Last chapter', 'detail': 'Oct 12', 'kind': 'info'}]},
-  {'rows': [{'label': 'How Reader Response Works', 'kind': 'nav', 'icon': I['help'], 'iconColour': '#990000'}]}]}, 1240)
+  {'rows': [{'label': 'How Reader Response Works', 'kind': 'nav', 'icon': I['help'], 'iconColour': '#821019'}]}]}, 1240)
 print('1 board')

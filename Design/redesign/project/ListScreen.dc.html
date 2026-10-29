@@ -81,14 +81,14 @@ button{cursor:pointer}
         <sc-if value="{{s.isWorks}}" hint-placeholder-val="{{true}}">
           <div style="margin: 0 -16px">
             <sc-for list="{{s.works}}" as="w" hint-placeholder-count="3">
-              <dc-import name="WorkRow" work="{{w}}" divider="{{w.divider}}" ledger="{{s.ledger}}" show-summary="{{s.summary}}" selecting="{{s.selecting}}" selected="{{w.selected}}" accent="#990000" hint-size="100%,120px"></dc-import>
+              <dc-import name="WorkRow" work="{{w}}" divider="{{w.divider}}" ledger="{{s.ledger}}" show-summary="{{s.summary}}" selecting="{{s.selecting}}" selected="{{w.selected}}" accent="#821019" hint-size="100%,120px"></dc-import>
             </sc-for>
           </div>
         </sc-if>
         <sc-if value="{{s.isGrid}}" hint-placeholder-val="{{false}}">
           <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 14px; margin-top: 6px">
             <sc-for list="{{s.works}}" as="w" hint-placeholder-count="4">
-              <dc-import name="CoverCard" work="{{w}}" width="172" accent="#990000" hint-size="172px,330px"></dc-import>
+              <dc-import name="CoverCard" work="{{w}}" width="172" accent="#821019" hint-size="172px,330px"></dc-import>
             </sc-for>
           </div>
         </sc-if>
@@ -111,8 +111,9 @@ button{cursor:pointer}
                 </span>
                 <sc-if value="{{r.hasBadge}}" hint-placeholder-val="{{false}}"><span style="padding: 0 7px; border-radius: 9px; background: {{r.badgeBg}}; color: {{r.badgeFg}}; font-size: 12px; line-height: 18px; font-weight: 700; white-space: nowrap">{{r.badge}}</span></sc-if>
                 <sc-if value="{{r.hasDetail}}" hint-placeholder-val="{{false}}"><span style="font-size: 15px; color: #8E8E93; white-space: nowrap">{{r.detail}}</span></sc-if>
-                <sc-if value="{{r.hasAction}}" hint-placeholder-val="{{false}}"><span style="height: 30px; padding: 0 12px; border-radius: 15px; background: rgba(153,0,0,0.10); color: #990000; font-size: 14px; line-height: 30px; font-weight: 600; white-space: nowrap">{{r.action}}</span></sc-if>
+                <sc-if value="{{r.hasAction}}" hint-placeholder-val="{{false}}"><span style="height: 30px; padding: 0 12px; border-radius: 15px; background: rgba(130,16,25,0.10); color: #821019; font-size: 14px; line-height: 30px; font-weight: 600; white-space: nowrap">{{r.action}}</span></sc-if>
                 <sc-if value="{{r.hasChevron}}" hint-placeholder-val="{{true}}"><svg aria-hidden="true" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="#C7C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0"><path d="m1.5 1.5 5 5.5-5 5.5"></path></svg></sc-if>
+                <sc-if value="{{r.hasTrailingHandle}}" hint-placeholder-val="{{false}}"><span aria-hidden="true" style="color: #8E8E93; display: flex; flex-shrink: 0"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 9h14M5 15h14"></path></svg></span></sc-if>
               </div>
             </sc-for>
           </div>
@@ -126,7 +127,7 @@ button{cursor:pointer}
   </sc-if>
   <sc-if value="{{hasTab}}" hint-placeholder-val="{{false}}">
     <div style="position: absolute; left: 16px; bottom: 28px">
-      <dc-import name="TabBar" selected="{{tab}}" accent="#990000" hint-size="358px,62px"></dc-import>
+      <dc-import name="TabBar" selected="{{tab}}" accent="#821019" hint-size="358px,62px"></dc-import>
     </div>
   </sc-if>
   <sc-if value="{{hasActions}}" hint-placeholder-val="{{false}}">
@@ -171,17 +172,17 @@ class Component extends DCLogic {
           title: r.title, weight: r.light ? 400 : 600, sub: r.sub || '', hasSub: !!r.sub,
           kicker: r.kicker || '', hasKicker: !!r.kicker, kickerColour: r.kickerColour || '#6C6C70',
           detail: r.detail || '', hasDetail: !!r.detail,
-          badge: r.badge || '', hasBadge: !!r.badge, badgeBg: r.badgeBg || '#990000', badgeFg: r.badgeFg || '#FFFFFF',
+          badge: r.badge || '', hasBadge: !!r.badge, badgeBg: r.badgeBg || '#821019', badgeFg: r.badgeFg || '#FFFFFF',
           action: r.action || '', hasAction: !!r.action,
           hasAvatar: !!(r.tone || r.glyph) && !r.cover, tone: r.tone || '#8E8E93', initial: (r.initial || r.title || '?').charAt(0).toUpperCase(),
           glyph: r.glyph || '', hasGlyph: !!r.glyph, noGlyph: !r.glyph,
           avatarSize: r.square ? 44 : 36, avatarRadius: r.square ? '10px' : '50%',
-          hasHandle: !!r.handle, hasCircle: r.circle !== undefined, circleBorder: r.circle ? 'none' : '1.5px solid #C7C7CC', circleBg: r.circle ? '#990000' : 'transparent', tick: r.circle ? tick : '',
+          hasHandle: !!r.handle && r.handle !== 'trailing', hasTrailingHandle: r.handle === 'trailing', hasCircle: r.circle !== undefined, circleBorder: r.circle ? 'none' : '1.5px solid #C7C7CC', circleBg: r.circle ? '#821019' : 'transparent', tick: r.circle ? tick : '',
           meta: r.meta || '', hasMeta: !!r.meta, metaColour: r.metaColour || '#8E8E93', metaWeight: r.metaColour ? 600 : 400,
           hasCover: !!r.cover, cover: r.cover || '', initial: (r.title || '?').replace(/^\d+\.\s*/, '').charAt(0),
           tags: (r.tags || []).map((t) => (typeof t === 'string' ? { label: t, bg: '#EFEFF4', fg: '#3A3A3C', weight: 400 } : { label: t.label, bg: t.bg || '#EFEFF4', fg: t.fg || '#3A3A3C', weight: t.bg ? 600 : 400 })), hasTags: !!(r.tags && r.tags.length),
-          buttons: (r.buttons || []).map((b) => ({ label: b.label, bg: b.primary ? '#990000' : b.destructive ? 'rgba(215,0,21,0.10)' : '#EFEFF4', fg: b.primary ? '#FFFFFF' : b.destructive ? '#D70015' : '#1C1C1E' })), hasButtons: !!(r.buttons && r.buttons.length),
-          hasBar: r.bar !== undefined, bar: (r.bar || 0) + '%', barColour: r.barColour || '#990000', barLabel: r.barLabel || '',
+          buttons: (r.buttons || []).map((b) => ({ label: b.label, bg: b.primary ? '#821019' : b.destructive ? 'rgba(215,0,21,0.10)' : '#EFEFF4', fg: b.primary ? '#FFFFFF' : b.destructive ? '#D70015' : '#1C1C1E' })), hasButtons: !!(r.buttons && r.buttons.length),
+          hasBar: r.bar !== undefined, bar: (r.bar || 0) + '%', barColour: r.barColour || '#821019', barLabel: r.barLabel || '',
           hasChevron: r.chevron ?? (!r.action && r.circle === undefined && !r.handle && !r.buttons),
           sep: i ? '0.5px solid #E5E5EA' : 'none'
         }))
@@ -196,12 +197,12 @@ class Component extends DCLogic {
       hasSegments: !!segsIn, segCols: 'repeat(' + ((segsIn && segsIn.options.length) || 2) + ', minmax(0, 1fr))',
       segs: segsIn ? segsIn.options.map((o, j) => ({ label: o, on: j === segsIn.selected ? 'true' : 'false', bg: j === segsIn.selected ? '#FFFFFF' : 'transparent', shadow: j === segsIn.selected ? '0 2px 6px rgba(0,0,0,0.12)' : 'none', weight: j === segsIn.selected ? 600 : 400 })) : [],
       hasChips: !!chipsIn,
-      chips: (chipsIn || []).map((c) => ({ label: c.label, on: c.on ? 'true' : 'false', bg: c.on ? '#990000' : '#EFEFF4', fg: c.on ? '#FFFFFF' : '#1C1C1E' })),
+      chips: (chipsIn || []).map((c) => ({ label: c.label, on: c.on ? 'true' : 'false', bg: c.on ? '#821019' : '#EFEFF4', fg: c.on ? '#FFFFFF' : '#1C1C1E' })),
       sections,
       ...statBlock,
       tab, hasTab: !actions && tab !== 'none', hasBottom: !!actions || tab !== 'none',
       hasActions: !!actions, actionsLabel: 'Actions for the selected works',
-      actions: (actions || []).map((a) => ({ label: a.label || a, colour: a.destructive ? '#D70015' : '#990000' }))
+      actions: (actions || []).map((a) => ({ label: a.label || a, colour: a.destructive ? '#D70015' : '#821019' }))
     };
   }
 }

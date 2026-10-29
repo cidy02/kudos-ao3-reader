@@ -13,17 +13,20 @@ body{margin:0}
 button{cursor:pointer}
 </style>
 </helmet>
-<div style="width: 1290px; height: 600px; box-sizing: border-box; padding: 26px 30px; background: #FFFFFF; color: #1C1C1E; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; display: flex; flex-direction: column; gap: 18px">
+<div style="width: 1290px; height: 720px; box-sizing: border-box; padding: 26px 30px; background: #FFFFFF; color: #1C1C1E; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; display: flex; flex-direction: column; gap: 18px">
   <header style="display: flex; flex-direction: column; gap: 4px">
-    <h1 style="margin: 0; font-size: 28px; font-weight: 700">Accent colour: options</h1>
-    <p style="margin: 0; font-size: 15px; line-height: 21px; color: #3A3A3C; max-width: 1100px">AO3 red sits close to the system’s destructive red, so Resume and Delete Permanently read alike. Each option is one fixed colour with a lighter step for text on Dark and OLED; fills keep the main colour. Destructive actions stay system red in every option.</p>
+    <h1 style="margin: 0; font-size: 28px; font-weight: 700">Accent colour</h1>
+    <p style="margin: 0; font-size: 15px; line-height: 21px; color: #3A3A3C; max-width: 1140px">AO3 Red is the default: the archive’s colour deepened from #990000 to #821019, so Resume can’t be mistaken for Delete. All six can be chosen in Settings › Appearance. Each has a lighter step for text on Dark and OLED; filled controls keep the main colour. Destructive actions stay system red with every choice.</p>
   </header>
   <div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 14px">
     <sc-for list="{{options}}" as="o" hint-placeholder-count="6">
       <section aria-label="{{o.name}}" style="display: flex; flex-direction: column; gap: 10px">
         <div style="display: flex; align-items: center; gap: 8px">
-          <span aria-hidden="true" style="width: 22px; height: 22px; border-radius: 11px; background: {{o.c}}; box-shadow: {{o.ring}}"></span>
-          <span style="display: flex; flex-direction: column"><span style="font-size: 15px; font-weight: 700">{{o.name}}</span><span style="font-size: 12px; color: #6C6C70; font-variant-numeric: tabular-nums">{{o.c}} · {{o.dark}}</span></span>
+          <span aria-hidden="true" style="width: 22px; height: 22px; flex-shrink: 0; border-radius: 11px; background: {{o.c}}; box-shadow: {{o.ring}}"></span>
+          <span style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+            <span style="display: flex; align-items: center; gap: 6px"><span style="font-size: 15px; font-weight: 700">{{o.name}}</span><sc-if value="{{o.isDefault}}" hint-placeholder-val="{{false}}"><span style="padding: 0 6px; border-radius: 8px; background: #EFEFF4; color: #3A3A3C; font-size: 11px; line-height: 16px; font-weight: 600">Default</span></sc-if></span>
+            <span style="font-size: 12px; color: #6C6C70; font-variant-numeric: tabular-nums">{{o.c}} · {{o.dark}}</span>
+          </span>
         </div>
         <sc-for list="{{o.modes}}" as="m" hint-placeholder-count="2">
           <div style="border-radius: 18px; background: {{m.bg}}; color: {{m.ink}}; padding: 14px 12px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 0 0 0.5px rgba(0,0,0,0.1)">
@@ -49,14 +52,20 @@ button{cursor:pointer}
       </section>
     </sc-for>
   </div>
+  <div style="border-radius: 16px; background: #F2F2F7; padding: 14px 16px; display: flex; align-items: center; gap: 14px">
+    <span aria-hidden="true" style="width: 30px; height: 30px; flex-shrink: 0; border-radius: 15px; background: conic-gradient(#F5C400, #5FBF5F, #5A9BE0, #A57BD8, #E86AA0, #E5484D, #F5C400); display: flex; align-items: center; justify-content: center"><span style="width: 22px; height: 22px; border-radius: 11px; background: #FFFFFF; color: #1C1C1E; display: flex; align-items: center; justify-content: center"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></span></span>
+    <span style="font-size: 15px; line-height: 21px; color: #1C1C1E"><span style="font-weight: 700">Custom colour.</span> Any colour, after a warning that Kudos is designed around these six: they keep text readable in every theme and stay clear of the red used for Delete. The warning is drawn on the board beside this one.</span>
+  </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1290,"height":600}}'>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1290,"height":720}}'>
 class Component extends DCLogic {
   renderVals() {
     const rgba = (hex, a) => { const x = hex.replace('#', ''); return 'rgba(' + parseInt(x.slice(0, 2), 16) + ',' + parseInt(x.slice(2, 4), 16) + ',' + parseInt(x.slice(4, 6), 16) + ',' + a + ')'; };
+    // AO3 Red: OKLCH lightness 0.39 (was 0.43 at #990000), 10.3:1 on white; 35% further from
+    // the destructive #D70015 in OKLab. Its Dark/OLED step #EE8A93 is 7.5:1 on #16161B.
     const opts = [
-      ['AO3 Red (today)', '#990000', '#FF7A70', 'The archive’s own colour. Closest to system red: Resume and Delete look like the same kind of button.'],
+      ['AO3 Red', '#821019', '#EE8A93', 'The archive’s colour, deepened toward maroon. Still AO3, and no longer the same red as Delete.'],
       ['Plum', '#7B2D6B', '#D88BC7', 'Keeps AO3’s warmth and reads as a bookbinding colour, clearly not a warning. Pairs with every fandom hue.'],
       ['Ink Blue', '#24508F', '#7FA6E8', 'Literary and calm. Near the system tint, so the app looks more stock iOS.'],
       ['Deep Teal', '#11707A', '#5CC3CC', 'Fresh and distinct from every rating colour. Cooler than the rest of the palette.'],
@@ -66,7 +75,8 @@ class Component extends DCLogic {
     return {
       options: opts.map(([name, c, dark, note], i) => ({
         name, c, dark, note,
-        ring: i === 1 ? '0 0 0 2px #FFFFFF, 0 0 0 4px ' + c : 'none',
+        isDefault: i === 0,
+        ring: i === 0 ? '0 0 0 2px #FFFFFF, 0 0 0 4px ' + c : 'none',
         modes: [
           { bg: '#FFFFFF', ink: '#000000', ink2: '#6C6C70', link: c, track: rgba(c, 0.18), tint: rgba(c, 0.1), chip: '#F2F2F7' },
           { bg: '#16161B', ink: '#F2F2F7', ink2: '#AEAEB2', link: dark, track: 'rgba(255,255,255,0.14)', tint: rgba(dark, 0.16), chip: '#2E2E35' }

@@ -39,7 +39,7 @@ button{cursor:pointer}
     <div style="display: flex; align-items: center; justify-content: space-between">
       <button aria-label="Close" style="width: 40px; height: 40px; border: none; border-radius: 20px; background: rgba(118,118,128,0.14); color: #1F1B16; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"></path></svg></button>
       <h2 style="margin: 0; font-size: 17px; font-weight: 600">Note</h2>
-      <button style="height: 40px; padding: 0 16px; border: none; border-radius: 20px; background: {{accent}}; color: #FFFFFF; font-family: inherit; font-size: 15px; font-weight: 600">Done</button>
+      <button aria-label="Done" style="width: 40px; height: 40px; border: none; border-radius: 20px; background: {{accent}}; color: #FFFFFF; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.6 4.6L19.2 7.4"></path></svg></button>
     </div>
     <blockquote style="margin: 0; padding: 8px 12px; border-left: 3px solid #E2B30B; background: #FFF8E1; border-radius: 4px 10px 10px 4px; font-family: 'New York', Georgia, serif; font-size: 15px; line-height: 21px; color: #3A3A3C">Elinor knelt and pressed her palm to the crust; it gave a little, the way new ice does.</blockquote>
     <label style="flex: 1; display: flex">
@@ -49,12 +49,12 @@ button{cursor:pointer}
   </section>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#990000"},"$preview":{"width":390,"height":844}}'>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#821019"},"$preview":{"width":390,"height":844}}'>
 class Component extends DCLogic {
   renderVals() {
     const colours = [['Yellow', '#F5C400'], ['Green', '#5FBF5F'], ['Blue', '#5A9BE0'], ['Pink', '#E86AA0'], ['Purple', '#A57BD8']];
     return {
-      accent: this.props.accent ?? '#990000',
+      accent: this.props.accent ?? '#821019',
       colours: colours.map(([name, hex], i) => ({ name, hex, pressed: i === 0 ? 'true' : 'false', ring: i === 0 ? '0 0 0 2px #FFFFFF, 0 0 0 4px ' + hex : 'none' }))
     };
   }

@@ -14,7 +14,7 @@ button{cursor:pointer}
 </style>
 </helmet>
 <div style="width: 390px; height: 1000px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box">
-  <h1 data-inline-title style="position: absolute; left: 110px; right: 110px; top: 54px; margin: 0; font-size: 17px; line-height: 44px; font-weight: 600; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Reading History</h1>
+  <h1 data-inline-title="" style="position: absolute; left: 110px; right: 110px; top: 54px; margin: 0; font-size: 17px; line-height: 44px; font-weight: 600; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Reading History</h1>
   <div style="position: absolute; left: 16px; right: 16px; top: 54px; display: flex; justify-content: space-between; z-index: 2">
     <button aria-label="Back to Library" style="width: 44px; height: 44px; border: none; border-radius: 22px; color: #1C1C1E; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.74); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)">
       <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg>
@@ -37,7 +37,7 @@ button{cursor:pointer}
         </div>
         <div style="display: flex; gap: 6px">
           <button aria-label="Previous week" style="width: 32px; height: 32px; border: none; border-radius: 16px; background: #F2F2F7; color: #1C1C1E; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"></path></svg></button>
-          <button aria-label="Next week" disabled style="width: 32px; height: 32px; border: none; border-radius: 16px; background: #F2F2F7; color: #C7C7CC; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m9 5 7 7-7 7"></path></svg></button>
+          <button aria-label="Next week" disabled="" style="width: 32px; height: 32px; border: none; border-radius: 16px; background: #F2F2F7; color: #C7C7CC; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m9 5 7 7-7 7"></path></svg></button>
         </div>
       </div>
       <div role="img" aria-label="{{chartLabel}}" style="display: flex; flex-direction: column; gap: 6px">
@@ -91,7 +91,7 @@ button{cursor:pointer}
 
   <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 150px; background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0.94) 72%); pointer-events: none"></div>
   <div style="position: absolute; left: 16px; bottom: 28px">
-    <dc-import name="TabBar" selected="library" accent="#990000" hint-size="358px,62px"></dc-import>
+    <dc-import name="TabBar" selected="library" accent="#821019" hint-size="358px,62px"></dc-import>
   </div>
 </div>
 </x-dc>
@@ -106,13 +106,13 @@ class Component extends DCLogic {
     const hue = { 'Original Work': 188, 'Persuasion': 335, 'Sherlock Holmes': 32, 'Jane Eyre': 262, 'Pride and Prejudice': 150 };
     const ink = (f) => 'hsl(' + (hue[f] ?? 210) + ', 56%, 33%)';
     // A work's chapters as cells: grey = read before, red = read in this sitting, light = still to read.
-    const bars = (n, before, now) => Array.from({ length: n }, (_, i) => (i < before ? '#AEAEB2' : i < before + now ? '#990000' : '#E5E5EA'));
+    const bars = (n, before, now) => Array.from({ length: n }, (_, i) => (i < before ? '#AEAEB2' : i < before + now ? '#821019' : '#E5E5EA'));
     const entry = (time, fandom, title, n, before, now, what, flag, last) => ({
       time, fandom, title, what, fandomColour: ink(fandom),
       bars: bars(n, before, now), barsW: Math.min(100, n * 9) + '%',
       barsLabel: 'Chapters ' + (before + 1) + (now > 1 ? '–' + (before + now) : '') + ' of ' + n + ' read in this sitting',
       finished: flag === 'finished', started: flag === 'started',
-      dotBg: flag === 'finished' ? '#2F8F3A' : '#FFFFFF', dotRing: flag === 'finished' ? '#2F8F3A' : '#990000',
+      dotBg: flag === 'finished' ? '#2F8F3A' : '#FFFFFF', dotRing: flag === 'finished' ? '#2F8F3A' : '#821019',
       rail: last ? 'linear-gradient(#E5E5EA 0, #E5E5EA 13px, transparent 13px)' : '#E5E5EA',
       sep: last ? 'none' : '0.5px solid #E5E5EA'
     });
@@ -122,8 +122,8 @@ class Component extends DCLogic {
       avgLabelTop: Math.round(112 - (avg / max) * H) - 7,
       days: mins.map((m, i) => ({
         h: Math.max(m ? 6 : 2, Math.round((m / max) * H)),
-        bg: i === 6 ? '#990000' : m ? 'rgba(153,0,0,0.35)' : '#E5E5EA',
-        label: labels[i], weight: i === 6 ? 700 : 400, fg: i === 6 ? '#990000' : '#6C6C70'
+        bg: i === 6 ? '#821019' : m ? 'rgba(130,16,25,0.35)' : '#E5E5EA',
+        label: labels[i], weight: i === 6 ? 700 : 400, fg: i === 6 ? '#821019' : '#6C6C70'
       })),
       groups: [
         { day: 'Today', total: '55 min', items: [

@@ -33,7 +33,7 @@ button{cursor:pointer}
     <div style="background: #F2F2F7; border-radius: 16px; overflow: hidden">
       <div style="display: flex; align-items: center; height: 46px; padding: 0 16px; border-bottom: 0.5px solid #D1D1D6">
         <span style="flex: 1; font-size: 17px">Show on Home</span>
-        <span role="switch" aria-checked="true" aria-label="Show on Home" style="width: 51px; height: 31px; border-radius: 16px; background: #990000; position: relative"><span style="position: absolute; right: 2px; top: 2px; width: 27px; height: 27px; border-radius: 14px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.2)"></span></span>
+        <span role="switch" aria-checked="true" aria-label="Show on Home" style="width: 51px; height: 31px; border-radius: 16px; background: #821019; position: relative"><span style="position: absolute; right: 2px; top: 2px; width: 27px; height: 27px; border-radius: 14px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.2)"></span></span>
       </div>
       <div style="display: flex; align-items: center; height: 46px; padding: 0 16px">
         <span style="flex: 1; font-size: 17px">Keep downloads</span>
@@ -48,7 +48,7 @@ button{cursor:pointer}
 
   <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 150px; background: linear-gradient(to bottom, #FFFFFF00, #FFFFFFF0 72%); pointer-events: none"></div>
   <div style="position: absolute; left: 16px; bottom: 28px">
-    <dc-import name="TabBar" selected="library" accent="#990000" hint-size="358px,62px"></dc-import>
+    <dc-import name="TabBar" selected="library" accent="#821019" hint-size="358px,62px"></dc-import>
   </div>
   <div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(0,0,0,0.24)"></div>
   <section role="dialog" aria-label="Add Works" style="position: absolute; left: 0; right: 0; top: 420px; bottom: 0; border-radius: 38px 38px 0 0; background: #F2F2F7; box-shadow: 0 -8px 30px rgba(0,0,0,0.18); display: flex; flex-direction: column">
@@ -74,11 +74,11 @@ button{cursor:pointer}
   </section>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#990000"},"$preview":{"width":390,"height":844}}'>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#821019"},"$preview":{"width":390,"height":844}}'>
 class Component extends DCLogic {
   renderVals() {
     return {
-      accent: this.props.accent ?? '#990000',
+      accent: this.props.accent ?? '#821019',
       tiles: [150, 290, 155, 335].map((h) => 'linear-gradient(155deg, hsl(' + h + ', 46%, 27%), hsl(' + ((h + 22) % 360) + ', 50%, 41%))'),
       a: { title: 'A Map of Small Hours', author: 'quietharbor', fandom: 'Pride and Prejudice', rating: 'G', category: 'FM', warnings: 'none', status: 'complete', words: '32,050', chapters: '9/9', kudos: '1,212' },
       b: { title: 'Northanger Nights', author: 'gothicnovelist', fandom: 'Northanger Abbey', rating: 'T', category: 'FM', warnings: 'none', status: 'wip', words: '47,300', chapters: '9/12', kudos: '980' },

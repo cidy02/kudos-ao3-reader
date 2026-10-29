@@ -11,7 +11,7 @@
 <style>
 body{margin:0}
 button{cursor:pointer}
-a{color:#990000}a:hover{color:#6E0000}
+a{color:#821019}a:hover{color:#6E0000}
 </style>
 </helmet>
 <div style="width: 951px; height: 669px; position: relative; overflow: hidden; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; box-sizing: border-box; display: flex">
@@ -37,7 +37,7 @@ a{color:#990000}a:hover{color:#6E0000}
     <div style="display: flex; flex-direction: column; padding: 0 8px">
       <sc-for list="{{works}}" as="w" hint-placeholder-count="6">
         <div aria-current="{{w.current}}" style="border-radius: 16px; background: {{w.bg}}; overflow: hidden">
-          <dc-import name="WorkRow" work="{{w}}" accent="#990000" hint-size="100%,100px"></dc-import>
+          <dc-import name="WorkRow" work="{{w}}" accent="#821019" hint-size="100%,100px"></dc-import>
         </div>
       </sc-for>
     </div>
@@ -55,7 +55,7 @@ a{color:#990000}a:hover{color:#6E0000}
         <a href="Author.dc.html" style="align-self: flex-start; font-size: 15px; line-height: 20px; text-decoration: none">inkwell_moth</a>
       </div>
       <dc-import name="Symbols" variant="inline" rating="T" category="FM" warnings="none" status="wip" size="18" hint-size="327px,18px"></dc-import>
-      <dc-import name="ResumeCard" variant="detail" width="352" accent="#990000" hint-size="352px,330px"></dc-import>
+      <dc-import name="ResumeCard" variant="detail" width="352" accent="#821019" hint-size="352px,330px"></dc-import>
       <dl style="margin: 0; background: #F2F2F7; border-radius: 16px; padding: 10px 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 10px">
         <sc-for list="{{stats}}" as="s" hint-placeholder-count="9">
           <div style="display: flex; flex-direction: column; align-items: center; gap: 1px; border-right: {{s.border}}">
@@ -67,7 +67,7 @@ a{color:#990000}a:hover{color:#6E0000}
     </div>
   </section>
   <div style="position: absolute; right: 8px; top: 0; z-index: 2">
-    <dc-import name="DuoSideBar" height="669" tabs="library" actions="{{side}}" accent="#990000" hint-size="64px,669px"></dc-import>
+    <dc-import name="DuoSideBar" height="669" tabs="library" actions="{{side}}" accent="#821019" hint-size="64px,669px"></dc-import>
   </div>
 </div>
 </x-dc>
@@ -88,11 +88,11 @@ class Component extends DCLogic {
     ];
     return {
       side: [
-        { label: 'Kudos given', d: 'M12 20s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.4a4.3 4.3 0 0 1 7.5 2.4C19.5 15.4 12 20 12 20z', on: true, fill: '#990000' },
+        { label: 'Kudos given', d: 'M12 20s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.4a4.3 4.3 0 0 1 7.5 2.4C19.5 15.4 12 20 12 20z', on: true, fill: '#821019' },
         { label: 'Bookmark on AO3', d: 'M7 4h10v16l-5-4-5 4z' },
         { label: 'More actions', d: 'dots' }
       ],
-      works: works.map((w) => ({ ...w, current: w.selected ? 'true' : 'false', bg: w.selected ? 'rgba(153,0,0,0.08)' : 'transparent' })),
+      works: works.map((w) => ({ ...w, current: w.selected ? 'true' : 'false', bg: w.selected ? 'rgba(130,16,25,0.08)' : 'transparent' })),
       stats: stats.map(([label, value], i) => ({ label, value, border: i % 3 === 2 ? 'none' : '0.5px solid #D1D1D6' }))
     };
   }

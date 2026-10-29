@@ -39,7 +39,7 @@ button{cursor:pointer}
       </span>
       <span style="flex: 1"></span>
       <sc-if value="{{hasConfirm}}" hint-placeholder-val="{{false}}">
-        <button aria-label="{{confirmLabel}}" style="width: 44px; height: 44px; border: none; border-radius: 22px; background: #990000; color: #FFFFFF; display: flex; align-items: center; justify-content: center">
+        <button aria-label="{{confirmLabel}}" style="width: 44px; height: 44px; border: none; border-radius: 22px; background: #821019; color: #FFFFFF; display: flex; align-items: center; justify-content: center">
           <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.6 4.6L19.2 7.4"></path></svg>
         </button>
       </sc-if>
@@ -135,7 +135,7 @@ button{cursor:pointer}
                   </sc-if>
                   <sc-if value="{{r.hasChips}}" hint-placeholder-val="{{false}}">
                     <span style="display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; max-width: 70%">
-                      <sc-for list="{{r.chips}}" as="c" hint-placeholder-count="2"><span style="padding: 3px 10px; border-radius: 13px; background: #EFEFF4; font-size: 13px; line-height: 20px">{{c}}</span></sc-for>
+                      <sc-for list="{{r.chips}}" as="c" hint-placeholder-count="2"><span style="padding: 3px 10px; border-radius: 13px; background: {{c.bg}}; color: {{c.fg}}; font-size: 13px; line-height: 20px; font-weight: {{c.weight}}">{{c.label}}</span></sc-for>
                     </span>
                   </sc-if>
                   <sc-if value="{{r.hasDetail}}" hint-placeholder-val="{{false}}"><span style="font-size: 16px; color: #8E8E93; white-space: nowrap">{{r.detail}}</span></sc-if>
@@ -144,7 +144,7 @@ button{cursor:pointer}
                     <span role="switch" aria-checked="{{r.onText}}" aria-label="{{r.label}}" style="width: 51px; height: 31px; flex-shrink: 0; border-radius: 16px; background: {{r.track}}; position: relative"><span style="position: absolute; left: {{r.knob}}px; top: 2px; width: 27px; height: 27px; border-radius: 14px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.2)"></span></span>
                   </sc-if>
                   <sc-if value="{{r.isCheck}}" hint-placeholder-val="{{false}}">
-                    <svg aria-label="Selected" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#990000" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0"><path d="M5 12.5l4.6 4.6L19.2 7.4"></path></svg>
+                    <svg aria-label="Selected" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#821019" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0"><path d="M5 12.5l4.6 4.6L19.2 7.4"></path></svg>
                   </sc-if>
                   <sc-if value="{{r.isCircle}}" hint-placeholder-val="{{false}}">
                     <span aria-hidden="true" style="width: 22px; height: 22px; flex-shrink: 0; box-sizing: border-box; border-radius: 11px; border: {{r.circleBorder}}; background: {{r.circleBg}}; color: #FFFFFF; display: flex; align-items: center; justify-content: center"><sc-if value="{{r.on}}" hint-placeholder-val="{{false}}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.6 4.6L19.2 7.4"></path></svg></sc-if></span>
@@ -166,6 +166,9 @@ button{cursor:pointer}
                   <sc-if value="{{r.isOut}}" hint-placeholder-val="{{false}}">
                     <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#C7C7CC" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0"><path d="M8 4h12v12M20 4 7 17"></path></svg>
                   </sc-if>
+                  <sc-if value="{{r.hasTrailingHandle}}" hint-placeholder-val="{{false}}">
+                    <span aria-hidden="true" style="width: 20px; flex-shrink: 0; display: flex; justify-content: center; color: #8E8E93"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 9h14M5 15h14"></path></svg></span>
+                  </sc-if>
                 </div>
               </div>
             </sc-for>
@@ -181,7 +184,7 @@ button{cursor:pointer}
   <sc-if value="{{hasTab}}" hint-placeholder-val="{{false}}">
     <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 150px; background: linear-gradient(to bottom, rgba(242,242,247,0), rgba(242,242,247,0.94) 72%); pointer-events: none"></div>
     <div style="position: absolute; left: 16px; bottom: 28px">
-      <dc-import name="TabBar" selected="{{tab}}" accent="#990000" hint-size="358px,62px"></dc-import>
+      <dc-import name="TabBar" selected="{{tab}}" accent="#821019" hint-size="358px,62px"></dc-import>
     </div>
   </sc-if>
 </div>
@@ -210,32 +213,35 @@ class Component extends DCLogic {
         const centred = k === 'button' || k === 'destructive';
         const field = k === 'field' || k === 'textarea';
         const tall = !!r.sub || !!r.meta || k === 'textarea';
-        const lead = r.handle || r.tile || r.icon || r.avatar || r.cover || r.dot || r.edit;
+        // handle: true draws the reorder handle at the start of the row; 'trailing' at its end, as iOS lists do.
+        const trailingHandle = r.handle === 'trailing';
+        const lead = (r.handle && !trailingHandle) || r.tile || r.icon || r.avatar || r.cover || r.dot || r.edit;
         return {
           label: r.label || '', sub: r.sub || '', hasSub: !!r.sub,
           detail: r.detail || '', hasDetail: !!r.detail && !field,
-          badge: r.badge || '', hasBadge: !!r.badge, badgeBg: r.badgeBg || '#990000', badgeFg: r.badgeFg || '#FFFFFF',
+          badge: r.badge || '', hasBadge: !!r.badge, badgeBg: r.badgeBg || '#821019', badgeFg: r.badgeFg || '#FFFFFF',
           meta: r.meta || '', hasMeta: !!r.meta, metaColour: r.metaColour || '#8E8E93', metaWeight: r.metaColour ? 600 : 400,
-          hasBar: r.bar !== undefined, bar: (r.bar || 0) + '%', barColour: r.barColour || '#990000',
+          hasBar: r.bar !== undefined, bar: (r.bar || 0) + '%', barColour: r.barColour || '#821019',
           hasCover: !!r.cover, cover: r.cover || '',
           hasDot: !!r.dot, dot: r.dot || '', dotD: r.dotD || '',
           hasEdit: !!r.edit, editBg: r.edit === 'add' ? '#34C759' : '#FF3B30', editD: r.edit === 'add' ? 'M12 5v14M5 12h14' : 'M5 12h14', editLabel: (r.edit === 'add' ? 'Show ' : 'Move to shelf buttons: ') + (r.label || ''),
           text: r.text || r.placeholder || '', fieldColour: r.text ? '#000000' : '#AEAEB2',
           wrap: k === 'textarea' ? 'normal' : 'nowrap',
-          chips: r.chips || [], hasChips: k === 'chips',
+          chips: (r.chips || []).map((c) => (typeof c === 'string' ? { label: c, bg: '#EFEFF4', fg: '#000000', weight: 400 }
+            : { label: (c.tone === 'out' ? '– ' : c.tone === 'in' ? '✓ ' : '') + c.label, bg: c.tone === 'out' ? 'rgba(215,0,21,0.08)' : c.tone === 'in' ? 'rgba(36,138,61,0.12)' : '#EFEFF4', fg: c.tone === 'out' ? '#D70015' : c.tone === 'in' ? '#1E6B34' : '#000000', weight: c.tone ? 600 : 400 })), hasChips: k === 'chips',
           segs: (r.options || []).map((o, j) => ({ label: o, on: j === (r.selected ?? 0) ? 'true' : 'false', bg: j === (r.selected ?? 0) ? '#FFFFFF' : 'transparent', shadow: j === (r.selected ?? 0) ? '0 2px 6px rgba(0,0,0,0.12)' : 'none', weight: j === (r.selected ?? 0) ? 600 : 400 })),
           hasSegments: k === 'segments',
           swatches: (r.colours || []).map((c, j) => ({ c, on: j === (r.selected ?? 0) ? 'true' : 'false', ring: j === (r.selected ?? 0) ? '0 0 0 2px #FFFFFF, 0 0 0 4px ' + c : 'none' })),
           hasSwatches: k === 'swatches',
           isToggle: k === 'toggle', onText: r.on ? 'true' : 'false', track: r.on ? '#34C759' : '#E9E9EB', knob: r.on ? 22 : 2,
           isCheck: k === 'check' && !!r.on,
-          isCircle: k === 'circle', on: !!r.on, circleBorder: r.on ? 'none' : '1.5px solid #C7C7CC', circleBg: r.on ? '#990000' : 'transparent',
+          isCircle: k === 'circle', on: !!r.on, circleBorder: r.on ? 'none' : '1.5px solid #C7C7CC', circleBg: r.on ? '#821019' : 'transparent',
           isNav: k === 'nav', isOut: k === 'out',
           isCentered: centred, isLeft: !centred && !field, isField: field,
           weight: centred ? 600 : (r.bold ? 600 : 400),
-          colour: k === 'destructive' ? '#D70015' : k === 'button' ? '#990000' : (r.colour || '#000000'),
-          hasHandle: !!r.handle, hasTile: !!r.tile && !r.avatar, tile: r.tile || '#8E8E93', d: r.icon || r.tileIcon || '',
-          hasIcon: !!r.icon && !r.tile, iconColour: r.iconColour || '#990000',
+          colour: k === 'destructive' ? '#D70015' : k === 'button' ? '#821019' : (r.colour || '#000000'),
+          hasHandle: !!r.handle && !trailingHandle, hasTrailingHandle: trailingHandle, hasTile: !!r.tile && !r.avatar, tile: r.tile || '#8E8E93', d: r.icon || r.tileIcon || '',
+          hasIcon: !!r.icon && !r.tile, iconColour: r.iconColour || '#821019',
           hasAvatar: !!r.avatar, initial: (r.label || '?').charAt(0).toUpperCase(),
           minH: k === 'textarea' ? (r.rows || 4) * 21 + 22 : 46,
           padV: tall ? 10 : 0,
@@ -260,7 +266,7 @@ class Component extends DCLogic {
       confirmLabel: this.props.confirm || '', hasConfirm: !!this.props.confirm,
       trailingText: this.props.trailing || '', hasTrailingText: !!this.props.trailing && !this.props.confirm,
       search: this.props.search || '', hasSearch: !!this.props.search,
-      hasHero: !!hero, heroTitle: hero ? hero.title : '', heroSub: hero ? (hero.sub || '') : '', heroColour: hero ? (hero.colour || '#990000') : '#990000', heroD: hero ? (hero.icon || '') : '',
+      hasHero: !!hero, heroTitle: hero ? hero.title : '', heroSub: hero ? (hero.sub || '') : '', heroColour: hero ? (hero.colour || '#821019') : '#821019', heroD: hero ? (hero.icon || '') : '',
       sections,
       ...statBlock,
       tab, hasTab: !sheet && tab !== 'none'

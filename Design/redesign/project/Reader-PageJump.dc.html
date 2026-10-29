@@ -13,7 +13,7 @@ body{margin:0}
 </style>
 </helmet>
 <div style="width: 390px; height: 844px; position: relative; overflow: hidden">
-  <dc-import name="FormScreen" title="Go to Page" subtitle="Chapter 7 · The Salt Road" mode="sheet" confirm="Go" height="844" sections="{{sections}}" hint-size="390px,844px"></dc-import>
+  <dc-import name="FormScreen" title="Go to Page" mode="sheet" confirm="Go" height="844" sections="{{sections}}" context="{{context}}" hint-size="390px,844px"></dc-import>
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
@@ -63,7 +63,14 @@ class Component extends DCLogic {
         }
       ]
     }
-  ]
+  ],
+  "context": {
+    "kicker": "The Cartographer’s Daughter",
+    "kickerColour": "hsl(188, 56%, 33%)",
+    "title": "Chapter 7 · The Salt Road",
+    "meta": "Page 4 of 18 · 21 min left in the chapter",
+    "cover": "linear-gradient(155deg, hsl(188, 46%, 27%), hsl(210, 50%, 41%))"
+  }
 };
   }
 }

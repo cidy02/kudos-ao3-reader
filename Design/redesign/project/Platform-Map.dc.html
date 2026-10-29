@@ -48,7 +48,7 @@ body{margin:0}
   </section>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#990000"},"$preview":{"width":1280,"height":1760}}'>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#821019"},"$preview":{"width":1280,"height":1760}}'>
 class Component extends DCLogic {
   renderVals() {
     const rows = [
@@ -79,7 +79,7 @@ class Component extends DCLogic {
       ['Type and colour', 'Dynamic Type styles; .tint(AO3 red) for everything tappable; fandom colour only in covers, the Resume card, the fandom label and the wash', 'M3 type scale; dynamic colour off; primary = AO3 red; fandom colour via a CompositionLocal, never on buttons; dark theme']
     ];
     return {
-      accent: this.props.accent ?? '#990000',
+      accent: this.props.accent ?? '#821019',
       rows: rows.map(([element, ios, android]) => ({ element, ios, android }))
     };
   }

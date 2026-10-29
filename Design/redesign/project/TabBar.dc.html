@@ -46,10 +46,10 @@ body{margin:0}
   </sc-if>
 </nav>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"selected":{"editor":"enum","options":["home","library","writing","browse","account","search"],"default":"home"},"variant":{"editor":"enum","options":["full","minimized"],"default":"full"},"account":{"editor":"enum","options":["avatar","tab"],"default":"avatar"},"accent":{"editor":null,"default":"#990000"},"accessoryTitle":{"editor":null,"default":"Salt & Starlight"},"accessorySubtitle":{"editor":null,"default":"Read Aloud · Ch 15 · 12 min left"},"accessoryCover":{"editor":null,"default":"#2E5339"},"$preview":{"width":358,"height":62}}'>
+<script type="text/x-dc" data-dc-script data-props='{"selected":{"editor":"enum","options":["home","library","writing","browse","account","search"],"default":"home"},"variant":{"editor":"enum","options":["full","minimized"],"default":"full"},"account":{"editor":"enum","options":["avatar","tab"],"default":"avatar"},"accent":{"editor":null,"default":"#821019"},"accessoryTitle":{"editor":null,"default":"Salt & Starlight"},"accessorySubtitle":{"editor":null,"default":"Read Aloud · Ch 15 · 12 min left"},"accessoryCover":{"editor":null,"default":"#2E5339"},"$preview":{"width":358,"height":62}}'>
 class Component extends DCLogic {
   renderVals() {
-    const accent = this.props.accent ?? '#990000';
+    const accent = this.props.accent ?? '#821019';
     const hex = accent.replace('#', '');
     const tint = 'rgba(' + parseInt(hex.slice(0, 2), 16) + ',' + parseInt(hex.slice(2, 4), 16) + ',' + parseInt(hex.slice(4, 6), 16) + ',0.10)';
     const selected = this.props.selected ?? 'home';

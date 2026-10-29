@@ -50,7 +50,7 @@ button{cursor:pointer}
       </div>
     </div>
 
-    <dc-import name="ResumeCard" variant="next" work="{{next}}" accent="#990000" hint-size="358px,250px"></dc-import>
+    <dc-import name="ResumeCard" variant="next" work="{{next}}" accent="#821019" hint-size="358px,250px"></dc-import>
 
     <section aria-label="In line" style="display: flex; flex-direction: column; gap: 2px">
       <h2 style="margin: 0; font-size: 20px; line-height: 25px; font-weight: 700">In line</h2>
@@ -58,7 +58,7 @@ button{cursor:pointer}
         <sc-for list="{{works}}" as="w" hint-placeholder-count="4">
           <div style="position: relative; z-index: {{w.z}}">
             <sc-if value="{{w.swipeNext}}" hint-placeholder-val="{{false}}">
-              <div aria-hidden="true" style="position: absolute; left: 0; top: 0; bottom: 0; width: 96px; background: #990000; color: #FFFFFF; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 13px; font-weight: 600">
+              <div aria-hidden="true" style="position: absolute; left: 0; top: 0; bottom: 0; width: 96px; background: #821019; color: #FFFFFF; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 13px; font-weight: 600">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V7M6.5 12.5 12 7l5.5 5.5M5 4h14"></path></svg>Read Next
               </div>
             </sc-if>
@@ -70,7 +70,7 @@ button{cursor:pointer}
             <div style="position: relative; display: flex; align-items: stretch; background: #FFFFFF; transform: {{w.shift}}; box-shadow: {{w.lift}}; border-radius: {{w.radius}}">
               <span style="width: 28px; flex-shrink: 0; padding-top: 14px; text-align: right; font-size: 15px; font-weight: 600; color: #6C6C70; font-variant-numeric: tabular-nums">{{w.n}}</span>
               <div style="flex: 1; min-width: 0; margin-left: -6px">
-                <dc-import name="WorkRow" work="{{w}}" divider="{{w.divider}}" accent="#990000" hint-size="100%,100px"></dc-import>
+                <dc-import name="WorkRow" work="{{w}}" divider="{{w.divider}}" accent="#821019" hint-size="100%,100px"></dc-import>
               </div>
             </div>
           </div>
@@ -81,14 +81,14 @@ button{cursor:pointer}
 
   <div aria-hidden="true" style="z-index: 4; position: absolute; left: 0; right: 0; bottom: 0; height: 150px; background: linear-gradient(to bottom, #FFFFFF00, #FFFFFFF0 72%); pointer-events: none"></div>
   <div style="z-index: 5; position: absolute; left: 16px; bottom: 28px">
-    <dc-import name="TabBar" selected="library" accent="#990000" hint-size="358px,62px"></dc-import>
+    <dc-import name="TabBar" selected="library" accent="#821019" hint-size="358px,62px"></dc-import>
   </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#990000"},"$preview":{"width":390,"height":1000}}'>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#821019"},"$preview":{"width":390,"height":1000}}'>
 class Component extends DCLogic {
   renderVals() {
-    const accent = this.props.accent ?? '#990000';
+    const accent = this.props.accent ?? '#821019';
     const hex = accent.replace('#', '');
     const tint = 'rgba(' + parseInt(hex.slice(0, 2), 16) + ',' + parseInt(hex.slice(2, 4), 16) + ',' + parseInt(hex.slice(4, 6), 16) + ',0.10)';
     const works = [

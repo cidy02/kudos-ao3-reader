@@ -38,7 +38,7 @@ button{cursor:pointer}
     </header>
     <div style="display: flex; gap: 10px">
       <button style="flex: 1; height: 44px; border: none; border-radius: 22px; background: {{accent}}; color: #FFFFFF; font-family: inherit; font-size: 17px; font-weight: 600">Subscribe</button>
-      <button style="flex: 1; height: 44px; border: none; border-radius: 22px; background: rgba(153,0,0,0.10); color: {{accent}}; font-family: inherit; font-size: 17px; font-weight: 600">Preserve all 3</button>
+      <button style="flex: 1; height: 44px; border: none; border-radius: 22px; background: rgba(130,16,25,0.10); color: {{accent}}; font-family: inherit; font-size: 17px; font-weight: 600">Preserve all 3</button>
     </div>
     <div style="margin: 0 -16px">
       <sc-for list="{{works}}" as="w" hint-placeholder-count="3">
@@ -57,7 +57,7 @@ button{cursor:pointer}
   </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#990000"},"$preview":{"width":390,"height":844}}'>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":null,"default":"#821019"},"$preview":{"width":390,"height":844}}'>
 class Component extends DCLogic {
   renderVals() {
     const works = [
@@ -66,7 +66,7 @@ class Component extends DCLogic {
       { title: 'Blank Vellum', author: 'inkwell_moth', fandom: 'Original Work', rating: 'T', category: 'FF', warnings: 'undisclosed', status: 'wip', words: '38,900', chapters: '6/?', kudos: '880' }
     ];
     return {
-      accent: this.props.accent ?? '#990000',
+      accent: this.props.accent ?? '#821019',
       works: works.map((w, i) => ({ ...w, n: i + 1, divider: i < works.length - 1 }))
     };
   }

@@ -16,7 +16,7 @@ OW, PER, PP, SH, SS = 188, 335, 150, 32, 262
 AMBER = {'badgeBg': '#FFF4E5', 'badgeFg': '#6B3A00'}
 GREY = {'badgeBg': '#EFEFF4', 'badgeFg': '#3A3A3C'}
 BLUE = {'badgeBg': '#E5EEFB', 'badgeFg': '#1E4E9A'}
-ship = lambda t: {'label': t, 'bg': 'rgba(153,0,0,0.10)', 'fg': '#990000'}
+ship = lambda t: {'label': t, 'bg': 'rgba(130,16,25,0.10)', 'fg': '#821019'}
 
 # What each screen is about
 NEW = {'kicker': 'Original Work · new work', 'kickerColour': ink(OW), 'title': 'Untitled lighthouse piece', 'meta': '3,240 words · 1 chapter · not posted yet', 'cover': art(OW)}
@@ -37,7 +37,7 @@ add('Post-Tags', 'Post a work › Tags', 'FormScreen', {'title': 'Tags', 'back':
   {'header': 'Additional tags', 'rows': [{'label': 'Tags', 'kind': 'chips', 'chips': ['Lighthouses', 'Slow Burn', 'Found Family']}]},
   {'header': 'Suggestions for “light”', 'rows': [
    {'label': 'Lighthouse Keepers', 'sub': '2,904 works', 'meta': 'Canonical tag', 'kind': 'nav'},
-   {'label': 'Lighthouses', 'sub': '6,120 works', 'meta': 'Added', 'metaColour': '#990000', 'kind': 'check', 'on': True},
+   {'label': 'Lighthouses', 'sub': '6,120 works', 'meta': 'Added', 'metaColour': '#821019', 'kind': 'check', 'on': True},
    {'label': 'Light Angst', 'sub': '98k works', 'meta': 'Canonical tag', 'kind': 'nav'}]},
   {'header': 'Tags you often use', 'rows': [
    {'label': 'Weather as Metaphor', 'sub': 'On 3 of your works', 'kind': 'circle'},
@@ -50,21 +50,21 @@ add('Post-Creators', 'Post a work › Co-creators', 'FormScreen', {'title': 'Cre
    {'label': 'saltwindow', 'sub': 'You · this pseud', 'kind': 'check', 'on': True, 'avatar': True, 'tile': '#23506B'},
    {'label': 'tidewright', 'sub': 'Invited Oct 27', 'meta': 'Shows once they accept on AO3', 'kind': 'info', 'avatar': True, 'tile': '#2F6D6A', 'badge': 'Invited', **GREY}]},
   {'header': 'People you’ve written with', 'rows': [
-   {'label': 'quietharbor', 'sub': 'Co-created Small Weathers · 2025', 'kind': 'info', 'avatar': True, 'tile': '#3E5B3A', 'badge': 'Invite', 'badgeBg': 'rgba(153,0,0,0.10)', 'badgeFg': '#990000'},
-   {'label': 'anne_at_lyme', 'sub': 'Beta-read Lantern Season', 'kind': 'info', 'avatar': True, 'tile': '#6B4E23', 'badge': 'Invite', 'badgeBg': 'rgba(153,0,0,0.10)', 'badgeFg': '#990000'}]},
+   {'label': 'quietharbor', 'sub': 'Co-created Small Weathers · 2025', 'kind': 'info', 'avatar': True, 'tile': '#3E5B3A', 'badge': 'Invite', 'badgeBg': 'rgba(130,16,25,0.10)', 'badgeFg': '#821019'},
+   {'label': 'anne_at_lyme', 'sub': 'Beta-read Lantern Season', 'kind': 'info', 'avatar': True, 'tile': '#6B4E23', 'badge': 'Invite', 'badgeBg': 'rgba(130,16,25,0.10)', 'badgeFg': '#821019'}]},
   {'rows': [{'label': 'Post under another pseud', 'kind': 'nav', 'detail': 'saltwindow'}]}]}, 844)
 add('Post-Series', 'Post a work › Series', 'FormScreen', {'title': 'Series', 'back': 'Back to Post'}, {
  'context': NEW,
  'sections': [
   {'header': 'Add to a series', 'rows': [
    {'label': 'None', 'kind': 'check'},
-   {'label': 'Lantern Season', 'sub': '3 parts · 47,260 words', 'meta': 'Becomes part 4', 'metaColour': '#990000', 'kind': 'check', 'on': True, 'tile': '#1E63C8', 'icon': I['series']},
+   {'label': 'Lantern Season', 'sub': '3 parts · 47,260 words', 'meta': 'Becomes part 4', 'metaColour': '#821019', 'kind': 'check', 'on': True, 'tile': '#1E63C8', 'icon': I['series']},
    {'label': 'Small Weathers', 'sub': 'Persuasion · 2 parts · 7,120 words', 'kind': 'check', 'tile': '#9C2F6B', 'icon': I['series']}]},
   {'header': 'Lantern Season after posting', 'rows': [
    {'label': '1. Keeper of the Northern Light', 'sub': '22,410 words · complete', 'kind': 'info', 'cover': art(OW)},
    {'label': '2. Lantern Season', 'sub': '15,050 words · complete', 'kind': 'info', 'cover': art(203)},
    {'label': '3. What the Tide Keeps', 'sub': '9,800 words · 3/8', 'kind': 'info', 'cover': art(176)},
-   {'label': '4. Untitled lighthouse piece', 'sub': '3,240 words', 'meta': 'This work', 'metaColour': '#990000', 'kind': 'info', 'cover': art(OW)}]},
+   {'label': '4. Untitled lighthouse piece', 'sub': '3,240 words', 'meta': 'This work', 'metaColour': '#821019', 'kind': 'info', 'cover': art(OW)}]},
   {'rows': [{'label': 'New Series…', 'kind': 'button'}]}]}, 940)
 add('Post-Parent', 'Post a work › Inspired by', 'FormScreen', {'title': 'Inspired By', 'back': 'Back to Post'}, {
  'context': NEW,
@@ -100,9 +100,9 @@ add('Series-Edit', 'Writing › Edit Series', 'FormScreen', {'title': 'Edit Seri
   {'header': 'Title', 'rows': [{'kind': 'field', 'text': 'Lantern Season'}]},
   {'header': 'Summary', 'rows': [{'kind': 'textarea', 'text': 'Three keepers, three winters, one light.', 'rows': 2}, {'label': 'Notes', 'kind': 'nav', 'detail': 'None'}]},
   {'header': 'Parts', 'rows': [
-   {'label': 'Keeper of the Northern Light', 'sub': 'Part 1 · 22,410 words · complete', 'kind': 'info', 'handle': True, 'cover': art(OW)},
-   {'label': 'Lantern Season', 'sub': 'Part 2 · 15,050 words · complete', 'kind': 'info', 'handle': True, 'cover': art(203)},
-   {'label': 'What the Tide Keeps', 'sub': 'Part 3 · 9,800 words · 3/8', 'meta': 'Work in progress', 'metaColour': '#C25E00', 'kind': 'info', 'handle': True, 'cover': art(176)}]},
+   {'label': 'Keeper of the Northern Light', 'sub': 'Part 1 · 22,410 words · complete', 'kind': 'info', 'handle': 'trailing', 'cover': art(OW)},
+   {'label': 'Lantern Season', 'sub': 'Part 2 · 15,050 words · complete', 'kind': 'info', 'handle': 'trailing', 'cover': art(203)},
+   {'label': 'What the Tide Keeps', 'sub': 'Part 3 · 9,800 words · 3/8', 'meta': 'Work in progress', 'metaColour': '#C25E00', 'kind': 'info', 'handle': 'trailing', 'cover': art(176)}]},
   {'rows': [{'label': 'Complete', 'kind': 'toggle', 'on': False}, {'label': 'Creators', 'kind': 'nav', 'detail': 'saltwindow'}]},
   {'rows': [{'label': 'Delete Series', 'kind': 'destructive'}], 'footer': 'The works stay; only the series goes.'}]}, 1100)
 add('Chapter-Add', 'Writing › Add Chapter (form)', 'FormScreen', {'title': 'New Chapter', 'subtitle': 'Chapter 5 of 8', 'mode': 'sheet', 'trailing': 'Post…'}, {
@@ -120,10 +120,10 @@ add('Writing-Chapters', 'Writing › a work’s chapters', 'ListScreen', {'title
  'stats': stats(('3/8', 'Posted'), ('9,800', 'Words'), ('4,108', 'Hits'), ('63', 'Comment threads')),
  'tools': [{'label': 'Add Chapter', 'icon': 'plus'}, {'label': 'More: Reorder, Edit Work', 'icon': 'more'}],
  'sections': [{'kind': 'rows', 'rows': [
-  {'title': '1. Low Water', 'sub': '3,210 words · posted Sep 28', 'meta': '29 comment threads', 'handle': True},
-  {'title': '2. The Lamp Room', 'sub': '3,350 words · posted Oct 9', 'meta': '21 comment threads', 'handle': True},
-  {'title': '3. Fog Bell', 'sub': '3,240 words · posted Oct 20', 'meta': '13 comment threads · 2 new', 'metaColour': '#990000', 'handle': True},
-  {'title': '4. Slack Water', 'sub': '1,240 words · edited yesterday', 'meta': 'Draft on AO3 · deleted Nov 19 unless posted', 'metaColour': '#C25E00', 'handle': True, 'badge': 'Draft', **GREY}]},
+  {'title': '1. Low Water', 'sub': '3,210 words · posted Sep 28', 'meta': '29 comment threads', 'handle': 'trailing'},
+  {'title': '2. The Lamp Room', 'sub': '3,350 words · posted Oct 9', 'meta': '21 comment threads', 'handle': 'trailing'},
+  {'title': '3. Fog Bell', 'sub': '3,240 words · posted Oct 20', 'meta': '13 comment threads · 2 new', 'metaColour': '#821019', 'handle': 'trailing'},
+  {'title': '4. Slack Water', 'sub': '1,240 words · edited yesterday', 'meta': 'Draft on AO3 · deleted Nov 19 unless posted', 'metaColour': '#C25E00', 'handle': 'trailing', 'badge': 'Draft', **GREY}]},
   {'header': 'Planned', 'count': '4', 'kind': 'rows', 'rows': [
    {'title': '5. Spring Tide', 'sub': 'Outline only', 'light': True, 'chevron': False},
    {'title': '6–8', 'sub': 'Not started', 'light': True, 'chevron': False}]}]}, 980)
@@ -170,7 +170,7 @@ add('AO3-Collection-Maintainers', 'AO3 collections › Maintainers', 'ListScreen
  'tools': [{'label': 'Invite', 'icon': 'plus'}],
  'sections': [
   {'header': 'Maintainers', 'count': '3', 'kind': 'rows', 'rows': [
-   {'title': 'saltwindow', 'sub': 'You · created the collection Sep 2024', 'tone': '#23506B', 'badge': 'Owner', 'badgeBg': '#990000'},
+   {'title': 'saltwindow', 'sub': 'You · created the collection Sep 2024', 'tone': '#23506B', 'badge': 'Owner', 'badgeBg': '#821019'},
    {'title': 'tidewright', 'sub': 'Since Sep 2024', 'meta': 'Approved 28 works', 'tone': '#2F6D6A', 'badge': 'Moderator', **BLUE},
    {'title': 'marginalia', 'sub': 'Invited Oct 20', 'meta': 'Hasn’t accepted yet', 'metaColour': '#C25E00', 'tone': '#7A4040', 'badge': 'Invited', **GREY}]},
   {'header': 'Most active members', 'count': '41', 'kind': 'rows', 'rows': [
@@ -231,11 +231,11 @@ add('Challenge-Settings', 'Challenge › Settings (maintainer)', 'FormScreen', {
 add('Prompt-Meme', 'Challenge › Prompt meme', 'ListScreen', {'title': 'Prompts', 'back': 'Back', 'tab': 'writing'}, {
  'large': False,
  'context': MEME,
- 'stats': stats(('142', 'Prompts'), ('38', 'Claimed'), ('21', 'Filled'), ('1', 'Yours', '#990000')),
+ 'stats': stats(('142', 'Prompts'), ('38', 'Claimed'), ('21', 'Filled'), ('1', 'Yours', '#821019')),
  'tools': [{'label': 'New Prompt', 'icon': 'plus'}],
  'chips': [{'label': 'All', 'on': True}, {'label': 'Unclaimed'}, {'label': 'Claimed by me'}, {'label': 'Filled'}],
  'sections': [{'kind': 'rows', 'rows': [
-  {'title': 'Anne, rain, a borrowed coat', 'sub': 'by quietharbor · Oct 12', 'tags': [ship('Anne Elliot/Frederick Wentworth')], 'meta': 'Claimed by you', 'metaColour': '#990000', 'tone': '#7B3FA0', 'glyph': I['chat'], 'square': True, 'badge': 'Claimed', 'badgeBg': '#990000'},
+  {'title': 'Anne, rain, a borrowed coat', 'sub': 'by quietharbor · Oct 12', 'tags': [ship('Anne Elliot/Frederick Wentworth')], 'meta': 'Claimed by you', 'metaColour': '#821019', 'tone': '#7B3FA0', 'glyph': I['chat'], 'square': True, 'badge': 'Claimed', 'badgeBg': '#821019'},
   {'title': 'The navy list, read aloud', 'sub': 'by anne_at_lyme · Oct 9', 'tags': ['Gen', 'Admiral Croft', 'Sophia Croft'], 'meta': '2 claims · 1 fill', 'tone': '#7B3FA0', 'glyph': I['chat'], 'square': True, 'action': 'Claim'},
   {'title': 'Lyme, the morning after', 'sub': 'Anonymous · Oct 8', 'tags': ['Louisa Musgrove', 'Anne Elliot'], 'meta': 'Unclaimed', 'tone': '#7B3FA0', 'glyph': I['chat'], 'square': True, 'action': 'Claim'},
   {'title': 'Kellynch, years later', 'sub': 'by elinor_d · Oct 2', 'tags': [ship('Anne Elliot/Frederick Wentworth'), 'Future Fic'], 'meta': '1 fill', 'tone': '#7B3FA0', 'glyph': I['chat'], 'square': True, 'action': 'Claim'}]}]}, 980)
