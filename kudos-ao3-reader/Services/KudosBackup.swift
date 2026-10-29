@@ -1758,7 +1758,9 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
             appTheme: defaults.string(forKey: "appTheme") ?? ReaderTheme.light.rawValue,
             readerTheme: defaults.string(forKey: "readerTheme") ?? ReaderTheme.light.rawValue,
             matchAppReaderTheme: bool(defaults, "matchAppReaderTheme", fallback: true),
-            accentColorHex: defaults.string(forKey: "accentColorHex") ?? defaultAccentColorHex,
+            // Preserve the field for cross-version decoding, but new archives
+            // always describe the one supported app colour.
+            accentColorHex: defaultAccentColorHex,
             autoPreserveSmallSeriesOnSaveForLater: bool(
                 defaults,
                 "autoPreserveSmallSeriesOnSaveForLater",
@@ -1823,7 +1825,8 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         defaults.set(appTheme, forKey: "appTheme")
         defaults.set(readerTheme, forKey: "readerTheme")
         defaults.set(matchAppReaderTheme, forKey: "matchAppReaderTheme")
-        defaults.set(accentColorHex, forKey: "accentColorHex")
+        // `accentColorHex` remains decodable for old archives. It is no longer
+        // applied because the app colour is fixed to AO3 red.
         defaults.set(autoPreserveSmallSeriesOnSaveForLater, forKey: "autoPreserveSmallSeriesOnSaveForLater")
         defaults.set(autoPreserveSeriesWorkThreshold, forKey: "autoPreserveSeriesWorkThreshold")
     }

@@ -298,10 +298,8 @@ struct AccountView: View {
         .refreshable { await refreshCurrentTab() }
     }
 
-    /// Spec 1m states the rule this whole treatment follows: *"the header wash is
-    /// the user's app accent colour — the crimson shown here is one instance of
-    /// it, not a fixed value"*. So the artboard's crimson is the default AO3 red
-    /// seen through that rule, not a literal to copy.
+    /// Account is app-scoped rather than work-scoped, so its identity and wash
+    /// use the app's fixed AO3 red (Sepia keeps its warm brown).
     private var accountPalette: SubjectPalette {
         theme.scopePalette
     }

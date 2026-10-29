@@ -24,15 +24,9 @@ final class ThemeManager {
         didSet { store(readerThemeStored, forKey: "readerTheme") }
     }
 
-    /// The user's chosen accent colour as a `#RRGGBB` hex string; defaults to AO3 red.
-    var accentHex: String {
-        didSet { UserDefaults.standard.set(accentHex, forKey: Self.accentKey) }
-    }
-
-    /// AO3's signature dark red — the default app accent.
+    /// AO3's signature dark red — the fixed app accent.
     static let ao3Red = "#990000"
     private static let matchKey = "matchAppReaderTheme"
-    private static let accentKey = "accentColorHex"
 
     init() {
         let defaults = UserDefaults.standard
@@ -46,18 +40,12 @@ final class ThemeManager {
         }
         matchAppAndReader = (defaults.object(forKey: Self.matchKey) as? Bool) ?? true
         readerThemeStored = storedReader
-        accentHex = defaults.string(forKey: Self.accentKey) ?? Self.ao3Red
-    }
-
-    /// The user's accent colour (falls back to AO3 red if the stored hex is bad).
-    var accentColor: Color {
-        Color(hex: accentHex) ?? Color(hex: Self.ao3Red)!
     }
 
     /// The exact control fill for the whole app: Sepia keeps its cohesive warm
-    /// brown; Light/Dark use the user's accent (default AO3 red).
+    /// brown; Light/Dark/OLED use AO3 red.
     var effectiveTint: Color {
-        SubjectPalette.controlColor(appTheme.appTint ?? accentColor, on: appTheme)
+        Self.appTint(for: appTheme)
     }
 
     /// Text, glyphs and text-button labels; filled controls keep `effectiveTint`.
@@ -66,40 +54,26 @@ final class ThemeManager {
     /// The palette every *scope*-level surface in the redesign draws from — the
     /// Account hub, the pushed Home and Library sections, the inbox, Writing.
     ///
-    /// Spec 1m states the rule: "the header wash is the user's app accent
-    /// colour — the crimson shown here is one instance of it, not a fixed
-    /// value". The artboards' reds and crimsons are the default AO3 red seen
-    /// through that rule, not literals to hard-code.
-    ///
-    /// Built from `effectiveTint` rather than `accentColor` so Sepia — which
-    /// ignores the accent and keeps its own warm brown — washes in brown too,
-    /// instead of in an accent it refuses to use anywhere else.
-    ///
-    /// Built from the **colour**, not from its hue. Every one of these screens
-    /// used to pass `effectiveTint.hueComponent` and nothing else, so two thirds
-    /// of the chosen colour was dropped at the door and `SubjectPalette` rebuilt
-    /// saturation and brightness from its own table: a muted accent came back
-    /// vivid, a pale one came back deep. Spec 1m's rule is that the wash *is* the
-    /// accent, so the colour has to survive the trip.
-    ///
-    /// Screens scoped to a *work* rather than to a tab (a work page, a fandom's
-    /// search results, a queue) take that subject's own hue instead — there is no
-    /// chosen colour there to be faithful to. See `CoverArt.workHue(fandoms:title:)`.
-    /// Built from the accent itself, not `effectiveTint`: the wash is the
-    /// chosen colour (1m); text receives readable ink separately.
+    /// Scope-level screens use AO3 red (or Sepia's warm brown) for both identity
+    /// and wash. Work-, fandom-, collection-, and queue-scoped screens still use
+    /// their subject colour for identity and wash, but not for app controls.
     var scopePalette: SubjectPalette {
-        SubjectPalette(color: appTheme.appTint ?? accentColor, theme: appTheme)
+        SubjectPalette(color: effectiveTint, theme: appTheme)
     }
 
     /// A foreground guaranteed to stay readable on top of `effectiveTint` — the
-    /// color controls actually render with (Sepia's fixed warm brown, not the
-    /// user's `accentColor`, since Sepia ignores the accent entirely). Unlike the
-    /// `ReaderTheme` role colors, this can't be a fixed per-theme case switch on
-    /// Light/Dark: the accent there is user-customizable (`setAccent`), so
-    /// contrast is derived from the actual rendered color's luminance every time
-    /// it changes.
+    /// color controls actually render with (Sepia's fixed warm brown, or AO3 red).
     var onEffectiveTint: Color {
         Self.label(on: effectiveTint)
+    }
+
+    /// The one app-control tint for a theme. Subject palettes call this too so a
+    /// screen's identity colour never leaks into buttons, toggles, pills or chrome.
+    static func appTint(for theme: ReaderTheme) -> Color {
+        SubjectPalette.controlColor(
+            theme.appTint ?? Color(hex: ao3Red)!,
+            on: theme
+        )
     }
 
     /// Black or white, whichever has the higher contrast on `fill` (WCAG: the
@@ -107,16 +81,6 @@ final class ThemeManager {
     /// Dark's lifted pink accent at ~2.8:1.
     static func label(on fill: Color) -> Color {
         fill.relativeLuminance > 0.179 ? .black : .white
-    }
-
-    /// Sets the accent from a picked colour (stored as hex).
-    func setAccent(_ color: Color) {
-        accentHex = color.hexString
-    }
-
-    /// Restores the default AO3-red accent.
-    func resetAccent() {
-        accentHex = Self.ao3Red
     }
 
     /// The theme the reader renders with — mirrors the app theme while linked, so

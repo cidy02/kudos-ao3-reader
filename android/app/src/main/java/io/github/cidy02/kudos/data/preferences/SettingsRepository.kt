@@ -185,10 +185,6 @@ class SettingsRepository(
         dataStore.edit { it[Keys.ReaderWordSpacing] = em }
     }
 
-    suspend fun updateAccentColor(hex: String) {
-        dataStore.edit { it[Keys.AccentColorHex] = hex }
-    }
-
     suspend fun updateSyncIsEnabled(enabled: Boolean) {
         dataStore.edit { it[Keys.SyncIsEnabled] = enabled }
     }
@@ -363,7 +359,6 @@ class SettingsRepository(
             prefs[Keys.AppTheme] = settings.app.appTheme.storageValue
             prefs[Keys.ReaderTheme] = settings.reader.readerTheme.storageValue
             prefs[Keys.MatchAppReaderTheme] = settings.reader.matchAppReaderTheme
-            prefs[Keys.AccentColorHex] = settings.app.accentColorHex
         }
     }
 
@@ -400,8 +395,9 @@ class SettingsRepository(
                 confirmBeforeDelete = preferences[Keys.ConfirmBeforeDelete]
                     ?: defaults.app.confirmBeforeDelete,
                 appTheme = AppThemeSetting.fromStorage(preferences[Keys.AppTheme]),
-                accentColorHex = preferences[Keys.AccentColorHex]
-                    ?: defaults.app.accentColorHex
+                // Keep decoding the legacy field in backups, but a stored custom
+                // colour no longer changes the app.
+                accentColorHex = defaults.app.accentColorHex
             ),
             privacy = PrivacySettings(
                 hideMatureContent = preferences[Keys.HideMatureContent]

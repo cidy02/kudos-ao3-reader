@@ -136,10 +136,9 @@ the status here in sync with the board.
 
 ### Theming & Customization
 
-- **[FI-6] AO3 Red as default accent + color picker** — *Status: Done (2026-06-19) · Board: T-16*  
-  Default accent is now AO3 red (`#990000`); Settings ▸ Theme has an Accent Color
-  `ColorPicker` + "Reset to AO3 Red" (`ThemeManager.accentColor`). The accent
-  applies in Light/Dark; Sepia keeps its warm tint. Verified in the simulator.
+- **[FI-6] AO3 Red as default accent + color picker** — *Status: Superseded by T-459 (2026-10-28) · Board: T-16*
+  T-16 originally added a configurable accent. T-459 removed the picker and fixed
+  app controls to AO3 red (`#990000`); Sepia keeps its warm tint.
 
 ### Library
 

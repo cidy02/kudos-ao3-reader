@@ -15,13 +15,6 @@ struct ContentView: View {
     @State private var theme = ThemeManager()
     @State private var auth = AO3AuthService()
     @State private var downloadQueue = DownloadQueue()
-    @State private var washRegistry = ScreenWashRegistry()
-
-    /// What the tab bar and chrome outside a screen are tinted with: the wash of
-    /// the screen on top, else the app accent.
-    private var chromeTint: Color {
-        washRegistry.current.map { theme.appTheme.accentInk(for: $0) } ?? theme.accentInk
-    }
 
     /// First-launch onboarding gate, persisted locally.
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
@@ -83,11 +76,9 @@ struct ContentView: View {
             // The app theme drives the whole app's light/dark appearance (the reader
             // overrides this for itself when its theme is unlinked).
             .preferredColorScheme(theme.appTheme.colorScheme)
-            // The current screen's wash where it has one (owner, 2026-10-11: the
-            // tab bar and chrome buttons follow it), else the app accent: Sepia's
-            // warm brown, or the user's accent colour in Light and Dark.
-            .accentTint(washRegistry.current ?? theme.effectiveTint, on: theme.appTheme)
-            .environment(washRegistry)
+            // App controls and chrome always use AO3 red (Sepia keeps its warm
+            // brown); subject colours stay in identity text, artwork and washes.
+            .accentTint(theme.effectiveTint, on: theme.appTheme)
             // Segmented controls (UISegmentedControl) draw a white selected segment
             // in Sepia's light scheme; warm them via the appearance proxy. Reset for
             // Light/Dark. `initial` covers launch; new controls pick it up on change.
@@ -96,7 +87,7 @@ struct ContentView: View {
             }
             // The *fallback* tint, for anything that renders without inheriting the
             // `.tint` above. See `applyWindowTint` for why that happens at all.
-            .onChange(of: chromeTint, initial: true) { _, tint in
+            .onChange(of: theme.accentInk, initial: true) { _, tint in
                 applyWindowTint(tint)
             }
             // Folder-sync queries live in a sibling observer so library mutations

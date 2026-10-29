@@ -473,7 +473,8 @@ struct CrossPlatformBackupTests {
         return tombstone
     }
 
-    /// Every backed-up setting set to a distinctive value.
+    /// Every backed-up setting set to a distinctive value. The legacy accent
+    /// preference is deliberately non-red to prove exports ignore it.
     private func seedDefaults() throws -> UserDefaults {
         let defaults = try testDefaults()
         defaults.set("paged", forKey: "readerMode")

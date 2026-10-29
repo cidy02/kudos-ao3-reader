@@ -40,6 +40,19 @@ struct AccentInkTests {
         #expect(previousDarkStep.contrastRatio(on: ReaderTheme.dark.cardBackdrop) < 4.5)
     }
 
+    @MainActor @Test func subjectPalettesKeepTheirIdentityOutOfControlTint() throws {
+        let subject = try #require(Color(hex: "#356A72"))
+        for theme in ReaderTheme.allCases {
+            let palette = SubjectPalette(color: subject, theme: theme)
+            #expect(palette.tint == ThemeManager.appTint(for: theme))
+            if theme == .sepia {
+                #expect(palette.tint == theme.appTint)
+            } else {
+                #expect(palette.tint.hexString == ThemeManager.ao3Red)
+            }
+        }
+    }
+
     @MainActor @Test func themeManagerSeparatesInkFromTheExactFill() throws {
         let defaults = UserDefaults.standard
         let keys = ["appTheme", "accentColorHex"]
@@ -47,8 +60,8 @@ struct AccentInkTests {
         defer {
             for (key, value) in zip(keys, previous) { defaults.set(value, forKey: key) }
         }
+        defaults.set("#2468AC", forKey: "accentColorHex")
         let manager = ThemeManager()
-        manager.accentHex = "#990000"
         for theme in ReaderTheme.allCases {
             manager.appTheme = theme
             #expect(manager.accentInk == theme.accentInk(for: manager.effectiveTint))
@@ -90,33 +103,29 @@ struct AccentInkTests {
         defer {
             for (key, value) in zip(keys, previous) { defaults.set(value, forKey: key) }
         }
-        defaults.removeObject(forKey: "accentColorHex")
+        defaults.set("#356A72", forKey: "accentColorHex")
         let manager = ThemeManager()
-        #expect(manager.accentHex == "#990000")
         let heroTint = Color.purple
 
-        for accent in ["#990000", "#356A72"] {
-            manager.accentHex = accent
-            for theme in ReaderTheme.allCases {
-                manager.appTheme = theme
-                var received: (fill: Color, ink: Color)?
-                let probe = SectionFilterAccentProbe { received = ($0, $1) }
-                    .modifier(ScopeSurfaceAccent())
-                    .accentTint(heroTint, on: theme)
-                    .environment(manager)
-                _ = ImageRenderer(content: Color.clear.frame(width: 1, height: 1)).cgImage
-                let renderer = ImageRenderer(content: probe)
-                _ = renderer.cgImage
+        for theme in ReaderTheme.allCases {
+            manager.appTheme = theme
+            var received: (fill: Color, ink: Color)?
+            let probe = SectionFilterAccentProbe { received = ($0, $1) }
+                .modifier(ScopeSurfaceAccent())
+                .accentTint(heroTint, on: theme)
+                .environment(manager)
+            _ = ImageRenderer(content: Color.clear.frame(width: 1, height: 1)).cgImage
+            let renderer = ImageRenderer(content: probe)
+            _ = renderer.cgImage
 
-                let actual = try #require(received)
-                #expect(actual.fill == manager.effectiveTint)
-                #expect(actual.ink == manager.accentInk)
-                #expect(actual.fill != heroTint)
-                if theme == .sepia {
-                    #expect(actual.fill == theme.appTint)
-                } else {
-                    #expect(actual.fill.hexString == accent)
-                }
+            let actual = try #require(received)
+            #expect(actual.fill == manager.effectiveTint)
+            #expect(actual.ink == manager.accentInk)
+            #expect(actual.fill != heroTint)
+            if theme == .sepia {
+                #expect(actual.fill == theme.appTint)
+            } else {
+                #expect(actual.fill.hexString == ThemeManager.ao3Red)
             }
         }
     }
@@ -129,33 +138,45 @@ struct AccentInkTests {
             for (key, value) in zip(keys, previous) { defaults.set(value, forKey: key) }
         }
         let manager = ThemeManager()
-        for accent in ["#990000", "#EEDDBB"] {
-            manager.accentHex = accent
-            for theme in ReaderTheme.allCases {
-                manager.appTheme = theme
-                for usePalette in [true, false] {
-                    let tint = manager.effectiveTint
-                    let expected = try renderedPixels(tint.frame(width: 1, height: 1))
-                        .pixel(x: 0, y: 0)
-                    let label = try renderedPixels(ThemeManager.label(on: tint).frame(width: 1, height: 1))
-                        .pixel(x: 0, y: 0)
-                    for size in [DynamicTypeSize.large, .accessibility5] {
-                        let pill = SubjectChip(
-                            text: "All", style: .pill(isSelected: true),
-                            palette: usePalette ? manager.scopePalette : nil
-                        )
-                        .fixedSize()
-                        .dynamicTypeSize(size)
-                        .accentTint(tint, on: theme)
-                        .environment(manager)
-                        .environment(\.colorScheme, theme.colorScheme)
-                        let pixels = try renderedPixels(pill)
-                        #expect(pixels.pixel(x: pixels.width / 2, y: 2) == expected)
-                        #expect(pixels.countContrastingInkPixels(on: expected, toward: label) > 4)
-                    }
+        defaults.set("#EEDDBB", forKey: "accentColorHex")
+        for theme in ReaderTheme.allCases {
+            manager.appTheme = theme
+            for usePalette in [true, false] {
+                let tint = manager.effectiveTint
+                let expected = try renderedPixels(tint.frame(width: 1, height: 1))
+                    .pixel(x: 0, y: 0)
+                let label = try renderedPixels(ThemeManager.label(on: tint).frame(width: 1, height: 1))
+                    .pixel(x: 0, y: 0)
+                for size in [DynamicTypeSize.large, .accessibility5] {
+                    let pill = SubjectChip(
+                        text: "All", style: .pill(isSelected: true),
+                        palette: usePalette ? manager.scopePalette : nil
+                    )
+                    .fixedSize()
+                    .dynamicTypeSize(size)
+                    .accentTint(tint, on: theme)
+                    .environment(manager)
+                    .environment(\.colorScheme, theme.colorScheme)
+                    let pixels = try renderedPixels(pill)
+                    #expect(pixels.pixel(x: pixels.width / 2, y: 2) == expected)
+                    #expect(pixels.countContrastingInkPixels(on: expected, toward: label) > 4)
                 }
             }
         }
+    }
+
+    @Test func backupsKeepDecodingLegacyAccentWithoutExportingOrApplyingIt() throws {
+        let suite = "AccentInkTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        defaults.set("#2468AC", forKey: "accentColorHex")
+        var settings = KudosBackupSettings.capture(defaults: defaults)
+        #expect(settings.accentColorHex == "#990000")
+
+        settings.accentColorHex = "#EEDDBB"
+        settings.apply(to: defaults)
+        #expect(defaults.string(forKey: "accentColorHex") == "#2468AC")
     }
 
     @MainActor @Test func worksFilterHeaderGroundIsSepiaAndOtherThemesKeepTheirGround() throws {

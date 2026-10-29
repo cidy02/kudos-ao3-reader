@@ -1,10 +1,9 @@
 import SwiftUI
 
-/// Home and Library take the colour of the work they lead with (owner,
-/// 2026-10-03): Home from the current Continue Reading hero, Library from the
-/// top of Reading Now. Both the gradient and the accent of the controls on the
-/// page, as a subject screen does through `screenTint`. No work: no wash, and
-/// the app accent. Android does the same in `MainScaffold` (`washHue`).
+/// Home and Library take the wash colour of the work they lead with: Home from
+/// the current Continue Reading hero, Library from the top of Reading Now.
+/// Controls remain AO3 red; no work means no wash. Android does the same in
+/// `MainScaffold` (`washHue`).
 private struct HeroWash: ViewModifier {
     @Environment(ThemeManager.self) private var themeManager
     let work: SavedWork?
@@ -26,7 +25,6 @@ private struct HeroWash: ViewModifier {
             }
             .accentTint(palette?.tint ?? themeManager.effectiveTint, on: themeManager.appTheme)
             .environment(\.screenTint, palette?.tint)
-            .reportsScreenWash(palette?.tint)
     }
 }
 
