@@ -40,16 +40,15 @@ nonisolated enum SubjectHueSwatches {
 /// takes its colour from its name — the state every queue and collection that
 /// predates this is in.
 ///
-/// On iOS the row ends in 1j's dashed "+": the system colour picker (grid,
-/// spectrum, RGB sliders, hex) that Settings' Accent Color opens. The pick is
-/// stored exactly, as `pickedHex` (`colorHex` on the model), with its hue in
-/// `selection` beside it; a preset clears it.
+/// The row ends in the boards' "More colours" well (`CustomColorWell`, a SwiftUI
+/// `ColorPicker`: grid, spectrum, RGB sliders, hex). The pick is stored exactly,
+/// as `pickedHex` (`colorHex` on the model), with its hue in `selection` beside
+/// it; a preset clears it.
 struct SubjectHueSwatchRow: View {
     @Binding var selection: Double?
     @Binding var pickedHex: String?
 
     @Environment(ThemeManager.self) private var themeManager
-    @State private var showingCustom = false
 
     private var pickedColor: Color? { pickedHex.flatMap(Color.init(hex:)) }
 
@@ -80,59 +79,33 @@ struct SubjectHueSwatchRow: View {
                 .accessibilityLabel(swatch.name)
                 .accessibilityAddTraits(isSelected(swatch) ? [.isButton, .isSelected] : .isButton)
             }
-            #if os(iOS)
-            customButton
-            #endif
+            customWell
             Spacer(minLength: 0)
         }
     }
 
-    #if os(iOS)
-    /// The dashed "+" until a custom colour is picked, then that colour,
-    /// selected; tapping either opens the picker.
-    private var customButton: some View {
-        Button {
-            showingCustom = true
-        } label: {
-            if let customHue {
-                swatchCircle(hue: customHue, picked: pickedColor, isSelected: true)
-            } else {
-                Image(systemName: "plus")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 28, height: 28)
-                    .overlay(
-                        Circle().strokeBorder(.secondary, style: StrokeStyle(lineWidth: 1, dash: [3, 2.5]))
-                    )
-                    .padding(3)
+    /// The row's last swatch (T-471): a `ColorPicker` well for any colour. The
+    /// pick is stored exactly, as `pickedHex`, with its hue in `selection` beside
+    /// it; a preset clears it.
+    private var customWell: some View {
+        CustomColorWell(
+            label: "Custom colour",
+            current: customHue != nil ? pickedColor : nil,
+            fallback: pickedColor
+                ?? themeManager.appTheme.subjectPalette(hue: selection ?? SubjectHueSwatches.all[0].hue).accent,
+            selectionRing: customHue.map { themeManager.appTheme.subjectPalette(hue: $0).accent },
+            onPick: { color in
+                selection = color.hueComponent
+                pickedHex = color.hexString
             }
-        }
-        .buttonStyle(.plain)
-        .minimumHitTarget()
-        .accessibilityLabel("Custom colour")
-        .accessibilityValue(pickedHex ?? "")
-        .accessibilityAddTraits(customHue != nil ? [.isButton, .isSelected] : .isButton)
-        .background(
-            SystemColorPicker(
-                isPresented: $showingCustom,
-                // Opaque: the swatch wash is translucent, and the picker
-                // previews a translucent colour over a light and a dark half.
-                initial: pickedColor
-                    ?? themeManager.appTheme.subjectPalette(hue: selection ?? SubjectHueSwatches.all[0].hue).accent,
-                onPick: { color in
-                    let picked = Color(uiColor: color)
-                    selection = picked.hueComponent
-                    pickedHex = picked.hexString
-                }
-            )
         )
+        .minimumHitTarget()
     }
-    #endif
 
-    /// A preset is drawn as the wash it paints; a picked colour as itself.
-    private func swatchCircle(hue: Double, picked: Color? = nil, isSelected: Bool) -> some View {
+    /// A preset is drawn as the wash it paints.
+    private func swatchCircle(hue: Double, isSelected: Bool) -> some View {
         Circle()
-            .fill(picked ?? themeManager.appTheme.carouselQueueTint(hue: hue))
+            .fill(themeManager.appTheme.carouselQueueTint(hue: hue))
             .frame(width: 28, height: 28)
             .overlay(
                 Circle()
@@ -144,56 +117,3 @@ struct SubjectHueSwatchRow: View {
             .padding(3)
     }
 }
-
-#if os(iOS)
-/// Presents `UIColorPickerViewController` the way `ColorPicker`'s well does —
-/// modally, with its own close button. (Embedded in a SwiftUI sheet it loses
-/// that button and has no visible way out.) It reports only the colour a person
-/// lands on, not every step of a slider drag, so a binding that writes straight
-/// to the store (a collection's Colour row) saves once per pick.
-private struct SystemColorPicker: UIViewControllerRepresentable {
-    @Binding var isPresented: Bool
-    let initial: Color
-    let onPick: (UIColor) -> Void
-
-    func makeUIViewController(context _: Context) -> UIViewController { UIViewController() }
-
-    func updateUIViewController(_ host: UIViewController, context: Context) {
-        context.coordinator.parent = self
-        guard isPresented, host.presentedViewController == nil else { return }
-        let picker = UIColorPickerViewController()
-        // Resolved for the current appearance, in case `initial` is dynamic.
-        picker.selectedColor = UIColor(initial).resolvedColor(with: host.traitCollection)
-        picker.supportsAlpha = false
-        picker.delegate = context.coordinator
-        picker.presentationController?.delegate = context.coordinator
-        host.present(picker, animated: true)
-    }
-
-    func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
-
-    final class Coordinator: NSObject, UIColorPickerViewControllerDelegate,
-        UIAdaptivePresentationControllerDelegate {
-        var parent: SystemColorPicker
-
-        init(parent: SystemColorPicker) { self.parent = parent }
-
-        func colorPickerViewController(
-            _: UIColorPickerViewController,
-            didSelect color: UIColor,
-            continuously: Bool
-        ) {
-            if !continuously { parent.onPick(color) }
-        }
-
-        func colorPickerViewControllerDidFinish(_: UIColorPickerViewController) {
-            parent.isPresented = false
-        }
-
-        /// Swiped down rather than closed.
-        func presentationControllerDidDismiss(_: UIPresentationController) {
-            parent.isPresented = false
-        }
-    }
-}
-#endif

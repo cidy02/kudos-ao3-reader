@@ -20,7 +20,7 @@ struct BookReaderView: View {
 
     var body: some View {
         reader.keepScreenAwakeWhileReading()
-            .accentTint(theme.effectiveTint, on: theme.readerTheme)
+            .accentTint(theme.effectiveTint, on: theme.readerChromeTheme)
     }
 
     @ViewBuilder private var reader: some View {
@@ -227,7 +227,7 @@ struct ReadiumReaderView: View {
         // Dim + card peel are driven in UIKit during the gesture (see
         // `ReaderDismissDragSurface`) so pan samples don't rebuild this tree.
         ZStack {
-            readerTheme.backgroundColor
+            readerPageColors.background
                 .ignoresSafeArea()
             ReaderDismissDimAnchor(surface: dismissSurface)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -237,7 +237,7 @@ struct ReadiumReaderView: View {
             dismissableReaderCard
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .preferredColorScheme(readerTheme.colorScheme)
+        .preferredColorScheme(readerPageColors.colorScheme)
         .navigationTitle(work.title)
         .navigationBarTitleDisplayMode(.inline)
         // The floating top bar replaces the system nav bar entirely. Hide the
@@ -297,7 +297,7 @@ struct ReadiumReaderView: View {
                 }
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
-                .preferredColorScheme(readerTheme.colorScheme)
+                .preferredColorScheme(readerPageColors.colorScheme)
             }
             // Title pill → work details as a *sheet*, not a navigation push.
             // Pushing via `navigationDestination(isPresented:)` while the reader
@@ -309,7 +309,7 @@ struct ReadiumReaderView: View {
                 NavigationStack {
                     WorkDetailView(work: work, openedFromReader: true)
                 }
-                .preferredColorScheme(readerTheme.colorScheme)
+                .preferredColorScheme(readerPageColors.colorScheme)
                 .presentationDragIndicator(.visible)
             }
             // Highlights made in an earlier session have to be drawn when the
@@ -477,12 +477,12 @@ struct ReadiumReaderView: View {
         case .loading:
             // Opaque page skeleton so the Library toolbar/menu can't show through
             // during the push transition, and so opening matches the rest of the app.
-            ReaderPageSkeletonFill(background: readerTheme.backgroundColor)
+            ReaderPageSkeletonFill(background: readerPageColors.background)
         case let .failed(message):
             ContentUnavailableView("Couldn't open this EPUB", systemImage: "exclamationmark.triangle",
                                    description: Text(message))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(readerTheme.backgroundColor)
+                .background(readerPageColors.background)
         case .ready:
             if let navigator = book.navigator {
                 // Navigator must be in the hierarchy to load spreads, but Readium
@@ -504,7 +504,7 @@ struct ReadiumReaderView: View {
                     )
                     .ignoresSafeArea()
                     if !book.hasPresentedFirstPage {
-                        ReaderPageSkeletonFill(background: readerTheme.backgroundColor)
+                        ReaderPageSkeletonFill(background: readerPageColors.background)
                             .transition(.opacity)
                     }
                 }
@@ -512,7 +512,7 @@ struct ReadiumReaderView: View {
             } else {
                 // Keep a full-size host even if the navigator is momentarily nil
                 // so chrome overlays never re-collapse to a zero-size anchor.
-                ReaderPageSkeletonFill(background: readerTheme.backgroundColor)
+                ReaderPageSkeletonFill(background: readerPageColors.background)
             }
         }
     }
@@ -631,27 +631,31 @@ struct ReadiumReaderView: View {
             if withNote {
                 colorBarAnnotationID = nil
                 editingNote = existing
-            } else if existing.color == ReadingAnnotationColor.lastUsed {
+            } else if ReadingAnnotationColorStorage.normalizedRaw(existing.colorRaw)
+                        == ReadingAnnotationColor.lastUsedRaw {
                 colorBarAnnotationID = nil
                 deleteAnnotation(existing)
             } else {
-                applyHighlightColor(ReadingAnnotationColor.lastUsed, to: existing)
+                applyHighlightColorRaw(ReadingAnnotationColor.lastUsedRaw, to: existing)
             }
             return
         }
 
-        let color = ReadingAnnotationColor.lastUsed
+        let colorRaw = ReadingAnnotationColor.lastUsedRaw
         let spineIndex = (book.readingPosition?.chapter ?? 1) - 1
         let annotation = ReadingAnnotation(
             work: work,
             kind: .highlight,
             locatorString: locatorString,
             selectedText: selection.locator.text.highlight ?? "",
-            color: color,
+            color: ReadingAnnotationColor(rawValue: colorRaw) ?? .yellow,
             progression: selection.locator.locations.totalProgression ?? 0,
             spineIndex: spineIndex,
             chapterTitle: chapterTitle(forSpineIndex: spineIndex)
         )
+        // The initializer only stores a preset. A well colour has to be written
+        // onto `colorRaw` afterwards or the new mark comes out yellow.
+        annotation.colorRaw = colorRaw
         modelContext.insert(annotation)
         try? modelContext.save()
         FolderSyncService.markDirty()
@@ -667,14 +671,15 @@ struct ReadiumReaderView: View {
         }
     }
 
-    private func applyHighlightColor(_ color: ReadingAnnotationColor, to annotation: ReadingAnnotation) {
-        guard annotation.color != color else {
+    private func applyHighlightColorRaw(_ raw: String, to annotation: ReadingAnnotation) {
+        let colorRaw = ReadingAnnotationColorStorage.normalizedRaw(raw)
+        guard annotation.colorRaw != colorRaw else {
             colorBarAnnotationID = nil
             return
         }
-        annotation.color = color
+        annotation.colorRaw = colorRaw
         annotation.markModified()
-        ReadingAnnotationColor.lastUsed = color
+        ReadingAnnotationColor.lastUsedRaw = colorRaw
         try? modelContext.save()
         FolderSyncService.markDirty()
         refreshHighlightDecorations()
@@ -706,9 +711,10 @@ struct ReadiumReaderView: View {
             .filter { $0.kind == .highlight }
             .compactMap { annotation in
                 guard let locator = Locator(persistenceString: annotation.locatorString) else { return nil }
-                let tint = UIColor(annotation.color.tint)
+                let tint = UIColor(annotation.displayTint)
                 // Underline is a rule, not a fill — match the palette swatch.
-                let style: Decoration.Style = annotation.color == .underline
+                // A well colour is always a fill; it has no underline case.
+                let style: Decoration.Style = annotation.customColorHex == nil && annotation.color == .underline
                     ? .underline(tint: tint)
                     : .highlight(tint: tint)
                 return Decoration(
@@ -984,7 +990,7 @@ struct ReadiumReaderView: View {
                 // Inset text, loading skeleton, and every chrome layer together.
                 // The fill stays full-bleed; paged Readium ignores side insets.
                 .padding(book.pageBoxGeometry.horizontalInsets(in: layoutDirection))
-                .background(readerTheme.backgroundColor)
+                .background(readerPageColors.background)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         // `host.safeAreaRegions = []` (inside the peel host) only stops the
@@ -1090,8 +1096,8 @@ struct ReadiumReaderView: View {
         if let id = colorBarAnnotationID,
            let annotation = annotations.first(where: { $0.id == id }) {
             ReaderHighlightColorBar(
-                selected: annotation.color,
-                onSelect: { applyHighlightColor($0, to: annotation) },
+                selectedRaw: annotation.colorRaw,
+                onSelectRaw: { applyHighlightColorRaw($0, to: annotation) },
                 onDismiss: { colorBarAnnotationID = nil }
             )
         }
@@ -1475,13 +1481,20 @@ extension ReadiumReaderView {
         themeManager.readerTheme
     }
 
+    /// Preset page, or the paper colour chosen in the theme well.
+    private var readerPageColors: ReaderPageColors {
+        themeManager.readerPage
+    }
+
     private var preferences: EPUBPreferences {
         ReadiumReaderStyleMapper.preferences(
             style: textStyle,
             theme: readerTheme,
             fontFamily: readiumFontFamily,
             readingMode: readingMode,
-            twoPageSpread: twoPageEnabled && wideLayoutAvailable
+            twoPageSpread: twoPageEnabled && wideLayoutAvailable,
+            backgroundHex: readerPageColors.backgroundHex,
+            textHex: readerPageColors.textHex
         )
     }
 
@@ -1504,7 +1517,7 @@ extension ReadiumReaderView {
 
     /// Re-submit preferences whenever any mapped setting changes (instant updates).
     private var preferencesToken: String {
-        "\(readingMode.rawValue)|\(readerTheme.rawValue)|\(fontID)|\(twoPageEnabled)|"
+        "\(readingMode.rawValue)|\(readerTheme.rawValue)|\(readerPageColors.backgroundHex)|\(fontID)|\(twoPageEnabled)|"
             + "\(wideLayoutAvailable)|\(textStyle.token)"
     }
 
@@ -1691,8 +1704,8 @@ extension ReadiumReaderView {
         .presentationContentInteraction(.scrolls)
         // Annotation rows and the segmented control tint from the theme, not the
         // raw accent, so Sepia keeps its warm brown.
-        .accentTint(themeManager.effectiveTint, on: readerTheme)
-        .preferredColorScheme(readerTheme.colorScheme)
+        .accentTint(themeManager.effectiveTint, on: themeManager.readerChromeTheme)
+        .preferredColorScheme(readerPageColors.colorScheme)
     }
     private func handleSpeechSkipBack() {
         guard let pos = book.readingPosition else { return }

@@ -20,6 +20,11 @@ struct CustomizeThemeView: View {
         themeManager.readerTheme
     }
 
+    /// Preset page, or the paper colour from the well beside the swatches.
+    private var page: ReaderPageColors {
+        themeManager.readerPage
+    }
+
     @AppStorage("readerFontID") private var fontID: String = "system"
     @AppStorage("readerCustomize") private var customize = false
     @AppStorage("readerBoldText") private var boldText = false
@@ -50,7 +55,13 @@ struct CustomizeThemeView: View {
     }
 
     private var css: String {
-        ReaderStylesheet.css(theme: theme, font: currentFont, style: style)
+        ReaderStylesheet.css(
+            theme: theme,
+            font: currentFont,
+            style: style,
+            pageBackgroundHex: page.backgroundHex,
+            pageTextHex: page.textHex
+        )
     }
 
     var body: some View {
@@ -126,7 +137,8 @@ struct CustomizeThemeView: View {
         }
         // The sheet's chrome (Liquid Glass, grouped backgrounds, controls) follows
         // the selected reader theme — dark in Dark, light in Light/Sepia.
-        .preferredColorScheme(theme.colorScheme)
+        .preferredColorScheme(page.colorScheme)
+        .accentTint(themeManager.effectiveTint, on: themeManager.readerChromeTheme)
     }
 
     // MARK: Pinned live preview + theme swatches
@@ -138,12 +150,12 @@ struct CustomizeThemeView: View {
         return VStack(spacing: 14) {
             ThemePreview(css: css)
                 .frame(height: previewHeight)
-                .background(theme.backgroundColor)
+                .background(page.background)
                 // Fade the last lines into the page colour so longer samples read as
                 // continuing rather than being abruptly cut at the bottom edge.
                 .overlay(alignment: .bottom) {
                     LinearGradient(
-                        colors: [theme.backgroundColor.opacity(0), theme.backgroundColor],
+                        colors: [page.background.opacity(0), page.background],
                         startPoint: .top, endPoint: .bottom
                     )
                     .frame(height: 36)
@@ -159,6 +171,7 @@ struct CustomizeThemeView: View {
             // Top-aligned, so a swatch whose name took two lines doesn't sit lower than the rest.
             HStack(alignment: .top, spacing: 12) {
                 ForEach(ReaderTheme.allCases) { swatch($0) }
+                customPaperWell
             }
         }
         .padding(.horizontal, 20)
@@ -169,7 +182,8 @@ struct CustomizeThemeView: View {
     }
 
     private func swatch(_ option: ReaderTheme) -> some View {
-        let selected = option == theme
+        // A custom paper is the selection; the preset it was picked on top of is not.
+        let selected = !page.isCustom && option == theme
         return Button {
             themeManager.readerTheme = option
         } label: {
@@ -220,6 +234,39 @@ struct CustomizeThemeView: View {
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
+    /// The row's last swatch: any page colour. Stored as `#RRGGBB` on the reader
+    /// only. Choosing a preset (here or in Settings) clears it.
+    private var customPaperWell: some View {
+        let selected = page.isCustom
+        return VStack(spacing: 7) {
+            ZStack(alignment: .topTrailing) {
+                CustomColorWell(
+                    label: "More colours",
+                    current: selected ? page.background : nil,
+                    fallback: theme.backgroundColor,
+                    selectionRing: selected ? themeManager.effectiveTint : nil,
+                    size: 54,
+                    onPick: { themeManager.readerCustomPaperHex = $0.hexString }
+                )
+                if selected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 16))
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(.white, themeManager.effectiveTint)
+                        .accessibilityHidden(true)
+                        .allowsHitTesting(false)
+                }
+            }
+            .padding(4)
+            Text("More")
+                .font(.caption2.weight(selected ? .semibold : .regular))
+                .foregroundStyle(selected ? .primary : .secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
     // MARK: Sliders
 
     /// A labelled slider, Apple Books–style: a descriptive icon and title on top
@@ -257,8 +304,11 @@ struct CustomizeThemeView: View {
     }
 
     private func reset() {
-        // Text Size is a separate primary control now, so Reset Theme leaves it alone.
+        // Text Size is a separate primary control now, so Reset Theme leaves it
+        // alone. A custom paper is part of this sheet, so Reset clears it and
+        // the preset shows again. The four theme cases themselves are unchanged.
         withAnimationUnlessReduced(.easeInOut(duration: 0.2), reduceMotion: reduceMotion) {
+            themeManager.readerCustomPaperHex = nil
             customize = false
             boldText = false
             fontID = "system"

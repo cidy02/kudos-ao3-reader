@@ -3938,6 +3938,10 @@ enum KudosBackupService {
                 chapterTitle: archived.chapterTitle,
                 createdAt: archived.createdAt
             )
+            // The initializer only accepts a preset. A well colour is `#RRGGBB`
+            // in the same column; write it back or a restore turns it yellow.
+            // The merge path above copies `colorRaw` and already keeps it.
+            restored.colorRaw = ReadingAnnotationColorStorage.normalizedRaw(archived.colorRaw)
             restored.lastModifiedAt = incomingModifiedAt
             restored.deletedAt = archived.deletedAt
             restored.isPendingDeletion = archived.isPendingDeletion

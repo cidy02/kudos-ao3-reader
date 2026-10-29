@@ -279,7 +279,13 @@ struct ReaderTextStyle: Equatable {
 
 /// Builds the stylesheet injected into the reader's web view for the current settings.
 enum ReaderStylesheet {
-    static func css(theme: ReaderTheme, font: ReaderFontOption, style: ReaderTextStyle = ReaderTextStyle()) -> String {
+    static func css(
+        theme: ReaderTheme,
+        font: ReaderFontOption,
+        style: ReaderTextStyle = ReaderTextStyle(),
+        pageBackgroundHex: String? = nil,
+        pageTextHex: String? = nil
+    ) -> String {
         var fontFace = ""
         var family = font.cssFamily
 
@@ -332,12 +338,16 @@ enum ReaderStylesheet {
         // viewport), set by the Text Size control.
         let fontSize = Int(resolvedStyle.fontSizePt.rounded())
         let marginPx = Int(resolvedStyle.margin)
+        // A paper colour from the theme well replaces the preset's page and body
+        // text. Links stay the preset's — the well is the page, not a re-theme.
+        let backgroundHex = pageBackgroundHex ?? theme.backgroundHex
+        let textHex = pageTextHex ?? theme.textHex
 
         return """
         \(fontFace)
         html, body {
-            background-color: \(theme.backgroundHex) !important;
-            color: \(theme.textHex) !important;
+            background-color: \(backgroundHex) !important;
+            color: \(textHex) !important;
         }
         body {
             font-family: \(family) !important;
@@ -373,7 +383,7 @@ enum ReaderStylesheet {
            own user-agent default for that tag. `*` with `!important` closes
            every such gap in one rule instead of chasing tags one at a time. */
         * {
-            color: \(theme.textHex) !important;
+            color: \(textHex) !important;
             font-family: \(family) !important;
         }
         p, div, span, li, h1, h2, h3, h4, h5, h6, blockquote, td, th, em, strong, a {
@@ -387,7 +397,7 @@ enum ReaderStylesheet {
         \(boldRule)
         a { color: \(theme.linkHex) !important; text-decoration: none; }
         img, svg { max-width: 100% !important; height: auto !important; }
-        hr { border-color: \(theme.textHex); opacity: 0.25; }
+        hr { border-color: \(textHex); opacity: 0.25; }
         """
     }
 
