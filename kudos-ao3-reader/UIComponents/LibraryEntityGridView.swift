@@ -29,7 +29,8 @@ struct LibraryEntityGridView<Item: Identifiable, Destination: Hashable, Card: Vi
             // The header every Library page opens with (pass2-17), not a bar title.
             SubjectHeaderBlock(kicker: "Library", title: title, subtitle: tally, palette: themeManager.scopePalette)
                 .padding(.top, 20)
-            CarouselCardGrid(uniformHeights: true) {
+            // Collection piles side by side get `coverStackSpacing` (T-461).
+            CarouselCardGrid(uniformHeights: true, columnSpacing: CarouselCardMetrics.coverStackSpacing) {
                 ForEach(items) { item in
                     NavigationLink(value: destination(item)) { card(item) }
                         .buttonStyle(.plain)

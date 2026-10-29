@@ -49,6 +49,8 @@ struct WorkCarouselSection<Cards: View, Empty: View>: View {
     /// header is identical either way, which is the point — the page changes how
     /// it reads without changing what it is.
     private let layout: WorkSectionLayout
+    /// Between cards side by side on a shelf.
+    private let cardSpacing: CGFloat
     private let onSeeAll: (() -> Void)?
     private let cards: () -> Cards
     private let emptyState: () -> Empty
@@ -62,6 +64,7 @@ struct WorkCarouselSection<Cards: View, Empty: View>: View {
         hasItems: Bool,
         itemCount: Int? = nil,
         layout: WorkSectionLayout = .shelves,
+        cardSpacing: CGFloat = CarouselCardMetrics.compactGridColumnSpacing,
         onSeeAll: (() -> Void)? = nil,
         @ViewBuilder cards: @escaping () -> Cards,
         @ViewBuilder emptyState: @escaping () -> Empty
@@ -70,6 +73,7 @@ struct WorkCarouselSection<Cards: View, Empty: View>: View {
         self.hasItems = hasItems
         self.itemCount = itemCount
         self.layout = layout
+        self.cardSpacing = cardSpacing
         self.onSeeAll = onSeeAll
         self.cards = cards
         self.emptyState = emptyState
@@ -90,7 +94,7 @@ struct WorkCarouselSection<Cards: View, Empty: View>: View {
                 if hasItems {
                     switch layout {
                     case .shelves:
-                        DashboardCardShelf { cards() }
+                        DashboardCardShelf(compactSpacing: cardSpacing, columnSpacing: cardSpacing) { cards() }
                     case .ledger:
                         // No `uniformWorkCardHeights` here: that exists to stop a
                         // shelf of side-by-side cards ragging at different heights.
