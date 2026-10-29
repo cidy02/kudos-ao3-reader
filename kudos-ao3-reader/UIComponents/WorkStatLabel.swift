@@ -513,8 +513,8 @@ private struct WorkStatusIconGridContent: View {
         return ZStack {
             // Filled, with the letter knocked out (owner, 2026-10-28, T-465):
             // the outline read as an empty frame next to the other tiles'
-            // solid glyphs. White on G/M/E/NR; dark on Teen's yellow, which
-            // white can't hold contrast on in either appearance.
+            // solid glyphs. White on G/M/E/NR and on Light's mustard Teen; dark on
+            // Dark's bright Teen yellow.
             Image(systemName: "shield.fill")
                 .font(.system(size: shieldSize))
                 .foregroundStyle(color)
@@ -530,9 +530,20 @@ private struct WorkStatusIconGridContent: View {
         }
     }
 
-    /// The dark ink the canvas cuts Teen's letter in (#3A2C00), for both the
-    /// light-appearance mustard and the dark-appearance system yellow.
-    private static let teenLetterInk = Color(red: 0x3A / 255, green: 0x2C / 255, blue: 0)
+    /// Teen's letter: the canvas's dark #3A2C00 on Dark's bright system yellow,
+    /// white on Light's dark mustard (where the dark ink all but vanished).
+    private static let teenLetterInk: Color = {
+        #if os(iOS)
+        Color(uiColor: UIColor { traits in
+            traits.userInterfaceStyle == .dark ? UIColor(red: 0x3A / 255, green: 0x2C / 255, blue: 0, alpha: 1) : .white
+        })
+        #else
+        Color(nsColor: NSColor(name: nil) { appearance in
+            appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+                ? NSColor(red: 0x3A / 255, green: 0x2C / 255, blue: 0, alpha: 1) : .white
+        })
+        #endif
+    }()
 
     /// Category (AO3's own quadrant pairs a gender symbol per orientation, not
     /// one generic icon for all of them): no SF Symbol ships literal gender

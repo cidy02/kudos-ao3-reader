@@ -618,6 +618,9 @@ struct SectionRuleHeader: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                 .fixedSize(horizontal: false, vertical: true)
+                // The title is what the section is; a note gives way to it
+                // ("NO READING TIME REC…" lost the title to its note).
+                .layoutPriority(1)
 
             if let countText {
                 Text(countText)
