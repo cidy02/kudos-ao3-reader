@@ -2,6 +2,46 @@
   "v": 3,
   "attachments": {},
   "boards": {
+    "AO3-Collection-Form.dc.html": {
+      "h": 1160,
+      "page": "subscreens",
+      "title": "AO3 collections › New or edit (form)",
+      "w": 390,
+      "x": 940,
+      "y": 4900
+    },
+    "AO3-Collection-Items.dc.html": {
+      "h": 844,
+      "page": "subscreens",
+      "title": "AO3 collections › Your items",
+      "w": 390,
+      "x": 470,
+      "y": 4900
+    },
+    "AO3-Collection-Maintainers.dc.html": {
+      "h": 940,
+      "page": "subscreens",
+      "title": "AO3 collections › Maintainers",
+      "w": 390,
+      "x": 1880,
+      "y": 4900
+    },
+    "AO3-Collection-Moderation.dc.html": {
+      "h": 960,
+      "page": "subscreens",
+      "title": "AO3 collections › Moderation",
+      "w": 390,
+      "x": 1410,
+      "y": 4900
+    },
+    "AO3-Collection-Page.dc.html": {
+      "h": 1040,
+      "page": "subscreens",
+      "title": "AO3 collection page",
+      "w": 390,
+      "x": 0,
+      "y": 4900
+    },
     "AO3-Collections.dc.html": {
       "h": 844,
       "page": "iphone",
@@ -17,6 +57,14 @@
       "w": 390,
       "x": 1410,
       "y": 8600
+    },
+    "AO3-Preferences.dc.html": {
+      "h": 1100,
+      "page": "subscreens",
+      "title": "Account › AO3 Preferences",
+      "w": 390,
+      "x": 1410,
+      "y": 1700
     },
     "AO3-Web.dc.html": {
       "h": 844,
@@ -41,6 +89,14 @@
       "w": 390,
       "x": 3760,
       "y": 10520
+    },
+    "Accent-Options.dc.html": {
+      "h": 600,
+      "page": "variants",
+      "title": "Accent colour: options",
+      "w": 1290,
+      "x": 0,
+      "y": 3080
     },
     "Account-Move.dc.html": {
       "h": 660,
@@ -74,6 +130,14 @@
       "x": 470,
       "y": 8600
     },
+    "All-Collections.dc.html": {
+      "h": 844,
+      "page": "subscreens",
+      "title": "Library › Collections",
+      "w": 390,
+      "x": 1880,
+      "y": 300
+    },
     "Android.dc.html": {
       "h": 1360,
       "page": "android",
@@ -98,6 +162,30 @@
       "x": 1880,
       "y": 4580
     },
+    "Availability-Check.dc.html": {
+      "h": 844,
+      "page": "subscreens",
+      "title": "Settings › What’s still on AO3",
+      "w": 390,
+      "x": 2820,
+      "y": 6540
+    },
+    "Backup-Replace.dc.html": {
+      "h": 844,
+      "page": "subscreens",
+      "title": "Settings › Restore from a backup (sheet)",
+      "w": 390,
+      "x": 2350,
+      "y": 6540
+    },
+    "Bookmark-Edit.dc.html": {
+      "h": 900,
+      "page": "subscreens",
+      "title": "Work › Bookmark on AO3 (sheet)",
+      "w": 390,
+      "x": 2820,
+      "y": 1700
+    },
     "Browse.dc.html": {
       "h": 1480,
       "page": "iphone",
@@ -114,6 +202,46 @@
       "x": 3290,
       "y": 10520
     },
+    "Bulk-Edit.dc.html": {
+      "h": 1000,
+      "page": "subscreens",
+      "title": "Library › Edit 3 Works (sheet)",
+      "w": 390,
+      "x": 4700,
+      "y": 300
+    },
+    "Challenge-Assignments.dc.html": {
+      "h": 1020,
+      "page": "subscreens",
+      "title": "Challenge › Assignments",
+      "w": 390,
+      "x": 3290,
+      "y": 4900
+    },
+    "Challenge-Settings.dc.html": {
+      "h": 1120,
+      "page": "subscreens",
+      "title": "Challenge › Settings (maintainer)",
+      "w": 390,
+      "x": 3760,
+      "y": 4900
+    },
+    "Challenge-SignUp.dc.html": {
+      "h": 1080,
+      "page": "subscreens",
+      "title": "Challenge › Sign up (form)",
+      "w": 390,
+      "x": 2350,
+      "y": 4900
+    },
+    "Challenge-SignUps.dc.html": {
+      "h": 980,
+      "page": "subscreens",
+      "title": "Challenge › Sign-ups (maintainer)",
+      "w": 390,
+      "x": 2820,
+      "y": 4900
+    },
     "Challenge.dc.html": {
       "h": 844,
       "page": "iphone",
@@ -121,6 +249,14 @@
       "w": 390,
       "x": 5560,
       "y": 8600
+    },
+    "Chapter-Add.dc.html": {
+      "h": 1040,
+      "page": "subscreens",
+      "title": "Writing › Add Chapter (form)",
+      "w": 390,
+      "x": 1880,
+      "y": 3200
     },
     "ChapterEditor.dc.html": {
       "h": 844,
@@ -130,6 +266,30 @@
       "x": 1800,
       "y": 2420
     },
+    "Collection-AddWorks.dc.html": {
+      "h": 844,
+      "page": "subscreens",
+      "title": "Collection › Add Works (sheet)",
+      "w": 390,
+      "x": 2820,
+      "y": 300
+    },
+    "Collection-New.dc.html": {
+      "h": 844,
+      "page": "subscreens",
+      "title": "Collections › New Collection (sheet)",
+      "w": 390,
+      "x": 2350,
+      "y": 300
+    },
+    "Collection-Reorder.dc.html": {
+      "h": 844,
+      "page": "subscreens",
+      "title": "Collection › Reorder",
+      "w": 390,
+      "x": 3290,
+      "y": 300
+    },
     "Collection.dc.html": {
       "h": 844,
       "page": "iphone",
@@ -137,6 +297,14 @@
       "w": 390,
       "x": 2820,
       "y": 0
+    },
+    "Comment-Menu.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Comments · long-press menu",
+      "w": 390,
+      "x": 2820,
+      "y": 4580
     },
     "Comment-Thread.dc.html": {
       "h": 844,
@@ -187,6 +355,14 @@
       "x": 0,
       "y": 0
     },
+    "Delete-Warnings.dc.html": {
+      "h": 960,
+      "page": "states",
+      "title": "Deleting a work Kudos can’t fetch again",
+      "w": 1290,
+      "x": 1410,
+      "y": 3240
+    },
     "Direction-Mix.dc.html": {
       "h": 1640,
       "page": "direction",
@@ -202,6 +378,14 @@
       "w": 2700,
       "x": 0,
       "y": 0
+    },
+    "Downloaded-Date.dc.html": {
+      "h": 844,
+      "page": "subscreens",
+      "title": "Work › Edit downloaded date (sheet)",
+      "w": 390,
+      "x": 5640,
+      "y": 6540
     },
     "Duo-Book-Comments.dc.html": {
       "h": 669,
@@ -427,6 +611,14 @@
       "x": 2340,
       "y": 2420
     },
+    "Edit-Shelves.dc.html": {
+      "h": 844,
+      "page": "subscreens",
+      "title": "Library › Edit Shelves (sheet)",
+      "w": 390,
+      "x": 1410,
+      "y": 300
+    },
     "Fandom-Works.dc.html": {
       "h": 844,
       "page": "iphone",
@@ -442,6 +634,22 @@
       "w": 390,
       "x": 1410,
       "y": 2300
+    },
+    "Filter-Language.dc.html": {
+      "h": 1000,
+      "page": "subscreens",
+      "title": "Search filters › Language",
+      "w": 390,
+      "x": 4700,
+      "y": 1700
+    },
+    "Filter-Tags.dc.html": {
+      "h": 900,
+      "page": "subscreens",
+      "title": "Search filters › Tags",
+      "w": 390,
+      "x": 5170,
+      "y": 1700
     },
     "Flow-Duo.dc.html": {
       "h": 620,
@@ -499,6 +707,30 @@
       "x": 0,
       "y": 4180
     },
+    "FormScreen.dc.html": {
+      "h": 844,
+      "page": "system",
+      "title": "Form screen (component)",
+      "w": 390,
+      "x": 0,
+      "y": 3584
+    },
+    "History-Month.dc.html": {
+      "h": 900,
+      "page": "subscreens",
+      "title": "Reading History · Month",
+      "w": 390,
+      "x": 5170,
+      "y": 300
+    },
+    "History-Year.dc.html": {
+      "h": 900,
+      "page": "subscreens",
+      "title": "Reading History · Year",
+      "w": 390,
+      "x": 5640,
+      "y": 300
+    },
     "Home-Launchpad.dc.html": {
       "h": 1600,
       "page": "iphone",
@@ -522,6 +754,14 @@
       "w": 1290,
       "x": 0,
       "y": 0
+    },
+    "Inbox-Filter.dc.html": {
+      "h": 844,
+      "page": "subscreens",
+      "title": "Inbox › Filter (sheet)",
+      "w": 390,
+      "x": 2350,
+      "y": 1700
     },
     "Inbox.dc.html": {
       "h": 844,
@@ -611,6 +851,30 @@
       "x": 1360,
       "y": 2760
     },
+    "Layouts-Plan.dc.html": {
+      "h": 1100,
+      "page": "structure",
+      "title": "One layout per surface",
+      "w": 1290,
+      "x": 0,
+      "y": 9040
+    },
+    "Legal-Notices.dc.html": {
+      "h": 844,
+      "page": "subscreens",
+      "title": "Settings › About › Legal notices",
+      "w": 390,
+      "x": 5170,
+      "y": 6540
+    },
+    "Library-Edit.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Library › Edit (sheet over Library)",
+      "w": 390,
+      "x": 4700,
+      "y": 0
+    },
     "Library-Filters.dc.html": {
       "h": 1400,
       "page": "iphone",
@@ -651,6 +915,22 @@
       "x": 470,
       "y": 0
     },
+    "ListScreen.dc.html": {
+      "h": 844,
+      "page": "system",
+      "title": "List screen (component)",
+      "w": 390,
+      "x": 470,
+      "y": 3584
+    },
+    "Local-Destination.dc.html": {
+      "h": 844,
+      "page": "subscreens",
+      "title": "Import › Where to put it (sheet)",
+      "w": 390,
+      "x": 6110,
+      "y": 6540
+    },
     "Login.dc.html": {
       "h": 844,
       "page": "iphone",
@@ -666,6 +946,14 @@
       "w": 390,
       "x": 0,
       "y": 0
+    },
+    "MenuTopRow.dc.html": {
+      "h": 64,
+      "page": "system",
+      "title": "Menu top row (component)",
+      "w": 270,
+      "x": 0,
+      "y": 3400
     },
     "My-Works.dc.html": {
       "h": 844,
@@ -691,6 +979,14 @@
       "x": 2350,
       "y": 10520
     },
+    "Open-AO3.dc.html": {
+      "h": 844,
+      "page": "subscreens",
+      "title": "Account › Open AO3",
+      "w": 390,
+      "x": 1880,
+      "y": 1700
+    },
     "Platform-Map.dc.html": {
       "h": 1760,
       "page": "system",
@@ -698,6 +994,46 @@
       "w": 1280,
       "x": 0,
       "y": 920
+    },
+    "Post-CollectionsGifts.dc.html": {
+      "h": 880,
+      "page": "subscreens",
+      "title": "Post a work › Collections and gifts",
+      "w": 390,
+      "x": 4230,
+      "y": 3200
+    },
+    "Post-Creators.dc.html": {
+      "h": 844,
+      "page": "subscreens",
+      "title": "Post a work › Co-creators",
+      "w": 390,
+      "x": 2820,
+      "y": 3200
+    },
+    "Post-Parent.dc.html": {
+      "h": 900,
+      "page": "subscreens",
+      "title": "Post a work › Inspired by",
+      "w": 390,
+      "x": 3760,
+      "y": 3200
+    },
+    "Post-Series.dc.html": {
+      "h": 940,
+      "page": "subscreens",
+      "title": "Post a work › Series",
+      "w": 390,
+      "x": 3290,
+      "y": 3200
+    },
+    "Post-Tags.dc.html": {
+      "h": 1300,
+      "page": "subscreens",
+      "title": "Post a work › Tags",
+      "w": 390,
+      "x": 2350,
+      "y": 3200
     },
     "Privacy.dc.html": {
       "h": 844,
@@ -707,6 +1043,70 @@
       "x": 1880,
       "y": 10520
     },
+    "Prompt-Meme.dc.html": {
+      "h": 980,
+      "page": "subscreens",
+      "title": "Challenge › Prompt meme",
+      "w": 390,
+      "x": 4230,
+      "y": 4900
+    },
+    "Prompt-Tags.dc.html": {
+      "h": 1060,
+      "page": "subscreens",
+      "title": "Challenge › Prompt tags (maintainer)",
+      "w": 390,
+      "x": 4700,
+      "y": 4900
+    },
+    "Quality-Method.dc.html": {
+      "h": 3400,
+      "page": "quality",
+      "title": "Reader Response · verified facts, signals, Ways to Find, build order",
+      "w": 1280,
+      "x": 1410,
+      "y": 0
+    },
+    "Quality-RankDeeper.dc.html": {
+      "h": 1240,
+      "page": "quality",
+      "title": "Rank Top 100, running (owner approved 28 Oct 2026): pages 2 to 5, 3 s apart, cancellable, tagged in the User-Agent",
+      "w": 390,
+      "x": 2770,
+      "y": 0
+    },
+    "Quality-Response.dc.html": {
+      "h": 1240,
+      "page": "quality",
+      "title": "Work › Reader Response (sheet)",
+      "w": 390,
+      "x": 940,
+      "y": 0
+    },
+    "Quality-Results.dc.html": {
+      "h": 1240,
+      "page": "quality",
+      "title": "Search › Hidden Gems, ranked by kudos per hit",
+      "w": 390,
+      "x": 0,
+      "y": 0
+    },
+    "Quality-WIPs.dc.html": {
+      "h": 1240,
+      "page": "quality",
+      "title": "Search › Active WIPs, on schedule first",
+      "w": 390,
+      "x": 470,
+      "y": 0
+    },
+    "Queue-Edit.dc.html": {
+      "h": 1000,
+      "page": "subscreens",
+      "title": "Queue › Edit Queue (sheet)",
+      "w": 390,
+      "x": 3760,
+      "y": 300
+    },
     "Queue-Manage.dc.html": {
       "h": 1000,
       "page": "iphone",
@@ -714,6 +1114,14 @@
       "w": 390,
       "x": 1880,
       "y": 11920
+    },
+    "Queue-Tags.dc.html": {
+      "h": 844,
+      "page": "subscreens",
+      "title": "Queues › Manage Tags",
+      "w": 390,
+      "x": 4230,
+      "y": 300
     },
     "Queue.dc.html": {
       "h": 844,
@@ -739,6 +1147,14 @@
       "x": 3290,
       "y": 7080
     },
+    "ReadAloud-Anywhere.dc.html": {
+      "h": 980,
+      "page": "subscreens",
+      "title": "Read Aloud outside the reader (T-458)",
+      "w": 1290,
+      "x": 0,
+      "y": 7784
+    },
     "Reader-Contents.dc.html": {
       "h": 844,
       "page": "iphone",
@@ -746,6 +1162,14 @@
       "w": 390,
       "x": 940,
       "y": 7080
+    },
+    "Reader-CustomizeTheme.dc.html": {
+      "h": 844,
+      "page": "subscreens",
+      "title": "Reader › Customize Theme",
+      "w": 390,
+      "x": 470,
+      "y": 6540
     },
     "Reader-End.dc.html": {
       "h": 844,
@@ -778,6 +1202,22 @@
       "w": 390,
       "x": 470,
       "y": 7080
+    },
+    "Reader-PageJump.dc.html": {
+      "h": 844,
+      "page": "subscreens",
+      "title": "Reader › Go to Page (sheet)",
+      "w": 390,
+      "x": 0,
+      "y": 6540
+    },
+    "Reader-Pronunciation.dc.html": {
+      "h": 844,
+      "page": "subscreens",
+      "title": "Read Aloud › Pronunciations",
+      "w": 390,
+      "x": 940,
+      "y": 6540
     },
     "Reader-ReadAloud.dc.html": {
       "h": 844,
@@ -827,6 +1267,30 @@
       "x": 470,
       "y": 2300
     },
+    "Search-Save.dc.html": {
+      "h": 844,
+      "page": "subscreens",
+      "title": "Search › Save Search (sheet)",
+      "w": 390,
+      "x": 4230,
+      "y": 1700
+    },
+    "Search-Saved.dc.html": {
+      "h": 844,
+      "page": "subscreens",
+      "title": "Search › Saved Searches",
+      "w": 390,
+      "x": 3760,
+      "y": 1700
+    },
+    "Search-Sort.dc.html": {
+      "h": 1840,
+      "page": "iphone",
+      "title": "Search filters › Sort By (Ways to Find, AO3 order, Kudos ranking)",
+      "w": 390,
+      "x": 2820,
+      "y": 2300
+    },
     "Search.dc.html": {
       "h": 1240,
       "page": "iphone",
@@ -835,6 +1299,22 @@
       "x": 0,
       "y": 2300
     },
+    "Series-Edit.dc.html": {
+      "h": 1100,
+      "page": "subscreens",
+      "title": "Writing › Edit Series",
+      "w": 390,
+      "x": 4700,
+      "y": 3200
+    },
+    "Series-SavePrompt.dc.html": {
+      "h": 844,
+      "page": "subscreens",
+      "title": "Work › Save the whole series? (sheet)",
+      "w": 390,
+      "x": 3290,
+      "y": 1700
+    },
     "Series.dc.html": {
       "h": 844,
       "page": "iphone",
@@ -842,6 +1322,14 @@
       "w": 390,
       "x": 2350,
       "y": 4580
+    },
+    "Settings-Account.dc.html": {
+      "h": 844,
+      "page": "subscreens",
+      "title": "Settings › Account and privacy",
+      "w": 390,
+      "x": 4700,
+      "y": 6540
     },
     "Settings-Appearance.dc.html": {
       "h": 844,
@@ -859,6 +1347,30 @@
       "x": 940,
       "y": 10520
     },
+    "Settings-Library.dc.html": {
+      "h": 844,
+      "page": "subscreens",
+      "title": "Settings › Library",
+      "w": 390,
+      "x": 3290,
+      "y": 6540
+    },
+    "Settings-Preservation.dc.html": {
+      "h": 844,
+      "page": "subscreens",
+      "title": "Settings › Preservation",
+      "w": 390,
+      "x": 3760,
+      "y": 6540
+    },
+    "Settings-Queues.dc.html": {
+      "h": 844,
+      "page": "subscreens",
+      "title": "Settings › Reading Queues",
+      "w": 390,
+      "x": 4230,
+      "y": 6540
+    },
     "Settings-Storage.dc.html": {
       "h": 844,
       "page": "iphone",
@@ -875,12 +1387,54 @@
       "x": 0,
       "y": 10520
     },
+    "Shelf-Grid.dc.html": {
+      "h": 1000,
+      "page": "subscreens",
+      "title": "Library › Finished (grid)",
+      "w": 390,
+      "x": 470,
+      "y": 300
+    },
+    "Shelf-List.dc.html": {
+      "h": 1000,
+      "page": "subscreens",
+      "title": "Library › Finished (list)",
+      "w": 390,
+      "x": 0,
+      "y": 300
+    },
     "Shelf-Options.dc.html": {
       "h": 640,
       "page": "duo",
       "title": "Shelf cards · earlier options (decided in Your mix)",
       "w": 920,
       "x": 1552,
+      "y": 0
+    },
+    "Shelf-ReadingNow.dc.html": {
+      "h": 1000,
+      "page": "subscreens",
+      "title": "Library › Reading Now",
+      "w": 390,
+      "x": 940,
+      "y": 300
+    },
+    "Skin-Dark.dc.html": {
+      "h": 120,
+      "w": 120,
+      "x": 19400,
+      "y": 0
+    },
+    "Skin-OLED.dc.html": {
+      "h": 120,
+      "w": 120,
+      "x": 19600,
+      "y": 0
+    },
+    "Skin-Sepia.dc.html": {
+      "h": 120,
+      "w": 120,
+      "x": 19800,
       "y": 0
     },
     "States-Confirm.dc.html": {
@@ -923,6 +1477,38 @@
       "x": 0,
       "y": 0
     },
+    "Subscriptions-Plan.dc.html": {
+      "h": 960,
+      "page": "structure",
+      "title": "Subscriptions: works, series, authors and tags",
+      "w": 1290,
+      "x": 0,
+      "y": 7960
+    },
+    "Subscriptions-Series.dc.html": {
+      "h": 844,
+      "page": "subscreens",
+      "title": "Subscriptions › Series",
+      "w": 390,
+      "x": 470,
+      "y": 1700
+    },
+    "Subscriptions-Tags.dc.html": {
+      "h": 844,
+      "page": "subscreens",
+      "title": "Subscriptions › Tags (followed in Kudos)",
+      "w": 390,
+      "x": 940,
+      "y": 1700
+    },
+    "Subscriptions-Works.dc.html": {
+      "h": 844,
+      "page": "subscreens",
+      "title": "Subscriptions › Works",
+      "w": 390,
+      "x": 0,
+      "y": 1700
+    },
     "Subscriptions.dc.html": {
       "h": 900,
       "page": "iphone",
@@ -947,6 +1533,14 @@
       "x": 1360,
       "y": 0
     },
+    "Sync-Devices.dc.html": {
+      "h": 844,
+      "page": "subscreens",
+      "title": "Settings › Synced devices",
+      "w": 390,
+      "x": 1880,
+      "y": 6540
+    },
     "Sync-Onboarding.dc.html": {
       "h": 844,
       "page": "iphone",
@@ -954,6 +1548,14 @@
       "w": 390,
       "x": 2820,
       "y": 10520
+    },
+    "Sync-Pair.dc.html": {
+      "h": 844,
+      "page": "subscreens",
+      "title": "Settings › Add a Device (sheet)",
+      "w": 390,
+      "x": 1410,
+      "y": 6540
     },
     "System-Surfaces.dc.html": {
       "h": 960,
@@ -987,637 +1589,45 @@
       "x": 3760,
       "y": 8600
     },
-    "Themes.dc.html": {
-      "h": 2880,
-      "page": "variants",
-      "title": "Sepia, Dark and OLED",
-      "w": 1400,
-      "x": 0,
-      "y": 0
-    },
-    "Work-Actions.dc.html": {
-      "h": 844,
-      "page": "iphone",
-      "title": "Work Detail · actions menu, top row",
-      "w": 390,
-      "x": 470,
-      "y": 4580
-    },
-    "Work-AddTo.dc.html": {
-      "h": 844,
-      "page": "iphone",
-      "title": "Work menu · Add to queue or collection",
-      "w": 390,
-      "x": 1410,
-      "y": 11920
-    },
-    "Work-Editor.dc.html": {
-      "h": 1500,
-      "page": "iphone",
-      "title": "Post or edit a work",
-      "w": 390,
-      "x": 3290,
-      "y": 8600
-    },
-    "WorkRow.dc.html": {
-      "h": 112,
-      "page": "system",
-      "title": "Work row (component)",
-      "w": 390,
-      "x": 1360,
-      "y": 306
-    },
-    "Writing.dc.html": {
-      "h": 1950,
-      "page": "iphone",
-      "title": "Writing tab",
-      "w": 390,
-      "x": 940,
-      "y": 11920
-    },
-    "iPhone-Reader.dc.html": {
-      "h": 844,
-      "page": "iphone",
-      "title": "Reader",
-      "w": 390,
-      "x": 0,
-      "y": 7080
-    },
-    "iPhone-WorkDetail.dc.html": {
-      "h": 2080,
-      "page": "iphone",
-      "title": "Work Detail",
-      "w": 390,
-      "x": 0,
-      "y": 4580
-    },
-    "Delete-Warnings.dc.html": {
-      "h": 960,
-      "page": "states",
-      "title": "Deleting a work Kudos can’t fetch again",
-      "w": 1290,
-      "x": 1410,
-      "y": 3240
-    },
-    "Subscriptions-Plan.dc.html": {
-      "h": 960,
-      "page": "structure",
-      "title": "Subscriptions: works, series, authors and tags",
-      "w": 1290,
-      "x": 0,
-      "y": 7960
-    },
-    "Comment-Menu.dc.html": {
-      "h": 844,
-      "page": "iphone",
-      "title": "Comments · long-press menu",
-      "w": 390,
-      "x": 2820,
-      "y": 4580
-    },
-    "MenuTopRow.dc.html": {
-      "h": 64,
-      "page": "system",
-      "title": "Menu top row (component)",
-      "w": 270,
-      "x": 0,
-      "y": 3400
-    },
-    "Layouts-Plan.dc.html": {
-      "h": 1100,
-      "page": "structure",
-      "title": "One layout per surface",
-      "w": 1290,
-      "x": 0,
-      "y": 9040
-    },
-    "Shelf-List.dc.html": {
-      "h": 1000,
-      "page": "subscreens",
-      "title": "Library › Finished (list)",
-      "w": 390,
-      "x": 0,
-      "y": 300
-    },
-    "Shelf-Grid.dc.html": {
-      "h": 1000,
-      "page": "subscreens",
-      "title": "Library › Finished (grid)",
-      "w": 390,
-      "x": 470,
-      "y": 300
-    },
-    "Shelf-ReadingNow.dc.html": {
-      "h": 1000,
-      "page": "subscreens",
-      "title": "Library › Reading Now",
-      "w": 390,
-      "x": 940,
-      "y": 300
-    },
-    "Edit-Shelves.dc.html": {
-      "h": 844,
-      "page": "subscreens",
-      "title": "Library › Edit Shelves (sheet)",
-      "w": 390,
-      "x": 1410,
-      "y": 300
-    },
-    "All-Collections.dc.html": {
-      "h": 844,
-      "page": "subscreens",
-      "title": "Library › Collections",
-      "w": 390,
-      "x": 1880,
-      "y": 300
-    },
-    "Collection-New.dc.html": {
-      "h": 844,
-      "page": "subscreens",
-      "title": "Collections › New Collection (sheet)",
-      "w": 390,
-      "x": 2350,
-      "y": 300
-    },
-    "Collection-AddWorks.dc.html": {
-      "h": 844,
-      "page": "subscreens",
-      "title": "Collection › Add Works (sheet)",
-      "w": 390,
-      "x": 2820,
-      "y": 300
-    },
-    "Collection-Reorder.dc.html": {
-      "h": 844,
-      "page": "subscreens",
-      "title": "Collection › Reorder",
-      "w": 390,
-      "x": 3290,
-      "y": 300
-    },
-    "Queue-Edit.dc.html": {
-      "h": 1000,
-      "page": "subscreens",
-      "title": "Queue › Edit Queue (sheet)",
-      "w": 390,
-      "x": 3760,
-      "y": 300
-    },
-    "Queue-Tags.dc.html": {
-      "h": 844,
-      "page": "subscreens",
-      "title": "Queues › Manage Tags",
-      "w": 390,
-      "x": 4230,
-      "y": 300
-    },
-    "Bulk-Edit.dc.html": {
-      "h": 1000,
-      "page": "subscreens",
-      "title": "Library › Edit 3 Works (sheet)",
-      "w": 390,
-      "x": 4700,
-      "y": 300
-    },
-    "History-Month.dc.html": {
-      "h": 900,
-      "page": "subscreens",
-      "title": "Reading History · Month",
-      "w": 390,
-      "x": 5170,
-      "y": 300
-    },
-    "History-Year.dc.html": {
-      "h": 900,
-      "page": "subscreens",
-      "title": "Reading History · Year",
-      "w": 390,
-      "x": 5640,
-      "y": 300
-    },
-    "Work-Preview.dc.html": {
-      "h": 844,
-      "page": "subscreens",
-      "title": "Long-press preview of a work",
-      "w": 390,
-      "x": 6110,
-      "y": 300
-    },
-    "Subscriptions-Works.dc.html": {
-      "h": 844,
-      "page": "subscreens",
-      "title": "Subscriptions › Works",
-      "w": 390,
-      "x": 0,
-      "y": 1700
-    },
-    "Subscriptions-Series.dc.html": {
-      "h": 844,
-      "page": "subscreens",
-      "title": "Subscriptions › Series",
-      "w": 390,
-      "x": 470,
-      "y": 1700
-    },
-    "Subscriptions-Tags.dc.html": {
-      "h": 844,
-      "page": "subscreens",
-      "title": "Subscriptions › Tags (followed in Kudos)",
-      "w": 390,
-      "x": 940,
-      "y": 1700
-    },
-    "AO3-Preferences.dc.html": {
-      "h": 1100,
-      "page": "subscreens",
-      "title": "Account › AO3 Preferences",
-      "w": 390,
-      "x": 1410,
-      "y": 1700
-    },
-    "Open-AO3.dc.html": {
-      "h": 844,
-      "page": "subscreens",
-      "title": "Account › Open AO3",
-      "w": 390,
-      "x": 1880,
-      "y": 1700
-    },
-    "Inbox-Filter.dc.html": {
-      "h": 844,
-      "page": "subscreens",
-      "title": "Inbox › Filter (sheet)",
-      "w": 390,
-      "x": 2350,
-      "y": 1700
-    },
-    "Bookmark-Edit.dc.html": {
-      "h": 900,
-      "page": "subscreens",
-      "title": "Work › Bookmark on AO3 (sheet)",
-      "w": 390,
-      "x": 2820,
-      "y": 1700
-    },
-    "Series-SavePrompt.dc.html": {
-      "h": 844,
-      "page": "subscreens",
-      "title": "Work › Save the whole series? (sheet)",
-      "w": 390,
-      "x": 3290,
-      "y": 1700
-    },
-    "Search-Saved.dc.html": {
-      "h": 844,
-      "page": "subscreens",
-      "title": "Search › Saved Searches",
-      "w": 390,
-      "x": 3760,
-      "y": 1700
-    },
-    "Search-Save.dc.html": {
-      "h": 844,
-      "page": "subscreens",
-      "title": "Search › Save Search (sheet)",
-      "w": 390,
-      "x": 4230,
-      "y": 1700
-    },
-    "Filter-Language.dc.html": {
-      "h": 1000,
-      "page": "subscreens",
-      "title": "Search filters › Language",
-      "w": 390,
-      "x": 4700,
-      "y": 1700
-    },
-    "Filter-Tags.dc.html": {
-      "h": 900,
-      "page": "subscreens",
-      "title": "Search filters › Tags",
-      "w": 390,
-      "x": 5170,
-      "y": 1700
-    },
-    "Writing-Stats.dc.html": {
-      "h": 1170,
-      "page": "subscreens",
-      "title": "Writing › Stats",
-      "w": 390,
-      "x": 0,
-      "y": 3200
-    },
-    "Writing-Drafts.dc.html": {
-      "h": 844,
-      "page": "subscreens",
-      "title": "Writing › Drafts",
-      "w": 390,
-      "x": 470,
-      "y": 3200
-    },
-    "Writing-Series.dc.html": {
-      "h": 844,
-      "page": "subscreens",
-      "title": "Writing › Series",
-      "w": 390,
-      "x": 940,
-      "y": 3200
-    },
-    "Writing-Chapters.dc.html": {
-      "h": 980,
-      "page": "subscreens",
-      "title": "Writing › a work’s chapters",
-      "w": 390,
-      "x": 1410,
-      "y": 3200
-    },
-    "Chapter-Add.dc.html": {
-      "h": 1040,
-      "page": "subscreens",
-      "title": "Writing › Add Chapter (form)",
-      "w": 390,
-      "x": 1880,
-      "y": 3200
-    },
-    "Post-Tags.dc.html": {
-      "h": 1300,
-      "page": "subscreens",
-      "title": "Post a work › Tags",
-      "w": 390,
-      "x": 2350,
-      "y": 3200
-    },
-    "Post-Creators.dc.html": {
-      "h": 844,
-      "page": "subscreens",
-      "title": "Post a work › Co-creators",
-      "w": 390,
-      "x": 2820,
-      "y": 3200
-    },
-    "Post-Series.dc.html": {
-      "h": 940,
-      "page": "subscreens",
-      "title": "Post a work › Series",
-      "w": 390,
-      "x": 3290,
-      "y": 3200
-    },
-    "Post-Parent.dc.html": {
-      "h": 900,
-      "page": "subscreens",
-      "title": "Post a work › Inspired by",
-      "w": 390,
-      "x": 3760,
-      "y": 3200
-    },
-    "Post-CollectionsGifts.dc.html": {
-      "h": 880,
-      "page": "subscreens",
-      "title": "Post a work › Collections and gifts",
-      "w": 390,
-      "x": 4230,
-      "y": 3200
-    },
-    "Series-Edit.dc.html": {
-      "h": 1100,
-      "page": "subscreens",
-      "title": "Writing › Edit Series",
-      "w": 390,
-      "x": 4700,
-      "y": 3200
-    },
-    "AO3-Collection-Page.dc.html": {
-      "h": 1040,
-      "page": "subscreens",
-      "title": "AO3 collection page",
-      "w": 390,
-      "x": 0,
-      "y": 4900
-    },
-    "AO3-Collection-Items.dc.html": {
-      "h": 844,
-      "page": "subscreens",
-      "title": "AO3 collections › Your items",
-      "w": 390,
-      "x": 470,
-      "y": 4900
-    },
-    "AO3-Collection-Form.dc.html": {
+    "Themes-AO3-Collection-Form.dc.html": {
       "h": 1160,
-      "page": "subscreens",
-      "title": "AO3 collections › New or edit (form)",
-      "w": 390,
-      "x": 940,
-      "y": 4900
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — AO3 collections › New or edit (form)",
+      "w": 1250,
+      "x": 2780,
+      "y": 19070
     },
-    "AO3-Collection-Moderation.dc.html": {
-      "h": 960,
-      "page": "subscreens",
-      "title": "AO3 collections › Moderation",
-      "w": 390,
-      "x": 1410,
-      "y": 4900
+    "Themes-AO3-Collection-Items.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — AO3 collections › Your items",
+      "w": 1250,
+      "x": 1390,
+      "y": 19070
     },
-    "AO3-Collection-Maintainers.dc.html": {
+    "Themes-AO3-Collection-Maintainers.dc.html": {
       "h": 940,
-      "page": "subscreens",
-      "title": "AO3 collections › Maintainers",
-      "w": 390,
-      "x": 1880,
-      "y": 4900
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — AO3 collections › Maintainers",
+      "w": 1250,
+      "x": 5560,
+      "y": 19070
     },
-    "Challenge-SignUp.dc.html": {
-      "h": 1080,
-      "page": "subscreens",
-      "title": "Challenge › Sign up (form)",
-      "w": 390,
-      "x": 2350,
-      "y": 4900
+    "Themes-AO3-Collection-Moderation.dc.html": {
+      "h": 960,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — AO3 collections › Moderation",
+      "w": 1250,
+      "x": 4170,
+      "y": 19070
     },
-    "Challenge-SignUps.dc.html": {
-      "h": 980,
-      "page": "subscreens",
-      "title": "Challenge › Sign-ups (maintainer)",
-      "w": 390,
-      "x": 2820,
-      "y": 4900
-    },
-    "Challenge-Assignments.dc.html": {
-      "h": 1020,
-      "page": "subscreens",
-      "title": "Challenge › Assignments",
-      "w": 390,
-      "x": 3290,
-      "y": 4900
-    },
-    "Challenge-Settings.dc.html": {
-      "h": 1120,
-      "page": "subscreens",
-      "title": "Challenge › Settings (maintainer)",
-      "w": 390,
-      "x": 3760,
-      "y": 4900
-    },
-    "Prompt-Meme.dc.html": {
-      "h": 980,
-      "page": "subscreens",
-      "title": "Challenge › Prompt meme",
-      "w": 390,
-      "x": 4230,
-      "y": 4900
-    },
-    "Prompt-Tags.dc.html": {
-      "h": 1060,
-      "page": "subscreens",
-      "title": "Challenge › Prompt tags (maintainer)",
-      "w": 390,
-      "x": 4700,
-      "y": 4900
-    },
-    "Reader-PageJump.dc.html": {
-      "h": 844,
-      "page": "subscreens",
-      "title": "Reader › Go to Page (sheet)",
-      "w": 390,
+    "Themes-AO3-Collection-Page.dc.html": {
+      "h": 1040,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — AO3 collection page",
+      "w": 1250,
       "x": 0,
-      "y": 6540
-    },
-    "Reader-CustomizeTheme.dc.html": {
-      "h": 844,
-      "page": "subscreens",
-      "title": "Reader › Customize Theme",
-      "w": 390,
-      "x": 470,
-      "y": 6540
-    },
-    "Reader-Pronunciation.dc.html": {
-      "h": 844,
-      "page": "subscreens",
-      "title": "Read Aloud › Pronunciations",
-      "w": 390,
-      "x": 940,
-      "y": 6540
-    },
-    "Sync-Pair.dc.html": {
-      "h": 844,
-      "page": "subscreens",
-      "title": "Settings › Add a Device (sheet)",
-      "w": 390,
-      "x": 1410,
-      "y": 6540
-    },
-    "Sync-Devices.dc.html": {
-      "h": 844,
-      "page": "subscreens",
-      "title": "Settings › Synced devices",
-      "w": 390,
-      "x": 1880,
-      "y": 6540
-    },
-    "Backup-Replace.dc.html": {
-      "h": 844,
-      "page": "subscreens",
-      "title": "Settings › Restore from a backup (sheet)",
-      "w": 390,
-      "x": 2350,
-      "y": 6540
-    },
-    "Availability-Check.dc.html": {
-      "h": 844,
-      "page": "subscreens",
-      "title": "Settings › What’s still on AO3",
-      "w": 390,
-      "x": 2820,
-      "y": 6540
-    },
-    "Settings-Library.dc.html": {
-      "h": 844,
-      "page": "subscreens",
-      "title": "Settings › Library",
-      "w": 390,
-      "x": 3290,
-      "y": 6540
-    },
-    "Settings-Preservation.dc.html": {
-      "h": 844,
-      "page": "subscreens",
-      "title": "Settings › Preservation",
-      "w": 390,
-      "x": 3760,
-      "y": 6540
-    },
-    "Settings-Queues.dc.html": {
-      "h": 844,
-      "page": "subscreens",
-      "title": "Settings › Reading Queues",
-      "w": 390,
-      "x": 4230,
-      "y": 6540
-    },
-    "Settings-Account.dc.html": {
-      "h": 844,
-      "page": "subscreens",
-      "title": "Settings › Account and privacy",
-      "w": 390,
-      "x": 4700,
-      "y": 6540
-    },
-    "Legal-Notices.dc.html": {
-      "h": 844,
-      "page": "subscreens",
-      "title": "Settings › About › Legal notices",
-      "w": 390,
-      "x": 5170,
-      "y": 6540
-    },
-    "Downloaded-Date.dc.html": {
-      "h": 844,
-      "page": "subscreens",
-      "title": "Work › Edit downloaded date (sheet)",
-      "w": 390,
-      "x": 5640,
-      "y": 6540
-    },
-    "Local-Destination.dc.html": {
-      "h": 844,
-      "page": "subscreens",
-      "title": "Import › Where to put it (sheet)",
-      "w": 390,
-      "x": 6110,
-      "y": 6540
-    },
-    "ReadAloud-Anywhere.dc.html": {
-      "h": 980,
-      "page": "subscreens",
-      "title": "Read Aloud outside the reader (T-458)",
-      "w": 1290,
-      "x": 0,
-      "y": 7784
-    },
-    "FormScreen.dc.html": {
-      "h": 844,
-      "page": "system",
-      "title": "Form screen (component)",
-      "w": 390,
-      "x": 0,
-      "y": 3584
-    },
-    "ListScreen.dc.html": {
-      "h": 844,
-      "page": "system",
-      "title": "List screen (component)",
-      "w": 390,
-      "x": 470,
-      "y": 3584
-    },
-    "Accent-Options.dc.html": {
-      "h": 600,
-      "page": "variants",
-      "title": "Accent colour: options",
-      "w": 1290,
-      "x": 0,
-      "y": 3080
+      "y": 19070
     },
     "Themes-AO3-Collections.dc.html": {
       "h": 844,
@@ -1634,6 +1644,14 @@
       "w": 1250,
       "x": 4170,
       "y": 8600
+    },
+    "Themes-AO3-Preferences.dc.html": {
+      "h": 1100,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Account › AO3 Preferences",
+      "w": 1250,
+      "x": 4170,
+      "y": 15870
     },
     "Themes-AO3-Web.dc.html": {
       "h": 844,
@@ -1675,6 +1693,14 @@
       "x": 1390,
       "y": 8600
     },
+    "Themes-All-Collections.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Library › Collections",
+      "w": 1250,
+      "x": 5560,
+      "y": 14470
+    },
     "Themes-Author.dc.html": {
       "h": 1520,
       "page": "themes-all",
@@ -1682,6 +1708,30 @@
       "w": 1250,
       "x": 5560,
       "y": 4580
+    },
+    "Themes-Availability-Check.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Settings › What’s still on AO3",
+      "w": 1250,
+      "x": 8340,
+      "y": 20710
+    },
+    "Themes-Backup-Replace.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Settings › Restore from a backup (sheet)",
+      "w": 1250,
+      "x": 6950,
+      "y": 20710
+    },
+    "Themes-Bookmark-Edit.dc.html": {
+      "h": 900,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Work › Bookmark on AO3 (sheet)",
+      "w": 1250,
+      "x": 8340,
+      "y": 15870
     },
     "Themes-Browse.dc.html": {
       "h": 1480,
@@ -1699,462 +1749,6 @@
       "x": 9730,
       "y": 10520
     },
-    "Themes-Challenge.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Challenge",
-      "w": 1250,
-      "x": 16680,
-      "y": 8600
-    },
-    "Themes-Collection.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Collection",
-      "w": 1250,
-      "x": 8340,
-      "y": 0
-    },
-    "Themes-Comment-Thread.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Comments · thread, reply",
-      "w": 1250,
-      "x": 4170,
-      "y": 4580
-    },
-    "Themes-Comments.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Comments",
-      "w": 1250,
-      "x": 2780,
-      "y": 4580
-    },
-    "Themes-Fandom-Works.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Browse · fandom works",
-      "w": 1250,
-      "x": 5560,
-      "y": 2300
-    },
-    "Themes-Fandoms.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Browse · fandom index",
-      "w": 1250,
-      "x": 4170,
-      "y": 2300
-    },
-    "Themes-Home-Launchpad.dc.html": {
-      "h": 1600,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Home · launchpad, profile button",
-      "w": 1250,
-      "x": 0,
-      "y": 11920
-    },
-    "Themes-Inbox.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Inbox",
-      "w": 1250,
-      "x": 6950,
-      "y": 8600
-    },
-    "Themes-Insights.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Reading Insights · first screen (all screens on the Reading Insights page)",
-      "w": 1250,
-      "x": 9730,
-      "y": 0
-    },
-    "Themes-Library-Filters.dc.html": {
-      "h": 1400,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Library · filters",
-      "w": 1250,
-      "x": 4170,
-      "y": 0
-    },
-    "Themes-Library-Organize.dc.html": {
-      "h": 1240,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Library · organise, shelf tiles, On AO3",
-      "w": 1250,
-      "x": 1390,
-      "y": 11920
-    },
-    "Themes-Library-Section.dc.html": {
-      "h": 1000,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Library · Reading History timeline",
-      "w": 1250,
-      "x": 2780,
-      "y": 0
-    },
-    "Themes-Library-Select.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Library · select mode",
-      "w": 1250,
-      "x": 12510,
-      "y": 0
-    },
-    "Themes-Library.dc.html": {
-      "h": 1560,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Library",
-      "w": 1250,
-      "x": 1390,
-      "y": 0
-    },
-    "Themes-Login.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Log in to AO3",
-      "w": 1250,
-      "x": 2780,
-      "y": 8600
-    },
-    "Themes-Main.dc.html": {
-      "h": 2080,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Home",
-      "w": 1250,
-      "x": 0,
-      "y": 0
-    },
-    "Themes-My-Works.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Works · Series · Drafts",
-      "w": 1250,
-      "x": 8340,
-      "y": 8600
-    },
-    "Themes-Onboarding.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Welcome",
-      "w": 1250,
-      "x": 6950,
-      "y": 10520
-    },
-    "Themes-Privacy.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Privacy and local data",
-      "w": 1250,
-      "x": 5560,
-      "y": 10520
-    },
-    "Themes-Queue-Manage.dc.html": {
-      "h": 1000,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Queue · swipe and drag",
-      "w": 1250,
-      "x": 5560,
-      "y": 11920
-    },
-    "Themes-Queue.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Reading Queue",
-      "w": 1250,
-      "x": 5560,
-      "y": 0
-    },
-    "Themes-Queues.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Queues · organizer, new queue",
-      "w": 1250,
-      "x": 6950,
-      "y": 0
-    },
-    "Themes-Read-Aloud-Settings.dc.html": {
-      "h": 1100,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Read Aloud settings",
-      "w": 1250,
-      "x": 9730,
-      "y": 7080
-    },
-    "Themes-Reader-Contents.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Reader · contents, bookmarks, notes",
-      "w": 1250,
-      "x": 2780,
-      "y": 7080
-    },
-    "Themes-Reader-End.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Reader · end of the work",
-      "w": 1250,
-      "x": 11120,
-      "y": 7080
-    },
-    "Themes-Reader-Find.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Reader · find in work",
-      "w": 1250,
-      "x": 4170,
-      "y": 7080
-    },
-    "Themes-Reader-Highlight.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Reader · highlight and note",
-      "w": 1250,
-      "x": 5560,
-      "y": 7080
-    },
-    "Themes-Reader-Menu.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Reader · menu, top row",
-      "w": 1250,
-      "x": 1390,
-      "y": 7080
-    },
-    "Themes-Reader-ReadAloud.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Reader · Read Aloud playing",
-      "w": 1250,
-      "x": 8340,
-      "y": 7080
-    },
-    "Themes-Reader-Settings.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Reader · themes and settings",
-      "w": 1250,
-      "x": 6950,
-      "y": 7080
-    },
-    "Themes-Recently-Deleted.dc.html": {
-      "h": 1000,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Recently Deleted · days left, can’t-re-download notes",
-      "w": 1250,
-      "x": 11120,
-      "y": 0
-    },
-    "Themes-Search-Filters.dc.html": {
-      "h": 2260,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Search · AO3 filters",
-      "w": 1250,
-      "x": 1390,
-      "y": 2300
-    },
-    "Themes-Search.dc.html": {
-      "h": 1240,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Search",
-      "w": 1250,
-      "x": 0,
-      "y": 2300
-    },
-    "Themes-Series.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Series",
-      "w": 1250,
-      "x": 6950,
-      "y": 4580
-    },
-    "Themes-Settings-Appearance.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Settings · appearance and fonts",
-      "w": 1250,
-      "x": 1390,
-      "y": 10520
-    },
-    "Themes-Settings-Backup-Sync.dc.html": {
-      "h": 1100,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Settings · backup, sync, import",
-      "w": 1250,
-      "x": 2780,
-      "y": 10520
-    },
-    "Themes-Settings-Storage.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Settings · downloads and storage",
-      "w": 1250,
-      "x": 4170,
-      "y": 10520
-    },
-    "Themes-Settings.dc.html": {
-      "h": 1240,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Settings",
-      "w": 1250,
-      "x": 0,
-      "y": 10520
-    },
-    "Themes-Subscriptions.dc.html": {
-      "h": 900,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Subscriptions · Updates (works, series, authors, tags)",
-      "w": 1250,
-      "x": 5560,
-      "y": 8600
-    },
-    "Themes-Sync-Onboarding.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Protect your library",
-      "w": 1250,
-      "x": 8340,
-      "y": 10520
-    },
-    "Themes-Work-Actions.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Work Detail · actions menu, top row",
-      "w": 1250,
-      "x": 1390,
-      "y": 4580
-    },
-    "Themes-Work-AddTo.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Work menu · Add to queue or collection",
-      "w": 1250,
-      "x": 4170,
-      "y": 11920
-    },
-    "Themes-Work-Editor.dc.html": {
-      "h": 1500,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Post or edit a work",
-      "w": 1250,
-      "x": 9730,
-      "y": 8600
-    },
-    "Themes-Writing.dc.html": {
-      "h": 1950,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Writing tab",
-      "w": 1250,
-      "x": 2780,
-      "y": 11920
-    },
-    "Themes-iPhone-Reader.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Reader",
-      "w": 1250,
-      "x": 0,
-      "y": 7080
-    },
-    "Themes-iPhone-WorkDetail.dc.html": {
-      "h": 2080,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Work Detail",
-      "w": 1250,
-      "x": 0,
-      "y": 4580
-    },
-    "Themes-Comment-Menu.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Comments · long-press menu",
-      "w": 1250,
-      "x": 8340,
-      "y": 4580
-    },
-    "Themes-Shelf-List.dc.html": {
-      "h": 1000,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Library › Finished (list)",
-      "w": 1250,
-      "x": 0,
-      "y": 14470
-    },
-    "Themes-Shelf-Grid.dc.html": {
-      "h": 1000,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Library › Finished (grid)",
-      "w": 1250,
-      "x": 1390,
-      "y": 14470
-    },
-    "Themes-Shelf-ReadingNow.dc.html": {
-      "h": 1000,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Library › Reading Now",
-      "w": 1250,
-      "x": 2780,
-      "y": 14470
-    },
-    "Themes-Edit-Shelves.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Library › Edit Shelves (sheet)",
-      "w": 1250,
-      "x": 4170,
-      "y": 14470
-    },
-    "Themes-All-Collections.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Library › Collections",
-      "w": 1250,
-      "x": 5560,
-      "y": 14470
-    },
-    "Themes-Collection-New.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Collections › New Collection (sheet)",
-      "w": 1250,
-      "x": 6950,
-      "y": 14470
-    },
-    "Themes-Collection-AddWorks.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Collection › Add Works (sheet)",
-      "w": 1250,
-      "x": 8340,
-      "y": 14470
-    },
-    "Themes-Collection-Reorder.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Collection › Reorder",
-      "w": 1250,
-      "x": 9730,
-      "y": 14470
-    },
-    "Themes-Queue-Edit.dc.html": {
-      "h": 1000,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Queue › Edit Queue (sheet)",
-      "w": 1250,
-      "x": 11120,
-      "y": 14470
-    },
-    "Themes-Queue-Tags.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Queues › Manage Tags",
-      "w": 1250,
-      "x": 12510,
-      "y": 14470
-    },
     "Themes-Bulk-Edit.dc.html": {
       "h": 1000,
       "page": "themes-all",
@@ -2163,252 +1757,20 @@
       "x": 13900,
       "y": 14470
     },
-    "Themes-History-Month.dc.html": {
-      "h": 900,
+    "Themes-Challenge-Assignments.dc.html": {
+      "h": 1020,
       "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Reading History · Month",
-      "w": 1250,
-      "x": 15290,
-      "y": 14470
-    },
-    "Themes-History-Year.dc.html": {
-      "h": 900,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Reading History · Year",
-      "w": 1250,
-      "x": 16680,
-      "y": 14470
-    },
-    "Themes-Work-Preview.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Long-press preview of a work",
-      "w": 1250,
-      "x": 18070,
-      "y": 14470
-    },
-    "Themes-Subscriptions-Works.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Subscriptions › Works",
-      "w": 1250,
-      "x": 0,
-      "y": 15870
-    },
-    "Themes-Subscriptions-Series.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Subscriptions › Series",
-      "w": 1250,
-      "x": 1390,
-      "y": 15870
-    },
-    "Themes-Subscriptions-Tags.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Subscriptions › Tags (followed in Kudos)",
-      "w": 1250,
-      "x": 2780,
-      "y": 15870
-    },
-    "Themes-AO3-Preferences.dc.html": {
-      "h": 1100,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Account › AO3 Preferences",
-      "w": 1250,
-      "x": 4170,
-      "y": 15870
-    },
-    "Themes-Open-AO3.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Account › Open AO3",
-      "w": 1250,
-      "x": 5560,
-      "y": 15870
-    },
-    "Themes-Inbox-Filter.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Inbox › Filter (sheet)",
-      "w": 1250,
-      "x": 6950,
-      "y": 15870
-    },
-    "Themes-Bookmark-Edit.dc.html": {
-      "h": 900,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Work › Bookmark on AO3 (sheet)",
-      "w": 1250,
-      "x": 8340,
-      "y": 15870
-    },
-    "Themes-Series-SavePrompt.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Work › Save the whole series? (sheet)",
+      "title": "Dark · OLED · Sepia — Challenge › Assignments",
       "w": 1250,
       "x": 9730,
-      "y": 15870
+      "y": 19070
     },
-    "Themes-Search-Saved.dc.html": {
-      "h": 844,
+    "Themes-Challenge-Settings.dc.html": {
+      "h": 1120,
       "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Search › Saved Searches",
+      "title": "Dark · OLED · Sepia — Challenge › Settings (maintainer)",
       "w": 1250,
       "x": 11120,
-      "y": 15870
-    },
-    "Themes-Search-Save.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Search › Save Search (sheet)",
-      "w": 1250,
-      "x": 12510,
-      "y": 15870
-    },
-    "Themes-Filter-Language.dc.html": {
-      "h": 1000,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Search filters › Language",
-      "w": 1250,
-      "x": 13900,
-      "y": 15870
-    },
-    "Themes-Filter-Tags.dc.html": {
-      "h": 900,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Search filters › Tags",
-      "w": 1250,
-      "x": 15290,
-      "y": 15870
-    },
-    "Themes-Writing-Stats.dc.html": {
-      "h": 1170,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Writing › Stats",
-      "w": 1250,
-      "x": 0,
-      "y": 17370
-    },
-    "Themes-Writing-Drafts.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Writing › Drafts",
-      "w": 1250,
-      "x": 1390,
-      "y": 17370
-    },
-    "Themes-Writing-Series.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Writing › Series",
-      "w": 1250,
-      "x": 2780,
-      "y": 17370
-    },
-    "Themes-Writing-Chapters.dc.html": {
-      "h": 980,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Writing › a work’s chapters",
-      "w": 1250,
-      "x": 4170,
-      "y": 17370
-    },
-    "Themes-Chapter-Add.dc.html": {
-      "h": 1040,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Writing › Add Chapter (form)",
-      "w": 1250,
-      "x": 5560,
-      "y": 17370
-    },
-    "Themes-Post-Tags.dc.html": {
-      "h": 1300,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Post a work › Tags",
-      "w": 1250,
-      "x": 6950,
-      "y": 17370
-    },
-    "Themes-Post-Creators.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Post a work › Co-creators",
-      "w": 1250,
-      "x": 8340,
-      "y": 17370
-    },
-    "Themes-Post-Series.dc.html": {
-      "h": 940,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Post a work › Series",
-      "w": 1250,
-      "x": 9730,
-      "y": 17370
-    },
-    "Themes-Post-Parent.dc.html": {
-      "h": 900,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Post a work › Inspired by",
-      "w": 1250,
-      "x": 11120,
-      "y": 17370
-    },
-    "Themes-Post-CollectionsGifts.dc.html": {
-      "h": 880,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Post a work › Collections and gifts",
-      "w": 1250,
-      "x": 12510,
-      "y": 17370
-    },
-    "Themes-Series-Edit.dc.html": {
-      "h": 1100,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Writing › Edit Series",
-      "w": 1250,
-      "x": 13900,
-      "y": 17370
-    },
-    "Themes-AO3-Collection-Page.dc.html": {
-      "h": 1040,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — AO3 collection page",
-      "w": 1250,
-      "x": 0,
-      "y": 19070
-    },
-    "Themes-AO3-Collection-Items.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — AO3 collections › Your items",
-      "w": 1250,
-      "x": 1390,
-      "y": 19070
-    },
-    "Themes-AO3-Collection-Form.dc.html": {
-      "h": 1160,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — AO3 collections › New or edit (form)",
-      "w": 1250,
-      "x": 2780,
-      "y": 19070
-    },
-    "Themes-AO3-Collection-Moderation.dc.html": {
-      "h": 960,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — AO3 collections › Moderation",
-      "w": 1250,
-      "x": 4170,
-      "y": 19070
-    },
-    "Themes-AO3-Collection-Maintainers.dc.html": {
-      "h": 940,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — AO3 collections › Maintainers",
-      "w": 1250,
-      "x": 5560,
       "y": 19070
     },
     "Themes-Challenge-SignUp.dc.html": {
@@ -2427,133 +1789,77 @@
       "x": 8340,
       "y": 19070
     },
-    "Themes-Challenge-Assignments.dc.html": {
-      "h": 1020,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Challenge › Assignments",
-      "w": 1250,
-      "x": 9730,
-      "y": 19070
-    },
-    "Themes-Challenge-Settings.dc.html": {
-      "h": 1120,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Challenge › Settings (maintainer)",
-      "w": 1250,
-      "x": 11120,
-      "y": 19070
-    },
-    "Themes-Prompt-Meme.dc.html": {
-      "h": 980,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Challenge › Prompt meme",
-      "w": 1250,
-      "x": 12510,
-      "y": 19070
-    },
-    "Themes-Prompt-Tags.dc.html": {
-      "h": 1060,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Challenge › Prompt tags (maintainer)",
-      "w": 1250,
-      "x": 13900,
-      "y": 19070
-    },
-    "Themes-Reader-PageJump.dc.html": {
+    "Themes-Challenge.dc.html": {
       "h": 844,
       "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Reader › Go to Page (sheet)",
+      "title": "Dark · OLED · Sepia — Challenge",
       "w": 1250,
-      "x": 0,
-      "y": 20710
+      "x": 16680,
+      "y": 8600
     },
-    "Themes-Reader-CustomizeTheme.dc.html": {
-      "h": 844,
+    "Themes-Chapter-Add.dc.html": {
+      "h": 1040,
       "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Reader › Customize Theme",
-      "w": 1250,
-      "x": 1390,
-      "y": 20710
-    },
-    "Themes-Reader-Pronunciation.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Read Aloud › Pronunciations",
-      "w": 1250,
-      "x": 2780,
-      "y": 20710
-    },
-    "Themes-Sync-Pair.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Settings › Add a Device (sheet)",
-      "w": 1250,
-      "x": 4170,
-      "y": 20710
-    },
-    "Themes-Sync-Devices.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Settings › Synced devices",
+      "title": "Dark · OLED · Sepia — Writing › Add Chapter (form)",
       "w": 1250,
       "x": 5560,
-      "y": 20710
+      "y": 17370
     },
-    "Themes-Backup-Replace.dc.html": {
+    "Themes-Collection-AddWorks.dc.html": {
       "h": 844,
       "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Settings › Restore from a backup (sheet)",
-      "w": 1250,
-      "x": 6950,
-      "y": 20710
-    },
-    "Themes-Availability-Check.dc.html": {
-      "h": 844,
-      "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Settings › What’s still on AO3",
+      "title": "Dark · OLED · Sepia — Collection › Add Works (sheet)",
       "w": 1250,
       "x": 8340,
-      "y": 20710
+      "y": 14470
     },
-    "Themes-Settings-Library.dc.html": {
+    "Themes-Collection-New.dc.html": {
       "h": 844,
       "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Settings › Library",
+      "title": "Dark · OLED · Sepia — Collections › New Collection (sheet)",
+      "w": 1250,
+      "x": 6950,
+      "y": 14470
+    },
+    "Themes-Collection-Reorder.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Collection › Reorder",
       "w": 1250,
       "x": 9730,
-      "y": 20710
+      "y": 14470
     },
-    "Themes-Settings-Preservation.dc.html": {
+    "Themes-Collection.dc.html": {
       "h": 844,
       "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Settings › Preservation",
+      "title": "Dark · OLED · Sepia — Collection",
       "w": 1250,
-      "x": 11120,
-      "y": 20710
+      "x": 8340,
+      "y": 0
     },
-    "Themes-Settings-Queues.dc.html": {
+    "Themes-Comment-Menu.dc.html": {
       "h": 844,
       "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Settings › Reading Queues",
+      "title": "Dark · OLED · Sepia — Comments · long-press menu",
       "w": 1250,
-      "x": 12510,
-      "y": 20710
+      "x": 8340,
+      "y": 4580
     },
-    "Themes-Settings-Account.dc.html": {
+    "Themes-Comment-Thread.dc.html": {
       "h": 844,
       "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Settings › Account and privacy",
+      "title": "Dark · OLED · Sepia — Comments · thread, reply",
       "w": 1250,
-      "x": 13900,
-      "y": 20710
+      "x": 4170,
+      "y": 4580
     },
-    "Themes-Legal-Notices.dc.html": {
+    "Themes-Comments.dc.html": {
       "h": 844,
       "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Settings › About › Legal notices",
+      "title": "Dark · OLED · Sepia — Comments",
       "w": 1250,
-      "x": 15290,
-      "y": 20710
+      "x": 2780,
+      "y": 4580
     },
     "Themes-Downloaded-Date.dc.html": {
       "h": 844,
@@ -2563,13 +1869,85 @@
       "x": 16680,
       "y": 20710
     },
-    "Themes-Local-Destination.dc.html": {
+    "Themes-Edit-Shelves.dc.html": {
       "h": 844,
       "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Import › Where to put it (sheet)",
+      "title": "Dark · OLED · Sepia — Library › Edit Shelves (sheet)",
       "w": 1250,
-      "x": 18070,
-      "y": 20710
+      "x": 4170,
+      "y": 14470
+    },
+    "Themes-Fandom-Works.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Browse · fandom works",
+      "w": 1250,
+      "x": 5560,
+      "y": 2300
+    },
+    "Themes-Fandoms.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Browse · fandom index",
+      "w": 1250,
+      "x": 4170,
+      "y": 2300
+    },
+    "Themes-Filter-Language.dc.html": {
+      "h": 1000,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Search filters › Language",
+      "w": 1250,
+      "x": 13900,
+      "y": 15870
+    },
+    "Themes-Filter-Tags.dc.html": {
+      "h": 900,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Search filters › Tags",
+      "w": 1250,
+      "x": 15290,
+      "y": 15870
+    },
+    "Themes-History-Month.dc.html": {
+      "h": 900,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Reading History · Month",
+      "w": 1250,
+      "x": 15290,
+      "y": 14470
+    },
+    "Themes-History-Year.dc.html": {
+      "h": 900,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Reading History · Year",
+      "w": 1250,
+      "x": 16680,
+      "y": 14470
+    },
+    "Themes-Home-Launchpad.dc.html": {
+      "h": 1600,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Home · launchpad, profile button",
+      "w": 1250,
+      "x": 0,
+      "y": 11920
+    },
+    "Themes-Inbox-Filter.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Inbox › Filter (sheet)",
+      "w": 1250,
+      "x": 6950,
+      "y": 15870
+    },
+    "Themes-Inbox.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Inbox",
+      "w": 1250,
+      "x": 6950,
+      "y": 8600
     },
     "Themes-Insights-Habits.dc.html": {
       "h": 2200,
@@ -2619,13 +1997,21 @@
       "x": 1390,
       "y": 22154
     },
-    "Library-Edit.dc.html": {
+    "Themes-Insights.dc.html": {
       "h": 844,
-      "page": "iphone",
-      "title": "Library › Edit (sheet over Library)",
-      "w": 390,
-      "x": 4700,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Reading Insights · first screen (all screens on the Reading Insights page)",
+      "w": 1250,
+      "x": 9730,
       "y": 0
+    },
+    "Themes-Legal-Notices.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Settings › About › Legal notices",
+      "w": 1250,
+      "x": 15290,
+      "y": 20710
     },
     "Themes-Library-Edit.dc.html": {
       "h": 844,
@@ -2635,21 +2021,693 @@
       "x": 13900,
       "y": 0
     },
-    "Search-Sort.dc.html": {
-      "h": 1240,
-      "page": "iphone",
-      "title": "Search filters › Sort By (AO3 sorts and computed ratios)",
-      "w": 390,
-      "x": 2820,
-      "y": 2300
+    "Themes-Library-Filters.dc.html": {
+      "h": 1400,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Library · filters",
+      "w": 1250,
+      "x": 4170,
+      "y": 0
     },
-    "Themes-Search-Sort.dc.html": {
+    "Themes-Library-Organize.dc.html": {
       "h": 1240,
       "page": "themes-all",
-      "title": "Dark · OLED · Sepia — Search filters › Sort By (AO3 sorts and computed ratios)",
+      "title": "Dark · OLED · Sepia — Library · organise, shelf tiles, On AO3",
+      "w": 1250,
+      "x": 1390,
+      "y": 11920
+    },
+    "Themes-Library-Section.dc.html": {
+      "h": 1000,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Library · Reading History timeline",
+      "w": 1250,
+      "x": 2780,
+      "y": 0
+    },
+    "Themes-Library-Select.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Library · select mode",
+      "w": 1250,
+      "x": 12510,
+      "y": 0
+    },
+    "Themes-Library.dc.html": {
+      "h": 1560,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Library",
+      "w": 1250,
+      "x": 1390,
+      "y": 0
+    },
+    "Themes-Local-Destination.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Import › Where to put it (sheet)",
+      "w": 1250,
+      "x": 18070,
+      "y": 20710
+    },
+    "Themes-Login.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Log in to AO3",
+      "w": 1250,
+      "x": 2780,
+      "y": 8600
+    },
+    "Themes-Main.dc.html": {
+      "h": 2080,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Home",
+      "w": 1250,
+      "x": 0,
+      "y": 0
+    },
+    "Themes-My-Works.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Works · Series · Drafts",
+      "w": 1250,
+      "x": 8340,
+      "y": 8600
+    },
+    "Themes-Onboarding.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Welcome",
+      "w": 1250,
+      "x": 6950,
+      "y": 10520
+    },
+    "Themes-Open-AO3.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Account › Open AO3",
+      "w": 1250,
+      "x": 5560,
+      "y": 15870
+    },
+    "Themes-Post-CollectionsGifts.dc.html": {
+      "h": 880,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Post a work › Collections and gifts",
+      "w": 1250,
+      "x": 12510,
+      "y": 17370
+    },
+    "Themes-Post-Creators.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Post a work › Co-creators",
+      "w": 1250,
+      "x": 8340,
+      "y": 17370
+    },
+    "Themes-Post-Parent.dc.html": {
+      "h": 900,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Post a work › Inspired by",
+      "w": 1250,
+      "x": 11120,
+      "y": 17370
+    },
+    "Themes-Post-Series.dc.html": {
+      "h": 940,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Post a work › Series",
+      "w": 1250,
+      "x": 9730,
+      "y": 17370
+    },
+    "Themes-Post-Tags.dc.html": {
+      "h": 1300,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Post a work › Tags",
+      "w": 1250,
+      "x": 6950,
+      "y": 17370
+    },
+    "Themes-Privacy.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Privacy and local data",
+      "w": 1250,
+      "x": 5560,
+      "y": 10520
+    },
+    "Themes-Prompt-Meme.dc.html": {
+      "h": 980,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Challenge › Prompt meme",
+      "w": 1250,
+      "x": 12510,
+      "y": 19070
+    },
+    "Themes-Prompt-Tags.dc.html": {
+      "h": 1060,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Challenge › Prompt tags (maintainer)",
+      "w": 1250,
+      "x": 13900,
+      "y": 19070
+    },
+    "Themes-Queue-Edit.dc.html": {
+      "h": 1000,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Queue › Edit Queue (sheet)",
+      "w": 1250,
+      "x": 11120,
+      "y": 14470
+    },
+    "Themes-Queue-Manage.dc.html": {
+      "h": 1000,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Queue · swipe and drag",
+      "w": 1250,
+      "x": 5560,
+      "y": 11920
+    },
+    "Themes-Queue-Tags.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Queues › Manage Tags",
+      "w": 1250,
+      "x": 12510,
+      "y": 14470
+    },
+    "Themes-Queue.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Reading Queue",
+      "w": 1250,
+      "x": 5560,
+      "y": 0
+    },
+    "Themes-Queues.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Queues · organizer, new queue",
+      "w": 1250,
+      "x": 6950,
+      "y": 0
+    },
+    "Themes-Read-Aloud-Settings.dc.html": {
+      "h": 1100,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Read Aloud settings",
+      "w": 1250,
+      "x": 9730,
+      "y": 7080
+    },
+    "Themes-Reader-Contents.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Reader · contents, bookmarks, notes",
+      "w": 1250,
+      "x": 2780,
+      "y": 7080
+    },
+    "Themes-Reader-CustomizeTheme.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Reader › Customize Theme",
+      "w": 1250,
+      "x": 1390,
+      "y": 20710
+    },
+    "Themes-Reader-End.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Reader · end of the work",
+      "w": 1250,
+      "x": 11120,
+      "y": 7080
+    },
+    "Themes-Reader-Find.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Reader · find in work",
+      "w": 1250,
+      "x": 4170,
+      "y": 7080
+    },
+    "Themes-Reader-Highlight.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Reader · highlight and note",
+      "w": 1250,
+      "x": 5560,
+      "y": 7080
+    },
+    "Themes-Reader-Menu.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Reader · menu, top row",
+      "w": 1250,
+      "x": 1390,
+      "y": 7080
+    },
+    "Themes-Reader-PageJump.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Reader › Go to Page (sheet)",
+      "w": 1250,
+      "x": 0,
+      "y": 20710
+    },
+    "Themes-Reader-Pronunciation.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Read Aloud › Pronunciations",
+      "w": 1250,
+      "x": 2780,
+      "y": 20710
+    },
+    "Themes-Reader-ReadAloud.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Reader · Read Aloud playing",
+      "w": 1250,
+      "x": 8340,
+      "y": 7080
+    },
+    "Themes-Reader-Settings.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Reader · themes and settings",
+      "w": 1250,
+      "x": 6950,
+      "y": 7080
+    },
+    "Themes-Recently-Deleted.dc.html": {
+      "h": 1000,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Recently Deleted · days left, can’t-re-download notes",
+      "w": 1250,
+      "x": 11120,
+      "y": 0
+    },
+    "Themes-Search-Filters.dc.html": {
+      "h": 2260,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Search · AO3 filters",
+      "w": 1250,
+      "x": 1390,
+      "y": 2300
+    },
+    "Themes-Search-Save.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Search › Save Search (sheet)",
+      "w": 1250,
+      "x": 12510,
+      "y": 15870
+    },
+    "Themes-Search-Saved.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Search › Saved Searches",
+      "w": 1250,
+      "x": 11120,
+      "y": 15870
+    },
+    "Themes-Search-Sort.dc.html": {
+      "h": 1840,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Search filters › Sort By (Ways to Find, AO3 order, Kudos ranking)",
       "w": 1250,
       "x": 8340,
       "y": 2300
+    },
+    "Themes-Search.dc.html": {
+      "h": 1240,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Search",
+      "w": 1250,
+      "x": 0,
+      "y": 2300
+    },
+    "Themes-Series-Edit.dc.html": {
+      "h": 1100,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Writing › Edit Series",
+      "w": 1250,
+      "x": 13900,
+      "y": 17370
+    },
+    "Themes-Series-SavePrompt.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Work › Save the whole series? (sheet)",
+      "w": 1250,
+      "x": 9730,
+      "y": 15870
+    },
+    "Themes-Series.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Series",
+      "w": 1250,
+      "x": 6950,
+      "y": 4580
+    },
+    "Themes-Settings-Account.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Settings › Account and privacy",
+      "w": 1250,
+      "x": 13900,
+      "y": 20710
+    },
+    "Themes-Settings-Appearance.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Settings · appearance and fonts",
+      "w": 1250,
+      "x": 1390,
+      "y": 10520
+    },
+    "Themes-Settings-Backup-Sync.dc.html": {
+      "h": 1100,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Settings · backup, sync, import",
+      "w": 1250,
+      "x": 2780,
+      "y": 10520
+    },
+    "Themes-Settings-Library.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Settings › Library",
+      "w": 1250,
+      "x": 9730,
+      "y": 20710
+    },
+    "Themes-Settings-Preservation.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Settings › Preservation",
+      "w": 1250,
+      "x": 11120,
+      "y": 20710
+    },
+    "Themes-Settings-Queues.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Settings › Reading Queues",
+      "w": 1250,
+      "x": 12510,
+      "y": 20710
+    },
+    "Themes-Settings-Storage.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Settings · downloads and storage",
+      "w": 1250,
+      "x": 4170,
+      "y": 10520
+    },
+    "Themes-Settings.dc.html": {
+      "h": 1240,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Settings",
+      "w": 1250,
+      "x": 0,
+      "y": 10520
+    },
+    "Themes-Shelf-Grid.dc.html": {
+      "h": 1000,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Library › Finished (grid)",
+      "w": 1250,
+      "x": 1390,
+      "y": 14470
+    },
+    "Themes-Shelf-List.dc.html": {
+      "h": 1000,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Library › Finished (list)",
+      "w": 1250,
+      "x": 0,
+      "y": 14470
+    },
+    "Themes-Shelf-ReadingNow.dc.html": {
+      "h": 1000,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Library › Reading Now",
+      "w": 1250,
+      "x": 2780,
+      "y": 14470
+    },
+    "Themes-Subscriptions-Series.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Subscriptions › Series",
+      "w": 1250,
+      "x": 1390,
+      "y": 15870
+    },
+    "Themes-Subscriptions-Tags.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Subscriptions › Tags (followed in Kudos)",
+      "w": 1250,
+      "x": 2780,
+      "y": 15870
+    },
+    "Themes-Subscriptions-Works.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Subscriptions › Works",
+      "w": 1250,
+      "x": 0,
+      "y": 15870
+    },
+    "Themes-Subscriptions.dc.html": {
+      "h": 900,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Subscriptions · Updates (works, series, authors, tags)",
+      "w": 1250,
+      "x": 5560,
+      "y": 8600
+    },
+    "Themes-Sync-Devices.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Settings › Synced devices",
+      "w": 1250,
+      "x": 5560,
+      "y": 20710
+    },
+    "Themes-Sync-Onboarding.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Protect your library",
+      "w": 1250,
+      "x": 8340,
+      "y": 10520
+    },
+    "Themes-Sync-Pair.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Settings › Add a Device (sheet)",
+      "w": 1250,
+      "x": 4170,
+      "y": 20710
+    },
+    "Themes-Work-Actions.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Work Detail · actions menu, top row",
+      "w": 1250,
+      "x": 1390,
+      "y": 4580
+    },
+    "Themes-Work-AddTo.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Work menu · Add to queue or collection",
+      "w": 1250,
+      "x": 4170,
+      "y": 11920
+    },
+    "Themes-Work-Editor.dc.html": {
+      "h": 1500,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Post or edit a work",
+      "w": 1250,
+      "x": 9730,
+      "y": 8600
+    },
+    "Themes-Work-Preview.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Long-press preview of a work",
+      "w": 1250,
+      "x": 18070,
+      "y": 14470
+    },
+    "Themes-Writing-Chapters.dc.html": {
+      "h": 980,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Writing › a work’s chapters",
+      "w": 1250,
+      "x": 4170,
+      "y": 17370
+    },
+    "Themes-Writing-Drafts.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Writing › Drafts",
+      "w": 1250,
+      "x": 1390,
+      "y": 17370
+    },
+    "Themes-Writing-Series.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Writing › Series",
+      "w": 1250,
+      "x": 2780,
+      "y": 17370
+    },
+    "Themes-Writing-Stats.dc.html": {
+      "h": 1170,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Writing › Stats",
+      "w": 1250,
+      "x": 0,
+      "y": 17370
+    },
+    "Themes-Writing.dc.html": {
+      "h": 1950,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Writing tab",
+      "w": 1250,
+      "x": 2780,
+      "y": 11920
+    },
+    "Themes-iPhone-Reader.dc.html": {
+      "h": 844,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Reader",
+      "w": 1250,
+      "x": 0,
+      "y": 7080
+    },
+    "Themes-iPhone-WorkDetail.dc.html": {
+      "h": 2080,
+      "page": "themes-all",
+      "title": "Dark · OLED · Sepia — Work Detail",
+      "w": 1250,
+      "x": 0,
+      "y": 4580
+    },
+    "Themes.dc.html": {
+      "h": 2880,
+      "page": "variants",
+      "title": "Sepia, Dark and OLED",
+      "w": 1400,
+      "x": 0,
+      "y": 0
+    },
+    "Work-Actions.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Work Detail · actions menu, top row",
+      "w": 390,
+      "x": 470,
+      "y": 4580
+    },
+    "Work-AddTo.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Work menu · Add to queue or collection",
+      "w": 390,
+      "x": 1410,
+      "y": 11920
+    },
+    "Work-Editor.dc.html": {
+      "h": 1500,
+      "page": "iphone",
+      "title": "Post or edit a work",
+      "w": 390,
+      "x": 3290,
+      "y": 8600
+    },
+    "Work-Preview.dc.html": {
+      "h": 844,
+      "page": "subscreens",
+      "title": "Long-press preview of a work",
+      "w": 390,
+      "x": 6110,
+      "y": 300
+    },
+    "WorkRow.dc.html": {
+      "h": 112,
+      "page": "system",
+      "title": "Work row (component)",
+      "w": 390,
+      "x": 1360,
+      "y": 306
+    },
+    "Writing-Chapters.dc.html": {
+      "h": 980,
+      "page": "subscreens",
+      "title": "Writing › a work’s chapters",
+      "w": 390,
+      "x": 1410,
+      "y": 3200
+    },
+    "Writing-Drafts.dc.html": {
+      "h": 844,
+      "page": "subscreens",
+      "title": "Writing › Drafts",
+      "w": 390,
+      "x": 470,
+      "y": 3200
+    },
+    "Writing-Series.dc.html": {
+      "h": 844,
+      "page": "subscreens",
+      "title": "Writing › Series",
+      "w": 390,
+      "x": 940,
+      "y": 3200
+    },
+    "Writing-Stats.dc.html": {
+      "h": 1170,
+      "page": "subscreens",
+      "title": "Writing › Stats",
+      "w": 390,
+      "x": 0,
+      "y": 3200
+    },
+    "Writing.dc.html": {
+      "h": 1950,
+      "page": "iphone",
+      "title": "Writing tab",
+      "w": 390,
+      "x": 940,
+      "y": 11920
+    },
+    "iPhone-Reader.dc.html": {
+      "h": 844,
+      "page": "iphone",
+      "title": "Reader",
+      "w": 390,
+      "x": 0,
+      "y": 7080
+    },
+    "iPhone-WorkDetail.dc.html": {
+      "h": 2080,
+      "page": "iphone",
+      "title": "Work Detail",
+      "w": 390,
+      "x": 0,
+      "y": 4580
     }
   },
   "createdOnFiles": {
@@ -2675,23 +2733,28 @@
     "rowWork",
     "whyDuo",
     "whyIphone",
-    "note-47ewmx",
     "rowInsightsScreens",
     "rowInsightsSpec",
     "themesAllIphone",
     "themesAllSubscreens",
-    "themesAllInsights"
+    "themesAllInsights",
+    "rowSubLibrary",
+    "rowSubAO3",
+    "rowSubWriting",
+    "rowSubCollections",
+    "rowSubSettings",
+    "rowSubReadAloud",
+    "rowQualityScreens",
+    "qualityWhere"
   ],
   "notes": {
-    "note-47ewmx": {
-      "bold": false,
-      "kind": "title1",
-      "page": "iphone",
-      "size": 24,
-      "text": "",
-      "w": 240,
-      "x": -1114,
-      "y": 8007
+    "qualityWhere": {
+      "fill": "gray",
+      "page": "quality",
+      "text": "Sort By with Ways to Find is on the iPhone page, in the Search & Browse row. The full method, sources and build plan: Design/redesign/notes/quality-signals-spec.md.",
+      "w": 860,
+      "x": 0,
+      "y": 1360
     },
     "rowAccount": {
       "kind": "title1",
@@ -2774,6 +2837,14 @@
       "x": 0,
       "y": 2976
     },
+    "rowQualityScreens": {
+      "kind": "title1",
+      "maxW": 3160,
+      "page": "quality",
+      "text": "Reader Response: quality signals in Search",
+      "x": 0,
+      "y": -300
+    },
     "rowReader": {
       "kind": "title1",
       "maxW": 4150,
@@ -2791,6 +2862,60 @@
       "w": 240,
       "x": 0,
       "y": 10220
+    },
+    "rowSubAO3": {
+      "kind": "title1",
+      "maxW": 5560,
+      "page": "subscreens",
+      "text": "Subscriptions, search and your AO3 account",
+      "w": 240,
+      "x": 0,
+      "y": 1440
+    },
+    "rowSubCollections": {
+      "kind": "title1",
+      "maxW": 5090,
+      "page": "subscreens",
+      "text": "AO3 collections and challenges",
+      "w": 240,
+      "x": 0,
+      "y": 4640
+    },
+    "rowSubLibrary": {
+      "kind": "title1",
+      "maxW": 6500,
+      "page": "subscreens",
+      "text": "Library and organising",
+      "w": 240,
+      "x": 0,
+      "y": 40
+    },
+    "rowSubReadAloud": {
+      "kind": "title1",
+      "maxW": 1290,
+      "page": "subscreens",
+      "text": "Read Aloud anywhere",
+      "w": 240,
+      "x": 0,
+      "y": 7524
+    },
+    "rowSubSettings": {
+      "kind": "title1",
+      "maxW": 6500,
+      "page": "subscreens",
+      "text": "Reader, sync and settings",
+      "w": 240,
+      "x": 0,
+      "y": 6280
+    },
+    "rowSubWriting": {
+      "kind": "title1",
+      "maxW": 5090,
+      "page": "subscreens",
+      "text": "Writing",
+      "w": 240,
+      "x": 0,
+      "y": 2940
     },
     "rowSystem": {
       "kind": "title1",
@@ -2810,6 +2935,33 @@
       "x": 0,
       "y": 4280
     },
+    "themesAllInsights": {
+      "kind": "title1",
+      "maxW": 8000,
+      "page": "themes-all",
+      "text": "Dark · OLED · Sepia — Reading Insights",
+      "w": 240,
+      "x": 0,
+      "y": 21894
+    },
+    "themesAllIphone": {
+      "kind": "title1",
+      "maxW": 8000,
+      "page": "themes-all",
+      "text": "Dark · OLED · Sepia — iPhone screens",
+      "w": 240,
+      "x": 0,
+      "y": -260
+    },
+    "themesAllSubscreens": {
+      "kind": "title1",
+      "maxW": 8000,
+      "page": "themes-all",
+      "text": "Dark · OLED · Sepia — Subscreens",
+      "w": 240,
+      "x": 0,
+      "y": 14210
+    },
     "whyDuo": {
       "fill": "blue",
       "page": "duo",
@@ -2824,78 +2976,6 @@
       "w": 380,
       "x": 4700,
       "y": 0
-    },
-    "rowSubLibrary": {
-      "x": 0,
-      "y": 40,
-      "text": "Library and organising",
-      "kind": "title1",
-      "page": "subscreens",
-      "maxW": 6500
-    },
-    "rowSubAO3": {
-      "x": 0,
-      "y": 1440,
-      "text": "Subscriptions, search and your AO3 account",
-      "kind": "title1",
-      "page": "subscreens",
-      "maxW": 5560
-    },
-    "rowSubWriting": {
-      "x": 0,
-      "y": 2940,
-      "text": "Writing",
-      "kind": "title1",
-      "page": "subscreens",
-      "maxW": 5090
-    },
-    "rowSubCollections": {
-      "x": 0,
-      "y": 4640,
-      "text": "AO3 collections and challenges",
-      "kind": "title1",
-      "page": "subscreens",
-      "maxW": 5090
-    },
-    "rowSubSettings": {
-      "x": 0,
-      "y": 6280,
-      "text": "Reader, sync and settings",
-      "kind": "title1",
-      "page": "subscreens",
-      "maxW": 6500
-    },
-    "rowSubReadAloud": {
-      "x": 0,
-      "y": 7524,
-      "text": "Read Aloud anywhere",
-      "kind": "title1",
-      "page": "subscreens",
-      "maxW": 1290
-    },
-    "themesAllIphone": {
-      "x": 0,
-      "y": -260,
-      "text": "Dark · OLED · Sepia — iPhone screens",
-      "kind": "title1",
-      "page": "themes-all",
-      "maxW": 12000
-    },
-    "themesAllSubscreens": {
-      "x": 0,
-      "y": 14210,
-      "text": "Dark · OLED · Sepia — Subscreens",
-      "kind": "title1",
-      "page": "themes-all",
-      "maxW": 12000
-    },
-    "themesAllInsights": {
-      "x": 0,
-      "y": 21894,
-      "text": "Dark · OLED · Sepia — Reading Insights",
-      "kind": "title1",
-      "page": "themes-all",
-      "maxW": 12000
     }
   },
   "order": [
@@ -3229,7 +3309,15 @@
     "Library-Edit.dc.html",
     "Themes-Library-Edit.dc.html",
     "Search-Sort.dc.html",
-    "Themes-Search-Sort.dc.html"
+    "Themes-Search-Sort.dc.html",
+    "Skin-Dark.dc.html",
+    "Skin-OLED.dc.html",
+    "Skin-Sepia.dc.html",
+    "Quality-Results.dc.html",
+    "Quality-WIPs.dc.html",
+    "Quality-Response.dc.html",
+    "Quality-Method.dc.html",
+    "Quality-RankDeeper.dc.html"
   ],
   "pages": [
     {
@@ -3279,6 +3367,10 @@
     {
       "id": "themes-all",
       "name": "Dark · OLED · Sepia"
+    },
+    {
+      "id": "quality",
+      "name": "Reader Response"
     }
   ],
   "title": "Kudos for iPhone Duo"

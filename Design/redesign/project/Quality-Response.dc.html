@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Work › Reader Response (sheet)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 1240px; position: relative; overflow: hidden">
+  <dc-import name="FormScreen" title="Reader Response" mode="sheet" height="1240" context="{{context}}" stats="{{stats}}" sections="{{sections}}" hint-size="390px,1240px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1240}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+  "context": {
+    "kicker": "Hidden Gems · 1st of 40 loaded",
+    "kickerColour": "#990000",
+    "title": "Keeper of the Northern Light",
+    "meta": "saltwindow · 22,410 words · 7/7 · complete",
+    "cover": "linear-gradient(155deg, hsl(188, 46%, 27%), hsl(210, 50%, 41%))"
+  },
+  "stats": [
+    {
+      "n": "2.4×",
+      "label": "Kudos per hit vs similar",
+      "colour": "#990000"
+    },
+    {
+      "n": "1,804",
+      "label": "Kudos"
+    },
+    {
+      "n": "19.2k",
+      "label": "Hits"
+    },
+    {
+      "n": "26%",
+      "label": "Saved"
+    }
+  ],
+  "sections": [
+    {
+      "header": "Kudos per Hit",
+      "rows": [
+        {
+          "label": "This work",
+          "sub": "1,804 kudos ÷ 19,200 hits",
+          "detail": "9.4%",
+          "kind": "info",
+          "bar": 100,
+          "barColour": "#990000"
+        },
+        {
+          "label": "Similar works",
+          "sub": "6 to 10 chapters · 15,000 to 30,000 words · complete · posted 2026",
+          "detail": "3.9%",
+          "kind": "info",
+          "bar": 41,
+          "barColour": "#AEAEB2"
+        }
+      ],
+      "footer": "AO3 counts one hit per reader per day, so long and serialized works collect more hits for each reader. Similar works share this one’s length, chapters, status and year."
+    },
+    {
+      "header": "How Sure",
+      "rows": [
+        {
+          "label": "Confidence",
+          "sub": "Thousands of readers; the figure is unlikely to move much",
+          "badge": "Steady",
+          "kind": "info",
+          "badgeBg": "#E3F1E6",
+          "badgeFg": "#1E6B34"
+        },
+        {
+          "label": "Cautious estimate",
+          "sub": "What the ranking uses",
+          "detail": "2.3×",
+          "kind": "info"
+        }
+      ]
+    },
+    {
+      "header": "Other Signals",
+      "rows": [
+        {
+          "label": "Saves per kudos",
+          "sub": "Similar works 14% · public bookmarks only",
+          "detail": "26%",
+          "kind": "info"
+        },
+        {
+          "label": "Comments per kudos",
+          "sub": "Similar works 3.0% · replies included",
+          "detail": "4.1%",
+          "kind": "info"
+        },
+        {
+          "label": "Momentum",
+          "sub": "Since you last saw it, 9 days ago",
+          "detail": "+46 kudos",
+          "kind": "info"
+        }
+      ]
+    },
+    {
+      "header": "Dates",
+      "rows": [
+        {
+          "label": "Posted",
+          "sub": "Estimated from the work’s number on AO3",
+          "detail": "About Mar 2026",
+          "kind": "info"
+        },
+        {
+          "label": "Last chapter",
+          "detail": "Oct 12",
+          "kind": "info"
+        }
+      ]
+    },
+    {
+      "rows": [
+        {
+          "label": "How Reader Response Works",
+          "kind": "nav",
+          "icon": "M12 3.5a8.5 8.5 0 1 1 0 17 8.5 8.5 0 0 1 0-17zM9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7M12 16.8v.1",
+          "iconColour": "#990000"
+        }
+      ]
+    }
+  ]
+};
+  }
+}
+</script>
+</body>
+</html>

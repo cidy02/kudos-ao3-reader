@@ -45,10 +45,16 @@ add('Search-Saved','Search › Saved Searches','ListScreen',{'title':'Saved Sear
   {'title':'Holmes casefic under 20k','sub':'Sherlock Holmes · Gen · under 20,000 words','tone':'#990000','glyph':I['tag'],'square':True,'badge':'3 new'},
   {'title':'Lighthouses (any fandom)','sub':'Freeform tag · English','tone':'#990000','glyph':I['tag'],'square':True},
   {'title':'“epistolary” in summaries','sub':'Text search · Teen and below','tone':'#990000','glyph':'M10.5 4a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM15.5 15.5l5 5','square':True}]}]})
-# Sort: AO3's own columns, then ratios Kudos computes from figures AO3 already shows.
+# Sort: ways to find (each sets both lists), AO3's own columns, then how Kudos ranks
+# the works already loaded. Method and sources: notes/quality-signals-spec.md.
 add('Search-Sort','Search filters › Sort By','FormScreen',{'title':'Sort By','back':'Back to Filters'},{
  'sections':[
-  {'header':'From AO3','rows':[{'label':l,'kind':'check','on':False,'tile':t,'icon':d} for l,t,d in [
+  {'header':'Ways to Find','rows':[
+   {'label':'Reader Favourites','sub':'Most kudos on AO3, at least 1,000 hits','kind':'check','tile':'#990000','icon':'M12 20s-7.5-4.6-7.5-10.2A4.2 4.2 0 0 1 12 7.2a4.2 4.2 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20z'},
+   {'label':'New and Loved','sub':'Posted in the last 6 months, most kudos first','kind':'check','tile':'#E07000','icon':'M5 6h14v14H5zM5 10h14M9 3.5v4M15 3.5v4'},
+   {'label':'Hidden Gems','sub':'300 to 5,000 hits, most kudos first','kind':'check','on':True,'tile':'#5856D6','icon':'M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8zM18 15l.8 2.2 2.2.8-2.2.8L18 21l-.8-2.2-2.2-.8 2.2-.8z'},
+   {'label':'Active WIPs','sub':'Updated in the last 60 days, on schedule first','kind':'check','tile':'#2F8F3A','icon':'M12 4a8 8 0 1 1 0 16 8 8 0 0 1 0-16zM12 8v4l3 2'}]},
+  {'header':'Load from AO3 by','footer':'Hidden Gems adds “hits 300 to 5,000” to the search AO3 runs.','rows':[{'label':l,'kind':'check','on':l=='Kudos','tile':t,'icon':d} for l,t,d in [
    ('Best Match','#1E63C8','M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8zM18 15l.8 2.2 2.2.8-2.2.8L18 21l-.8-2.2-2.2-.8 2.2-.8z'),
    ('Date Updated','#E07000','M4 12a8 8 0 1 0 2.3-5.6M4 4v4h4M12 8v4l3 2'),
    ('Date Posted','#E07000','M5 6h14v14H5zM5 10h14M9 3.5v4M15 3.5v4'),
@@ -59,16 +65,20 @@ add('Search-Sort','Search filters › Sort By','FormScreen',{'title':'Sort By','
    ('Kudos','#990000','M12 20s-7.5-4.6-7.5-10.2A4.2 4.2 0 0 1 12 7.2a4.2 4.2 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20z'),
    ('Comments','#2F8F3A','M4 5h16v11H9l-5 4z'),
    ('Bookmarks','#C25E00','M7 4h10v16l-5-4-5 4z')]]},
-  {'header':'Computed in Kudos','rows':[
-   {'label':'Kudos per Hit','sub':'Kudos ÷ hits','meta':'Top loaded result: 14.2%','metaColour':'#990000','kind':'check','on':True,'tile':'#990000','icon':'M12 20s-7.5-4.6-7.5-10.2A4.2 4.2 0 0 1 12 7.2a4.2 4.2 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20z'},
-   {'label':'Comments per Hit','sub':'Comment threads ÷ hits','kind':'check','tile':'#2F8F3A','icon':'M4 5h16v11H9l-5 4z'},
-   {'label':'Bookmarks per Hit','sub':'Bookmarks ÷ hits','kind':'check','tile':'#C25E00','icon':'M7 4h10v16l-5-4-5 4z'},
-   {'label':'Kudos per 1,000 Words','sub':'Kudos ÷ word count × 1,000','kind':'check','tile':'#5856D6','icon':'M5 6h14M5 12h14M5 18h9'}],
-   'footer':'Ranks the results already loaded. More load as you scroll; Kudos never fetches pages just to rank them.'},
-  {'header':'Ratios','rows':[
-   {'label':'Leave out works under','kind':'value','detail':'500 hits','sub':'A handful of hits makes any ratio look high'},
-   {'label':'Show the ratio on each result','kind':'toggle','on':True}]},
-  {'rows':[{'label':'Order','kind':'segments','options':['Highest First','Lowest First'],'selected':0}]}]},1240)
+  {'header':'Then Rank Loaded Works by','rows':[
+   {'label':'AO3’s Order','sub':'As AO3 sent them','kind':'check','tile':'#6C6C70','icon':'M4 6h16M4 12h16M4 18h16'},
+   {'label':'Kudos per Hit, Adjusted','sub':'Against works of the same length, chapters and age','meta':'Top loaded result: 2.4× typical','metaColour':'#990000','kind':'check','on':True,'tile':'#990000','icon':'M12 20s-7.5-4.6-7.5-10.2A4.2 4.2 0 0 1 12 7.2a4.2 4.2 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20z'},
+   {'label':'Saves per Kudos','sub':'Public bookmarks ÷ kudos','kind':'check','tile':'#C25E00','icon':'M7 4h10v16l-5-4-5 4z'},
+   {'label':'Comments per Kudos','sub':'Comments, replies included, ÷ kudos','kind':'check','tile':'#2F8F3A','icon':'M4 5h16v11H9l-5 4z'},
+   {'label':'Momentum','sub':'Kudos gained since you last saw each work','kind':'check','tile':'#1E63C8','icon':'M4 16l5-5 4 4 7-7M15 8h5v5'},
+   {'label':'Kudos per 1,000 Words','sub':'Kudos ÷ word count × 1,000','kind':'check','tile':'#7B3FA0','icon':'M5 6h14M5 12h14M5 18h9'}],
+   'footer':'Ranks the works already loaded. More load as you scroll, or up to 100 at once with Rank Top 100.'},
+  {'header':'Ranking','rows':[
+   {'label':'Rank cautiously','kind':'toggle','on':True,'sub':'Works with few readers need more kudos to rank high'},
+   {'label':'Set aside unusual stats','kind':'toggle','on':True,'sub':'More kudos than hits, or thousands of kudos and almost no bookmarks'},
+   {'label':'Leave out works under','kind':'value','detail':'300 hits','sub':'Sent to AO3 with the search, so pages stay full'},
+   {'label':'Show the signal on each result','kind':'toggle','on':True}]},
+  {'rows':[{'label':'Order','kind':'segments','options':['Highest First','Lowest First'],'selected':0}]}]},1840)
 add('Search-Save','Search › Save Search (sheet)','FormScreen',{'title':'Save Search','mode':'sheet','confirm':'Save'},{
  'sections':[{'header':'Name','rows':[{'kind':'field','text':'Persuasion · Anne/Wentworth · complete'}]},
   {'header':'This search','rows':[{'label':'Filters','kind':'chips','chips':['Persuasion','Anne/Wentworth','Complete','Kudos ↓']}]},
