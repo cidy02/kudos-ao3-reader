@@ -44,9 +44,6 @@ struct LibrarySectionListView: View {
     @State private var expandAll = false
     @State private var isSelecting: Bool
     @State private var selection: Set<UUID>
-    /// Spec 1ah/1ai's Time / State / Fandom / Flat strip. Persisted like
-    /// `displayMode`, and only ever shown for History — see `showsGroupingStrip`.
-    @AppStorage("library.history.grouping") private var historyGrouping: LibraryHistoryGrouping = .time
     /// Spec 1aj/1ak/1bc/1bd's Works / Authors / Fandoms / Tags strip, and the order
     /// its three aggregate scopes are ranked by. Favorites only.
     @AppStorage("library.favorites.scope") private var favoriteScope: FavoriteScope = .works
@@ -275,7 +272,9 @@ struct LibrarySectionListView: View {
             }
         } else {
             Group {
-                if displayMode != .compact || !allowedDisplayModes.contains(.compact) {
+                if kind == .history, !visibleItems.isEmpty {
+                    historyTimeline
+                } else if displayMode != .compact || !allowedDisplayModes.contains(.compact) {
                     detailedList
                 } else {
                     compactGrid
@@ -303,11 +302,6 @@ struct LibrarySectionListView: View {
             return "\(count) \(count == 1 ? "work" : "works") · none match the current filters"
         }
         let workCount = visibleItems.count
-        if showsGroupingStrip {
-            return LibraryHistoryGrouping.tallyLine(
-                workCount: workCount, grouping: historyGrouping, buckets: groupedItems
-            )
-        }
         let tally = "\(workCount) \(workCount == 1 ? "work" : "works")"
         // A filter brings its own sort (`visibleItems`), so the section's order
         // is only true while none is on.
@@ -628,40 +622,44 @@ struct LibrarySectionListView: View {
         )
     }
 
-    /// Only History gets the grouping strip. The other six sections are already one
-    /// thing by definition — a Downloaded list grouped by state would be one bucket —
-    /// and spec 1ah/1ai draw the control on History alone.
-    private var showsGroupingStrip: Bool { kind == .history }
-
-    private var groupingStrip: some View {
-        SubjectSegmentedControl(
-            options: LibraryHistoryGrouping.allCases,
-            title: \.title,
-            selection: $historyGrouping
-        )
-        .padding(.horizontal, SubjectMetrics.gutter)
-    }
-
-    /// The visible works bucketed by the current grouping, or one unnamed group for
-    /// every other section.
-    private var groupedItems: [LibraryHistoryGrouping.Bucket] {
-        guard showsGroupingStrip else {
-            return visibleItems.isEmpty
-                ? []
-                : [LibraryHistoryGrouping.Bucket(title: kind.groupTitle, workIDs: visibleItems.map(\.id))]
-        }
-        return LibraryHistoryGrouping.groups(
-            historyGrouping,
+    /// T-462: History is the reading timeline, which replaced the Time / State /
+    /// Fandom / Flat strip. Selection, the swipes and their asks stay this page's,
+    /// and works the rail cannot place on a day keep this page's own row.
+    private var historyTimeline: some View {
+        // One fetch for every off-rail row's facts strip, not one per row.
+        let summaries = ReadingLogService.summaries(in: context)
+        return ReadingHistoryTimelineList(
             works: visibleItems,
-            isAbandoned: { ReadingLogService.isAbandoned(work: $0) }
+            isSelecting: isSelecting,
+            selection: $selection,
+            pendingDelete: $pendingDelete,
+            pendingRemoval: $pendingRemoval,
+            onSelect: { work in
+                isSelecting = true
+                selection = [work.id]
+            },
+            header: { subjectHeaderSection },
+            offTimelineRow: { work in
+                row(work, summary: summaries[work.id]).cardRow(
+                    isSelected: isSelecting && selection.contains(work.id),
+                    tintHue: rowTintHue(work)
+                )
+            }
         )
+        .subjectScreenWash(palette: scopePalette)
     }
 
-    /// 1ai's Abandoned section, and only there: under Time the same work sits
-    /// among the rest, and greying it — or offering an undo — would announce a
-    /// state that grouping does not show.
+    /// The visible works as one unnamed group. History draws its timeline instead.
+    private var groupedItems: [LibraryHistoryGrouping.Bucket] {
+        visibleItems.isEmpty
+            ? []
+            : [LibraryHistoryGrouping.Bucket(title: kind.groupTitle, workIDs: visibleItems.map(\.id))]
+    }
+
+    /// 1ai's Abandoned rows, which the timeline gathers into their own section
+    /// below the rail: greyed, with the way back to In progress.
     private func isAbandonedRow(_ work: SavedWork) -> Bool {
-        showsGroupingStrip && historyGrouping == .state && ReadingLogService.isAbandoned(work: work)
+        kind == .history && ReadingLogService.isAbandoned(work: work)
     }
 
     /// The fandom's hue, or none for an Abandoned row — 1ai drops those "to grey
@@ -698,7 +696,7 @@ struct LibrarySectionListView: View {
         // the `finishingSessions` query already holds, and it runs inside
         // `visibleItems` where a fetch would run many times per frame.
         let groups = groupedItems
-        let summaries = showsGroupingStrip || showsFavoriteWorks
+        let summaries = kind == .history || showsFavoriteWorks
             ? ReadingLogService.summaries(in: context)
             : [:]
         let byID = Dictionary(visibleItems.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
@@ -708,15 +706,6 @@ struct LibrarySectionListView: View {
             if showsFavoriteScopes {
                 Section {
                     favoriteScopeStrip(authorsReady: false)
-                        .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
-                }
-            }
-
-            if showsGroupingStrip {
-                Section {
-                    groupingStrip
                         .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
@@ -757,10 +746,8 @@ struct LibrarySectionListView: View {
     /// Apple Books-style two-up grid — the same cover cards every carousel already
     /// uses, wrapping down the page instead of scrolling horizontally.
     ///
-    /// Carries the same strips the list does — Favorites' scope control and
-    /// History's Time / State / Fandom / Flat — and draws History's buckets as one
-    /// grid each. Without them, choosing Compact stranded the reader: Favorites
-    /// could not leave the Works scope, and History's grouping had nowhere to show.
+    /// Carries Favorites' scope control as the list does: without it, choosing
+    /// Compact stranded the reader in the Works scope. History has no Compact.
     private var compactGrid: some View {
         let items = visibleItems
         return ScrollView {
@@ -769,9 +756,6 @@ struct LibrarySectionListView: View {
                 if hasFilterRailContent { filterChipRail }
                 if showsFavoriteScopes {
                     favoriteScopeStrip(authorsReady: false)
-                }
-                if showsGroupingStrip {
-                    groupingStrip
                 }
                 if items.isEmpty, filters.hasActiveFilters {
                     filterCollisionCard.padding(.horizontal, 16)
@@ -853,12 +837,12 @@ struct LibrarySectionListView: View {
     /// "0m · Read ×0" would be three pieces of furniture saying nothing.
     @ViewBuilder
     private func factsStrip(_ work: SavedWork, summary: WorkReadingSummary?) -> some View {
-        if let summary, summary.visitCount > 0, showsGroupingStrip || showsFavoriteWorks {
+        if let summary, summary.visitCount > 0, kind == .history || showsFavoriteWorks {
             ReadingHistoryFactsStrip(
                 summary: summary,
                 postedChapterCount: work.postedChapterCount,
                 palette: scopePalette,
-                style: showsGroupingStrip ? .history : .favorites
+                style: kind == .history ? .history : .favorites
             )
         }
     }
