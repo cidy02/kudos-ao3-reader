@@ -27,9 +27,28 @@ struct AuthorProfileOverviewHeader: View {
             Section {
                 VStack(alignment: .leading, spacing: 12) {
                     identityRow(header)
-                    if let about = model.about, !about.bio.isEmpty {
-                        AO3RichTextView(document: about.bio, font: .subheadline)
-                            .fixedSize(horizontal: false, vertical: true)
+                    if let about = model.about {
+                        if !about.profileTitle.isEmpty {
+                            Text(about.profileTitle)
+                                .font(.subheadline.weight(.medium))
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        if let userID = about.userID {
+                            LabeledContent("User ID", value: userID.formatted())
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        if !about.bio.isEmpty {
+                            AO3RichTextView(document: about.bio, font: .subheadline)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    } else if case let .failed(message) = model.contentPhase {
+                        AuthorProfileOverviewFailure(
+                            model: model,
+                            section: .about,
+                            title: "Couldn't load About",
+                            message: message
+                        )
                     }
                     if showsAccountActions {
                         actionRow(header)
@@ -189,9 +208,35 @@ struct AuthorProfileOverviewHeader: View {
     }
 }
 
+private struct AuthorProfileOverviewFailure: View {
+    var model: AO3AuthorProfileModel
+    let section: AuthorProfileOverviewSection
+    let title: String
+    let message: String
+
+    @Environment(AO3AuthService.self) private var auth
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(title, systemImage: "exclamationmark.triangle")
+                .font(.subheadline.weight(.semibold))
+            Text(message)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Button("Retry") { model.retrySection(section, auth: auth) }
+                .buttonStyle(.bordered)
+                .accentFill()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .subjectPanel(cornerRadius: 16)
+    }
+}
+
 struct AuthorProfileOverviewSections: View {
     var model: AO3AuthorProfileModel
     let onSeeAll: (AO3AuthorProfileTab) -> Void
+    let onSeeAllMostKudos: () -> Void
     let onOpenFandom: (AO3AuthorFandom) -> Void
 
     @Environment(AO3AuthService.self) private var auth
@@ -320,7 +365,7 @@ struct AuthorProfileOverviewSections: View {
             SectionRuleHeader(
                 title: "Most Kudos",
                 count: total,
-                onSeeAll: showSeeAll ? { onSeeAll(.works) } : nil
+                onSeeAll: showSeeAll ? onSeeAllMostKudos : nil
             )
             .pageBodyRow(top: 18, gutter: 0)
             Group {
@@ -333,11 +378,14 @@ struct AuthorProfileOverviewSections: View {
                 case .unavailable:
                     overviewMessage("Most Kudos is unavailable.")
                 case let .failed(message):
-                    if works.isEmpty {
-                        overviewMessage(message)
-                    } else {
-                        popularShelf(works)
-                    }
+                    AuthorProfileOverviewFailure(
+                        model: model,
+                        section: .popular,
+                        title: "Couldn't load Most Kudos",
+                        message: message
+                    )
+                    .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
+                    if !works.isEmpty { popularShelf(works) }
                 case .loaded:
                     if works.isEmpty {
                         overviewMessage("No works visible on AO3.")
@@ -382,14 +430,23 @@ struct AuthorProfileOverviewSections: View {
             )
             .pageBodyRow(top: 18, gutter: 0)
             Group {
+                if case let .failed(message) = model.seriesPhase {
+                    AuthorProfileOverviewFailure(
+                        model: model,
+                        section: .series,
+                        title: "Couldn't load Series",
+                        message: message
+                    )
+                    .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
+                }
                 if model.header?.recentSeries == nil, model.series.isEmpty {
-                    if model.contentPhase == .loading {
+                    if model.seriesPhase == .idle || model.seriesPhase == .loading {
                         ProgressView()
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 16)
                             .accentFill()
-                    } else {
-                        overviewMessage("Couldn't read series. Open the full list to try again.")
+                    } else if model.seriesPhase == .loaded {
+                        overviewMessage("No series visible on AO3.")
                     }
                 } else if items.isEmpty {
                     overviewMessage("No series visible on AO3.")
@@ -425,14 +482,23 @@ struct AuthorProfileOverviewSections: View {
             )
             .pageBodyRow(top: 18, gutter: 0)
             Group {
+                if case let .failed(message) = model.bookmarksPhase {
+                    AuthorProfileOverviewFailure(
+                        model: model,
+                        section: .bookmarks,
+                        title: "Couldn't load Bookmarks",
+                        message: message
+                    )
+                    .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
+                }
                 if model.header?.recentBookmarks == nil, model.bookmarks.isEmpty {
-                    if model.contentPhase == .loading {
+                    if model.bookmarksPhase == .idle || model.bookmarksPhase == .loading {
                         ProgressView()
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 16)
                             .accentFill()
-                    } else {
-                        overviewMessage("Couldn't read bookmarks. Open the full list to try again.")
+                    } else if model.bookmarksPhase == .loaded {
+                        overviewMessage("No bookmarks visible on AO3.")
                     }
                 } else if items.isEmpty {
                     overviewMessage("No bookmarks visible on AO3.")
@@ -464,6 +530,7 @@ struct AuthorProfileOverviewSections: View {
             .subjectPanel(cornerRadius: 16)
             .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
     }
+
 }
 
 struct AuthorProfileLatestCard: View {

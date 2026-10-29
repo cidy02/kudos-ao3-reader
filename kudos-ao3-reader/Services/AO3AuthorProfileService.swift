@@ -171,6 +171,8 @@ final class AO3AuthorProfileModel {
     private(set) var popularWorks: [AO3WorkSummary] = []
     private(set) var popularPhase: Phase = .idle
     private(set) var popularHasMore = false
+    private(set) var seriesPhase: Phase = .idle
+    private(set) var bookmarksPhase: Phase = .idle
     private(set) var headerPhase: Phase = .idle
     private(set) var headerFailureSystemImage = "exclamationmark.triangle"
     private(set) var contentPhase: Phase = .idle
@@ -217,6 +219,7 @@ final class AO3AuthorProfileModel {
     private var authenticationScope = ""
     private var activeTask: Task<Void, Never>?
     private var sectionTasks: [AuthorProfileOverviewSection: Task<Void, Never>] = [:]
+    private var requestedOverviewSections = Set<AuthorProfileOverviewSection>()
     private let pageLoader: PageLoader
     private let dashboardOnly: Bool
     private let overviewMode: Bool
@@ -243,6 +246,10 @@ final class AO3AuthorProfileModel {
     func applyInitialTab(_ tab: AO3AuthorProfileTab) {
         selectedTab = tab
         if tab == .gifts { worksScope = .gifts }
+    }
+
+    func applyInitialWorksSort(_ sort: AO3WorksSort) {
+        worksSort = sort
     }
 
     var hasMore: Bool {
@@ -306,7 +313,9 @@ final class AO3AuthorProfileModel {
             await self.loadHeader(auth: auth)
             guard self.headerPhase == .loaded else { return }
             if self.overviewMode {
+                self.requestedOverviewSections.insert(.about)
                 await self.loadAbout(auth: auth)
+                await self.reloadRequestedOverviewSections(auth: auth)
                 return
             }
             await self.loadSelectedTab(auth: auth)
@@ -350,7 +359,9 @@ final class AO3AuthorProfileModel {
             await self.loadHeader(auth: auth)
             guard self.headerPhase == .loaded else { return }
             if self.overviewMode {
+                self.requestedOverviewSections.insert(.about)
                 await self.loadAbout(auth: auth)
+                await self.reloadRequestedOverviewSections(auth: auth)
                 return
             }
             await self.loadSelectedTab(auth: auth)
@@ -389,12 +400,11 @@ final class AO3AuthorProfileModel {
         worksFilters = filters
     }
 
-    /// A new author, or a sign-out, starts on Works with AO3's own ordering.
-    /// Carrying a scope across would show one person's Gifts under another's
-    /// name, and carrying a sort would silently reorder a list the reader never
-    /// asked to sort.
+    /// A new author or authentication scope keeps the visible tab, but resets
+    /// that tab to AO3's own ordering. Gifts must stay paired with its Gifts scope;
+    /// otherwise the title says Gifts while the model requests Works.
     private func resetWorksScoping() {
-        worksScope = .works
+        worksScope = selectedTab == .gifts ? .gifts : .works
         worksSort = .default
         // Same reason as the sort: a narrowed list carried onto another author
         // would hide works the reader never asked to hide, and the emptiness
@@ -495,16 +505,9 @@ final class AO3AuthorProfileModel {
             await self.loadHeader(auth: auth, bypassCache: true)
             guard self.headerPhase == .loaded else { return }
             if self.overviewMode {
+                self.requestedOverviewSections.insert(.about)
                 await self.loadAbout(auth: auth, bypassCache: true)
-                if self.popularPhase != .idle {
-                    await self.loadPopular(auth: auth, bypassCache: true)
-                }
-                if self.loadedTabs.contains(.series) {
-                    await self.loadSeries(auth: auth, page: 1, replace: true, bypassCache: true)
-                }
-                if self.loadedTabs.contains(.bookmarks) {
-                    await self.loadBookmarks(auth: auth, page: 1, replace: true, bypassCache: true)
-                }
+                await self.reloadRequestedOverviewSections(auth: auth, bypassCache: true)
                 return
             }
             await self.loadSelectedTab(auth: auth, force: true, bypassCache: true)
@@ -656,6 +659,16 @@ final class AO3AuthorProfileModel {
         if popularPhase == .loading {
             popularPhase = popularWorks.isEmpty ? .idle : .loaded
         }
+        if seriesPhase == .loading {
+            seriesPhase = series.isEmpty ? .idle : .loaded
+        }
+        if bookmarksPhase == .loading {
+            bookmarksPhase = bookmarks.isEmpty ? .idle : .loaded
+        }
+        if overviewMode, contentPhase == .loading {
+            contentPhase = about == nil ? .idle : .loaded
+        }
+        requestedOverviewSections.removeAll()
     }
 
     /// Lets deterministic tests await the model's current load without changing
@@ -669,24 +682,64 @@ final class AO3AuthorProfileModel {
     /// Overview lazy sections. Each keeps its own Task so scrolling Most Kudos
     /// into view cannot cancel the header/about load still in flight.
     func ensureSectionVisible(_ section: AuthorProfileOverviewSection, auth: AO3AuthService) {
-        guard overviewMode, headerPhase == .loaded else { return }
+        guard overviewMode, headerPhase == .loaded,
+              !requestedOverviewSections.contains(section) else { return }
         switch section {
         case .about:
             guard about == nil, !loadedTabs.contains(.about), sectionTasks[.about] == nil else { return }
+            requestedOverviewSections.insert(.about)
             startSection(.about) { await self.loadAbout(auth: auth) }
         case .popular:
-            guard popularPhase != .loading, popularPhase != .loaded, sectionTasks[.popular] == nil else {
-                return
-            }
+            guard popularPhase == .idle, sectionTasks[.popular] == nil else { return }
+            requestedOverviewSections.insert(.popular)
             startSection(.popular) { await self.loadPopular(auth: auth) }
         case .series:
             guard header?.recentSeries == nil, !loadedTabs.contains(.series),
                   sectionTasks[.series] == nil else { return }
+            requestedOverviewSections.insert(.series)
             startSection(.series) { await self.loadSeries(auth: auth, page: 1, replace: true) }
         case .bookmarks:
             guard header?.recentBookmarks == nil, !loadedTabs.contains(.bookmarks),
                   sectionTasks[.bookmarks] == nil else { return }
+            requestedOverviewSections.insert(.bookmarks)
             startSection(.bookmarks) { await self.loadBookmarks(auth: auth, page: 1, replace: true) }
+        }
+    }
+
+    func retrySection(_ section: AuthorProfileOverviewSection, auth: AO3AuthService) {
+        guard overviewMode, sectionTasks[section] == nil else { return }
+        switch section {
+        case .about:
+            guard case .failed = contentPhase else { return }
+            startSection(.about) { await self.loadAbout(auth: auth, bypassCache: true) }
+        case .popular:
+            guard case .failed = popularPhase else { return }
+            startSection(.popular) { await self.loadPopular(auth: auth, bypassCache: true) }
+        case .series:
+            guard case .failed = seriesPhase else { return }
+            startSection(.series) {
+                await self.loadSeries(auth: auth, page: 1, replace: true, bypassCache: true)
+            }
+        case .bookmarks:
+            guard case .failed = bookmarksPhase else { return }
+            startSection(.bookmarks) {
+                await self.loadBookmarks(auth: auth, page: 1, replace: true, bypassCache: true)
+            }
+        }
+    }
+
+    private func reloadRequestedOverviewSections(
+        auth: AO3AuthService,
+        bypassCache: Bool = false
+    ) async {
+        if requestedOverviewSections.contains(.popular) {
+            await loadPopular(auth: auth, bypassCache: bypassCache)
+        }
+        if requestedOverviewSections.contains(.series) {
+            await loadSeries(auth: auth, page: 1, replace: true, bypassCache: bypassCache)
+        }
+        if requestedOverviewSections.contains(.bookmarks) {
+            await loadBookmarks(auth: auth, page: 1, replace: true, bypassCache: bypassCache)
         }
     }
 
@@ -872,7 +925,6 @@ final class AO3AuthorProfileModel {
             isShowingStaleCache = isShowingStaleCache || cached.isStale
             popularPhase = .loaded
         } catch is CancellationError {
-            if popularWorks.isEmpty { popularPhase = .idle }
             return
         } catch {
             guard route == expectedRoute else { return }
@@ -886,7 +938,11 @@ final class AO3AuthorProfileModel {
         replace: Bool,
         bypassCache: Bool = false
     ) async {
-        contentPhase = series.isEmpty ? .loading : .loaded
+        if overviewMode {
+            seriesPhase = series.isEmpty ? .loading : .loaded
+        } else {
+            contentPhase = series.isEmpty ? .loading : .loaded
+        }
         do {
             try await fetchSeries(
                 auth: auth,
@@ -895,11 +951,15 @@ final class AO3AuthorProfileModel {
                 bypassCache: bypassCache
             )
             loadedTabs.insert(.series)
-            contentPhase = .loaded
+            if overviewMode { seriesPhase = .loaded } else { contentPhase = .loaded }
         } catch is CancellationError {
             return
         } catch {
-            contentPhase = .failed(Self.message(for: error))
+            if overviewMode {
+                seriesPhase = .failed(Self.message(for: error))
+            } else {
+                contentPhase = .failed(Self.message(for: error))
+            }
         }
     }
 
@@ -928,7 +988,11 @@ final class AO3AuthorProfileModel {
         replace: Bool,
         bypassCache: Bool = false
     ) async {
-        contentPhase = bookmarks.isEmpty ? .loading : .loaded
+        if overviewMode {
+            bookmarksPhase = bookmarks.isEmpty ? .loading : .loaded
+        } else {
+            contentPhase = bookmarks.isEmpty ? .loading : .loaded
+        }
         do {
             try await fetchBookmarks(
                 auth: auth,
@@ -937,11 +1001,15 @@ final class AO3AuthorProfileModel {
                 bypassCache: bypassCache
             )
             loadedTabs.insert(.bookmarks)
-            contentPhase = .loaded
+            if overviewMode { bookmarksPhase = .loaded } else { contentPhase = .loaded }
         } catch is CancellationError {
             return
         } catch {
-            contentPhase = .failed(Self.message(for: error))
+            if overviewMode {
+                bookmarksPhase = .failed(Self.message(for: error))
+            } else {
+                contentPhase = .failed(Self.message(for: error))
+            }
         }
     }
 
@@ -1023,6 +1091,8 @@ final class AO3AuthorProfileModel {
         popularWorks = []
         popularPhase = .idle
         popularHasMore = false
+        seriesPhase = .idle
+        bookmarksPhase = .idle
         worksPage = 0
         seriesPage = 0
         bookmarksPage = 0
