@@ -172,7 +172,7 @@ private struct UnblurredHomeResumeHero: View {
             }
 
             Text(work.title)
-                .font(.system(size: titleSize, weight: .bold))
+                .font(.system(size: titleSize, weight: .bold, design: .serif))
                 .tracking(-0.62)
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                 .foregroundStyle(.primary)

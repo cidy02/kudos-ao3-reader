@@ -7,21 +7,22 @@ import AppKit
 
 /// The app's top-level sections.
 enum AppTab: String, Hashable, CaseIterable, Identifiable {
-    case home, library, browse, account, search
+    case home, library, writing, browse, account, search
 
     var id: String {
         rawValue
     }
 
     /// The four core tabs in the main tab bar / sidebar. `search` is a global action
-    /// presented separately (the iOS search-role slot / a macOS sidebar button);
-    /// Settings and the old Bookmarks lists now live inside Account.
-    static let mainTabs: [AppTab] = [.home, .library, .browse, .account]
+    /// presented separately (the iOS search-role slot / a macOS sidebar button).
+    /// `account` remains decodable only to migrate old restored selections.
+    static let mainTabs: [AppTab] = [.home, .library, .writing, .browse]
 
     var title: String {
         switch self {
         case .home: "Home"
         case .library: "Library"
+        case .writing: "Writing"
         case .browse: "Browse"
         case .account: "Account"
         case .search: "Search"
@@ -32,9 +33,79 @@ enum AppTab: String, Hashable, CaseIterable, Identifiable {
         switch self {
         case .home: "house"
         case .library: "books.vertical"
+        case .writing: "square.and.pencil"
         case .browse: "safari"
         case .account: "person.crop.circle"
         case .search: "magnifyingglass"
+        }
+    }
+}
+
+/// The four AO3-managed reading lists now grouped under Library > On AO3.
+enum LibraryAO3Route: String, Hashable, CaseIterable {
+    case markedForLater
+    case bookmarks
+    case subscriptions
+    case history
+}
+
+/// Destinations owned by the Writing tab.
+enum WritingRoute: String, Hashable, CaseIterable {
+    case works
+    case drafts
+    case series
+    case collectionsAndChallenges
+}
+
+/// Destinations owned by the Home profile/account sheet.
+enum AccountSheetRoute: String, Hashable, CaseIterable {
+    case profile
+    case inbox
+    case preferences
+    case openAO3
+    case settings
+    case backup
+    case about
+}
+
+/// Account routes accepted by older deep links and restored navigation state.
+/// Keeping this translation pure makes the one-time migration testable without UI.
+enum LegacyAccountRoute: String, Hashable, CaseIterable {
+    case dashboard
+    case works
+    case drafts
+    case series
+    case collections
+    case inbox
+    case preferences
+    case moreOnAO3
+    case markedForLater
+    case bookmarks
+    case subscriptions
+    case history
+    case settings
+
+    enum Destination: Equatable {
+        case account(AccountSheetRoute)
+        case writing(WritingRoute)
+        case library(LibraryAO3Route)
+    }
+
+    var destination: Destination {
+        switch self {
+        case .dashboard: .account(.profile)
+        case .works: .writing(.works)
+        case .drafts: .writing(.drafts)
+        case .series: .writing(.series)
+        case .collections: .writing(.collectionsAndChallenges)
+        case .inbox: .account(.inbox)
+        case .preferences: .account(.preferences)
+        case .moreOnAO3: .account(.openAO3)
+        case .markedForLater: .library(.markedForLater)
+        case .bookmarks: .library(.bookmarks)
+        case .subscriptions: .library(.subscriptions)
+        case .history: .library(.history)
+        case .settings: .account(.settings)
         }
     }
 }
@@ -131,6 +202,11 @@ struct AO3TagWorksRequest: Hashable {
 /// switch to it (e.g. opening a saved bookmark).
 @Observable
 final class AppRouter {
+    struct RestoredSelection: Equatable {
+        let tab: AppTab
+        let presentsAccount: Bool
+    }
+
     var selection: AppTab = .home {
         didSet {
             // Remember where we came from so the focused Search mode's Back button
@@ -141,6 +217,12 @@ final class AppRouter {
 
     /// The tab the focused Search mode returns to when its Back button is tapped.
     var lastNonSearchTab: AppTab = .library
+    /// Home presents Account as a sheet; it is no longer a root tab.
+    var isPresentingAccount = false
+    private var opensWebsiteAfterAccountDismiss = false
+    var pendingAccountRoute: AccountSheetRoute?
+    var pendingWritingRoute: WritingRoute?
+    var pendingLibraryAO3Route: LibraryAO3Route?
     /// A URL the AO3 website sheet should load (set by `open`).
     var pendingURL: URL?
     /// Root-presented AO3 website sheet. Hosted on `ContentView` so `open`
@@ -310,6 +392,68 @@ final class AppRouter {
         let route = pendingAuthorProfile
         pendingAuthorProfile = nil
         return route
+    }
+
+    /// Migrates a persisted Account-tab selection to Home + the Account sheet.
+    static func restoredSelection(from rawValue: String?) -> RestoredSelection {
+        guard let rawValue, let tab = AppTab(rawValue: rawValue) else {
+            return RestoredSelection(tab: .home, presentsAccount: false)
+        }
+        if tab == .account {
+            return RestoredSelection(tab: .home, presentsAccount: true)
+        }
+        return RestoredSelection(tab: tab, presentsAccount: false)
+    }
+
+    func restoreSelection(from rawValue: String?) {
+        let restored = Self.restoredSelection(from: rawValue)
+        selection = restored.tab
+        isPresentingAccount = restored.presentsAccount
+    }
+
+    func showAccount(_ route: AccountSheetRoute? = nil) {
+        selection = .home
+        pendingAccountRoute = route
+        isPresentingAccount = true
+    }
+
+    func openWebsiteAfterDismissingAccount() {
+        opensWebsiteAfterAccountDismiss = true
+        isPresentingAccount = false
+    }
+
+    func accountDidDismiss() {
+        guard opensWebsiteAfterAccountDismiss else { return }
+        opensWebsiteAfterAccountDismiss = false
+        openWebsite()
+    }
+
+    func openLegacyAccountRoute(_ route: LegacyAccountRoute) {
+        switch route.destination {
+        case let .account(destination):
+            showAccount(destination)
+        case let .writing(destination):
+            pendingWritingRoute = destination
+            selection = .writing
+        case let .library(destination):
+            pendingLibraryAO3Route = destination
+            selection = .library
+        }
+    }
+
+    func consumePendingAccountRoute() -> AccountSheetRoute? {
+        defer { pendingAccountRoute = nil }
+        return pendingAccountRoute
+    }
+
+    func consumePendingWritingRoute() -> WritingRoute? {
+        defer { pendingWritingRoute = nil }
+        return pendingWritingRoute
+    }
+
+    func consumePendingLibraryAO3Route() -> LibraryAO3Route? {
+        defer { pendingLibraryAO3Route = nil }
+        return pendingLibraryAO3Route
     }
 
     /// True while an author byline navigation is settling — work/reader destinations

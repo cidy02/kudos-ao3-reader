@@ -14,10 +14,15 @@ struct ContentView: View {
     @State private var privacyGate = PrivacyGate()
     @State private var theme = ThemeManager()
     @State private var auth = AO3AuthService()
+    @State private var inboxModel = AO3InboxModel()
     @State private var downloadQueue = DownloadQueue()
 
     /// First-launch onboarding gate, persisted locally.
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+    /// Persisted independently of SwiftUI's tab chrome so the removed Account tab
+    /// can migrate to Home + its sheet on first launch after T-460.
+    @AppStorage("selectedAppTab") private var storedTab = AppTab.home.rawValue
+    @State private var didRestoreStoredTab = false
     /// Library Sync Folder onboarding gates — separate from the welcome gate above so
     /// completing one never implies the other. Mirrors FolderSyncOnboardingState's keys
     /// so this view re-renders when either changes (a plain UserDefaults read wouldn't).
@@ -51,6 +56,11 @@ struct ContentView: View {
             // Overlay first so the environments below wrap it too — otherwise the
             // banner sits outside the .environment scope and can't find the queue.
             .overlay(alignment: .bottom) { DownloadQueueBanner() }
+            // Home's profile control opens Account as a self-contained sheet.
+            // Root-hosting also gives restored/deep-linked Account routes one sink.
+            .sheet(isPresented: $router.isPresentingAccount, onDismiss: router.accountDidDismiss) {
+                AccountView()
+            }
             // AO3 website sheet is root-hosted so `router.open` never switches the
             // user into Browse — Done returns them to the tab they left.
             .sheet(isPresented: $router.isPresentingWebBrowser) {
@@ -72,6 +82,7 @@ struct ContentView: View {
             .environment(privacyGate)
             .environment(theme)
             .environment(auth)
+            .environment(inboxModel)
             .environment(downloadQueue)
             // The app theme drives the whole app's light/dark appearance (the reader
             // overrides this for itself when its theme is unlinked).
@@ -94,6 +105,10 @@ struct ContentView: View {
             // don't re-render the whole TabView (which was hitching Liquid Glass).
             .background { FolderSyncObserver() }
             .task {
+                if !didRestoreStoredTab {
+                    didRestoreStoredTab = true
+                    router.restoreSelection(from: storedTab)
+                }
                 // Yield first so the initial tab chrome (Liquid Glass) can paint before
                 // we burn the main actor on session restore / full-library normalize.
                 await Task.yield()
@@ -115,6 +130,10 @@ struct ContentView: View {
                 // Backfills the derived search text for records that predate indexing,
                 // arrived via an older backup, or were indexed under an older schema.
                 await WorkSearchIndex.rebuildIfNeeded(in: modelContext)
+            }
+            .onChange(of: router.selection) { _, selection in
+                guard selection != .account else { return }
+                storedTab = selection.rawValue
             }
             // "Open in Kudos" from Files, Safari, Reddit, AirDrop — the way a
             // community-redistributed copy actually reaches the app. Converts
@@ -366,10 +385,14 @@ struct ContentView: View {
             ) {
                 LibraryView()
             }
+        case .writing:
+            ProgressiveTabContent(shell: .blank) { WritingView() }
         case .browse:
             ProgressiveTabContent(shell: .blank) { BrowseView() }
         case .account:
-            ProgressiveTabContent(shell: .blank) { AccountView() }
+            // Defensive only: restored `.account` values migrate before this is
+            // selected, and Account is no longer present in `mainTabs`.
+            ProgressiveTabContent(shell: .blank) { HomeView() }
         case .search:
             ProgressiveTabContent(shell: .blank, shellDuration: .milliseconds(80)) {
                 SearchView()

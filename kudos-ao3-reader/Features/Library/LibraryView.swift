@@ -6,8 +6,8 @@ import SwiftUI
 /// The Library tab: a Books-style dashboard of the user's saved works. Every section
 /// is a collapsible horizontal card carousel with a `>` chevron that opens its full
 /// vertical list. Sections, in order: Reading Now, Saved for Later, Finished,
-/// Collections, Downloaded. Saved for Later is the permanent local queue; AO3
-/// Marked for Later remains in Account and never becomes local queue membership.
+/// Collections, Downloaded. Saved for Later is the permanent local queue; AO3-managed
+/// lists live in the On AO3 group and never become local queue membership.
 ///
 /// Filtering (the inspector panel), Reading Insights, content privacy, and
 /// multi-select bulk actions (all platforms) are kept from the previous
@@ -146,6 +146,9 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 .navigationDestination(for: WorkCollection.self) { CollectionDetailView(collection: $0) }
                 .navigationDestination(for: ReadingQueue.self) { ReadingQueueDetailView(queue: $0) }
                 .navigationDestination(for: AO3WorkSummary.self) { WorkDetailView(remote: $0) }
+                .navigationDestination(for: LibraryAO3Route.self) { route in
+                    AO3AccountWorksList(kind: route.kind, originKicker: "Library")
+                }
                 .ao3AuthorNavigation(path: $path, tab: .library)
                 .navigationDestination(for: RecentlyDeletedDestination.self) { _ in RecentlyDeletedView() }
                 .navigationDestination(for: ReadingInsightsDestination.self) { _ in
@@ -240,6 +243,12 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                     // already pushed instead of landing cleanly, or double-push the
                     // same kind if it happens to already be on the stack.
                     openDeepLinkedSection(kind)
+                }
+                .onChange(of: router.pendingLibraryAO3Route, initial: true) { _, route in
+                    guard let route else { return }
+                    path = NavigationPath()
+                    path.append(route)
+                    router.pendingLibraryAO3Route = nil
                 }
         }
         // Declared on the stack itself so the cards inside it and the screens
@@ -367,6 +376,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             localLedgerSection(.downloaded)
             localLedgerSection(.history)
             localLedgerSection(.favorites)
+            onAO3Panel.dashboardListRow(EdgeInsets(top: 18, leading: 0, bottom: 8, trailing: 0))
             if recentlyDeletedCount > 0 {
                 recentlyDeletedRow.dashboardListRow(EdgeInsets(top: 16, leading: 0, bottom: 12, trailing: 0))
             }
@@ -476,6 +486,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 localCarousel(.downloaded)
                 localCarousel(.history)
                 localCarousel(.favorites)
+                onAO3Panel.dashboardLeadingRegion()
                 if recentlyDeletedCount > 0 {
                     recentlyDeletedRow.dashboardLeadingRegion()
                 }
@@ -483,6 +494,39 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             .padding(.vertical, 12)
         }
         .refreshable { await refreshLibraryDashboard() }
+    }
+
+    private var onAO3Panel: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionRuleHeader(title: "On AO3")
+                .padding(.horizontal, SubjectMetrics.accountGutter)
+
+            VStack(spacing: 0) {
+                ForEach(Array(LibraryAO3Route.allCases.enumerated()), id: \.element) { index, route in
+                    if index > 0 { SubjectRowSeparator() }
+                    Button {
+                        path.append(route)
+                    } label: {
+                        AccountNavCardLabel(
+                            title: route.title,
+                            systemImage: route.systemImage,
+                            count: cachedAO3Count(route)
+                        )
+                        .padding(.horizontal, 14)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .subjectPanel()
+            .padding(.horizontal, CardListMetrics.sideMargin)
+        }
+    }
+
+    private func cachedAO3Count(_ route: LibraryAO3Route) -> String? {
+        AO3AccountListCountsCache.shared.count(
+            for: route.countKind,
+            authenticationScope: AO3AuthorProfileFetcher.sessionScopedCacheScope(for: auth)
+        )?.displayText
     }
 
     /// Only shown once something is actually pending deletion — matches every other
@@ -918,5 +962,43 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     private func unique(_ works: [SavedWork]) -> [SavedWork] {
         var seen = Set<UUID>()
         return works.filter { seen.insert($0.id).inserted }
+    }
+}
+
+private extension LibraryAO3Route {
+    var title: String {
+        switch self {
+        case .markedForLater: "Marked for Later"
+        case .bookmarks: "Bookmarks"
+        case .subscriptions: "Subscriptions"
+        case .history: "AO3 History"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .markedForLater: "clock.badge"
+        case .bookmarks: "bookmark"
+        case .subscriptions: "bell"
+        case .history: "clock.arrow.circlepath"
+        }
+    }
+
+    var kind: AO3AccountWorksList.Kind {
+        switch self {
+        case .markedForLater: .markedForLater
+        case .bookmarks: .bookmarks
+        case .subscriptions: .subscriptions
+        case .history: .history
+        }
+    }
+
+    var countKind: AO3AccountListKind {
+        switch self {
+        case .markedForLater: .markedForLater
+        case .bookmarks: .bookmarks
+        case .subscriptions: .subscriptions
+        case .history: .history
+        }
     }
 }
