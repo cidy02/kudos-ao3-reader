@@ -433,7 +433,7 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
                     }
 
                     Button(role: .destructive) {
-                        if confirmBeforeDelete {
+                        if PreservedWorkService.shouldConfirmDelete(work, settingOn: confirmBeforeDelete) {
                             pendingDelete = work
                         } else {
                             PreservedWorkService.softDelete(work, in: context)
@@ -591,7 +591,10 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
                 // swipe stays off so a flick can't destroy a saved work.
                 if let existingLocalWork, existingLocalWork.isSaved {
                     Button(role: .destructive) {
-                        if confirmBeforeDelete {
+                        if PreservedWorkService.shouldConfirmDelete(
+                            existingLocalWork,
+                            settingOn: confirmBeforeDelete
+                        ) {
                             pendingDelete = existingLocalWork
                         } else {
                             PreservedWorkService.softDelete(existingLocalWork, in: context)
@@ -624,7 +627,10 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
 
                 if let existingLocalWork, existingLocalWork.isSaved {
                     Button(role: .destructive) {
-                        if confirmBeforeDelete {
+                        if PreservedWorkService.shouldConfirmDelete(
+                            existingLocalWork,
+                            settingOn: confirmBeforeDelete
+                        ) {
                             pendingDelete = existingLocalWork
                         } else {
                             PreservedWorkService.softDelete(existingLocalWork, in: context)

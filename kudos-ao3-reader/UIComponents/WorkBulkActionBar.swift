@@ -34,11 +34,7 @@ struct WorkBulkActionBar: View {
     }
 
     private var deleteMessage: String {
-        let base = "Kudos will move the selected works to Recently Deleted. "
-            + "You can restore them for the next 90 days."
-        guard selectedWorks.contains(where: \.ao3Unavailable) else { return base }
-        return base + " Some are no longer available on AO3. If you don't restore them in time, "
-            + "you can't download them again."
+        PreservedWorkService.deleteConfirmationMessage(for: selectedWorks)
     }
 
     var body: some View {

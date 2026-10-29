@@ -108,7 +108,7 @@ private struct LibraryWorkSwipeActions: ViewModifier {
                     }
                 } else {
                     Button(role: .destructive) {
-                        if confirmBeforeDelete {
+                        if PreservedWorkService.shouldConfirmDelete(work, settingOn: confirmBeforeDelete) {
                             pendingDelete = work
                         } else {
                             PreservedWorkService.softDelete(work, in: context)

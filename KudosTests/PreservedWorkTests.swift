@@ -289,11 +289,69 @@ struct PreservedWorkTests {
         ) == "8 works · deleted 30 Aug")
     }
 
-    @Test func recentlyDeletedTurnsAmberUnderAWeek() {
+    @Test func recentlyDeletedTurnsRedInTheLastSevenDays() {
         #expect(RecentlyDeletedView.isUrgent(daysRemaining: 0))
         #expect(RecentlyDeletedView.isUrgent(daysRemaining: 6))
-        #expect(!RecentlyDeletedView.isUrgent(daysRemaining: 7))
+        #expect(RecentlyDeletedView.isUrgent(daysRemaining: 7))
+        #expect(!RecentlyDeletedView.isUrgent(daysRemaining: 8))
         #expect(!RecentlyDeletedView.isUrgent(daysRemaining: 30))
+    }
+
+    @Test func daysRemainingRoundsUpAndTheSevenDayBoundaryIsUrgent() {
+        #expect(RecentlyDeletedView.daysRemaining(Date().addingTimeInterval(6.5 * 86_400)) == 7)
+        #expect(RecentlyDeletedView.daysRemaining(Date().addingTimeInterval(7.5 * 86_400)) == 8)
+        #expect(RecentlyDeletedView.daysRemaining(Date().addingTimeInterval(0.1 * 86_400)) == 1)
+        #expect(RecentlyDeletedView.daysLeftLabel(1) == "1 day left")
+        #expect(RecentlyDeletedView.daysLeftLabel(7) == "7 days left")
+    }
+
+    @Test func recentlyDeletedRowsSortSoonestToGoFirst() throws {
+        let container = try container()
+        let context = container.mainContext
+        let later = SavedWork(title: "Later", author: "Writer")
+        let sooner = SavedWork(title: "Sooner", author: "Writer")
+        context.insert(later)
+        context.insert(sooner)
+        try context.save()
+        PreservedWorkService.softDelete(later, in: context)
+        PreservedWorkService.softDelete(sooner, in: context)
+        later.permanentDeletionScheduledAt = Date().addingTimeInterval(40 * 86_400)
+        sooner.permanentDeletionScheduledAt = Date().addingTimeInterval(3 * 86_400)
+
+        let sorted = RecentlyDeletedView.sortedSoonestFirst([
+            RecentlyDeletedEntry.work(later, in: context),
+            RecentlyDeletedEntry.work(sooner, in: context)
+        ])
+        #expect(sorted.map(\.title) == ["Sooner", "Later"])
+    }
+
+    @Test func recentlyDeletedIrreplaceableCountIgnoresCollections() throws {
+        let container = try container()
+        let context = container.mainContext
+        let gone = SavedWork(title: "Gone", author: "Writer")
+        gone.ao3WorkID = 8
+        gone.ao3Unavailable = true
+        let fine = SavedWork(title: "Fine", author: "Writer")
+        fine.ao3WorkID = 9
+        let collection = WorkCollection(name: "Shelf")
+        context.insert(gone)
+        context.insert(fine)
+        context.insert(collection)
+        try context.save()
+        PreservedWorkService.softDelete(gone, in: context)
+        PreservedWorkService.softDelete(fine, in: context)
+        PreservedWorkService.softDelete(collection, in: context)
+
+        let entries = [
+            RecentlyDeletedEntry.work(gone, in: context),
+            RecentlyDeletedEntry.work(fine, in: context),
+            RecentlyDeletedEntry.collection(collection, in: context)
+        ]
+        #expect(RecentlyDeletedView.irreplaceableCount(in: entries) == 1)
+        #expect(RecentlyDeletedView.bulkPermanentMessage(
+            ids: Set(entries.map(\.id)),
+            in: entries
+        ).contains("1 of these 3 can't be downloaded again"))
     }
 
     /// 1bj's per-item alert names only what this work actually has.
@@ -314,11 +372,82 @@ struct PreservedWorkTests {
 
     @Test func deleteConfirmationMessageEscalatesWhenAO3Unavailable() {
         let available = SavedWork(title: "Available Work", author: "Writer")
+        available.ao3WorkID = 1
         let unavailable = SavedWork(title: "Gone Work", author: "Writer")
+        unavailable.ao3WorkID = 2
         unavailable.ao3Unavailable = true
 
         #expect(PreservedWorkService.deleteConfirmationMessage(for: available).contains("Recently Deleted"))
-        #expect(PreservedWorkService.deleteConfirmationMessage(for: unavailable).contains("no longer available"))
+        #expect(PreservedWorkService.deleteConfirmationMessage(for: unavailable).contains("no longer on AO3"))
+        #expect(PreservedWorkService.deleteConfirmationMessage(for: unavailable, permanently: true)
+            .contains("can't download it again"))
+        #expect(!PreservedWorkService.shouldConfirmDelete(available, settingOn: false))
+        #expect(PreservedWorkService.shouldConfirmDelete(unavailable, settingOn: false))
+    }
+
+    @Test func deleteConfirmationMessageEscalatesForANonAO3Import() {
+        let reason = WorkRedownloadability.of(
+            origin: .fanfictionNet,
+            ao3Unavailable: false,
+            importFormatDisplayName: "PDF"
+        )
+        let message = PreservedWorkService.deleteConfirmationMessage(
+            title: "The Boy Who Lived Twice",
+            reason: reason
+        )
+        #expect(message.contains("a PDF from FanFiction.net"))
+        #expect(message.contains("only downloads from AO3"))
+        #expect(message.contains("Recently Deleted"))
+
+        let permanent = PreservedWorkService.deleteConfirmationMessage(
+            title: "The Boy Who Lived Twice",
+            reason: reason,
+            permanently: true
+        )
+        #expect(permanent.contains("this is the only copy"))
+        #expect(!permanent.contains("Recently Deleted"))
+    }
+
+    @Test func bulkDeleteConfirmationCountsWorksThatCannotBeFetchedAgain() {
+        let soft = PreservedWorkService.deleteConfirmationMessage(
+            itemCount: 5,
+            irreplaceableCount: 2,
+            permanently: false
+        )
+        #expect(soft.contains("2 of these 5 can't be downloaded again"))
+        #expect(soft.contains("Recently Deleted"))
+
+        let permanent = PreservedWorkService.deleteConfirmationMessage(
+            itemCount: 5,
+            irreplaceableCount: 2,
+            permanently: true
+        )
+        #expect(permanent.contains("2 of these 5 can't be downloaded again"))
+        #expect(!permanent.contains("The works stay on AO3"))
+
+        let allReplaceable = PreservedWorkService.deleteConfirmationMessage(
+            itemCount: 3,
+            irreplaceableCount: 0,
+            permanently: true
+        )
+        #expect(allReplaceable.contains("The works stay on AO3"))
+        #expect(!allReplaceable.contains("can't be downloaded again"))
+    }
+
+    @Test func bulkDeleteConfirmationFromWorksUsesTheSharedBuilder() {
+        let gone = SavedWork(title: "Gone", author: "A")
+        gone.ao3WorkID = 3
+        gone.ao3Unavailable = true
+        let fine = SavedWork(title: "Fine", author: "A")
+        fine.ao3WorkID = 4
+        let imported = SavedWork(
+            title: "Rescued",
+            author: "A",
+            sourceURL: "https://www.fanfiction.net/s/1/1/"
+        )
+
+        let message = PreservedWorkService.deleteConfirmationMessage(for: [gone, fine, imported])
+        #expect(message.contains("2 of these 3 can't be downloaded again"))
     }
 
     @Test func manifestV7RoundTripsPermanentDeletionScheduledAt() throws {
