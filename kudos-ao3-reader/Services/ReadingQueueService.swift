@@ -170,6 +170,7 @@ enum ReadingQueueService {
         keepsWorksOffline: Bool? = nil,
         seededFrom seed: NewQueueSeed = .empty,
         tagNames: [String] = [],
+        seedWorkIDs: [UUID] = [],
         in context: ModelContext
     ) -> ReadingQueue {
         let trimmed = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -190,6 +191,17 @@ enum ReadingQueueService {
         }
         if seed == .savedForLater {
             seedFromSavedForLater(into: queue, in: context)
+        }
+        // Works picked in the sheet, after a Saved for Later copy. `append`
+        // skips anyone already in the queue, and a queue-only record is not a
+        // library work the picker is allowed to add.
+        if !seedWorkIDs.isEmpty {
+            let library = (try? context.fetch(FetchDescriptor<SavedWork>())) ?? []
+            let byID = Dictionary(library.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+            let picked = seedWorkIDs.compactMap { byID[$0] }.filter {
+                !$0.isPendingDeletion && !$0.isQueueOnlyWork
+            }
+            append(picked, to: queue, in: context)
         }
         context.saveBestEffort(reason: "Saving reading queue failed")
         return queue

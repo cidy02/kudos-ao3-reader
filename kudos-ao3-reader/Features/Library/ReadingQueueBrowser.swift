@@ -908,6 +908,7 @@ extension ReadingQueueBrowserView {
             keepsWorksOffline: options.keepsWorksOffline,
             seededFrom: options.seed,
             tagNames: options.tagNames,
+            seedWorkIDs: options.seedWorkIDs,
             in: context
         )
         // As Home's and the organizer's: unsaved, the half-made queue is dropped and the
