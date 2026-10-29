@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Reader Response method</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1280px; height: 3400px; box-sizing: border-box; padding: 64px; background: #FFFFFF; color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; display: flex; flex-direction: column; gap: 40px">
+  <header style="display: flex; flex-direction: column; gap: 10px; max-width: 1000px">
+    <h1 style="margin: 0; font-size: 44px; line-height: 52px; font-weight: 700">Reader Response: how Kudos judges quality</h1>
+    <p style="margin: 0; font-size: 19px; line-height: 27px; color: #3A3A3C">AO3 sorts by single counts, so old, long and serialized works win and new or short ones sink. Kudos ranks the works already loaded by figures every blurb carries, each compared with works of the same shape, and asks AO3 to do the narrowing it can do exactly. Pages load as the reader scrolls, or up to five at once when they tap Rank Top 100. Checked against AO3’s source and live searches on 28 October 2026; the full method and build plan are in notes/quality-signals-spec.md.</p>
+    <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px">
+      <span style="padding: 4px 10px; border-radius: 10px; background: #E3F1E6; color: #1E6B34; font-size: 14px; font-weight: 600">Verified: AO3 source or a live search</span>
+      <span style="padding: 4px 10px; border-radius: 10px; background: #FBF0DC; color: #8A5A00; font-size: 14px; font-weight: 600">Starting value: tune with data</span>
+      <span style="padding: 4px 10px; border-radius: 10px; background: #EFEFF4; color: #3A3A3C; font-size: 14px; font-weight: 600">Left out, and why</span>
+    </div>
+  </header>
+
+  <section style="display: flex; flex-direction: column; gap: 14px">
+    <div style="display: flex; align-items: baseline; gap: 12px">
+      <h2 style="margin: 0; font-size: 26px; line-height: 32px; font-weight: 700">What AO3’s numbers count</h2>
+      <span style="font-size: 15px; color: #6C6C70">every signal below rests on these</span>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px">
+      <sc-for list="{{facts}}" as="f" hint-placeholder-count="9">
+        <article style="border-radius: 16px; background: #F2F2F7; padding: 18px 20px; display: flex; flex-direction: column; gap: 8px; border-left: 4px solid #2F8F3A">
+          <h3 style="margin: 0; font-size: 18px; line-height: 23px; font-weight: 700">{{f.title}}</h3>
+          <p style="margin: 0; font-size: 15px; line-height: 21px; color: #1C1C1E">{{f.text}}</p>
+          <p style="margin: 0; font-family: 'SF Mono', ui-monospace, Menlo, monospace; font-size: 12px; line-height: 17px; color: #6C6C70">{{f.src}}</p>
+        </article>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 14px">
+    <div style="display: flex; align-items: baseline; gap: 12px">
+      <h2 style="margin: 0; font-size: 26px; line-height: 32px; font-weight: 700">The signals</h2>
+      <span style="font-size: 15px; color: #6C6C70">computed on the device from the blurb; nothing extra is fetched</span>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px">
+      <sc-for list="{{signals}}" as="s" hint-placeholder-count="6">
+        <article style="border-radius: 16px; background: #F2F2F7; padding: 18px 20px; display: flex; flex-direction: column; gap: 8px; border-left: 4px solid {{s.edge}}">
+          <div style="display: flex; align-items: center; gap: 8px">
+            <h3 style="margin: 0; flex: 1; min-width: 0; font-size: 19px; line-height: 24px; font-weight: 700">{{s.title}}</h3>
+            <span style="padding: 2px 8px; border-radius: 10px; background: {{s.pBg}}; color: {{s.pFg}}; font-size: 12px; line-height: 16px; font-weight: 700">{{s.phase}}</span>
+          </div>
+          <p style="margin: 0; padding: 10px 12px; border-radius: 10px; background: #FFFFFF; font-family: 'SF Mono', ui-monospace, Menlo, monospace; font-size: 12.5px; line-height: 19px; color: #1C1C1E; white-space: pre-line">{{s.formula}}</p>
+          <p style="margin: 0; font-size: 14px; line-height: 20px; color: #3A3A3C">{{s.notes}}</p>
+        </article>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 14px">
+    <div style="display: flex; align-items: baseline; gap: 12px">
+      <h2 style="margin: 0; font-size: 26px; line-height: 32px; font-weight: 700">Ways to Find: what each one asks AO3 for</h2>
+      <span style="font-size: 15px; color: #6C6C70">one request per page, the one the search already makes</span>
+    </div>
+    <div style="border-radius: 16px; background: #F2F2F7; overflow: hidden">
+      <div style="display: grid; grid-template-columns: 200px 150px minmax(0, 1fr) 300px; gap: 16px; padding: 12px 20px; font-size: 13px; line-height: 18px; font-weight: 700; color: #6C6C70">
+        <span>Way to find</span><span>AO3 sort</span><span>Added to the search query</span><span>Then ranked by</span>
+      </div>
+      <sc-for list="{{lenses}}" as="l" hint-placeholder-count="4">
+        <div style="display: grid; grid-template-columns: 200px 150px minmax(0, 1fr) 300px; gap: 16px; padding: 14px 20px; border-top: 0.5px solid #D1D1D6; background: #FFFFFF; align-items: baseline">
+          <span style="font-size: 16px; line-height: 21px; font-weight: 600">{{l.name}}</span>
+          <span style="font-size: 15px; line-height: 21px; color: #3A3A3C">{{l.sort}}</span>
+          <span style="font-family: 'SF Mono', ui-monospace, Menlo, monospace; font-size: 13.5px; line-height: 21px; color: #1C1C1E">{{l.query}}</span>
+          <span style="font-size: 15px; line-height: 21px; color: #3A3A3C">{{l.rank}}</span>
+        </div>
+      </sc-for>
+    </div>
+    <p style="margin: 0; font-size: 14px; line-height: 20px; color: #3A3A3C; max-width: 1060px">Run live: created_at date ranges, revised_at:&gt;now-90d, otp:true, -series.title:* and hits/kudos ranges. Same syntax, not run: hits:&gt;=1000, hits:[300 TO 5000], created_at:&gt;now-6M. The proposal’s revised_at: &gt;"3 months ago" fails with a syntax error. Ratio bands (kudos &gt; x AND hits &lt; y) are left out: they drop 5% works and keep 0.4% ones.</p>
+    <p style="margin: 0; padding: 14px 18px; border-radius: 14px; background: #F2F2F7; font-size: 14px; line-height: 20px; color: #1C1C1E; max-width: 1060px"><span style="font-weight: 700">Rank Top 100 (owner approved, 28 Oct 2026).</span> One tap loads pages 2 to 5 of the same search, strictly one after another, 3 seconds apart, cancellable, at most 10 such pages in 10 minutes. Each request adds <span style="font-family: 'SF Mono', ui-monospace, Menlo, monospace; font-size: 13px">feature=rank-top-100; reader-requested pages 2-5</span> to the KudosReader User-Agent, so AO3 can see which feature made it and reach the project through the linked repository. A 429, 403 or 503 ends the run; two throttled runs in a day switch it off for 24 hours.</p>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 14px">
+    <div style="display: flex; align-items: baseline; gap: 12px">
+      <h2 style="margin: 0; font-size: 26px; line-height: 32px; font-weight: 700">From the Gemini proposal</h2>
+      <span style="font-size: 15px; color: #6C6C70">what survived checking</span>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px">
+      <sc-for list="{{verdicts}}" as="v" hint-placeholder-count="3">
+        <article style="border-radius: 16px; background: {{v.bg}}; padding: 18px 20px; display: flex; flex-direction: column; gap: 10px">
+          <h3 style="margin: 0; font-size: 19px; line-height: 24px; font-weight: 700; color: {{v.fg}}">{{v.title}}</h3>
+          <sc-for list="{{v.items}}" as="i" hint-placeholder-count="6">
+            <p style="margin: 0; font-size: 14px; line-height: 20px; color: #1C1C1E">{{i}}</p>
+          </sc-for>
+        </article>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 14px">
+    <div style="display: flex; align-items: baseline; gap: 12px">
+      <h2 style="margin: 0; font-size: 26px; line-height: 32px; font-weight: 700">Build order</h2>
+      <span style="font-size: 15px; color: #6C6C70">each phase ships on its own</span>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px">
+      <sc-for list="{{phases}}" as="p" hint-placeholder-count="3">
+        <article style="border-radius: 16px; background: #F2F2F7; padding: 18px 20px; display: flex; flex-direction: column; gap: 8px; border-left: 4px solid #C98A12">
+          <div style="display: flex; align-items: center; gap: 8px">
+            <span style="padding: 2px 8px; border-radius: 8px; background: #FBF0DC; color: #8A5A00; font-size: 13px; line-height: 18px; font-weight: 700">{{p.id}}</span>
+            <h3 style="margin: 0; flex: 1; min-width: 0; font-size: 19px; line-height: 24px; font-weight: 700">{{p.title}}</h3>
+          </div>
+          <p style="margin: 0; font-size: 15px; line-height: 21px; color: #1C1C1E">{{p.text}}</p>
+          <p style="margin: 0; font-family: 'SF Mono', ui-monospace, Menlo, monospace; font-size: 12px; line-height: 17px; color: #6C6C70">{{p.data}}</p>
+        </article>
+      </sc-for>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":3400}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const P1 = { pBg: '#E3F1E6', pFg: '#1E6B34' };
+    const P2 = { pBg: '#FBF0DC', pFg: '#8A5A00' };
+    const P3 = { pBg: '#E5F0FB', pFg: '#1F5D99' };
+    return {
+      facts: [
+        { title: 'Hits', text: 'One per work, per IP address, per day; the day turns at 03:00 UTC. The page’s JavaScript sends it. The creator’s visits add none, and neither do downloads or apps that don’t run JavaScript, Kudos included.', src: 'RedisHitCounter · hit_count/_include.html.erb · since 15 Apr 2020' },
+        { title: 'Hits before April 2020', text: 'Only the work page or chapter 1 counted. A repeat counted unless the same IP had made the previous visit. Logged-out hits were paused from 31 March to 24 April 2020.', src: 'lib/work_stats.rb, chapters_controller.rb at b3bdab9 · AO3 news, 31 Mar 2020' },
+        { title: 'Kudos', text: 'One per account and one per IP address for each work, guests included; none from the creator, and no guest kudos on works restricted to members.', src: 'app/models/kudo.rb · work.rb update_stat_counter' },
+        { title: 'Bookmarks', text: 'Public bookmarks only. Private bookmarks are never counted, so a bookmark rate understates how often a work is saved.', src: 'work.rb: bookmarks.where(private: false).count' },
+        { title: 'Comments', text: 'Every visible comment, replies and the creator’s own included. An author who answers each comment roughly doubles the count.', src: 'commentable_entity.rb count_visible_comments_uncached' },
+        { title: 'The date on a blurb', text: 'The newest posted chapter’s date. Editing a chapter doesn’t move it; posting one or changing a chapter’s date does. Creators can backdate, so it can be older than the work.', src: 'work.rb set_revised_at_by_chapter · live: a work created 1 Feb 2014 shows 14 Nov 2013' },
+        { title: 'The work number', text: 'Rises with every work created, posted or not: 1,162,883 on 1 Feb 2014 · 23,419,396 on 1 Apr 2020 · 78,676,796 on 1 Feb 2026 · 95,630,676 on 29 Oct 2026. Good for a posting date to within days.', src: 'AO3 search by created_at day, sorted by Date Posted · 28 Oct 2026' },
+        { title: 'The search box', text: 'Elasticsearch query_string, AND by default, over indexed fields including created_at, revised_at, hits, kudos_count, bookmarks_count, comments_count, word_count, complete, otp and series.title.', src: 'work_query.rb · work_indexer.rb' },
+        { title: 'Filter counts', text: 'Tag pages (Browse) carry the filter sidebar with exact counts per rating, category, fandom, relationship and tag. /works/search, which the Search tab uses, has none. otp:true means one canonical relationship: synonyms count as one.', src: 'live pages and searches · 28 Oct 2026' }
+      ],
+      signals: [
+        { title: 'Kudos per hit, adjusted', edge: '#990000', phase: 'P1 · table in P2', ...P1, formula: 'typical  = kudos ÷ hits for works of the same chapters,\n           length, status and posting year\nshown    = (kudos + 20) ÷ (hits × typical + 20)\nranked   = shown × e^(−1.28 ÷ √(kudos + 20))', notes: '1.0× is typical for its shape. Shape absorbs hits per reader (serials and long works collect more), the 2020 counter change and era, without hand-set multipliers. 20 is a starting value. Until the P2 table ships, typical comes from the loaded works in the same chapter band, pulled toward their overall median.' },
+        { title: 'Saves per kudos', edge: '#C25E00', phase: 'P1', ...P1, formula: '(bookmarks + 30 × b) ÷ (kudos + 30)\nb = typical bookmarks ÷ kudos for the band', notes: 'Kept apart from kudos rather than blended with an invented weight. Public bookmarks only. 30 is a starting value.' },
+        { title: 'Comments per kudos', edge: '#2F8F3A', phase: 'P1', ...P1, formula: '(comments + 30 × c) ÷ (kudos + 30)\nc = typical comments ÷ kudos for the band', notes: 'Replies are counted, the creator’s included, so authors who answer every comment lift it. Shown as a signal, never a judgement.' },
+        { title: 'Momentum', edge: '#1E63C8', phase: 'P3', ...P3, formula: '(kudos now − kudos then) ÷ days × 7\nneeds two sightings at least a day apart\nelse: kudos per month since posted (labelled so)', notes: 'Real change comes from the sightings Kudos already makes while you browse. The fallback dates the work by its number, so a 2015 work with a new epilogue isn’t mistaken for a new one.' },
+        { title: 'WIP schedule', edge: '#2F8F3A', phase: 'P1', ...P1, formula: 'interval = (last chapter − posted) ÷ (chapters − 1)\nlate     = days since ÷ max(14, interval)\n≤ 1.5 on schedule · ≤ 4 running late · beyond, or a year: long pause', notes: 'Nearly done: at least 80% of a stated total, on schedule. One chapter: just started. The thresholds are judgment; tune them on real lists.' },
+        { title: 'Unusual stats', edge: '#8E8E93', phase: 'P1', ...P1, formula: 'kudos > hits (with hits ≥ 20)\nor kudos ≥ 1,000 with bookmarks and comments\n   each under 0.2% of kudos', notes: 'Seen live on 28 Oct 2026: a 898-word one-shot with 40,674 kudos, 1,105 hits and 2 bookmarks; several like it. These are shown but never ranked, and the app makes no claim about why.' }
+      ],
+      lenses: [
+        { name: 'Reader Favourites', sort: 'Kudos', query: 'hits:>=1000', rank: 'Kudos per hit, adjusted' },
+        { name: 'New and Loved', sort: 'Kudos', query: 'created_at:>now-6M', rank: 'Kudos per hit, adjusted' },
+        { name: 'Hidden Gems', sort: 'Kudos', query: 'hits:[300 TO 5000]', rank: 'Kudos per hit, adjusted' },
+        { name: 'Active WIPs', sort: 'Date Updated', query: 'complete:false revised_at:>now-60d', rank: 'On schedule first, then kudos per hit' }
+      ],
+      verdicts: [
+        { title: 'Kept', bg: '#E3F1E6', fg: '#1E6B34', items: [
+          'Hits count reader-days, so raw kudos per hit punishes long and serialized works: the core insight, confirmed in the source.',
+          'Damping small samples toward a typical value (empirical Bayes).',
+          'Bookmarks per kudos as its own signal, damped.',
+          'WIP cadence from the posting date and chapter count; the arithmetic checks out.',
+          'created_at, otp:true and the work number as a posting clock; 23.5 million in April 2020 is right.',
+          'Saying how many works a filter hid.'] },
+        { title: 'Changed', bg: '#FBF0DC', fg: '#8A5A00', items: [
+          'Hand-set multipliers (Explicit 0.74, Gen 1.08, WIP 0.86, pandemic 1.35, θ 0.52) become a table measured from a random sample.',
+          'γ 0.42 and the span ÷ 2 chapter cap become shape bands; they assumed every reader followed the serial.',
+          'The pre-2020 0.72 deflator goes: chapters past the first never counted then, so the direction depends on the work.',
+          'Wilson on hits becomes Gamma–Poisson on kudos; hits are not trials.',
+          'The loaded batch as the baseline goes: a lens pre-filters it, so every work would look typical.'] },
+        { title: 'Left out', bg: '#EFEFF4', fg: '#3A3A3C', items: [
+          'Fetching extra pages automatically on every search: AO3’s robots.txt bars bots from /works/search. Only the capped, tagged Rank Top 100 the reader taps survives.',
+          'Ratio bands in the query, and “sort by kudos under 8,000 hits returns the best ratio”: neither holds.',
+          'Work-number dates of 10M = 2022 and 18M = 2026: those are AO3’s total work counts; Feb 2026 is 78.7M.',
+          'Percentile badges read off an assumed bell curve.',
+          'Judging summaries or tag counts: not Kudos’s place to grade how authors write or tag.',
+          'A raw SQLite table of every blurb ever seen: the app uses SwiftData, and the cache stays small.'] }
+      ],
+      phases: [
+        { id: 'P1', title: 'Signals and the Sort screen', text: 'Parse chapters, dates and the work number; the pure signal functions with tests; Ways to Find as query clauses; the ranked list and its signal line; Rank Top 100 with its User-Agent tag, policy row and README note. No new storage.', data: 'AO3WorkSummary parsing · new ReaderResponse.swift · AO3WorksSort · AO3RequestDefaults.userAgent(feature:) · Search results' },
+        { id: 'P2', title: 'Calibration table and the sheet', text: 'Measure typical rates from a random sample (works by posting day), with the owner’s approval, and ship it as a small JSON table. Reader Response sheet on Work Detail.', data: 'one-off sample script · Resources/reader-response-typical.json' },
+        { id: 'P3', title: 'Sightings and Browse context', text: 'A small local cache of the stats seen per work, for Momentum. Pool sizes from Browse’s filter counts for “in a 320-work pairing” context.', data: 'SwiftData cache, capped, kept out of backup and sync' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -47,6 +47,14 @@ body{margin:0}
           <span style="margin-top: 2px; font-size: 14px; line-height: 19px; color: #3A3A3C; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden">{{w.summary}}</span>
         </sc-if>
         <span style="font-size: 12px; line-height: 16px; color: #6C6C70">{{stats}}</span>
+        <sc-if value="{{hasSignal}}" hint-placeholder-val="{{false}}">
+          <span style="margin-top: 4px; display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 12px; line-height: 16px">
+            <span style="flex-shrink: 0; display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px 1px 6px; border-radius: 9px; background: {{signalBg}}; color: {{signalFg}}; font-weight: 600; white-space: nowrap">
+              <svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="{{signalD}}"></path></svg>{{signalLabel}}
+            </span>
+            <span style="min-width: 0; color: #6C6C70; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{signalNote}}</span>
+          </span>
+        </sc-if>
         <sc-if value="{{hasBars}}" hint-placeholder-val="{{false}}">
           <div style="display: flex; align-items: flex-end; gap: 8px; margin-top: 5px">
             <div role="img" aria-label="{{barsLabel}}" style="flex: 1; max-width: {{barsW}}; height: 16px; display: flex; align-items: flex-end; gap: 2px">
@@ -96,6 +104,16 @@ class Component extends DCLogic {
     if (w.hits) parts.push(w.hits + ' hits');
     if (w.updated) parts.push(w.updated);
     const hasProgress = typeof w.progress === 'number';
+    // Reader Response: one optional signal under the figures (ranked search results only).
+    const sig = w.signal || null;
+    const TONES = {
+      high: ['rgba(' + parseInt(hex.slice(0, 2), 16) + ',' + parseInt(hex.slice(2, 4), 16) + ',' + parseInt(hex.slice(4, 6), 16) + ',0.10)', accent, 'M12 20s-7.5-4.6-7.5-10.2A4.2 4.2 0 0 1 12 7.2a4.2 4.2 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20z'],
+      good: ['#E3F1E6', '#1E6B34', 'M5 12.5l4.6 4.6L19.2 7.4'],
+      late: ['#FBF0DC', '#8A5A00', 'M12 4a8 8 0 1 1 0 16 8 8 0 0 1 0-16zM12 8v4l3 2'],
+      neutral: ['#EFEFF4', '#3A3A3C', 'M12 5v14M5 12h14'],
+      unusual: ['#EFEFF4', '#6C6C70', 'M12 4 2.5 20h19zM12 10v4M12 17h.01']
+    };
+    const tone = sig ? (TONES[sig.tone] || TONES.high) : TONES.neutral;
     // Ledger: the fandom as a coloured label (identity, not a tinted card); progress as chapter bars.
     const seedOf = (t) => { let h = 7; for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) >>> 0; return h; };
     const FAN = { 'Original Work': 188, 'Persuasion': 335, 'Sherlock Holmes': 32, 'Jane Eyre': 262, 'Northanger Abbey': 290, 'Pride and Prejudice': 150, 'To the Lighthouse': 205 };
@@ -124,6 +142,12 @@ class Component extends DCLogic {
       barsW: Math.min(100, (w.planned || 0) * 8) + '%',
       barsLabel: hasBars ? (w.read || 0) + ' of ' + w.posted + ' posted chapters read' + (w.planned > w.posted ? ', ' + (w.planned - w.posted) + ' not posted yet' : '') : '',
       stats: parts.join(' · '),
+      hasSignal: !!sig,
+      signalLabel: sig ? sig.label : '',
+      signalNote: sig ? (sig.note || '') : '',
+      signalBg: tone[0],
+      signalFg: tone[1],
+      signalD: tone[2],
       isHidden: !!w.hidden,
       isShown: !w.hidden,
       hasBadge: !!w.badge,
