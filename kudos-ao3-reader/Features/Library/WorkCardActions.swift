@@ -299,8 +299,8 @@ enum WorkReaderPreparation {
     /// restarts the work, so this returns without downloading when the copy
     /// is not readable. A file freed or swept while AO3 is sending is left
     /// for the normal Download path. A failed download throws before
-    /// `replaceEPUB`, and `replaceEPUB` validates the package before it
-    /// touches the installed file.
+    /// `replaceEPUB`. `replaceEPUB` validates the package before it touches
+    /// the installed file, and a throw from that replace removes the temp.
     @MainActor
     static func updateDownloadedEPUB(
         for work: SavedWork,
@@ -322,7 +322,14 @@ enum WorkReaderPreparation {
             try? FileManager.default.removeItem(at: temp)
             return
         }
-        try ReadingQueueService.replaceEPUB(for: work, with: temp)
+        do {
+            try ReadingQueueService.replaceEPUB(for: work, with: temp)
+        } catch {
+            // Invalid package, or replaceItemAt failing, must not leave the
+            // temp behind. Success has already moved it into place.
+            try? FileManager.default.removeItem(at: temp)
+            throw error
+        }
         work.knownChapterCount = work.postedChapterCount
         if work.isQueuedForLater {
             work.epubPreservationStatus = .preserved

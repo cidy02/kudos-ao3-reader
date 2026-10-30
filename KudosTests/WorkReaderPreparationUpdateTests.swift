@@ -143,7 +143,8 @@ struct WorkReaderPreparationUpdateTests {
         try expectUntouched(fixture.work, original: fixture.original)
         #expect(fixture.work.epubPreservationStatus == .notPreserved)
         #expect(FileManager.default.fileExists(atPath: fixture.work.fileURL.path))
-        log.removeTemps()
+        #expect(!log.temps.isEmpty)
+        #expect(log.temps.allSatisfy { !FileManager.default.fileExists(atPath: $0.path) })
     }
 
     @Test func workWithNoEPUBDoesNotDownload() async throws {
