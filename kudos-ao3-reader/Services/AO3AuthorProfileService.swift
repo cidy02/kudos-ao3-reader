@@ -203,12 +203,6 @@ final class AO3AuthorProfileModel {
     /// parameters and so costs a refetch, while these narrow the pages already
     /// parsed, in place and offline. Same sheet, two different costs.
     private(set) var worksFilters = AO3SearchFilters()
-    /// 1u's hero totals. `nil` until fetched, and it stays `nil` for anyone but
-    /// the signed-in account — otwarchive's `StatsController` sets
-    /// `@user = current_user` behind `users_only`, so there is no stats page for
-    /// another author and asking for one would just 403.
-    private(set) var stats: AO3UserStats?
-
     private var worksPage = 0
     private var worksTotalPages = 1
     private var seriesPage = 0
@@ -323,7 +317,6 @@ final class AO3AuthorProfileModel {
                 return
             }
             await self.loadSelectedTab(auth: auth)
-            await self.loadOwnStats(auth: auth)
         }
     }
 
@@ -354,7 +347,6 @@ final class AO3AuthorProfileModel {
             == .orderedSame
         self.route = route
         selectedFandom = nil
-        stats = nil
         resetWorksScoping()
         if !keepsAccountAbout { about = nil }
         resetScopedContent(keepingAbout: keepsAccountAbout)
@@ -369,7 +361,6 @@ final class AO3AuthorProfileModel {
                 return
             }
             await self.loadSelectedTab(auth: auth)
-            await self.loadOwnStats(auth: auth)
         }
     }
 
@@ -414,32 +405,6 @@ final class AO3AuthorProfileModel {
         // would hide works the reader never asked to hide, and the emptiness
         // would look like that author having nothing.
         worksFilters = AO3SearchFilters()
-    }
-
-    /// Fetched beside the header rather than with the works page, because it is
-    /// one figure set for the account and does not change when the scope, the
-    /// sort or the page does.
-    ///
-    /// Failure is silent on purpose: the hero simply keeps the works count it
-    /// already had. A stats page that 403s or changes shape should not put an
-    /// error on a screen whose list loaded perfectly well.
-    private func loadOwnStats(auth: AO3AuthService) async {
-        guard stats == nil, ownsThisRoute(auth: auth),
-              let url = AO3Client.userStatsURL(username: route.username)
-        else { return }
-        let expectedRoute = route
-        let loaded = try? await parsedPage(at: url, auth: auth, bypassCache: false) {
-            try AO3Client.parseUserStats(from: $0)
-        }
-        guard let loaded, route == expectedRoute, !loaded.value.isEmpty else { return }
-        stats = loaded.value
-    }
-
-    /// Stats belong to the account, not a pseud, so a pseud route has none.
-    private func ownsThisRoute(auth: AO3AuthService) -> Bool {
-        route.pseud == nil
-            && auth.isLoggedIn
-            && auth.username?.localizedCaseInsensitiveCompare(route.username) == .orderedSame
     }
 
     private func reloadWorks(auth: AO3AuthService) {
@@ -1079,7 +1044,6 @@ final class AO3AuthorProfileModel {
         headerFailureSystemImage = "exclamationmark.triangle"
         about = nil
         selectedFandom = nil
-        stats = nil
         resetWorksScoping()
         resetScopedContent(keepingAbout: false)
         isShowingStaleCache = false

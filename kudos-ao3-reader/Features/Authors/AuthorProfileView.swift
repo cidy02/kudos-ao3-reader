@@ -35,6 +35,7 @@ struct AuthorProfileView: View {
     /// The toolbar "+" on your own Works — Add lives there on every list of
     /// your own things (queues, collections).
     @State private var isCreatingWork = false
+    @State private var isShowingStats = false
     /// Which group the bulk bar's button opens the form on.
     @State private var bulkEditFocus: EditMultipleWorksView.Focus?
     /// 1bn's bulk Delete: the works named in the alert, fixed when it opened,
@@ -118,6 +119,7 @@ struct AuthorProfileView: View {
             .navigationDestination(isPresented: $isCreatingWork) {
                 WritingWorkDestination(workID: nil) { Task { await model.refresh(auth: auth) } }
             }
+            .navigationDestination(isPresented: $isShowingStats) { WritingStatsView() }
             .navigationDestination(item: ownWorkPushBinding) { action in
                 ownWorkDestination(action)
                     .environment(\.writingOtherWorks, WritingOtherWorkTags.sources(from: model.works))
@@ -949,6 +951,12 @@ private extension AuthorProfileView {
             if showsDashboard {
                 Button { dashboardDestination = .tab(.about) } label: {
                     Label("About", systemImage: "person.text.rectangle")
+                }
+            }
+            if isOwnProfile, model.route.pseud == nil,
+               !showsDashboard, model.selectedTab == .works {
+                Button { isShowingStats = true } label: {
+                    Label("Stats", systemImage: "chart.bar")
                 }
             }
             Button { router.open(model.route.dashboardURL) } label: {
