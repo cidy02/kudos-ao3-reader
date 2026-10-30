@@ -1186,9 +1186,12 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         guard let work = localWork, work.hasUpdate, !working else { return }
         let workID = work.id
         let queue = downloadQueue
+        let token = UUID()
+        // One update per work. The view that finds an entry already there
+        // does not start a second request or clear the first.
+        guard queue.beginUpdateDownload(for: workID, token: token) else { return }
         working = true
         loadError = nil
-        queue.beginUpdateDownload(for: workID)
         Task {
             do {
                 try await WorkReaderPreparation.updateDownloadedEPUB(
@@ -1205,7 +1208,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             } catch {
                 loadError = UserFacingError.message(for: error)
             }
-            queue.endUpdateDownload(for: workID)
+            queue.endUpdateDownload(for: workID, token: token)
             working = false
         }
     }

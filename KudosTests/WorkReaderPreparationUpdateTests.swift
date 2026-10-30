@@ -287,7 +287,8 @@ struct WorkReaderPreparationUpdateTests {
         let start = Date(timeIntervalSince1970: 10_000)
         #expect(queue.liveDownloadFraction(for: work, at: start) == nil)
 
-        queue.beginUpdateDownload(for: work.id, at: start)
+        let token = UUID()
+        #expect(queue.beginUpdateDownload(for: work.id, token: token, at: start))
         #expect(queue.isDownloading(work))
         #expect(queue.downloadFraction(for: work, at: start) == 0)
         #expect(queue.liveDownloadFraction(for: work, at: start) == 0)
@@ -303,10 +304,32 @@ struct WorkReaderPreparationUpdateTests {
         #expect((crept ?? 1) < 1)
         #expect(queue.liveDownloadFraction(for: work, at: later) == crept)
 
-        queue.endUpdateDownload(for: work.id)
+        queue.endUpdateDownload(for: work.id, token: token)
         queue.noteUpdateDownloadProgress(1, for: work.id)
         #expect(queue.liveDownloadFraction(for: work, at: later) == nil)
         #expect(!queue.isDownloading(work))
+    }
+
+    /// Two detail screens can offer the circle for one work. The second begin
+    /// loses, and its end must not clear the entry the first begin created.
+    @Test func aSecondUpdateBeginForTheSameWorkReturnsFalse() {
+        let queue = DownloadQueue()
+        let work = SavedWork(title: "Update", author: "Writer")
+        let start = Date(timeIntervalSince1970: 10_000)
+        let first = UUID()
+        #expect(queue.beginUpdateDownload(for: work.id, token: first, at: start))
+        #expect(queue.isDownloading(work))
+
+        let second = UUID()
+        #expect(!queue.beginUpdateDownload(for: work.id, token: second, at: start.addingTimeInterval(1)))
+        #expect(queue.downloadFraction(for: work, at: start) == 0)
+
+        queue.endUpdateDownload(for: work.id, token: second)
+        #expect(queue.isDownloading(work))
+
+        queue.endUpdateDownload(for: work.id, token: first)
+        #expect(!queue.isDownloading(work))
+        #expect(queue.liveDownloadFraction(for: work, at: start) == nil)
     }
 
     // MARK: - Fixture
