@@ -149,6 +149,7 @@ struct ScaledCarouselCardSize: DynamicProperty {
         width: CGFloat = CarouselCardMetrics.width,
         height: CGFloat = CarouselCardMetrics.height
     ) {
+        designWidth = width
         _scaledWidth = ScaledMetric(wrappedValue: width, relativeTo: .body)
         _scaledHeight = ScaledMetric(wrappedValue: height, relativeTo: .body)
     }
@@ -172,9 +173,16 @@ struct ScaledCarouselCardSize: DynamicProperty {
         CarouselCardMetrics.clampRatio(scaledWidth: scaledWidth, availableWidth: maxWidth)
     }
 
+    /// The unscaled shelf width this card was built at. Only the 120 pt cover
+    /// takes a grid's stretched column; a stack keeps its own scaled width.
+    private let designWidth: CGFloat
+
     var width: CGFloat {
-        if let gridCardWidth, gridCardWidth > 0 { return gridCardWidth }
-        return scaledWidth * clampRatio
+        CarouselCardMetrics.resolvedCardWidth(
+            designWidth: designWidth,
+            scaledWidth: scaledWidth * clampRatio,
+            gridCardWidth: gridCardWidth
+        )
     }
     var height: CGFloat { scaledHeight * clampRatio }
 
@@ -191,6 +199,25 @@ extension CarouselCardMetrics {
     static func clampRatio(scaledWidth: CGFloat, availableWidth: CGFloat) -> CGFloat {
         guard scaledWidth > 0 else { return 1 }
         return min(1, max(0, availableWidth) / scaledWidth)
+    }
+
+    /// Stretch-to-fill is the 120 pt cover grid only. A stack (`stackWidth`)
+    /// keeps the pre-branch adaptive columns and its own scaled width.
+    static func stretchesToFill(baseWidth: CGFloat) -> Bool {
+        baseWidth == width
+    }
+
+    /// A cover grid's column wins. Any other design width ignores it, so a
+    /// 150 pt pile is not resized to whatever leftover the row has.
+    static func resolvedCardWidth(
+        designWidth: CGFloat,
+        scaledWidth: CGFloat,
+        gridCardWidth: CGFloat?
+    ) -> CGFloat {
+        if stretchesToFill(baseWidth: designWidth), let gridCardWidth, gridCardWidth > 0 {
+            return gridCardWidth
+        }
+        return scaledWidth
     }
 
     /// How many grid columns fit when none may be narrower than `minimum`.

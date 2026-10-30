@@ -92,6 +92,8 @@ struct CarouselCardGrid<Content: View>: View {
     var columnCount: Int?
     var containerWidth: CGFloat?
     var columnSpacing: CGFloat
+    /// 120 pt covers stretch. Any other base width (the 150 pt stacks) does not.
+    private let baseCardWidth: CGFloat
     @ViewBuilder var content: () -> Content
     @State private var availableWidth: CGFloat?
     @ScaledMetric(relativeTo: .body) private var gridMinimum = CarouselCardMetrics.gridMinimumWidth
@@ -109,6 +111,7 @@ struct CarouselCardGrid<Content: View>: View {
         self.columnCount = columnCount
         self.containerWidth = containerWidth
         self.columnSpacing = columnSpacing
+        baseCardWidth = cardWidth
         cardSize = ScaledCarouselCardSize(width: cardWidth)
         self.content = content
     }
@@ -141,7 +144,7 @@ struct CarouselCardGrid<Content: View>: View {
         let columns = gridColumns(in: available, fallbackMinimum: minimum)
         return LazyVGrid(
             columns: columns.items,
-            alignment: .leading,
+            alignment: columns.alignment,
             spacing: CarouselCardMetrics.compactGridSpacing
         ) {
             content()
@@ -149,17 +152,23 @@ struct CarouselCardGrid<Content: View>: View {
         .environment(\.carouselGridCardWidth, columns.cardWidth)
     }
 
-    /// At least 112 pt per column, then each card stretches to fill the row.
-    /// An explicit count (a shelf page) keeps that count and still stretches.
+    /// Cover grids: at least 112 pt per column, then each card stretches to fill
+    /// the row. An explicit count (a shelf page) keeps that count and still
+    /// stretches. Any other base width keeps the pre-branch adaptive columns
+    /// (`4948b820`) and does not publish a stretched width.
     private func gridColumns(
         in available: CGFloat?, fallbackMinimum: CGFloat
-    ) -> (items: [GridItem], cardWidth: CGFloat?) {
+    ) -> (items: [GridItem], cardWidth: CGFloat?, alignment: HorizontalAlignment) {
+        guard CarouselCardMetrics.stretchesToFill(baseWidth: baseCardWidth) else {
+            return legacyColumns(fallbackMinimum: fallbackMinimum)
+        }
         guard let available, available > 0 else {
             return (
                 CarouselCardMetrics.adaptiveCardColumns(
                     minimum: fallbackMinimum, spacing: columnSpacing
                 ),
-                nil
+                nil,
+                .leading
             )
         }
         let count = columnCount.map { max(1, $0) } ?? CarouselCardMetrics.gridColumnCount(
@@ -173,7 +182,33 @@ struct CarouselCardGrid<Content: View>: View {
                 repeating: GridItem(.fixed(max(cardWidth, 1)), spacing: columnSpacing),
                 count: count
             ),
-            cardWidth
+            cardWidth,
+            .leading
+        )
+    }
+
+    /// `4948b820`: a counted shelf page is fixed at the card's own width;
+    /// otherwise `.adaptive`, centred, capped at that width.
+    private func legacyColumns(
+        fallbackMinimum: CGFloat
+    ) -> (items: [GridItem], cardWidth: CGFloat?, alignment: HorizontalAlignment) {
+        if let columnCount {
+            let count = max(1, columnCount)
+            return (
+                Array(
+                    repeating: GridItem(.fixed(max(fallbackMinimum, 1)), spacing: columnSpacing),
+                    count: count
+                ),
+                nil,
+                .leading
+            )
+        }
+        return (
+            CarouselCardMetrics.adaptiveCardColumns(
+                minimum: fallbackMinimum, spacing: columnSpacing
+            ),
+            nil,
+            .center
         )
     }
 }
