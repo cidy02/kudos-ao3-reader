@@ -210,9 +210,11 @@ private struct AccentColourPicker: View {
     }
 }
 
-/// 32pt fill. Selected draws the board's ring: 2pt of the fill, a 2pt white gap,
-/// then the fill. The gap is the board's literal white on every theme.
+/// 32pt fill. Selected draws a 2pt ring of the fill, a 2pt gap in the row
+/// colour, then the fill. The board's gap is white because its card is white.
+/// Here the gap is the settings cell, so Dark, OLED and Sepia have no white halo.
 private struct AccentSwatch: View {
+    @Environment(ThemeManager.self) private var themeManager
     let fillHex: String
     let selected: Bool
 
@@ -223,7 +225,7 @@ private struct AccentSwatch: View {
                     .strokeBorder(color, lineWidth: 2)
                     .frame(width: 40, height: 40)
                 Circle()
-                    .fill(Color.white)
+                    .fill(gap)
                     .frame(width: 36, height: 36)
             }
             Circle()
@@ -234,10 +236,14 @@ private struct AccentSwatch: View {
     }
 
     private var color: Color { Color(hex: fillHex) ?? .black }
+    /// The form row these swatches sit on. Light's cell is white.
+    private var gap: Color { themeManager.appTheme.cardSurface }
 }
 
 /// The (+) well. A selected custom colour rings it; the rainbow stays the well.
+/// The ring's gap and the well's centre use the row colour, same as a swatch.
 private struct AccentCustomWell: View {
+    @Environment(ThemeManager.self) private var themeManager
     let selectedHex: String?
 
     var body: some View {
@@ -247,21 +253,23 @@ private struct AccentCustomWell: View {
                     .strokeBorder(Color(hex: selectedHex) ?? .black, lineWidth: 2)
                     .frame(width: 40, height: 40)
                 Circle()
-                    .fill(Color.white)
+                    .fill(gap)
                     .frame(width: 36, height: 36)
             }
             Circle()
                 .fill(AngularGradient(colors: Self.wheel, center: .center))
                 .frame(width: 32, height: 32)
             Circle()
-                .fill(Color.white)
+                .fill(gap)
                 .frame(width: 24, height: 24)
             Image(systemName: "plus")
                 .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(Color(hex: "#1C1C1E") ?? .black)
+                .foregroundStyle(ThemeManager.label(on: gap))
         }
         .frame(width: 40, height: 40)
     }
+
+    private var gap: Color { themeManager.appTheme.cardSurface }
 
     private static let wheel: [Color] = [
         "#F5C400", "#5FBF5F", "#5A9BE0", "#A57BD8", "#E86AA0", "#E5484D", "#F5C400"
