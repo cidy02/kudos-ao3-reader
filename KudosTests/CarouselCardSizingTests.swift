@@ -100,11 +100,15 @@ struct CarouselCardSizingTests {
             availableWidth: 358, columns: 3, spacing: spacing
         )
         #expect(abs(filled - (CGFloat(358) - 2 * spacing) / 3) < 0.001)
-        // Cover aspect stays width × 1.42 whatever the column becomes.
+        // The stretched columns plus the gaps between them fill the row.
+        // artHeight is defined as width × 1.42, so comparing those cannot fail.
+        let columns = 2
         let stretched = CarouselCardMetrics.gridCardWidth(
-            availableWidth: 358, columns: 2, spacing: spacing
+            availableWidth: 358, columns: columns, spacing: spacing
         )
-        #expect(abs(stretched * 1.42 - stretched / CarouselCardMetrics.width * CarouselCardMetrics.artHeight) < 0.001)
+        #expect(abs(
+            stretched * CGFloat(columns) + spacing * CGFloat(columns - 1) - 358
+        ) < 0.001)
     }
 
     @Test func theClipUsesTheAlreadyUsableViewportWidth() {
