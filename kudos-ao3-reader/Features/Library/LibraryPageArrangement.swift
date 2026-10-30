@@ -128,6 +128,12 @@ nonisolated struct LibraryPageArrangement: Codable, Equatable, Sendable, RawRepr
         )
     }
 
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(sections, forKey: .sections)
+        try container.encode(buttons, forKey: .buttons)
+    }
+
     /// UserDefaults string. Nil when the string is not this arrangement, so
     /// `@AppStorage` falls back to `default` instead of drawing a broken page.
     init?(rawValue: String) {

@@ -3,11 +3,11 @@ import SwiftData
 import SwiftUI
 
 // Lint: this existing dashboard owns many stateful sections.
-/// The Library tab: a Books-style dashboard of the user's saved works. Every section
-/// is a collapsible horizontal card carousel with a `>` chevron that opens its full
-/// vertical list. Sections, in order: Reading Now, Saved for Later, Finished,
-/// Collections, Downloaded. Saved for Later is the permanent local queue; AO3-managed
-/// lists live in the On AO3 group and never become local queue membership.
+/// The Library tab. The reader chooses which shelves are sections (a carousel or
+/// ledger rows) and which are buttons in the Shelves grid. The default is
+/// Favourites, Collections, then Downloaded, as carousels. All Works stays in
+/// the header. Saved for Later is the Want to Read shelf; AO3-managed lists live
+/// in the On AO3 group and never become local queue membership.
 ///
 /// Filtering (the inspector panel), Reading Insights, content privacy, and
 /// multi-select bulk actions (all platforms) are kept from the previous
@@ -30,8 +30,10 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     @Query(filter: #Predicate<SavedWork> { $0.isPendingDeletion }) private var deletedWorks: [SavedWork]
     @Query(filter: #Predicate<WorkCollection> { $0.isPendingDeletion }) private var deletedCollections: [WorkCollection]
     @Query(filter: #Predicate<ReadingQueue> { $0.isPendingDeletion }) private var deletedQueues: [ReadingQueue]
-    /// `library.dashboard.layout` is left in UserDefaults and never read. The
-    /// dashboard is shelves. T-472 is the place a reader picks a Library layout.
+    @Query(filter: #Predicate<ReadingQueue> { !$0.isPendingDeletion }) private var readingQueues: [ReadingQueue]
+    /// `library.dashboard.layout` is left in UserDefaults and never read. Which
+    /// shelves are sections, and carousel or list, is `pageArrangement`.
+    @AppStorage(LibraryPageArrangement.storageKey) private var pageArrangement = LibraryPageArrangement.default
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
 
@@ -39,6 +41,10 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     @Namespace private var cardZoomNamespace
     @State private var filters = LibraryFilters()
     @State private var showingNewCollection = false
+    @State private var showingEditShelves = false
+    @State private var importedCache: [SavedWork] = []
+    @State private var libraryHeader = LibraryHeaderFacts()
+    @State private var filteredDownloadedBytes: Int64 = 0
 
     @ScaledMetric(relativeTo: .footnote) private var recentlyDeletedTitleSize: CGFloat = 14
     @ScaledMetric(relativeTo: .footnote) private var recentlyDeletedCountSize: CGFloat = 13
@@ -164,6 +170,8 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 }
                 #endif
                 .navigationDestination(for: AllCollectionsDestination.self) { _ in collectionsGridDestination }
+                .navigationDestination(for: AllReadingQueuesDestination.self, destination: queuesDestination)
+                .navigationDestination(for: LibraryCatalogueDestination.self, destination: catalogueDestination)
                 .toolbar { toolbarContent }
             #if os(iOS)
                 // Select mode owns the bottom edge with its bulk-action bar; the
@@ -179,6 +187,13 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 // serves both entry points, which both flip the same flag.
                 .sheet(isPresented: $showingNewCollection) {
                     NewCollectionSheet()
+                }
+                .sheet(isPresented: $showingEditShelves) {
+                    LibraryEditShelvesSheet(
+                        arrangement: $pageArrangement,
+                        counts: shelfCounts,
+                        allWorksCount: libraryHeader.workCount
+                    )
                 }
                 .filterPanelPresentation(isPresented: router.isShowing(.libraryFilters)) {
                     // The lists are drawn from what the Library can show: not a work Hide
@@ -266,6 +281,19 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         )
     }
 
+    @ViewBuilder
+    private func queuesDestination(_ destination: AllReadingQueuesDestination) -> some View {
+        if destination.initialQueueID == nil {
+            AllReadingQueuesGridView()
+        } else {
+            ReadingQueueBrowserView(initialQueueID: destination.initialQueueID, originKicker: "Library")
+        }
+    }
+
+    private func catalogueDestination(_ destination: LibraryCatalogueDestination) -> some View {
+        LibraryCatalogueListView(kind: destination.kind)
+    }
+
     /// Extracted from the `onChange` closure: inline, the added branch tipped this
     /// view's body past what the type checker would solve in reasonable time.
     private func openDeepLinkedSection(_ kind: LibrarySectionKind) {
@@ -312,6 +340,18 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             next[kind] = filters.apply(to: kind.works(from: works, visible: passesPrivacy))
         }
         sectionCache = next
+        importedCache = filters.apply(to: works.filter { work in
+            LibraryShelfID.isImported(origin: work.origin, isQueueOnly: work.isQueueOnlyWork)
+                && passesPrivacy(work)
+        })
+        let libraryWorks = works.filter { !$0.isQueueOnlyWork && passesPrivacy($0) }
+        let downloadedWorks = libraryWorks.filter(\.isDownloaded)
+        libraryHeader = LibraryHeaderFacts(
+            workCount: libraryWorks.count,
+            downloadedCount: downloadedWorks.count,
+            downloadedBytes: downloadedWorks.reduce(0) { $0 + queueWorkFileSize($1.fileURL) }
+        )
+        filteredDownloadedBytes = (next[.downloaded] ?? []).reduce(0) { $0 + queueWorkFileSize($1.fileURL) }
 
         // One chip per fandom family, counted once per work.
         let counts: [String: Int] = works
@@ -339,10 +379,8 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                     // First paint inside the progressive tab content — keep showing
                     // skeletons until the section cache is ready (usually one yield).
                     TabDashboardShell(
-                        sectionTitles: [
-                            "Reading Now", "Saved for Later", "Finished",
-                            "Collections", "Downloaded", "Reading History", "Favorites"
-                        ],
+                        sectionTitles: pageArrangement.sections.map(\.id.title)
+                            + (pageArrangement.buttons.isEmpty ? [] : ["Shelves"]),
                         showFilterChips: true
                     )
                 }
@@ -356,14 +394,20 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         ScrollView {
             // 26pt between sections (Rules; 1c drew 22), the chips' row included.
             VStack(alignment: .leading, spacing: SubjectMetrics.sectionSpacing) {
+                libraryHeaderLink
                 fandomFilterBar
-                localCarousel(.readingNow)
-                localCarousel(.savedForLater)
-                localCarousel(.finished)
-                collectionsCarousel
-                localCarousel(.downloaded)
-                localCarousel(.history)
-                localCarousel(.favorites)
+                ForEach(pageArrangement.sections) { section in
+                    arrangedSection(section)
+                }
+                if !pageArrangement.buttons.isEmpty {
+                    LibraryShelfButtonGrid(
+                        buttons: pageArrangement.buttons,
+                        counts: shelfCounts,
+                        onEdit: { showingEditShelves = true },
+                        onOpen: openShelf
+                    )
+                    .dashboardLeadingRegion()
+                }
                 onAO3Panel.dashboardLeadingRegion()
                 if recentlyDeletedCount > 0 {
                     recentlyDeletedRow.dashboardLeadingRegion()
@@ -442,13 +486,19 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
 
     /// A purely local section carousel (Reading Now / Finished / Downloaded).
     /// Reads pre-filtered slices from `sectionCache`.
-    private func localCarousel(_ kind: LibrarySectionKind) -> some View {
+    private func localCarousel(
+        _ kind: LibrarySectionKind,
+        title: String,
+        countText: String? = nil,
+        emptyMessage: String? = nil
+    ) -> some View {
         let sectionWorks = cachedWorks(for: kind)
         return WorkCarouselSection(
-            title: kind.title,
+            title: title,
             collapseKey: "library.\(kind.rawValue)",
             hasItems: !sectionWorks.isEmpty,
             itemCount: sectionWorks.count,
+            countText: countText,
             onSeeAll: !sectionWorks.isEmpty
                 ? { path.append(LibrarySectionRoute(kind: kind, originKicker: "Library")) }
                 : nil
@@ -457,7 +507,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 localCarouselCard(work: work, footer: footer(kind, work), progress: progress(kind, work))
             }
         } emptyState: {
-            SectionEmptyState(message: kind.emptyMessage, systemImage: kind.emptyIcon)
+            SectionEmptyState(message: emptyMessage ?? kind.emptyMessage, systemImage: kind.emptyIcon)
         }
     }
 
@@ -484,6 +534,329 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             Text("Use + above to create a collection for works you want to group together.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private func arrangedSection(_ section: LibraryPageSection) -> some View {
+        switch section.id {
+        case .collections:
+            if section.style == .list {
+                collectionsList
+            } else {
+                collectionsCarousel
+            }
+        case .queues:
+            if section.style == .list {
+                queuesList
+            } else {
+                queuesCarousel
+            }
+        case .imported:
+            importedSection(section.style)
+        default:
+            if let kind = shelfKind(section.id) {
+                if section.style == .list {
+                    workListSection(section.id, kind: kind)
+                } else {
+                    localCarousel(
+                        kind,
+                        title: section.id.title,
+                        countText: downloadedCountText(for: section.id),
+                        emptyMessage: emptyCopy(for: section.id)
+                    )
+                }
+            }
+        }
+    }
+
+    private var libraryHeaderLink: some View {
+        let bytes = LocalStorageFootprint.formatted(bytes: libraryHeader.downloadedBytes)
+        let tally = LibraryPageArrangement.headerTally(
+            works: libraryHeader.workCount,
+            downloaded: libraryHeader.downloadedCount,
+            byteText: bytes
+        )
+        let phrase = LibraryPageArrangement.workCountPhrase(libraryHeader.workCount)
+        let line = Text(phrase).fontWeight(.semibold).foregroundStyle(.primary)
+            + Text(" · \(libraryHeader.downloadedCount) downloaded · \(bytes)").foregroundStyle(.secondary)
+        return Button {
+            path.append(LibraryCatalogueDestination(kind: .allWorks))
+        } label: {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                line
+                    .font(.subheadline)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 16)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("All Works, \(tally)")
+        .accessibilityHint("Opens every work in the library")
+        .dashboardLeadingRegion()
+    }
+
+    private var shelfCounts: [LibraryShelfID: Int] {
+        Dictionary(uniqueKeysWithValues: LibraryShelfID.allCases.map { ($0, shelfCount($0)) })
+    }
+
+    private func shelfCount(_ shelf: LibraryShelfID) -> Int {
+        switch shelf {
+        case .favourites: cachedWorks(for: .favorites).count
+        case .collections: collections.count
+        case .downloaded: cachedWorks(for: .downloaded).count
+        case .wantToRead: cachedWorks(for: .savedForLater).count
+        case .readingNow: cachedWorks(for: .readingNow).count
+        case .finished: cachedWorks(for: .finished).count
+        case .queues: shelfQueues.count
+        case .history: cachedWorks(for: .history).count
+        case .imported: importedCache.count
+        }
+    }
+
+    private var shelfQueues: [ReadingQueue] {
+        readingQueues
+            .filter { $0.kind == .custom }
+            .sorted { lhs, rhs in
+                if lhs.sortOrder != rhs.sortOrder { return lhs.sortOrder < rhs.sortOrder }
+                return lhs.displayName.localizedStandardCompare(rhs.displayName) == .orderedAscending
+            }
+    }
+
+    private func shelfKind(_ shelf: LibraryShelfID) -> LibrarySectionKind? {
+        switch shelf {
+        case .favourites: .favorites
+        case .downloaded: .downloaded
+        case .wantToRead: .savedForLater
+        case .readingNow: .readingNow
+        case .finished: .finished
+        case .history: .history
+        case .collections, .queues, .imported: nil
+        }
+    }
+
+    private func emptyCopy(for shelf: LibraryShelfID) -> String {
+        switch shelf {
+        case .wantToRead:
+            "You haven't saved any works for later. Add a work to Want to Read to see it here."
+        case .imported:
+            "Works you import, or bring in from another site, appear here."
+        case .queues:
+            "You have no queues yet. Open Queues to add one."
+        case .collections:
+            "Use + above to create a collection for works you want to group together."
+        default:
+            shelfKind(shelf)?.emptyMessage ?? ""
+        }
+    }
+
+    private func downloadedCountText(for shelf: LibraryShelfID) -> String? {
+        guard shelf == .downloaded else { return nil }
+        let count = cachedWorks(for: .downloaded).count
+        guard count > 0 else { return nil }
+        return "\(count.compactCount) · \(LocalStorageFootprint.formatted(bytes: filteredDownloadedBytes))"
+    }
+
+    private func openShelf(_ shelf: LibraryShelfID) {
+        switch shelf {
+        case .collections:
+            path.append(AllCollectionsDestination())
+        case .queues:
+            path.append(AllReadingQueuesDestination(initialQueueID: nil))
+        case .imported:
+            path.append(LibraryCatalogueDestination(kind: .imported))
+        default:
+            if let kind = shelfKind(shelf) {
+                path.append(LibrarySectionRoute(kind: kind, originKicker: "Library"))
+            }
+        }
+    }
+
+    private func workListSection(_ shelf: LibraryShelfID, kind: LibrarySectionKind) -> some View {
+        let sectionWorks = cachedWorks(for: kind)
+        return LibraryCollapsingShelf(
+            title: shelf.title,
+            collapseKey: "library.\(kind.rawValue)",
+            count: sectionWorks.count,
+            countText: downloadedCountText(for: shelf),
+            onSeeAll: sectionWorks.isEmpty
+                ? nil
+                : { path.append(LibrarySectionRoute(kind: kind, originKicker: "Library")) }
+        ) {
+            if sectionWorks.isEmpty {
+                SectionEmptyState(message: emptyCopy(for: shelf), systemImage: kind.emptyIcon)
+                    .padding(.horizontal, 16)
+            } else {
+                VStack(spacing: 8) {
+                    ForEach(sectionWorks.prefix(12)) { work in
+                        ledgerRow(work)
+                    }
+                }
+                .padding(.horizontal, 16)
+            }
+        }
+    }
+
+    private func importedSection(_ style: LibrarySectionStyle) -> some View {
+        let sectionWorks = importedCache
+        return LibraryCollapsingShelf(
+            title: LibraryShelfID.imported.title,
+            collapseKey: "library.imported",
+            count: sectionWorks.count,
+            onSeeAll: sectionWorks.isEmpty
+                ? nil
+                : { path.append(LibraryCatalogueDestination(kind: .imported)) }
+        ) {
+            if sectionWorks.isEmpty {
+                SectionEmptyState(message: emptyCopy(for: .imported), systemImage: "doc")
+                    .padding(.horizontal, 16)
+            } else if style == .list {
+                VStack(spacing: 8) {
+                    ForEach(sectionWorks.prefix(12)) { work in
+                        ledgerRow(work)
+                    }
+                }
+                .padding(.horizontal, 16)
+            } else {
+                DashboardCardShelf {
+                    ForEach(sectionWorks.prefix(12)) { work in
+                        localCarouselCard(work: work, footer: nil, progress: nil)
+                    }
+                }
+            }
+        }
+    }
+
+    private func ledgerRow(_ work: SavedWork) -> some View {
+        let selected = selection.contains(work.id)
+        let toggle: (() -> Void)? = isSelecting ? { toggleSelection(work) } : nil
+        return SensitiveWorkRow(
+            work: work,
+            openMode: .reader,
+            isSelecting: isSelecting,
+            isSelected: selected,
+            onToggleSelection: toggle,
+            presentation: .ledger,
+            showsFavoriteStar: true,
+            showsFullLedgerStats: true,
+            showsSummary: false,
+            usesInlineNavigation: !isSelecting
+        )
+        .padding(.horizontal, 14)
+        .padding(.vertical, 6)
+        .background {
+            let shape = RoundedRectangle(cornerRadius: SubjectMetrics.rowRadius, style: .continuous)
+            shape.fill(themeManager.appTheme.cardSurface)
+                .overlay(
+                    shape.strokeBorder(
+                        selected ? AnyShapeStyle(.tint) : AnyShapeStyle(themeManager.appTheme.cardBorder),
+                        lineWidth: selected ? 2 : 0.5
+                    )
+                )
+        }
+    }
+
+    private var collectionsList: some View {
+        LibraryCollapsingShelf(
+            title: LibraryShelfID.collections.title,
+            collapseKey: "library.\(LibrarySectionKind.collections.rawValue)",
+            count: collections.count,
+            onSeeAll: collections.isEmpty ? nil : { path.append(AllCollectionsDestination()) }
+        ) {
+            if collections.isEmpty {
+                Text(emptyCopy(for: .collections))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 16)
+            } else {
+                VStack(spacing: 8) {
+                    ForEach(collections.prefix(12)) { collection in
+                        NavigationLink(value: collection) {
+                            CollectionLedgerRow(
+                                collection: collection,
+                                previewWorks: collectionPreviews(collection)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 16)
+            }
+        }
+    }
+
+    private func collectionPreviews(_ collection: WorkCollection) -> [SavedWork] {
+        collection.works.filter { work in
+            !work.isPendingDeletion && !gate.isConcealed(work, enabled: hideMature)
+        }
+    }
+
+    private var queuesCarousel: some View {
+        WorkCarouselSection(
+            title: LibraryShelfID.queues.title,
+            collapseKey: "library.queues",
+            hasItems: !shelfQueues.isEmpty,
+            itemCount: shelfQueues.count,
+            cardSpacing: CarouselCardMetrics.coverStackSpacing,
+            onSeeAll: { path.append(AllReadingQueuesDestination(initialQueueID: nil)) }
+        ) {
+            ForEach(shelfQueues.prefix(12)) { queue in
+                NavigationLink(value: AllReadingQueuesDestination(initialQueueID: queue.id)) {
+                    ReadingQueueCard(queue: queue)
+                }
+                .buttonStyle(.plain)
+            }
+        } emptyState: {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(emptyCopy(for: .queues))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button("Open Queues") {
+                    path.append(AllReadingQueuesDestination(initialQueueID: nil))
+                }
+                .foregroundStyle(.accentFill)
+            }
+        }
+    }
+
+    private var queuesList: some View {
+        LibraryCollapsingShelf(
+            title: LibraryShelfID.queues.title,
+            collapseKey: "library.queues",
+            count: shelfQueues.count,
+            onSeeAll: { path.append(AllReadingQueuesDestination(initialQueueID: nil)) }
+        ) {
+            if shelfQueues.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(emptyCopy(for: .queues))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button("Open Queues") {
+                        path.append(AllReadingQueuesDestination(initialQueueID: nil))
+                    }
+                    .foregroundStyle(.accentFill)
+                }
+                .padding(.horizontal, 16)
+            } else {
+                VStack(spacing: 8) {
+                    ForEach(shelfQueues.prefix(12)) { queue in
+                        NavigationLink(value: AllReadingQueuesDestination(initialQueueID: queue.id)) {
+                            LibraryQueueLedgerRow(queue: queue)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 16)
+            }
         }
     }
 
@@ -599,7 +972,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             let showsMature = hideMature
             let showsStatistics = !statisticsWorks.isEmpty
             let showsSelect = !works.isEmpty
-            let showsMoreMenu = showsStatistics || showsSelect || showsMature
+            let showsMoreMenu = true
             // Gated as a whole, not just its inner pieces — an empty HStack (or a
             // WorkListMoreMenu with no items) still reserves an (empty-looking)
             // toolbar slot, which is exactly what showed a blank "..." button when
@@ -619,6 +992,11 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                         : nil,
                     showsMoreMenu
                         ? AnyView(WorkListMoreMenu {
+                            Button {
+                                showingEditShelves = true
+                            } label: {
+                                Label("Edit Shelves", systemImage: "square.grid.2x2")
+                            }
                             if showsMature {
                                 MatureRevealToggle()
                             }
@@ -765,12 +1143,15 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     }
 
     private var visibleDashboardWorks: [SavedWork] {
-        unique(
-            dashboardWorks(for: .readingNow)
-                + dashboardWorks(for: .savedForLater)
-                + dashboardWorks(for: .finished)
-                + dashboardWorks(for: .downloaded)
-        )
+        var listed: [SavedWork] = []
+        for section in pageArrangement.sections {
+            if section.id == .imported {
+                listed += importedCache.prefix(12)
+            } else if let kind = shelfKind(section.id) {
+                listed += dashboardWorks(for: kind)
+            }
+        }
+        return unique(listed)
     }
 
     private func dashboardWorks(for kind: LibrarySectionKind) -> [SavedWork] {
@@ -781,6 +1162,14 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         var seen = Set<UUID>()
         return works.filter { seen.insert($0.id).inserted }
     }
+}
+
+/// Counts for the line under the Library title. Privacy-filtered, not narrowed
+/// by the fandom chips: the header is the whole library.
+private struct LibraryHeaderFacts {
+    var workCount = 0
+    var downloadedCount = 0
+    var downloadedBytes: Int64 = 0
 }
 
 private extension LibraryAO3Route {
