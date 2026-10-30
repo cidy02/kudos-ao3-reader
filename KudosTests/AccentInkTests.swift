@@ -281,12 +281,18 @@ struct AccentInkTests {
     @MainActor @Test func defaultAccentIsAO3Red821019() {
         let defaults = UserDefaults.standard
         let previous = defaults.object(forKey: "accentColorHex")
+        let previousTheme = defaults.object(forKey: "appTheme")
         defaults.removeObject(forKey: "accentColorHex")
         defer {
             if let previous {
                 defaults.set(previous, forKey: "accentColorHex")
             } else {
                 defaults.removeObject(forKey: "accentColorHex")
+            }
+            if let previousTheme {
+                defaults.set(previousTheme, forKey: "appTheme")
+            } else {
+                defaults.removeObject(forKey: "appTheme")
             }
         }
         let manager = ThemeManager()
@@ -299,11 +305,17 @@ struct AccentInkTests {
     @MainActor @Test func storedLegacyRedIsReadAsAO3RedAndNotRewritten() {
         let defaults = UserDefaults.standard
         let previous = defaults.object(forKey: "accentColorHex")
+        let previousTheme = defaults.object(forKey: "appTheme")
         defer {
             if let previous {
                 defaults.set(previous, forKey: "accentColorHex")
             } else {
                 defaults.removeObject(forKey: "accentColorHex")
+            }
+            if let previousTheme {
+                defaults.set(previousTheme, forKey: "appTheme")
+            } else {
+                defaults.removeObject(forKey: "appTheme")
             }
         }
         defaults.set("#990000", forKey: "accentColorHex")
