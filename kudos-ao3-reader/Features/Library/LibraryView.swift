@@ -739,6 +739,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         return SensitiveWorkRow(
             work: work,
             openMode: .reader,
+            onSelect: selectAction(for: work),
             isSelecting: isSelecting,
             isSelected: selected,
             onToggleSelection: toggle,
