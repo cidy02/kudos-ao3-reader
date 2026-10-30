@@ -100,6 +100,9 @@ enum CarouselCardMetrics {
     static let width: CGFloat = 120
     static let artHeight: CGFloat = width * 1.42
     static let height: CGFloat = artHeight + 55
+    /// Grids are not the 120 pt shelf. Board 01 draws three columns at this
+    /// floor, and each column then stretches so the row is full.
+    static let gridMinimumWidth: CGFloat = 112
     /// Collections and queues remain the wider T-461 stack rather than inheriting
     /// the narrower work-cover width.
     static let stackWidth: CGFloat = 150
@@ -135,6 +138,7 @@ struct ScaledCarouselCardSize: DynamicProperty {
     @ScaledMetric(relativeTo: .body) private var scaledWidth = CarouselCardMetrics.width
     @ScaledMetric(relativeTo: .body) private var scaledHeight = CarouselCardMetrics.height
     @Environment(\.carouselCardAvailableWidth) private var availableWidth
+    @Environment(\.carouselGridCardWidth) private var gridCardWidth
 
     init(
         width: CGFloat = CarouselCardMetrics.width,
@@ -163,7 +167,10 @@ struct ScaledCarouselCardSize: DynamicProperty {
         CarouselCardMetrics.clampRatio(scaledWidth: scaledWidth, availableWidth: maxWidth)
     }
 
-    var width: CGFloat { scaledWidth * clampRatio }
+    var width: CGFloat {
+        if let gridCardWidth, gridCardWidth > 0 { return gridCardWidth }
+        return scaledWidth * clampRatio
+    }
     var height: CGFloat { scaledHeight * clampRatio }
 
     /// A grid computes its columns before supplying this width to its children.
@@ -179,6 +186,21 @@ extension CarouselCardMetrics {
     static func clampRatio(scaledWidth: CGFloat, availableWidth: CGFloat) -> CGFloat {
         guard scaledWidth > 0 else { return 1 }
         return min(1, max(0, availableWidth) / scaledWidth)
+    }
+
+    /// How many grid columns fit when none may be narrower than `minimum`.
+    static func gridColumnCount(availableWidth: CGFloat, minimum: CGFloat, spacing: CGFloat) -> Int {
+        let width = max(0, availableWidth)
+        let slot = max(1, minimum) + spacing
+        guard width > 0 else { return 1 }
+        return max(1, Int((width + spacing) / slot))
+    }
+
+    /// Column width that fills `availableWidth` across `columns`, cover aspect unchanged.
+    static func gridCardWidth(availableWidth: CGFloat, columns: Int, spacing: CGFloat) -> CGFloat {
+        let count = max(1, columns)
+        let gaps = spacing * CGFloat(count - 1)
+        return max(0, availableWidth - gaps) / CGFloat(count)
     }
 
     /// Column layout for a wrapping grid of compact cover cards (Work, Reading

@@ -66,6 +66,30 @@ struct CarouselCardSizingTests {
     }
     #endif
 
+    @Test func gridsFitAsManyColumnsAs112PointsAllowAndStretch() {
+        let spacing = CarouselCardMetrics.compactGridColumnSpacing
+        #expect(CarouselCardMetrics.gridMinimumWidth == 112)
+        // Board 01: three columns land on the 112 pt floor.
+        #expect(CarouselCardMetrics.gridColumnCount(
+            availableWidth: 360, minimum: 112, spacing: spacing
+        ) == 3)
+        #expect(CarouselCardMetrics.gridCardWidth(
+            availableWidth: 360, columns: 3, spacing: spacing
+        ) == 112)
+        // A phone row that cannot hold a third 112 pt column stays 2-up and fills.
+        #expect(CarouselCardMetrics.gridColumnCount(
+            availableWidth: 358, minimum: 112, spacing: spacing
+        ) == 2)
+        #expect(CarouselCardMetrics.gridCardWidth(
+            availableWidth: 358, columns: 2, spacing: spacing
+        ) == 173)
+        // Cover aspect stays width × 1.42 whatever the column becomes.
+        let stretched = CarouselCardMetrics.gridCardWidth(
+            availableWidth: 358, columns: 2, spacing: spacing
+        )
+        #expect(abs(stretched * 1.42 - stretched / CarouselCardMetrics.width * CarouselCardMetrics.artHeight) < 0.001)
+    }
+
     @Test func theClipUsesTheAlreadyUsableViewportWidth() {
         let viewport = CGRect(x: 0, y: 0, width: 380, height: 240)
         let clip = HorizontalScrollViewportMetrics.clipRect(

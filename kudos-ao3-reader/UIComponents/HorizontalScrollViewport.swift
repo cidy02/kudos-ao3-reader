@@ -3,6 +3,8 @@ import SwiftUI
 extension EnvironmentValues {
     /// Card space after the host's safe area and content gutters, not the screen.
     @Entry var carouselCardAvailableWidth: CGFloat?
+    /// A grid's stretched column width. Carousels leave this nil and stay at 120 pt.
+    @Entry var carouselGridCardWidth: CGFloat?
 }
 
 extension ScrollView {
@@ -92,6 +94,7 @@ struct CarouselCardGrid<Content: View>: View {
     var columnSpacing: CGFloat
     @ViewBuilder var content: () -> Content
     @State private var availableWidth: CGFloat?
+    @ScaledMetric(relativeTo: .body) private var gridMinimum = CarouselCardMetrics.gridMinimumWidth
     private var cardSize: ScaledCarouselCardSize
 
     init(
@@ -134,15 +137,44 @@ struct CarouselCardGrid<Content: View>: View {
     }
 
     private func cells(minimum: CGFloat) -> some View {
-        LazyVGrid(
-            columns: columnCount.map { count in
-                Array(repeating: GridItem(.fixed(minimum), spacing: columnSpacing), count: count)
-            } ?? CarouselCardMetrics.adaptiveCardColumns(minimum: minimum, spacing: columnSpacing),
-            alignment: columnCount == nil ? .center : .leading,
+        let available = containerWidth ?? availableWidth
+        let columns = gridColumns(in: available, fallbackMinimum: minimum)
+        return LazyVGrid(
+            columns: columns.items,
+            alignment: .leading,
             spacing: CarouselCardMetrics.compactGridSpacing
         ) {
             content()
         }
+        .environment(\.carouselGridCardWidth, columns.cardWidth)
+    }
+
+    /// At least 112 pt per column, then each card stretches to fill the row.
+    /// An explicit count (a shelf page) keeps that count and still stretches.
+    private func gridColumns(
+        in available: CGFloat?, fallbackMinimum: CGFloat
+    ) -> (items: [GridItem], cardWidth: CGFloat?) {
+        guard let available, available > 0 else {
+            return (
+                CarouselCardMetrics.adaptiveCardColumns(
+                    minimum: fallbackMinimum, spacing: columnSpacing
+                ),
+                nil
+            )
+        }
+        let count = columnCount.map { max(1, $0) } ?? CarouselCardMetrics.gridColumnCount(
+            availableWidth: available, minimum: gridMinimum, spacing: columnSpacing
+        )
+        let cardWidth = CarouselCardMetrics.gridCardWidth(
+            availableWidth: available, columns: count, spacing: columnSpacing
+        )
+        return (
+            Array(
+                repeating: GridItem(.fixed(max(cardWidth, 1)), spacing: columnSpacing),
+                count: count
+            ),
+            cardWidth
+        )
     }
 }
 
