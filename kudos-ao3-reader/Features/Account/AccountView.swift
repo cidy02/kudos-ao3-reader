@@ -133,7 +133,9 @@ struct AccountView: View {
         NavigationStack(path: $path) {
             Group { standardListRoot }
                 .navigationTitle("Account")
+                #if os(iOS)
                 .navigationBarTitleDisplayMode(.inline)
+                #endif
                 .navigationDestination(for: Route.self, destination: destination)
                 #if DEBUG
                 .task {
