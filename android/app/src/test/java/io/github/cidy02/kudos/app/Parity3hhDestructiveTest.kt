@@ -69,7 +69,7 @@ class Parity3hhDestructiveTest {
     }
 
     private fun show(content: @Composable () -> Unit) {
-        compose.setContent { if (visible) KudosTheme(mode, accentColorHex = "#008577") {
+        compose.setContent { if (visible) KudosTheme(mode) {
             tokens = LocalKudosTokens.current
             view = LocalView.current
             content()

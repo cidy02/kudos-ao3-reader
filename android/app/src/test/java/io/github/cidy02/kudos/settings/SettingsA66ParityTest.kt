@@ -43,9 +43,11 @@ class SettingsA66ParityTest {
         compose.setContent {
             KudosTheme(KudosThemeMode.Light) { SettingsAppearancePage(repository, KudosSettings.Defaults) }
         }
-        for (label in listOf("Match App & Reader Theme", "Accent Color", "Reset to AO3 Red", "Customize Theme…")) {
+        for (label in listOf("Match App & Reader Theme", "Customize Theme…")) {
             compose.onNodeWithText(label).assertExists()
         }
+        compose.onAllNodesWithText("Accent Color").assertCountEquals(0)
+        compose.onAllNodesWithText("Reset to AO3 Red").assertCountEquals(0)
         compose.onNodeWithContentDescription("Text size, 18 pt").assertExists()
         for (label in listOf("Line height", "Letter spacing", "Word spacing", "Margin")) {
             compose.onAllNodesWithText(label).assertCountEquals(0)

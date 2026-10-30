@@ -13,7 +13,12 @@ fun SubjectPaletteTheme(palette: SubjectPalette, content: @Composable () -> Unit
         LocalSubjectPalette provides palette,
         LocalKudosTokens provides tokens.copy(accent = palette.tint, accentInk = ink, scopePaletteOverride = palette)
     ) {
-        MaterialTheme(colorScheme = MaterialTheme.colorScheme.copy(primary = ink, secondary = ink, tertiary = ink)) {
+        MaterialTheme(colorScheme = MaterialTheme.colorScheme.copy(
+            primary = palette.tint,
+            onPrimary = SubjectPalette.label(palette.tint),
+            secondary = ink,
+            tertiary = ink
+        )) {
             content()
         }
     }

@@ -3,6 +3,7 @@ package io.github.cidy02.kudos.ui.subject
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import io.github.cidy02.kudos.ui.theme.Ao3Red
+import io.github.cidy02.kudos.ui.theme.Ao3RedInkDark
 import io.github.cidy02.kudos.ui.theme.SepiaTint
 
 /**
@@ -44,12 +45,9 @@ enum class ReaderTheme {
             Oled -> Color(red = 0.110f, green = 0.110f, blue = 0.118f)
         }
 
-    /**
-     * Sepia's fixed control tint (`ReaderTheme.appTint`). Other themes return
-     * null and the caller's picked accent is used exactly.
-     */
-    val appTint: Color?
-        get() = if (this == Sepia) SepiaTint else null
+    /** One app-control colour: AO3 red, except Sepia's cohesive warm brown. */
+    val appTint: Color
+        get() = if (this == Sepia) SepiaTint else Ao3Red
 
     /** iOS 26 system red; destructive/error marks ignore the picked accent. */
     val destructive: Color
@@ -85,12 +83,17 @@ enum class ReaderTheme {
 
     fun glassStroke(opacity: Double = 0.16): Color = glass(opacity)
 
-    /** Scope palette: the user's accent, or Sepia's own brown when the theme refuses the accent. */
-    fun scopePalette(userAccent: Color): SubjectPalette =
-        SubjectPalette.fromColor(appTint ?: userAccent, this)
+    /** Scope palette: the fixed app colour. [legacyAccent] is accepted only for source compatibility. */
+    @Suppress("UNUSED_PARAMETER")
+    fun scopePalette(legacyAccent: Color = Ao3Red): SubjectPalette =
+        SubjectPalette.fromColor(appTint, this)
 
     /** Readable glyph/text ink; filled controls keep the supplied colour. */
-    fun accentInk(color: Color): Color = if (isDarkFamily) color.readableOn(cardBackdrop) else color
+    fun accentInk(color: Color): Color = when {
+        isDarkFamily && color == Ao3Red -> Ao3RedInkDark
+        isDarkFamily -> color.readableOn(cardBackdrop)
+        else -> color
+    }
 
     private fun glass(opacity: Double): Color =
         if (isDarkFamily) Color.White.withOpacity(opacity) else Color.Black.withOpacity(opacity * 0.55)
@@ -111,7 +114,7 @@ enum class ReaderTheme {
  */
 data class KudosTokens(
     val theme: ReaderTheme,
-    /** Picked accent, used exactly. Sepia substitutes [ReaderTheme.appTint]. */
+    /** Exact app-control fill: AO3 red, or Sepia's warm brown. */
     val accent: Color,
     val background: Color,
     val panelFill: Color,
@@ -150,8 +153,9 @@ data class KudosTokens(
     fun glassStroke(opacity: Double = 0.16): Color = theme.glassStroke(opacity)
 
     companion object {
-        fun of(theme: ReaderTheme, userAccent: Color): KudosTokens {
-            val accent = theme.appTint ?: userAccent
+        @Suppress("UNUSED_PARAMETER")
+        fun of(theme: ReaderTheme, legacyAccent: Color = Ao3Red): KudosTokens {
+            val accent = theme.appTint
             return KudosTokens(
                 theme = theme,
                 accent = accent,

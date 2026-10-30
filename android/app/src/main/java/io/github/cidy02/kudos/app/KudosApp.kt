@@ -203,7 +203,7 @@ fun KudosApp(
         }
     }
 
-    KudosTheme(themeMode = themeMode, accentColorHex = settings.app.accentColorHex) {
+    KudosTheme(themeMode = themeMode) {
         if (preview != null && !previewClosed) {
             FirstRunDemoDestination(preview) { previewClosed = true }
             return@KudosTheme

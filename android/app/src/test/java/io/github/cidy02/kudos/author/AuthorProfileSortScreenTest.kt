@@ -89,7 +89,7 @@ class AuthorProfileSortScreenTest {
         val repo = AO3AuthorRepository(publicClient = client, parseDispatcher = Dispatchers.Unconfined,
             pageCache = AO3PageCache(ttlMillis = 0, staleMillis = 0))
         compose.setContent {
-            KudosTheme(theme, accentColorHex = "#7954B3") {
+            KudosTheme(theme) {
                 view = LocalView.current
                 tokens = LocalKudosTokens.current
                 expectedPalette = tokens.scopePalette

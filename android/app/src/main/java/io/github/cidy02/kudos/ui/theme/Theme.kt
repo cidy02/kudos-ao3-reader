@@ -58,10 +58,9 @@ private fun lightScheme(accent: Color) = lightColorScheme(
 private fun darkScheme(accent: Color) = darkColorScheme(
     error = ReaderTheme.Dark.destructive,
     onError = SubjectPalette.label(ReaderTheme.Dark.destructive),
-    // Controls take the accent's readable ink, as SubjectPaletteTheme does and as iOS tints them. A cream
-    // primary left bare Material controls cream here: Add to Collection's checkbox and Done, Subscribe (3hk).
-    primary = ReaderTheme.Dark.accentInk(accent),
-    onPrimary = SubjectPalette.label(ReaderTheme.Dark.accentInk(accent)),
+    // Material's primary is the filled-control role. Text and links use KudosTokens.accentInk.
+    primary = accent,
+    onPrimary = SubjectPalette.label(accent),
     secondary = AccentBlue,
     onSecondary = Paper,
     background = SurfaceDark,
@@ -75,9 +74,8 @@ private fun darkScheme(accent: Color) = darkColorScheme(
 private fun oledScheme(accent: Color) = darkColorScheme(
     error = ReaderTheme.Oled.destructive,
     onError = SubjectPalette.label(ReaderTheme.Oled.destructive),
-    // As Dark: the accent's readable ink (3hk).
-    primary = ReaderTheme.Oled.accentInk(accent),
-    onPrimary = SubjectPalette.label(ReaderTheme.Oled.accentInk(accent)),
+    primary = accent,
+    onPrimary = SubjectPalette.label(accent),
     secondary = AccentBlue,
     onSecondary = Paper,
     background = SurfaceOled,
@@ -136,18 +134,14 @@ internal fun SheetSystemBars(tokens: KudosTokens) {
 @Composable
 fun KudosTheme(
     themeMode: KudosThemeMode,
-    accentColorHex: String = DefaultAccentHex,
     content: @Composable () -> Unit
 ) {
     val systemDark = isSystemInDarkTheme()
-    val accent = remember(accentColorHex) { parseAccentColor(accentColorHex) }
     val colorScheme = when (themeMode) {
-        KudosThemeMode.System -> if (systemDark) darkScheme(accent) else lightScheme(accent)
-        KudosThemeMode.Light -> lightScheme(accent)
-        // Apple suppresses the user's accent choice in Sepia too (see SepiaScheme
-        // above) — Sepia always uses its own warm-brown tint, by design.
-        KudosThemeMode.Dark -> darkScheme(accent)
-        KudosThemeMode.Oled -> oledScheme(accent)
+        KudosThemeMode.System -> if (systemDark) darkScheme(Ao3Red) else lightScheme(Ao3Red)
+        KudosThemeMode.Light -> lightScheme(Ao3Red)
+        KudosThemeMode.Dark -> darkScheme(Ao3Red)
+        KudosThemeMode.Oled -> oledScheme(Ao3Red)
         KudosThemeMode.Sepia -> SepiaScheme
     }
     // System dark follows Dark, not OLED — the same split the Material schemes use.
@@ -158,11 +152,11 @@ fun KudosTheme(
         KudosThemeMode.Oled -> ReaderTheme.Oled
         KudosThemeMode.Sepia -> ReaderTheme.Sepia
     }
-    val tokens = remember(themeMode, systemDark, accentColorHex) {
-        KudosTokens.of(readerTheme, accent)
+    val tokens = remember(themeMode, systemDark) {
+        KudosTokens.of(readerTheme)
     }
-    val scopePalette = remember(themeMode, systemDark, accentColorHex) {
-        readerTheme.scopePalette(accent)
+    val scopePalette = remember(themeMode, systemDark) {
+        readerTheme.scopePalette()
     }
 
     // The bars' icons follow the app's theme, not the phone's. `enableEdgeToEdge()` alone leaves
@@ -186,15 +180,6 @@ fun KudosTheme(
 }
 
 const val DefaultAccentHex = "#990000"
-
-/** Settings validates/normalizes to #RRGGBB before persisting; fall back to the AO3 red default for anything else. */
-fun parseAccentColor(hex: String): Color {
-    return try {
-        Color(android.graphics.Color.parseColor(hex))
-    } catch (_: IllegalArgumentException) {
-        Ao3Red
-    }
-}
 
 private object ColorTokens {
     val SepiaSurface = androidx.compose.ui.graphics.Color(0xFFFFF6E8)

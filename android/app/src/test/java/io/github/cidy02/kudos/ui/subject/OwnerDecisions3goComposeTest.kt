@@ -53,7 +53,7 @@ class OwnerDecisions3goComposeTest {
     @Test fun glyphUsesReadableInkForTheSuppliedAccentButTheSquareKeepsItsExactFillOnDarkAndOled() {
         var mode by mutableStateOf(KudosThemeMode.Dark)
         var accent by mutableStateOf(Color(0xFF990000))
-        compose.setContent { KudosTheme(mode, accentColorHex = "#00FF00") {
+        compose.setContent { KudosTheme(mode) {
             AccentIconSquare(Icons.Default.Settings, "Glyph", Modifier.testTag("square"), accent)
         } }
         for ((theme, selectedMode) in listOf(ReaderTheme.Dark to KudosThemeMode.Dark, ReaderTheme.Oled to KudosThemeMode.Oled)) {
@@ -69,14 +69,14 @@ class OwnerDecisions3goComposeTest {
         }
     }
 
-    @Test fun aSheetPaletteOwnsControlInkAndFilledSwitchesKeepThePickedColour() {
+    @Test fun aSheetPaletteKeepsIdentityButControlsUseTheFixedAppColour() {
         val picked = Color(0xFF193B97)
         var mode by mutableStateOf(KudosThemeMode.Light)
         var theme by mutableStateOf(ReaderTheme.Light)
         var primary = Color.Unspecified
         var tokenFill = Color.Unspecified
         var tokenInk = Color.Unspecified
-        compose.setContent { KudosTheme(mode, accentColorHex = "#990000") {
+        compose.setContent { KudosTheme(mode) {
             val palette = SubjectPalette.fromColor(picked, theme)
             SubjectPaletteTheme(palette) {
                 primary = MaterialTheme.colorScheme.primary
@@ -89,11 +89,12 @@ class OwnerDecisions3goComposeTest {
             ReaderTheme.Dark to KudosThemeMode.Dark, ReaderTheme.Oled to KudosThemeMode.Oled, ReaderTheme.Sepia to KudosThemeMode.Sepia)) {
             compose.runOnIdle { theme = nextTheme; mode = nextMode }
             compose.runOnIdle {
-                assertEquals(picked, tokenFill)
-                assertEquals(nextTheme.accentInk(picked), tokenInk)
-                assertEquals(tokenInk, primary)
+                assertEquals(nextTheme.appTint, tokenFill)
+                assertEquals(nextTheme.accentInk(nextTheme.appTint), tokenInk)
+                assertEquals(tokenFill, primary)
             }
-            assertTrue(properties(compose.onNodeWithContentDescription("Keep")) .contains("color" to picked))
+            assertTrue(properties(compose.onNodeWithContentDescription("Keep"))
+                .contains("color" to nextTheme.appTint))
         }
     }
 

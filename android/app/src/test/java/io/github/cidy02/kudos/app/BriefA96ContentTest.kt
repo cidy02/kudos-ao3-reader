@@ -81,7 +81,7 @@ class BriefA96ContentTest {
 
     private fun show(content: @Composable () -> Unit) {
         compose.setContent {
-            KudosTheme(mode, accentColorHex = "#7954B3") {
+            KudosTheme(mode) {
                 tokens = LocalKudosTokens.current
                 val density = LocalDensity.current
                 CompositionLocalProvider(LocalDensity provides Density(density.density, scale)) {

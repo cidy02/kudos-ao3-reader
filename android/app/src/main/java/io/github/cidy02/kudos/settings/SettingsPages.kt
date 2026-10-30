@@ -43,7 +43,6 @@ fun SettingsAppearancePage(
 ) {
     val scope = rememberCoroutineScope()
     val tokens = LocalKudosTokens.current
-    var showAccentPresets by remember { mutableStateOf(false) }
     var showCustomizeTheme by remember { mutableStateOf(false) }
     DebugShotEffect("appearance") { showCustomizeTheme = true }
 
@@ -52,11 +51,9 @@ fun SettingsAppearancePage(
         "Choose Light, Sepia, Dark, or OLED for Kudos and the reader."
     } else {
         "You can choose different themes for Kudos and the reader."
-    }) + " Your accent colour appears in Light, Dark, and OLED; Sepia keeps its warm tint."
+    }) + " Controls use AO3 red; Sepia keeps its warm tint."
     val appOption = ThemeChipOption.entries.firstOrNull { it.setting == settings.app.appTheme }
         ?: ThemeChipOption.Light
-    val alreadyAo3Red = settings.app.accentColorHex.equals("#990000", ignoreCase = true)
-
     SettingsPage(title = "Appearance") {
         item {
             SettingsSection(label = "Theme", footnote = themeFootnote) {
@@ -96,24 +93,6 @@ fun SettingsAppearancePage(
                         )
                     }
                 }
-                SubjectRowSeparator()
-                SubjectFormRow(
-                    label = "Accent Color",
-                    onClick = { showAccentPresets = !showAccentPresets },
-                    trailing = { AccentColorWell(color = accentColorOrFallback(settings.app.accentColorHex)) }
-                )
-                if (showAccentPresets) {
-                    AccentCustomizeBlock(
-                        accentHex = settings.app.accentColorHex,
-                        onCommit = { hex -> scope.launch { repository.updateAccentColor(hex) } }
-                    )
-                }
-                SubjectRowSeparator()
-                SettingsActionRow(
-                    label = "Reset to AO3 Red",
-                    enabled = !alreadyAo3Red,
-                    onClick = { scope.launch { repository.updateAccentColor("#990000") } }
-                )
                 SubjectRowSeparator()
                 SettingsActionRow(
                     label = "Customize Theme…",

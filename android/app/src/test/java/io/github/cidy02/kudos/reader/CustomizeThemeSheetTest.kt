@@ -42,14 +42,14 @@ class CustomizeThemeSheetTest {
     }
     private val repository = SettingsRepository(dataStore)
 
-    @Test fun appearanceEntryOpensReadingTextControlsAndKeepsAccentPresetsSeparate() {
+    @Test fun appearanceEntryOpensReadingTextControlsWithoutAnAccentPicker() {
         compose.setContent {
             val settings by repository.settings.collectAsState(initial = KudosSettings.Defaults)
             CompositionLocalProvider(LocalKudosTokens provides KudosTokens.of(ReaderTheme.Light, Color.Red)) {
                 SettingsAppearancePage(repository, settings)
             }
         }
-        compose.onNodeWithText("Accent Color").assertExists()
+        compose.onAllNodesWithText("Accent Color").assertCountEquals(0)
         openAndCheckSharedSheet()
     }
 
