@@ -1,14 +1,22 @@
 import SwiftUI
+#if os(iOS)
+import UIKit
+#elseif os(macOS)
+import AppKit
+#endif
 
 // Settings › Reading: Appearance, Font, Reader, Listening. Font, Reader and
 // Listening are the same sections the reader's options sheet shows
 // (`ReaderOptionsForm`), so the two can never drift apart.
 
-/// App-wide theme and text size. The reader's own theme picker stays in the
-/// reader's sheet; app controls use the fixed AO3-red brand colour.
+/// App-wide theme, accent colour, and text size. The reader's own theme picker
+/// stays in the reader's sheet. Sepia keeps its warm brown for controls.
 struct SettingsAppearancePage: View {
     @Environment(ThemeManager.self) private var themeManager
     @State private var showCustomize = false
+    @State private var showCustomWarning = false
+    @State private var customPick: Task<Void, Never>?
+    @State private var pickerBridge = AccentColorPickerBridge()
 
     /// Bindings into the central ThemeManager (an @Observable in the environment).
     private var appThemeBinding: Binding<ReaderTheme> {
@@ -43,11 +51,47 @@ struct SettingsAppearancePage: View {
             } header: {
                 Text("Theme")
             } footer: {
-                Text((themeManager.matchAppAndReader
-                        ? "Choose Light, Sepia, Dark, or OLED for Kudos and the reader."
-                        : "You can choose different themes for Kudos and the reader.")
-                    + " Controls use AO3 red; Sepia keeps its warm tint.")
+                Text(themeManager.matchAppAndReader
+                    ? "Choose Light, Sepia, Dark, or OLED for Kudos and the reader."
+                    : "You can choose different themes for Kudos and the reader.")
             }
+
+            Section {
+                AccentColourPicker(
+                    accentHex: themeManager.accentHex,
+                    onSelectNamed: { themeManager.accentHex = $0 },
+                    onCustom: { showCustomWarning = true }
+                )
+            } header: {
+                Text("Accent colour")
+            } footer: {
+                Text("Delete and other destructive actions stay system red with every colour. "
+                    + "Sepia keeps its warm tint.")
+            }
+        }
+        .alert("Use a Custom Colour?", isPresented: $showCustomWarning) {
+            Button("Choose a Colour") {
+                let hex = themeManager.accentHex
+                pickerBridge.onPick = { color in
+                    let picked = color.hexString
+                    guard picked.caseInsensitiveCompare(themeManager.accentHex) != .orderedSame else { return }
+                    themeManager.setAccent(color)
+                }
+                customPick?.cancel()
+                customPick = Task { @MainActor in
+                    // Let the alert finish dismissing before the system picker.
+                    try? await Task.sleep(for: .milliseconds(450))
+                    guard !Task.isCancelled else { return }
+                    pickerBridge.present(initialHex: hex)
+                }
+            }
+            Button("Keep AO3 Red") { themeManager.resetAccent() }
+        } message: {
+            Text("Kudos is designed around its six accent colours. They keep text readable in Light, Sepia, Dark and OLED, and stay clear of the red used for Delete. A custom colour may make some buttons and links harder to read.")
+        }
+        .onDisappear {
+            customPick?.cancel()
+            pickerBridge.close()
         }
         #if DEBUG
         .task { if DebugLaunchRoute.takeSheet("customizetheme") { showCustomize = true } }
@@ -105,6 +149,228 @@ struct SettingsListeningPage: View {
             ReaderPronunciationSettingsView(onScanChapter: nil)
         }
         #endif
+    }
+}
+#endif
+
+/// The six named swatches plus a custom well. VoiceOver gets a real picker for
+/// the six (radio group on the Mac, inline on iPhone — iOS has no radio trait)
+/// and a separate Custom colour button, so the warning still opens.
+private struct AccentColourPicker: View {
+    let accentHex: String
+    let onSelectNamed: (String) -> Void
+    let onCustom: () -> Void
+
+    private var namedSelection: Binding<String?> {
+        Binding(
+            get: { AppAccent.named(hex: accentHex)?.fillHex },
+            set: { if let hex = $0 { onSelectNamed(hex) } }
+        )
+    }
+
+    private var customHex: String? {
+        AppAccent.named(hex: accentHex) == nil ? accentHex : nil
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 0) {
+                ForEach(AppAccent.all) { accent in
+                    Button {
+                        onSelectNamed(accent.fillHex)
+                    } label: {
+                        AccentSwatch(fillHex: accent.fillHex, selected: namedSelection.wrappedValue == accent.fillHex)
+                    }
+                    .buttonStyle(.plain)
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .contentShape(Rectangle())
+                }
+                Button(action: onCustom) {
+                    AccentCustomWell(selectedHex: customHex)
+                }
+                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .contentShape(Rectangle())
+            }
+            .accessibilityRepresentation {
+                VStack(alignment: .leading, spacing: 0) {
+                    Picker("Accent colour", selection: namedSelection) {
+                        ForEach(AppAccent.all) { accent in
+                            Text(accent.isDefault ? "\(accent.name), Default" : accent.name)
+                                .tag(Optional(accent.fillHex))
+                        }
+                    }
+                    #if os(macOS)
+                    .pickerStyle(.radioGroup)
+                    #else
+                    .pickerStyle(.inline)
+                    #endif
+                    Button("Custom colour", action: onCustom)
+                        .accessibilityAddTraits(customHex == nil ? [] : .isSelected)
+                        .accessibilityValue(customHex ?? "")
+                }
+            }
+
+            HStack {
+                Text(AppAccent.named(hex: accentHex)?.name ?? "Custom")
+                Spacer()
+                if accentHex.caseInsensitiveCompare(ThemeManager.ao3Red) == .orderedSame {
+                    Text("Default")
+                        .foregroundStyle(Color(hex: "#8E8E93") ?? .secondary)
+                }
+            }
+            .font(.subheadline)
+            .accessibilityHidden(true)
+        }
+    }
+}
+
+/// 32pt fill. Selected draws the board's ring: 2pt of the fill, a 2pt white gap,
+/// then the fill. The gap is the board's literal white on every theme.
+private struct AccentSwatch: View {
+    let fillHex: String
+    let selected: Bool
+
+    var body: some View {
+        ZStack {
+            if selected {
+                Circle()
+                    .strokeBorder(color, lineWidth: 2)
+                    .frame(width: 40, height: 40)
+                Circle()
+                    .fill(Color.white)
+                    .frame(width: 36, height: 36)
+            }
+            Circle()
+                .fill(color)
+                .frame(width: 32, height: 32)
+        }
+        .frame(width: 40, height: 40)
+    }
+
+    private var color: Color { Color(hex: fillHex) ?? .black }
+}
+
+/// The (+) well. A selected custom colour rings it; the rainbow stays the well.
+private struct AccentCustomWell: View {
+    let selectedHex: String?
+
+    var body: some View {
+        ZStack {
+            if let selectedHex {
+                Circle()
+                    .strokeBorder(Color(hex: selectedHex) ?? .black, lineWidth: 2)
+                    .frame(width: 40, height: 40)
+                Circle()
+                    .fill(Color.white)
+                    .frame(width: 36, height: 36)
+            }
+            Circle()
+                .fill(AngularGradient(colors: Self.wheel, center: .center))
+                .frame(width: 32, height: 32)
+            Circle()
+                .fill(Color.white)
+                .frame(width: 24, height: 24)
+            Image(systemName: "plus")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(Color(hex: "#1C1C1E") ?? .black)
+        }
+        .frame(width: 40, height: 40)
+    }
+
+    private static let wheel: [Color] = [
+        "#F5C400", "#5FBF5F", "#5A9BE0", "#A57BD8", "#E86AA0", "#E5484D", "#F5C400"
+    ].map { Color(hex: $0) ?? .gray }
+}
+
+/// Presents the system colour picker after the custom-colour warning. The iOS
+/// delegate is weak, and the Mac panel does not retain its target, so the page
+/// holds this object and clears it on disappear.
+@MainActor
+private final class AccentColorPickerBridge: NSObject {
+    var onPick: (Color) -> Void = { _ in }
+
+    #if os(iOS)
+    private var picker: UIColorPickerViewController?
+    #elseif os(macOS)
+    /// `NSColorPanel` has setters for target and action, and no getter. The
+    /// target is not retained, so this flag is how `close` knows the panel is ours.
+    private var panelIsOurs = false
+    #endif
+
+    func present(initialHex: String) {
+        let parts = Self.components(initialHex)
+        #if os(iOS)
+        let picker = UIColorPickerViewController()
+        picker.supportsAlpha = false
+        picker.selectedColor = UIColor(red: parts.r, green: parts.g, blue: parts.b, alpha: 1)
+        picker.delegate = self
+        self.picker = picker
+        guard let host = Self.topViewController() else { return }
+        host.present(picker, animated: true)
+        #elseif os(macOS)
+        let panel = NSColorPanel.shared
+        panel.showsAlpha = false
+        panel.isContinuous = false
+        panel.setTarget(nil)
+        panel.color = NSColor(srgbRed: parts.r, green: parts.g, blue: parts.b, alpha: 1)
+        panel.setTarget(self)
+        panel.setAction(#selector(colorChanged(_:)))
+        panelIsOurs = true
+        panel.orderFront(nil)
+        #endif
+    }
+
+    func close() {
+        #if os(iOS)
+        picker?.dismiss(animated: false)
+        picker = nil
+        #elseif os(macOS)
+        guard panelIsOurs else { return }
+        let panel = NSColorPanel.shared
+        panel.setTarget(nil)
+        panel.setAction(nil)
+        panel.close()
+        panelIsOurs = false
+        #endif
+    }
+
+    private static func components(_ hex: String) -> (r: CGFloat, g: CGFloat, b: CGFloat) {
+        var string = hex.trimmingCharacters(in: .whitespacesAndNewlines)
+        if string.hasPrefix("#") { string.removeFirst() }
+        let value = UInt64(string, radix: 16) ?? 0x821019
+        return (
+            CGFloat((value >> 16) & 0xFF) / 255,
+            CGFloat((value >> 8) & 0xFF) / 255,
+            CGFloat(value & 0xFF) / 255
+        )
+    }
+
+    #if os(iOS)
+    private static func topViewController() -> UIViewController? {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let scene = scenes.first { $0.activationState == .foregroundActive } ?? scenes.first
+        let window = scene?.windows.first { $0.isKeyWindow } ?? scene?.windows.first
+        var controller = window?.rootViewController
+        while let presented = controller?.presentedViewController, !presented.isBeingDismissed {
+            controller = presented
+        }
+        return controller
+    }
+    #endif
+
+    #if os(macOS)
+    @objc private func colorChanged(_ sender: NSColorPanel) {
+        onPick(Color(nsColor: sender.color))
+    }
+    #endif
+}
+
+#if os(iOS)
+extension AccentColorPickerBridge: UIColorPickerViewControllerDelegate {
+    func colorPickerViewControllerDidFinish(_ viewController: UIColorPickerViewController) {
+        onPick(Color(uiColor: viewController.selectedColor))
+        picker = nil
     }
 }
 #endif
