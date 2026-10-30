@@ -374,17 +374,17 @@ class Brief3hcContentTest {
         val secondChapterLayout = textLayout(chapters[1].displayName)
         val countWhenChapterScoped = textLayout("42")
 
-        assertEquals(customPalette.accent, allLayout.layoutInput.style.color)
+        assertEquals(customPalette.controlInk, allLayout.layoutInput.style.color)
         assertEquals(FontWeight.Normal, allLayout.layoutInput.style.fontWeight)
-        assertEquals(customPalette.accent, firstChapterLayout.layoutInput.style.color)
+        assertEquals(customPalette.controlInk, firstChapterLayout.layoutInput.style.color)
         assertEquals(FontWeight.SemiBold, firstChapterLayout.layoutInput.style.fontWeight)
-        assertEquals(customPalette.accent, secondChapterLayout.layoutInput.style.color)
+        assertEquals(customPalette.controlInk, secondChapterLayout.layoutInput.style.color)
         assertEquals(FontWeight.Normal, secondChapterLayout.layoutInput.style.fontWeight)
-        assertEquals(customPalette.accent.copy(alpha = 0.6f), countWhenChapterScoped.layoutInput.style.color)
+        assertEquals(customPalette.controlInk.copy(alpha = 0.6f), countWhenChapterScoped.layoutInput.style.color)
 
         compose.runOnIdle { isScopeAll = true }
         val countWhenAllScoped = textLayout("42")
-        assertEquals(customPalette.accent, countWhenAllScoped.layoutInput.style.color)
+        assertEquals(customPalette.controlInk, countWhenAllScoped.layoutInput.style.color)
         assertEquals(FontWeight.SemiBold, textLayout("All Comments").layoutInput.style.fontWeight)
     }
 

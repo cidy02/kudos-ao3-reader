@@ -393,7 +393,9 @@ internal fun CollectionEditorHeader(
     val tokens = LocalKudosTokens.current
     Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically) {
-        if (!editing) TextButton(onClick = onDismiss, enabled = !saving) { Text("Cancel") }
+        if (!editing) TextButton(onClick = onDismiss, enabled = !saving) {
+            Text("Cancel", color = tokens.accentInk)
+        }
         Text(title, Modifier.weight(1f), color = tokens.primaryInk, fontSize = 17.sp,
             fontWeight = FontWeight.SemiBold)
         TextButton(onClick = onSave, enabled = canSave) {

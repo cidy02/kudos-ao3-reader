@@ -14,13 +14,13 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/** 3hk: bare Material controls in Dark and OLED take the accent's readable ink, as iOS tints them, not cream. */
+/** 3hk: Material primary is the filled app colour. Dark and OLED text uses accentInk instead. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], application = Application::class)
 class Parity3hkThemeTest {
     @get:Rule val compose = createComposeRule()
 
-    @Test fun darkAndOledMaterialPrimaryIsTheAccentsReadableInk() {
+    @Test fun darkAndOledMaterialPrimaryIsTheFilledAppColour() {
         var mode by mutableStateOf(KudosThemeMode.Dark)
         var primary = Color.Unspecified
         lateinit var tokens: KudosTokens
@@ -31,7 +31,8 @@ class Parity3hkThemeTest {
         for (theme in listOf(KudosThemeMode.Dark, KudosThemeMode.Oled)) {
             compose.runOnIdle { mode = theme }
             compose.waitForIdle()
-            assertEquals("Material primary in $theme", tokens.theme.accentInk(tokens.accent), primary)
+            assertEquals("Material primary in $theme", tokens.accent, primary)
+            assertEquals("Text ink in $theme", Ao3RedInkDark, tokens.accentInk)
             // The old cream primary was (244,232,215): nearly as green as red. The ink is clearly red.
             assertTrue("Primary in $theme is red, not cream: $primary", primary.red - primary.green > 0.2f)
         }

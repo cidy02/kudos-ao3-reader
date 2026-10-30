@@ -142,17 +142,13 @@ class BriefA100ContentTest {
         for (theme in themes) for (fontScale in listOf(1f, 2f)) {
             compose.runOnIdle { mode = theme; scale = fontScale }
             compose.waitForIdle() // Read expected tokens only after the new theme has composed.
-            val expected = when (screen) {
-                Screen.Library, Screen.Home -> tokens.scopePalette
-                Screen.Queue -> queuePalette(tokens.theme, queue)
-                Screen.Collection -> collectionDraftPalette(collection.name, collection.hue, collection.colorHex, tokens.theme)
-            }
-            assertInk("Default", expected.accent)
-            assertInk("Any rating", expected.accent)
+            // A queue or collection colour stays on the page. Filter controls take the app colour.
+            assertInk("Default", tokens.accentInk)
+            assertInk("Any rating", tokens.accentInk)
             val colors = compose.onNodeWithContentDescription("Done").fetchSemanticsNode().layoutInfo.getModifierInfo()
                 .flatMap { (it.modifier as? InspectableValue)?.inspectableElements?.toList().orEmpty() }
                 .filter { it.name == "color" }.map { it.value }
-            assertTrue("$screen Done fill should be ${expected.tint}, was $colors", expected.tint in colors)
+            assertTrue("$screen Done fill should be ${tokens.accent}, was $colors", tokens.accent in colors)
         }
         compose.onNodeWithText("Default").performClick()
         compose.onNodeWithText("Title", useUnmergedTree = true).performClick()

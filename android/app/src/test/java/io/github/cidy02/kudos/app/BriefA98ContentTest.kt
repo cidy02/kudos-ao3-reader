@@ -27,7 +27,6 @@ import io.github.cidy02.kudos.author.*
 import io.github.cidy02.kudos.comments.ChapterPickerContent
 import io.github.cidy02.kudos.comments.chapterPickerBookIcon
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
-import io.github.cidy02.kudos.home.HomeFacts
 import io.github.cidy02.kudos.library.*
 import io.github.cidy02.kudos.network.ao3.*
 import io.github.cidy02.kudos.network.ao3.author.AO3AuthorRepository
@@ -189,8 +188,8 @@ class BriefA98ContentTest {
         for (custom in listOf(false, true)) for (theme in themes) {
             compose.runOnIdle { mode = theme; pagePalette = custom }
             compose.waitForIdle() // expected reads tokens.theme: let the theme land first
-            val expected = if (custom) SubjectPalette.fromHue(0.47, tokens.theme) else tokens.scopePalette
-            assertEquals(expected.accent, layout("Default").layoutInput.style.color)
+            // Passing a page palette does not recolour the choice. It stays the app ink.
+            assertEquals(tokens.accentInk, layout("Default").layoutInput.style.color)
         }
         compose.onNodeWithText("Default").performClick()
         compose.onNodeWithText("Title", useUnmergedTree = true).performClick()
@@ -213,9 +212,9 @@ class BriefA98ContentTest {
             compose.runOnIdle { title = name; mode = theme }
             val effective = name.ifEmpty { client.slug }
             compose.onNodeWithText("$effective · 4 sign-ups").assertExists()
-            val expected = SubjectPalette.fromHue(HomeFacts.workHue(emptyList(), effective), tokens.theme)
             val bounds = compose.onNodeWithText("Save changes").fetchSemanticsNode().boundsInRoot
-            assertPixel(expected.accent, Offset(bounds.left + 20, bounds.center.y))
+            // The title still names the screen. The filled Save control is the app colour.
+            assertPixel(tokens.accent, Offset(bounds.left + 20, bounds.center.y))
         }
         assertEquals(client.openingReads, client.gets)
         assertTrue(client.sent.isEmpty())
