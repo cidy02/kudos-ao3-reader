@@ -341,7 +341,7 @@ fun HomeStatusTray(
         io.github.cidy02.kudos.ui.components.WorkSymbolTile.warnings(warnings, tokens.theme.isDarkFamily),
         io.github.cidy02.kudos.ui.components.WorkSymbolTile.completion(isComplete, tokens.theme.isDarkFamily)
     )
-    val gap = scaledTileSize * 0.12f
+    val gap = scaledTileSize * io.github.cidy02.kudos.ui.components.WorkSymbolGeometry.GapRatio
     val spoken = buildList {
         add(rating.ifBlank { "Not rated" })
         add(if (categories.isEmpty()) "No category" else "Categories: ${categories.joinToString(", ")}")
