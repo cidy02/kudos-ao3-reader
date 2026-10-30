@@ -159,7 +159,7 @@ struct LibraryQueueLedgerRow: View {
         .padding(.vertical, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
-            RoundedRectangle(cornerRadius: SubjectMetrics.rowRadius, style: .continuous)
+            RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
                 .fill(themeManager.appTheme.cardSurface)
         }
         .accessibilityElement(children: .combine)
