@@ -80,8 +80,13 @@ nonisolated struct AdaptiveContentRegions: Equatable {
         height >= 2 * CarouselCardMetrics.height + CarouselCardMetrics.compactGridSpacing + 24
     }
 
+    /// The grouped dashboard is for a display that holds three of the 164 pt
+    /// cards it was designed around. T-475's 120 pt cover would let a 434 pt
+    /// phone count three and lose its compact dashboard.
+    private static let groupedShelfCardWidth: CGFloat = 164
+
     @MainActor static func usesGroupedShelves(in size: CGSize) -> Bool {
-        hasDashboardHeight(size.height) && columns(in: size.width, cardWidth: CarouselCardMetrics.width) >= 3
+        hasDashboardHeight(size.height) && columns(in: size.width, cardWidth: groupedShelfCardWidth) >= 3
     }
 
     /// One logical page spans panes, but each pane scrolls only complete cards.
