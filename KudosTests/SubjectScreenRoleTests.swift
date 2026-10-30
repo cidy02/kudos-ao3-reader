@@ -17,6 +17,6 @@ struct SubjectScreenRoleTests {
     @Test func washGeometryMatchesTheSharedRule() {
         #expect(SubjectWashGeometry.height == 380)
         #expect(SubjectWashGeometry.opacities == [0.20, 0.12, 0.05, 0])
-        #expect(SubjectWashGeometry.locations == [0, 0.5, 0.75, 1])
+        #expect(SubjectWashGeometry.locations == [0, 0.35, 0.65, 1])
     }
 }

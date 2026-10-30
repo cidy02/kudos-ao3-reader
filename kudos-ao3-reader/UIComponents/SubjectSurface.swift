@@ -127,7 +127,9 @@ struct SubjectPalette {
     /// picked colour reaches the wash as itself. A `LinearGradient` cannot be
     /// introspected, so the stops are the only testable seam.
     var washStops: [Gradient.Stop] {
-        let washColor = picked ?? accent
+        // The boards draw one muted colour in every theme (Skin-Dark and friends
+        // leave it alone), so this is not `accent`, which lightens on dark pages.
+        let washColor = picked ?? Color(hue: hue, saturation: 0.72, brightness: 0.52)
         return zip(SubjectWashGeometry.opacities, SubjectWashGeometry.locations).map {
             .init(color: washColor.opacity($0.0), location: $0.1)
         }
@@ -1181,7 +1183,7 @@ struct GlassCircleButton<Label: View>: View {
 enum SubjectWashGeometry {
     static let height: CGFloat = 380
     static let opacities: [Double] = [0.20, 0.12, 0.05, 0]
-    static let locations: [Double] = [0, 0.5, 0.75, 1]
+    static let locations: [Double] = [0, 0.35, 0.65, 1]
 }
 
 private struct SubjectWashedScreenKey: EnvironmentKey {
@@ -1219,12 +1221,21 @@ extension EnvironmentValues {
 /// status bar. It always resolves to the plain content ground at 380 points.
 private struct SubjectWash: ViewModifier {
     let palette: SubjectPalette
+    /// How far the page has moved: the boards draw the wash in the page, so it
+    /// leaves with the content and the title shrinks into a plain bar.
+    @State private var scrolled: CGFloat = 0
 
     func body(content: Content) -> some View {
         content
+            .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                geometry.contentOffset.y + geometry.contentInsets.top
+            } action: { _, offset in
+                scrolled = max(0, offset)
+            }
             .background(alignment: .top) {
                 palette.wash
                     .frame(height: SubjectWashGeometry.height)
+                    .offset(y: -scrolled)
                     .frame(maxHeight: .infinity, alignment: .top)
                     .ignoresSafeArea()
             }
