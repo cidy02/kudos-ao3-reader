@@ -109,6 +109,8 @@ enum WorkListKeys {
     static let bookmarksArrangement = "account.bookmarks.arrangement"
     static let ao3HistoryArrangement = "account.ao3History.arrangement"
     static let yourWorksArrangement = "account.yourWorks.arrangement"
+    static let allWorksArrangement = "library.allWorks.arrangement"
+    static let importedArrangement = "library.imported.arrangement"
 
     static func libraryShelfArrangement(_ kind: String) -> String {
         "library.\(kind).arrangement"
