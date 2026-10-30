@@ -277,7 +277,7 @@ struct AccentInkTests {
         #expect(manager.effectiveTint.hexString == "#821019")
     }
 
-    @MainActor @Test func legacyStoredRedIsNotRewrittenToTheNewDefault() {
+    @MainActor @Test func storedLegacyRedIsReadAsAO3RedAndNotRewritten() {
         let defaults = UserDefaults.standard
         let previous = defaults.object(forKey: "accentColorHex")
         defer {
@@ -289,10 +289,16 @@ struct AccentInkTests {
         }
         defaults.set("#990000", forKey: "accentColorHex")
         let manager = ThemeManager()
-        #expect(manager.accentHex == "#990000")
+        // The picker selects AppAccent.named(hex: accentHex).
+        let selected = AppAccent.named(hex: manager.accentHex)
+        #expect(manager.accentHex == "#821019")
+        #expect(selected?.name == "AO3 Red")
+        #expect(selected?.fillHex == "#821019")
         #expect(defaults.string(forKey: "accentColorHex") == "#990000")
         manager.appTheme = .light
-        #expect(manager.effectiveTint.hexString == "#990000")
+        #expect(manager.effectiveTint.hexString == "#821019")
+        #expect(ThemeManager.appTint(for: .light).hexString == "#821019")
+        #expect(defaults.string(forKey: "accentColorHex") == "#990000")
     }
 
     @Test func presentAccentIsCapturedAndApplied() throws {
@@ -303,10 +309,27 @@ struct AccentInkTests {
         defaults.set("#112233", forKey: "accentColorHex")
         var settings = KudosBackupSettings.capture(defaults: defaults)
         #expect(settings.accentColorHex == "#112233")
+        let data = try JSONEncoder().encode(settings)
+        let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(object["accentColorHex"] as? String == "#112233")
 
         defaults.set("#445566", forKey: "accentColorHex")
         settings.apply(to: defaults)
         #expect(defaults.string(forKey: "accentColorHex") == "#112233")
+    }
+
+    @Test func applyWritesPlumAndACustomHex() throws {
+        let suite = "AccentInkTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        for chosen in ["#7B2D6B", "#2468AC"] {
+            defaults.set("#111111", forKey: "accentColorHex")
+            var settings = KudosBackupSettings.capture(defaults: defaults)
+            settings.accentColorHex = chosen
+            settings.apply(to: defaults)
+            #expect(defaults.string(forKey: "accentColorHex") == chosen)
+        }
     }
 
     @Test func absentAccentLeavesTheLocalValue() throws {
@@ -333,26 +356,50 @@ struct AccentInkTests {
         #expect(defaults.string(forKey: "accentColorHex") == "#445566")
     }
 
-    @Test func legacyRedRestoresAsItself() throws {
+    @Test func applySkipsLegacyUnchosenRed() throws {
         let suite = "AccentInkTests.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
 
-        defaults.set("#821019", forKey: "accentColorHex")
-        var settings = KudosBackupSettings.capture(defaults: defaults)
-        settings.accentColorHex = "#990000"
-        settings.apply(to: defaults)
-        #expect(defaults.string(forKey: "accentColorHex") == "#990000")
+        for incoming in ["#990000", "#990000".lowercased()] {
+            defaults.set("#7B2D6B", forKey: "accentColorHex")
+            var settings = KudosBackupSettings.capture(defaults: defaults)
+            settings.accentColorHex = incoming
+            settings.apply(to: defaults)
+            #expect(defaults.string(forKey: "accentColorHex") == "#7B2D6B")
+        }
     }
 
-    @Test func captureWithoutAStoredAccentWritesTheNewDefault() throws {
+    @Test func captureOmitsTheAccentKeyWhenNothingIsStored() throws {
         let suite = "AccentInkTests.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
 
         defaults.removeObject(forKey: "accentColorHex")
         let settings = KudosBackupSettings.capture(defaults: defaults)
-        #expect(settings.accentColorHex == "#821019")
+        #expect(settings.accentColorHex == nil)
+        let data = try JSONEncoder().encode(settings)
+        let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(object["accentColorHex"] == nil)
+    }
+
+    @Test func folderSyncRestoreFromAnUnchosenDeviceLeavesLocalPlum() throws {
+        let remoteName = "AccentInkTests.remote.\(UUID().uuidString)"
+        let remote = try #require(UserDefaults(suiteName: remoteName))
+        defer { remote.removePersistentDomain(forName: remoteName) }
+        remote.removeObject(forKey: "accentColorHex")
+        let captured = KudosBackupSettings.capture(defaults: remote)
+        let data = try JSONEncoder().encode(captured)
+        let decoded = try JSONDecoder().decode(KudosBackupSettings.self, from: data)
+        #expect(decoded.accentColorHex == nil)
+
+        let localName = "AccentInkTests.local.\(UUID().uuidString)"
+        let local = try #require(UserDefaults(suiteName: localName))
+        defer { local.removePersistentDomain(forName: localName) }
+        local.set("#7B2D6B", forKey: "accentColorHex")
+        // FolderSyncService.restore ends in KudosBackupSettings.apply.
+        decoded.apply(to: local)
+        #expect(local.string(forKey: "accentColorHex") == "#7B2D6B")
     }
 
     @MainActor @Test func worksFilterHeaderGroundIsSepiaAndOtherThemesKeepTheirGround() throws {
