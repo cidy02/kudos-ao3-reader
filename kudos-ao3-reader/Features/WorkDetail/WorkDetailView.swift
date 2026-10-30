@@ -1137,12 +1137,14 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     }
 
     /// `openingContents` arms the reader's chapter sheet only after the reader
-    /// itself exists. A failed download, or a dismiss back to a reader already
-    /// on the stack, must not leave `.readerChapters` selected.
+    /// itself exists. A failed download must not leave `.readerChapters`
+    /// selected. Dismissing onto the reader this detail was opened from does:
+    /// that reader is already there.
     private func read(openingContents: Bool) {
         if openedFromReader {
             // Already reading this exact work one screen down — reopening it
             // here would stack a second reader over the live one (A2).
+            if openingContents { router.panel = .readerChapters }
             dismiss()
             return
         }
