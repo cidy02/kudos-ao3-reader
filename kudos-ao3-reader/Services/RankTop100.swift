@@ -286,7 +286,7 @@ struct RankTop100Loader: Sendable {
                 return RankTop100Outcome(pages: pages, stop: .cancelled)
             } catch let error as AO3Error {
                 if let throttleAvailability = await store.recordThrottle(error, at: await clock.now()) {
-                    let retryUntil = switch throttleAvailability {
+                    let retryUntil: Date? = switch throttleAvailability {
                     case let .retryAfter(date), let .throttledUntil(date): date
                     default: nil
                     }
