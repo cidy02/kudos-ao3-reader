@@ -414,8 +414,10 @@ struct AO3AuthorProfileStateTests {
         let slow = try #require(AO3AuthorRoute(username: "SlowUser"))
         let final = try #require(AO3AuthorRoute(username: "FinalUser"))
         var cancelledSlowLoad = false
+        var slowLoadStarted = false
         let model = AO3AuthorProfileModel(route: initial) { url, _, _ in
             if url.path == "/users/SlowUser" {
+                slowLoadStarted = true
                 do {
                     try await Task.sleep(for: .seconds(2))
                 } catch {
@@ -431,7 +433,11 @@ struct AO3AuthorProfileStateTests {
         let auth = AO3AuthService()
 
         model.selectScope(slow, auth: auth)
-        await Task.yield()
+        // One yield was not always enough under load: the second scope could
+        // cancel the slow load before its request started, so nothing was
+        // cancelled mid-request. Wait for the request itself (bounded, so a
+        // load that never starts fails the expectation instead of hanging).
+        for _ in 0..<10_000 where !slowLoadStarted { await Task.yield() }
         model.selectScope(final, auth: auth)
         await model.waitForActiveLoad()
 
