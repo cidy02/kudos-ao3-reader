@@ -657,7 +657,7 @@ struct WorkResumeCard: View {
             .font(.headline)
             .foregroundStyle(accentFill)
             .frame(maxWidth: variant == .detail ? .infinity : nil)
-            .frame(height: variant.primaryHeight)
+            .frame(minHeight: variant.primaryHeight)
             .padding(.horizontal, variant == .detail ? 16 : 22)
             .background(Color.white, in: Capsule())
         }
@@ -672,9 +672,9 @@ struct WorkResumeCard: View {
     ) -> some View {
         Button { if isInteractive { action() } } label: {
             Image(systemName: systemImage)
-                .font(.system(size: 18, weight: .medium))
+                .font(.body.weight(.medium))
                 .foregroundStyle(.white)
-                .frame(width: variant.primaryHeight, height: variant.primaryHeight)
+                .frame(minWidth: variant.primaryHeight, minHeight: variant.primaryHeight)
                 .background(Color.white.opacity(0.18), in: Circle())
         }
         .buttonStyle(.plain)
@@ -715,6 +715,7 @@ struct WorkResumeCard: View {
     ) -> some View {
         let clamped = min(max(fraction, 0), 1)
         let percent = Int((clamped * 100).rounded())
+        let size = dynamicTypeSize.isAccessibilitySize ? diameter * 1.35 : diameter
         return ZStack {
             Circle().stroke(Color.white.opacity(0.24), lineWidth: showsLabel ? 10 : 6)
             Circle()
@@ -728,13 +729,19 @@ struct WorkResumeCard: View {
                 VStack(spacing: 0) {
                     Text("\(percent)%")
                         .font(.system(.title3, design: .rounded, weight: .bold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.5)
                     Text(accessibilityLabel == "Download progress" ? "Download" : "Read")
                         .font(.caption2.weight(.semibold))
                         .textCase(.uppercase)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.5)
                 }
+                .padding(showsLabel ? 12 : 6)
             }
         }
-        .frame(width: diameter, height: diameter)
+        .frame(minWidth: diameter, minHeight: diameter)
+        .frame(width: size, height: size)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityValue("\(percent) percent")
