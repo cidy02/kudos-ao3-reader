@@ -329,7 +329,7 @@ class Brief3hcContentTest {
         compose.onAllNodesWithText("by", useUnmergedTree = true).assertCountEquals(2)
         val undertowLayout = textLayout("undertow")
         val uncleLayout = textLayout("uncle_iroh_fan")
-        assertEquals(tokens.scopePalette.accent, undertowLayout.layoutInput.style.color)
+        assertEquals(tokens.scopePalette.controlInk, undertowLayout.layoutInput.style.color)
         assertEquals(tokens.secondaryInk, uncleLayout.layoutInput.style.color)
         assertEquals(FontWeight.Normal, undertowLayout.layoutInput.style.fontWeight)
         assertEquals(FontWeight.Normal, uncleLayout.layoutInput.style.fontWeight)
@@ -343,7 +343,7 @@ class Brief3hcContentTest {
         }
         compose.runOnIdle { fontScale = 1.5f }
         assertEquals(15.5f, textLayout("undertow").layoutInput.style.fontSize.value, 0f)
-        assertEquals(tokens.scopePalette.accent, textLayout("undertow").layoutInput.style.color)
+        assertEquals(tokens.scopePalette.controlInk, textLayout("undertow").layoutInput.style.color)
     }
 
     @Test fun chapterPickerUsesOpenBookIconAndPaletteAccentOnAllRowLabels() {

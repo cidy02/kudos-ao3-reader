@@ -181,12 +181,12 @@ internal fun ListeningVoicePackSection(voicePack: VoicePackUi, packFailedToOpen:
             text = { Text(VOICE_PACK_CONFIRM_MESSAGE) },
             confirmButton = {
                 TextButton(onClick = { confirming = false; voicePack.onDownload() }) {
-                    Text("Download $VOICE_PACK_SIZE_LABEL", color = tokens.scopePalette.accent)
+                    Text("Download $VOICE_PACK_SIZE_LABEL", color = tokens.scopePalette.controlInk)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { confirming = false }) {
-                    Text("Cancel", color = tokens.scopePalette.accent)
+                    Text("Cancel", color = tokens.scopePalette.controlInk)
                 }
             }
         )
@@ -212,7 +212,7 @@ private fun VoicePackBusyRow(title: String, onCancel: (() -> Unit)?) {
 @Composable
 private fun VoicePackCancelButton(onCancel: () -> Unit) {
     TextButton(onClick = onCancel) {
-        Text("Cancel", color = LocalKudosTokens.current.scopePalette.accent, fontSize = 15.sp)
+        Text("Cancel", color = LocalKudosTokens.current.scopePalette.controlInk, fontSize = 15.sp)
     }
 }
 

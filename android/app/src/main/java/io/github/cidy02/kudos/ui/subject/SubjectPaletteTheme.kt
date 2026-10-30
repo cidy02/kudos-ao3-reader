@@ -4,7 +4,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 
-/** A coloured sheet owns its controls' tint independently of the page beneath it. */
+/** A subject sheet keeps its identity palette while every control uses the fixed app colour. */
 @Composable
 fun SubjectPaletteTheme(palette: SubjectPalette, content: @Composable () -> Unit) {
     val tokens = LocalKudosTokens.current

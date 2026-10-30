@@ -149,7 +149,7 @@ class BriefA96ContentTest {
             for (theme in themes) {
                 compose.runOnIdle { mode = theme }
                 compose.waitForIdle()
-                assertEquals(tokens.scopePalette.accent, textLayout("Avery Writes,").layoutInput.style.color)
+                assertEquals(tokens.scopePalette.controlInk, textLayout("Avery Writes,").layoutInput.style.color)
                 assertEquals(tokens.secondaryInk, textLayout("Guest").layoutInput.style.color)
                 assertEquals(tokens.secondaryInk, textLayout("by").layoutInput.style.color)
             }
@@ -173,7 +173,7 @@ class BriefA96ContentTest {
             compose.runOnIdle { work = linked.copy(authorIdentitiesJSON = if (hasIdentity) linked.authorIdentitiesJSON else "") }
             compose.onAllNodesWithText("by", useUnmergedTree = true).assertCountEquals(1)
             assertEquals(tokens.secondaryInk, textLayout("by").layoutInput.style.color)
-            assertEquals(if (hasIdentity) tokens.scopePalette.accent else tokens.secondaryInk,
+            assertEquals(if (hasIdentity) tokens.scopePalette.controlInk else tokens.secondaryInk,
                 textLayout("Avery Writes").layoutInput.style.color)
             if (hasIdentity) {
                 compose.onNodeWithContentDescription("Author: Avery Writes", useUnmergedTree = true).performClick()

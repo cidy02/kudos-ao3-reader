@@ -175,9 +175,15 @@ class SubjectPalette private constructor(
         get() = if (theme.isDarkFamily) hsb(hue, 0.52, 0.155) else Color.White
 
     val chipFill: Color
-        get() = tint.withOpacity(if (theme.isDarkFamily) 0.24 else 0.16)
+        get() = accent.withOpacity(if (theme.isDarkFamily) 0.24 else 0.16)
 
     val chipStroke: Color
+        get() = accent.withOpacity(if (theme.isDarkFamily) 0.50 else 0.40)
+
+    val controlChipFill: Color
+        get() = tint.withOpacity(if (theme.isDarkFamily) 0.24 else 0.16)
+
+    val controlChipStroke: Color
         get() = tint.withOpacity(if (theme.isDarkFamily) 0.50 else 0.40)
 
     private fun stop(saturation: Double, brightness: Double, location: Float) =

@@ -72,7 +72,7 @@ fun AO3TagSetScreen(
     SubjectPaletteTheme(palette) {
     MaterialTheme(colorScheme = MaterialTheme.colorScheme.copy(
         primary = palette.tint, onPrimary = palette.labelOnTint,
-        primaryContainer = palette.chipFill, onPrimaryContainer = palette.controlInk,
+        primaryContainer = palette.controlChipFill, onPrimaryContainer = palette.controlInk,
         surface = tokens.cardFill, onSurface = tokens.primaryInk,
         surfaceContainerHigh = tokens.cardFill, surfaceContainerHighest = tokens.cardFill,
         surfaceVariant = tokens.cardFill, onSurfaceVariant = tokens.secondaryInk,

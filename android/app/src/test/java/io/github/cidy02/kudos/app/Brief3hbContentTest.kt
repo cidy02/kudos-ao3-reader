@@ -270,10 +270,10 @@ class Brief3hbContentTest {
             false, 0, draft, { draft = it }, { adds++ }, { _, _ -> }) }
         val add = compose.onNodeWithText("Add", useUnmergedTree = true)
         compose.onNodeWithText("Add").assertIsNotEnabled()
-        assertNotEquals(tokens.scopePalette.accent, textColor(add))
+        assertNotEquals(tokens.scopePalette.controlInk, textColor(add))
         compose.onNodeWithContentDescription("New tag").performTextInput("Comfort")
         compose.onNodeWithText("Add").assertIsEnabled()
-        assertEquals(tokens.scopePalette.accent, textColor(add))
+        assertEquals(tokens.scopePalette.controlInk, textColor(add))
         compose.onNodeWithText("Add").performClick()
         compose.runOnIdle { assertEquals(1, adds) }
     }
@@ -337,7 +337,7 @@ class Brief3hbContentTest {
         compose.runOnIdle { scale = 2f }
         compose.runOnIdle { assertEquals(100, web.settings.textZoom) }
     }
-    @Test fun nearbyAndNextUseTheExplicitPagePaletteInEveryTheme() {
+    @Test fun nearbyAndNextUseTheFixedAppColourInEveryTheme() {
         lateinit var palette: SubjectPalette
         var committed: Int? = null
         var jump by mutableStateOf(true)
@@ -350,8 +350,8 @@ class Brief3hbContentTest {
         for (theme in themes) {
             compose.runOnIdle { mode = theme }
             val tile = compose.onNodeWithContentDescription("Page 2").fetchSemanticsNode().boundsInRoot
-            assertColor(palette.chipFill.compositeOver(tokens.background), pixel(Offset(tile.center.x, tile.top + 8f)))
-            assertEquals(palette.accentOnFill, textColor(compose.onNode(hasText("2") and
+            assertColor(palette.controlChipFill.compositeOver(tokens.background), pixel(Offset(tile.center.x, tile.top + 8f)))
+            assertEquals(palette.controlInk, textColor(compose.onNode(hasText("2") and
                 hasAnyAncestor(hasContentDescription("Page 2")), useUnmergedTree = true)))
         }
         compose.onNodeWithContentDescription("Page 3").performClick()
@@ -361,7 +361,7 @@ class Brief3hbContentTest {
         for (theme in themes) {
             compose.runOnIdle { mode = theme }
             compose.waitForIdle() // so `palette` below is this theme's, not the last one's
-            assertAccentPixels(compose.onNodeWithContentDescription("Next Page"), palette.accentOnFill)
+            assertAccentPixels(compose.onNodeWithContentDescription("Next Page"), palette.controlInk)
         }
     }
     @Test fun contentsDoneAndDisplayControlsUseAccentInkInEveryTheme() {

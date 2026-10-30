@@ -252,7 +252,7 @@ fun QueueLedgerCard(
         else -> null
     }
     val metadata = HomeFacts.localWorkMetadata(work.author, work.wordCount, work.chapters)
-    val tile = 22.dp
+    val tile = 24.dp
     WorkLedgerCard(work, modifier.downloadDimmed(if (downloadFraction != null) 1f else 0f)) {
         Box {
             Row(
@@ -268,7 +268,7 @@ fun QueueLedgerCard(
                     downloadFraction = downloadFraction,
                     progress = fraction,
                     state = state,
-                    diameter = tile * 2 + 11.dp
+                    diameter = tile * 2.12f
                 )
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                     SubjectKicker(

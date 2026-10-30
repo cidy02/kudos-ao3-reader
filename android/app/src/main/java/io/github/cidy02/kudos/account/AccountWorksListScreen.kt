@@ -974,7 +974,7 @@ private fun HistoryBrowser(
             containerColor = tokens.theme.cardSurface,
             confirmButton = {
                 TextButton(onClick = { writer?.dismissError(); missingLink = false }) {
-                    Text("OK", color = palette.accent)
+                    Text("OK", color = palette.controlInk)
                 }
             }
         )
@@ -1224,7 +1224,7 @@ internal fun SubscriptionsBrowser(
             containerColor = tokens.theme.cardSurface,
             confirmButton = {
                 TextButton(onClick = { unsubscribeState?.dismissError() }) {
-                    Text("OK", color = palette.accent)
+                    Text("OK", color = palette.controlInk)
                 }
             }
         )

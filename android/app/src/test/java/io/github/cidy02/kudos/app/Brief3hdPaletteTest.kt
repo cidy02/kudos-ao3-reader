@@ -78,7 +78,7 @@ class Brief3hdPaletteTest {
     private fun checkNext(node: SemanticsNodeInteraction, hue: Double) {
         compose.waitForIdle() // palettes recorded by composition must be current before the comparison
         assertEquals(hue, washes.page!!.palette.hue, 0.000001)
-        val expected = SubjectPalette.fromHue(hue, tokens.theme).accentOnFill
+        val expected = SubjectPalette.fromHue(hue, tokens.theme).controlInk
         val bounds = node.fetchSemanticsNode().boundsInRoot
         lateinit var bitmap: Bitmap
         compose.runOnIdle {

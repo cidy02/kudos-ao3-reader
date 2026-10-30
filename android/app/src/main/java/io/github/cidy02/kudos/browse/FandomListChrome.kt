@@ -319,7 +319,7 @@ private fun FamilyBlock(
                     if (sort == FandomFamilySort.FamilyTotal) Text(
                         (if (family.showsApproximateCount) "~" else "") + groupedCount(family.displayedWorkCount),
                         color = tokens.secondaryInk, fontSize = 13.sp)
-                    Text("All ${family.memberCount} tags", color = palette.accent, fontSize = 11.sp)
+                    Text("All ${family.memberCount} tags", color = palette.controlInk, fontSize = 11.sp)
                 }
             }
             if (!large) Column(horizontalAlignment = Alignment.End) {
@@ -336,7 +336,7 @@ private fun FamilyBlock(
                 }
                 Text(
                     text = "All ${family.memberCount} tags",
-                    color = palette.accent,
+                    color = palette.controlInk,
                     fontSize = 11.sp,
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Medium

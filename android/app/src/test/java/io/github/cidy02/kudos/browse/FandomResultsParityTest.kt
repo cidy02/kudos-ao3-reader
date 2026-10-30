@@ -168,8 +168,8 @@ class FandomResultsParityTest {
         compose.runOnIdle { assertEquals(HomeFacts.coverHue("Star Wars - All Media Types"), washes.page!!.palette.hue, 0.000001) }
     }
 
-    @Test fun fandomPagersUseThePagesBrownRatherThanTheGlobalAccent() = checkPagerPalette(false)
-    @Test fun tagPagersUseThePagesBrownRatherThanTheGlobalAccent() = checkPagerPalette(true)
+    @Test fun fandomPagersUseTheFixedAppColour() = checkPagerPalette(false)
+    @Test fun tagPagersUseTheFixedAppColour() = checkPagerPalette(true)
     private fun checkPagerPalette(tag: Boolean) {
         show(tag = tag, fandom = "Star Wars - All Media Types")
         for (theme in listOf(KudosThemeMode.Light, KudosThemeMode.Sepia, KudosThemeMode.Dark, KudosThemeMode.Oled)) {
@@ -181,7 +181,7 @@ class FandomResultsParityTest {
                 compose.runOnIdle { bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888); view.draw(Canvas(bitmap)) }
                 bitmap
             }
-            val expectedInk = palette.accentOnFill
+            val expectedInk = palette.controlInk
             val matches = (next.top.toInt() until next.bottom.toInt()).sumOf { y ->
                 (next.left.toInt() until next.right.toInt()).count { x ->
                     val pixel = Color(image.getPixel(x, y))
@@ -191,7 +191,7 @@ class FandomResultsParityTest {
                 }
             }
             image.recycle()
-            assertTrue("Page next arrow uses its subject ink ($theme)", matches > 3)
+            assertTrue("Page next arrow uses the app ink ($theme)", matches > 3)
         }
     }
 

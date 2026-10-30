@@ -150,7 +150,7 @@ fun KudosPaginationBar(
                 .minimumInteractiveComponentSize()
                 .size(40.dp)
                 .clip(CircleShape)
-                .background(if (navEnabled) palette.chipFill else Color.Transparent)
+                .background(if (navEnabled) palette.controlChipFill else Color.Transparent)
                 .combinedClickable(
                     enabled = navEnabled,
                     role = Role.Button,
@@ -163,7 +163,7 @@ fun KudosPaginationBar(
             Icon(
                 Icons.AutoMirrored.Outlined.KeyboardArrowRight,
                 contentDescription = "Next Page",
-                tint = if (navEnabled) palette.accentOnFill else tokens.secondaryInk.copy(alpha = 0.38f)
+                tint = if (navEnabled) palette.controlInk else tokens.secondaryInk.copy(alpha = 0.38f)
             )
         }
     }
@@ -253,10 +253,10 @@ internal fun PageJumpContent(currentPage: Int, totalPages: Int, onSelect: (Int) 
                                         .heightIn(min = 44.dp)
                                         .clip(RoundedCornerShape(11.dp))
                                         .background(
-                                            if (selected) palette.chipFill
+                                            if (selected) palette.controlChipFill
                                             else tokens.glassFill(0.08)
                                         )
-                                        .border(0.5.dp, if (selected) palette.chipStroke
+                                        .border(0.5.dp, if (selected) palette.controlChipStroke
                                             else tokens.glassStroke(0.13), RoundedCornerShape(11.dp))
                                         .selectable(selected = selected, role = Role.RadioButton) { pageInput = page.toString() }
                                         .semantics { contentDescription = "Page $page" },
@@ -268,7 +268,7 @@ internal fun PageJumpContent(currentPage: Int, totalPages: Int, onSelect: (Int) 
                                         autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = 16.sp),
                                         lineHeight = 20.sp,
                                         fontWeight = FontWeight.SemiBold,
-                                        color = if (selected) palette.accentOnFill
+                                        color = if (selected) palette.controlInk
                                         else tokens.primaryInk
                                     )
                                 }

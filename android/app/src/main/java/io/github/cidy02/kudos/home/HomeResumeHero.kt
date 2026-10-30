@@ -115,7 +115,7 @@ private fun HeroBody(
             warnings = work.workWarnings,
             isComplete = work.knownCompletion,
             arrangement = HomeStatusArrangement.Grid,
-            tileSize = 22.dp,
+            tileSize = 24.dp,
             modifier = trayModifier
         )
     }

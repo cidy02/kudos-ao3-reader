@@ -119,7 +119,7 @@ class BriefA98ContentTest {
             assertFalse((0 until text.lineCount).any(text::isLineEllipsized))
             val bounds = current.fetchSemanticsNode().boundsInRoot
             assertPixel(tokens.glassFill(0.15).compositeOver(tokens.background), Offset(bounds.left + 4, bounds.center.y))
-            assertEquals(tokens.scopePalette.accent, layout("0.9x").layoutInput.style.color)
+            assertEquals(tokens.scopePalette.controlInk, layout("0.9x").layoutInput.style.color)
         }
         compose.onNodeWithText("0.9x").performClick()
         compose.runOnIdle { assertEquals(0.9f, rate, 0f) }
@@ -144,7 +144,7 @@ class BriefA98ContentTest {
             for (reader in listOf(false, true)) for (theme in themes) for (fontScale in listOf(1f, 2f)) {
                 compose.runOnIdle { inReader = reader; mode = theme; scale = fontScale }
                 compose.onNodeWithText("Plain Narration").performScrollTo().assertIsDisplayed()
-                assertEquals(if (fontScale == 1f) tokens.primaryInk else tokens.scopePalette.accent,
+                assertEquals(if (fontScale == 1f) tokens.primaryInk else tokens.scopePalette.controlInk,
                     layout("Plain Narration").layoutInput.style.color)
                 val text = layout("Plain Narration")
                 assertFalse((0 until text.lineCount).any(text::isLineEllipsized))

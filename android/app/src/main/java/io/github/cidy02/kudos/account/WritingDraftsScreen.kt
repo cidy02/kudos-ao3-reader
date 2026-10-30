@@ -64,8 +64,8 @@ import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 import io.github.cidy02.kudos.network.ao3.writing.DraftExpiry
 import io.github.cidy02.kudos.ui.components.KudosPaginationBar
 import io.github.cidy02.kudos.ui.components.KudosRefreshBox
-import io.github.cidy02.kudos.ui.components.statusChips
-import io.github.cidy02.kudos.ui.components.WorkStatIcons
+import io.github.cidy02.kudos.ui.subject.HomeStatusArrangement
+import io.github.cidy02.kudos.ui.subject.HomeStatusTray
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SectionRuleHeader
 import io.github.cidy02.kudos.ui.subject.SubjectHeaderBlock
@@ -112,9 +112,9 @@ fun WritingDraftsScreen(
     // Shared pagination reads Material roles; scope those roles to this page's tokens only.
     val scheme = MaterialTheme.colorScheme.copy(
         primary = palette.tint, onPrimary = palette.labelOnTint,
-        primaryContainer = palette.chipFill, onPrimaryContainer = palette.controlInk,
+        primaryContainer = palette.controlChipFill, onPrimaryContainer = palette.controlInk,
         secondary = palette.tint, onSecondary = palette.labelOnTint,
-        secondaryContainer = palette.chipFill, onSecondaryContainer = palette.controlInk,
+        secondaryContainer = palette.controlChipFill, onSecondaryContainer = palette.controlInk,
         surface = tokens.cardFill, surfaceContainerHigh = tokens.cardFill,
         surfaceVariant = tokens.cardFill, surfaceContainer = tokens.cardFill,
         surfaceContainerHighest = tokens.cardFill, surfaceContainerLow = tokens.cardFill,
@@ -298,45 +298,15 @@ private fun DraftExpiryBadge(days: Int) {
         if (tone == DraftExpiry.Tone.Red) tokens.destructive else SubjectPalette.fromHue(tone.hue, tokens.theme).accent)
 }
 
-/** Reuses the account cards' status mapping and glyphs, in iOS's four-cell tray. */
+/** The same trayless 24 dp required-tag grid used by every other work surface. */
 @Composable
 private fun DraftStatusGrid(work: AO3WorkSummary) {
-    val tokens = LocalKudosTokens.current
-    val density = LocalDensity.current
-    val scale = density.fontScale.coerceAtMost(1.8f)
-    val letterSize = with(density) { (7.dp * scale).toSp() }
-    val categorySize = with(density) { (14.dp * scale).toSp() }
-    val stats = statusChips(work.rating, work.categories, work.warnings, work.isComplete)
-    Column(Modifier.background(tokens.glassFill(0.10), RoundedCornerShape(SubjectMetrics.trayRadius))
-        .border(0.5.dp, tokens.glassStroke(), RoundedCornerShape(SubjectMetrics.trayRadius))
-        .padding(horizontal = 7.dp * scale, vertical = 5.5.dp * scale)
-        .clearAndSetSemantics { contentDescription = stats.joinToString(", ") { it.accessibilityLabel ?: it.text } },
-        verticalArrangement = Arrangement.spacedBy(3.5.dp * scale)) {
-        stats.chunked(2).forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(3.5.dp * scale)) {
-                row.forEach { stat ->
-                    val tint = stat.tint ?: tokens.secondaryInk
-                    Box(Modifier.size(22.dp * scale).background(tint.withOpacity(0.3), RoundedCornerShape(5.dp * scale)),
-                        contentAlignment = Alignment.Center) {
-                        val category = when (stat.text) {
-                            "F/F" -> "⚢"; "M/M" -> "⚣"; "F/M" -> "⚤"; "Gen" -> "☉"; "Other" -> "♅"
-                            else -> null
-                        }
-                        if (category != null) Text(category, color = tint, fontSize = categorySize, lineHeight = categorySize)
-                        else {
-                            stat.icon?.let { Icon(it, contentDescription = null, tint = tint, modifier = Modifier.size(14.dp * scale)) }
-                            if (stat.icon == WorkStatIcons.rating) {
-                                val letter = when (work.rating) {
-                                    "General Audiences" -> "G"; "Teen And Up Audiences" -> "T"
-                                    "Mature" -> "M"; "Explicit" -> "E"; else -> "?"
-                                }
-                                Text(letter, color = tint, fontSize = letterSize, lineHeight = letterSize,
-                                    fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
+    HomeStatusTray(
+        rating = work.rating,
+        categories = work.categories,
+        warnings = work.warnings,
+        isComplete = work.isComplete,
+        arrangement = HomeStatusArrangement.Grid,
+        tileSize = 24.dp
+    )
 }

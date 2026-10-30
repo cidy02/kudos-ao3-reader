@@ -29,7 +29,7 @@ import org.jsoup.safety.Safelist
 @Composable
 fun AO3RichText(html: String, onOpenAo3: (String) -> Unit, modifier: Modifier = Modifier) {
     val tokens = LocalKudosTokens.current
-    val accent = LocalSubjectPalette.current.accent
+    val accent = LocalSubjectPalette.current.controlInk
     val uriHandler = LocalUriHandler.current
     val openAo3 by rememberUpdatedState(onOpenAo3)
     val text = remember(html, accent) {

@@ -584,7 +584,7 @@ private fun ShellNavigationBar(
     val tokens = LocalKudosTokens.current
     // The selected tab is an accent-tinted pill under a glyph that reads on it in every theme
     // (the bare accent, AO3 red by default, does not on Dark: owner question 2).
-    val onAccent = io.github.cidy02.kudos.ui.subject.LocalSubjectPalette.current.accentOnFill
+    val onAccent = tokens.accentInk
     val colors = ShortNavigationBarItemDefaults.colors(
         selectedIconColor = onAccent,
         selectedTextColor = onAccent,
