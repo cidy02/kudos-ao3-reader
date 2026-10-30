@@ -366,7 +366,9 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             // T-458: no entry starts speech, and macOS has no TTS.
             readAloud: read,
             contents: openContents,
-            updateDownload: resumeUpdate
+            // T-476b: no download path keeps the reading position yet;
+            // restoreReadableEPUB resets it, so the circle stays hidden.
+            updateDownload: nil
         )
         .downloadDimmed(localWork)
         .pageBodyRow(top: 14)
@@ -374,11 +376,6 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
 
     private func openContents() {
         read(openingContents: true)
-    }
-
-    private var resumeUpdate: (() -> Void)? {
-        guard localWork?.hasUpdate == true else { return nil }
-        return updateDownloadedWork
     }
 
     /// Nil unless this work has actually been opened on this device. A ring at
@@ -1173,26 +1170,6 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                     working = false
                 }
             }
-        }
-    }
-
-    /// Replaces the preserved EPUB only when AO3 reports new chapters, then
-    /// advances the same watermark Home's update badge reads.
-    private func updateDownloadedWork() {
-        guard let work = localWork, work.hasUpdate, !working else { return }
-        Task {
-            working = true
-            loadError = nil
-            do {
-                try await WorkReaderPreparation.restoreReadableEPUB(for: work, in: context)
-                work.knownChapterCount = work.postedChapterCount
-                context.saveBestEffort(reason: "Saving updated download failed")
-            } catch let error as AO3Error {
-                loadError = error.errorDescription
-            } catch {
-                loadError = UserFacingError.message(for: error)
-            }
-            working = false
         }
     }
 
