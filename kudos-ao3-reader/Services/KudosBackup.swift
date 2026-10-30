@@ -1603,8 +1603,8 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
     var readerTheme: String
     var matchAppReaderTheme: Bool
     /// Nil when the key is absent or JSON null, and when capture found no stored
-    /// accent. An unchosen device omits the key. Same absent-vs-present shape as
-    /// `libraryPageArrangement`.
+    /// accent. Apply writes a present value except `#990000`, the old unchosen
+    /// default. Same absent-vs-present shape as `libraryPageArrangement`.
     var accentColorHex: String?
     var autoPreserveSmallSeriesOnSaveForLater: Bool
     var autoPreserveSeriesWorkThreshold: Int
@@ -1842,9 +1842,10 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         defaults.set(appTheme, forKey: "appTheme")
         defaults.set(readerTheme, forKey: "readerTheme")
         defaults.set(matchAppReaderTheme, forKey: "matchAppReaderTheme")
-        // Present means "use this colour", including a legacy `#990000`. Absent
-        // (or JSON null, which decodes as nil) leaves whatever this device stored.
-        if let accentColorHex {
+        // Absent (or JSON null, which decodes as nil) leaves the local accent.
+        // `#990000` in any case is the pre-2026-10-29 default, not a choice.
+        // Any other present value is applied as stored, including a custom colour.
+        if let accentColorHex, !ThemeManager.isLegacyUnchosenAccent(accentColorHex) {
             defaults.set(accentColorHex, forKey: "accentColorHex")
         }
         defaults.set(autoPreserveSmallSeriesOnSaveForLater, forKey: "autoPreserveSmallSeriesOnSaveForLater")

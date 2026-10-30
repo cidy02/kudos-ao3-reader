@@ -69,9 +69,9 @@ Current backup settings fields:
 >
 > `accentColorHex` is omitted from capture when the device has no stored accent.
 > Capture writes the stored value when the key is present. The in-app default is
-> still `#821019`; launch does not write it into an empty key. Restore applies a
-> present value as stored, including a legacy `#990000`, and an absent key leaves
-> the local accent alone.
+> still `#821019`; launch does not write it into an empty key. Restore skips an
+> absent key and a present `#990000` (any case), and applies any other present
+> value as stored.
 
 ## Theme Values
 
