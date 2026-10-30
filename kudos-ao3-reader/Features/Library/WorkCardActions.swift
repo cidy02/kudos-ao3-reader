@@ -268,12 +268,16 @@ enum WorkReaderPreparation {
     }
 
     @MainActor
-    static func restoreReadableEPUB(for work: SavedWork, in context: ModelContext) async throws {
+    static func restoreReadableEPUB(
+        for work: SavedWork,
+        in context: ModelContext,
+        downloadEPUB: ((Int) async throws -> URL)? = nil
+    ) async throws {
         guard let id = work.ao3WorkID ?? WorkTags.ao3WorkID(from: work.sourceURL) else {
             throw WorkReaderPreparationError.missingAO3ID
         }
 
-        let temp = try await AO3Client.shared.downloadEPUB(workID: id)
+        let temp = try await fetchedEPUB(id, downloadEPUB: downloadEPUB, onProgress: nil)
         try ReadingQueueService.replaceEPUB(for: work, with: temp)
         work.hasEPUB = true
         work.isFinished = false
@@ -288,6 +292,53 @@ enum WorkReaderPreparation {
         work.legacyReaderProgress = nil
         work.markModified()
         try context.save()
+    }
+
+    /// Replaces the EPUB when AO3 has posted chapters this copy has not taken.
+    /// Reading position stays: a missing file is `restoreReadableEPUB`, which
+    /// restarts the work. A failed download throws before `replaceEPUB`, and
+    /// `replaceEPUB` validates the package before it touches the installed file.
+    @MainActor
+    static func updateDownloadedEPUB(
+        for work: SavedWork,
+        in context: ModelContext,
+        downloadEPUB: ((Int) async throws -> URL)? = nil,
+        onProgress: (@Sendable (Double) -> Void)? = nil
+    ) async throws {
+        guard work.modelContext != nil, work.hasUpdate else { return }
+        guard let id = work.ao3WorkID ?? WorkTags.ao3WorkID(from: work.sourceURL) else {
+            throw WorkReaderPreparationError.missingAO3ID
+        }
+
+        let temp = try await fetchedEPUB(id, downloadEPUB: downloadEPUB, onProgress: onProgress)
+        // The installed file is still the previous copy. Drop the temp if the
+        // record was deleted while AO3 was sending, and do not touch that copy.
+        guard work.modelContext != nil else {
+            try? FileManager.default.removeItem(at: temp)
+            return
+        }
+        try ReadingQueueService.replaceEPUB(for: work, with: temp)
+        work.knownChapterCount = work.postedChapterCount
+        if work.isQueuedForLater {
+            work.epubPreservationStatus = .preserved
+            work.preservedAt = Date()
+        }
+        work.markModified()
+        try context.save()
+    }
+
+    /// Test seam matches `ReadingQueueService.preserve`: nil uses the one
+    /// EPUB download (`AO3Client.downloadEPUB` — pacing, UA, no second client).
+    @MainActor
+    private static func fetchedEPUB(
+        _ id: Int,
+        downloadEPUB: ((Int) async throws -> URL)?,
+        onProgress: (@Sendable (Double) -> Void)?
+    ) async throws -> URL {
+        if let downloadEPUB {
+            return try await downloadEPUB(id)
+        }
+        return try await AO3Client.shared.downloadEPUB(workID: id, onProgress: onProgress)
     }
 }
 
