@@ -71,7 +71,7 @@ Current backup settings fields:
 > Capture writes the stored value when the key is present. The in-app default is
 > still `#821019`; launch does not write it into an empty key. Restore skips an
 > absent key and a present `#990000` (any case), and applies any other present
-> value as stored.
+> value as stored. A stored `#990000` is read as `#821019` and is not rewritten.
 
 ## Theme Values
 

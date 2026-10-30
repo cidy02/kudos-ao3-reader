@@ -54,11 +54,17 @@ final class ThemeManager {
         didSet { store(readerThemeStored, forKey: "readerTheme") }
     }
 
-    /// The reader's accent as `#RRGGBB`. `didSet` does not run from `init`, so a
-    /// missing `accentColorHex` stays missing until they pick a colour.
+    /// The reader's accent as `#RRGGBB` for display. A stored `#990000` is read
+    /// as AO3 Red. The setter writes the given string. Init assigns the backing
+    /// store instead, so a missing key stays missing and `#990000` is not rewritten.
     var accentHex: String {
-        didSet { UserDefaults.standard.set(accentHex, forKey: Self.accentKey) }
+        get { Self.readingAccentHex(storedAccentHex) }
+        set { writeAccentHex(newValue) }
     }
+
+    /// The UserDefaults string, or AO3 Red in memory when the key is absent.
+    /// `#990000` is kept here so the getter can map it without writing.
+    private var storedAccentHex: String
 
     /// Default accent when nothing is stored. A stored value is never rewritten
     /// to this.
@@ -69,6 +75,13 @@ final class ThemeManager {
 
     nonisolated static func isLegacyUnchosenAccent(_ hex: String) -> Bool {
         hex.caseInsensitiveCompare(legacyUnchosenAccentHex) == .orderedSame
+    }
+
+    /// What the app shows for a stored accent. A missing key and `#990000`
+    /// are AO3 Red. The stored string is not rewritten.
+    nonisolated static func readingAccentHex(_ stored: String?) -> String {
+        guard let stored, !isLegacyUnchosenAccent(stored) else { return ao3Red }
+        return stored
     }
     private static let matchKey = "matchAppReaderTheme"
     nonisolated private static let accentKey = "accentColorHex"
@@ -107,8 +120,14 @@ final class ThemeManager {
                 defaults.removeObject(forKey: Self.paperKey)
             }
         }
-        // `didSet` does not run from `init`, so an absent accent is not written.
-        accentHex = defaults.string(forKey: Self.accentKey) ?? Self.ao3Red
+        // The setter would write. A missing key must stay missing, and a stored
+        // `#990000` must stay `#990000` while the getter reads it as AO3 Red.
+        storedAccentHex = defaults.string(forKey: Self.accentKey) ?? Self.ao3Red
+    }
+
+    private func writeAccentHex(_ hex: String) {
+        storedAccentHex = hex
+        UserDefaults.standard.set(hex, forKey: Self.accentKey)
     }
 
     /// The user's accent colour (falls back to AO3 red if the stored hex is bad).
@@ -145,9 +164,10 @@ final class ThemeManager {
     /// The one app-control tint for a theme. Subject palettes call this too so a
     /// screen's identity colour never leaks into buttons, toggles, pills or chrome.
     /// Reads the stored accent directly: this is not a view, so it cannot observe
-    /// `accentHex`. Screens that must refresh use `effectiveTint`.
+    /// `accentHex`. A stored `#990000` is read as AO3 Red. Screens that must
+    /// refresh use `effectiveTint`.
     static func appTint(for theme: ReaderTheme) -> Color {
-        let hex = UserDefaults.standard.string(forKey: accentKey) ?? ao3Red
+        let hex = readingAccentHex(UserDefaults.standard.string(forKey: accentKey))
         let accent = Color(hex: hex) ?? Color(hex: ao3Red)!
         return SubjectPalette.controlColor(theme.appTint ?? accent, on: theme)
     }
