@@ -58,13 +58,6 @@ extension WorkDetailView {
                 Section {
                     tagCluster(group)
                         .pageBodyRow(top: index == 0 ? 20 : 22)
-
-                    if index == groups.count - 1 {
-                        Text("Tags come from AO3. Tap one to find other AO3 works with that tag.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .pageBodyRow(top: 16)
-                    }
                 }
             }
         }

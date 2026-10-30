@@ -170,12 +170,6 @@ struct MediaBrowserView: View {
                 }
 
                 openWebsiteRow
-
-                instructions
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, CardListMetrics.sideMargin)
             }
             .padding(.vertical, 12)
         }
@@ -372,17 +366,6 @@ struct MediaBrowserView: View {
             } header: {
                 Text("Browse by fandom")
             }
-
-            // Instruction as a clear-background row, not a Section footer: a plain
-            // list row with no listRowBackground falls back to white under Sepia's
-            // light scheme, so clear it to let the warm backdrop show through.
-            instructions
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
-                .listRowInsets(EdgeInsets(top: 4, leading: 20, bottom: 12, trailing: 20))
         }
         .cardList()
         // `/media` is `max-age=600, public`, so without the invalidation the
@@ -393,15 +376,6 @@ struct MediaBrowserView: View {
         }
     }
     #endif
-
-    /// Instructional caption shown under the category list.
-    private var instructions: Text {
-        #if os(iOS)
-        Text("Browse fandoms from AO3. Tap a category to see its fandoms.")
-        #else
-        Text("Popular fandoms from AO3. Tap one to search its works.")
-        #endif
-    }
 
     // MARK: - Card
 

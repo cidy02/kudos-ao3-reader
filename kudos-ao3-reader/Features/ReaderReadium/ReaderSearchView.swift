@@ -318,10 +318,7 @@ struct ReaderSearchView: View {
     private var content: some View {
         switch model.phase {
         case .idle:
-            ContentUnavailableView(
-                "Find in Work", systemImage: "magnifyingglass",
-                description: Text("Search the text of this work. Tap a result to jump to that passage.")
-            )
+            ContentUnavailableView("Find in Work", systemImage: "magnifyingglass")
         case .searching:
             ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity).accentFill()
         case let .failed(message):
