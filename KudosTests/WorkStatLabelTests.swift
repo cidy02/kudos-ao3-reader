@@ -386,6 +386,10 @@ struct WorkSymbolTileTests {
         #expect(!WorkStatusIconGrid.drawsBacking(arrangement: .grid, backed: false))
         #expect(!WorkStatusIconGrid.drawsBacking(arrangement: .strip, backed: true))
         #expect(!WorkStatusIconGrid.drawsBacking(arrangement: .strip, backed: false))
+        // A call site that says nothing gets the backed grid; flipping either
+        // default would quietly strip the tray from every list row.
+        let plain = WorkStatusIconGrid()
+        #expect(WorkStatusIconGrid.drawsBacking(arrangement: plain.arrangement, backed: plain.backed))
     }
 
     @Test func backingColoursMatchTheBoard() {
