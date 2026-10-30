@@ -170,8 +170,8 @@ struct RankTop100Tests {
 
     @Test func everyAutomatedFeaturePhraseIsHeaderSafeASCII() {
         for feature in AO3AutomatedFeature.allCases {
-            #expect(feature.token.unicodeScalars.allSatisfy(\.isASCII))
-            #expect(feature.phrase.unicodeScalars.allSatisfy(\.isASCII))
+            #expect(feature.token.unicodeScalars.allSatisfy { $0.isASCII })
+            #expect(feature.phrase.unicodeScalars.allSatisfy { $0.isASCII })
             #expect(!feature.token.contains("("))
             #expect(!feature.token.contains(")"))
             #expect(!feature.token.contains("\\"))
