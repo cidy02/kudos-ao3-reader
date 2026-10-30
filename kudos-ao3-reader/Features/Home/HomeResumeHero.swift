@@ -704,14 +704,14 @@ struct WorkResumeCard: View {
         .accessibilityLabel(title)
     }
 
-    /// Same decision as `WorkReadingOrDownloadRing`: the queue's fraction while
-    /// a download or restore is in flight, otherwise the reading fraction.
+    /// The queue's fraction while a download or restore is in flight
+    /// (`DownloadQueue.liveDownloadFraction`), otherwise the reading fraction.
     @ViewBuilder
     private func progressDial(diameter: CGFloat, showsLabel: Bool) -> some View {
-        if let localWork, downloads.isDownloading(localWork) {
+        if let localWork, downloads.liveDownloadFraction(for: localWork, at: .now) != nil {
             TimelineView(.animation) { context in
                 progressRing(
-                    fraction: downloads.downloadFraction(for: localWork, at: context.date) ?? 1,
+                    fraction: downloads.liveDownloadFraction(for: localWork, at: context.date) ?? 1,
                     diameter: diameter,
                     showsLabel: showsLabel,
                     accessibilityLabel: "Download progress"
