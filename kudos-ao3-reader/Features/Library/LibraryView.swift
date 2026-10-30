@@ -195,6 +195,12 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                         allWorksCount: libraryHeader.workCount
                     )
                 }
+                // The shelf layout lives in UserDefaults, which the folder-sync
+                // observer does not query. The notice it listens for marks the
+                // folder dirty so the layout reaches the reader's other devices.
+                .onChange(of: pageArrangement) { _, _ in
+                    NotificationCenter.default.post(name: .kudosSyncRelevantSettingChanged, object: nil)
+                }
                 .filterPanelPresentation(isPresented: router.isShowing(.libraryFilters)) {
                     // The lists are drawn from what the Library can show: not a work Hide
                     // mode hides (its fandoms and tags were offered here). A queue's
