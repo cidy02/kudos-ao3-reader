@@ -154,10 +154,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         detailContent
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
-        // Spec 1a washes the page in the work's own hue and runs it 620pt down,
-        // well past the identity block, so the strip and resume card sit inside
-        // the colour rather than on the plain backdrop below it.
-        .subjectScreenWash(palette: workPalette, washHeight: 620)
+        .subjectScreenWash(palette: workPalette, role: .subjectWash)
         .refreshable { await refreshDetails() }
         // Same-touch author byline on a List card can also activate the row's work
         // NavigationLink. Dismiss async — in-transaction dismiss() is often ignored.

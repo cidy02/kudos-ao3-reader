@@ -169,7 +169,7 @@ struct AO3CollectionItemsView: View {
             }
         }
         .cardList()
-        .subjectScreenWash(palette: palette)
+        .subjectScreenWash(palette: palette, role: .content)
         .toolbar {
             if pendingCount > 0 {
                 ToolbarItem(placement: .primaryAction) {

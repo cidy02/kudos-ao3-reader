@@ -25,9 +25,7 @@ struct SubjectScreenScaffold<LeadingChrome: View, TrailingChrome: View, Content:
     let title: String
     /// One line of tallies under the title: "4 works · most recently read first".
     var subtitle: String?
-    /// How far down the saturated part of the wash reaches. The spec uses 380 for
-    /// a plain list and 600–620 where a hero card sits under the header.
-    var washHeight: CGFloat = 380
+    var role: SubjectScreenRole = .grouped
     /// Chrome that replaces the default back button. Nil keeps the back button.
     @ViewBuilder var leadingChrome: () -> LeadingChrome
     @ViewBuilder var trailingChrome: () -> TrailingChrome
@@ -54,7 +52,7 @@ struct SubjectScreenScaffold<LeadingChrome: View, TrailingChrome: View, Content:
         }
         .subjectScreenChrome(
             palette: palette,
-            washHeight: washHeight,
+            role: role,
             leading: leadingChrome,
             trailing: trailingChrome
         )
@@ -71,7 +69,7 @@ struct SubjectScreenScaffold<LeadingChrome: View, TrailingChrome: View, Content:
 /// and get a `ScrollView` for free.
 private struct SubjectScreenChrome<Leading: View, Trailing: View>: ViewModifier {
     let palette: SubjectPalette
-    let washHeight: CGFloat
+    let role: SubjectScreenRole
     @ViewBuilder var leading: () -> Leading
     @ViewBuilder var trailing: () -> Trailing
 
@@ -88,7 +86,7 @@ private struct SubjectScreenChrome<Leading: View, Trailing: View>: ViewModifier 
                 .padding(.horizontal, 14)
                 .frame(height: 44)
             }
-            .subjectWash(palette, height: washHeight)
+            .subjectScreenSurface(role, palette: palette)
             .hidesFloatingTabBar()
             .hidesSystemNavigationBar()
             .reinstatesBackSwipe { dismiss() }
@@ -108,21 +106,36 @@ private struct SubjectScreenChrome<Leading: View, Trailing: View>: ViewModifier 
 /// device.
 private struct SubjectScreenWash: ViewModifier {
     let palette: SubjectPalette
-    let washHeight: CGFloat
+    let role: SubjectScreenRole
 
     func body(content: Content) -> some View {
         content
-            .subjectWash(palette, height: washHeight)
+            .subjectScreenSurface(role, palette: palette)
             .hidesFloatingTabBar()
             .hidesNavigationBarChrome()
     }
 }
 
 extension View {
+    /// Retains the pushed-screen chrome contract while choosing the screen's
+    /// visual role. Tab-bar hiding deliberately remains outside this choice.
+    @ViewBuilder
+    func subjectScreenSurface(_ role: SubjectScreenRole, palette: SubjectPalette) -> some View {
+        if role.usesSubjectWash {
+            subjectWash(palette)
+        } else {
+            appScreenSurface(role)
+                .screenTint(palette)
+        }
+    }
+
     /// Wash plus a transparent, title-less navigation bar. Keeps the bar's own
     /// items; see `SubjectScreenWash` for why that is worth a second modifier.
-    func subjectScreenWash(palette: SubjectPalette, washHeight: CGFloat = 380) -> some View {
-        modifier(SubjectScreenWash(palette: palette, washHeight: washHeight))
+    func subjectScreenWash(
+        palette: SubjectPalette,
+        role: SubjectScreenRole = .grouped
+    ) -> some View {
+        modifier(SubjectScreenWash(palette: palette, role: role))
     }
 
     /// Empties the navigation bar's title and background so the wash shows
@@ -179,14 +192,14 @@ extension View {
     /// without giving up swipe actions.
     func subjectScreenChrome<Leading: View, Trailing: View>(
         palette: SubjectPalette,
-        washHeight: CGFloat = 380,
+        role: SubjectScreenRole = .grouped,
         @ViewBuilder leading: @escaping () -> Leading,
         @ViewBuilder trailing: @escaping () -> Trailing
     ) -> some View {
         modifier(
             SubjectScreenChrome(
                 palette: palette,
-                washHeight: washHeight,
+                role: role,
                 leading: leading,
                 trailing: trailing
             )
@@ -201,7 +214,7 @@ extension SubjectScreenScaffold where LeadingChrome == GlassCircleButton<Image> 
         kicker: String,
         title: String,
         subtitle: String? = nil,
-        washHeight: CGFloat = 380,
+        role: SubjectScreenRole = .grouped,
         onBack: @escaping () -> Void,
         @ViewBuilder trailingChrome: @escaping () -> TrailingChrome,
         @ViewBuilder content: @escaping () -> Content
@@ -211,7 +224,7 @@ extension SubjectScreenScaffold where LeadingChrome == GlassCircleButton<Image> 
             kicker: kicker,
             title: title,
             subtitle: subtitle,
-            washHeight: washHeight,
+            role: role,
             leadingChrome: {
                 GlassCircleButton(accessibilityName: "Back", action: onBack) {
                     Image(systemName: "chevron.left")

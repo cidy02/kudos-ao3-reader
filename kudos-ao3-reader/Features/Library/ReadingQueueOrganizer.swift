@@ -309,7 +309,7 @@ struct AllReadingQueuesGridView: View {
         // 1bg's grammar: the title bar takes the count while selecting. Inside the wash:
         // its blank title is the outer one, and set after it the count never showed.
         .navigationTitle(isSelecting ? "\(selection.count) selected" : "")
-        .subjectScreenWash(palette: organizerPalette)
+        .subjectScreenWash(palette: organizerPalette, role: .content)
         .toolbar { toolbarContent }
         #if os(iOS)
         .environment(

@@ -43,7 +43,7 @@ struct LibraryEntityGridView<Item: Identifiable, Destination: Hashable, Card: Vi
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(16)
         }
-        .subjectScreenWash(palette: themeManager.scopePalette)
+        .subjectScreenWash(palette: themeManager.scopePalette, role: .content)
         .toolbar {
             ActionToolbar(items: [
                 AnyView(ToolbarIconButton(title: "New Collection", systemImage: "plus", action: onNew))

@@ -279,9 +279,7 @@ struct FandomWorksView: View {
                 .overlay { statusOverlay }
             }
         }
-        // A pushed results page (1k proper): the wash under a title-less bar,
-        // the subject named by the hero, as on every other subject page.
-        .subjectScreenWash(palette: resultsPalette, washHeight: 600)
+        .subjectScreenWash(palette: resultsPalette, role: .subjectWash)
         .screenTint(resultsPalette)
             // Zooms out of the fandom row that pushed it.
             .workCardZoomDestination(BrowseZoomKey.fandom(zoomKey), in: zoomNamespace)
@@ -731,9 +729,7 @@ struct TagWorksView: View {
                 .overlay { statusOverlay }
             }
         }
-        // A pushed results page (1k proper): the wash under a title-less bar,
-        // the subject named by the hero, as on every other subject page.
-        .subjectScreenWash(palette: resultsPalette, washHeight: 600)
+        .subjectScreenWash(palette: resultsPalette, role: .content)
         .screenTint(resultsPalette)
             .toolbar { toolbarContent }
             .onChange(of: showingFilters) { _, showing in

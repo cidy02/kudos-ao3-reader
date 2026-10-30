@@ -613,7 +613,7 @@ struct LibrarySectionListView: View {
             }
         }
         .cardList()
-        .subjectScreenWash(palette: scopePalette)
+        .subjectScreenWash(palette: scopePalette, role: .content)
         .task(id: authorNewestWorkPrefetchKey(for: allRows)) {
             await prefetchAuthorNewestWorks(rows: allRows)
         }
@@ -654,7 +654,7 @@ struct LibrarySectionListView: View {
                 )
             }
         )
-        .subjectScreenWash(palette: scopePalette)
+        .subjectScreenWash(palette: scopePalette, role: .content)
     }
 
     /// The visible works as one unnamed group. History draws its timeline instead.
@@ -733,7 +733,7 @@ struct LibrarySectionListView: View {
             }
         }
         .cardList()
-        .subjectScreenWash(palette: scopePalette)
+        .subjectScreenWash(palette: scopePalette, role: .content)
     }
 
     /// Apple Books-style two-up grid — the same cover cards every carousel already
@@ -760,7 +760,7 @@ struct LibrarySectionListView: View {
                 }
             }
         }
-        .subjectScreenWash(palette: scopePalette)
+        .subjectScreenWash(palette: scopePalette, role: .content)
     }
 
     /// A bucket's works in list order. Buckets keep the incoming order, so

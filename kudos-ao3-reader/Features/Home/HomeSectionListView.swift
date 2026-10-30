@@ -308,7 +308,7 @@ struct HomeSectionListView: View {
             }
         }
         .cardList()
-        .subjectScreenWash(palette: scopePalette)
+        .subjectScreenWash(palette: scopePalette, role: .content)
     }
 
     /// The kicker / rule / 32pt hero, as the list's first row rather than as a
@@ -406,7 +406,7 @@ struct HomeSectionListView: View {
                 }
             }
         }
-        .subjectScreenWash(palette: scopePalette)
+        .subjectScreenWash(palette: scopePalette, role: .content)
     }
 
     private var workGrid: some View {

@@ -102,7 +102,7 @@ struct ReadingInsightsView: View {
             Section { topFandomsSection }
         }
         .cardList()
-        .subjectScreenWash(palette: palette)
+        .subjectScreenWash(palette: palette, role: .content)
         // 1bi: the period is a view choice, so it lives in "…" like the
         // layout picker elsewhere; the header is the title and tally alone.
         .toolbar {

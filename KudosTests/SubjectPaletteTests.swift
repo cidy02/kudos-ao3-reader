@@ -25,22 +25,19 @@ struct SubjectPaletteTests {
         let picked = Color(hue: 0.58, saturation: 0.40, brightness: 0.80)
         let stops = SubjectPalette(color: picked, theme: .dark).washStops
 
-        // Dark's ramp, fitted to the weight the derived stops already had for the
-        // default AO3 red — every stop is the one colour, only less of it.
-        #expect(stops.dropLast().map(\.color)
-            == [0.41, 0.33, 0.21, 0.09].map { picked.opacity($0) })
+        #expect(stops.map(\.color)
+            == SubjectWashGeometry.opacities.map { picked.opacity($0) })
     }
 
-    /// The wash has to end at the page it sits on, or the screen keeps a coloured
-    /// band at the bottom instead of resolving into the backdrop.
-    @Test func theWashResolvesIntoThePageOnBothPaths() {
+    /// The final transparent stop lets a wash resolve into whichever page ground
+    /// the owning screen selected.
+    @Test func theWashEndsTransparentOnBothPaths() {
         for theme in [ReaderTheme.dark, .oled, .light, .sepia] {
             let picked = SubjectPalette(color: .purple, theme: theme).washStops
             let derived = SubjectPalette(hue: 0.75, theme: theme).washStops
-            #expect(picked.last?.color == theme.cardBackdrop, "\(theme)")
-            #expect(derived.last?.color == theme.cardBackdrop, "\(theme)")
-            #expect(picked.last?.location == 1)
+            #expect(picked.last?.color == Color.purple.opacity(0), "\(theme)")
             #expect(derived.last?.location == 1)
+            #expect(picked.last?.location == 1)
         }
     }
 
@@ -60,6 +57,6 @@ struct SubjectPaletteTests {
         let picked = SubjectPalette(color: .orange, theme: .dark).washStops.map(\.location)
         let derived = SubjectPalette(hue: 0.1, theme: .dark).washStops.map(\.location)
         #expect(picked == derived)
-        #expect(picked == [0, 0.26, 0.52, 0.74, 1])
+        #expect(picked == SubjectWashGeometry.locations)
     }
 }

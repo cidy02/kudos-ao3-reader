@@ -441,12 +441,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 // Card-based list: each result is a fully-rounded card with ~12pt
                 // spacing, over the themed backdrop (replaces the grouped style).
                 .cardList()
-                // The wash only, not `subjectScreenWash`: Search is a tab root
-                // and keeps its navigation title, where a pushed results screen
-                // (spec 1k proper) gives its bar up to floating chrome. 600pt
-                // because the header block, the figure strip and the chip rail
-                // all sit inside the saturated part.
-                .subjectWash(resultsPalette, height: 600)
+                .appScreenSurface(.content)
                 .refreshable { await refreshCurrentResults() }
                 // The other half of the cancellation story: `TabView` keeps this
                 // tab's hierarchy — and its `.refreshable` task — alive when the

@@ -198,7 +198,7 @@ struct CommentsView: View {
             #if os(macOS)
             .navigationTitle("Comments")
             #endif
-            .subjectScreenWash(palette: palette, washHeight: 480)
+            .subjectScreenWash(palette: palette, role: .content)
             .navigationDestination(item: $pushedThread) { route in
                 CommentThreadScreen(
                     rootID: route.commentID,
@@ -1465,7 +1465,7 @@ struct CommentComposerSheet: View {
         // `subjectWash`, not `subjectScreenWash`: the latter also empties the
         // navigation bar, which is where Cancel and Post live on this sheet.
         // Applied under the presentation modifiers so those stay outermost.
-        .subjectWash(palette, height: 320)
+        .appScreenSurface(.grouped)
         // Two numbers, not two layouts (spec 1be): `.medium` is the artboard's
         // 462pt of sheet, and the system re-lays it out at the shorter height on
         // its own once the keyboard is up. A literal `.height(462)` would be one
