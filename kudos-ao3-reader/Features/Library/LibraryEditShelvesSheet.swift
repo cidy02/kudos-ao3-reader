@@ -64,7 +64,11 @@ struct LibraryEditShelvesSheet: View {
                 .appThemedRows()
             }
             .appThemedScroll()
-            .environment(\.editMode, .constant(.active))
+            // Reorder handles stay up: this sheet exists to move shelves.
+            // `editMode` is iOS-only; macOS lists reorder without it.
+            #if os(iOS)
+                .environment(\.editMode, .constant(.active))
+            #endif
             .navigationTitle("Edit Shelves")
             #if os(iOS)
                 .navigationBarTitleDisplayMode(.inline)
