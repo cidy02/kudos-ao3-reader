@@ -604,7 +604,7 @@ struct WorkResumeCard: View {
             )
             Spacer(minLength: 0)
         }
-        actionCircle(title: "Read Aloud", systemImage: "speaker.wave.2.fill", action: onReadAloud)
+        // T-458: the circle stays hidden until Read Aloud can start speech.
         primaryButton
         if variant == .detail, model.newChapterCount > 0, let onUpdate {
             ZStack(alignment: .topTrailing) {
