@@ -132,7 +132,7 @@ fun ReaderContentsSheet(
                         itemsIndexed(entries, key = { _, entry -> "${entry.depth}:${entry.href}:${entry.title}" }) { index, entry ->
                             val percent = startPercent(entry)
                             val actions = buildList {
-                                add(SwipeAction("Go", Icons.AutoMirrored.Filled.ArrowForward, tokens.scopePalette.accent) {
+                                add(SwipeAction("Go", Icons.AutoMirrored.Filled.ArrowForward, tokens.scopePalette.tint) {
                                     onSelectEntry(entry)
                                 })
                                 if (percent != null) {

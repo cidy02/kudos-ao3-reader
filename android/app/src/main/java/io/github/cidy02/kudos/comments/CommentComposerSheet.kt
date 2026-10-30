@@ -167,7 +167,7 @@ internal fun CommentComposerContent(
                     fontSize = 16.sp,
                     maxLines = 1,
                     softWrap = false,
-                    color = if (submitting) tokens.secondaryInk else palette.accent
+                    color = if (submitting) tokens.secondaryInk else palette.controlInk
                 )
             }
 
@@ -195,7 +195,7 @@ internal fun CommentComposerContent(
                     CircularProgressIndicator(
                         modifier = Modifier.size(18.dp),
                         strokeWidth = 2.dp,
-                        color = palette.accent
+                        color = palette.controlInk
                     )
                 } else {
                     Text(
@@ -204,7 +204,7 @@ internal fun CommentComposerContent(
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
                         softWrap = false,
-                        color = if (canPost) palette.accent else tokens.secondaryInk
+                        color = if (canPost) palette.controlInk else tokens.secondaryInk
                     )
                 }
             }
@@ -238,7 +238,7 @@ internal fun CommentComposerContent(
                             text = replyTarget.author.name,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = palette.accent,
+                            color = palette.controlInk,
                             modifier = Modifier
                                 .clickable { replyTarget.author.username?.let(onOpenAuthor) }
                                 .semantics { contentDescription = "View ${replyTarget.author.name}'s profile" }
@@ -289,7 +289,7 @@ internal fun CommentComposerContent(
                     lineHeight = 22.sp,
                     color = tokens.primaryInk
                 ),
-                cursorBrush = SolidColor(palette.accent),
+                cursorBrush = SolidColor(palette.controlInk),
                 // The field had no name: a screen reader said only "edit box" (iOS names it).
                 modifier = Modifier.fillMaxWidth()
                     .focusRequester(textFocus)

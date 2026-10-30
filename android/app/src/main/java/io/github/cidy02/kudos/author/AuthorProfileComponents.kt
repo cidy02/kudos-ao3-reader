@@ -424,7 +424,7 @@ private fun SeriesCreatorByline(series: AO3AuthorSeriesSummary,
         Text("by", color = tokens.secondaryInk, fontSize = 12.sp)
         creators.forEachIndexed { index, creator ->
             Text(creator.displayName + if (index < creators.lastIndex) "," else "",
-                color = if (creator.route != null) tokens.scopePalette.accent else tokens.secondaryInk, fontSize = 12.sp,
+                color = if (creator.route != null) tokens.scopePalette.controlInk else tokens.secondaryInk, fontSize = 12.sp,
                 modifier = if (creator.route != null) Modifier.clickable { onOpenAuthor(creator.route) }
                     .semantics { contentDescription = "Author: ${creator.displayName}" } else Modifier)
         }

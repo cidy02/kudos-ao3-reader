@@ -448,13 +448,13 @@ fun AuthorProfileScreen(
             text = { Text(ownWorksDeleteMessage(pending), color = tokens.secondaryInk, lineHeight = 22.sp) },
             confirmButton = { TextButton(onClick = { scope.launch { deletes?.confirm() } }) {
                 Text("Delete on AO3", color = tokens.destructive, lineHeight = 20.sp) } },
-            dismissButton = { TextButton(onClick = { deletes?.cancel(); heldDelete = null }) { Text("Cancel", color = tokens.scopePalette.accent, lineHeight = 20.sp) } })
+            dismissButton = { TextButton(onClick = { deletes?.cancel(); heldDelete = null }) { Text("Cancel", color = tokens.scopePalette.controlInk, lineHeight = 20.sp) } })
     }
     deleteState.error?.let { message ->
         AlertDialog(onDismissRequest = { deletes?.dismissError(); heldDelete = null }, containerColor = tokens.cardFill,
             title = { Text("Couldn’t delete", color = tokens.primaryInk, lineHeight = 28.sp) },
             text = { Text(message, color = tokens.secondaryInk, lineHeight = 22.sp) },
-            confirmButton = { TextButton(onClick = { deletes?.dismissError(); heldDelete = null }) { Text("OK", color = tokens.scopePalette.accent, lineHeight = 20.sp) } })
+            confirmButton = { TextButton(onClick = { deletes?.dismissError(); heldDelete = null }) { Text("OK", color = tokens.scopePalette.controlInk, lineHeight = 20.sp) } })
     }
     ProvidePushedShellChrome(
         hasSubjectHeader = true,
@@ -469,9 +469,9 @@ fun AuthorProfileScreen(
                 val loaded = works?.works.orEmpty()
                 TextButton(onClick = { selection.toggleSelectAll(loaded.map { it.id }) }, enabled = loaded.isNotEmpty()) {
                     Text(if (loaded.isNotEmpty() && loaded.all { selection.isSelected(it.id) }) "Deselect All" else "Select All",
-                        color = tokens.scopePalette.accent, lineHeight = 20.sp)
+                        color = tokens.scopePalette.controlInk, lineHeight = 20.sp)
                 }
-                IconButton(onClick = selection::exit) { Icon(Icons.Default.Check, "Done", tint = tokens.scopePalette.accent) }
+                IconButton(onClick = selection::exit) { Icon(Icons.Default.Check, "Done", tint = tokens.scopePalette.controlInk) }
             } else if (!isDashboard && tab == AuthorTab.Works) {
                 val activeCount = worksSort.activeCount + worksFilters.activeCountForRefine
                 ToolbarCircleButton(onClick = { showingWorksFilters = true }, accessibilityName = "Sort and filter",
@@ -1106,7 +1106,7 @@ fun AuthorProfileScreen(
                                                 leadingIcon = Icons.Outlined.Person,
                                                 onClick = { if (!current) route = p.route },
                                                 trailing = if (current) { {
-                                                    Icon(Icons.Filled.Check, "Selected", tint = LocalSubjectPalette.current.accent,
+                                                    Icon(Icons.Filled.Check, "Selected", tint = LocalSubjectPalette.current.controlInk,
                                                         modifier = Modifier.size(18.dp))
                                                 } } else null
                                             )
@@ -1191,7 +1191,7 @@ internal fun ownWorksLine(name: String, count: Int?, stats: io.github.cidy02.kud
 @Composable
 private fun DashboardSeeAll(what: String, onClick: () -> Unit) {
     TextButton(onClick = onClick) {
-        Text("See all $what", color = LocalKudosTokens.current.scopePalette.accent, fontWeight = FontWeight.Medium)
+        Text("See all $what", color = LocalKudosTokens.current.scopePalette.controlInk, fontWeight = FontWeight.Medium)
     }
 }
 

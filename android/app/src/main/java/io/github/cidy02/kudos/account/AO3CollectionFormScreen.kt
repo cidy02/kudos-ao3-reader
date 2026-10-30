@@ -86,7 +86,7 @@ fun AO3CollectionFormScreen(
             kicker = "AO3 Account › Collections", subtitle = "Your changes are saved to AO3") {
             if (state.loading || (state.form == null && state.loadError == null)) item {
                 Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = palette.accent, trackColor = tokens.separator)
+                    CircularProgressIndicator(color = palette.controlInk, trackColor = tokens.separator)
                 }
             }
             state.loadError?.let { message -> item {
@@ -217,7 +217,7 @@ fun AO3CollectionFormScreen(
                         scope.launch { model.confirmDelete(confirmation) }
                     }) { Text("Delete on AO3", color = if (form.confirmsDeletion(typed)) red else tokens.tertiaryInk, lineHeight = 20.sp) }
                 }, dismissButton = {
-                    TextButton(onClick = { deleting = false; typed = "" }) { Text("Cancel", color = palette.accent, lineHeight = 20.sp) }
+                    TextButton(onClick = { deleting = false; typed = "" }) { Text("Cancel", color = palette.controlInk, lineHeight = 20.sp) }
                 })
         }
     }

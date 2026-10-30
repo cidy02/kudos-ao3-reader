@@ -61,6 +61,6 @@ fun WritingEditorDemoScreen(fromFile: Boolean, onClose: () -> Unit) {
     else Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
         val failure = error
         if (failure != null) Text(failure, color = tokens.primaryInk, fontSize = 16.sp, lineHeight = 22.sp)
-        else CircularProgressIndicator(color = tokens.scopePalette.accent)
+        else CircularProgressIndicator(color = tokens.scopePalette.controlInk)
     }
 }

@@ -205,7 +205,7 @@ internal fun WritingSuggestionRow(tag: AO3EditorTag, onAdd: () -> Unit) {
             Text("%,d".format(count), color = tokens.secondaryInk, fontSize = 12.sp,
                 fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold)
         }
-        Icon(Icons.Default.Add, null, tint = palette.accent, modifier = Modifier.size(18.dp))
+        Icon(Icons.Default.Add, null, tint = palette.controlInk, modifier = Modifier.size(18.dp))
     }
 }
 

@@ -499,7 +499,7 @@ internal fun PreferenceHelpContent(
             Text(text, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold,
                 color = tokens.primaryInk, modifier = Modifier.weight(1f))
             if (onDone != null) io.github.cidy02.kudos.ui.subject.ToolbarCircleButton(onClick = onDone, accessibilityName = "Done") {
-                Icon(Icons.Filled.Check, contentDescription = null, tint = tokens.scopePalette.accent)
+                Icon(Icons.Filled.Check, contentDescription = null, tint = tokens.scopePalette.controlInk)
             }
         }
     }

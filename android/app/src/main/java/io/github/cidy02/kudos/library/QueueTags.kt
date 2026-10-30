@@ -494,10 +494,10 @@ internal fun QueueTagManagerContent(
         Column(Modifier.padding(horizontal = 16.dp).fillMaxWidth().subjectPanel()) {
             SubjectTextFieldRow("New tag", draft, "New tag", onDraftChange, fieldOnly = true,
                 onSubmit = onAdd,
-                leading = { Icon(Icons.Filled.Add, contentDescription = null, tint = palette.accent) },
+                leading = { Icon(Icons.Filled.Add, contentDescription = null, tint = palette.controlInk) },
                 trailing = {
                     TextButton(onClick = onAdd, enabled = draft.isNotBlank(),
-                        colors = ButtonDefaults.textButtonColors(contentColor = palette.accent)) { Text("Add") }
+                        colors = ButtonDefaults.textButtonColors(contentColor = palette.controlInk)) { Text("Add") }
                 })
         }
         FormFootnote("A tag you use here is the same tag on your works.", Modifier.padding(horizontal = 16.dp))

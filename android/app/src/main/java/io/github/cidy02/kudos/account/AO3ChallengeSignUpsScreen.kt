@@ -95,12 +95,12 @@ private fun ChallengeSignUpsContent(slug: String, title: String, viewerIsOwner: 
     ProvidePushedShellChrome(hasSubjectHeader = true)
     val filtered = state.filtered(filter) // derive every drawn row from collected state
     val large = isAccessibilityFontScale()
-    MaterialTheme(colorScheme = MaterialTheme.colorScheme.copy(primary = palette.accent,
-        primaryContainer = palette.chipFill, onPrimaryContainer = palette.accentOnFill,
+    MaterialTheme(colorScheme = MaterialTheme.colorScheme.copy(primary = palette.tint,
+        primaryContainer = palette.chipFill, onPrimaryContainer = palette.controlInk,
         surface = tokens.cardFill, onSurface = tokens.primaryInk,
         surfaceContainerHigh = tokens.cardFill, surfaceContainerHighest = tokens.cardFill,
         surfaceVariant = tokens.cardFill, onSurfaceVariant = tokens.secondaryInk,
-        outline = tokens.separator, outlineVariant = tokens.separator, surfaceTint = palette.accent)) {
+        outline = tokens.separator, outlineVariant = tokens.separator, surfaceTint = palette.tint)) {
         Column(Modifier.fillMaxSize().subjectScreenWash(palette)) {
             KudosRefreshBox(onRefresh = { model.load(refresh = true) }, modifier = Modifier.weight(1f)) {
                 LazyColumn(Modifier.fillMaxSize().testTag("Challenge sign-ups"), contentPadding = PaddingValues(bottom = 24.dp)) {
@@ -182,7 +182,7 @@ private fun ChallengeSignUpsContent(slug: String, title: String, viewerIsOwner: 
                                     enabled = !state.loading && !state.terminal,
                                     modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) {
                                     Text("Load page ${state.loadedPages + 1} of ${state.totalPages}",
-                                        color = palette.accent, fontSize = 13.sp, lineHeight = 19.sp)
+                                        color = palette.controlInk, fontSize = 13.sp, lineHeight = 19.sp)
                                 }
                             }
                         }
@@ -210,7 +210,7 @@ private fun PushedChallengeHeader(kicker: String, title: String, subtitle: Strin
 private fun SignUpsLoading() {
     val tokens = LocalKudosTokens.current
     Row(Modifier.fillMaxWidth().padding(24.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-        CircularProgressIndicator(color = tokens.scopePalette.accent, trackColor = tokens.separator,
+        CircularProgressIndicator(color = tokens.scopePalette.controlInk, trackColor = tokens.separator,
             modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
         Text("Loading sign-ups…", color = tokens.secondaryInk, fontSize = 14.sp, lineHeight = 20.sp,
             modifier = Modifier.padding(start = 10.dp))

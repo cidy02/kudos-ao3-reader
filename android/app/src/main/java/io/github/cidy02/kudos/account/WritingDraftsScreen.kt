@@ -111,17 +111,17 @@ fun WritingDraftsScreen(
 
     // Shared pagination reads Material roles; scope those roles to this page's tokens only.
     val scheme = MaterialTheme.colorScheme.copy(
-        primary = palette.accent, onPrimary = palette.labelOnAccent,
-        primaryContainer = palette.chipFill, onPrimaryContainer = palette.accentOnFill,
-        secondary = palette.accent, onSecondary = palette.labelOnAccent,
-        secondaryContainer = palette.chipFill, onSecondaryContainer = palette.accentOnFill,
+        primary = palette.tint, onPrimary = palette.labelOnTint,
+        primaryContainer = palette.chipFill, onPrimaryContainer = palette.controlInk,
+        secondary = palette.tint, onSecondary = palette.labelOnTint,
+        secondaryContainer = palette.chipFill, onSecondaryContainer = palette.controlInk,
         surface = tokens.cardFill, surfaceContainerHigh = tokens.cardFill,
         surfaceVariant = tokens.cardFill, surfaceContainer = tokens.cardFill,
         surfaceContainerHighest = tokens.cardFill, surfaceContainerLow = tokens.cardFill,
         surfaceContainerLowest = tokens.background, surfaceDim = tokens.background, surfaceBright = tokens.cardFill,
         onSurface = tokens.primaryInk, onSurfaceVariant = tokens.secondaryInk,
         background = tokens.background, onBackground = tokens.primaryInk,
-        outline = tokens.separator, outlineVariant = tokens.separator, surfaceTint = palette.accent,
+        outline = tokens.separator, outlineVariant = tokens.separator, surfaceTint = palette.tint,
         scrim = tokens.primaryInk.copy(alpha = 0.32f)
     )
     MaterialTheme(colorScheme = scheme) {
@@ -164,7 +164,7 @@ fun WritingDraftsScreen(
                     if (state.loading || auth == AO3AuthState.Restoring) item {
                         Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.Center,
                             verticalAlignment = Alignment.CenterVertically) {
-                            CircularProgressIndicator(color = palette.accent, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                            CircularProgressIndicator(color = palette.controlInk, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                             Text("Loading drafts…", color = tokens.secondaryInk, fontSize = 13.sp, lineHeight = 19.sp,
                                 modifier = Modifier.padding(start = 8.dp))
                         }
@@ -173,7 +173,7 @@ fun WritingDraftsScreen(
                         Column {
                             DraftFootnote(message)
                             TextButton(onClick = { scope.launch { loader.load() } }) {
-                                Text("Try Again", color = palette.accent, fontSize = 15.sp,
+                                Text("Try Again", color = palette.controlInk, fontSize = 15.sp,
                                     lineHeight = 21.sp, fontWeight = FontWeight.SemiBold)
                             }
                         }

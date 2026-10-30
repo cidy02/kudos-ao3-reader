@@ -198,7 +198,7 @@ internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String
         {
             TextButton(enabled = !state.saving && !state.saved && !state.tagsNeedRefresh && !state.publicationNeedRefresh,
                 onClick = { onSaving(); scope.launch { model.save() } },
-                colors = ButtonDefaults.textButtonColors(contentColor = palette.accent, disabledContentColor = tokens.tertiaryInk)) {
+                colors = ButtonDefaults.textButtonColors(contentColor = palette.controlInk, disabledContentColor = tokens.tertiaryInk)) {
                 Text("Save", fontSize = 15.sp, lineHeight = 21.sp)
             }
         }
@@ -221,7 +221,7 @@ internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String
             confirmButton = { TextButton(onClick = { onSaving(); scope.launch { model.delete() } }) {
                 Text(if (form.isDraft) "Delete" else "Delete on AO3", color = MaterialTheme.colorScheme.error, lineHeight = 20.sp)
             } }, dismissButton = { TextButton(onClick = model::dismissDelete) {
-                Text("Cancel", color = palette.accent, lineHeight = 20.sp)
+                Text("Cancel", color = palette.controlInk, lineHeight = 20.sp)
             } })
     }
     LazyColumn(Modifier.fillMaxSize().subjectScreenWash(palette).testTag("Writing work form"), state = list,
@@ -238,14 +238,14 @@ internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String
             Box(Modifier.fillMaxWidth().padding(top = 60.dp).padding(horizontal = SubjectMetrics.accountGutter),
                 contentAlignment = Alignment.Center) {
                 val failure = state.failure
-                if (failure == null) CircularProgressIndicator(color = palette.accent, trackColor = tokens.separator)
+                if (failure == null) CircularProgressIndicator(color = palette.controlInk, trackColor = tokens.separator)
                 else Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Couldn't load from AO3", color = tokens.primaryInk, fontSize = 20.sp, lineHeight = 27.sp,
                         textAlign = TextAlign.Center)
                     Text(failure, color = tokens.secondaryInk, fontSize = 14.sp, lineHeight = 20.sp, textAlign = TextAlign.Center)
                     TextButton(onClick = { scope.launch { model.load(retry = true) } },
-                        colors = ButtonDefaults.textButtonColors(contentColor = palette.accent)) {
-                        Text("Try Again", color = palette.accent, fontSize = 14.sp, lineHeight = 20.sp)
+                        colors = ButtonDefaults.textButtonColors(contentColor = palette.controlInk)) {
+                        Text("Try Again", color = palette.controlInk, fontSize = 14.sp, lineHeight = 20.sp)
                     }
                 }
             }
@@ -270,8 +270,8 @@ internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String
                 WorkFormSection("Tags")
                 if (state.tagsNeedRefresh) TextButton(enabled = !state.refreshingTags,
                     onClick = { scope.launch { model.refreshTags(retry = true) } },
-                    colors = ButtonDefaults.textButtonColors(contentColor = palette.accent)) {
-                    Text("Reload tags", color = palette.accent, fontSize = 14.sp, lineHeight = 20.sp)
+                    colors = ButtonDefaults.textButtonColors(contentColor = palette.controlInk)) {
+                    Text("Reload tags", color = palette.controlInk, fontSize = 14.sp, lineHeight = 20.sp)
                 }
                 SettingsPanel(Modifier.padding(top = 8.dp)) {
                     SubjectFormRow("Categories", value = workFormCount(form.categories), showsDisclosure = true,
@@ -340,8 +340,8 @@ internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String
                 WorkFormSection(if (form.isDraft) "When posted" else "Publication")
                 if (state.publicationNeedRefresh) TextButton(enabled = !state.refreshingPublication,
                     onClick = { scope.launch { model.refreshPublication(retry = true) } },
-                    colors = ButtonDefaults.textButtonColors(contentColor = palette.accent)) {
-                    Text("Reload chapter totals", color = palette.accent, fontSize = 14.sp, lineHeight = 20.sp)
+                    colors = ButtonDefaults.textButtonColors(contentColor = palette.controlInk)) {
+                    Text("Reload chapter totals", color = palette.controlInk, fontSize = 14.sp, lineHeight = 20.sp)
                 }
                 SettingsPanel(Modifier.padding(top = 8.dp)) {
                     if (form.isPosted) {
@@ -352,7 +352,7 @@ internal fun WritingWorkFormContent(model: WritingWorkFormState, account: String
                                     enabled = !state.saving && !state.publicationNeedRefresh,
                                     singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                     textStyle = ComposeTextStyle(color = tokens.primaryInk, fontSize = 14.5.sp, lineHeight = 20.sp,
-                                        textAlign = TextAlign.End), cursorBrush = SolidColor(palette.accent),
+                                        textAlign = TextAlign.End), cursorBrush = SolidColor(palette.controlInk),
                                     modifier = Modifier.width(64.dp).semantics { contentDescription = "Chapter total" },
                                     decorationBox = { input -> Box(contentAlignment = Alignment.CenterEnd) {
                                         if (form.chapterTotal.isEmpty()) Text("?", color = tokens.tertiaryInk, fontSize = 14.5.sp, lineHeight = 20.sp)
@@ -513,7 +513,7 @@ private fun WorkFormTagChoices(form: AO3WorkForm, kind: WorkFormTags, onToggle: 
 private fun WorkFormOptionRow(label: String, selected: Boolean, onClick: () -> Unit) {
     val tokens = LocalKudosTokens.current
     SubjectFormRow(label, onClick = onClick, trailing = {
-        if (selected) Icon(Icons.Filled.Check, contentDescription = "Selected", tint = tokens.scopePalette.accent, modifier = Modifier.size(18.dp))
+        if (selected) Icon(Icons.Filled.Check, contentDescription = "Selected", tint = tokens.scopePalette.controlInk, modifier = Modifier.size(18.dp))
     })
 }
 

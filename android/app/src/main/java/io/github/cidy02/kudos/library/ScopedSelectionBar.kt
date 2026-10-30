@@ -143,10 +143,10 @@ internal fun ScopedSelectionBar(
         ) {
             if (queuePage) {
                 BarAction("Download", Icons.Outlined.Download, hasSelection && missing.isNotEmpty() && downloadQueue != null,
-                    palette.accent) { downloadMissing() }
+                    palette.controlInk) { downloadMissing() }
                 BarAction("Move to", Icons.AutoMirrored.Outlined.DriveFileMove, hasSelection && queueRepository != null,
-                    palette.accent) { movingToQueue = true }
-                BarAction("Tag", Icons.Outlined.Sell, hasSelection, palette.accent) { tagging = true }
+                    palette.controlInk) { movingToQueue = true }
+                BarAction("Tag", Icons.Outlined.Sell, hasSelection, palette.controlInk) { tagging = true }
                 BarAction("Remove", Icons.Outlined.RemoveCircleOutline, hasSelection, MaterialTheme.colorScheme.error,
                     spoken = removeLabel) { onRequestRemove?.invoke() ?: run { confirmRemove = true } }
             } else {
@@ -157,9 +157,9 @@ internal fun ScopedSelectionBar(
             }
             Box {
                 if (queuePage) {
-                    BarAction("More", Icons.Filled.MoreVert, hasSelection, palette.accent) { menuOpen = true }
+                    BarAction("More", Icons.Filled.MoreVert, hasSelection, palette.controlInk) { menuOpen = true }
                 } else {
-                    TextButton(onClick = { menuOpen = true }, enabled = hasSelection) { Text("Actions", color = palette.accent) }
+                    TextButton(onClick = { menuOpen = true }, enabled = hasSelection) { Text("Actions", color = palette.controlInk) }
                 }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                     fun item(label: String, enabled: Boolean = true, action: () -> Unit) = Triple(label, enabled, action)
@@ -196,7 +196,7 @@ internal fun ScopedSelectionBar(
                 }
             }
             if (!queuePage) {
-                IconButton(onClick = onDone) { Icon(Icons.Filled.Check, contentDescription = "Done", tint = palette.accent) }
+                IconButton(onClick = onDone) { Icon(Icons.Filled.Check, contentDescription = "Done", tint = palette.controlInk) }
             }
         }
     }

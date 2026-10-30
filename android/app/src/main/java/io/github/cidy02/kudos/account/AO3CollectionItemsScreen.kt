@@ -133,16 +133,16 @@ fun AO3CollectionItemsScreen(
 
     // Explicit colours also cover shared pagination/refresh chrome.
     MaterialTheme(colorScheme = MaterialTheme.colorScheme.copy(
-        primary = palette.accent, onPrimary = SubjectPalette.label(palette.accent),
-        secondary = palette.accent, onSecondary = SubjectPalette.label(palette.accent),
-        primaryContainer = palette.chipFill, onPrimaryContainer = palette.accentOnFill,
-        secondaryContainer = palette.chipFill, onSecondaryContainer = palette.accentOnFill,
-        tertiary = palette.accent, onTertiary = SubjectPalette.label(palette.accent),
-        tertiaryContainer = palette.chipFill, onTertiaryContainer = palette.accentOnFill,
-        inversePrimary = palette.accent, inverseSurface = tokens.cardFill, inverseOnSurface = tokens.primaryInk,
+        primary = palette.tint, onPrimary = palette.labelOnTint,
+        secondary = palette.tint, onSecondary = palette.labelOnTint,
+        primaryContainer = palette.chipFill, onPrimaryContainer = palette.controlInk,
+        secondaryContainer = palette.chipFill, onSecondaryContainer = palette.controlInk,
+        tertiary = palette.tint, onTertiary = palette.labelOnTint,
+        tertiaryContainer = palette.chipFill, onTertiaryContainer = palette.controlInk,
+        inversePrimary = palette.tint, inverseSurface = tokens.cardFill, inverseOnSurface = tokens.primaryInk,
         error = tokens.destructive, onError = SubjectPalette.label(tokens.destructive),
         errorContainer = tokens.panelFill, onErrorContainer = tokens.primaryInk,
-        surfaceTint = palette.accent, surfaceVariant = tokens.cardFill,
+        surfaceTint = palette.tint, surfaceVariant = tokens.cardFill,
         surfaceDim = tokens.background, surfaceBright = tokens.cardFill,
         surfaceContainerLowest = tokens.background, surfaceContainerLow = tokens.cardFill,
         surfaceContainerHighest = tokens.cardFill,
@@ -195,7 +195,7 @@ fun AO3CollectionItemsScreen(
                             Text(message, color = tokens.secondaryInk, fontSize = 13.sp, lineHeight = 19.sp)
                             if (authState.isSignedIn) {
                                 TextButton(onClick = { scope.launch { model.load(tab) } }) {
-                                    Text("Try Again", color = palette.accent, lineHeight = 20.sp)
+                                    Text("Try Again", color = palette.controlInk, lineHeight = 20.sp)
                                 }
                             }
                         }
@@ -204,7 +204,7 @@ fun AO3CollectionItemsScreen(
                 if (authState.isSignedIn && (state.busy || state.phase == AO3CollectionItemsUiState.Phase.Idle) &&
                     state.page?.items.isNullOrEmpty()) {
                     item { Box(Modifier.fillMaxWidth().padding(top = 20.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = palette.accent, trackColor = tokens.separator, modifier = Modifier.size(24.dp))
+                        CircularProgressIndicator(color = palette.controlInk, trackColor = tokens.separator, modifier = Modifier.size(24.dp))
                     } }
                 } else if (state.phase == AO3CollectionItemsUiState.Phase.Loaded && state.page?.items.isNullOrEmpty()) {
                     item { ItemsMessage("Nothing in this tab.") }
@@ -304,7 +304,7 @@ private fun CollectionItemPanel(
             if (item.removeEditable || draft.remove) {
                 TextButton(onClick = onRemove, enabled = enabled, contentPadding = PaddingValues(0.dp)) {
                     Text(if (draft.remove) "Keep" else "Remove from collection", lineHeight = 17.sp, fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold, color = if (draft.remove) palette.accent else
+                        fontWeight = FontWeight.SemiBold, color = if (draft.remove) palette.controlInk else
                             tokens.destructive)
                 }
             }

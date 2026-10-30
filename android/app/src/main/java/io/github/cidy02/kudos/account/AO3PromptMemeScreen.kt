@@ -85,13 +85,13 @@ private fun PromptMemeContent(
     DisposableEffect(model) { onDispose { model.close() } }
     ProvidePushedShellChrome(hasSubjectHeader = true)
     MaterialTheme(colorScheme = MaterialTheme.colorScheme.copy(
-        primary = palette.accent, onPrimary = SubjectPalette.label(palette.accent),
-        primaryContainer = palette.chipFill, onPrimaryContainer = palette.accentOnFill,
+        primary = palette.tint, onPrimary = palette.labelOnTint,
+        primaryContainer = palette.chipFill, onPrimaryContainer = palette.controlInk,
         surface = tokens.cardFill, onSurface = tokens.primaryInk,
         surfaceContainerHigh = tokens.cardFill, surfaceContainerHighest = tokens.cardFill,
         surfaceVariant = tokens.cardFill, onSurfaceVariant = tokens.secondaryInk,
         background = tokens.background, onBackground = tokens.primaryInk,
-        outline = tokens.separator, outlineVariant = tokens.separator, surfaceTint = palette.accent
+        outline = tokens.separator, outlineVariant = tokens.separator, surfaceTint = palette.tint
     )) {
         Box(Modifier.fillMaxSize()) {
         KudosRefreshBox(onRefresh = { model.load(readSchedule = true) }, modifier = Modifier.fillMaxSize().subjectScreenWash(palette)) {
@@ -130,7 +130,7 @@ private fun PromptMemeContent(
                     state.loading && prompts.isEmpty() -> item {
                         Row(Modifier.fillMaxWidth().padding(vertical = 24.dp), horizontalArrangement = Arrangement.Center,
                             verticalAlignment = Alignment.CenterVertically) {
-                            CircularProgressIndicator(color = palette.accent, trackColor = tokens.separator,
+                            CircularProgressIndicator(color = palette.controlInk, trackColor = tokens.separator,
                                 modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                             Text("Loading prompts…", color = tokens.secondaryInk, fontSize = 14.sp, lineHeight = 20.sp,
                                 modifier = Modifier.padding(start = 10.dp))
@@ -139,7 +139,7 @@ private fun PromptMemeContent(
                     state.failure != null && prompts.isEmpty() -> item {
                         PromptMemeMessage("Couldn't load prompts", state.failure.orEmpty()) {
                             TextButton(onClick = { scope.launch { model.load(currentPage) } }) {
-                                Text("Try Again", color = palette.accent, fontSize = 14.sp, lineHeight = 20.sp)
+                                Text("Try Again", color = palette.controlInk, fontSize = 14.sp, lineHeight = 20.sp)
                             }
                         }
                     }
@@ -170,7 +170,7 @@ private fun PromptMemeContent(
                             ChallengeFootnote("A Prompt Meme has no matching or assignments. You can claim a prompt here and release it " +
                                 "later. Add a new prompt through your sign-up, and post fills on AO3.")
                             if (state.loading && totalPages > 1) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                                CircularProgressIndicator(color = palette.accent, trackColor = tokens.separator,
+                                CircularProgressIndicator(color = palette.controlInk, trackColor = tokens.separator,
                                     modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                             }
                             KudosPaginationBar(currentPage, totalPages, onPageChange = { page -> scope.launch { model.load(page) } },
@@ -250,12 +250,12 @@ private fun PromptMemeCard(prompt: AO3PromptMemePrompt, large: Boolean, inFlight
 private fun PromptMemeAction(title: String, prominent: Boolean, inFlight: Boolean, enabled: Boolean, action: () -> Unit) {
     val tokens = LocalKudosTokens.current
     val palette = tokens.scopePalette
-    val ink = if (prominent) SubjectPalette.label(palette.accent) else palette.accent
+    val ink = if (prominent) palette.labelOnTint else palette.controlInk
     val shape = RoundedCornerShape(50)
     Box(Modifier.heightIn(min = 44.dp).clickable(enabled = enabled, role = Role.Button, onClick = action),
         contentAlignment = Alignment.Center) {
         Row(Modifier.heightIn(min = 34.dp).clip(shape)
-            .background(if (prominent) palette.accent else palette.accent.copy(alpha = 0.14f))
+            .background(if (prominent) palette.tint else palette.tint.copy(alpha = 0.14f))
             .padding(horizontal = 14.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically) {
             if (inFlight) CircularProgressIndicator(color = ink, trackColor = ink.copy(alpha = 0.2f),

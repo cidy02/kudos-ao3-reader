@@ -367,7 +367,7 @@ fun CollectionDetailScreen(
                 ) {
                     Text(
                         if (allSelected) "Deselect All" else "Select All",
-                        color = palette.accent
+                        color = palette.controlInk
                     )
                 }
                 IconButton(
@@ -376,7 +376,7 @@ fun CollectionDetailScreen(
                         selectedIds = emptySet()
                     }
                 ) {
-                    Icon(Icons.Filled.Check, contentDescription = "Done", tint = palette.accent)
+                    Icon(Icons.Filled.Check, contentDescription = "Done", tint = palette.controlInk)
                 }
             } else {
                 ToolbarAddButton(
@@ -840,7 +840,7 @@ private fun CollectionWorkListItem(
             if (isSelecting) {
                 WorkSelectionBubble(
                     isSelected = isSelected,
-                    palette = palette
+                    accent = palette.tint
                 )
             }
             Box(Modifier.weight(1f)) {

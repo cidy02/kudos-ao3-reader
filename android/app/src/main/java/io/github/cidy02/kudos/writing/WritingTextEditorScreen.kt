@@ -218,14 +218,14 @@ internal fun WritingTextEditorContent(
         confirmButton = { TextButton(onClick = {
             showDeleteChapter = false; onDone(session.done()); chapterActions.delete()
         }) { Text("Delete on AO3", color = tokens.destructive, lineHeight = 20.sp) } },
-        dismissButton = { TextButton(onClick = { showDeleteChapter = false }) { Text("Cancel", color = palette.accent, lineHeight = 20.sp) } })
+        dismissButton = { TextButton(onClick = { showDeleteChapter = false }) { Text("Cancel", color = palette.controlInk, lineHeight = 20.sp) } })
 
     session.error?.let { message ->
         AlertDialog(onDismissRequest = { session.error = null }, containerColor = tokens.cardFill,
             titleContentColor = tokens.primaryInk, textContentColor = tokens.secondaryInk,
             title = { Text("Editor error", lineHeight = 28.sp) }, text = { Text(message, lineHeight = 22.sp) },
             confirmButton = { TextButton(onClick = { session.error = null }) {
-                Text("OK", color = palette.accent, lineHeight = 20.sp)
+                Text("OK", color = palette.controlInk, lineHeight = 20.sp)
             } })
     }
     if (showLink) AlertDialog(onDismissRequest = { showLink = false }, containerColor = tokens.cardFill,
@@ -244,8 +244,8 @@ internal fun WritingTextEditorContent(
             showLink = false
             if (WritingMarkup.safeLink(link)) session.editor.insert("a", link)
             else session.error = "Enter an HTTP, HTTPS, or mailto link."
-        }) { Text("Insert", color = palette.accent, lineHeight = 20.sp) } },
-        dismissButton = { TextButton(onClick = { showLink = false }) { Text("Cancel", color = palette.accent, lineHeight = 20.sp) } })
+        }) { Text("Insert", color = palette.controlInk, lineHeight = 20.sp) } },
+        dismissButton = { TextButton(onClick = { showLink = false }) { Text("Cancel", color = palette.controlInk, lineHeight = 20.sp) } })
 
     if (session.recoveries.isNotEmpty()) {
         WritingRecoverySheet(session)
@@ -276,7 +276,7 @@ internal fun WritingRecoverySheet(
                     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         session.recoveries.forEach { item ->
                             TextButton(onClick = { session.selectRecovery(item) }) {
-                                Text(recoveryDate(item.entry.savedAt), color = palette.accent, lineHeight = 20.sp,
+                                Text(recoveryDate(item.entry.savedAt), color = palette.controlInk, lineHeight = 20.sp,
                                     fontWeight = if (item == copy) FontWeight.Bold else FontWeight.Normal)
                             }
                         }
@@ -320,7 +320,7 @@ private fun EditorToolbarButton(name: String, icon: ImageVector, enabled: Boolea
 private fun EditorSheetAction(text: String, action: () -> Unit, destructive: Boolean = false) {
     val tokens = LocalKudosTokens.current
     TextButton(onClick = action) {
-        Text(text, lineHeight = 22.sp, color = if (destructive) tokens.destructive else tokens.scopePalette.accent)
+        Text(text, lineHeight = 22.sp, color = if (destructive) tokens.destructive else tokens.scopePalette.controlInk)
     }
 }
 
@@ -332,7 +332,7 @@ internal fun EditorPreview(state: WritingBufferPreview.State?) {
     val tokens = LocalKudosTokens.current
     when (state) {
         null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(color = tokens.scopePalette.accent)
+            CircularProgressIndicator(color = tokens.scopePalette.controlInk)
         }
         WritingBufferPreview.State.Failed -> Column(Modifier.fillMaxSize().padding(16.dp),
             verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
@@ -361,7 +361,7 @@ internal fun WritingPreviewParagraph(block: WritingBufferPreview.Block) {
             block.runs.forEach { run ->
                 withStyle(SpanStyle(fontWeight = if (run.isBold) FontWeight.Bold else FontWeight.Normal,
                     fontStyle = if (run.isItalic) FontStyle.Italic else FontStyle.Normal,
-                    color = if (run.link != null) tokens.scopePalette.accent else tokens.primaryInk,
+                    color = if (run.link != null) tokens.scopePalette.controlInk else tokens.primaryInk,
                     textDecoration = if (run.link != null) TextDecoration.Underline else null)) { append(run.text) }
             }
         }, fontFamily = FontFamily.Default, fontSize = 17.sp, lineHeight = 24.sp)

@@ -97,7 +97,7 @@ fun WorkDetailSummarySection(
                 text = if (expanded) "Show Less" else "Show More",
                 fontSize = 14.5.sp,
                 fontWeight = FontWeight.Medium,
-                color = palette.accent,
+                color = palette.controlInk,
                 modifier = Modifier
                     .semantics { contentDescription = if (expanded) "Show less summary" else "Show more summary" }
                     .clickable { expanded = !expanded }

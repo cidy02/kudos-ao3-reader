@@ -39,7 +39,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import io.github.cidy02.kudos.ui.theme.DefaultAccentHex
 import io.github.cidy02.kudos.ui.theme.KudosTheme
 import io.github.cidy02.kudos.ui.theme.KudosThemeMode
 
@@ -64,7 +63,7 @@ private const val CatalogHue = 38.0 / 360.0
 @Composable
 fun DesignCatalogScreen() {
     var mode by remember { mutableStateOf(KudosThemeMode.Dark) }
-    KudosTheme(themeMode = mode, accentColorHex = DefaultAccentHex) {
+    KudosTheme(themeMode = mode) {
         val tokens = LocalKudosTokens.current
         val scope = LocalSubjectPalette.current
         val huePalette = remember(tokens.theme) { SubjectPalette.fromHue(CatalogHue, tokens.theme) }

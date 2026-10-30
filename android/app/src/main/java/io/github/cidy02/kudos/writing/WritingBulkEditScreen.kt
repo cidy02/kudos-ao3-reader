@@ -91,7 +91,7 @@ fun WritingBulkEditScreen(model: WritingBulkEditState, focus: String?, onBack: (
         trailingContent = if (form == null) null else {
             {
                 IconButton(enabled = !state.saving && !state.saved, onClick = { saveIn.launch { if (model.save() && saveScope != null) onSaved() } }) {
-                    Icon(Icons.Default.Check, "Save", tint = palette.accent)
+                    Icon(Icons.Default.Check, "Save", tint = palette.controlInk)
                 }
                 IconButton(onClick = onBack) { Icon(Icons.Default.Close, "Cancel", tint = tokens.secondaryInk) }
             }
@@ -100,7 +100,7 @@ fun WritingBulkEditScreen(model: WritingBulkEditState, focus: String?, onBack: (
         AlertDialog(onDismissRequest = model::dismissError, containerColor = tokens.cardFill,
             title = { Text("AO3 could not save the change", color = tokens.primaryInk, lineHeight = 28.sp) },
             text = { Text(error, color = tokens.secondaryInk, lineHeight = 22.sp) }, confirmButton = {
-                TextButton(onClick = model::dismissError) { Text("OK", color = palette.accent, lineHeight = 20.sp) }
+                TextButton(onClick = model::dismissError) { Text("OK", color = palette.controlInk, lineHeight = 20.sp) }
             })
     }
     LazyColumn(Modifier.fillMaxSize().subjectScreenWash(palette), state = list, contentPadding = PaddingValues(bottom = 32.dp)) {
@@ -111,7 +111,7 @@ fun WritingBulkEditScreen(model: WritingBulkEditState, focus: String?, onBack: (
                     Text(state.failure!!, color = tokens.secondaryInk, fontSize = 14.sp, lineHeight = 20.sp, modifier = Modifier.padding(14.dp))
                     SubjectFormRow("Try Again", onClick = { scope.launch { model.load(retry = true) } })
                 } else Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                    CircularProgressIndicator(color = palette.accent, trackColor = tokens.separator, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    CircularProgressIndicator(color = palette.controlInk, trackColor = tokens.separator, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                     Text("Loading ${model.ids.size} works…", color = tokens.secondaryInk, fontSize = 14.sp, lineHeight = 20.sp, modifier = Modifier.padding(start = 10.dp))
                 }
             }
@@ -266,7 +266,7 @@ internal fun BulkOptionsScreen(picker: BulkPicker, options: List<AO3FormOption>,
                         onChange { if (name in it.collectionsToAdd) it else it.copy(collectionsToAdd = it.collectionsToAdd + name) }
                         entry = ""
                     }, enabled = trimWritingTag(entry).isNotEmpty(),
-                        colors = androidx.compose.material3.ButtonDefaults.textButtonColors(contentColor = palette.accent)) { Text("Add") }
+                        colors = androidx.compose.material3.ButtonDefaults.textButtonColors(contentColor = palette.controlInk)) { Text("Add") }
                 }
             }
             item { WorkFormFootnote("Enter the collection name exactly as it appears on AO3. If AO3 doesn't recognize it, you will see that when you save.") }

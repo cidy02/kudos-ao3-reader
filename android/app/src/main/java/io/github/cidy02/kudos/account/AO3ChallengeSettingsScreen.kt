@@ -70,13 +70,13 @@ fun AO3ChallengeSettingsScreen(
     SubjectPaletteTheme(palette) {
         // Refresh chrome is the only Material surface; every colour comes from subject tokens.
         MaterialTheme(colorScheme = MaterialTheme.colorScheme.copy(
-            primary = palette.accent, onPrimary = SubjectPalette.label(palette.accent),
-            primaryContainer = palette.chipFill, onPrimaryContainer = palette.accentOnFill,
+            primary = palette.tint, onPrimary = palette.labelOnTint,
+            primaryContainer = palette.chipFill, onPrimaryContainer = palette.controlInk,
             surface = tokens.cardFill, onSurface = tokens.primaryInk,
             surfaceContainerHigh = tokens.cardFill, surfaceContainerHighest = tokens.cardFill,
             surfaceVariant = tokens.cardFill, onSurfaceVariant = tokens.secondaryInk,
             background = tokens.background, onBackground = tokens.primaryInk,
-            outline = tokens.separator, outlineVariant = tokens.separator, surfaceTint = palette.accent
+            outline = tokens.separator, outlineVariant = tokens.separator, surfaceTint = palette.tint
         )) {
             KudosRefreshBox(onRefresh = { model.load() }, modifier = Modifier.fillMaxSize().subjectScreenWash(palette)) {
                 LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
@@ -92,7 +92,7 @@ fun AO3ChallengeSettingsScreen(
                         state.loading || (state.data == null && state.failure == null && authState.isSignedIn) -> item {
                             Row(Modifier.fillMaxWidth().padding(vertical = 24.dp), horizontalArrangement = Arrangement.Center,
                                 verticalAlignment = Alignment.CenterVertically) {
-                                CircularProgressIndicator(color = palette.accent, trackColor = tokens.separator,
+                                CircularProgressIndicator(color = palette.controlInk, trackColor = tokens.separator,
                                     modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                                 Text("Loading challenge settings…", color = tokens.secondaryInk, fontSize = 14.sp, lineHeight = 20.sp,
                                     modifier = Modifier.padding(start = 10.dp))
@@ -107,7 +107,7 @@ fun AO3ChallengeSettingsScreen(
                                     Text(state.failure ?: "Log in to AO3 before using this feature.", color = tokens.secondaryInk,
                                         fontSize = 13.sp, lineHeight = 19.sp, textAlign = TextAlign.Center)
                                     TextButton(onClick = { scope.launch { model.load() } }) {
-                                        Text("Try Again", color = palette.accent, fontSize = 14.sp, lineHeight = 20.sp)
+                                        Text("Try Again", color = palette.controlInk, fontSize = 14.sp, lineHeight = 20.sp)
                                     }
                                 }
                             }
@@ -133,7 +133,7 @@ fun AO3ChallengeSettingsScreen(
                                                 Text(if (type == AO3ChallengeKind.GiftExchange) "Sign-ups are matched into assignments" else "Prompts are claimed freely",
                                                     color = tokens.secondaryInk, fontSize = 11.5.sp, lineHeight = 17.sp)
                                             }
-                                            if (kind == type) Icon(Icons.Filled.Check, contentDescription = "Selected", tint = palette.accent,
+                                            if (kind == type) Icon(Icons.Filled.Check, contentDescription = "Selected", tint = palette.controlInk,
                                                 modifier = Modifier.size(18.dp))
                                         }
                                     }

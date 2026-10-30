@@ -140,7 +140,7 @@ fun QueueSettingsScreen(
         trailingContent = if (managing) {
             {
                 TextButton(onClick = { managing = false; reload += 1 }) {
-                    Text("Done", color = palette.accent)
+                    Text("Done", color = palette.controlInk)
                 }
             }
         } else null
@@ -208,7 +208,7 @@ fun QueueSettingsScreen(
                 }
             },
             textStyle = TextStyle(color = tokens.primaryInk, fontSize = 16.sp, fontFamily = FontFamily.Serif),
-            cursorBrush = SolidColor(palette.accent),
+            cursorBrush = SolidColor(palette.controlInk),
             decorationBox = { inner ->
                 Box {
                     if (notes.isEmpty()) {
@@ -267,7 +267,7 @@ fun QueueSettingsScreen(
                             text = { Text(swatch.name) },
                             modifier = Modifier.semantics { selected = SubjectHueSwatches.matches(swatch, current.hue) && current.colorHex == null },
                             trailingIcon = { if (SubjectHueSwatches.matches(swatch, current.hue) && current.colorHex == null)
-                                androidx.compose.material3.Icon(Icons.Outlined.Check, null, tint = palette.accent) },
+                                androidx.compose.material3.Icon(Icons.Outlined.Check, null, tint = palette.controlInk) },
                             onClick = {
                                 colourMenu = false
                                 scope.launch {

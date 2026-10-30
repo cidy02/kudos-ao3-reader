@@ -261,7 +261,7 @@ private fun <T> FavoriteSegments(options: List<T>, selectedOption: T, onSelect: 
         SettingsPanel {
             options.forEachIndexed { index, option ->
                 if (index > 0) SubjectRowSeparator()
-                Text(title(option), color = if (option == selectedOption) tokens.scopePalette.accent else tokens.primaryInk,
+                Text(title(option), color = if (option == selectedOption) tokens.scopePalette.controlInk else tokens.primaryInk,
                     fontSize = 13.sp, lineHeight = 19.sp, fontWeight = FontWeight.Medium,
                     modifier = Modifier.fillMaxWidth().semantics { selected = option == selectedOption }
                         .clickable(role = Role.RadioButton) { onSelect(option) }.padding(14.dp))

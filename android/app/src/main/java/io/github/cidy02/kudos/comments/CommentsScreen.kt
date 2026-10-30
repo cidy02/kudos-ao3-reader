@@ -433,7 +433,7 @@ fun CommentsScreen(
                                     Text(
                                         text = author.displayName + if (index < authors.lastIndex) "," else "",
                                         fontSize = 15.sp,
-                                        color = palette.accent,
+                                        color = palette.controlInk,
                                         modifier = Modifier.clickable {
                                             author.username?.let(onOpenAuthor)
                                         }
@@ -732,7 +732,7 @@ fun CommentsScreen(
                         }
                     },
                     shape = RoundedCornerShape(percent = 50),
-                    color = palette.accent,
+                    color = palette.tint,
                     shadowElevation = 6.dp,
                     modifier = Modifier.height(44.dp)
                 ) {
@@ -744,14 +744,14 @@ fun CommentsScreen(
                         Icon(
                             imageVector = icon,
                             contentDescription = null,
-                            tint = palette.solidButtonLabel,
+                            tint = palette.labelOnTint,
                             modifier = Modifier.size(16.dp)
                         )
                         Text(
                             text = title,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = palette.solidButtonLabel
+                            color = palette.labelOnTint
                         )
                     }
                 }
@@ -837,23 +837,23 @@ internal fun ChapterPickerContent(
                         Icon(
                             imageVector = Icons.Outlined.ChatBubbleOutline,
                             contentDescription = null,
-                            tint = palette.accent,
+                            tint = palette.controlInk,
                             modifier = Modifier.size(18.dp)
                         )
                         Text(
                             text = "All Comments",
                             fontSize = 15.sp,
                             fontWeight = if (isScopeAll) FontWeight.SemiBold else FontWeight.Normal,
-                            color = palette.accent
+                            color = palette.controlInk
                         )
                     }
-                    if (isScopeAll) Icon(Icons.Outlined.Check, null, tint = palette.accent)
+                    if (isScopeAll) Icon(Icons.Outlined.Check, null, tint = palette.controlInk)
                     if (totalComments != null) {
                         Text(
                             text = java.text.NumberFormat.getIntegerInstance().format(totalComments),
                             fontSize = 13.sp,
                             fontFamily = FontFamily.Monospace,
-                            color = palette.accent.copy(alpha = if (isScopeAll) 1f else 0.6f)
+                            color = palette.controlInk.copy(alpha = if (isScopeAll) 1f else 0.6f)
                         )
                     }
                 }
@@ -875,7 +875,7 @@ internal fun ChapterPickerContent(
                     } else {
                         androidx.compose.material3.CircularProgressIndicator(
                             modifier = Modifier.size(22.dp).semantics { contentDescription = "Loading chapters" },
-                            strokeWidth = 2.dp, color = palette.accent)
+                            strokeWidth = 2.dp, color = palette.controlInk)
                     }
                 }
             }
@@ -903,14 +903,14 @@ internal fun ChapterPickerContent(
                             Icon(
                                 imageVector = chapterPickerBookIcon,
                                 contentDescription = null,
-                                tint = palette.accent,
+                                tint = palette.controlInk,
                                 modifier = Modifier.size(18.dp)
                             )
                             Text(
                                 text = chapter.displayName,
                                 fontSize = 15.sp,
                                 fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                                color = palette.accent,
+                                color = palette.controlInk,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -919,7 +919,7 @@ internal fun ChapterPickerContent(
                             Icon(
                                 imageVector = Icons.Default.Check,
                                 contentDescription = null,
-                                tint = palette.accent,
+                                tint = palette.controlInk,
                                 modifier = Modifier.size(16.dp)
                             )
                         }

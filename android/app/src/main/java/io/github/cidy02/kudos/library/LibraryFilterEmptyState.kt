@@ -99,7 +99,7 @@ fun LibraryFilterCollisionCard(
                             color = tokens.primaryInk, fontSize = 13.5.sp, fontWeight = FontWeight.Medium
                         )
                         Text(
-                            count, color = tokens.scopePalette.accent, fontSize = 12.sp,
+                            count, color = tokens.scopePalette.controlInk, fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.Monospace
                         )
                     }

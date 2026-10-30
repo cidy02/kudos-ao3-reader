@@ -388,7 +388,7 @@ fun RecentlyDeletedScreen(
                 ) {
                     Text(
                         text = if (allSelected) "Deselect All" else "Select All",
-                        color = palette.accent,
+                        color = palette.controlInk,
                         fontWeight = FontWeight.SemiBold
                     )
                 }
@@ -903,7 +903,7 @@ private fun RecentlyDeletedRow(
             }
 
             if (isSelecting) {
-                WorkSelectionBubble(isSelected = isSelected, accent = palette.accent)
+                WorkSelectionBubble(isSelected = isSelected, accent = palette.tint)
             }
 
             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
@@ -942,7 +942,7 @@ private fun RecentlyDeletedRow(
                 SwipeAction(
                     label = "Restore",
                     icon = Icons.Outlined.Refresh,
-                    color = palette.accent,
+                    color = palette.tint,
                     onClick = onRestore
                 )
             )
