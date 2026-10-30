@@ -168,7 +168,10 @@ private struct DashboardResumeSkeleton: View {
     var body: some View {
         if let regions, regions.resumePanes(hasNext: true, cardWidth: cardSize.width(in: nil)) != nil {
             HomeResumeComposition(hasNext: true) {
-                SkeletonBlock(height: 240, cornerRadius: SubjectMetrics.cornerRadius)
+                // Default-type Home card: 16 pt padding each side, the 96 pt
+                // ring, a 12 pt gap, 52 pt bars, a 6 pt gap, two caption lines,
+                // another 12 pt gap, and the 44 pt action.
+                SkeletonBlock(height: 290, cornerRadius: SubjectMetrics.cornerRadius)
             } next: {
                 ForEach(0 ..< 4, id: \.self) { _ in WorkCoverCardSkeleton() }
             }

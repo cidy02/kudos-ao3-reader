@@ -120,6 +120,10 @@ struct AO3WorkRowSkeleton: View {
 
 /// Wireframe matching the carousel cover cards (`WorkCoverCard` / `AO3WorkCoverCard`).
 struct WorkCoverCardSkeleton: View {
+    /// `CarouselCardMetrics.width` minus the 12 pt padding on each side. The
+    /// old 132 and 140 pt lines ran past a 120 pt card.
+    private var contentWidth: CGFloat { CarouselCardMetrics.width - 24 }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
             // Title, then the 2x2 tag grid (WorkStatusIconGrid) centered between
@@ -130,8 +134,8 @@ struct WorkCoverCardSkeleton: View {
             // small tag-chip pills below that) from before that card was
             // redesigned; the mismatch was reported directly against a real
             // screenshot.
-            SkeletonTextLine(height: 15, width: 132)
-            SkeletonTextLine(height: 15, width: 84)
+            SkeletonTextLine(height: 15, width: contentWidth * 0.94)
+            SkeletonTextLine(height: 15, width: contentWidth * 0.60)
 
             Spacer(minLength: 4)
             // Four separate tiles in a 2x2 arrangement, not one solid square —
@@ -153,11 +157,11 @@ struct WorkCoverCardSkeleton: View {
             .frame(maxWidth: .infinity, alignment: .center)
             Spacer(minLength: 4)
 
-            SkeletonTextLine(height: 12, width: 92) // author
-            SkeletonTextLine(height: 10, width: 118) // fandom
+            SkeletonTextLine(height: 12, width: contentWidth * 0.66) // author
+            SkeletonTextLine(height: 10, width: contentWidth * 0.84) // fandom
 
-            SkeletonTextLine(height: 10, width: 60) // "Reading"/date label
-            SkeletonBlock(height: 5, width: 140, cornerRadius: 3) // progress bar
+            SkeletonTextLine(height: 10, width: contentWidth * 0.43) // "Reading"/date label
+            SkeletonBlock(height: 5, width: contentWidth, cornerRadius: 3) // progress bar
         }
         .padding(12)
         .frame(width: CarouselCardMetrics.width,
