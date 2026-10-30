@@ -476,8 +476,10 @@ actor AO3Client { // swiftlint:disable:this type_body_length
             AO3RequestDefaults.userAgent(feature: .rankTop100),
             forHTTPHeaderField: "User-Agent"
         )
-        try await pace()
+        // In this order: the feature's 3 s wait can be long, and pace() has to
+        // claim its slot immediately before the request goes out.
         try await paceRankTop100()
+        try await pace()
 
         let data: Data
         if authenticatedRequest != nil {
