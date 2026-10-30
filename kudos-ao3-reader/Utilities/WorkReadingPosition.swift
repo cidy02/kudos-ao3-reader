@@ -13,6 +13,17 @@ enum WorkReadingPosition {
         return trimmed.isEmpty ? nil : trimmed
     }
 
+    /// Readium's fraction within the current resource, used by the detail
+    /// Resume card. This is distinct from the work-wide `totalProgression`.
+    static func chapterProgress(from locatorJSON: String) -> Double? {
+        guard let data = locatorJSON.data(using: .utf8),
+              let locator = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let locations = locator["locations"] as? [String: Any],
+              let progression = locations["progression"] as? Double
+        else { return nil }
+        return min(max(progression, 0), 1)
+    }
+
     /// The progress label a card or the Activity section prints: the
     /// publication's overall percent (`SavedWork.publicationProgress`, Readium's
     /// or the macOS reader's Readium-equivalent), or nothing. Not

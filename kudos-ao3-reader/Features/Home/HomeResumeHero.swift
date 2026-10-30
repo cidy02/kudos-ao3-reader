@@ -1,14 +1,168 @@
 import SwiftData
 import SwiftUI
 
+enum ResumeCardVariant: Equatable {
+    case home
+    case next
+    case detail
+
+    var barsHeight: CGFloat { self == .detail ? 76 : 52 }
+    var primaryHeight: CGFloat { self == .detail ? 50 : 44 }
+}
+
+struct ResumeCardModel {
+    let title: String
+    let authors: [String]
+    let authorIdentities: [AO3AuthorIdentity]
+    let fandoms: [String]
+    let rating: String
+    let categories: [String]
+    let warnings: [String]
+    let completion: WorkCompletionStatus
+    let words: Int?
+    let kudos: Int?
+    let chapters: String
+    let progress: Double?
+    let chapterProgress: Double?
+    let chapterName: String?
+    let published: String
+    let updated: String
+    let newChapterCount: Int
+
+    init(work: SavedWork) {
+        title = work.title
+        authors = work.verifiedAuthorIdentities.isEmpty
+            ? (work.author.isEmpty ? [] : [work.author])
+            : work.verifiedAuthorIdentities.map(\.displayName)
+        authorIdentities = work.verifiedAuthorIdentities
+        fandoms = work.workFandoms
+        rating = work.rating
+        categories = work.workCategories
+        warnings = work.workWarnings
+        completion = work.completionStatus
+        words = work.wordCount > 0 ? work.wordCount : nil
+        kudos = work.kudos > 0 ? work.kudos : nil
+        chapters = work.chapters
+        progress = work.readingProgress.map { min(max($0, 0), 1) }
+        chapterProgress = WorkReadingPosition.chapterProgress(from: work.readiumLocator)
+        chapterName = WorkReadingPosition.title(from: work.readiumLocator)
+        published = work.datePublished
+        updated = work.dateUpdated
+        newChapterCount = max(0, work.postedChapterCount - work.knownChapterCount)
+    }
+
+    init(
+        title: String,
+        authors: [String],
+        authorIdentities: [AO3AuthorIdentity],
+        fandoms: [String],
+        rating: String,
+        categories: [String],
+        warnings: [String],
+        completion: WorkCompletionStatus,
+        words: Int?,
+        kudos: Int?,
+        chapters: String,
+        progress: Double?,
+        chapterProgress: Double?,
+        chapterName: String?,
+        published: String,
+        updated: String,
+        newChapterCount: Int
+    ) {
+        self.title = title
+        self.authors = authors
+        self.authorIdentities = authorIdentities
+        self.fandoms = fandoms
+        self.rating = rating
+        self.categories = categories
+        self.warnings = warnings
+        self.completion = completion
+        self.words = words
+        self.kudos = kudos
+        self.chapters = chapters
+        self.progress = progress.map { min(max($0, 0), 1) }
+        self.chapterProgress = chapterProgress.map { min(max($0, 0), 1) }
+        self.chapterName = chapterName
+        self.published = published
+        self.updated = updated
+        self.newChapterCount = max(0, newChapterCount)
+    }
+
+    var art: CoverArt.WorkArt { CoverArt.workArt(fandoms: fandoms, title: title) }
+
+    var primaryFandom: String? {
+        fandoms.first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .map(FandomDisplayName.bareTitle)
+    }
+
+    var workPercent: Int { Int(((progress ?? 0) * 100).rounded()) }
+    var chapterPercent: Int { Int(((chapterProgress ?? 0) * 100).rounded()) }
+    var postedChapters: Int { SavedWork.postedChapterCount(from: chapters) }
+    var plannedChapters: Int {
+        max(SavedWork.totalChapterCount(from: chapters) ?? postedChapters, postedChapters)
+    }
+
+    var chapterNumber: Int {
+        if let chapterName,
+           let match = chapterName.range(
+               of: #"(?i)\bch(?:apter)?\s*(\d+)"#,
+               options: .regularExpression
+           ),
+           let number = Int(chapterName[match].filter(\.isNumber)) {
+            return number
+        }
+        return ChapterBarGeometry.readingChapter(
+            posted: postedChapters,
+            progress: progress ?? 0,
+            weights: nil
+        )
+    }
+
+    var displayedChapterName: String { chapterName ?? "Chapter \(chapterNumber)" }
+
+    var postedLabel: String {
+        guard plannedChapters > 0 else { return chapters }
+        if plannedChapters == postedChapters {
+            return "\(postedChapters) chapter\(postedChapters == 1 ? "" : "s")"
+        }
+        return "\(postedChapters) of \(plannedChapters) posted"
+    }
+
+    var postedShortLabel: String {
+        plannedChapters > 0 ? "\(postedChapters) of \(plannedChapters)" : chapters
+    }
+
+    var figureLine: String? {
+        var parts: [String] = []
+        if let words { parts.append("\(words.formatted()) words") }
+        if let kudos { parts.append("♥ \(kudos.compactCount)") }
+        let text = parts.joined(separator: " · ")
+        return text.isEmpty ? nil : text
+    }
+
+    func chapterItems(weights: [Int]?) -> [ChapterBarItem] {
+        ChapterBarModel.items(
+            chapters: chapters,
+            progress: progress,
+            isFinished: progress == 1,
+            weights: weights
+        )
+    }
+}
+
 struct HomeResumeHero: View {
     let work: SavedWork
+    var variant: ResumeCardVariant = .home
     var isSelecting: Bool = false
     var isSelected: Bool = false
     var onToggleSelection: (() -> Void)?
     var onSelect: (() -> Void)?
+    var onPrimary: (() -> Void)?
+    var onReadAloud: (() -> Void)?
 
     @Environment(PrivacyGate.self) private var gate
+    @Environment(\.workCardTransitionNamespace) private var zoomNamespace
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var mode: MaturePrivacyMode = .obscure
 
@@ -18,295 +172,415 @@ struct HomeResumeHero: View {
 
     var body: some View {
         if blurred {
-            let hero = UnblurredHomeResumeHero(work: work)
-                .environment(\.ao3AuthorNavigationEnabled, false)
-                .blur(radius: 6)
-                .overlay {
-                    if !isSelecting {
-                        Label("Tap to reveal", systemImage: "eye.slash.fill")
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(.regularMaterial, in: Capsule())
-                    }
-                }
-                .contentShape(Rectangle())
-
-            if isSelecting {
-                hero
-                    .overlay(alignment: .topTrailing) {
-                        WorkSelectionBubble(isSelected: isSelected)
-                            .padding(8)
-                    }
-                    .overlay {
-                        RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
-                            .strokeBorder(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(Color.clear), lineWidth: 2)
-                            .allowsHitTesting(false)
-                    }
-                    .onTapGesture { onToggleSelection?() }
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("Hidden mature work")
-                    .accessibilityValue(isSelected ? "Selected" : "Not selected")
-                    .accessibilityHint("Double-tap to \(isSelected ? "deselect" : "select") this work.")
-                    .localWorkContextMenu(work: work, onSelect: onSelect)
-            } else {
-                hero
-                    .onTapGesture { gate.reveal(work) }
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("Hidden mature work. Activate to reveal.")
-                    .localWorkContextMenu(work: work, onSelect: onSelect)
-            }
-        } else if isSelecting {
-            Button {
-                onToggleSelection?()
-            } label: {
-                UnblurredHomeResumeHero(work: work)
-                    // Nested author byline would otherwise fight this Button for the
-                    // same tap in selection mode — disabled here the same way the
-                    // blurred branch above already disables it.
+            ZStack {
+                resumeCard(interactive: false)
                     .environment(\.ao3AuthorNavigationEnabled, false)
-                    .overlay(alignment: .topTrailing) {
-                        WorkSelectionBubble(isSelected: isSelected)
-                            .padding(8)
-                    }
-                    .overlay {
-                        RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
-                            .strokeBorder(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(Color.clear), lineWidth: 2)
-                    }
+                    .blur(radius: 6)
+                    .allowsHitTesting(false)
+                if !isSelecting { MatureRevealCapsule() }
             }
-            .buttonStyle(.plain)
+            .contentShape(Rectangle())
+            .overlay(alignment: .topTrailing) {
+                if isSelecting { WorkSelectionBubble(isSelected: isSelected).padding(8) }
+            }
+            .onTapGesture {
+                if isSelecting { onToggleSelection?() } else { gate.reveal(work) }
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Hidden mature work")
+            .accessibilityValue(isSelecting ? (isSelected ? "Selected" : "Not selected") : "")
+            .accessibilityHint(isSelecting ? "Double-tap to toggle selection." : "Activate to reveal.")
+            .localWorkContextMenu(work: work, onSelect: onSelect)
+        } else if isSelecting {
+            ZStack {
+                resumeCard(interactive: false)
+                    .environment(\.ao3AuthorNavigationEnabled, false)
+                    .allowsHitTesting(false)
+            }
+            .contentShape(Rectangle())
+            .overlay(alignment: .topTrailing) {
+                WorkSelectionBubble(isSelected: isSelected).padding(8)
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
+                    .strokeBorder(
+                        isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(Color.clear),
+                        lineWidth: 2
+                    )
+                    .allowsHitTesting(false)
+            }
+            .onTapGesture { onToggleSelection?() }
+            .accessibilityElement(children: .ignore)
             .accessibilityLabel(work.title)
             .accessibilityValue(isSelected ? "Selected" : "Not selected")
             .accessibilityHint("Double-tap to \(isSelected ? "deselect" : "select") this work.")
             .accessibilityAddTraits(isSelected ? .isSelected : [])
             .localWorkContextMenu(work: work, onSelect: onSelect)
         } else {
-            // A NavigationLink wrapping the hero, like every other card in
-            // HomeView — *not* `.cardNavigation`.
-            //
-            // `cardNavigation` puts an invisible link in the *background* and
-            // relies on the enclosing List to make the whole row activate it
-            // ("The List still makes the whole card tappable" — its own doc).
-            // Every other caller is inside a `List`. Home is a ScrollView, so
-            // there was no row activation, and the hero's own background and
-            // `contentShape` sit in front of that invisible link: the card
-            // simply did not respond to taps.
-            //
-            // The byline keeps its own tap because it is a Button inside the
-            // link's label, which takes the touch within its own bounds; the
-            // author push also sets `AppRouter.cardNavigationSuppressed`, so a
-            // reader/work push landing from the same touch dismisses itself
-            // rather than burying the profile.
-            NavigationLink(value: LocalWorkDestination.reader(work)) {
-                UnblurredHomeResumeHero(work: work)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(work.title)
-            .localWorkContextMenu(work: work, onSelect: onSelect)
+            resumeCard(interactive: true)
+                .localWorkContextMenu(work: work, onSelect: onSelect)
         }
+    }
+
+    private func resumeCard(interactive: Bool) -> some View {
+        WorkResumeCard(
+            model: ResumeCardModel(work: work),
+            localWork: work,
+            variant: variant,
+            primaryLabel: variant == .next ? "Start" : "Resume",
+            isBusy: false,
+            isInteractive: interactive,
+            onPrimary: { onPrimary?() },
+            onReadAloud: { onReadAloud?() }
+        )
+        .workCardZoomSource(work.zoomKey, in: zoomNamespace)
     }
 }
 
-private struct UnblurredHomeResumeHero: View {
-    let work: SavedWork
+struct WorkResumeCard: View {
+    let model: ResumeCardModel
+    var localWork: SavedWork?
+    let variant: ResumeCardVariant
+    let primaryLabel: String
+    var isBusy = false
+    var isInteractive = true
+    let onPrimary: () -> Void
+    let onReadAloud: () -> Void
+    var onContents: (() -> Void)?
+    var onUpdate: (() -> Void)?
+
     @Environment(ThemeManager.self) private var themeManager
-    @Environment(\.workCardTransitionNamespace) private var zoomNamespace
+    @Environment(\.accentFill) private var accentFill
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @ScaledMetric(relativeTo: .title) private var titleSize: CGFloat = 31
-    @ScaledMetric(relativeTo: .caption) private var metadataSize: CGFloat = 13
-    @ScaledMetric(relativeTo: .caption2) private var dateSize: CGFloat = 12
-    @ScaledMetric(relativeTo: .subheadline) private var buttonSize: CGFloat = 14
-    @ScaledMetric(relativeTo: .caption) private var ringSize: CGFloat = 68
-
-    /// Spec 1b floats the four-tag grid in the card's top-trailing corner and
-    /// reserves 94pt of the kicker's and title's trailing edge for it, so long
-    /// titles wrap before they reach it instead of running underneath. An
-    /// overlay rather than an HStack sibling: the grid is much taller than one
-    /// line of kicker, and in an HStack its height would drive the whole row's
-    /// spacing to whatever sits below.
-    private let signalGridReservedWidth: CGFloat = 94
-
-    /// Individual author names for the byline — matches WorkDetailView's
-    /// `displayAuthorList` derivation for the same work.
-    private var authorNames: [String] {
-        work.verifiedAuthorIdentities.isEmpty
-            ? (work.author.isEmpty ? [] : [work.author])
-            : work.verifiedAuthorIdentities.map(\.displayName)
-    }
-
-    private var subjectHue: Double {
-        CoverArt.workHue(fandoms: work.workFandoms, title: work.title)
-    }
-
-    private var subjectPalette: SubjectPalette {
-        themeManager.appTheme.subjectPalette(hue: subjectHue)
-    }
-
-    private var primaryFandomName: String? {
-        work.workFandoms.first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-            .map(FandomDisplayName.bareTitle)
-    }
-
-    /// Clamped so a nil or out-of-range stored fraction can never draw a
-    /// negative or over-full ring. An in-progress work can legitimately have no
-    /// stored fraction (only a `lastReadDate`), which shows as 0% rather than
-    /// an invented number.
-    private var resolvedReadingProgress: Double {
-        min(1, max(0, work.readingProgress ?? 0))
-    }
-
-    /// The last-opened date backs up the stored locator title and remains useful
-    /// for legacy or restored records with no publication label (spec 1b).
-    private var lastReadRelativeDescription: String? {
-        guard let lastReadDate = work.lastReadDate else { return nil }
-        return lastReadDate.formatted(.relative(presentation: .named))
-    }
+    @State private var chapterWeights: [Int]?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if dynamicTypeSize.isAccessibilitySize { signalGrid }
-            if let primaryFandomName {
-                SubjectKicker(text: primaryFandomName, palette: subjectPalette, size: 9.5, ruleSpacing: 7)
-                    .padding(.trailing, dynamicTypeSize.isAccessibilitySize ? 0 : signalGridReservedWidth)
+            switch variant {
+            case .home: homeHeader
+            case .next: nextHeader
+            case .detail: detailHeader
             }
-
-            Text(work.title)
-                .font(.system(size: titleSize, weight: .bold, design: .serif))
-                .tracking(-0.62)
-                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
-                .foregroundStyle(.primary)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.trailing, dynamicTypeSize.isAccessibilitySize ? 0 : signalGridReservedWidth)
-
-            metadataLine
-            resumeRow
+            chapterSection
+            actions
         }
-        .padding(.horizontal, 18)
-        .padding(.top, 16)
-        .padding(.bottom, 18)
+        .padding(16)
         .frame(maxWidth: .infinity, alignment: .topLeading)
-        .background(heroCardBackground)
-        .overlay(alignment: .topTrailing) {
-            // On the card's own content insets, now no tray pads it in (I-1).
-            if !dynamicTypeSize.isAccessibilitySize { signalGrid.padding(.top, 16).padding(.trailing, 18) }
-        }
+        .foregroundStyle(.white)
+        .background(cardBackground)
         .contentShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
-        .workCardZoomSource(work.zoomKey, in: zoomNamespace)
+        .environment(\.colorScheme, .dark)
+        .task(id: chapterCacheKey) { await loadChapterWeights() }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(accessibilityLabel)
     }
 
-    private var signalGrid: some View {
-        WorkStatusIconGrid(
-                rating: work.rating.isEmpty ? nil : work.rating,
-                categories: work.workCategories,
-                warnings: work.workWarnings,
-                completion: work.completionStatus,
-                tileSize: 24,
-                announcesToVoiceOver: true
-        )
-    }
-
-    /// The author is a real `AO3AuthorBylineView` so the name stays tappable
-    /// here exactly as it is everywhere else in the app; the two figures beside
-    /// it are plain text, joined by the spec's dimmed middle dot.
-    @ViewBuilder
-    private var metadataLine: some View {
-        let figureSegments = WorkStat.localWorkMetadata(
-            author: "", wordCount: work.wordCount, chapters: work.chapters
-        )
-        FlowLayout(spacing: 8, rowSpacing: 6) {
-            if !work.author.isEmpty {
-                AO3AuthorBylineView(
-                    names: authorNames,
-                    identities: work.verifiedAuthorIdentities,
-                    includesBy: false,
-                    font: .system(size: metadataSize),
-                    expandsHitTarget: false
-                )
-                if !figureSegments.isEmpty {
-                    metadataSeparator
-                }
+    private var homeHeader: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 14) {
+                progressRing(diameter: 96, showsLabel: true)
+                identity
             }
-            ForEach(Array(figureSegments.enumerated()), id: \.offset) { index, segment in
-                Text(segment)
-                    .font(.system(size: metadataSize))
-                if index < figureSegments.count - 1 {
-                    metadataSeparator
-                }
+            VStack(alignment: .leading, spacing: 12) {
+                progressRing(diameter: 96, showsLabel: true)
+                identity
             }
         }
-        .fixedSize(horizontal: false, vertical: true)
-        .foregroundStyle(Color.primary.opacity(0.75))
     }
 
-    private var metadataSeparator: some View {
-        Text("·")
-            .font(.system(size: metadataSize))
-            .foregroundStyle(Color.primary.opacity(0.35))
-            .accessibilityHidden(true)
+    private var nextHeader: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Up next")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.white.opacity(0.9))
+            identity
+        }
     }
 
-    /// Ring, then where you stopped, then the one filled control on the card.
-    private var resumeRow: some View {
-        let layout = dynamicTypeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
-            : AnyLayout(HStackLayout(spacing: 16))
-        // The ring over the chapter line too at these sizes: beside a scaled
-        // ring the line broke mid-word ("Chap / ter 2").
-        let ringAndPlace = dynamicTypeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 10))
-            : AnyLayout(HStackLayout(spacing: 16))
-        return layout {
-            ringAndPlace {
-                WorkReadingOrDownloadRing(
-                    work: work,
-                    progress: resolvedReadingProgress,
-                    state: resolvedReadingProgress >= 1 ? "Finished" : "Reading",
-                    diameter: ringSize
-                )
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(WorkReadingPosition.title(from: work.readiumLocator)
-                         ?? (lastReadRelativeDescription == nil ? "Ready to resume" : "Last opened"))
-                        .font(.system(size: metadataSize, weight: .semibold))
-                        .foregroundStyle(.primary)
-                    if let lastReadRelativeDescription {
-                        Text(lastReadRelativeDescription)
-                            .font(.system(size: dateSize))
-                            .foregroundStyle(Color.primary.opacity(0.6))
-                    }
+    private var detailHeader: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                progressRing(diameter: 52, showsLabel: false)
+                detailChapterLabels
+                contentsButton
+            }
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 12) {
+                    progressRing(diameter: 52, showsLabel: false)
+                    detailChapterLabels
                 }
+                contentsButton
+            }
+        }
+    }
+
+    private var identity: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            if let fandom = model.primaryFandom {
+                Text(fandom.uppercased())
+                    .font(.caption.weight(.semibold))
+                    .tracking(0.8)
+                    .foregroundStyle(Color.white.opacity(0.9))
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                Capsule().fill(Color.white.opacity(0.9)).frame(width: 16, height: 2)
+                    .padding(.vertical, 2)
+            }
+            Text(model.title)
+                .font(.system(.title2, design: .serif, weight: .semibold))
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 3)
                 .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            AO3AuthorBylineView(
+                names: model.authors,
+                identities: model.authorIdentities,
+                fallbackText: "Anonymous",
+                includesBy: false,
+                font: .subheadline,
+                tinted: true,
+                expandsHitTarget: false
+            )
+            .tint(.white)
+            if let figureLine = model.figureLine {
+                Text(figureLine)
+                    .font(.footnote)
+                    .foregroundStyle(Color.white.opacity(0.85))
             }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
 
-            // Drawn, not a Button: the whole hero is already one navigation
-            // link into the reader, and a second tap target inside it would
-            // race the link for the same touch. VoiceOver reads the card's own
-            // label and hint instead, so this stays out of the tree.
-            Text("Resume")
-                .font(.system(size: buttonSize, weight: .semibold))
-                .foregroundStyle(subjectPalette.solidButtonLabel)
-                .padding(.horizontal, 18)
-                .padding(.vertical, 10)
-                .background(subjectPalette.solidButtonFill, in: Capsule())
-                .accessibilityHidden(true)
+    private var detailChapterLabels: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(model.displayedChapterName)
+                .font(.headline)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+            Text("\(model.chapterPercent)% of the chapter · \(model.workPercent)% of the work")
+                .font(.footnote)
+                .foregroundStyle(Color.white.opacity(0.85))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var contentsButton: some View {
+        Button { if isInteractive { onContents?() } } label: {
+            Text(model.postedShortLabel + " ›")
+                .font(.subheadline)
+                .foregroundStyle(.white)
+                .lineLimit(1)
+        }
+        .buttonStyle(.plain)
+        .disabled(!isInteractive || onContents == nil)
+        .accessibilityLabel("Contents, \(model.postedShortLabel) chapters")
+    }
+
+    private var chapterSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ChapterBars(
+                items: model.chapterItems(weights: chapterWeights),
+                scale: .card,
+                onGradient: true,
+                height: variant.barsHeight
+            )
+            if variant == .detail {
+                chapterLegend
+                if !model.published.isEmpty || !model.updated.isEmpty {
+                    Text(detailDates)
+                        .font(.footnote)
+                        .foregroundStyle(Color.white.opacity(0.85))
+                }
+            } else {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(model.displayedChapterName + " · " + model.postedLabel)
+                        .lineLimit(1)
+                    Spacer(minLength: 4)
+                    if !model.updated.isEmpty { Text("Updated \(model.updated)").lineLimit(1) }
+                }
+                .font(.caption)
+                .foregroundStyle(Color.white.opacity(0.85))
+            }
         }
     }
 
-    private var heroCardBackground: some View {
-        let heroShape = RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
-        return heroShape
-            .fill(themeManager.appTheme.carouselCardSurface)
-            .overlay(heroShape.fill(subjectPalette.cardWash))
-            .overlay(heroShape.strokeBorder(subjectPalette.cardBorder, lineWidth: 0.5))
+    private var chapterLegend: some View {
+        HStack(spacing: 14) {
+            legendItem("Read", fill: .white)
+            legendItem("Posted, unread", fill: Color.white.opacity(0.3))
+            HStack(spacing: 5) {
+                RoundedRectangle(cornerRadius: 2)
+                    .stroke(style: StrokeStyle(lineWidth: 1, dash: [2, 1.5]))
+                    .frame(width: 10, height: 10)
+                Text("Not posted yet")
+            }
+        }
+        .font(.caption)
+        .foregroundStyle(Color.white.opacity(0.9))
+    }
+
+    private func legendItem(_ title: String, fill: Color) -> some View {
+        HStack(spacing: 5) {
+            RoundedRectangle(cornerRadius: 2).fill(fill).frame(width: 10, height: 10)
+            Text(title)
+        }
+    }
+
+    private var actions: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 10) { actionContents }
+            VStack(alignment: .leading, spacing: 10) { actionContents }
+        }
+    }
+
+    @ViewBuilder
+    private var actionContents: some View {
+        if variant != .detail {
+            WorkStatusIconGrid(
+                rating: model.rating.isEmpty ? nil : model.rating,
+                categories: model.categories,
+                warnings: model.warnings,
+                completion: model.completion,
+                tileSize: 24,
+                announcesToVoiceOver: true,
+                arrangement: .strip
+            )
+            Spacer(minLength: 0)
+        }
+        actionCircle(title: "Read Aloud", systemImage: "speaker.wave.2.fill", action: onReadAloud)
+        primaryButton
+        if variant == .detail, model.newChapterCount > 0, let onUpdate {
+            ZStack(alignment: .topTrailing) {
+                actionCircle(title: "Update download", systemImage: "arrow.down", action: onUpdate)
+                Text("\(model.newChapterCount)")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.white)
+                    .frame(minWidth: 18, minHeight: 18)
+                    .background(accentFill, in: Circle())
+                    .overlay(Circle().stroke(Color.white, lineWidth: 2))
+                    .offset(x: 2, y: -2)
+                    .accessibilityHidden(true)
+            }
+        }
+    }
+
+    private var primaryButton: some View {
+        Button { if isInteractive { onPrimary() } } label: {
+            HStack(spacing: 8) {
+                if isBusy {
+                    ProgressView().controlSize(.small).tint(accentFill)
+                } else {
+                    Image(systemName: "play.fill").font(.caption)
+                }
+                Text(variant == .detail ? "Resume Chapter \(model.chapterNumber)" : primaryLabel)
+                    .lineLimit(1)
+            }
+            .font(.headline)
+            .foregroundStyle(accentFill)
+            .frame(maxWidth: variant == .detail ? .infinity : nil)
+            .frame(height: variant.primaryHeight)
+            .padding(.horizontal, variant == .detail ? 16 : 22)
+            .background(Color.white, in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(!isInteractive || isBusy)
+    }
+
+    private func actionCircle(
+        title: String,
+        systemImage: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button { if isInteractive { action() } } label: {
+            Image(systemName: systemImage)
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(.white)
+                .frame(width: variant.primaryHeight, height: variant.primaryHeight)
+                .background(Color.white.opacity(0.18), in: Circle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!isInteractive)
+        .accessibilityLabel(title)
+    }
+
+    private func progressRing(diameter: CGFloat, showsLabel: Bool) -> some View {
+        ZStack {
+            Circle().stroke(Color.white.opacity(0.24), lineWidth: showsLabel ? 10 : 6)
+            Circle()
+                .trim(from: 0, to: model.progress ?? 0)
+                .stroke(
+                    Color.white,
+                    style: StrokeStyle(lineWidth: showsLabel ? 10 : 6, lineCap: .round)
+                )
+                .rotationEffect(.degrees(-90))
+            if showsLabel {
+                VStack(spacing: 0) {
+                    Text("\(model.workPercent)%")
+                        .font(.system(.title3, design: .rounded, weight: .bold))
+                    Text("Read").font(.caption2.weight(.semibold)).textCase(.uppercase)
+                }
+            }
+        }
+        .frame(width: diameter, height: diameter)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(model.workPercent) percent read")
+    }
+
+    private var cardBackground: some View {
+        RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
+            .fill(CoverArt.workGradient(for: model.art))
+            .overlay(alignment: .bottomTrailing) {
+                Text(model.title.trimmingCharacters(in: .whitespacesAndNewlines).first.map(String.init) ?? "")
+                    .font(.system(size: 250, weight: .semibold, design: .serif))
+                    .foregroundStyle(Color.white.opacity(0.08))
+                    .offset(x: 10, y: 58)
+                    .accessibilityHidden(true)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5)
+            )
             .shadow(
                 color: themeManager.appTheme.carouselCardShadow.color,
                 radius: themeManager.appTheme.carouselCardShadow.radius + 6,
                 x: 0,
                 y: themeManager.appTheme.carouselCardShadow.y + 2
             )
+    }
+
+    private var detailDates: String {
+        var parts: [String] = []
+        if !model.published.isEmpty { parts.append("Published \(model.published)") }
+        if !model.updated.isEmpty { parts.append("updated \(model.updated)") }
+        return parts.joined(separator: " · ")
+    }
+
+    private var accessibilityLabel: String {
+        let prefix = variant == .next
+            ? "Up next"
+            : variant == .detail ? "Your reading" : "Continue reading"
+        return "\(prefix): \(model.title), \(model.workPercent) percent read"
+    }
+
+    private var chapterCacheKey: String {
+        guard let localWork, localWork.hasEPUB else { return "none" }
+        let values = try? localWork.fileURL.resourceValues(
+            forKeys: [.fileSizeKey, .contentModificationDateKey]
+        )
+        return "\(localWork.id)-\(values?.fileSize ?? -1)-"
+            + "\(values?.contentModificationDate?.timeIntervalSince1970 ?? -1)"
+    }
+
+    private func loadChapterWeights() async {
+        guard let localWork, localWork.hasEPUB else {
+            chapterWeights = nil
+            return
+        }
+        let id = localWork.id
+        let url = localWork.fileURL
+        let weights = await Task.detached(priority: .utility) {
+            ChapterLengthCache.weights(workID: id, fileURL: url)
+        }.value
+        guard localWork.modelContext != nil else { return }
+        chapterWeights = weights
     }
 }
 
@@ -323,7 +597,9 @@ struct HomeResumeComposition<Hero: View, Next: View>: View {
     var body: some View {
         #if os(iOS)
         if let regions, let panes = regions.resumePanes(
-            hasNext: hasNext, cardWidth: cardSize.width(in: nil), rightToLeft: direction == .rightToLeft
+            hasNext: hasNext,
+            cardWidth: cardSize.width(in: nil),
+            rightToLeft: direction == .rightToLeft
         ) {
             DashboardRegionRow(panes: panes, width: regions.viewport.width) {
                 hero().padding(.horizontal, 16)

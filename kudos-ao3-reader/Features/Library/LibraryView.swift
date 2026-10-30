@@ -510,7 +510,12 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 : nil
         ) {
             ForEach(sectionWorks.prefix(12)) { work in
-                localCarouselCard(work: work, footer: footer(kind, work), progress: progress(kind, work))
+                localCarouselCard(
+                    work: work,
+                    footer: footer(kind, work),
+                    progress: progress(kind, work),
+                    metadataStyle: kind == .downloaded ? .downloaded : .standard
+                )
             }
         } emptyState: {
             SectionEmptyState(message: emptyMessage ?? kind.emptyMessage, systemImage: kind.emptyIcon)
@@ -525,6 +530,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             hasItems: !collections.isEmpty,
             itemCount: collections.count,
             cardSpacing: CarouselCardMetrics.coverStackSpacing,
+            cardWidth: CarouselCardMetrics.stackWidth,
             onSeeAll: !collections.isEmpty ? { path.append(AllCollectionsDestination()) } : nil
         ) {
             // The "New collection" card is the toolbar's "+" now (owner,
@@ -812,6 +818,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             hasItems: !shelfQueues.isEmpty,
             itemCount: shelfQueues.count,
             cardSpacing: CarouselCardMetrics.coverStackSpacing,
+            cardWidth: CarouselCardMetrics.stackWidth,
             onSeeAll: { path.append(AllReadingQueuesDestination(initialQueueID: nil)) }
         ) {
             ForEach(shelfQueues.prefix(12)) { queue in
@@ -1108,17 +1115,33 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     }
 
     @ViewBuilder
-    private func localCarouselCard(work: SavedWork, footer: String?, progress: Double?) -> some View {
-        localCoverCard(work: work, footer: footer, progress: progress)
+    private func localCarouselCard(
+        work: SavedWork,
+        footer: String?,
+        progress: Double?,
+        metadataStyle: WorkCoverMetadataStyle = .standard
+    ) -> some View {
+        localCoverCard(
+            work: work,
+            footer: footer,
+            progress: progress,
+            metadataStyle: metadataStyle
+        )
     }
 
     @ViewBuilder
-    private func localCoverCard(work: SavedWork, footer: String?, progress: Double?) -> some View {
+    private func localCoverCard(
+        work: SavedWork,
+        footer: String?,
+        progress: Double?,
+        metadataStyle: WorkCoverMetadataStyle
+    ) -> some View {
         if isSelecting {
             SensitiveWorkCoverCard(
                 work: work,
                 footer: footer,
                 progress: progress,
+                metadataStyle: metadataStyle,
                 isSelecting: true,
                 isSelected: selection.contains(work.id),
                 onToggleSelection: { toggleSelection(work) }
@@ -1126,7 +1149,12 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
         } else {
             NavigationLink(value: LocalWorkDestination.reader(work)) {
-                SensitiveWorkCoverCard(work: work, footer: footer, progress: progress)
+                SensitiveWorkCoverCard(
+                    work: work,
+                    footer: footer,
+                    progress: progress,
+                    metadataStyle: metadataStyle
+                )
             }
             .buttonStyle(.plain)
             .localWorkContextMenu(work: work, onSelect: selectAction(for: work))

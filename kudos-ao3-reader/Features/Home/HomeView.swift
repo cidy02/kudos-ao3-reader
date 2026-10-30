@@ -472,7 +472,9 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                             isSelecting: isSelecting,
                             isSelected: selection.contains(heroWork.id),
                             onToggleSelection: { toggleSelection(heroWork) },
-                            onSelect: selectAction(for: heroWork)
+                            onSelect: selectAction(for: heroWork),
+                            onPrimary: { path.append(LocalWorkDestination.reader(heroWork)) },
+                            onReadAloud: { path.append(LocalWorkDestination.reader(heroWork)) }
                         )
                         .downloadDimmed(heroWork)
                     } next: {
@@ -520,6 +522,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
             collapseKey: "home.readingQueues",
             hasItems: !customQueues.isEmpty,
             itemCount: customQueues.count,
+            cardWidth: CarouselCardMetrics.stackWidth,
             onSeeAll: !customQueues.isEmpty
                 ? { path.append(AllReadingQueuesDestination(initialQueueID: nil)) }
                 : nil

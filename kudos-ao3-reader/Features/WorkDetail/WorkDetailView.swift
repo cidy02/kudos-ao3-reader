@@ -326,13 +326,40 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         )
         return WorkDetailResumeCard(
             actionTitle: label.title,
+            model: ResumeCardModel(
+                title: displayTitle,
+                authors: displayAuthorList,
+                authorIdentities: displayAuthorIdentities,
+                fandoms: displayFandoms,
+                rating: displayRating,
+                categories: displayCategories,
+                warnings: displayWarnings,
+                completion: displayCompletionStatus,
+                words: displayWords,
+                kudos: displayKudos,
+                chapters: displayChapters,
+                progress: resumeCardReadingProgress,
+                chapterProgress: localWork.flatMap {
+                    WorkReadingPosition.chapterProgress(from: $0.readiumLocator)
+                },
+                chapterName: localWork.flatMap {
+                    WorkReadingPosition.title(from: $0.readiumLocator)
+                },
+                published: displayPublishedDate,
+                updated: displayUpdatedDate,
+                newChapterCount: localWork.map {
+                    max(0, $0.postedChapterCount - $0.knownChapterCount)
+                } ?? 0
+            ),
             localWork: localWork,
             isBusy: working,
-            readingProgress: resumeCardReadingProgress,
-            savedPositionTitle: localWork.flatMap { WorkReadingPosition.title(from: $0.readiumLocator) },
-            lastReadDate: localWork?.lastReadDate,
-            palette: workPalette,
-            action: read
+            action: read,
+            readAloud: read,
+            contents: {
+                router.panel = .readerChapters
+                read()
+            },
+            updateDownload: localWork?.hasUpdate == true ? updateDownloadedWork : nil
         )
         .downloadDimmed(localWork)
         .pageBodyRow(top: 14)
@@ -1117,6 +1144,26 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                     working = false
                 }
             }
+        }
+    }
+
+    /// Replaces the preserved EPUB only when AO3 reports new chapters, then
+    /// advances the same watermark Home's update badge reads.
+    private func updateDownloadedWork() {
+        guard let work = localWork, work.hasUpdate, !working else { return }
+        Task {
+            working = true
+            loadError = nil
+            do {
+                try await WorkReaderPreparation.restoreReadableEPUB(for: work, in: context)
+                work.knownChapterCount = work.postedChapterCount
+                context.saveBestEffort(reason: "Saving updated download failed")
+            } catch let error as AO3Error {
+                loadError = error.errorDescription
+            } catch {
+                loadError = UserFacingError.message(for: error)
+            }
+            working = false
         }
     }
 

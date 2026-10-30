@@ -157,155 +157,30 @@ struct WorkDetailFigureStrip: View {
     }
 }
 
-/// The glass card under the figure strip: where you stopped, and the one filled
-/// control that takes you back there.
-///
-/// The whole card is the button, not just the circle. The circle is drawn, in
-/// the same way `HomeResumeHero`'s Resume pill is drawn — a real button nested
-/// inside a card-sized tap target races it for the same touch, and there is
-/// only one thing this card does.
+/// Work Detail's full Resume variant. The visual and chapter logic live in the
+/// same `WorkResumeCard` Home and queues use, while this seam keeps the detail
+/// screen's read/download actions local to that screen.
 struct WorkDetailResumeCard: View {
-    /// What the action is called right now — Read / Continue Reading /
-    /// Opening…, from `WorkDetailPresentation.readAction` so this card and the
-    /// rest of the screen never disagree about it.
     let actionTitle: String
-    /// The library's copy, for the ring's download fill; nil for a remote work
-    /// nobody here has opened.
+    let model: ResumeCardModel
     let localWork: SavedWork?
     let isBusy: Bool
-    /// Nil for a work with no local reading state — a remote work nobody here
-    /// has opened. Drawing a 0% ring for it would claim it is being tracked.
-    let readingProgress: Double?
-    let savedPositionTitle: String?
-    let lastReadDate: Date?
-    let palette: SubjectPalette
     let action: () -> Void
-
-    @Environment(ThemeManager.self) private var themeManager
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @ScaledMetric(relativeTo: .headline) private var primarySize: CGFloat = 16.5
-    @ScaledMetric(relativeTo: .caption) private var secondarySize: CGFloat = 12.5
-    @ScaledMetric(relativeTo: .headline) private var ringDiameter: CGFloat = 48
-    @ScaledMetric(relativeTo: .body) private var controlDiameter: CGFloat = 42
-    @ScaledMetric(relativeTo: .body) private var controlIconSize: CGFloat = 16
-
-    private var clampedProgress: Double? {
-        readingProgress.map { min(1, max(0, $0)) }
-    }
-
-    /// The publication's persisted label can identify front matter as well as
-    /// chapters. Legacy records keep the action label without guessing an index.
-    private var primaryLine: String {
-        guard clampedProgress != nil else { return actionTitle }
-        return savedPositionTitle ?? "Reading"
-    }
-
-    /// The last-opened date is durable; page estimates are not stored here.
-    private var secondaryLine: String? {
-        guard clampedProgress != nil else { return nil }
-        return lastReadDate?.formatted(.relative(presentation: .named))
-    }
+    let readAloud: () -> Void
+    let contents: () -> Void
+    let updateDownload: (() -> Void)?
 
     var body: some View {
-        Button(action: action) {
-            cardContent
-            .padding(.horizontal, 18)
-            .padding(.vertical, 16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(cardBackground)
-            .contentShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .disabled(isBusy)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(actionTitle)
-        .accessibilityValue(accessibilityValue)
-        .accessibilityAddTraits(.isButton)
-    }
-
-    @ViewBuilder
-    private var cardContent: some View {
-        if dynamicTypeSize.isAccessibilitySize {
-            VStack(alignment: .leading, spacing: 12) {
-                progressRing
-                resumeLabels
-                circleControl.frame(maxWidth: .infinity, alignment: .trailing)
-            }
-        } else {
-            HStack(spacing: 15) {
-                progressRing
-                resumeLabels
-                circleControl
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var progressRing: some View {
-        if let localWork {
-            WorkReadingOrDownloadRing(work: localWork, progress: clampedProgress, diameter: min(ringDiameter, 72))
-                .accessibilityHidden(true)
-        } else if let clampedProgress {
-            WorkProgressRing(progress: clampedProgress, diameter: min(ringDiameter, 72))
-                .accessibilityHidden(true)
-        }
-    }
-
-    private var resumeLabels: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(primaryLine)
-                .font(.system(size: primarySize, weight: .semibold))
-                .foregroundStyle(.primary)
-                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
-            if let secondaryLine {
-                Text(secondaryLine)
-                    .font(.system(size: secondarySize))
-                    .foregroundStyle(Color.primary.opacity(0.6))
-                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
-            }
-        }
-        .minimumScaleFactor(dynamicTypeSize.isAccessibilitySize ? 1 : 0.7)
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var accessibilityValue: String {
-        guard let clampedProgress else { return "Not started" }
-        let percent: Int = Int((clampedProgress * 100).rounded())
-        var spokenParts: [String] = [primaryLine, String(percent) + " percent"]
-        if let secondaryLine {
-            spokenParts.append(secondaryLine)
-        }
-        return spokenParts.joined(separator: ", ")
-    }
-
-    /// 42pt, filled, and the only high-contrast thing on the page — the same
-    /// `solidButton` pair the Home hero's Resume pill uses, so the app has one
-    /// "this is the action" colour rather than one per screen.
-    @ViewBuilder
-    private var circleControl: some View {
-        ZStack {
-            Circle().fill(palette.solidButtonFill)
-            if isBusy {
-                ProgressView()
-                    .controlSize(.small)
-                    .tint(palette.solidButtonLabel)
-            } else {
-                // Spec 1a's play triangle, even while a copy is fetched to read:
-                // reading never announces a download (owner, 2026-10-01).
-                Image(systemName: "play.fill")
-                    .font(.system(size: min(controlIconSize, 22), weight: .semibold))
-                    .foregroundStyle(palette.solidButtonLabel)
-            }
-        }
-        // Graphics grow with the text only up to a point: at AX sizes an
-        // uncapped ring and button crowded the words out of the card.
-        .frame(width: min(controlDiameter, 56), height: min(controlDiameter, 56))
-    }
-
-    private var cardBackground: some View {
-        let shape = RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
-        return shape
-            .fill(themeManager.appTheme.glassFill(0.10))
-            .overlay(shape.strokeBorder(themeManager.appTheme.glassStroke(0.14), lineWidth: 0.5))
+        WorkResumeCard(
+            model: model,
+            localWork: localWork,
+            variant: .detail,
+            primaryLabel: actionTitle,
+            isBusy: isBusy,
+            onPrimary: action,
+            onReadAloud: readAloud,
+            onContents: contents,
+            onUpdate: updateDownload
+        )
     }
 }

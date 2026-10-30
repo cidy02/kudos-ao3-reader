@@ -92,19 +92,21 @@ struct CarouselCardGrid<Content: View>: View {
     var columnSpacing: CGFloat
     @ViewBuilder var content: () -> Content
     @State private var availableWidth: CGFloat?
-    private var cardSize = ScaledCarouselCardSize()
+    private var cardSize: ScaledCarouselCardSize
 
     init(
         uniformHeights: Bool = false,
         columnCount: Int? = nil,
         containerWidth: CGFloat? = nil,
         columnSpacing: CGFloat = CarouselCardMetrics.compactGridColumnSpacing,
+        cardWidth: CGFloat = CarouselCardMetrics.width,
         @ViewBuilder content: @escaping () -> Content
     ) {
         self.uniformHeights = uniformHeights
         self.columnCount = columnCount
         self.containerWidth = containerWidth
         self.columnSpacing = columnSpacing
+        cardSize = ScaledCarouselCardSize(width: cardWidth)
         self.content = content
     }
 
@@ -154,8 +156,24 @@ struct DashboardCardShelf<Content: View>: View {
     @ViewBuilder var content: () -> Content
     @Environment(\.dashboardContentRegions) private var regions
     @Environment(\.layoutDirection) private var direction
-    private var cardSize = ScaledCarouselCardSize()
+    private let baseCardWidth: CGFloat
+    private var cardSize: ScaledCarouselCardSize
     @State private var visiblePage: Int? = 0
+
+    init(
+        groupsInSinglePane: Bool = false,
+        compactSpacing: CGFloat = 12,
+        columnSpacing: CGFloat = CarouselCardMetrics.compactGridColumnSpacing,
+        cardWidth: CGFloat = CarouselCardMetrics.width,
+        @ViewBuilder content: @escaping () -> Content
+    ) {
+        self.groupsInSinglePane = groupsInSinglePane
+        self.compactSpacing = compactSpacing
+        self.columnSpacing = columnSpacing
+        baseCardWidth = cardWidth
+        cardSize = ScaledCarouselCardSize(width: cardWidth)
+        self.content = content
+    }
 
     var body: some View {
         #if os(iOS)
@@ -209,7 +227,10 @@ struct DashboardCardShelf<Content: View>: View {
             HStack(alignment: .top, spacing: 0) {
                 ForEach(pages.indices, id: \.self) { page in
                     CarouselCardGrid(
-                        columnCount: columns, containerWidth: max(0, width - 32), columnSpacing: columnSpacing
+                        columnCount: columns,
+                        containerWidth: max(0, width - 32),
+                        columnSpacing: columnSpacing,
+                        cardWidth: baseCardWidth
                     ) {
                         ForEach(pages[page][pane], id: \.self) { index in
                             cards[index]

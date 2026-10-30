@@ -15,7 +15,10 @@ struct CollectionCard: View {
 
     /// Scales width and height together so the card grows proportionally at
     /// large Dynamic Type sizes instead of only getting taller.
-    var cardSize = ScaledCarouselCardSize()
+    var cardSize = ScaledCarouselCardSize(
+        width: CarouselCardMetrics.stackWidth,
+        height: CarouselCardMetrics.stackHeight
+    )
 
     /// Explicit, non-defaulted init — see `ReadingQueueCard.init` in
     /// ReadingQueues.swift for why this matters here.
@@ -38,7 +41,7 @@ struct CollectionCard: View {
         works.filter { !gate.isConcealed($0, enabled: hideMature) }
     }
 
-    private var scale: CGFloat { cardSize.width / CarouselCardMetrics.width }
+    private var scale: CGFloat { cardSize.width / CarouselCardMetrics.stackWidth }
     /// Board 01 draws the pile 150×140; the card keeps that shape at its own width.
     private var tileHeight: CGFloat { cardSize.width * 140 / 150 }
 

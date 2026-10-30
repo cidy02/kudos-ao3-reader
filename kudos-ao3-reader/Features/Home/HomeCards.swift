@@ -1,78 +1,77 @@
 import SwiftData
 import SwiftUI
 
+enum WorkCoverMetadataStyle: Equatable {
+    case standard
+    case downloaded
+}
+
+enum WorkCoverMetadata {
+    static func reading(chapters: String, progress: Double) -> String {
+        let posted = SavedWork.postedChapterCount(from: chapters)
+        let total = SavedWork.totalChapterCount(from: chapters)
+        var parts: [String] = []
+        if posted > 0 {
+            parts.append(total.map { "Ch \(posted) of \($0)" } ?? "Ch \(posted)")
+        }
+        parts.append("\(Int((min(max(progress, 0), 1) * 100).rounded()))%")
+        return parts.joined(separator: " · ")
+    }
+
+    static func downloaded(date: String?, size: String?) -> String? {
+        let text = [date, size].compactMap { value in
+            guard let value, !value.isEmpty else { return nil }
+            return value
+        }.joined(separator: " · ")
+        return text.isEmpty ? nil : text
+    }
+
+    static func summary(words: Int?, chapters: String) -> String? {
+        var parts: [String] = []
+        if let words, words > 0 { parts.append("\(words.compactCount) words") }
+        if !chapters.isEmpty { parts.append(chapters) }
+        let text = parts.joined(separator: " · ")
+        return text.isEmpty ? nil : text
+    }
+
+    static func updateBadge(from footer: String?) -> String? {
+        guard let footer, footer.first == "+" else { return nil }
+        let count = footer.dropFirst().prefix { $0.isNumber }
+        return count.isEmpty ? footer : "+\(count)"
+    }
+}
+
 /// Standard carousel card: a compact AO3 work summary surface with the title, author,
 /// status, metadata, and reading progress all inside the tappable card.
 struct WorkCoverCard: View {
     let work: SavedWork
     var footer: String?
     var progress: Double?
+    var metadataStyle: WorkCoverMetadataStyle = .standard
 
-    @Environment(ThemeManager.self) private var themeManager
     @Environment(DownloadQueue.self) private var downloads
-    @ScaledMetric(relativeTo: .headline) private var ringDiameter: CGFloat = 68
     /// Set per tab stack; the pushed reader zooms out of this card. See
     /// `WorkCardZoomTransition.swift`.
     @Environment(\.workCardTransitionNamespace) private var zoomNamespace
 
     var body: some View {
-        WorkSummaryCardSurface(hue: hue) {
-            VStack(alignment: .leading, spacing: 5) {
-                if let primaryFandom {
-                    SubjectKicker(text: primaryFandom, palette: palette, size: 9)
-                        .padding(.bottom, 2)
-                }
-
-                Text(work.title)
-                    .font(.headline)
-                    // Two lines, then "…". A third line costs real card height
-                    // for a fraction of a title, and long fandom titles are
-                    // common enough that they decided the card's size more often
-                    // than the metadata below them did.
-                    //
-                    // Reserved whether or not the title needs the second line:
-                    // the cards are already a uniform height, but a one-line
-                    // title used to pull the ring up while its two-line
-                    // neighbour pushed it down, so a scanned row of cards had
-                    // its rings at two different heights.
-                    .lineLimit(2, reservesSpace: true)
-                    .foregroundStyle(.primary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                Spacer(minLength: 0)
-
-                if progressValue != nil || downloads.isDownloading(work) {
-                    progressRing(progressValue)
-                        .frame(maxWidth: .infinity, alignment: .center)
-                } else if let footer {
-                    updateBadge(footer)
-                        .frame(maxWidth: .infinity, alignment: .center)
-                }
-
-                Spacer(minLength: 0)
-
-                if !work.author.isEmpty {
-                    Text(work.author)
-                        .font(.caption)
-                        .foregroundStyle(Color.primary.opacity(0.78))
-                        .lineLimit(1)
-                        .combinedAccessibilityRow("Author: \(work.author)")
-                }
-
-                // Only preservation stays on the card. It is the one status the app
-                // exists to surface — "this is the last copy of a deleted work" — and
-                // hiding that would defeat the point. It also appears on very few
-                // cards, so it costs space only where it matters most. Work Details
-                // is on the long-press menu, not a corner control.
-                if let preservation = work.preservationState.badgeLabel {
-                    WorkStateBadge(text: preservation, symbol: work.preservationState.badgeSymbol)
-                        .font(.caption2)
-                }
-
-                cardStats
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.top, 6)
+        WorkSummaryCardSurface(
+            art: CoverArt.workArt(fandoms: work.workFandoms, title: work.title),
+            title: work.title,
+            author: work.author,
+            fandom: primaryFandom
+        ) {
+            if progressValue != nil || downloads.isDownloading(work) {
+                CoverProgressBar(
+                    progress: progressValue ?? 0,
+                    isDownloading: downloads.isDownloading(work)
+                )
+            }
+            cardStats
+            coverMeta
+            if let preservation = work.preservationState.badgeLabel {
+                WorkStateBadge(text: preservation, symbol: work.preservationState.badgeSymbol)
+                    .font(.caption2)
             }
         }
         .downloadDimmed(work)
@@ -96,14 +95,6 @@ struct WorkCoverCard: View {
     private var primaryFandom: String? {
         work.workFandoms.first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
             .map(FandomDisplayName.bareTitle)
-    }
-
-    private var hue: Double {
-        CoverArt.workHue(fandoms: work.workFandoms, title: work.title)
-    }
-
-    private var palette: SubjectPalette {
-        themeManager.appTheme.subjectPalette(hue: hue)
     }
 
     private var progressValue: Double? {
@@ -130,27 +121,41 @@ struct WorkCoverCard: View {
         return saved.map { min(1, max(0, $0)) }
     }
 
-    private func progressRing(_ value: Double?) -> some View {
-        WorkReadingOrDownloadRing(
-            work: work,
-            progress: value,
-            state: (value ?? 0) >= 1 ? "Finished" : "Reading",
-            diameter: min(ringDiameter, 82)
-        )
+    private var coverMeta: some View {
+        HStack(spacing: 6) {
+            Text(metaLine ?? "")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if let badge = WorkCoverMetadata.updateBadge(from: footer) {
+                updateBadge(badge)
+            }
+        }
+    }
+
+    private var metaLine: String? {
+        if metadataStyle == .downloaded {
+            let date = work.downloadedAt?.formatted(.dateTime.month(.abbreviated).day())
+            let values = try? work.fileURL.resourceValues(forKeys: [.fileSizeKey])
+            let size = values?.fileSize.map { LocalStorageFootprint.formatted(bytes: Int64($0)) }
+            return WorkCoverMetadata.downloaded(date: date, size: size)
+        }
+        if let progressValue {
+            return WorkCoverMetadata.reading(chapters: work.chapters, progress: progressValue)
+        }
+        if let footer, WorkCoverMetadata.updateBadge(from: footer) == nil { return footer }
+        return WorkCoverMetadata.summary(words: work.wordCount, chapters: work.chapters)
     }
 
     private func updateBadge(_ text: String) -> some View {
-        Text(text.uppercased())
+        Text(text)
             .font(.caption2.monospacedDigit().weight(.bold))
-            .tracking(0.5)
             .lineLimit(1)
-            // Spec 1b draws this white on a white-16% capsule, not in the
-            // subject accent: it says "this changed since you looked", which is
-            // a fact about the card, not part of the fandom's identity.
-            .foregroundStyle(Color.primary)
-            .padding(.horizontal, 9)
-            .padding(.vertical, 4)
-            .background(themeManager.appTheme.glassFill(0.16), in: Capsule())
+            .foregroundStyle(.white)
+            .frame(minHeight: 16)
+            .padding(.horizontal, 6)
+            .background(.accentFill, in: Capsule())
             .combinedAccessibilityRow(text)
     }
 }
@@ -162,7 +167,6 @@ struct AO3WorkCoverCard: View {
     /// Draws `AO3ProvenanceBadge`. Only where remote and local cards share a row.
     var showsProvenanceBadge = false
 
-    @Environment(ThemeManager.self) private var themeManager
     /// See `WorkCoverCard.zoomNamespace`.
     @Environment(\.workCardTransitionNamespace) private var zoomNamespace
 
@@ -176,44 +180,25 @@ struct AO3WorkCoverCard: View {
     /// reading progress, so the centre slot takes its update date (the local
     /// card's "+N new" slot), and there is no preservation state to report.
     var body: some View {
-        WorkSummaryCardSurface(hue: CoverArt.workHue(fandoms: work.fandoms, title: work.title)) {
-            VStack(alignment: .leading, spacing: 5) {
-                if let primaryFandom {
-                    SubjectKicker(text: primaryFandom, palette: palette, size: 9)
-                        .padding(.trailing, badgeClearance)
-                        .padding(.bottom, 2)
-                }
-
-                Text(work.title)
-                    .font(.headline)
-                    .lineLimit(2, reservesSpace: true)
-                    .foregroundStyle(.primary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    // Only when there is no kicker above it to clear the badge.
-                    .padding(.trailing, primaryFandom == nil ? badgeClearance : 0)
+        WorkSummaryCardSurface(
+            art: CoverArt.workArt(fandoms: work.fandoms, title: work.title),
+            title: work.title,
+            author: work.authorText,
+            fandom: primaryFandom
+        ) {
+            cardStats
+            HStack(spacing: 6) {
+                Text(remoteMeta ?? "")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading)
-
-                Spacer(minLength: 0)
-
                 if !work.dateUpdated.isEmpty {
-                    WorkStateBadge(text: work.dateUpdated, symbol: "calendar")
+                    Image(systemName: "calendar")
                         .font(.caption2)
-                        .frame(maxWidth: .infinity, alignment: .center)
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel("Updated \(work.dateUpdated)")
                 }
-
-                Spacer(minLength: 0)
-
-                if let author = work.authors.first, !author.isEmpty {
-                    Text(author)
-                        .font(.caption)
-                        .foregroundStyle(Color.primary.opacity(0.78))
-                        .lineLimit(1)
-                        .combinedAccessibilityRow("Author: \(author)")
-                }
-
-                cardStats
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.top, 6)
             }
         }
         .overlay(alignment: .topTrailing) {
@@ -224,12 +209,6 @@ struct AO3WorkCoverCard: View {
         }
         .workCardZoomSource(work.zoomKey, in: zoomNamespace)
         .remoteWorkContextMenu(work: work)
-    }
-
-    /// Room the first line keeps free at its trailing edge, so a long fandom
-    /// name ends before the badge instead of running under it.
-    private var badgeClearance: CGFloat {
-        showsProvenanceBadge ? AO3ProvenanceBadge.clearance : 0
     }
 
     private var cardStats: some View {
@@ -251,10 +230,13 @@ struct AO3WorkCoverCard: View {
             .map(FandomDisplayName.bareTitle)
     }
 
-    private var palette: SubjectPalette {
-        themeManager.appTheme.subjectPalette(
-            hue: CoverArt.workHue(fandoms: work.fandoms, title: work.title)
-        )
+    private var remoteMeta: String? {
+        var parts: [String] = []
+        if let words = work.words { parts.append("\(words.compactCount) words") }
+        if !work.chapters.isEmpty { parts.append(work.chapters) }
+        if parts.isEmpty, !work.dateUpdated.isEmpty { parts.append(work.dateUpdated) }
+        let text = parts.joined(separator: " · ")
+        return text.isEmpty ? nil : text
     }
 }
 
@@ -289,10 +271,11 @@ struct SelectableWorkCoverCard: View {
     let work: SavedWork
     var footer: String?
     var progress: Double?
+    var metadataStyle: WorkCoverMetadataStyle = .standard
     var isSelected: Bool
 
     var body: some View {
-        WorkCoverCard(work: work, footer: footer, progress: progress)
+        WorkCoverCard(work: work, footer: footer, progress: progress, metadataStyle: metadataStyle)
             .overlay(alignment: .topTrailing) {
                 WorkSelectionBubble(isSelected: isSelected)
                     .padding(8)
@@ -332,10 +315,10 @@ struct WorkSelectionBubble: View {
 }
 
 private struct WorkSummaryCardSurface<Content: View>: View {
-    @Environment(ThemeManager.self) private var themeManager
-    /// Stable per-fandom hue (0...1) used to tint the card so the same subject has
-    /// one visual identity across surfaces.
-    var hue: Double?
+    let art: CoverArt.WorkArt
+    let title: String
+    let author: String
+    let fandom: String?
     @ViewBuilder var content: () -> Content
 
     /// Scales width and height together so the card grows proportionally at
@@ -346,41 +329,21 @@ private struct WorkSummaryCardSurface<Content: View>: View {
     /// `nil` in a container that doesn't coordinate — the card keeps its own floor.
     @Environment(\.uniformWorkCardHeight) private var uniformHeight
 
-    /// The card's scaled outer width minus the symmetric 12pt padding applied
-    /// below — the exact width the content itself renders at.
-    private var contentWidth: CGFloat {
-        cardSize.width - 24
-    }
-
     var body: some View {
-        content()
-            // Pins the content's width to a single, unambiguous value *before*
-            // asking for its ideal height, rather than letting an outer
-            // .frame(minWidth:maxWidth:) negotiate width across two separate
-            // passes (once for the ideal-size query, once for placement).
-            // Wrapping content reads whatever width it's proposed — if the two
-            // passes disagree even slightly, it can wrap a different number of
-            // lines in each, undershooting the reported ideal height (and thus
-            // the floor .frame(minHeight:) grows to) by a full line at large
-            // accessibility text sizes. A single .frame(width:) is proposed
-            // identically in every pass, so both queries wrap the same way.
-            // Originally written for the stats row's FlowLayout; that is a
-            // fixed-line VStack now, but the wrapping title has the same
-            // property, so the frame stays.
-            //
-            // Deliberately no .fixedSize(vertical:) here (unlike an earlier
-            // version of this fix): that would lock the content to its own
-            // ideal height, decoupling it from a taller `minHeight` floor —
-            // which is exactly what content's trailing Spacer(minLength:)
-            // needs to expand into so the Reading-progress/footer group
-            // pins to the card's true bottom instead of floating wherever
-            // the metadata above it happens to end.
-            .frame(width: contentWidth, alignment: .topLeading)
-            .padding(12)
-            // The floor is the card tile, or the container's resolved height once it
-            // has measured every card — see `uniformWorkCardHeights()`. A floor, not
-            // a clamp: content taller than it still reports its real height below,
-            // which is what lets one render both display and measure.
+        VStack(alignment: .leading, spacing: 6) {
+            GeneratedWorkCoverArt(
+                art: art,
+                title: title,
+                author: author,
+                fandom: fandom,
+                width: cardSize.width
+            )
+            .frame(width: cardSize.width, height: cardSize.width * 1.42)
+
+            VStack(alignment: .leading, spacing: 6) { content() }
+                .frame(width: cardSize.width, alignment: .leading)
+        }
+            .frame(width: cardSize.width, alignment: .topLeading)
             .frame(minHeight: max(cardSize.height, uniformHeight ?? 0), alignment: .topLeading)
             .background(
                 GeometryReader { geometry in
@@ -390,34 +353,145 @@ private struct WorkSummaryCardSurface<Content: View>: View {
                     )
                 }
             )
-            .background(
-                RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
-                    .fill(themeManager.appTheme.carouselCardSurface)
-                    .overlay(hueTint)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
-                            .strokeBorder(
-                                hue.map { themeManager.appTheme.subjectPalette(hue: $0).cardBorder }
-                                    ?? themeManager.appTheme.carouselCardBorder(hue: nil),
-                                lineWidth: 0.5
-                            )
-                    )
-                    .shadow(color: themeManager.appTheme.carouselCardShadow.color,
-                            radius: themeManager.appTheme.carouselCardShadow.radius,
-                            x: 0,
-                            y: themeManager.appTheme.carouselCardShadow.y)
-            )
             .contentShape(
                 RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
             )
     }
+}
+
+private struct GeneratedWorkCoverArt: View {
+    let art: CoverArt.WorkArt
+    let title: String
+    let author: String
+    let fandom: String?
+    let width: CGFloat
+
+    @Environment(ThemeManager.self) private var themeManager
+
+    private var scale: CGFloat { width / CarouselCardMetrics.width }
+
+    var body: some View {
+        ZStack {
+            CoverArt.workGradient(for: art)
+            initial
+            layout
+                .padding(width * 0.1)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5)
+        )
+        .shadow(
+            color: themeManager.appTheme.carouselCardShadow.color,
+            radius: themeManager.appTheme.carouselCardShadow.radius,
+            x: 0,
+            y: themeManager.appTheme.carouselCardShadow.y
+        )
+        .environment(\.colorScheme, .dark)
+    }
+
+    private var initial: some View {
+        Text(title.trimmingCharacters(in: .whitespacesAndNewlines).first.map(String.init) ?? "")
+            .font(.system(size: width * 1.05, weight: .semibold, design: .serif))
+            .foregroundStyle(Color.white.opacity(0.15))
+            .fixedSize()
+            .offset(initialOffset)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: initialAlignment)
+            .accessibilityHidden(true)
+    }
+
+    private var initialAlignment: Alignment {
+        art.layout == 0 ? .topTrailing : art.layout == 1 ? .bottomTrailing : .bottomLeading
+    }
+
+    private var initialOffset: CGSize {
+        switch art.layout {
+        case 0: CGSize(width: width * 0.07, height: -width * 0.17)
+        case 1: CGSize(width: width * 0.07, height: width * 0.29)
+        default: CGSize(width: -width * 0.07, height: width * 0.29)
+        }
+    }
 
     @ViewBuilder
-    private var hueTint: some View {
-        if let hue {
-            RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
-                .fill(themeManager.appTheme.subjectPalette(hue: hue).cardWash)
+    private var layout: some View {
+        switch art.layout {
+        case 0:
+            VStack(alignment: .leading, spacing: 4 * scale) {
+                fandomLabel
+                Spacer(minLength: 0)
+                titleLabel
+                authorLabel
+            }
+        case 1:
+            VStack(alignment: .leading, spacing: 4 * scale) {
+                titleLabel
+                authorLabel
+                Spacer(minLength: 0)
+                fandomLabel
+            }
+        default:
+            VStack(alignment: .leading, spacing: 4 * scale) {
+                fandomLabel
+                titleLabel.multilineTextAlignment(.trailing)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .padding(.top, 6 * scale)
+                authorLabel.frame(maxWidth: .infinity, alignment: .trailing)
+                Spacer(minLength: 0)
+            }
         }
+    }
+
+    @ViewBuilder
+    private var fandomLabel: some View {
+        if let fandom, !fandom.isEmpty {
+            Text(fandom.uppercased())
+                .font(.system(size: max(8, width * 0.075), weight: .semibold))
+                .tracking(0.8 * scale)
+                .foregroundStyle(Color.white.opacity(0.88))
+                .lineLimit(2)
+        }
+    }
+
+    private var titleLabel: some View {
+        Text(title)
+            .font(.system(size: max(13, width * 0.135), weight: .semibold, design: .serif))
+            .foregroundStyle(.white)
+            .lineLimit(4)
+            .minimumScaleFactor(0.78)
+    }
+
+    @ViewBuilder
+    private var authorLabel: some View {
+        if !author.isEmpty {
+            Text(author)
+                .font(.system(size: max(10, width * 0.092)).italic())
+                .foregroundStyle(Color.white.opacity(0.88))
+                .lineLimit(2)
+        }
+    }
+}
+
+private struct CoverProgressBar: View {
+    let progress: Double
+    let isDownloading: Bool
+
+    @Environment(ThemeManager.self) private var themeManager
+
+    var body: some View {
+        GeometryReader { geometry in
+            Capsule()
+                .fill(themeManager.appTheme.glassFill(0.14))
+                .overlay(alignment: .leading) {
+                    Capsule()
+                        .fill(.accentFill)
+                        .frame(width: geometry.size.width * min(max(progress, 0), 1))
+                }
+        }
+        .frame(height: 3)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(isDownloading ? "Downloading" : "Reading progress")
+        .accessibilityValue("\(Int((min(max(progress, 0), 1) * 100).rounded())) percent")
     }
 }
 
