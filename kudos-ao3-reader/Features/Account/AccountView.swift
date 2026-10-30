@@ -272,7 +272,8 @@ struct AccountView: View {
     }
 
     /// Account identity follows the same stable username hue as Author Profile.
-    /// This palette paints only the header wash; controls inherit app red.
+    /// This palette paints only the header wash. Controls use the reader's accent,
+    /// and Sepia keeps its warm brown.
     private var accountPalette: SubjectPalette {
         theme.appTheme.subjectPalette(hue: CoverArt.hue(for: auth.username ?? "AO3 account"))
     }
