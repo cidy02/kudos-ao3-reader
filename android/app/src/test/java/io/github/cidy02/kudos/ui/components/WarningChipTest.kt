@@ -1,8 +1,5 @@
 package io.github.cidy02.kudos.ui.components
 
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.CheckCircle
-import androidx.compose.material.icons.outlined.WarningAmber
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -22,8 +19,11 @@ class WarningChipTest {
     private fun warningChips(warnings: List<String>, expanded: Boolean) =
         statusChips(rating = "", categories = emptyList(), warnings = warnings,
                     isComplete = null, expanded = expanded)
-            .filter { it.icon == Icons.Outlined.WarningAmber || it.icon == Icons.Outlined.CheckCircle }
-            .filter { it.text != "Complete" }
+            .filter {
+                it.symbolMark == WorkSymbolMark.Exclamation ||
+                    it.symbolMark == WorkSymbolMark.Dash ||
+                    it.text == "Not Disclosed"
+            }
             .map { it.text }
 
     @Test

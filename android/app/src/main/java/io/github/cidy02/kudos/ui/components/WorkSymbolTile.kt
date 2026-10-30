@@ -198,11 +198,27 @@ fun WorkSymbolMarkView(
     }
 }
 
-private object WorkSymbolGeometry {
+internal object WorkSymbolGeometry {
     const val CornerRadiusRatio = 0.24f
+    const val GapRatio = 0.12f
     const val GlyphBoxRatio = 0.68f
     const val ShieldBoxRatio = 0.84f
     const val ShieldBodyOffsetRatio = (11.56f - 12f) / 24f
+
+    /** Two tiles and the gap between them. iOS `WorkStatusIconGrid.gridHeight`. */
+    fun gridExtent(tileSize: Float): Float = tileSize * (2f + GapRatio)
+
+    /**
+     * Translation, in the 24-unit drawing grid, that puts the mark's centreline
+     * bounding box on (12, 12). A uniform stroke does not move that centre, so
+     * this is the same centring as iOS `path(for:in:)`.
+     */
+    fun inkShift(mark: WorkSymbolMark): Offset {
+        val pieces = markPieces(mark)
+        if (pieces.isEmpty()) return Offset.Zero
+        val bounds = pieces.map { it.centerline() }.reduce { a, b -> a.union(b) }
+        return Offset(12f - bounds.midX, 12f - bounds.midY)
+    }
 }
 
 private val CenteredWorkSymbolText = TextStyle(
@@ -237,99 +253,167 @@ private fun MultiQuadrants(modifier: Modifier) {
     }
 }
 
+private const val SignStroke = 2.2f
+private const val Diagonal = 0.70710677f
+
+private sealed interface MarkPiece {
+    data class Poly(
+        val points: List<Pair<Float, Float>>,
+        val width: Float,
+        val miter: Boolean = false
+    ) : MarkPiece
+
+    data class Ring(val x: Float, val y: Float, val radius: Float, val width: Float) : MarkPiece
+    data class Disc(val x: Float, val y: Float, val radius: Float) : MarkPiece
+    data object Shield : MarkPiece
+    data class HalfRing(val radius: Float, val stroke: Float) : MarkPiece
+}
+
+private data class InkBounds(val left: Float, val top: Float, val right: Float, val bottom: Float) {
+    val midX: Float get() = (left + right) / 2f
+    val midY: Float get() = (top + bottom) / 2f
+
+    fun union(other: InkBounds) = InkBounds(
+        minOf(left, other.left),
+        minOf(top, other.top),
+        maxOf(right, other.right),
+        maxOf(bottom, other.bottom)
+    )
+}
+
+private fun MarkPiece.centerline(): InkBounds = when (this) {
+    is MarkPiece.Poly -> InkBounds(
+        points.minOf { it.first },
+        points.minOf { it.second },
+        points.maxOf { it.first },
+        points.maxOf { it.second }
+    )
+    is MarkPiece.Ring -> InkBounds(x - radius, y - radius, x + radius, y + radius)
+    is MarkPiece.Disc -> InkBounds(x - radius, y - radius, x + radius, y + radius)
+    // Convex hull of the shield's points. The two cubics stay inside it.
+    MarkPiece.Shield -> InkBounds(4.4f, 2.6f, 19.6f, 21.4f)
+    is MarkPiece.HalfRing -> InkBounds(12f - radius, 12f - radius, 12f + radius, 12f + radius)
+}
+
+private fun markPieces(mark: WorkSymbolMark): List<MarkPiece> = when (mark) {
+    is WorkSymbolMark.Shield -> listOf(MarkPiece.Shield)
+    WorkSymbolMark.Check -> listOf(
+        MarkPiece.Poly(listOf(5f to 12.5f, 9.6f to 17.1f, 19.2f to 7.4f), 3.4f)
+    )
+    WorkSymbolMark.HalfRing -> listOf(MarkPiece.HalfRing(8.2f, 2.6f))
+    WorkSymbolMark.Gen -> listOf(
+        MarkPiece.Ring(12f, 12f, 8f, 2.4f),
+        MarkPiece.Disc(12f, 12f, 2.6f)
+    )
+    WorkSymbolMark.Dash -> listOf(MarkPiece.Poly(listOf(6.53f to 12f, 17.47f to 12f), 3.88f))
+    WorkSymbolMark.FemaleFemale -> listOf(
+        MarkPiece.Ring(8f, 8.4f, 4.8f, SignStroke),
+        MarkPiece.Poly(listOf(8f to 13.2f, 8f to 18.8f), SignStroke),
+        MarkPiece.Ring(16f, 8.4f, 4.8f, SignStroke),
+        MarkPiece.Poly(listOf(16f to 13.2f, 16f to 18.8f), SignStroke),
+        MarkPiece.Poly(listOf(5.4f to 16f, 18.6f to 16f), SignStroke)
+    )
+    WorkSymbolMark.FemaleMale -> listOf(
+        MarkPiece.Ring(9.2f, 13.4f, 4.4f, SignStroke),
+        MarkPiece.Poly(listOf(9.2f to 17.8f, 9.2f to 22f), SignStroke),
+        MarkPiece.Poly(listOf(6.6f to 20f, 11.8f to 20f), SignStroke)
+    ) + malePieces(13.9f, 8.7f, 4.4f, 3.8f, 3.4f)
+    WorkSymbolMark.MaleMale -> malePieces(7.6f, 11.2f, 4.8f, 4.6f, 3.6f) +
+        malePieces(13f, 16.6f, 4.8f, 4.6f, 3.6f)
+    WorkSymbolMark.Other -> listOf(
+        MarkPiece.Poly(listOf(3.6f to 3.6f, 5.8f to 3.6f, 5.8f to 14.4f, 3.6f to 14.4f), SignStroke),
+        MarkPiece.Poly(listOf(20.4f to 3.6f, 18.2f to 3.6f, 18.2f to 14.4f, 20.4f to 14.4f), SignStroke),
+        MarkPiece.Poly(listOf(5.8f to 9f, 18.2f to 9f), SignStroke),
+        MarkPiece.Poly(listOf(12f to 3.6f, 12f to 16f), SignStroke),
+        MarkPiece.Ring(12f, 18.9f, 2.9f, SignStroke)
+    )
+    WorkSymbolMark.Multi, WorkSymbolMark.Exclamation, WorkSymbolMark.Question -> emptyList()
+}
+
+/** ♂ with its arrow at 45° up-right. The head is mitred so it ends in a point. */
+private fun malePieces(
+    centerX: Float,
+    centerY: Float,
+    radius: Float,
+    arrow: Float,
+    head: Float
+): List<MarkPiece> {
+    val tipX = centerX + (radius + arrow) * Diagonal
+    val tipY = centerY - (radius + arrow) * Diagonal
+    return listOf(
+        MarkPiece.Ring(centerX, centerY, radius, SignStroke),
+        MarkPiece.Poly(
+            listOf((centerX + radius * Diagonal) to (centerY - radius * Diagonal), tipX to tipY),
+            SignStroke
+        ),
+        MarkPiece.Poly(
+            listOf((tipX - head) to tipY, tipX to tipY, tipX to (tipY + head)),
+            SignStroke,
+            miter = true
+        )
+    )
+}
+
 private fun DrawScope.drawWorkSymbol(mark: WorkSymbolMark, color: Color) {
+    val pieces = markPieces(mark)
+    if (pieces.isEmpty()) return
     val scale = size.minDimension / 24f
-    val shift = when (mark) {
-        WorkSymbolMark.FemaleFemale -> Offset(0f, 0.8f)
-        WorkSymbolMark.MaleMale -> Offset(0.78f, -0.98f)
-        WorkSymbolMark.Other -> Offset(0f, -0.7f)
-        else -> Offset.Zero
-    }
+    val shift = WorkSymbolGeometry.inkShift(mark)
     fun point(x: Float, y: Float) = Offset((x + shift.x) * scale, (y + shift.y) * scale)
     fun stroke(width: Float, join: StrokeJoin = StrokeJoin.Round) = Stroke(
         width = width * scale,
         cap = StrokeCap.Round,
         join = join
     )
-    fun polyline(vararg points: Pair<Float, Float>, width: Float = 2.2f, join: StrokeJoin = StrokeJoin.Round) {
-        val path = Path().apply {
-            val first = points.first()
-            moveTo(point(first.first, first.second).x, point(first.first, first.second).y)
-            points.drop(1).forEach { (x, y) -> lineTo(point(x, y).x, point(x, y).y) }
-        }
-        drawPath(path, color, style = stroke(width, join))
-    }
-    fun ring(x: Float, y: Float, radius: Float, width: Float = 2.2f) {
-        drawCircle(color, radius * scale, point(x, y), style = stroke(width))
-    }
-    fun male(centerX: Float, centerY: Float, radius: Float, arrow: Float, head: Float) {
-        val diagonal = 0.70710677f
-        val tipX = centerX + (radius + arrow) * diagonal
-        val tipY = centerY - (radius + arrow) * diagonal
-        ring(centerX, centerY, radius)
-        polyline(
-            (centerX + radius * diagonal) to (centerY - radius * diagonal),
-            tipX to tipY
-        )
-        polyline((tipX - head) to tipY, tipX to tipY, tipX to (tipY + head), join = StrokeJoin.Miter)
-    }
-
-    when (mark) {
-        is WorkSymbolMark.Shield -> {
-            val path = Path().apply {
-                moveTo(point(12f, 2.6f).x, point(12f, 2.6f).y)
-                lineTo(point(4.4f, 5.5f).x, point(4.4f, 5.5f).y)
-                lineTo(point(4.4f, 11.5f).x, point(4.4f, 11.5f).y)
-                cubicTo(
-                    point(4.4f, 16.2f).x, point(4.4f, 16.2f).y,
-                    point(7.6f, 20.1f).x, point(7.6f, 20.1f).y,
-                    point(12f, 21.4f).x, point(12f, 21.4f).y
+    pieces.forEach { piece ->
+        when (piece) {
+            is MarkPiece.Poly -> {
+                val path = Path().apply {
+                    val first = piece.points.first()
+                    moveTo(point(first.first, first.second).x, point(first.first, first.second).y)
+                    piece.points.drop(1).forEach { (x, y) -> lineTo(point(x, y).x, point(x, y).y) }
+                }
+                drawPath(
+                    path,
+                    color,
+                    style = stroke(piece.width, if (piece.miter) StrokeJoin.Miter else StrokeJoin.Round)
                 )
-                cubicTo(
-                    point(16.4f, 20.1f).x, point(16.4f, 20.1f).y,
-                    point(19.6f, 16.2f).x, point(19.6f, 16.2f).y,
-                    point(19.6f, 11.5f).x, point(19.6f, 11.5f).y
-                )
-                lineTo(point(19.6f, 5.5f).x, point(19.6f, 5.5f).y)
-                close()
             }
-            drawPath(path, color)
-            drawPath(path, color, style = stroke(1.4f))
+            is MarkPiece.Ring -> drawCircle(
+                color,
+                piece.radius * scale,
+                point(piece.x, piece.y),
+                style = stroke(piece.width)
+            )
+            is MarkPiece.Disc -> drawCircle(color, piece.radius * scale, point(piece.x, piece.y))
+            MarkPiece.Shield -> {
+                val path = Path().apply {
+                    moveTo(point(12f, 2.6f).x, point(12f, 2.6f).y)
+                    lineTo(point(4.4f, 5.5f).x, point(4.4f, 5.5f).y)
+                    lineTo(point(4.4f, 11.5f).x, point(4.4f, 11.5f).y)
+                    cubicTo(
+                        point(4.4f, 16.2f).x, point(4.4f, 16.2f).y,
+                        point(7.6f, 20.1f).x, point(7.6f, 20.1f).y,
+                        point(12f, 21.4f).x, point(12f, 21.4f).y
+                    )
+                    cubicTo(
+                        point(16.4f, 20.1f).x, point(16.4f, 20.1f).y,
+                        point(19.6f, 16.2f).x, point(19.6f, 16.2f).y,
+                        point(19.6f, 11.5f).x, point(19.6f, 11.5f).y
+                    )
+                    lineTo(point(19.6f, 5.5f).x, point(19.6f, 5.5f).y)
+                    close()
+                }
+                drawPath(path, color)
+                drawPath(path, color, style = stroke(1.4f))
+            }
+            is MarkPiece.HalfRing -> {
+                // Clip in the same shifted space as the ring, on the source x = 12 line.
+                clipRect(right = point(12f, 12f).x) {
+                    drawCircle(color, piece.radius * scale, point(12f, 12f))
+                }
+                drawCircle(color, piece.radius * scale, point(12f, 12f), style = stroke(piece.stroke))
+            }
         }
-        WorkSymbolMark.Check -> polyline(5f to 12.5f, 9.6f to 17.1f, 19.2f to 7.4f, width = 3.4f)
-        WorkSymbolMark.HalfRing -> {
-            clipRect(right = size.width / 2f) { drawCircle(color, 8.2f * scale, point(12f, 12f)) }
-            ring(12f, 12f, 8.2f, 2.6f)
-        }
-        WorkSymbolMark.Gen -> {
-            ring(12f, 12f, 8f, 2.4f)
-            drawCircle(color, 2.6f * scale, point(12f, 12f))
-        }
-        WorkSymbolMark.Dash -> polyline(6.53f to 12f, 17.47f to 12f, width = 3.88f)
-        WorkSymbolMark.FemaleFemale -> {
-            ring(8f, 8.4f, 4.8f)
-            polyline(8f to 13.2f, 8f to 18.8f)
-            ring(16f, 8.4f, 4.8f)
-            polyline(16f to 13.2f, 16f to 18.8f)
-            polyline(5.4f to 16f, 18.6f to 16f)
-        }
-        WorkSymbolMark.FemaleMale -> {
-            ring(9.2f, 13.4f, 4.4f)
-            polyline(9.2f to 17.8f, 9.2f to 22f)
-            polyline(6.6f to 20f, 11.8f to 20f)
-            male(13.9f, 8.7f, 4.4f, 3.8f, 3.4f)
-        }
-        WorkSymbolMark.MaleMale -> {
-            male(7.6f, 11.2f, 4.8f, 4.6f, 3.6f)
-            male(13f, 16.6f, 4.8f, 4.6f, 3.6f)
-        }
-        WorkSymbolMark.Other -> {
-            polyline(3.6f to 3.6f, 5.8f to 3.6f, 5.8f to 14.4f, 3.6f to 14.4f)
-            polyline(20.4f to 3.6f, 18.2f to 3.6f, 18.2f to 14.4f, 20.4f to 14.4f)
-            polyline(5.8f to 9f, 18.2f to 9f)
-            polyline(12f to 3.6f, 12f to 16f)
-            ring(12f, 18.9f, 2.9f)
-        }
-        WorkSymbolMark.Multi, WorkSymbolMark.Exclamation, WorkSymbolMark.Question -> Unit
     }
 }
