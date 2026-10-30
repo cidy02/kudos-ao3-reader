@@ -87,8 +87,8 @@ struct AO3FilterPanel: View {
     var worksSort: AO3WorksSort?
     /// Commits `worksSort` when Apply finds it changed. The host refetches.
     var onApplyWorksSort: ((AO3WorksSort) -> Void)?
-    /// Search's computed ranking (T-473), edited on the Sort By screen. Nil where
-    /// the host has no loaded-works ranking (Browse), which hides those sections.
+    /// Search/tag-list computed ranking (T-473), edited on the Sort By screen.
+    /// Nil where the host has no loaded-works ranking, which hides those sections.
     var ranking: Binding<LoadedWorksRanking>?
     @State private var sortPresentation: WorksSortPresentation
     #if DEBUG

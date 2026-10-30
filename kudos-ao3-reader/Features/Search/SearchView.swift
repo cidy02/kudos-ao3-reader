@@ -13,6 +13,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     @Environment(AppRouter.self) private var router
     @Environment(AO3AuthService.self) private var auth
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(\.scenePhase) private var scenePhase
 
     // Local-first search sources (Global Search, Phase 2): matched on-device, live.
     @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }, sort: \SavedWork.dateAdded, order: .reverse)
@@ -33,6 +34,8 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     @State private var showingSaveDialog = false
     @State private var saveName = ""
     @State private var results: [AO3WorkSummary] = []
+    @State private var rankTop100 = RankTop100Controller()
+    @State private var rankTop100Pages: [Int: AO3SearchPage] = [:]
     @State private var currentPage = 1
     /// The page the latest load asked for, until it lands — so Try Again after a
     /// failed page tap retries that page (1k.7) instead of `runSearch`'s page 1.
@@ -308,6 +311,13 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                         }
                 }
                 .remoteWorkSelectionChrome(bulkSelection)
+                .onChange(of: router.selection) { _, selection in
+                    if selection != .search { rankTop100.cancel() }
+                }
+                .onChange(of: scenePhase) { _, phase in
+                    if phase != .active { rankTop100.cancel() }
+                }
+                .onDisappear { rankTop100.cancel() }
         }
     }
 
@@ -392,6 +402,17 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                                 isSelected: bulkSelection.isSelecting && bulkSelection.selection.contains(entry.id),
                                 chrome: .plain
                             )
+                        }
+                    }
+
+                    if totalPages > 1 {
+                        Section {
+                            RankTop100Controls(
+                                controller: rankTop100,
+                                totalPages: totalPages,
+                                start: startRankTop100
+                            )
+                            .bareListRow()
                         }
                     }
 
@@ -746,6 +767,8 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     /// came from (a typed query or a tapped fandom chip) so Browse shows fresh.
     private func returnToBrowse() {
         loadToken += 1 // discard any in-flight load so it can't re-show results
+        rankTop100.cancel()
+        rankTop100Pages = [:]
         filterHistory.removeAll()
         filters = AO3SearchFilters()
         results = []
@@ -793,6 +816,8 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         currentPage = 1
         totalPages = 1
         resultSummary = nil
+        rankTop100.cancel()
+        rankTop100Pages = [:]
         load(page: 1)
     }
 
@@ -904,6 +929,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     }
 
     private func load(page: Int) {
+        rankTop100.cancel()
         // A page tap, a refresh or Try Again after an un-applied filter edit
         // would otherwise ask for page N of a query whose page 1 never loaded.
         // Here, so all three callers get it: the edited query starts at page 1.
@@ -936,11 +962,26 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 guard token == loadToken else { return }
                 // Noted in Momentum's record on the way in (T-473).
                 results = ranking.noting(result.works)
+                rankTop100Pages[result.currentPage] = result
                 currentPage = result.currentPage
                 totalPages = result.totalPages
                 resultSummary = result.summary
                 loadedFilters = current
                 requestedPage = nil
+                if let url = RankTop100URLSource.search(
+                    filters: current,
+                    additionalQueryClause: nil
+                ).url(page: result.currentPage) {
+                    await RankTop100Store.shared.remember(
+                        result,
+                        for: RankTop100PageRequest(
+                            page: result.currentPage,
+                            url: url,
+                            scope: rankTop100Scope
+                        ),
+                        at: Date()
+                    )
+                }
                 phase = .loaded
             } catch is CancellationError {
                 // Superseded on purpose — the newer load owns the UI now.
@@ -953,6 +994,34 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 phase = .failed(UserFacingError.message(for: error))
             }
         }
+    }
+
+    private var rankTop100Scope: String {
+        auth.isLoggedIn ? "auth:\(auth.sessionGeneration)" : "anonymous"
+    }
+
+    private func startRankTop100() {
+        let source = RankTop100URLSource.search(
+            filters: loadedFilters ?? filters,
+            additionalQueryClause: nil
+        )
+        let requests = source.requests(through: totalPages, scope: rankTop100Scope)
+        guard !requests.isEmpty else { return }
+        let authenticatedRequest = auth.authenticatedRequest()
+        rankTop100.start(
+            requests: requests,
+            existingPages: rankTop100Pages,
+            load: { request in
+                try await AO3Client.shared.rankTop100Page(
+                    request,
+                    authenticatedRequest: authenticatedRequest
+                )
+            },
+            onPages: { pages in
+                rankTop100Pages = pages
+                results = ranking.noting(RankTop100Pages.works(in: pages))
+            }
+        )
     }
 
     /// No subject: unlike a fandom or tag list, a Search can have several fandoms

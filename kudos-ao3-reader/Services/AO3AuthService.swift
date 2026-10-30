@@ -242,6 +242,22 @@ struct LiveAO3SessionValidator: AO3SessionValidating {
     }
 }
 
+nonisolated enum AO3AutomatedFeature: Sendable {
+    case rankTop100
+
+    var token: String {
+        switch self {
+        case .rankTop100: "feature=rank-top-100"
+        }
+    }
+
+    var phrase: String {
+        switch self {
+        case .rankTop100: "reader-requested pages 2-5"
+        }
+    }
+}
+
 nonisolated enum AO3RequestDefaults {
     /// The one User-Agent every AO3-facing request sends (AO3Client's session default,
     /// authenticated per-request headers, and the session validator all use this):
@@ -255,6 +271,13 @@ nonisolated enum AO3RequestDefaults {
             + "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15 "
             + "KudosReader/\(version) (+https://github.com/cidy02/kudos-ao3-reader)"
     }()
+
+    /// A stable purpose tag inside the existing KudosReader comment. Only the
+    /// reader-requested automatic pages use this; nil is exactly the plain UA.
+    static func userAgent(feature: AO3AutomatedFeature?) -> String {
+        guard let feature else { return userAgent }
+        return String(userAgent.dropLast()) + "; \(feature.token); \(feature.phrase))"
+    }
 
     static func isTrustedURL(_ url: URL?) -> Bool {
         guard url?.scheme?.lowercased() == "https",
