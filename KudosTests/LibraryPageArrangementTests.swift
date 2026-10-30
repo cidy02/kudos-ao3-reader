@@ -94,15 +94,30 @@ struct LibraryPageArrangementTests {
         )
     }
 
-    @Test func olderSettingsWithoutTheFieldRestoreTheDefault() throws {
+    @Test func olderSettingsWithoutTheFieldLeaveTheLocalLayout() throws {
         let settings = try JSONDecoder().decode(KudosBackupSettings.self, from: Data(olderSettingsJSON.utf8))
-        #expect(settings.libraryPageArrangement == .default)
+        #expect(settings.libraryPageArrangement == nil)
 
         let defaults = try makeDefaults()
         let custom = LibraryPageArrangement.default.settingStyle(.downloaded, to: .list)
         defaults.set(custom.rawValue, forKey: LibraryPageArrangement.storageKey)
         settings.apply(to: defaults)
-        #expect(LibraryPageArrangement.stored(in: defaults) == .default)
+        #expect(LibraryPageArrangement.stored(in: defaults) == custom)
+    }
+
+    @Test func aMalformedArrangementDecodesAsNilAndLeavesTheLocalLayout() throws {
+        let json = olderSettingsJSON.replacingOccurrences(
+            of: "\"autoPreserveSeriesWorkThreshold\": 5",
+            with: "\"autoPreserveSeriesWorkThreshold\": 5, \"libraryPageArrangement\": \"nope\""
+        )
+        let settings = try JSONDecoder().decode(KudosBackupSettings.self, from: Data(json.utf8))
+        #expect(settings.libraryPageArrangement == nil)
+
+        let defaults = try makeDefaults()
+        let custom = LibraryPageArrangement.default.settingStyle(.favourites, to: .list)
+        defaults.set(custom.rawValue, forKey: LibraryPageArrangement.storageKey)
+        settings.apply(to: defaults)
+        #expect(LibraryPageArrangement.stored(in: defaults) == custom)
     }
 
     @Test func arrangementRoundTripsThroughBackupSettings() throws {
