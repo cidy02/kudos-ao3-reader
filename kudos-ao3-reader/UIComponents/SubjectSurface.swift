@@ -367,8 +367,6 @@ enum SubjectMetrics {
     static let heroRadius: CGFloat = 18
     /// Chips in the redesign are rounded rects, not capsules (spec `8px`).
     static let chipRadius: CGFloat = 8
-    /// The signal tray behind a work's four status tiles (spec `10px`).
-    static let trayRadius: CGFloat = 10
 }
 
 // MARK: - Washed card

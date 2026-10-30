@@ -89,8 +89,7 @@ struct WorkCoverCard: View {
             completion: work.completionStatus,
             tileSize: 24,
             announcesToVoiceOver: true,
-            arrangement: .strip,
-            showsTray: true
+            arrangement: .strip
         )
     }
 
@@ -241,8 +240,7 @@ struct AO3WorkCoverCard: View {
             completion: WorkCompletionStatus(isComplete: work.isComplete),
             tileSize: 24,
             announcesToVoiceOver: true,
-            arrangement: .strip,
-            showsTray: true
+            arrangement: .strip
         )
     }
 
