@@ -307,7 +307,7 @@ struct AO3AuthorProfileOverviewTests {
         let dashboard = try fixture("ao3_author_dashboard").replacingOccurrences(
             of: "</body>",
             with: """
-            <div id="user-series"><li class="series"></li></div>
+            <div id="user-series"><li class="series blurb"></li></div>
             <div id="user-bookmarks"><li class="bookmark blurb"></li></div>
             </body>
             """
