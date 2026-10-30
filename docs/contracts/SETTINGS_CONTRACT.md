@@ -57,7 +57,7 @@ Current backup settings fields:
 | `appTheme` | `light` |
 | `readerTheme` | `light` |
 | `matchAppReaderTheme` | `true` |
-| `accentColorHex` | `#821019` |
+| `accentColorHex` | omitted when unset |
 
 > Note: this table documents the literal **backup-capture** fallbacks (reference:
 > `KudosBackup.swift`). `appTheme` captures as `light`. Separately, on first launch
@@ -67,10 +67,11 @@ Current backup settings fields:
 > `appTheme ?? "light"` to match `KudosBackup.swift` exactly (do not seed from
 > `readerTheme` inside the serializer).
 >
-> `accentColorHex` is `#821019` only when the device has no stored accent. Capture
-> writes the stored value when the key is present. Restore applies a present value
-> as stored, including a legacy `#990000`, and an absent key leaves the local accent
-> alone. Launch does not write the default into an empty key.
+> `accentColorHex` is omitted from capture when the device has no stored accent.
+> Capture writes the stored value when the key is present. The in-app default is
+> still `#821019`; launch does not write it into an empty key. Restore applies a
+> present value as stored, including a legacy `#990000`, and an absent key leaves
+> the local accent alone.
 
 ## Theme Values
 

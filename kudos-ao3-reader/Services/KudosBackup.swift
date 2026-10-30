@@ -1583,9 +1583,6 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
     private static let defaultReaderFontSizePt: Double = 18
     private static let defaultReaderLineHeight: Double = 1.65
     private static let defaultReaderMargin: Double = 28
-    /// Capture fallback when the device has no stored accent. Matches
-    /// `ThemeManager.ao3Red`. A present archive value is never rewritten to this.
-    private static let defaultAccentColorHex = "#821019"
 
     var readerFontID: String
     var readerMode: String
@@ -1605,9 +1602,9 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
     var appTheme: String
     var readerTheme: String
     var matchAppReaderTheme: Bool
-    /// Nil when the key is absent or JSON null. Apply writes it only when it is
-    /// present, so a restore leaves the local accent alone. Same absent-vs-present
-    /// shape as `libraryPageArrangement`.
+    /// Nil when the key is absent or JSON null, and when capture found no stored
+    /// accent. An unchosen device omits the key. Same absent-vs-present shape as
+    /// `libraryPageArrangement`.
     var accentColorHex: String?
     var autoPreserveSmallSeriesOnSaveForLater: Bool
     var autoPreserveSeriesWorkThreshold: Int
@@ -1776,9 +1773,10 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
             appTheme: defaults.string(forKey: "appTheme") ?? ReaderTheme.light.rawValue,
             readerTheme: defaults.string(forKey: "readerTheme") ?? ReaderTheme.light.rawValue,
             matchAppReaderTheme: bool(defaults, "matchAppReaderTheme", fallback: true),
-            // The stored accent, or AO3 red when this device has not chosen one.
-            // An absent key on *restore* is a different case and must not land here.
-            accentColorHex: defaults.string(forKey: "accentColorHex") ?? defaultAccentColorHex,
+            // Only a stored accent. Omitting the key keeps an unchosen device from
+            // replacing another device's colour through folder sync. Older builds
+            // decode a missing key as their own default.
+            accentColorHex: defaults.string(forKey: "accentColorHex"),
             autoPreserveSmallSeriesOnSaveForLater: bool(
                 defaults,
                 "autoPreserveSmallSeriesOnSaveForLater",
