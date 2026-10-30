@@ -129,25 +129,14 @@ struct AccountView: View {
     static let writingRowOrder: [AccountWritingTab] = [.works, .series, .drafts]
     static let activityRowOrder: [AccountActivityTab] = [.history, .inbox]
 
-    /// Compact work lists use Library/Home's root `ScrollView` + `NavigationLink`
-    /// pattern. Stacking many links inside one List row breaks tap targets.
-    private var usesLibraryStyleCompactLayout: Bool {
-        auth.isLoggedIn && displayMode == .compact && showsWorkListControls
-    }
-
     /// The floating gear fades while you scroll down (owner, 2026-10-01).
     @State private var chromeScrolledAway = false
 
     var body: some View {
         NavigationStack(path: $path) {
-            Group {
-                if usesLibraryStyleCompactLayout {
-                    libraryStyleCompactRoot
-                } else {
-                    standardListRoot
-                }
-            }
-            .navigationTitle("Account")
+            Group { standardListRoot }
+                .navigationTitle("Account")
+                .navigationBarTitleDisplayMode(.inline)
                 .navigationDestination(for: Route.self, destination: destination)
                 #if DEBUG
                 .task {
@@ -197,8 +186,11 @@ struct AccountView: View {
                 }
                 .ao3AuthorNavigation(path: $path, tab: .account)
                 .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Done") { dismissAccount() }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button(action: dismissAccount) {
+                            Label("Done", systemImage: "checkmark")
+                                .labelStyle(.iconOnly)
+                        }
                     }
                 }
                 .sheet(isPresented: $showingLogin) { AO3LoginView() }
@@ -239,27 +231,18 @@ struct AccountView: View {
                     syncProfileModel(username: username)
                 }
                 .onChange(of: auth.sessionGeneration, initial: true) { _, _ in
-                    // Reset a hidden Inbox immediately on logout/session replacement,
-                    // but do not fetch it until Activity › Inbox is visibly opened.
+                    // Reset private Inbox state immediately on logout/session replacement.
                     inboxModel.syncAuthenticationContext(auth: auth)
                 }
                 .onChange(of: activityTab) { _, tab in
                     if tab != .inbox { inboxModel.endSelection() }
                 }
         }
+        .presentationDragIndicator(.visible)
     }
 
-    /// Artboard 1n: *"No session, so no accent and no wash: the tab sits on plain
-    /// #0b0b0d."* The wash is derived from the account's own accent, so with no
-    /// account there is nothing to derive it from — signed out is the one state
-    /// where this tab is deliberately colourless.
-    @ViewBuilder
     private var standardListRoot: some View {
-        if auth.isLoggedIn {
-            standardListBody.subjectWash(accountPalette)
-        } else {
-            standardListBody
-        }
+        standardListBody
     }
 
     private var standardListBody: some View {
@@ -267,83 +250,32 @@ struct AccountView: View {
             profileCardSection
 
             if auth.isLoggedIn {
-                accountSheetSections
+                accountProfileCountStrip
+                accountLatestSection
+                accountInboxSection
+                accountAO3Section
             }
+            accountKudosSection
+            if auth.isLoggedIn { accountLogOutSection }
         }
-        .cardList()
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background(alignment: .top) {
+            ZStack(alignment: .top) {
+                theme.appTheme.cardBackdrop
+                if auth.isLoggedIn {
+                    accountPalette.wash.frame(height: 380)
+                }
+            }
+            .ignoresSafeArea()
+        }
         .refreshable { await refreshAccountSheet() }
     }
 
-    /// Account is app-scoped rather than work-scoped, so its identity and wash
-    /// use the app's fixed AO3 red (Sepia keeps its warm brown).
+    /// Account identity follows the same stable username hue as Author Profile.
+    /// This palette paints only the header wash; controls inherit app red.
     private var accountPalette: SubjectPalette {
-        theme.scopePalette
-    }
-
-    /// Matches LibrarySectionListView compact: `ScrollView` + two-up `NavigationLink` cards.
-    private var libraryStyleCompactRoot: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: AccountControlMetrics.compactSpacing) {
-                // No `SubjectHeaderBlock` here either: `usesLibraryStyleCompactLayout`
-                // is only ever true while signed in, so this one was always the
-                // duplicate name. The identity row inside the card below is the
-                // same one the list layout shows — this branch is a different
-                // *arrangement* of the Account tab, not a different screen.
-                AccountProfileCard(
-                    profileModel: profileModel,
-                    postingPseudName: $postingPseudName,
-                    onViewProfile: openOwnProfile,
-                    onLogin: { showingLogin = true }
-                )
-                .padding(.horizontal, SubjectMetrics.accountGutter)
-
-                if let notice = auth.noticeMessage {
-                    Text(notice)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, CardListMetrics.sideMargin)
-                }
-
-                SubjectSegmentedControl(
-                    options: AccountTab.allCases,
-                    title: \.rawValue,
-                    selection: $selectedTab
-                )
-                .accessibilityLabel("Account Content")
-                .padding(.horizontal, SubjectMetrics.accountGutter)
-
-                compactScopeChrome
-                compactWorksContent
-            }
-            .padding(.vertical, 12)
-        }
-        // This is a tab root, so keep the tab bar while painting its wash.
-        .subjectWash(accountPalette)
-        .refreshable { await refreshCurrentTab() }
-    }
-
-    @ViewBuilder
-    private var compactScopeChrome: some View {
-        // Compact swaps the list host, not 1bt's scope membership or controls.
-        switch selectedTab {
-        case .reading:
-            readingScopeGroups
-        case .writing:
-            writingScopeGroups
-        case .activity:
-            activityScopeGroups
-        case .overview:
-            EmptyView()
-        }
-    }
-
-    /// Dead in practice: `usesLibraryStyleCompactLayout` requires
-    /// `showsWorkListControls`, which every scope now returns false for, because
-    /// no scope draws an inline work list any more. Kept exhaustive rather than
-    /// deleted in the same commit as the display-mode fix.
-    @ViewBuilder
-    private var compactWorksContent: some View {
-        EmptyView()
+        theme.appTheme.subjectPalette(hue: CoverArt.hue(for: auth.username ?? "AO3 account"))
     }
 
     // MARK: Activation
@@ -369,7 +301,7 @@ struct AccountView: View {
     private func syncProfileModel(username: String?) {
         if let username, let route = AO3AuthorRoute(username: username) {
             if profileModel?.route.username.localizedCaseInsensitiveCompare(username) != .orderedSame {
-                profileModel = AO3AuthorProfileModel(route: route)
+                profileModel = AO3AuthorProfileModel(route: route, overviewMode: true)
             }
         } else {
             profileModel = nil
@@ -454,7 +386,8 @@ struct AccountView: View {
     /// right scope rather than growing a third copy of the same list.
     @ViewBuilder
     private func ownProfile(title: String, tab: AO3AuthorProfileTab) -> some View {
-        if let username = auth.username, let route = AO3AuthorRoute(username: username) {
+        if let route = profileModel?.route
+            ?? auth.username.flatMap({ AO3AuthorRoute(username: $0) }) {
             AuthorProfileView(route: route, navigationTitle: title, initialTab: tab)
         } else {
             ContentUnavailableView(
@@ -505,20 +438,50 @@ struct AccountView: View {
             && hideMature
     }
 
-    // MARK: Profile card
+    // MARK: Account sheet content
 
+    @ViewBuilder
     private var profileCardSection: some View {
-        Section {
-            AccountProfileCard(
-                profileModel: profileModel,
-                postingPseudName: $postingPseudName,
-                onViewProfile: openOwnProfile,
-                onLogin: { showingLogin = true }
-            )
-            .pageBodyRow(top: 10, gutter: SubjectMetrics.accountGutter)
-            // A row, not the section's footer: a plain list paints a footer on a white band
-            // (see Search's saved searches).
-            if let notice = auth.noticeMessage {
+        if auth.isLoggedIn {
+            if let model = profileModel {
+                if model.header != nil {
+                    AuthorProfileOverviewHeader(
+                        model: model,
+                        isOwnProfile: true,
+                        muteAction: nil,
+                        blockAction: nil,
+                        onSubscription: {},
+                        onModeration: { _ in },
+                        onSelectScope: { model.selectScope($0, auth: auth) }
+                    )
+                    accountProfileActions(model)
+                } else {
+                    accountProfileLoadState(model)
+                }
+            } else {
+                Section {
+                    ProgressView("Loading your AO3 profile…")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .accentFill()
+                }
+                .cardRow()
+            }
+        } else {
+            Section {
+                AccountProfileCard(
+                    profileModel: profileModel,
+                    postingPseudName: $postingPseudName,
+                    onViewProfile: openOwnProfile,
+                    onLogin: { showingLogin = true }
+                )
+                .padding(16)
+                .subjectPanel(cornerRadius: 16)
+                .pageBodyRow(top: 10, gutter: SubjectMetrics.accountGutter)
+            }
+        }
+
+        if let notice = auth.noticeMessage {
+            Section {
                 Text(notice)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -527,11 +490,122 @@ struct AccountView: View {
         }
     }
 
-    /// T-460 moves the existing Account content into a compact Home sheet.
-    /// The richer visual restyle remains T-470; these rows reuse the existing
-    /// profile, Inbox, preferences and Settings destinations unchanged.
     @ViewBuilder
-    private var accountSheetSections: some View {
+    private func accountProfileLoadState(_ model: AO3AuthorProfileModel) -> some View {
+        Section {
+            switch model.headerPhase {
+            case .idle, .loading, .loaded:
+                ProgressView("Loading your AO3 profile…")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accentFill()
+            case .unavailable:
+                AO3ProfileMessageRow(
+                    title: "Profile unavailable",
+                    systemImage: "person.slash",
+                    message: "AO3 could not load your profile. It may be temporarily unavailable.",
+                    actionTitle: "Try Again",
+                    action: { model.retry(auth: auth) }
+                )
+            case let .failed(message):
+                AO3ProfileMessageRow(
+                    title: "Couldn't load your profile",
+                    systemImage: "exclamationmark.triangle",
+                    message: message,
+                    actionTitle: "Try Again",
+                    action: { model.retry(auth: auth) }
+                )
+            }
+        }
+        .cardRow()
+    }
+
+    private func accountProfileActions(_ model: AO3AuthorProfileModel) -> some View {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(spacing: 8))
+            : AnyLayout(HStackLayout(spacing: 8))
+        return Section {
+            layout {
+                Button(action: openOwnProfile) {
+                    Label("View Profile", systemImage: "person")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .accentFill()
+                .prominentLabel()
+
+                ShareLink(item: model.route.dashboardURL) {
+                    Label("Share", systemImage: "square.and.arrow.up")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .foregroundStyle(.accentInk)
+                .accentFill()
+
+                Button {
+                    if let url = profileEditURL { router.open(url) }
+                } label: {
+                    Label("Edit", systemImage: "pencil")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .foregroundStyle(.accentInk)
+                .accentFill()
+                .disabled(profileEditURL == nil)
+            }
+            .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
+        }
+    }
+
+    @ViewBuilder
+    private var accountProfileCountStrip: some View {
+        if let model = profileModel, let header = model.header {
+            AuthorProfileCountStrip(items: [
+                .init(
+                    title: "Works",
+                    count: header.listCount(for: .works, route: model.route),
+                    action: { path.append(Route.myWorks) }
+                ),
+                .init(
+                    title: "Series",
+                    count: header.listCount(for: .series, route: model.route),
+                    action: { path.append(Route.mySeries) }
+                ),
+                .init(
+                    title: "Bookmarks",
+                    count: header.listCount(for: .bookmarks, route: model.route),
+                    action: { path.append(AO3AccountWorksList.Kind.bookmarks) }
+                ),
+                .init(
+                    title: "Subscriptions",
+                    countText: cachedCount(.subscriptions),
+                    action: { openLibraryAO3(.subscriptions) }
+                )
+            ])
+        }
+    }
+
+    private var accountLatestSection: some View {
+        Section {
+            SectionRuleHeader(title: "Your Latest")
+                .pageBodyRow(top: 18, gutter: 0)
+            if let work = profileModel?.latestWork {
+                AuthorProfileLatestCard(work: work)
+                    .cardNavigation(to: work, accessibilityLabel: work.title)
+                    .pageBodyRow(top: 10, gutter: SubjectMetrics.accountGutter)
+            } else {
+                Text(profileModel?.header?.recentWorks == nil
+                    ? "Couldn't read your latest work. Open Works to try again."
+                    : "No recent works visible on AO3.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .padding(16)
+                    .subjectPanel(cornerRadius: 16)
+                    .pageBodyRow(top: 10, gutter: SubjectMetrics.accountGutter)
+            }
+        }
+    }
+
+    private var accountInboxSection: some View {
         Section {
             VStack(spacing: 0) {
                 panelNavRow(
@@ -540,16 +614,65 @@ struct AccountView: View {
                     count: inboxModel.unreadCount.map(String.init),
                     value: Route.inbox
                 )
+                SubjectRowSeparator()
+                accountInboxPreview
             }
-            .subjectPanel()
-            .pageBodyRow(top: 10, gutter: SubjectMetrics.accountGutter)
-        } header: {
-            SectionRuleHeader(title: "Activity")
-                .pageBodyRow(top: 18, gutter: 0)
+            .subjectPanel(cornerRadius: 16)
+            .pageBodyRow(top: 18, gutter: SubjectMetrics.accountGutter)
         }
+    }
 
+    @ViewBuilder
+    private var accountInboxPreview: some View {
+        switch inboxModel.phase {
+        case .idle, .loading:
+            ProgressView("Loading recent messages…")
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(14)
+                .accentFill()
+        case .loaded, .paginationFailed:
+            let items = Array(inboxModel.items.prefix(2))
+            if items.isEmpty {
+                Text("No messages in your AO3 inbox.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(14)
+            } else {
+                ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                    if index > 0 { SubjectRowSeparator() }
+                    AccountInboxPreviewRow(item: item) { openInboxItem(item) }
+                }
+            }
+        case let .failed(message):
+            VStack(alignment: .leading, spacing: 8) {
+                Text(message)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Button("Try Again") { inboxModel.retry(auth: auth) }
+                    .foregroundStyle(.accentInk)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(14)
+        }
+    }
+
+    private var accountAO3Section: some View {
         Section {
             VStack(spacing: 0) {
+                panelNavRow(
+                    title: "Inbox",
+                    systemImage: "tray",
+                    count: inboxModel.unreadCount.map(String.init),
+                    value: Route.inbox
+                )
+                SubjectRowSeparator()
+                panelNavRow(
+                    title: "AO3 Preferences",
+                    systemImage: "slider.horizontal.3",
+                    value: Route.preferences
+                )
+                SubjectRowSeparator()
                 panelNavRow(
                     title: "My Dashboard",
                     systemImage: "square.grid.2x2",
@@ -562,21 +685,17 @@ struct AccountView: View {
                     value: Route.moreOnAO3
                 )
                 SubjectRowSeparator()
-                panelNavRow(
-                    title: "AO3 Preferences",
-                    systemImage: "slider.horizontal.3",
-                    value: Route.preferences
-                )
-                SubjectRowSeparator()
                 panelActionRow(title: "Open AO3", systemImage: "safari", action: openAO3FromAccount)
             }
-            .subjectPanel()
+            .subjectPanel(cornerRadius: 16)
             .pageBodyRow(top: 10, gutter: SubjectMetrics.accountGutter)
         } header: {
             SectionRuleHeader(title: "AO3")
                 .pageBodyRow(top: 18, gutter: 0)
         }
+    }
 
+    private var accountKudosSection: some View {
         Section {
             VStack(spacing: 0) {
                 panelNavRow(title: "Settings", systemImage: "gearshape", value: Route.settings)
@@ -589,13 +708,15 @@ struct AccountView: View {
                 SubjectRowSeparator()
                 panelNavRow(title: "About", systemImage: "info.circle", value: SettingsRoute.about)
             }
-            .subjectPanel()
+            .subjectPanel(cornerRadius: 16)
             .pageBodyRow(top: 10, gutter: SubjectMetrics.accountGutter)
         } header: {
-            SectionRuleHeader(title: "Kudos Settings")
+            SectionRuleHeader(title: "Kudos")
                 .pageBodyRow(top: 18, gutter: 0)
         }
+    }
 
+    private var accountLogOutSection: some View {
         Section {
             Button(role: .destructive) {
                 confirmingLogOut = true
@@ -625,6 +746,16 @@ struct AccountView: View {
         router.openWebsiteAfterDismissingAccount()
     }
 
+    private func openLibraryAO3(_ route: LibraryAO3Route) {
+        router.pendingLibraryAO3Route = route
+        router.selection = .library
+        dismissAccount()
+    }
+
+    private var profileEditURL: URL? {
+        AccountExternalNavCard.userURL(suffix: "profile/edit", username: auth.username)
+    }
+
     private func openAccountRoute(_ route: AccountSheetRoute) {
         switch route {
         case .dashboard: path.append(Route.dashboard)
@@ -640,8 +771,8 @@ struct AccountView: View {
     }
 
     private func openOwnProfile() {
-        guard let username = auth.username,
-              let route = AO3AuthorRoute(username: username) else { return }
+        guard let route = profileModel?.route
+            ?? auth.username.flatMap({ AO3AuthorRoute(username: $0) }) else { return }
         path.append(route)
     }
 
@@ -1239,7 +1370,7 @@ private extension AccountView {
         AccountScopeGroup(
             title: title,
             count: nil,
-            layout: usesLibraryStyleCompactLayout ? .scroll : .list
+            layout: .list
         ) {
             VStack(spacing: 0) {
                 ForEach(Array(destinations.enumerated()), id: \.element.id) { index, destination in

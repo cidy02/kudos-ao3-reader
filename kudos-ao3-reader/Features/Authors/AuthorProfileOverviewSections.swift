@@ -208,6 +208,78 @@ struct AuthorProfileOverviewHeader: View {
     }
 }
 
+/// The profile tally strip shared by Author Profile and the Account sheet.
+/// Callers supply destinations because Account's Subscriptions tally crosses to
+/// Library while the author surface keeps all four destinations in its stack.
+struct AuthorProfileCountStrip: View {
+    struct Item: Identifiable {
+        let id: String
+        let title: String
+        let countText: String?
+        let action: () -> Void
+
+        init(title: String, count: Int?, action: @escaping () -> Void) {
+            id = title
+            self.title = title
+            countText = count?.compactCount
+            self.action = action
+        }
+
+        init(title: String, countText: String?, action: @escaping () -> Void) {
+            id = title
+            self.title = title
+            self.countText = countText
+            self.action = action
+        }
+    }
+
+    let items: [Item]
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        let columns = dynamicTypeSize.isAccessibilitySize ? 2 : items.count
+        Section {
+            LazyVGrid(
+                columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: columns),
+                spacing: 0
+            ) {
+                ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                    Button(action: item.action) {
+                        VStack(spacing: 1) {
+                            Text(item.countText ?? "—")
+                                .font(.title3.weight(.bold).monospacedDigit())
+                            Text(item.title)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(countLabel(item))
+                    .overlay(alignment: .leading) {
+                        if index % columns != 0 {
+                            Divider().padding(.vertical, 8)
+                        }
+                    }
+                    .overlay(alignment: .top) {
+                        if columns == 2, index >= columns {
+                            Divider()
+                        }
+                    }
+                }
+            }
+            .subjectPanel(cornerRadius: 16)
+            .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
+        }
+    }
+
+    private func countLabel(_ item: Item) -> String {
+        guard let count = item.countText else { return item.title }
+        return "\(count) \(item.title.lowercased())"
+    }
+}
+
 private struct AuthorProfileOverviewFailure: View {
     var model: AO3AuthorProfileModel
     let section: AuthorProfileOverviewSection
@@ -245,7 +317,12 @@ struct AuthorProfileOverviewSections: View {
 
     var body: some View {
         if let header = model.header {
-            countStrip(header)
+            AuthorProfileCountStrip(items: [
+                countItem(.works, content: .works, header: header),
+                countItem(.series, content: .series, header: header),
+                countItem(.bookmarks, content: .bookmarks, header: header),
+                countItem(.gifts, content: .gifts, header: header)
+            ])
             fandoms(header)
         }
         latest
@@ -254,47 +331,16 @@ struct AuthorProfileOverviewSections: View {
         bookmarks
     }
 
-    private func countStrip(_ header: AO3AuthorHeader) -> some View {
-        let items: [(AO3AuthorProfileTab, AO3AuthorRoute.Content)] = [
-            (.works, .works), (.series, .series), (.bookmarks, .bookmarks), (.gifts, .gifts)
-        ]
-        let columns = dynamicTypeSize.isAccessibilitySize ? 2 : 4
-        return Section {
-            LazyVGrid(
-                columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: columns),
-                spacing: 0
-            ) {
-                ForEach(Array(items.enumerated()), id: \.offset) { index, item in
-                    let (tab, content) = item
-                    let count = header.listCount(for: content, route: model.route)
-                    Button { onSeeAll(tab) } label: {
-                        VStack(spacing: 1) {
-                            Text(count?.compactCount ?? "—")
-                                .font(.title3.weight(.bold).monospacedDigit())
-                            Text(tab.rawValue)
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(countLabel(tab: tab, count: count))
-                    .overlay(alignment: .leading) {
-                        if index % columns != 0 {
-                            Divider().padding(.vertical, 8)
-                        }
-                    }
-                }
-            }
-            .subjectPanel(cornerRadius: 16)
-            .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
-        }
-    }
-
-    private func countLabel(tab: AO3AuthorProfileTab, count: Int?) -> String {
-        guard let count else { return tab.rawValue }
-        return "\(count.compactCount) \(tab.rawValue.lowercased())"
+    private func countItem(
+        _ tab: AO3AuthorProfileTab,
+        content: AO3AuthorRoute.Content,
+        header: AO3AuthorHeader
+    ) -> AuthorProfileCountStrip.Item {
+        AuthorProfileCountStrip.Item(
+            title: tab.rawValue,
+            count: header.listCount(for: content, route: model.route),
+            action: { onSeeAll(tab) }
+        )
     }
 
     @ViewBuilder
