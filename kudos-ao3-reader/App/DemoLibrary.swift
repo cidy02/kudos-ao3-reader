@@ -476,7 +476,9 @@ enum DebugLaunchRoute {
 
     static func applyTab(_ router: AppRouter) {
         guard let value = pageRoute else { return }
-        if libraryRoutes.contains(where: value.hasPrefix) {
+        if workRoutes.contains(where: value.hasPrefix) {
+            router.selection = .home
+        } else if libraryRoutes.contains(where: value.hasPrefix) {
             router.selection = .library
         } else if value.hasPrefix("acct:") {
             let target = String(value.dropFirst("acct:".count))
@@ -515,6 +517,9 @@ enum DebugLaunchRoute {
     static var opensQueueDetails: Bool { pageRoute?.hasPrefix("queue-details:") == true }
 
     private static let libraryRoutes = ["collections", "collection:", "recentlyDeleted", "insights"]
+    /// Resolved against Home's works, so they need Home selected; the app
+    /// otherwise restores whichever tab the last launch left.
+    private static let workRoutes = ["work:", "mycopy:", "read:", "comments:", "compose:", "thread:"]
 
     /// `acct:<screen>` on the Account tab (pair with `-KudosFixtureDir` and
     /// `-KudosDemoSignedIn YES`): dashboard, drafts, works, series, inbox,
@@ -645,8 +650,7 @@ enum DebugLaunchRoute {
     static func homeWork(in works: [SavedWork]) -> SavedWork? {
         // `mycopy:<title>` opens the same page with its My copy sheet up;
         // `read:<title>` opens the reader instead (see `opensReader`).
-        let prefixes = ["work:", "mycopy:", "read:", "comments:", "compose:", "thread:"]
-        guard let value = pageRoute, let prefix = prefixes.first(where: value.hasPrefix) else { return nil }
+        guard let value = pageRoute, let prefix = workRoutes.first(where: value.hasPrefix) else { return nil }
         let title = String(value.dropFirst(prefix.count))
         return works.first { $0.title == title }
     }
