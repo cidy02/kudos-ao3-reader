@@ -40,6 +40,39 @@ struct AO3UserStatsParsingTests {
         #expect(stats.userSubscriptions == 57)
     }
 
+    @Test func readsYearChoicesAndPerWorkFiguresWithinEachRow() throws {
+        let stats = try AO3Client.parseUserStats(from: fixture("ao3_user_stats"))
+        #expect(stats.availableYears == [2025, 2024])
+        #expect(stats.selectedYear == nil)
+        #expect(stats.fandomGroups.map(\.name) == ["Jujutsu Kaisen", "Original Work"])
+
+        let first = try #require(stats.fandomGroups.first?.works.first)
+        #expect(first.id == 11)
+        #expect(first.title == "The Weight of Water")
+        #expect(first.wordCount == 84_200)
+        #expect(first.hits == 28_900)
+        #expect(first.kudos == 1204)
+        #expect(first.commentThreads == 318)
+        #expect(first.bookmarks == 96)
+        #expect(first.subscriptions == 44)
+
+        // The template omits the subscriptions row when the count is zero.
+        let unsubscribed = try #require(stats.fandomGroups.first?.works.last)
+        #expect(unsubscribed.id == 22)
+        #expect(unsubscribed.subscriptions == 0)
+    }
+
+    @Test func flatViewDeduplicatesMultifandomWorksAndSortsMeasuresDescending() throws {
+        let stats = try AO3Client.parseUserStats(from: fixture("ao3_user_stats"))
+        let works = try #require(stats.sections(grouping: .flat, sortedBy: .kudos).first?.works)
+
+        #expect(works.map(\.id) == [22, 11])
+        #expect(works.first?.fandoms == ["Jujutsu Kaisen", "Original Work"])
+        let dateGroups = stats.sections(grouping: .byFandom, sortedBy: .date)
+        #expect(dateGroups.count == 2)
+        #expect(dateGroups.first?.works.map(\.id) == [11, 22])
+    }
+
     /// otwarchive renders `stats/no_stats` when a user has no posted works. That
     /// page carries no totals block and is not a parse failure.
     @Test func anAccountWithNoWorksParsesEmptyRatherThanThrowing() throws {
@@ -49,12 +82,18 @@ struct AO3UserStatsParsingTests {
         #expect(stats.kudos == nil)
     }
 
-    /// No `year` parameter: `@current_year` falls back to "All Years", which is
-    /// the career total. Sending a year would quietly scope the hero to it.
-    @Test func statsURLAsksForAllYears() throws {
+    /// No `year` parameter means All Years; a selected year is AO3's own filter.
+    @Test func statsURLBuildsAllYearsAndYearSpecificRequests() throws {
         let url = try #require(AO3Client.userStatsURL(username: "tester"))
-        #expect(url.absoluteString == "https://archiveofourown.org/users/tester/stats")
-        #expect(url.query == nil)
+        let allYears = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false))
+        #expect(allYears.path == "/users/tester/stats")
+        #expect(allYears.queryItems?.first(where: { $0.name == "year" }) == nil)
+        #expect(allYears.queryItems?.first(where: { $0.name == "sort_column" })?.value == "date")
+        #expect(allYears.queryItems?.first(where: { $0.name == "sort_direction" })?.value == "DESC")
+
+        let yearURL = try #require(AO3Client.userStatsURL(username: "tester", year: 2024))
+        let oneYear = try #require(URLComponents(url: yearURL, resolvingAgainstBaseURL: false))
+        #expect(oneYear.queryItems?.first(where: { $0.name == "year" })?.value == "2024")
         #expect(AO3Client.userStatsURL(username: "  ") == nil)
     }
 }

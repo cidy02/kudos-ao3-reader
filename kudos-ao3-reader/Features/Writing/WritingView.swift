@@ -13,6 +13,11 @@ struct WritingView: View {
 
     @State private var path = NavigationPath()
     @State private var profileModel: AO3AuthorProfileModel?
+    @State private var stats: AO3UserStats?
+    @State private var statsError: String?
+    @State private var isLoadingStats = false
+    @State private var statsReload = 0
+    @State private var activeStatsRequestID: UUID?
     @State private var drafts: AO3DraftsPage?
     @State private var draftsError: String?
     @State private var isLoadingDrafts = false
@@ -23,6 +28,7 @@ struct WritingView: View {
 
     private enum Destination: Hashable {
         case inbox
+        case stats
     }
 
     var body: some View {
@@ -50,7 +56,12 @@ struct WritingView: View {
             .navigationDestination(item: $editingWorkID) {
                 WritingWorkDestination(workID: $0) { draftsReload += 1 }
             }
-            .navigationDestination(for: Destination.self) { _ in inboxDestination }
+            .navigationDestination(for: Destination.self) { destination in
+                switch destination {
+                case .inbox: inboxDestination
+                case .stats: WritingStatsView()
+                }
+            }
             .navigationDestination(for: AO3WorkSummary.self) { WorkDetailView(remote: $0) }
             .navigationDestination(for: AccountInboxThreadDestination.self) { destination in
                 CommentsView(
@@ -100,6 +111,7 @@ struct WritingView: View {
             }
             #endif
             .task(id: activationKey) { await activate() }
+            .task(id: statsActivationKey) { await loadStats() }
             .onChange(of: auth.username, initial: true) { _, _ in syncProfileModel() }
             .onChange(of: router.pendingWritingRoute, initial: true) { _, route in
                 guard let route else { return }
@@ -108,6 +120,7 @@ struct WritingView: View {
                 router.pendingWritingRoute = nil
             }
             .refreshable { await refresh() }
+            .onDisappear { profileModel?.cancel() }
         }
     }
 
@@ -164,26 +177,6 @@ struct WritingView: View {
                 onSeeAll: { path.append(WritingRoute.drafts) }
             )
             .pageBodyRow(top: 18, gutter: 0)
-        }
-    }
-
-    @ViewBuilder
-    private var statsSection: some View {
-        let cells = statsCells
-        if !cells.isEmpty {
-            Section {
-                SubjectStatStrip(cells: Array(cells.prefix(4)), palette: theme.scopePalette)
-                    .subjectPanel()
-                    .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
-                if cells.count > 4 {
-                    SubjectStatStrip(cells: Array(cells.dropFirst(4)), palette: theme.scopePalette)
-                        .subjectPanel()
-                        .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
-                }
-            } header: {
-                SectionRuleHeader(title: "All Years")
-                    .pageBodyRow(top: 18, gutter: 0)
-            }
         }
     }
 
@@ -354,19 +347,6 @@ struct WritingView: View {
         inboxModel.items.filter(\.isUnread)
     }
 
-    private var statsCells: [SubjectStatStrip.Cell] {
-        guard let stats = profileModel?.stats else { return [] }
-        return [
-            stats.wordCount.map { .init(value: $0.compactCount, label: "Words") },
-            stats.kudos.map { .init(value: $0.compactCount, label: "Kudos") },
-            stats.hits.map { .init(value: $0.compactCount, label: "Hits") },
-            stats.commentThreads.map { .init(value: $0.compactCount, label: "Comment Threads") },
-            stats.bookmarks.map { .init(value: $0.compactCount, label: "Bookmarks") },
-            stats.subscriptions.map { .init(value: $0.compactCount, label: "Subscriptions") },
-            stats.userSubscriptions.map { .init(value: $0.compactCount, label: "User Subs") }
-        ].compactMap { $0 }
-    }
-
     private func cachedCount(_ kind: AO3AccountListKind) -> String? {
         AO3AccountListCountsCache.shared.count(
             for: kind,
@@ -400,6 +380,7 @@ struct WritingView: View {
         if let profileModel { await profileModel.refresh(auth: auth) }
         await inboxModel.refresh(auth: auth)
         await loadDrafts()
+        await loadStats()
     }
 
     private func loadDrafts() async {
@@ -485,6 +466,75 @@ struct WritingView: View {
             return AO3CommentsWorkContext(remote: work)
         }
         return AO3CommentsWorkContext(title: item.workTitle, authors: [])
+    }
+}
+
+private extension WritingView {
+    var statsActivationKey: String {
+        "\(router.selection == .writing)|\(auth.sessionGeneration)|\(auth.username ?? "")|\(statsReload)"
+    }
+
+    @ViewBuilder
+    var statsSection: some View {
+        Section {
+            if let stats, !stats.isEmpty {
+                Button { path.append(Destination.stats) } label: {
+                    WritingStatsTotalsPanel(stats: stats)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Open stats by work, All Years")
+                .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
+            } else if isLoadingStats {
+                ProgressView("Loading stats…")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .cardRow()
+            } else if let statsError {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(statsError).font(.footnote).foregroundStyle(.secondary)
+                    Button("Try Again") { statsReload += 1 }
+                }
+                .cardRow()
+            } else {
+                Text("AO3 has no posted-work statistics yet.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .cardRow()
+            }
+        } header: {
+            SectionRuleHeader(
+                title: "Stats",
+                countText: "All Years",
+                onSeeAll: { path.append(Destination.stats) }
+            )
+            .pageBodyRow(top: 18, gutter: 0)
+        }
+    }
+
+    func loadStats() async {
+        guard router.selection == .writing, auth.isLoggedIn else {
+            stats = nil
+            statsError = nil
+            isLoadingStats = false
+            return
+        }
+        let requestID = UUID()
+        activeStatsRequestID = requestID
+        isLoadingStats = true
+        statsError = nil
+        stats = nil
+        defer {
+            if activeStatsRequestID == requestID { isLoadingStats = false }
+        }
+        do {
+            let loaded = try await auth.loadUserStats()
+            guard activeStatsRequestID == requestID, !Task.isCancelled else { return }
+            stats = loaded
+        } catch is CancellationError {
+            return
+        } catch {
+            guard activeStatsRequestID == requestID, !Task.isCancelled else { return }
+            statsError = UserFacingError.message(for: error)
+        }
     }
 }
 
