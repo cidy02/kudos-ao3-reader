@@ -291,38 +291,25 @@ struct AccountProfileCard: View {
         .logOutConfirmation(isPresented: $confirmingLogOut) { Task { await auth.logout() } }
     }
 
-    /// Artboard 1n's identity block, which is 1m's with everything the account
-    /// supplied taken out: a neutral 56pt circle, the state as the 27pt name, and
-    /// no kicker or accent rule — *"no session, so no accent and no wash"*.
-    ///
-    /// The name is stated **here and nowhere else**, as on the signed-in side.
-    /// `AccountView` used to head this with a `SubjectHeaderBlock` as well, which
-    /// said "Not signed in" a second time and drew an accent rule on the one
-    /// screen the spec asks to be colourless.
-    ///
-    /// 1n also captions the title "No account, no colour". That is the artboard
-    /// explaining itself to a reader of the spec — as on-screen copy it tells a
-    /// signed-out user nothing — so, like 1m's closing caption, only the half
-    /// that informs is drawn: the paragraph below.
+    /// T-470's signed-out account card. The invitation link stays inline text so
+    /// Log In remains the only primary action.
     private var signedOutCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 13) {
-                AO3AuthorAvatar(url: nil, name: "AO3 account", size: 56, isCircular: true)
+                AO3AuthorAvatar(url: nil, name: "AO3 account", size: 52, isCircular: true)
 
-                Text("Not signed in")
-                    .font(.system(size: nameSize, weight: .bold))
-                    .tracking(-0.5)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.7)
+                Text("Bring your AO3 account along")
+                    .font(.title3.weight(.bold))
+                    .fixedSize(horizontal: false, vertical: true)
                     .accessibilityAddTraits(.isHeader)
 
                 Spacer(minLength: 0)
             }
 
-            Text("Log in to see your AO3 works, bookmarks, subscriptions, "
-                + "history and inbox. Your sign-in stays on this device.")
+            Text("Your bookmarks, history, subscriptions, inbox and works appear here. "
+                + "Your library works without an account.")
                 .font(.system(size: signedOutBodySize))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
 
             Button(action: onLogin) {
@@ -330,12 +317,23 @@ struct AccountProfileCard: View {
                     Image(systemName: "person.badge.key")
                     Text(auth.status == .signingIn ? "Logging In…" : "Log In to AO3")
                 }
+                .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
             .accentFill()
             .prominentLabel()
             .buttonBorderShape(.capsule)
+            .controlSize(.large)
             .disabled(auth.status == .signingIn)
+
+            AO3InvitationRequestLink {
+                router.open(AO3InvitationRequest.url)
+            }
+
+            Text("Your sign-in stays on this device. Kudos never sees your password.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 4)

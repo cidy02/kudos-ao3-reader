@@ -1,5 +1,28 @@
 import SwiftUI
 
+nonisolated enum AO3InvitationRequest {
+    static let url = URL(string: "https://archiveofourown.org/invite_requests")!
+}
+
+/// AO3 accounts are invitation-based. Keep this as an inline text link on both
+/// account entry surfaces so it never reads like an alternate sign-in button.
+struct AO3InvitationRequestLink: View {
+    let onOpen: () -> Void
+
+    var body: some View {
+        Text("No AO3 account? [Create one](\(AO3InvitationRequest.url.absoluteString))")
+            .font(.subheadline)
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity)
+            .environment(\.openURL, OpenURLAction { url in
+                guard url == AO3InvitationRequest.url else { return .systemAction }
+                onOpen()
+                return .handled
+            })
+            .accessibilityHint("Opens AO3's invitation request page")
+    }
+}
+
 /// Native AO3 account entry. The WebView used by `AO3AuthService` remains
 /// off-screen unless the automatic mechanism fails, at which point this view
 /// deliberately switches to the visible fallback.
@@ -16,7 +39,6 @@ struct AO3LoginView: View {
     /// sheet down mid-login — the latter must not cancel an in-flight attempt.
     @State private var userInitiatedClose = false
 
-    private static let signUpURL = URL(string: "https://archiveofourown.org/users/new")!
     private static let passwordResetURL = URL(string: "https://archiveofourown.org/users/password/new")!
 
     /// Automatic submit or visible AO3 hand-off — swipe-to-dismiss would abandon
@@ -161,17 +183,15 @@ struct AO3LoginView: View {
 
                 Section {
                     Button {
-                        openOnAO3(Self.signUpURL)
-                    } label: {
-                        Label("Create an AO3 account", systemImage: "person.badge.plus")
-                    }
-                    Button {
                         openOnAO3(Self.passwordResetURL)
                     } label: {
                         Label("Forgot your password?", systemImage: "key")
                     }
+                    AO3InvitationRequestLink {
+                        openOnAO3(AO3InvitationRequest.url)
+                    }
                 } footer: {
-                    Text("These open AO3 in the Browse tab. Come back here to log in afterwards.")
+                    Text("These open AO3 in Kudos. Come back here to log in afterwards.")
                 }
             }
             .appThemedRows()

@@ -127,6 +127,109 @@ struct AccountToolbarContent: ToolbarContent {
     }
 }
 
+/// The compact notification row used by the Account sheet's two-item preview.
+/// The full Inbox keeps `AccountInboxItemRow` and all of its actions.
+struct AccountInboxPreviewRow: View {
+    let item: AO3InboxItem
+    let onOpen: () -> Void
+
+    @Environment(ThemeManager.self) private var theme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    private var avatarPalette: SubjectPalette {
+        theme.appTheme.subjectPalette(hue: CoverArt.hue(for: item.commenterName))
+    }
+
+    var body: some View {
+        Button(action: onOpen) {
+            HStack(alignment: .top, spacing: 10) {
+                Text(item.commenterName.first.map { String($0).uppercased() } ?? "?")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(avatarPalette.labelOnAccent)
+                    .frame(width: 30, height: 30)
+                    .background(avatarPalette.accent, in: Circle())
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    byline
+                    Text(item.isUnavailable ? "A comment here is unavailable" : item.excerpt)
+                        .font(.subheadline)
+                        .foregroundStyle(.primary)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityHint("Opens the comment thread")
+    }
+
+    @ViewBuilder
+    private var byline: some View {
+        let subject = item.workTitle.isEmpty ? item.subjectTitle : item.workTitle
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(item.commenterName)
+                    .font(.caption.weight(.semibold))
+                if !subject.isEmpty {
+                    Text("on \(subject)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                if !item.postedAgo.isEmpty {
+                    Text(item.postedAgo)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+        } else {
+            HStack(spacing: 5) {
+                if item.isUnread {
+                    Circle()
+                        .fill(.accentFill)
+                        .frame(width: 7, height: 7)
+                        .accessibilityHidden(true)
+                }
+                Text(item.commenterName)
+                    .font(.caption.weight(.semibold))
+                    .lineLimit(1)
+                if !subject.isEmpty {
+                    Text("on \(subject)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 4)
+                if !item.postedAgo.isEmpty {
+                    Text(item.postedAgo)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
+            }
+        }
+    }
+
+    private var accessibilityLabel: String {
+        if item.isUnavailable { return "A comment here is unavailable" }
+        return [
+            item.isUnread ? "Unread" : nil,
+            item.commenterName,
+            item.subjectTitle.isEmpty ? nil : "on \(item.subjectTitle)",
+            item.excerpt.isEmpty ? nil : item.excerpt,
+            item.postedAgo.isEmpty ? nil : item.postedAgo
+        ]
+        .compactMap { $0 }
+        .joined(separator: ". ")
+    }
+}
+
 /// One inbox notification card.
 struct AccountInboxItemRow: View {
     let item: AO3InboxItem
