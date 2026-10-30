@@ -823,8 +823,8 @@ extension WorkResumeCard {
         }
     }
 
-    /// "2 new chapters" — the circle's VoiceOver value. The label stays
-    /// "Update download" so the count is the value, not part of the name.
+    /// "2 new chapters" while idle. While the file is arriving the circle's
+    /// value is "Downloading, 40 percent". The label stays "Update download".
     private var updateChapterValue: String {
         let count = model.newChapterCount
         if count == 1 { return "1 new chapter" }
@@ -841,19 +841,21 @@ extension WorkResumeCard {
         fraction: Double?,
         chapterValue: String
     ) -> some View {
-        Button {
-            if isInteractive, !isBusy { onUpdate() }
+        let clamped = fraction.map { min(max($0, 0), 1) }
+        let percent = clamped.map { Int(($0 * 100).rounded()) }
+        return Button {
+            // The detail card is already `.disabled(isBusy)`.
+            if isInteractive { onUpdate() }
         } label: {
             ZStack {
                 Circle().fill(Color.white.opacity(0.18))
-                if let fraction {
-                    let clamped = min(max(fraction, 0), 1)
+                if let clamped, let percent {
                     Circle()
                         .trim(from: 0, to: clamped)
                         .stroke(Color.white, style: StrokeStyle(lineWidth: 3, lineCap: .round))
                         .rotationEffect(.degrees(-90))
                         .padding(3)
-                    Text("\(Int((clamped * 100).rounded()))%")
+                    Text("\(percent)%")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(.white)
                         .lineLimit(1)
@@ -873,7 +875,7 @@ extension WorkResumeCard {
         .buttonStyle(.plain)
         .disabled(!isInteractive)
         .accessibilityLabel("Update download")
-        .accessibilityValue(chapterValue)
+        .accessibilityValue(percent.map { "Downloading, \($0) percent" } ?? chapterValue)
     }
 
     private var primaryButton: some View {
