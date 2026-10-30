@@ -377,7 +377,8 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     }
 
     private var resumeUpdate: (() -> Void)? {
-        guard localWork?.hasUpdate == true else { return nil }
+        guard let work = localWork, work.hasUpdate,
+              WorkReaderPreparation.hasReadableEPUB(for: work) else { return nil }
         return updateDownloadedWork
     }
 

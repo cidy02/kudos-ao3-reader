@@ -38,6 +38,14 @@ struct WorkReaderPreparationUpdateTests {
 
     private struct StubDownloadError: Error {}
 
+    /// `log.make` stores its closure, so a freed-during-download stamp cannot
+    /// be a local `var`.
+    private final class FreedStamp {
+        var modified = Date.distantPast
+        var preservedAt: Date?
+        var digest = ""
+    }
+
     @Test func updateKeepsReadingPositionAndAdvancesWatermark() async throws {
         let fixture = try makeFixture(queued: true)
         defer { try? FileManager.default.removeItem(at: fixture.work.fileURL) }
@@ -136,6 +144,64 @@ struct WorkReaderPreparationUpdateTests {
         #expect(fixture.work.epubPreservationStatus == .notPreserved)
         #expect(FileManager.default.fileExists(atPath: fixture.work.fileURL.path))
         log.removeTemps()
+    }
+
+    @Test func workWithNoEPUBDoesNotDownload() async throws {
+        let fixture = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.work.fileURL) }
+        fixture.work.hasEPUB = false
+        let log = DownloadLog()
+        log.make = { try Self.stageSample(into: log) }
+
+        try await update(fixture.work, in: fixture.context, log: log)
+
+        #expect(log.ids.isEmpty)
+        #expect(log.temps.isEmpty)
+        #expect(!fixture.work.hasEPUB)
+        #expect(fixture.work.knownChapterCount == 5)
+        #expect(fixture.work.hasUpdate)
+        #expect(fixture.work.lastSpineIndex == 4)
+        #expect(fixture.work.epubDigest == "old-digest")
+        #expect(fixture.work.lastModifiedAt == Self.oldModified)
+        #expect(try Data(contentsOf: fixture.work.fileURL) == fixture.original)
+    }
+
+    /// The file can disappear after the download has started: free space, or
+    /// the held-copy sweep. The temp must not become the installed file, and
+    /// the watermark stays where the free left it.
+    @Test func fileFreedDuringTheDownloadRemovesTheTempAndLeavesFields() async throws {
+        let fixture = try makeFixture(queued: true)
+        defer { try? FileManager.default.removeItem(at: fixture.work.fileURL) }
+        let log = DownloadLog()
+        let work = fixture.work
+        let stamp = FreedStamp()
+        log.make = {
+            WorkLifecycle.freeEPUB(work)
+            stamp.modified = work.lastModifiedAt
+            stamp.preservedAt = work.preservedAt
+            stamp.digest = work.epubDigest
+            return try Self.stageSample(into: log)
+        }
+
+        try await update(work, in: fixture.context, log: log)
+
+        #expect(log.ids == [476])
+        #expect(!log.temps.isEmpty)
+        #expect(log.temps.allSatisfy { !FileManager.default.fileExists(atPath: $0.path) })
+        #expect(!work.hasEPUB)
+        #expect(work.knownChapterCount == 5)
+        #expect(work.hasUpdate)
+        #expect(work.isFinished)
+        #expect(work.lastSpineIndex == 4)
+        #expect(work.lastScrollFraction == 0.5)
+        #expect(work.legacyReaderProgress == 0.75)
+        #expect(work.readiumLocator == Self.locator)
+        #expect(work.epubDigest == stamp.digest)
+        #expect(work.epubPreservationStatus == .missingFile)
+        #expect(work.preservedAt == stamp.preservedAt)
+        #expect(work.lastModifiedAt == stamp.modified)
+        #expect(!work.remoteEPUBPending)
+        #expect(!FileManager.default.fileExists(atPath: work.fileURL.path))
     }
 
     @Test func workWithoutAnUpdateDoesNotDownload() async throws {

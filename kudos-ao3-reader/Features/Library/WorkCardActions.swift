@@ -295,9 +295,12 @@ enum WorkReaderPreparation {
     }
 
     /// Replaces the EPUB when AO3 has posted chapters this copy has not taken.
-    /// Reading position stays: a missing file is `restoreReadableEPUB`, which
-    /// restarts the work. A failed download throws before `replaceEPUB`, and
-    /// `replaceEPUB` validates the package before it touches the installed file.
+    /// Reading position stays. A missing file is `restoreReadableEPUB`, which
+    /// restarts the work, so this returns without downloading when the copy
+    /// is not readable. A file freed or swept while AO3 is sending is left
+    /// for the normal Download path. A failed download throws before
+    /// `replaceEPUB`, and `replaceEPUB` validates the package before it
+    /// touches the installed file.
     @MainActor
     static func updateDownloadedEPUB(
         for work: SavedWork,
@@ -305,15 +308,17 @@ enum WorkReaderPreparation {
         downloadEPUB: ((Int) async throws -> URL)? = nil,
         onProgress: (@Sendable (Double) -> Void)? = nil
     ) async throws {
-        guard work.modelContext != nil, work.hasUpdate else { return }
+        guard work.modelContext != nil, work.hasUpdate, hasReadableEPUB(for: work) else { return }
         guard let id = work.ao3WorkID ?? WorkTags.ao3WorkID(from: work.sourceURL) else {
             throw WorkReaderPreparationError.missingAO3ID
         }
 
         let temp = try await fetchedEPUB(id, downloadEPUB: downloadEPUB, onProgress: onProgress)
         // The installed file is still the previous copy. Drop the temp if the
-        // record was deleted while AO3 was sending, and do not touch that copy.
-        guard work.modelContext != nil else {
+        // record was deleted, or the file was freed or swept, while AO3 was
+        // sending. Do not touch the copy. A freed work gets new chapters
+        // through the normal Download path.
+        guard work.modelContext != nil, hasReadableEPUB(for: work) else {
             try? FileManager.default.removeItem(at: temp)
             return
         }
