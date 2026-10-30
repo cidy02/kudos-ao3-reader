@@ -118,8 +118,14 @@ struct FandomWorksView: View {
     @Environment(\.workCardTransitionNamespace) private var zoomNamespace
 
     @Environment(AO3AuthService.self) private var auth
+    @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(\.scenePhase) private var scenePhase
     @State private var results: [AO3WorkSummary] = []
+    @State private var ranking = SearchRankingSession()
+    @State private var rankTop100 = RankTop100Controller()
+    @State private var rankTop100Pages: [Int: AO3SearchPage] = [:]
+    @State private var rankTop100Source: RankTop100URLSource?
     @State private var currentPage = 1
     @State private var totalPages = 1
     /// AO3's own result-count heading for these results, when it sent one.
@@ -222,19 +228,31 @@ struct FandomWorksView: View {
                     }
                     if showPagination { Section { paginationRow } }
                     Section {
-                        ForEach(results) { work in
+                        ForEach(ranking.ranked(results)) { entry in
                             SelectableAO3WorkRow(
-                                work: work,
+                                work: entry.work,
                                 expandAll: expandAll,
                                 controller: bulkSelection,
                                 presentation: .searchLedger,
+                                signal: ranking.signal(for: entry),
                                 showsSummary: showSummaries,
                                 wide: true
                             )
                             .cardRow(
-                                isSelected: bulkSelection.isSelecting && bulkSelection.selection.contains(work.id),
+                                isSelected: bulkSelection.isSelecting
+                                    && bulkSelection.selection.contains(entry.id),
                                 chrome: .plain
                             )
+                        }
+                    }
+                    if totalPages > 1 {
+                        Section {
+                            RankTop100Controls(
+                                controller: rankTop100,
+                                totalPages: totalPages,
+                                start: startRankTop100
+                            )
+                            .bareListRow()
                         }
                     }
                     if showPagination { Section { paginationRow } }
@@ -265,12 +283,20 @@ struct FandomWorksView: View {
                     showFandomPicker: false,
                     canReset: hasExtraFilters,
                     onApply: applyFilters,
-                    onReset: resetFilters
+                    onReset: resetFilters,
+                    ranking: $ranking.settings
                 )
                 .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
             }
             .remoteWorkSelectionChrome(bulkSelection)
             .task { await load(page: 1) }
+            .onDisappear { rankTop100.cancel() }
+            .onChange(of: router.selection) { _, selection in
+                if selection != .browse { rankTop100.cancel() }
+            }
+            .onChange(of: scenePhase) { _, phase in
+                if phase != .active { rankTop100.cancel() }
+            }
     }
 
     private var showPagination: Bool {
@@ -370,6 +396,7 @@ struct FandomWorksView: View {
     }
 
     private func load(page: Int) async {
+        rankTop100.cancel()
         // Always, not only on a first load: with results already on screen this
         // is what tells the pagination bar a fetch is running. The list itself
         // still shows the results (the skeleton branch is gated on `results`
@@ -386,7 +413,9 @@ struct FandomWorksView: View {
             // resolves, and as the old intersection when one does not.
             let result: AO3SearchPage
             var unionApplied = false
+            let source: RankTop100URLSource
             if includedFandoms.count == 1 {
+                source = .fandom(includedFandoms[0], filters: filters)
                 result = try await AO3Client.shared.fandomWorksPage(
                     fandom: includedFandoms[0],
                     filters: filters,
@@ -400,6 +429,7 @@ struct FandomWorksView: View {
                 var unionFilters = filters
                 unionFilters.fandom = ""
                 unionApplied = true
+                source = .search(filters: unionFilters, additionalQueryClause: clause)
                 result = try await AO3Client.shared.search(
                     filters: unionFilters,
                     page: page,
@@ -407,6 +437,7 @@ struct FandomWorksView: View {
                     additionalQueryClause: clause
                 )
             } else {
+                source = .search(filters: filters, additionalQueryClause: nil)
                 result = try await AO3Client.shared.search(
                     filters: filters,
                     page: page,
@@ -414,10 +445,23 @@ struct FandomWorksView: View {
                 )
             }
             guard token == loadToken else { return }
-            results = result.works
+            results = ranking.noting(result.works)
+            rankTop100Pages[result.currentPage] = result
+            rankTop100Source = source
             currentPage = result.currentPage
             totalPages = result.totalPages
             resultSummary = result.summary
+            if let url = source.url(page: result.currentPage) {
+                await RankTop100Store.shared.remember(
+                    result,
+                    for: RankTop100PageRequest(
+                        page: result.currentPage,
+                        url: url,
+                        scope: rankTop100Scope
+                    ),
+                    at: Date()
+                )
+            }
             phase = .loaded
             // Only a real union may be cached as the family's exact total. The
             // intersection is wrong in the same direction every time, so a
@@ -445,6 +489,9 @@ struct FandomWorksView: View {
     /// search with whatever filters are now set — the same single request, just newly
     /// parameterised.
     private func reload() {
+        rankTop100.cancel()
+        rankTop100Pages = [:]
+        rankTop100Source = nil
         loadedFilters = filters
         phase = .loading
         results = []
@@ -452,6 +499,31 @@ struct FandomWorksView: View {
         totalPages = 1
         resultSummary = nil
         Task { await load(page: 1) }
+    }
+
+    private var rankTop100Scope: String {
+        auth.isLoggedIn ? "auth:\(auth.sessionGeneration)" : "anonymous"
+    }
+
+    private func startRankTop100() {
+        guard let source = rankTop100Source else { return }
+        let requests = source.requests(through: totalPages, scope: rankTop100Scope)
+        guard !requests.isEmpty else { return }
+        let authenticatedRequest = auth.authenticatedRequest()
+        rankTop100.start(
+            requests: requests,
+            existingPages: rankTop100Pages,
+            load: { request in
+                try await AO3Client.shared.rankTop100Page(
+                    request,
+                    authenticatedRequest: authenticatedRequest
+                )
+            },
+            onPages: { pages in
+                rankTop100Pages = pages
+                results = ranking.noting(RankTop100Pages.works(in: pages))
+            }
+        )
     }
 
     /// Apply the chosen filters and close the panel.
@@ -514,8 +586,13 @@ struct TagWorksView: View {
     let request: AO3TagWorksRequest
 
     @Environment(AO3AuthService.self) private var auth
+    @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(\.scenePhase) private var scenePhase
     @State private var results: [AO3WorkSummary] = []
+    @State private var ranking = SearchRankingSession()
+    @State private var rankTop100 = RankTop100Controller()
+    @State private var rankTop100Pages: [Int: AO3SearchPage] = [:]
     @State private var currentPage = 1
     @State private var totalPages = 1
     /// AO3's own result-count heading for these results, when it sent one.
@@ -583,19 +660,31 @@ struct TagWorksView: View {
                     }
                     if showPagination { Section { paginationRow } }
                     Section {
-                        ForEach(results) { work in
+                        ForEach(ranking.ranked(results)) { entry in
                             SelectableAO3WorkRow(
-                                work: work,
+                                work: entry.work,
                                 expandAll: expandAll,
                                 controller: bulkSelection,
                                 presentation: .searchLedger,
+                                signal: ranking.signal(for: entry),
                                 showsSummary: showSummaries,
                                 wide: true
                             )
                             .cardRow(
-                                isSelected: bulkSelection.isSelecting && bulkSelection.selection.contains(work.id),
+                                isSelected: bulkSelection.isSelecting
+                                    && bulkSelection.selection.contains(entry.id),
                                 chrome: .plain
                             )
+                        }
+                    }
+                    if totalPages > 1 {
+                        Section {
+                            RankTop100Controls(
+                                controller: rankTop100,
+                                totalPages: totalPages,
+                                start: startRankTop100
+                            )
+                            .bareListRow()
                         }
                     }
                     if showPagination { Section { paginationRow } }
@@ -623,12 +712,20 @@ struct TagWorksView: View {
                     allowsRelevanceSort: false,
                     canReset: hasExtraFilters,
                     onApply: applyFilters,
-                    onReset: resetFilters
+                    onReset: resetFilters,
+                    ranking: $ranking.settings
                 )
                 .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
             }
             .remoteWorkSelectionChrome(bulkSelection)
             .task { await load(page: 1) }
+            .onDisappear { rankTop100.cancel() }
+            .onChange(of: router.selection) { _, selection in
+                if selection != .browse { rankTop100.cancel() }
+            }
+            .onChange(of: scenePhase) { _, phase in
+                if phase != .active { rankTop100.cancel() }
+            }
     }
 
     @ToolbarContentBuilder
@@ -752,6 +849,8 @@ struct TagWorksView: View {
     }
 
     private func reload() {
+        rankTop100.cancel()
+        rankTop100Pages = [:]
         loadedFilters = filters
         phase = .loading
         results = []
@@ -763,6 +862,7 @@ struct TagWorksView: View {
     }
 
     private func load(page: Int) async {
+        rankTop100.cancel()
         // Always, not only on a first load: with results already on screen this
         // is what tells the pagination bar a fetch is running. The list itself
         // still shows the results (the skeleton branch is gated on `results`
@@ -777,10 +877,23 @@ struct TagWorksView: View {
                 at: request.url, filters: filters, page: page, request: auth.authenticatedRequest()
             )
             guard token == loadToken else { return }
-            results = result.works
+            results = ranking.noting(result.works)
+            rankTop100Pages[result.currentPage] = result
             currentPage = result.currentPage
             totalPages = result.totalPages
             resultSummary = result.summary
+            let source = RankTop100URLSource.tag(request.url, filters: filters)
+            if let url = source.url(page: result.currentPage) {
+                await RankTop100Store.shared.remember(
+                    result,
+                    for: RankTop100PageRequest(
+                        page: result.currentPage,
+                        url: url,
+                        scope: rankTop100Scope
+                    ),
+                    at: Date()
+                )
+            }
             phase = .loaded
         } catch let error as AO3Error {
             guard token == loadToken else { return }
@@ -789,5 +902,30 @@ struct TagWorksView: View {
             guard token == loadToken else { return }
             phase = .failed(UserFacingError.message(for: error))
         }
+    }
+
+    private var rankTop100Scope: String {
+        auth.isLoggedIn ? "auth:\(auth.sessionGeneration)" : "anonymous"
+    }
+
+    private func startRankTop100() {
+        let source = RankTop100URLSource.tag(request.url, filters: loadedFilters ?? filters)
+        let requests = source.requests(through: totalPages, scope: rankTop100Scope)
+        guard !requests.isEmpty else { return }
+        let authenticatedRequest = auth.authenticatedRequest()
+        rankTop100.start(
+            requests: requests,
+            existingPages: rankTop100Pages,
+            load: { request in
+                try await AO3Client.shared.rankTop100Page(
+                    request,
+                    authenticatedRequest: authenticatedRequest
+                )
+            },
+            onPages: { pages in
+                rankTop100Pages = pages
+                results = ranking.noting(RankTop100Pages.works(in: pages))
+            }
+        )
     }
 }

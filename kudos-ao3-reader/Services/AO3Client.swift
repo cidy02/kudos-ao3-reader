@@ -206,6 +206,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     /// *starts* are always at least `minRequestInterval` apart no matter how many
     /// callers are in flight.
     private var nextAllowedRequestAt = Date.distantPast
+    private var nextAllowedRankTop100RequestAt = Date.distantPast
     private let minRequestInterval: TimeInterval = 0.6
 
     private func pace() async throws {
@@ -217,6 +218,22 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         if step.wait > 5 {
             Log.network.notice("Pacer backlog: waiting \(step.wait, privacy: .public)s")
         }
+        if step.wait > 0 {
+            try await paceSleep(step.wait)
+        }
+    }
+
+    /// Rank Top 100's stricter start-to-start floor. This runs after the normal
+    /// pacer so coordinator or global-pacer waiting cannot compress the actual
+    /// URLSession starts below three seconds.
+    private func paceRankTop100() async throws {
+        try Task.checkCancellation()
+        let step = Self.paceStep(
+            now: Date(),
+            nextAllowed: nextAllowedRankTop100RequestAt,
+            minInterval: RankTop100Feature.requestSpacing
+        )
+        nextAllowedRankTop100RequestAt = step.nextAllowed
         if step.wait > 0 {
             try await paceSleep(step.wait)
         }
@@ -429,6 +446,57 @@ actor AO3Client { // swiftlint:disable:this type_body_length
             html = try await getHTML(url)
         }
         return try Self.parseSearchPage(html, page: page)
+    }
+
+    /// One Rank Top 100 page through the existing session, allow-list, pacer and
+    /// global request coordinator. Lookahead deliberately does not use
+    /// `withRetry`: its stricter policy stops the run on the first 429, 403, 503,
+    /// or other error instead of turning one reader tap into hidden retries.
+    func rankTop100Page(
+        _ pageRequest: RankTop100PageRequest,
+        authenticatedRequest: URLRequest? = nil
+    ) async throws -> AO3SearchPage {
+        try Self.rejectIfUntrusted(pageRequest.url)
+        return try await AO3RequestCoordinator.shared.withSlot { [self] in
+            try await performRankTop100Fetch(pageRequest, authenticatedRequest: authenticatedRequest)
+        }
+    }
+
+    private func performRankTop100Fetch(
+        _ pageRequest: RankTop100PageRequest,
+        authenticatedRequest: URLRequest?
+    ) async throws -> AO3SearchPage {
+        var request = authenticatedRequest ?? URLRequest(url: pageRequest.url)
+        request.url = pageRequest.url
+        request.setValue(
+            AO3RequestDefaults.userAgent(feature: .rankTop100),
+            forHTTPHeaderField: "User-Agent"
+        )
+        try await pace()
+        try await paceRankTop100()
+
+        let data: Data
+        if authenticatedRequest != nil {
+            request.httpShouldHandleCookies = false
+            let (body, response) = try await session.data(for: request, delegate: redirectCookieRelay)
+            defer { evictFromSharedCache(request, responseURL: response.url) }
+            try Self.check(response)
+            if Self.isLoginRedirect(path: response.url?.path) {
+                throw AO3Error.authenticationRequired
+            }
+            data = body
+        } else {
+            let (body, response) = try await session.data(for: request)
+            defer {
+                Self.purgeSessionCookie(
+                    from: session.configuration.httpCookieStorage,
+                    url: pageRequest.url
+                )
+            }
+            try Self.check(response)
+            data = body
+        }
+        return try Self.parseSearchPage(Self.htmlString(from: data), page: pageRequest.page)
     }
 
     /// One page of a fandom's works, from AO3's own tag listing — Browse's

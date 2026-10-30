@@ -37,6 +37,16 @@ Minimum OS versions follow the Xcode project deployment targets (currently iOS/i
 
 Kudos is an independent, unofficial personal project. **It is not affiliated with, endorsed by, or connected to the Organization for Transformative Works (OTW) or Archive of Our Own (AO3).** It does not use an official AO3 API; it scrapes public HTML. Session credentials stay on-device in the Keychain.
 
+### For AO3 and OTW volunteers
+Kudos is a free, open-source (AGPL) reader for AO3. It requests the pages its reader opens, at least 0.6 seconds
+apart, and identifies itself as `KudosReader` with a link to this repository. One feature fetches more than one
+page from a single tap, and says so in its User-Agent:
+- `feature=rank-top-100`: after the reader taps Rank Top 100 on a search, pages 2 to 5 of that search, one every
+  3 seconds, cancellable, at most 10 such pages in 10 minutes. It stops at the first error.
+
+If anything Kudos does causes trouble, please open an issue at
+https://github.com/cidy02/kudos-ao3-reader/issues and we will change it or turn it off.
+
 ## Build from source
 
 Open `AO3_App_OpenSource.xcodeproj` in Xcode and build the `AO3_App_OpenSource` scheme (product name: **Kudos**). The Readium reader runs on iOS/iPadOS; macOS uses the legacy reader. For Simulator builds from the command line, code signing can be disabled:
