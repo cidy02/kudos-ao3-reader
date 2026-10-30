@@ -12,32 +12,8 @@ import SwiftUI
 /// The header itself is `SectionRuleHeader` (see `SubjectSurface.swift`) — the
 /// redesign's kicker / count / hairline / chevron treatment, shared with every
 /// other shelf in the app so Home and Library read as one surface.
-/// Whether a dashboard lays its sections out as shelves of cover cards or as a
-/// ledger of full-width rows — the choice spec 1c puts in the "…" menu, and the
-/// difference between artboards 1c and 1d.
-///
-/// Persisted per dashboard rather than per section: the spec draws it as one
-/// decision about how the whole page reads, and a page half in one mode and half
-/// in the other is neither.
-nonisolated enum WorkSectionLayout: String, CaseIterable {
-    case shelves
-    case ledger
-
-    var title: String {
-        switch self {
-        case .shelves: "Shelves"
-        case .ledger: "Ledger"
-        }
-    }
-
-    var symbol: String {
-        switch self {
-        case .shelves: "rectangle.grid.2x2"
-        case .ledger: "list.bullet"
-        }
-    }
-}
-
+/// Home and Library dashboards are shelves. The old Shelves/Ledger switch is
+/// gone; a stored `library.dashboard.layout` value is left unread.
 struct WorkCarouselSection<Cards: View, Empty: View>: View {
     private let title: String
     private let hasItems: Bool
@@ -45,10 +21,6 @@ struct WorkCarouselSection<Cards: View, Empty: View>: View {
     /// it — a section whose count is not a fact worth stating (an AO3-paged
     /// list showing one page of many) should not print a misleading one.
     private let itemCount: Int?
-    /// Shelves scrolls the cards sideways; ledger stacks them down the page. The
-    /// header is identical either way, which is the point — the page changes how
-    /// it reads without changing what it is.
-    private let layout: WorkSectionLayout
     /// Between cards side by side on a shelf.
     private let cardSpacing: CGFloat
     private let onSeeAll: (() -> Void)?
@@ -63,7 +35,6 @@ struct WorkCarouselSection<Cards: View, Empty: View>: View {
         collapseKey: String,
         hasItems: Bool,
         itemCount: Int? = nil,
-        layout: WorkSectionLayout = .shelves,
         cardSpacing: CGFloat = CarouselCardMetrics.compactGridColumnSpacing,
         onSeeAll: (() -> Void)? = nil,
         @ViewBuilder cards: @escaping () -> Cards,
@@ -72,7 +43,6 @@ struct WorkCarouselSection<Cards: View, Empty: View>: View {
         self.title = title
         self.hasItems = hasItems
         self.itemCount = itemCount
-        self.layout = layout
         self.cardSpacing = cardSpacing
         self.onSeeAll = onSeeAll
         self.cards = cards
@@ -80,31 +50,16 @@ struct WorkCarouselSection<Cards: View, Empty: View>: View {
         _collapsed = AppStorage(wrappedValue: false, "section.collapsed.\(collapseKey)")
     }
 
-    /// 1b/1c: 11pt from the header to the cards; 1d: 10pt to the first row. The
-    /// shelf's scroll view pads 6pt above its cards for their shadow, and the
-    /// ledger 2pt, so the stack spacing is what is left.
-    private var headerSpacing: CGFloat {
-        layout == .shelves ? 11 - 6 : 10 - 2
-    }
+    /// 1b/1c: 11pt from the header to the cards. The shelf's scroll view pads
+    /// 6pt above its cards for their shadow, so the stack spacing is what is left.
+    private var headerSpacing: CGFloat { 11 - 6 }
 
     var body: some View {
         VStack(alignment: .leading, spacing: headerSpacing) {
             header
             if !collapsed {
                 if hasItems {
-                    switch layout {
-                    case .shelves:
-                        DashboardCardShelf(compactSpacing: cardSpacing, columnSpacing: cardSpacing) { cards() }
-                    case .ledger:
-                        // No `uniformWorkCardHeights` here: that exists to stop a
-                        // shelf of side-by-side cards ragging at different heights.
-                        // Stacked rows have no such problem, and forcing them to a
-                        // common height would pad every short row to match the
-                        // tallest title on the page.
-                        VStack(spacing: 10) { cards() }
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 2)
-                    }
+                    DashboardCardShelf(compactSpacing: cardSpacing, columnSpacing: cardSpacing) { cards() }
                 } else {
                     emptyState()
                         .frame(maxWidth: .infinity, alignment: .leading)

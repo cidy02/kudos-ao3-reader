@@ -81,12 +81,16 @@ struct LibrarySectionKindTests {
         )
     }
 
-    /// 1ah/1ai/1aj draw ledger rows; the other five sections keep the card they
-    /// had. This is only the default — the stored choice is per section.
-    @Test func historyAndFavoritesDefaultToLedgerRows() {
-        for kind in LibrarySectionKind.allCases {
-            let expected: WorkListDisplayMode = kind == .history || kind == .favorites ? .ledger : .detailed
-            #expect(kind.defaultDisplayMode == expected, "\(kind)")
+    /// History keeps the timeline it already draws. The work shelves are ledger
+    /// lists. Collections is the dashboard's collection shelf, not a work list.
+    @Test func eachSectionDrawsItsOwnSurface() {
+        #expect(LibrarySectionKind.history.surface == .readingHistory)
+        #expect(LibrarySectionKind.history.surface.kind == .ownRows)
+        #expect(LibrarySectionKind.collections.surface == .library)
+        #expect(LibrarySectionKind.collections.surface.kind == .fixed)
+        for kind in [LibrarySectionKind.readingNow, .savedForLater, .finished, .downloaded, .favorites] {
+            #expect(kind.surface == .shelf, "\(kind)")
+            #expect(kind.surface.kind == .ledger, "\(kind)")
         }
     }
 

@@ -831,6 +831,53 @@ enum WorkStat {
         return segments
     }
 
+    /// The full AO3 stat line a detailed card used to show, as the ledger's
+    /// one dot-separated line: author, language, words, chapters, comments,
+    /// kudos, bookmarks, hits, and the updated date.
+    ///
+    /// A local work stores 0 until AO3 has been asked, and that 0 means
+    /// unknown. Zero counts are printed only when the reader shows zeros and
+    /// the work has a word count, which is how a refreshed blurb is told from
+    /// a sparse row. Positive counts are printed either way.
+    static func fullLedgerStatLine(
+        author: String,
+        language: String,
+        wordCount: Int,
+        chapters: String,
+        comments: Int,
+        kudos: Int,
+        bookmarks: Int,
+        hits: Int,
+        dateUpdated: String,
+        showsZeroStats: Bool
+    ) -> [String] {
+        var segments: [String] = []
+        let name = author.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !name.isEmpty { segments.append(name) }
+        let languageName = language.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !languageName.isEmpty { segments.append(languageName) }
+        func count(_ value: Int, singular: String, plural: String? = nil) -> String? {
+            let known = value > 0 || (showsZeroStats && wordCount > 0)
+            guard known else { return nil }
+            let noun = value == 1 ? singular : (plural ?? "\(singular)s")
+            return "\(value.formatted()) \(noun)"
+        }
+        if let words = count(wordCount, singular: "word") { segments.append(words) }
+        let chapterRange = chapters.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !chapterRange.isEmpty { segments.append(chapterRange) }
+        for item in [
+            count(comments, singular: "comment"),
+            count(kudos, singular: "kudos", plural: "kudos"),
+            count(bookmarks, singular: "bookmark"),
+            count(hits, singular: "hit")
+        ].compactMap(\.self) {
+            segments.append(item)
+        }
+        let updated = dateUpdated.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !updated.isEmpty { segments.append(displayDate(updated)) }
+        return segments
+    }
+
     /// AO3 rating → a short, glanceable name. Originally scoped to compact cover
     /// cards only (no width for "Teen And Up Audiences" there); list rows and
     /// search-result cards now use the same short form for a consistent stat row.

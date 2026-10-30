@@ -13,8 +13,8 @@ struct HomeSectionListView: View {
     @Environment(AO3AuthService.self) private var auth
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
-    /// Persisted per section, matching WorkCarouselSection's collapse-state convention.
-    @AppStorage private var displayMode: WorkListDisplayMode
+    /// List or Grid, remembered per Home shelf.
+    @AppStorage private var arrangement: WorkListArrangement
 
     @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }, sort: \SavedWork.dateAdded, order: .reverse)
     private var works: [SavedWork]
@@ -28,7 +28,6 @@ struct HomeSectionListView: View {
     @State private var updatePill: HomeUpdatePill = .all
     @State private var showingFilters = false
     @State private var isSelecting: Bool
-    @State private var expandAll = false
     @AppStorage("confirmBeforeDelete") private var confirmBeforeDelete = true
     @State private var pendingDelete: SavedWork?
     @State private var selection: Set<UUID>
@@ -38,7 +37,11 @@ struct HomeSectionListView: View {
     /// this, the expanded list always opened with a fresh, empty selection.
     init(kind: HomeSectionKind, initialSelecting: Bool = false, initialSelection: Set<UUID> = []) {
         self.kind = kind
-        _displayMode = AppStorage(wrappedValue: .detailed, "home.\(kind.rawValue).displayMode")
+        let resolved = WorkListLayoutMigration.resolve(
+            arrangementKey: WorkListKeys.homeShelfArrangement(kind.rawValue),
+            legacyDisplayModeKey: WorkListKeys.homeShelfDisplayMode(kind.rawValue)
+        )
+        _arrangement = AppStorage(wrappedValue: resolved, WorkListKeys.homeShelfArrangement(kind.rawValue))
         _isSelecting = State(initialValue: initialSelecting)
         _selection = State(initialValue: initialSelection)
     }
@@ -122,10 +125,10 @@ struct HomeSectionListView: View {
                 ContentUnavailableView("Nothing here yet", systemImage: "books.vertical")
             } else {
                 Group {
-                    if displayMode != .compact {
-                        detailedList
-                    } else {
+                    if arrangement == .grid {
                         compactGrid
+                    } else {
+                        detailedList
                     }
                 }
                 .refreshable {
@@ -191,11 +194,7 @@ struct HomeSectionListView: View {
                                     } label: {
                                         Label("Select", systemImage: "checklist")
                                     }
-                                    DisplayModeMenuPicker(mode: $displayMode)
-                                    // Expand acts on Detailed cards; the ledger does not expand.
-                                    if displayMode == .detailed {
-                                        ExpandAllMenuItem(expandAll: $expandAll)
-                                    }
+                                    ListGridMenuPicker(arrangement: $arrangement)
                                 }
                             })
                         ].compactMap { $0 })
@@ -225,13 +224,6 @@ struct HomeSectionListView: View {
             )
     }
 
-    /// Which row the chosen mode draws. Ledger, Compact and Detailed are three
-    /// separate presentations and a screen shows one of them — this used to pass
-    /// `.ledger` unconditionally, so "Detailed" drew ledger rows.
-    private var rowPresentation: WorkRow.Presentation {
-        displayMode == .ledger ? .ledger : .standard
-    }
-
     private var detailedList: some View {
         List {
             subjectHeaderSection
@@ -241,13 +233,15 @@ struct HomeSectionListView: View {
                     ForEach(visibleItems) { work in
                         SensitiveWorkRow(
                             work: work,
-                            expandAll: expandAll,
                             openMode: .reader,
                             onSelect: isSelecting ? nil : { isSelecting = true; selection = [work.id] },
                             isSelecting: isSelecting,
                             isSelected: selection.contains(work.id),
                             onToggleSelection: { toggleSelection(work) },
-                            presentation: rowPresentation
+                            presentation: .ledger,
+                            showsFavoriteStar: true,
+                            showsFullLedgerStats: true,
+                            showsSummary: false
                         )
                         // The row's wash is painted here, at the card's true outer
                         // edge, rather than inside `WorkLedgerRow` — see its

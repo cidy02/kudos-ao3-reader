@@ -25,7 +25,8 @@ struct LibrarySectionListView: View {
     /// announcing a tab the reader had not opened.
     let originKicker: String
 
-    @AppStorage private var displayMode: WorkListDisplayMode
+    /// List or Grid, per shelf. History keeps its timeline and does not read this.
+    @AppStorage private var arrangement: WorkListArrangement
 
     @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }, sort: \SavedWork.dateAdded, order: .reverse)
     private var works: [SavedWork]
@@ -41,7 +42,6 @@ struct LibrarySectionListView: View {
     /// page, not the app-wide Library filter.
     @State private var filters = LibraryFilters()
     @State private var showingFilters = false
-    @State private var expandAll = false
     @State private var isSelecting: Bool
     @State private var selection: Set<UUID>
     /// Spec 1aj/1ak/1bc/1bd's Works / Authors / Fandoms / Tags strip, and the order
@@ -84,7 +84,17 @@ struct LibrarySectionListView: View {
     ) {
         self.kind = kind
         self.originKicker = originKicker
-        _displayMode = AppStorage(wrappedValue: kind.defaultDisplayMode, "library.\(kind.rawValue).displayMode")
+        // History is its own rows. Resolving it would write a key the page never draws.
+        let resolved: WorkListArrangement = kind == .history
+            ? .list
+            : WorkListLayoutMigration.resolve(
+                arrangementKey: WorkListKeys.libraryShelfArrangement(kind.rawValue),
+                legacyDisplayModeKey: WorkListKeys.libraryShelfDisplayMode(kind.rawValue)
+            )
+        _arrangement = AppStorage(
+            wrappedValue: resolved,
+            WorkListKeys.libraryShelfArrangement(kind.rawValue)
+        )
         _isSelecting = State(initialValue: initialSelecting)
         _selection = State(initialValue: initialSelection)
     }
@@ -217,10 +227,8 @@ struct LibrarySectionListView: View {
                                         Label("Select", systemImage: "checklist")
                                     }
                                 }
-                                DisplayModeMenuPicker(mode: $displayMode, modes: allowedDisplayModes)
-                                // Expand acts on Detailed cards; the ledger does not expand.
-                                if displayMode == .detailed {
-                                    ExpandAllMenuItem(expandAll: $expandAll)
+                                if kind != .history {
+                                    ListGridMenuPicker(arrangement: $arrangement)
                                 }
                             })
                         ].compactMap { $0 })
@@ -274,10 +282,10 @@ struct LibrarySectionListView: View {
             Group {
                 if kind == .history, !visibleItems.isEmpty {
                     historyTimeline
-                } else if displayMode != .compact || !allowedDisplayModes.contains(.compact) {
-                    detailedList
-                } else {
+                } else if kind != .history, arrangement == .grid {
                     compactGrid
+                } else {
+                    detailedList
                 }
             }
             .refreshable {
@@ -668,18 +676,9 @@ struct LibrarySectionListView: View {
         isAbandonedRow(work) ? nil : CoverArt.workHue(fandoms: work.workFandoms, title: work.title)
     }
 
-    /// Which row the chosen mode draws. Ledger, Compact and Detailed are three
-    /// separate presentations and a screen shows one of them — this used to pass
-    /// `.ledger` unconditionally, so "Detailed" drew ledger rows.
-    private var allowedDisplayModes: [WorkListDisplayMode] {
-        kind == .history ? [.detailed, .ledger] : WorkListDisplayMode.allCases
-    }
-
-    /// History saved as Compact before it lost the grid reads as Ledger.
-    private var rowPresentation: WorkRow.Presentation {
-        let compactUnavailable = displayMode == .compact && !allowedDisplayModes.contains(.compact)
-        return displayMode == .ledger || compactUnavailable ? .ledger : .standard
-    }
+    /// Shelves are ledger rows. History's timeline uses the same short ledger
+    /// and does not grow a stat line or a favorite star.
+    private var showsShelfLedgerFacts: Bool { kind != .history }
 
     private var detailedList: some View {
         // Both bound once: `groupedItems` buckets the whole list and `summaries`
@@ -814,13 +813,14 @@ struct LibrarySectionListView: View {
             VStack(alignment: .leading, spacing: 8) {
                 SensitiveWorkRow(
                     work: work,
-                    expandAll: expandAll,
                     openMode: .reader,
                     isSelecting: true,
                     isSelected: selection.contains(work.id),
                     onToggleSelection: { toggleSelection(work) },
-                    presentation: rowPresentation,
-                    showsFavoriteStar: showsFavoriteWorks
+                    presentation: .ledger,
+                    showsFavoriteStar: showsShelfLedgerFacts,
+                    showsFullLedgerStats: showsShelfLedgerFacts,
+                    showsSummary: false
                 )
                 .environment(\.ledgerKickerMuted, isAbandonedRow(work))
                 factsStrip(work, summary: summary)
@@ -851,11 +851,12 @@ struct LibrarySectionListView: View {
         VStack(alignment: .leading, spacing: 8) {
             SensitiveWorkRow(
                 work: work,
-                expandAll: expandAll,
                 openMode: .reader,
                 onSelect: { isSelecting = true; selection = [work.id] },
-                presentation: rowPresentation,
-                showsFavoriteStar: showsFavoriteWorks
+                presentation: .ledger,
+                showsFavoriteStar: showsShelfLedgerFacts,
+                showsFullLedgerStats: showsShelfLedgerFacts,
+                showsSummary: false
             )
             .environment(\.ledgerKickerMuted, isAbandonedRow(work))
             factsStrip(work, summary: summary)

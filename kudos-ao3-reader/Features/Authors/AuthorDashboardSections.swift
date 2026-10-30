@@ -6,8 +6,8 @@ struct AO3DashboardSections: View {
     let header: AO3AuthorHeader
     let route: AO3AuthorRoute
     let expandAll: Bool
-    /// The page's Ledger / Detailed choice; the dashboard offers the picker.
-    var displayMode: WorkListDisplayMode = .ledger
+    /// Recent works are an author list: detailed rows, summaries optional.
+    var showsSummary = true
     let onSeeAll: (AO3AuthorProfileTab) -> Void
 
     @Environment(AO3AuthService.self) private var auth
@@ -72,7 +72,8 @@ struct AO3DashboardSections: View {
                     AO3AuthorWorkCard(
                         entry: entry,
                         expandAll: expandAll,
-                        usesLedger: displayMode != .detailed,
+                        usesLedger: false,
+                        showsSummary: showsSummary,
                         showsPerformance: auth.username?.localizedCaseInsensitiveCompare(route.username) == .orderedSame
                     )
                 }
@@ -183,6 +184,9 @@ struct AO3AuthorWorkCard: View {
     let entry: CanonicalWork
     let expandAll: Bool
     var usesLedger = true
+    var showsSummary = true
+    /// Your Works ledger rows restore the full stat line. Detailed rows ignore it.
+    var showsFullLedgerStats = false
     var showsPerformance = false
 
     @Environment(PrivacyGate.self) private var gate
@@ -192,7 +196,13 @@ struct AO3AuthorWorkCard: View {
         VStack(alignment: .leading, spacing: 8) {
             if let work = entry.local {
                 // SensitiveWorkRow owns its link inside the privacy boundary.
-                SensitiveWorkRow(work: work, expandAll: expandAll, presentation: usesLedger ? .ledger : .standard)
+                SensitiveWorkRow(
+                    work: work,
+                    expandAll: expandAll,
+                    presentation: usesLedger ? .ledger : .standard,
+                    showsFullLedgerStats: showsFullLedgerStats,
+                    showsSummary: usesLedger ? false : showsSummary
+                )
                 if showsPerformance, let blurb = entry.remote,
                    !hideMature || !work.isAdult || gate.isRevealed(work) {
                     AO3AuthorPerformanceStrip(work: blurb)
@@ -202,7 +212,8 @@ struct AO3AuthorWorkCard: View {
                     work: work,
                     expandAll: expandAll,
                     presentation: usesLedger ? .searchLedger : .standard,
-                    showsPerformance: showsPerformance
+                    showsPerformance: showsPerformance,
+                    showsSummary: usesLedger ? false : showsSummary
                 )
                 .cardNavigation(to: work, accessibilityLabel: work.title)
             }

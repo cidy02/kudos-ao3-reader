@@ -52,6 +52,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     @State private var path = NavigationPath()
     /// Drives the toolbar "expand/collapse all" toggle for the result cards.
     @State private var expandAllCards = false
+    @AppStorage(WorkListKeys.searchShowSummaries) private var showSummaries = true
     /// Bumped on every search load and when backing out to Browse; a load whose
     /// token is stale (superseded by a newer search, or by returning to Browse
     /// before it finished) discards its result instead of re-showing results.
@@ -241,6 +242,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                                     Button { bulkSelection.isSelecting = true } label: {
                                         Label("Select", systemImage: "checklist")
                                     }
+                                    ShowSummariesMenuItem(isOn: $showSummaries)
                                     ExpandAllMenuItem(expandAll: $expandAllCards)
                                 })
                                 : (showsLocalResults && !localWorks.isEmpty)
@@ -381,7 +383,9 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                                 work: entry.work,
                                 expandAll: expandAllCards,
                                 controller: bulkSelection,
-                                presentation: .searchLedger, signal: ranking.signal(for: entry)
+                                presentation: .searchLedger,
+                                signal: ranking.signal(for: entry),
+                                showsSummary: showSummaries
                             )
                             .cardRow(
                                 isSelected: bulkSelection.isSelecting && bulkSelection.selection.contains(entry.id),

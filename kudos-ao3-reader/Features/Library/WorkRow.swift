@@ -42,13 +42,21 @@ struct WorkRow: View {
     var presentation: Presentation = .standard
     /// 1aj draws a filled gold star beside the title on Favorites. Off elsewhere:
     /// 1ah and 1ai draw no star, so this is not a property of being favourited but
-    /// of being on the screen that is about it.
+    /// of being on the screen that is about it. A shelf whose old default was the
+    /// detailed card passes true, so the star is not lost when that list becomes
+    /// a ledger.
     var showsFavoriteStar = false
+    /// Ledger lists that used to show `WorkListStatsRow` pass true. History keeps
+    /// the short author · words · chapters line.
+    var showsFullLedgerStats = false
+    /// Detailed rows only. Off hides the summary paragraph; tags still expand.
+    var showsSummary = true
 
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var theme
     @Environment(\.ledgerPositionNumber) private var positionNumber
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @AppStorage("showsZeroStats") private var showsZeroStats = true
     @State private var internalExpanded = false
 
     private var expandedBinding: Binding<Bool> {
@@ -62,14 +70,18 @@ struct WorkRow: View {
     /// sized from it.
     static let ledgerTileSize: CGFloat = 24
 
-    static func isExpandable(for work: SavedWork) -> Bool {
-        isExpandable(strippedSummary: work.summary.strippingHTML(), for: work)
+    static func isExpandable(for work: SavedWork, showsSummary: Bool = true) -> Bool {
+        let summary = showsSummary ? work.summary.strippingHTML() : ""
+        return isExpandable(strippedSummary: summary, for: work, showsSummary: showsSummary)
     }
 
     /// Core of `isExpandable(for:)`, taking an already-stripped summary so `body`
     /// (which needs the stripped text anyway) strips it once per render, not per use.
-    private static func isExpandable(strippedSummary: String, for work: SavedWork) -> Bool {
-        strippedSummary.count > 120 || !work.workRelationships.isEmpty
+    /// A hidden summary is not a reason to expand.
+    private static func isExpandable(
+        strippedSummary: String, for work: SavedWork, showsSummary: Bool = true
+    ) -> Bool {
+        (showsSummary && strippedSummary.count > 120) || !work.workRelationships.isEmpty
             || !work.workCharacters.isEmpty || !work.workFreeforms.isEmpty
             || (!work.hasCategorizedWorkTags && !work.workTags.isEmpty)
     }
@@ -106,15 +118,27 @@ struct WorkRow: View {
         work.workFandoms.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     }
 
-    /// Author · words · chapters — the three facts the spec's ledger row prints.
-    /// Deliberately shorter than `WorkListStatsRow`: the line is one line tall,
-    /// sits in a column narrower than the card, and the four signals to its right
-    /// already carry rating, category, warnings and completion, so repeating them
-    /// here would spend the line on what is already on screen.
+    /// History keeps author · words · chapters. A ledger list that replaced a
+    /// detailed card restores the full stat line those cards showed.
     private var ledgerMetadataSegments: [String] {
-        WorkStat.localWorkMetadata(
-            author: work.author, wordCount: work.wordCount, chapters: work.chapters
-        )
+        if showsFullLedgerStats {
+            WorkStat.fullLedgerStatLine(
+                author: work.author,
+                language: work.language,
+                wordCount: work.wordCount,
+                chapters: work.chapters,
+                comments: work.comments,
+                kudos: work.kudos,
+                bookmarks: work.bookmarks,
+                hits: work.hits,
+                dateUpdated: work.dateUpdated,
+                showsZeroStats: showsZeroStats
+            )
+        } else {
+            WorkStat.localWorkMetadata(
+                author: work.author, wordCount: work.wordCount, chapters: work.chapters
+            )
+        }
     }
 
     /// The word under the ring's percentage, matching the Home card's ring
@@ -186,8 +210,10 @@ struct WorkRow: View {
     /// property is not, and would need an explicit `return` instead.
     @ViewBuilder
     private var standardRow: some View {
-        let summaryText = work.summary.strippingHTML()
-        let isExpandable = Self.isExpandable(strippedSummary: summaryText, for: work)
+        let summaryText = showsSummary ? work.summary.strippingHTML() : ""
+        let isExpandable = Self.isExpandable(
+            strippedSummary: summaryText, for: work, showsSummary: showsSummary
+        )
         VStack(alignment: .leading, spacing: 6) {
             // Title + author, with the favorite star and expand control pinned top-trailing.
             VStack(alignment: .leading, spacing: 2) {

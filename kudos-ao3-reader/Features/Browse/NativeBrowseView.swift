@@ -131,6 +131,7 @@ struct FandomWorksView: View {
     /// `loadToken` is the same guard).
     @State private var loadToken = 0
     @State private var expandAll = false
+    @AppStorage(WorkListKeys.fandomWorksShowSummaries) private var showSummaries = true
     /// The active filters for this fandom's works — seeded to just the fandom, then
     /// refined via the same filter panel the Search tab uses.
     @State private var filters: AO3SearchFilters
@@ -226,7 +227,8 @@ struct FandomWorksView: View {
                                 work: work,
                                 expandAll: expandAll,
                                 controller: bulkSelection,
-                                presentation: .searchLedger
+                                presentation: .searchLedger,
+                                showsSummary: showSummaries
                             )
                             .cardRow(
                                 isSelected: bulkSelection.isSelecting && bulkSelection.selection.contains(work.id),
@@ -484,6 +486,7 @@ struct FandomWorksView: View {
                     Button { bulkSelection.isSelecting = true } label: {
                         Label("Select", systemImage: "checklist")
                     }
+                    ShowSummariesMenuItem(isOn: $showSummaries)
                     ExpandAllMenuItem(expandAll: $expandAll)
                 })
             ])
@@ -523,6 +526,7 @@ struct TagWorksView: View {
     /// `loadToken` is the same guard).
     @State private var loadToken = 0
     @State private var expandAll = false
+    @AppStorage(WorkListKeys.tagWorksShowSummaries) private var showSummaries = true
     @State private var filters = Self.baseline
     @State private var showingFilters = false
     /// The filters the results on screen were asked for. The panel edits `filters` itself, so
@@ -583,7 +587,8 @@ struct TagWorksView: View {
                                 work: work,
                                 expandAll: expandAll,
                                 controller: bulkSelection,
-                                presentation: .searchLedger
+                                presentation: .searchLedger,
+                                showsSummary: showSummaries
                             )
                             .cardRow(
                                 isSelected: bulkSelection.isSelecting && bulkSelection.selection.contains(work.id),
@@ -642,6 +647,7 @@ struct TagWorksView: View {
                     Button { bulkSelection.isSelecting = true } label: {
                         Label("Select", systemImage: "checklist")
                     }
+                    ShowSummariesMenuItem(isOn: $showSummaries)
                     ExpandAllMenuItem(expandAll: $expandAll)
                 })
             ])

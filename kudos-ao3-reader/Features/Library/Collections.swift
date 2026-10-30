@@ -99,10 +99,10 @@ struct CollectionDetailView: View {
     @State private var renameText = ""
     @State private var confirmDelete = false
     @State private var showingAddWorks = false
-    @State private var expandAll = false
-    /// Ledger or Detailed, remembered for every local collection (no cover
-    /// grid: a collection page reorders and removes by row).
-    @AppStorage("collection.displayMode") private var displayMode: WorkListDisplayMode = .detailed
+    /// List or Grid for this collection. The shared `collection.displayMode`
+    /// key migrates the first time this collection opens and is left in place.
+    /// Reorder stays a sheet; the grid does not show the list.
+    @State private var arrangement: WorkListArrangement = .list
 
     /// The collection's own colour: wash, tint and row accents, as a queue's
     /// page takes its queue's (1h) — the sibling it should read like.
@@ -296,6 +296,42 @@ struct CollectionDetailView: View {
         if detailsSaveFailed { showingDetailsSaveAlert = true } else { showingDetails = false }
     }
 
+    /// Covers. Swipe-to-remove stays on the list; reorder is already a sheet.
+    private var collectionGrid: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                SubjectHeaderBlock(
+                    kicker: "Library", title: collection.name, subtitle: tallyLine, palette: palette
+                )
+                .padding(.top, 20)
+                CarouselCardGrid {
+                    ForEach(visibleWorks) { work in
+                        NavigationLink(value: LocalWorkDestination.reader(work)) {
+                            SensitiveWorkCoverCard(work: work)
+                        }
+                        .buttonStyle(.plain)
+                        .localWorkContextMenu(work: work)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(16)
+            }
+        }
+        .refreshable {
+            let task = Task { _ = await WorkMetadataRefresh.refresh(visibleWorks, in: context, auth: auth) }
+            refreshTask = task
+            await task.value
+        }
+        .cancelRefreshOnTabChange($refreshTask)
+    }
+
+    private func loadArrangement() {
+        arrangement = WorkListLayoutMigration.resolve(
+            arrangementKey: WorkListKeys.collectionArrangement(collection.id),
+            legacyDisplayModeKey: WorkListKeys.collectionDisplayMode
+        )
+    }
+
     var body: some View {
         Group {
             if works.isEmpty {
@@ -310,6 +346,8 @@ struct CollectionDetailView: View {
                         Label("Add Works", systemImage: "plus")
                     }
                 }
+            } else if arrangement == .grid, !isSelecting {
+                collectionGrid
             } else {
                 List {
                     Section {
@@ -324,12 +362,14 @@ struct CollectionDetailView: View {
                     ForEach(visibleWorks) { work in
                         SensitiveWorkRow(
                             work: work,
-                            expandAll: expandAll,
                             openMode: .reader,
                             isSelecting: isSelecting,
                             isSelected: selection.contains(work.id),
                             onToggleSelection: { toggleSelection(work) },
-                            presentation: displayMode == .ledger ? .ledger : .standard
+                            presentation: .ledger,
+                            showsFavoriteStar: true,
+                            showsFullLedgerStats: true,
+                            showsSummary: false
                         )
                         .swipeActions(edge: .trailing) {
                             if !isSelecting {
@@ -388,6 +428,13 @@ struct CollectionDetailView: View {
         // Named by its header block, on its own colour — the queue page's
         // language. macOS keeps a real window title (the wash empties it on iOS).
         .subjectScreenWash(palette: palette)
+        .onAppear(perform: loadArrangement)
+        .onChange(of: arrangement) { _, arrangement in
+            UserDefaults.standard.set(
+                arrangement.rawValue,
+                forKey: WorkListKeys.collectionArrangement(collection.id)
+            )
+        }
         #if os(macOS)
         .navigationTitle(collection.name)
         #endif
@@ -458,10 +505,7 @@ struct CollectionDetailView: View {
                                 .disabled(filters.hasActiveFilters || hidesMatureWorks)
                             }
                             if !works.isEmpty {
-                                DisplayModeMenuPicker(mode: $displayMode, modes: [.ledger, .detailed])
-                                if displayMode == .detailed {
-                                    ExpandAllMenuItem(expandAll: $expandAll)
-                                }
+                                ListGridMenuPicker(arrangement: $arrangement)
                                 Divider()
                             }
                             Button {
