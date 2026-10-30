@@ -114,7 +114,7 @@ struct CoverAndResumeArtTests {
             newChapterCount: 0
         )
         #expect(model.postedLabel == "1 chapter")
-        #expect(model.displayedChapterName == "Ready to resume")
+        #expect(model.displayedChapterName == "Not started")
         #expect(model.workPercent == 0)
     }
 

@@ -181,7 +181,10 @@ struct ResumeCardModel {
     var displayedChapterName: String {
         if let chapterName { return chapterName }
         if progress == nil || progress == 0 {
-            return lastReadLabel == nil ? "Ready to resume" : "Last opened"
+            // Never opened. The board names this from the first chapter; without
+            // that title, say the work has not been started. "Ready to resume"
+            // sat over a Read button.
+            return lastReadLabel == nil ? "Not started" : "Last opened"
         }
         return "Chapter \(chapterNumber)"
     }
