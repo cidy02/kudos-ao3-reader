@@ -792,7 +792,9 @@ extension WorkResumeCard {
         let showsDownload = localWork.map {
             downloads.liveDownloadFraction(for: $0, at: .now) != nil
         } ?? false
-        return ZStack(alignment: .topTrailing) {
+        // The count sits on the circle. An overlay keeps it there: as a sibling
+        // its minimum frame grows with the row and the badge leaves the circle.
+        return Group {
             if showsDownload, let localWork {
                 TimelineView(.animation) { context in
                     updateCircleButton(
@@ -804,12 +806,16 @@ extension WorkResumeCard {
             } else {
                 updateCircleButton(onUpdate, fraction: nil, chapterValue: chapterValue)
             }
+        }
+        .frame(width: updateCircleSide, height: updateCircleSide)
+        .overlay(alignment: .topTrailing) {
             Text("\(model.newChapterCount)")
                 .font(.caption2.weight(.bold))
                 .foregroundStyle(.white)
                 .lineLimit(1)
                 .minimumScaleFactor(0.5)
                 .frame(minWidth: 18, minHeight: 18)
+                .fixedSize()
                 .background(accentFill, in: Circle())
                 .overlay(Circle().stroke(Color.white, lineWidth: 2))
                 .offset(x: 2, y: -2)
@@ -860,7 +866,9 @@ extension WorkResumeCard {
                         .foregroundStyle(.white)
                 }
             }
-            .frame(minWidth: updateCircleSide, minHeight: updateCircleSide)
+            // Exact side, as progressRing does. A minimum grows beside the
+            // flexible Resume button and takes half the row.
+            .frame(width: updateCircleSide, height: updateCircleSide)
         }
         .buttonStyle(.plain)
         .disabled(!isInteractive)
