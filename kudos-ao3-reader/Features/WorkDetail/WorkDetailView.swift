@@ -373,8 +373,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     }
 
     private func openContents() {
-        router.panel = .readerChapters
-        read()
+        read(openingContents: true)
     }
 
     private var resumeUpdate: (() -> Void)? {
@@ -1137,6 +1136,13 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     /// Opens the reader for this work. Imports a remote work first, and re-downloads a
     /// freed history entry, before pushing the reader — it never opens another detail.
     func read() {
+        read(openingContents: false)
+    }
+
+    /// `openingContents` arms the reader's chapter sheet only after the reader
+    /// itself exists. A failed download, or a dismiss back to a reader already
+    /// on the stack, must not leave `.readerChapters` selected.
+    private func read(openingContents: Bool) {
         if openedFromReader {
             // Already reading this exact work one screen down — reopening it
             // here would stack a second reader over the live one (A2).
@@ -1144,7 +1150,11 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             return
         }
         withLocalWork { work in
-            if WorkReaderPreparation.hasReadableEPUB(for: work) { readerWork = work; return }
+            if WorkReaderPreparation.hasReadableEPUB(for: work) {
+                if openingContents { router.panel = .readerChapters }
+                readerWork = work
+                return
+            }
             // Freed history entry: re-download into the existing record, keeping its id
             // (so progress/tags stay attached), then open.
             Task {
@@ -1153,6 +1163,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                 do {
                     try await WorkReaderPreparation.restoreReadableEPUB(for: work, in: context)
                     working = false
+                    if openingContents { router.panel = .readerChapters }
                     readerWork = work
                 } catch let error as AO3Error {
                     loadError = error.errorDescription
