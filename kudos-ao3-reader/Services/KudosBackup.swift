@@ -1606,10 +1606,11 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
     var accentColorHex: String
     var autoPreserveSmallSeriesOnSaveForLater: Bool
     var autoPreserveSeriesWorkThreshold: Int
-    /// Which Library shelves are sections, and which are buttons. Absent on an
-    /// older archive: the reader gets the default (Favourites, Collections,
-    /// Downloaded as carousels). Additive — no manifest version bump.
-    var libraryPageArrangement: LibraryPageArrangement
+    /// Which Library shelves are sections, and which are buttons. Nil when the
+    /// key is absent (an older archive, or Android) or the value does not
+    /// decode. Apply writes it only when it is present, so the local layout
+    /// stays. Additive — no manifest version bump.
+    var libraryPageArrangement: LibraryPageArrangement?
 
     init(
         readerFontID: String,
@@ -1633,7 +1634,7 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         accentColorHex: String,
         autoPreserveSmallSeriesOnSaveForLater: Bool,
         autoPreserveSeriesWorkThreshold: Int,
-        libraryPageArrangement: LibraryPageArrangement = .default
+        libraryPageArrangement: LibraryPageArrangement? = nil
     ) {
         self.readerFontID = readerFontID
         self.readerMode = readerMode
@@ -1725,10 +1726,12 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
                 Int.self,
                 forKey: .autoPreserveSeriesWorkThreshold
             ) ?? 5,
-            libraryPageArrangement: container.decodeIfPresent(
+            // `try?` so a present but malformed value is nil, not a failure of
+            // the whole manifest. Absent and JSON null are nil too.
+            libraryPageArrangement: (try? container.decodeIfPresent(
                 LibraryPageArrangement.self,
                 forKey: .libraryPageArrangement
-            ) ?? .default
+            )) ?? nil
         )
     }
 
@@ -1841,9 +1844,11 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         // applied because the app colour is fixed to AO3 red.
         defaults.set(autoPreserveSmallSeriesOnSaveForLater, forKey: "autoPreserveSmallSeriesOnSaveForLater")
         defaults.set(autoPreserveSeriesWorkThreshold, forKey: "autoPreserveSeriesWorkThreshold")
-        // Older archives omit the key and decode as the default, which is what
-        // a restore writes. A newer archive carries the reader's own order.
-        defaults.set(libraryPageArrangement.rawValue, forKey: LibraryPageArrangement.storageKey)
+        // An absent or malformed key stays nil. An older archive, or a folder
+        // sync from Android, must leave the reader's own Library layout alone.
+        if let libraryPageArrangement {
+            defaults.set(libraryPageArrangement.rawValue, forKey: LibraryPageArrangement.storageKey)
+        }
     }
 
     private static func bool(
