@@ -170,7 +170,19 @@ private struct AccentColourPicker: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text(AppAccent.named(hex: accentHex)?.name ?? "Custom")
+                    .font(.body)
+                Spacer()
+                if accentHex.caseInsensitiveCompare(ThemeManager.ao3Red) == .orderedSame {
+                    Text("Default")
+                        .font(.subheadline)
+                        .foregroundStyle(Color(hex: "#8E8E93") ?? .secondary)
+                }
+            }
+            .accessibilityHidden(true)
+
             HStack(spacing: 0) {
                 ForEach(AppAccent.all) { accent in
                     let selected = selectedFill == accent.fillHex
@@ -194,17 +206,6 @@ private struct AccentColourPicker: View {
                 .accessibilityLabel("Custom colour")
                 .accessibilityAddTraits(customHex == nil ? [] : .isSelected)
             }
-
-            HStack {
-                Text(AppAccent.named(hex: accentHex)?.name ?? "Custom")
-                Spacer()
-                if accentHex.caseInsensitiveCompare(ThemeManager.ao3Red) == .orderedSame {
-                    Text("Default")
-                        .foregroundStyle(Color(hex: "#8E8E93") ?? .secondary)
-                }
-            }
-            .font(.subheadline)
-            .accessibilityHidden(true)
         }
     }
 }
