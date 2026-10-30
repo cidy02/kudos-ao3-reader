@@ -327,6 +327,7 @@ struct WorkResumeCard: View {
 
     @Environment(ThemeManager.self) private var themeManager
     @Environment(AppRouter.self) private var router
+    @Environment(DownloadQueue.self) private var downloads
     @Environment(\.accentFill) private var accentFill
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @AppStorage("showsZeroStats") private var showsZeroStats = true
@@ -356,11 +357,11 @@ struct WorkResumeCard: View {
     private var homeHeader: some View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: 14) {
-                progressRing(diameter: 96, showsLabel: true)
+                progressDial(diameter: 96, showsLabel: true)
                 identity
             }
             VStack(alignment: .leading, spacing: 12) {
-                progressRing(diameter: 96, showsLabel: true)
+                progressDial(diameter: 96, showsLabel: true)
                 identity
             }
         }
@@ -378,13 +379,13 @@ struct WorkResumeCard: View {
     private var detailHeader: some View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: 12) {
-                progressRing(diameter: 52, showsLabel: false)
+                progressDial(diameter: 52, showsLabel: false)
                 detailChapterLabels
                 contentsButton
             }
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 12) {
-                    progressRing(diameter: 52, showsLabel: false)
+                    progressDial(diameter: 52, showsLabel: false)
                     detailChapterLabels
                 }
                 contentsButton
@@ -664,11 +665,41 @@ struct WorkResumeCard: View {
         .accessibilityLabel(title)
     }
 
-    private func progressRing(diameter: CGFloat, showsLabel: Bool) -> some View {
-        ZStack {
+    /// Same decision as `WorkReadingOrDownloadRing`: the queue's fraction while
+    /// a download or restore is in flight, otherwise the reading fraction.
+    @ViewBuilder
+    private func progressDial(diameter: CGFloat, showsLabel: Bool) -> some View {
+        if let localWork, downloads.isDownloading(localWork) {
+            TimelineView(.animation) { context in
+                progressRing(
+                    fraction: downloads.downloadFraction(for: localWork, at: context.date) ?? 1,
+                    diameter: diameter,
+                    showsLabel: showsLabel,
+                    accessibilityLabel: "Download progress"
+                )
+            }
+        } else {
+            progressRing(
+                fraction: model.progress ?? 0,
+                diameter: diameter,
+                showsLabel: showsLabel,
+                accessibilityLabel: "Reading progress"
+            )
+        }
+    }
+
+    private func progressRing(
+        fraction: Double,
+        diameter: CGFloat,
+        showsLabel: Bool,
+        accessibilityLabel: String
+    ) -> some View {
+        let clamped = min(max(fraction, 0), 1)
+        let percent = Int((clamped * 100).rounded())
+        return ZStack {
             Circle().stroke(Color.white.opacity(0.24), lineWidth: showsLabel ? 10 : 6)
             Circle()
-                .trim(from: 0, to: model.progress ?? 0)
+                .trim(from: 0, to: clamped)
                 .stroke(
                     Color.white,
                     style: StrokeStyle(lineWidth: showsLabel ? 10 : 6, lineCap: .round)
@@ -676,15 +707,18 @@ struct WorkResumeCard: View {
                 .rotationEffect(.degrees(-90))
             if showsLabel {
                 VStack(spacing: 0) {
-                    Text("\(model.workPercent)%")
+                    Text("\(percent)%")
                         .font(.system(.title3, design: .rounded, weight: .bold))
-                    Text("Read").font(.caption2.weight(.semibold)).textCase(.uppercase)
+                    Text(accessibilityLabel == "Download progress" ? "Download" : "Read")
+                        .font(.caption2.weight(.semibold))
+                        .textCase(.uppercase)
                 }
             }
         }
         .frame(width: diameter, height: diameter)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(model.workPercent) percent read")
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityValue("\(percent) percent")
     }
 
     private var cardBackground: some View {

@@ -62,10 +62,17 @@ struct WorkCoverCard: View {
             author: work.author,
             fandom: primaryFandom
         ) {
-            if progressValue != nil || downloads.isDownloading(work) {
+            if downloads.isDownloading(work) {
+                TimelineView(.animation) { context in
+                    CoverProgressBar(
+                        progress: downloads.downloadFraction(for: work, at: context.date) ?? 1,
+                        accessibilityLabel: "Download progress"
+                    )
+                }
+            } else if let progressValue {
                 CoverProgressBar(
-                    progress: progressValue ?? 0,
-                    isDownloading: downloads.isDownloading(work)
+                    progress: progressValue,
+                    accessibilityLabel: "Reading progress"
                 )
             }
             cardStats
@@ -470,24 +477,25 @@ private struct GeneratedWorkCoverArt: View {
 
 private struct CoverProgressBar: View {
     let progress: Double
-    let isDownloading: Bool
+    let accessibilityLabel: String
 
     @Environment(ThemeManager.self) private var themeManager
 
     var body: some View {
+        let fraction = min(max(progress, 0), 1)
         GeometryReader { geometry in
             Capsule()
                 .fill(themeManager.appTheme.glassFill(0.14))
                 .overlay(alignment: .leading) {
                     Capsule()
                         .fill(.accentFill)
-                        .frame(width: geometry.size.width * min(max(progress, 0), 1))
+                        .frame(width: geometry.size.width * fraction)
                 }
         }
         .frame(height: 3)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(isDownloading ? "Downloading" : "Reading progress")
-        .accessibilityValue("\(Int((min(max(progress, 0), 1) * 100).rounded())) percent")
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityValue("\(Int((fraction * 100).rounded())) percent")
     }
 }
 
