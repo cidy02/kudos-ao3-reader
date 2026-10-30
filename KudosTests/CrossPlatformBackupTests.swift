@@ -578,6 +578,9 @@ struct CrossPlatformBackupTests {
         root.removeValue(forKey: "exportedBy")
         if var settings = root["settings"] as? [String: Any] {
             settings.removeValue(forKey: "readerFontID") // iOS restore deliberately keeps it device-local.
+            // iOS writes the reader's Library shelf layout. The goldens and
+            // Android do not, so the round-trip compares only shared fields.
+            settings.removeValue(forKey: "libraryPageArrangement")
             root["settings"] = settings
         }
         if var works = root["works"] as? [[String: Any]] {
