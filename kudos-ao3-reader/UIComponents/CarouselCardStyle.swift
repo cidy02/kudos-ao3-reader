@@ -21,18 +21,17 @@ enum CoverArt {
 
     /// A stable hue in 0...1 derived from the title (djb2-ish hash).
     static func hue(for string: String) -> Double {
-        let hash = string.unicodeScalars.reduce(UInt64(5381)) { ($0 &* 33) &+ UInt64($1.value) }
-        return Double(hash % 360) / 360
+        Double(hueDegrees(for: string)) / 360
     }
 
     /// One deterministic art choice for every generated surface of a work. The
-    /// primary fandom owns the colour family; the title supplies only a nearby
-    /// shade and one of the three cover compositions.
+    /// hue family is `hue(for:)` of the primary fandom — the same function a
+    /// fandom page uses for its wash. The title supplies only a ±12° shade and
+    /// one of the three cover compositions.
     static func workArt(fandoms: [String], title: String) -> WorkArt {
         let fandom = fandoms.first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-        let familySeed = coverSeed(fandom.map(FandomDisplayName.bareTitle) ?? title)
+        let familyHue = hueDegrees(for: fandom ?? title)
         let titleSeed = coverSeed(title)
-        let familyHue = Int(familySeed % 360)
         let shade = Int(titleSeed % 25) - 12
         return WorkArt(
             familyHue: familyHue,
@@ -42,11 +41,17 @@ enum CoverArt {
         )
     }
 
-    /// The shared work hue, including the title's ±12° shade. Existing work
-    /// surfaces call this helper, so a cover, Resume card and compact swatch do
-    /// not quietly choose separate colours for the same work.
+    /// Work palettes follow the work's primary fandom so the same subject keeps
+    /// the same visual identity across Home and Search. Title is only a fallback
+    /// for imports and malformed blurbs that carry no fandom. The generated
+    /// cover uses this as its hue family and adds the title's ±12° shade.
     static func workHue(fandoms: [String], title: String) -> Double {
-        Double(workArt(fandoms: fandoms, title: title).hue) / 360
+        Double(workArt(fandoms: fandoms, title: title).familyHue) / 360
+    }
+
+    private static func hueDegrees(for string: String) -> Int {
+        let hash = string.unicodeScalars.reduce(UInt64(5381)) { ($0 &* 33) &+ UInt64($1.value) }
+        return Int(hash % 360)
     }
 
     /// The generated-art gradient from the design export: HSL 46%/27% to
