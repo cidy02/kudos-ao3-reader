@@ -55,7 +55,7 @@ struct HomeSectionListView: View {
     }
 
     /// This page is scoped to a Home section, not to one work, so its wash uses
-    /// the app's fixed AO3 red (Sepia keeps its warm brown), not a fandom colour.
+    /// the reader's accent (Sepia keeps its warm brown), not a fandom colour.
     private var scopePalette: SubjectPalette {
         themeManager.scopePalette
     }

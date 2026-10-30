@@ -1583,7 +1583,9 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
     private static let defaultReaderFontSizePt: Double = 18
     private static let defaultReaderLineHeight: Double = 1.65
     private static let defaultReaderMargin: Double = 28
-    private static let defaultAccentColorHex = "#990000"
+    /// Capture fallback when the device has no stored accent. Matches
+    /// `ThemeManager.ao3Red`. A present archive value is never rewritten to this.
+    private static let defaultAccentColorHex = "#821019"
 
     var readerFontID: String
     var readerMode: String
@@ -1603,7 +1605,10 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
     var appTheme: String
     var readerTheme: String
     var matchAppReaderTheme: Bool
-    var accentColorHex: String
+    /// Nil when the key is absent or JSON null. Apply writes it only when it is
+    /// present, so a restore leaves the local accent alone. Same absent-vs-present
+    /// shape as `libraryPageArrangement`.
+    var accentColorHex: String?
     var autoPreserveSmallSeriesOnSaveForLater: Bool
     var autoPreserveSeriesWorkThreshold: Int
     /// Which Library shelves are sections, and which are buttons. Nil when the
@@ -1631,7 +1636,7 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         appTheme: String,
         readerTheme: String,
         matchAppReaderTheme: Bool,
-        accentColorHex: String,
+        accentColorHex: String?,
         autoPreserveSmallSeriesOnSaveForLater: Bool,
         autoPreserveSeriesWorkThreshold: Int,
         libraryPageArrangement: LibraryPageArrangement? = nil
@@ -1716,8 +1721,7 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
             readerTheme: container.decodeIfPresent(String.self, forKey: .readerTheme)
                 ?? ReaderTheme.light.rawValue,
             matchAppReaderTheme: container.decodeIfPresent(Bool.self, forKey: .matchAppReaderTheme) ?? true,
-            accentColorHex: container.decodeIfPresent(String.self, forKey: .accentColorHex)
-                ?? Self.defaultAccentColorHex,
+            accentColorHex: container.decodeIfPresent(String.self, forKey: .accentColorHex),
             autoPreserveSmallSeriesOnSaveForLater: container.decodeIfPresent(
                 Bool.self,
                 forKey: .autoPreserveSmallSeriesOnSaveForLater
@@ -1772,9 +1776,9 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
             appTheme: defaults.string(forKey: "appTheme") ?? ReaderTheme.light.rawValue,
             readerTheme: defaults.string(forKey: "readerTheme") ?? ReaderTheme.light.rawValue,
             matchAppReaderTheme: bool(defaults, "matchAppReaderTheme", fallback: true),
-            // Preserve the field for cross-version decoding, but new archives
-            // always describe the one supported app colour.
-            accentColorHex: defaultAccentColorHex,
+            // The stored accent, or AO3 red when this device has not chosen one.
+            // An absent key on *restore* is a different case and must not land here.
+            accentColorHex: defaults.string(forKey: "accentColorHex") ?? defaultAccentColorHex,
             autoPreserveSmallSeriesOnSaveForLater: bool(
                 defaults,
                 "autoPreserveSmallSeriesOnSaveForLater",
@@ -1840,8 +1844,11 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         defaults.set(appTheme, forKey: "appTheme")
         defaults.set(readerTheme, forKey: "readerTheme")
         defaults.set(matchAppReaderTheme, forKey: "matchAppReaderTheme")
-        // `accentColorHex` remains decodable for old archives. It is no longer
-        // applied because the app colour is fixed to AO3 red.
+        // Present means "use this colour", including a legacy `#990000`. Absent
+        // (or JSON null, which decodes as nil) leaves whatever this device stored.
+        if let accentColorHex {
+            defaults.set(accentColorHex, forKey: "accentColorHex")
+        }
         defaults.set(autoPreserveSmallSeriesOnSaveForLater, forKey: "autoPreserveSmallSeriesOnSaveForLater")
         defaults.set(autoPreserveSeriesWorkThreshold, forKey: "autoPreserveSeriesWorkThreshold")
         // An absent or malformed key stays nil. An older archive, or a folder

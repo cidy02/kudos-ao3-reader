@@ -2,10 +2,18 @@ import SwiftUI
 
 extension ReaderTheme {
     /// Android uses this same page (Dark #0B0B0D, OLED black), not the reader's ground.
+    /// A named accent uses its one Dark/OLED step on both of those themes. A custom
+    /// colour, and any legacy hex that is not a named fill, still mixes toward white.
     func accentInk(for tint: Color) -> Color {
         switch self {
-        case .dark, .oled: tint.readable(on: cardBackdrop)
-        case .light, .sepia: tint
+        case .dark, .oled:
+            if let named = AppAccent.named(hex: tint.hexString),
+               let step = Color(hex: named.darkInkHex) {
+                return step
+            }
+            return tint.readable(on: cardBackdrop)
+        case .light, .sepia:
+            return tint
         }
     }
 }

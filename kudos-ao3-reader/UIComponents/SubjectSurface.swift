@@ -71,7 +71,9 @@ struct SubjectPalette {
     /// What every app control on this screen is tinted with — a toggle, a
     /// prominent button, a selected pill, or floating chrome. Subject colours
     /// remain visible in washes, artwork, labels and rules, but controls keep the
-    /// app's AO3-red identity (Sepia keeps its warm brown).
+    /// reader's accent (Sepia keeps its warm brown). This reads the stored accent
+    /// at call time; a view that must refresh when it changes uses
+    /// `ThemeManager.effectiveTint`.
     var tint: Color { ThemeManager.appTint(for: theme) }
 
     /// A chosen colour as a control colour: the colour itself, on every theme.
@@ -1071,8 +1073,8 @@ struct SubjectChip: View {
 
     /// A chip is something the user taps or sets, so its colour is the app's — a
     /// `palette` here only says which subject the chip sits on, never what colour
-    /// it is (`SubjectPalette.tint` is the app tint on every subject).
-    private var controlFill: Color { palette?.tint ?? fill }
+    /// it is. `effectiveTint` (not `palette.tint`) so a change of accent redraws.
+    private var controlFill: Color { palette == nil ? fill : themeManager.effectiveTint }
 
     var body: some View {
         HStack(spacing: 6) {
@@ -1280,12 +1282,12 @@ extension View {
         modifier(SubjectWash(palette: palette, height: height))
     }
 
-    /// Reinforces the fixed app-control tint inside a subject wash. The concrete
+    /// Reinforces the app-control tint inside a subject wash. The concrete
     /// environment colour remains necessary for swipe actions, which otherwise
-    /// render grey instead of inheriting SwiftUI's tint.
+    /// render grey instead of inheriting SwiftUI's tint. The fill is the reader's
+    /// accent, observed from `ThemeManager`, never the subject's identity colour.
     func screenTint(_ palette: SubjectPalette) -> some View {
-        accentTint(palette.tint, on: palette.theme)
-            .environment(\.screenTint, palette.tint)
+        modifier(ScreenControlTint(theme: palette.theme))
     }
 
     /// The label on a `.borderedProminent` / `.glassProminent` button: black or
@@ -1293,6 +1295,18 @@ extension View {
     /// app's), instead of the system's white on every fill.
     func prominentLabel() -> some View {
         modifier(ProminentLabel())
+    }
+}
+
+private struct ScreenControlTint: ViewModifier {
+    let theme: ReaderTheme
+    @Environment(ThemeManager.self) private var themeManager
+
+    func body(content: Content) -> some View {
+        let fill = themeManager.effectiveTint
+        content
+            .accentTint(fill, on: theme)
+            .environment(\.screenTint, fill)
     }
 }
 

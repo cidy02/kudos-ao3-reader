@@ -1,5 +1,31 @@
 import SwiftUI
 
+/// One of the six Appearance accents. Dark and OLED share `darkInkHex`; anything
+/// else — a custom colour, or a legacy value such as the old `#990000` — takes
+/// `Color.readable(on:)` instead of a named step.
+struct AppAccent: Identifiable, Equatable {
+    let name: String
+    let fillHex: String
+    let darkInkHex: String
+
+    var id: String { fillHex }
+    var isDefault: Bool { fillHex == Self.ao3Red.fillHex }
+
+    static let ao3Red = AppAccent(name: "AO3 Red", fillHex: "#821019", darkInkHex: "#EE8A93")
+    static let plum = AppAccent(name: "Plum", fillHex: "#7B2D6B", darkInkHex: "#D88BC7")
+    static let inkBlue = AppAccent(name: "Ink Blue", fillHex: "#24508F", darkInkHex: "#7FA6E8")
+    static let deepTeal = AppAccent(name: "Deep Teal", fillHex: "#11707A", darkInkHex: "#5CC3CC")
+    static let forest = AppAccent(name: "Forest", fillHex: "#2F6B4F", darkInkHex: "#7CC59E")
+    static let ochre = AppAccent(name: "Ochre", fillHex: "#9A5B00", darkInkHex: "#E7A84B")
+
+    static let all: [AppAccent] = [ao3Red, plum, inkBlue, deepTeal, forest, ochre]
+
+    /// Case-insensitive `#RRGGBB` match against the fill, not the text step.
+    static func named(hex: String) -> AppAccent? {
+        all.first { $0.fillHex.caseInsensitiveCompare(hex) == .orderedSame }
+    }
+}
+
 /// Central theme state for the whole app. `appTheme` themes the app (pages, menus,
 /// sheets, navigation bars); the reader can follow it or use its own theme.
 ///
@@ -28,9 +54,17 @@ final class ThemeManager {
         didSet { store(readerThemeStored, forKey: "readerTheme") }
     }
 
-    /// AO3's signature dark red — the fixed app accent.
-    static let ao3Red = "#990000"
+    /// The reader's accent as `#RRGGBB`. `didSet` does not run from `init`, so a
+    /// missing `accentColorHex` stays missing until they pick a colour.
+    var accentHex: String {
+        didSet { UserDefaults.standard.set(accentHex, forKey: Self.accentKey) }
+    }
+
+    /// Default accent when nothing is stored. A stored value, including the old
+    /// `#990000`, is never rewritten to this.
+    nonisolated static let ao3Red = AppAccent.ao3Red.fillHex
     private static let matchKey = "matchAppReaderTheme"
+    nonisolated private static let accentKey = "accentColorHex"
     /// Reader-only paper colour from the theme well. Not a `ReaderTheme` raw
     /// value, and not written into `.kudosbackup` (the backup has no field for it).
     static let paperKey = "readerCustomPaperHex"
@@ -66,12 +100,19 @@ final class ThemeManager {
                 defaults.removeObject(forKey: Self.paperKey)
             }
         }
+        // `didSet` does not run from `init`, so an absent accent is not written.
+        accentHex = defaults.string(forKey: Self.accentKey) ?? Self.ao3Red
+    }
+
+    /// The user's accent colour (falls back to AO3 red if the stored hex is bad).
+    var accentColor: Color {
+        Color(hex: accentHex) ?? Color(hex: Self.ao3Red)!
     }
 
     /// The exact control fill for the whole app: Sepia keeps its cohesive warm
-    /// brown; Light/Dark/OLED use AO3 red.
+    /// brown; Light, Dark and OLED use the reader's accent.
     var effectiveTint: Color {
-        Self.appTint(for: appTheme)
+        SubjectPalette.controlColor(appTheme.appTint ?? accentColor, on: appTheme)
     }
 
     /// Text, glyphs and text-button labels; filled controls keep `effectiveTint`.
@@ -80,26 +121,38 @@ final class ThemeManager {
     /// The palette every *scope*-level surface in the redesign draws from — the
     /// Account hub, the pushed Home and Library sections, the inbox, Writing.
     ///
-    /// Scope-level screens use AO3 red (or Sepia's warm brown) for both identity
-    /// and wash. Work-, fandom-, collection-, and queue-scoped screens still use
-    /// their subject colour for identity and wash, but not for app controls.
+    /// Scope-level screens use the reader's accent (or Sepia's warm brown) for
+    /// both identity and wash. Work-, fandom-, collection-, and queue-scoped
+    /// screens still use their subject colour for identity and wash, but not for
+    /// app controls.
     var scopePalette: SubjectPalette {
         SubjectPalette(color: effectiveTint, theme: appTheme)
     }
 
     /// A foreground guaranteed to stay readable on top of `effectiveTint` — the
-    /// color controls actually render with (Sepia's fixed warm brown, or AO3 red).
+    /// color controls actually render with (Sepia's warm brown, or the accent).
     var onEffectiveTint: Color {
         Self.label(on: effectiveTint)
     }
 
     /// The one app-control tint for a theme. Subject palettes call this too so a
     /// screen's identity colour never leaks into buttons, toggles, pills or chrome.
+    /// Reads the stored accent directly: this is not a view, so it cannot observe
+    /// `accentHex`. Screens that must refresh use `effectiveTint`.
     static func appTint(for theme: ReaderTheme) -> Color {
-        SubjectPalette.controlColor(
-            theme.appTint ?? Color(hex: ao3Red)!,
-            on: theme
-        )
+        let hex = UserDefaults.standard.string(forKey: accentKey) ?? ao3Red
+        let accent = Color(hex: hex) ?? Color(hex: ao3Red)!
+        return SubjectPalette.controlColor(theme.appTint ?? accent, on: theme)
+    }
+
+    /// Stores a picked colour. A value whose hex is a named fill is that accent.
+    func setAccent(_ color: Color) {
+        accentHex = color.hexString
+    }
+
+    /// Restores the default AO3-red accent.
+    func resetAccent() {
+        accentHex = Self.ao3Red
     }
 
     /// Black or white, whichever has the higher contrast on `fill` (WCAG: the
