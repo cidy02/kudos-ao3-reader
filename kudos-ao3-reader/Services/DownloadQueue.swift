@@ -103,6 +103,15 @@ final class DownloadQueue {
         return max(item.fraction, creep)
     }
 
+    /// The fill a cover bar or Resume ring draws while `work` is downloading,
+    /// or nil when it is not. A missing queue fraction reads as full so the
+    /// control does not sit empty. Callers that need the bar to move pass
+    /// `TimelineView`'s date.
+    func liveDownloadFraction(for work: SavedWork, at now: Date) -> Double? {
+        guard isDownloading(work) else { return nil }
+        return downloadFraction(for: work, at: now) ?? 1
+    }
+
     private func activeItem(for work: SavedWork) -> Item? {
         guard let ao3ID = work.ao3WorkID ?? WorkTags.ao3WorkID(from: work.sourceURL) else { return nil }
         return items.first { $0.id == ao3ID && ($0.status == .queued || $0.status == .downloading) }

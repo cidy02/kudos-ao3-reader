@@ -113,10 +113,10 @@ struct WorkCoverCard: View {
             fandom: primaryFandom,
             showsInitial: showsInitial
         ) {
-            if downloads.isDownloading(work) {
+            if downloads.liveDownloadFraction(for: work, at: .now) != nil {
                 TimelineView(.animation) { context in
                     CoverProgressBar(
-                        progress: downloads.downloadFraction(for: work, at: context.date) ?? 1,
+                        progress: downloads.liveDownloadFraction(for: work, at: context.date) ?? 1,
                         accessibilityLabel: "Download progress"
                     )
                 }
