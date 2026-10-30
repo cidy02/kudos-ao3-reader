@@ -119,7 +119,7 @@ enum CarouselCardMetrics {
 /// user's Dynamic Type setting, preserving its aspect ratio — every compact
 /// carousel card (Work, Reading Queue, Collection) embeds one of these so the
 /// whole card grows together at large accessibility text sizes instead of
-/// only getting taller while staying pinned at 164pt wide, but never past the
+/// only getting taller while staying pinned at the shelf width, but never past the
 /// container: at extreme accessibility sizes the proportional scale alone can
 /// exceed the usable width, clipping the card's trailing edge (confirmed live
 /// on iPhone 17 at accessibility-XXXL). `width`/`height` scale from the same
@@ -132,8 +132,8 @@ enum CarouselCardMetrics {
 /// `var` of this type rather than redeclaring the two `@ScaledMetric`
 /// properties itself.
 struct ScaledCarouselCardSize: DynamicProperty {
-    @ScaledMetric(relativeTo: .body) private var scaledWidth: CGFloat
-    @ScaledMetric(relativeTo: .body) private var scaledHeight: CGFloat
+    @ScaledMetric(relativeTo: .body) private var scaledWidth = CarouselCardMetrics.width
+    @ScaledMetric(relativeTo: .body) private var scaledHeight = CarouselCardMetrics.height
     @Environment(\.carouselCardAvailableWidth) private var availableWidth
 
     init(

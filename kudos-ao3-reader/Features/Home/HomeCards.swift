@@ -50,6 +50,7 @@ struct WorkCoverCard: View {
     var metadataStyle: WorkCoverMetadataStyle = .standard
 
     @Environment(DownloadQueue.self) private var downloads
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     /// Set per tab stack; the pushed reader zooms out of this card. See
     /// `WorkCardZoomTransition.swift`.
     @Environment(\.workCardTransitionNamespace) private var zoomNamespace
@@ -126,7 +127,8 @@ struct WorkCoverCard: View {
             Text(metaLine ?? "")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                .lineLimit(1)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                .fixedSize(horizontal: false, vertical: dynamicTypeSize.isAccessibilitySize)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if let badge = WorkCoverMetadata.updateBadge(from: footer) {
                 updateBadge(badge)
@@ -187,19 +189,11 @@ struct AO3WorkCoverCard: View {
             fandom: primaryFandom
         ) {
             cardStats
-            HStack(spacing: 6) {
-                Text(remoteMeta ?? "")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                if !work.dateUpdated.isEmpty {
-                    Image(systemName: "calendar")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .accessibilityLabel("Updated \(work.dateUpdated)")
-                }
-            }
+            Text(remoteMeta ?? "")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
         .overlay(alignment: .topTrailing) {
             if showsProvenanceBadge {
@@ -230,11 +224,13 @@ struct AO3WorkCoverCard: View {
             .map(FandomDisplayName.bareTitle)
     }
 
+    /// Words, chapters and the updated date all stay. The previous card printed
+    /// the date as its own badge; dropping it once words exist hid an AO3 field.
     private var remoteMeta: String? {
         var parts: [String] = []
         if let words = work.words { parts.append("\(words.compactCount) words") }
         if !work.chapters.isEmpty { parts.append(work.chapters) }
-        if parts.isEmpty, !work.dateUpdated.isEmpty { parts.append(work.dateUpdated) }
+        if !work.dateUpdated.isEmpty { parts.append(work.dateUpdated) }
         let text = parts.joined(separator: " · ")
         return text.isEmpty ? nil : text
     }

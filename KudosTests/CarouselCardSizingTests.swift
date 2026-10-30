@@ -11,7 +11,9 @@ struct CarouselCardSizingTests {
             scaledWidth: CarouselCardMetrics.width, availableWidth: availableWidth
         )
         #expect(ratio == 1)
-        #expect(CarouselCardMetrics.width * ratio == 164)
+        // Shelf covers are 120 pt (I-14). An unclamped card keeps that width.
+        #expect(CarouselCardMetrics.width == 120)
+        #expect(CarouselCardMetrics.width * ratio == CarouselCardMetrics.width)
         #expect(CarouselCardMetrics.height * ratio == CarouselCardMetrics.height)
     }
 
