@@ -602,6 +602,7 @@ struct AO3FilterPanel: View {
             .combinedAccessibilityRow([title, state.accessibilityStatus].compactMap { $0 }.joined(separator: ", "))
         }
         .buttonStyle(.plain)
+        .accessibilityHint("Tap to \(state.nextActionLabel.lowercased())")
         // Only override the themed cell when included — an EmptyView background
         // would wipe `.appThemedRows()` on the other states.
         if state == .included {

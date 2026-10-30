@@ -1293,6 +1293,15 @@ nonisolated enum FilterSelectionState: Equatable {
         case .excluded: "Excluded"
         }
     }
+
+    /// What the next tap does, for a cycling row's VoiceOver hint.
+    var nextActionLabel: String {
+        switch next {
+        case .included: "Include"
+        case .excluded: "Exclude"
+        case .clear: "Clear"
+        }
+    }
 }
 
 // MARK: - Work tags (categorized)

@@ -43,11 +43,10 @@ extension WorkDetailView {
         let groups = tagGroups
         if groups.isEmpty {
             Section {
-                // Only offer an AO3 refresh when a refresh can actually succeed;
-                // a plain imported EPUB has no AO3 identity to fetch from.
+                // A plain imported EPUB has no AO3 identity, so it says why it
+                // has no AO3 tags rather than that AO3 hasn't sent them yet.
                 Text(ao3WorkID != nil
-                    ? "AO3 hasn't provided tags for this work yet. "
-                        + "Pull down to get the latest details from AO3."
+                    ? "AO3 hasn't provided tags for this work yet."
                     : "This imported work isn't linked to AO3, so you won't see AO3 tags here.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -93,6 +92,7 @@ extension WorkDetailView {
                     }
                     .buttonStyle(.plain)
                     .minimumHitTarget(30)
+                    .accessibilityHint("Searches AO3 for works with this tag")
                 }
             }
         }
@@ -192,8 +192,7 @@ extension WorkDetailView {
             WorkProvenanceSections(work: work)
         } else {
             Section {
-                Text("This work isn't in your Library yet. Save, queue, or start reading it "
-                    + "to see its download, progress, and tags here.")
+                Text("This work isn't in your Library yet.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .myCopyRow()

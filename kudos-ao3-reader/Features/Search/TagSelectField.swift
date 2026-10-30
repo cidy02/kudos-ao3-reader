@@ -297,6 +297,7 @@ struct TagPickerView: View {
                 .combinedAccessibilityRow([tag, state.accessibilityStatus].compactMap { $0 }.joined(separator: ", "))
             }
             .buttonStyle(.plain)
+            .accessibilityHint("Tap to \(state.nextActionLabel.lowercased()) this tag")
             if state == .included {
                 row.listRowBackground(theme.appTheme.includeColor.opacity(0.10))
             } else {
@@ -386,13 +387,6 @@ private struct FilterTagChip: View {
         state == .excluded ? "minus.circle.fill" : "plus.circle.fill"
     }
 
-    private var nextStateLabel: String {
-        switch state.next {
-        case .included: "Include"
-        case .excluded: "Exclude"
-        case .clear: "Clear"
-        }
-    }
 
     var body: some View {
         HStack(spacing: 4) {
@@ -414,7 +408,7 @@ private struct FilterTagChip: View {
         .onTapGesture(perform: onCycle)
         .accessibilityAddTraits(.isButton)
         .accessibilityLabel("\(state == .excluded ? "Excluded" : "Included"): \(tag)")
-        .accessibilityHint("Tap to \(nextStateLabel.lowercased()) this tag")
+        .accessibilityHint("Tap to \(state.nextActionLabel.lowercased()) this tag")
         .accessibilityAction(named: Text("Cycle tag"), onCycle)
     }
 }

@@ -59,7 +59,15 @@ struct BulkTagStatePicker: View {
         .buttonStyle(.plain)
         .accessibilityLabel(option.title)
         .accessibilityValue(stateLabel(state) ?? "Unchanged")
-        .accessibilityHint("Cycles through add to every selected work, remove, and unchanged")
+        .accessibilityHint(hint(for: state.next))
+    }
+
+    private func hint(for next: FilterSelectionState) -> String {
+        switch next {
+        case .included: "Tap to add it to every selected work"
+        case .excluded: "Tap to remove it from every selected work"
+        case .clear: "Tap to leave it unchanged"
+        }
     }
 
     /// `.included` is "add", `.excluded` is "remove" — the same two verbs the
