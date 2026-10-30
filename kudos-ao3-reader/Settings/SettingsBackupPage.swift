@@ -456,6 +456,12 @@ struct SettingsBackupPage: View {
         themeManager.appTheme = ReaderTheme(rawValue: settings.appTheme) ?? .light
         themeManager.readerTheme = ReaderTheme(rawValue: settings.readerTheme) ?? .light
         themeManager.matchAppAndReader = settings.matchAppReaderTheme
+        // Replace-mode restores never reach here, same as the themes above:
+        // `apply` has already written a present accent into defaults. An absent
+        // key must not clobber the colour on this device.
+        if let accentColorHex = settings.accentColorHex {
+            themeManager.accentHex = accentColorHex
+        }
     }
 
     private static let backupDateFormatter: DateFormatter = {

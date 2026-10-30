@@ -78,6 +78,10 @@ struct CrossPlatformBackupTests {
         try CrossPlatformFixtureFields.clearAssets()
         let restored = try restore(androidArchive)
         defer { restored.cleanup() }
+        #expect(
+            restored.defaults.string(forKey: "accentColorHex")
+                == androidArchive.manifest.settings.accentColorHex
+        )
         try CrossPlatformFixtureFields.assertRestored(in: restored.container.mainContext)
         let reexported = try KudosBackupService.makeContents(
             works: restored.works,
@@ -473,8 +477,8 @@ struct CrossPlatformBackupTests {
         return tombstone
     }
 
-    /// Every backed-up setting set to a distinctive value. The legacy accent
-    /// preference is deliberately non-red to prove exports ignore it.
+    /// Every backed-up setting set to a distinctive value, including the accent
+    /// the export must carry.
     private func seedDefaults() throws -> UserDefaults {
         let defaults = try testDefaults()
         defaults.set("paged", forKey: "readerMode")

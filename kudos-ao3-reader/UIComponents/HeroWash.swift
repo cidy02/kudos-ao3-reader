@@ -2,8 +2,8 @@ import SwiftUI
 
 /// Home and Library take the wash colour of the work they lead with: Home from
 /// the current Continue Reading hero, Library from the top of Reading Now.
-/// Controls remain AO3 red; no work means no wash. Android does the same in
-/// `MainScaffold` (`washHue`).
+/// Controls stay the reader's accent; no work means no wash. Android does the
+/// same in `MainScaffold` (`washHue`).
 private struct HeroWash: ViewModifier {
     @Environment(ThemeManager.self) private var themeManager
     let work: SavedWork?
@@ -23,8 +23,8 @@ private struct HeroWash: ViewModifier {
                         .ignoresSafeArea()
                 }
             }
-            .accentTint(palette?.tint ?? themeManager.effectiveTint, on: themeManager.appTheme)
-            .environment(\.screenTint, palette?.tint)
+            .accentTint(themeManager.effectiveTint, on: themeManager.appTheme)
+            .environment(\.screenTint, palette == nil ? nil : themeManager.effectiveTint)
     }
 }
 

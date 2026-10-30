@@ -87,7 +87,7 @@ struct ContentView: View {
             // The app theme drives the whole app's light/dark appearance (the reader
             // overrides this for itself when its theme is unlinked).
             .preferredColorScheme(theme.appTheme.colorScheme)
-            // App controls and chrome always use AO3 red (Sepia keeps its warm
+            // App controls and chrome use the reader's accent (Sepia keeps its warm
             // brown); subject colours stay in identity text, artwork and washes.
             .accentTint(theme.effectiveTint, on: theme.appTheme)
             // Segmented controls (UISegmentedControl) draw a white selected segment

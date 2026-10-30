@@ -4,12 +4,15 @@ import Testing
 
 @Suite(.serialized)
 struct AccentInkTests {
-    @Test func ao3RedReadsOnBothDarkPages() throws {
+    @Test func legacyRedNeedsAReadableStepOnDarkPages() throws {
+        // `#990000` is the pre-T-459c red, not one of the six named fills.
         let red = try #require(Color(hex: "#990000"))
+        #expect(AppAccent.named(hex: "#990000") == nil)
         for theme in [ReaderTheme.dark, .oled] {
             let page = theme.cardBackdrop
             #expect(red.contrastRatio(on: page) < 4.5)
             #expect(theme.accentInk(for: red).contrastRatio(on: page) >= 4.5)
+            #expect(theme.accentInk(for: red).hexString != "#EE8A93")
             #expect(SubjectPalette.controlColor(red, on: theme) == red)
         }
     }
@@ -23,16 +26,17 @@ struct AccentInkTests {
     }
 
     @Test func lightAndSepiaKeepTheTintItself() throws {
-        let tint = try #require(Color(hex: "#990000"))
+        let tint = try #require(Color(hex: "#821019"))
         for theme in [ReaderTheme.light, .sepia] {
             #expect(theme.accentInk(for: tint) == tint)
         }
     }
 
-    @Test func ao3RedMatchesAndroidsByteRoundedWhiteMix() throws {
+    @Test func legacyRedMatchesAndroidsByteRoundedWhiteMix() throws {
         let red = try #require(Color(hex: "#990000"))
         // Android readableOn: original RGB + (1 - original RGB) * step / 20f,
         // rounded to sRGB bytes by Compose Color. Dark stops at step 8; OLED at 7.
+        // Named accents do not use this mix — AO3 Red's step is the fixed `#EE8A93`.
         #expect(ReaderTheme.dark.cardBackdrop.hexString == "#0B0B0D")
         #expect(ReaderTheme.dark.accentInk(for: red).hexString == "#C26666")
         #expect(ReaderTheme.oled.accentInk(for: red).hexString == "#BD5959")
@@ -40,7 +44,44 @@ struct AccentInkTests {
         #expect(previousDarkStep.contrastRatio(on: ReaderTheme.dark.cardBackdrop) < 4.5)
     }
 
+    @Test func eachNamedAccentKeepsItsFillAndDarkStep() throws {
+        #expect(AppAccent.all.count == 6)
+        #expect(AppAccent.ao3Red.isDefault)
+        #expect(ThemeManager.ao3Red == "#821019")
+        for accent in AppAccent.all {
+            let fill = try #require(Color(hex: accent.fillHex))
+            #expect(fill.hexString == accent.fillHex)
+            #expect(AppAccent.named(hex: accent.fillHex.lowercased()) == accent)
+            for theme in [ReaderTheme.dark, .oled] {
+                #expect(theme.accentInk(for: fill).hexString == accent.darkInkHex)
+            }
+            for theme in [ReaderTheme.light, .sepia] {
+                #expect(theme.accentInk(for: fill) == fill)
+            }
+        }
+    }
+
+    @Test func aCustomColourUsesTheReadableStep() throws {
+        let custom = try #require(Color(hex: "#2468AC"))
+        #expect(AppAccent.named(hex: custom.hexString) == nil)
+        for theme in [ReaderTheme.dark, .oled] {
+            let ink = theme.accentInk(for: custom)
+            #expect(ink.hexString == custom.readable(on: theme.cardBackdrop).hexString)
+            #expect(ink.contrastRatio(on: theme.cardBackdrop) >= 4.5)
+        }
+    }
+
     @MainActor @Test func subjectPalettesKeepTheirIdentityOutOfControlTint() throws {
+        let defaults = UserDefaults.standard
+        let previous = defaults.object(forKey: "accentColorHex")
+        defaults.removeObject(forKey: "accentColorHex")
+        defer {
+            if let previous {
+                defaults.set(previous, forKey: "accentColorHex")
+            } else {
+                defaults.removeObject(forKey: "accentColorHex")
+            }
+        }
         let subject = try #require(Color(hex: "#356A72"))
         for theme in ReaderTheme.allCases {
             let palette = SubjectPalette(color: subject, theme: theme)
@@ -65,10 +106,16 @@ struct AccentInkTests {
         for theme in ReaderTheme.allCases {
             manager.appTheme = theme
             #expect(manager.accentInk == theme.accentInk(for: manager.effectiveTint))
-            if theme == .dark || theme == .oled {
-                #expect(manager.effectiveTint.hexString == "#990000")
+            if theme == .sepia {
+                #expect(manager.effectiveTint == theme.appTint)
+                #expect(manager.accentInk == manager.effectiveTint)
+            } else if theme == .dark || theme == .oled {
+                #expect(manager.effectiveTint.hexString == "#2468AC")
+                let custom = try #require(Color(hex: "#2468AC"))
+                #expect(manager.accentInk.hexString == custom.readable(on: theme.cardBackdrop).hexString)
                 #expect(manager.accentInk.contrastRatio(on: theme.cardBackdrop) >= 4.5)
             } else {
+                #expect(manager.effectiveTint.hexString == "#2468AC")
                 #expect(manager.accentInk == manager.effectiveTint)
             }
         }
@@ -125,7 +172,7 @@ struct AccentInkTests {
             if theme == .sepia {
                 #expect(actual.fill == theme.appTint)
             } else {
-                #expect(actual.fill.hexString == ThemeManager.ao3Red)
+                #expect(actual.fill.hexString == "#356A72")
             }
         }
     }
@@ -137,8 +184,8 @@ struct AccentInkTests {
         defer {
             for (key, value) in zip(keys, previous) { defaults.set(value, forKey: key) }
         }
-        let manager = ThemeManager()
         defaults.set("#EEDDBB", forKey: "accentColorHex")
+        let manager = ThemeManager()
         for theme in ReaderTheme.allCases {
             manager.appTheme = theme
             for usePalette in [true, false] {
@@ -212,18 +259,100 @@ struct AccentInkTests {
         }
     }
 
-    @Test func backupsKeepDecodingLegacyAccentWithoutExportingOrApplyingIt() throws {
+    @MainActor @Test func defaultAccentIsAO3Red821019() {
+        let defaults = UserDefaults.standard
+        let previous = defaults.object(forKey: "accentColorHex")
+        defaults.removeObject(forKey: "accentColorHex")
+        defer {
+            if let previous {
+                defaults.set(previous, forKey: "accentColorHex")
+            } else {
+                defaults.removeObject(forKey: "accentColorHex")
+            }
+        }
+        let manager = ThemeManager()
+        #expect(manager.accentHex == "#821019")
+        #expect(defaults.string(forKey: "accentColorHex") == nil)
+        manager.appTheme = .light
+        #expect(manager.effectiveTint.hexString == "#821019")
+    }
+
+    @MainActor @Test func legacyStoredRedIsNotRewrittenToTheNewDefault() {
+        let defaults = UserDefaults.standard
+        let previous = defaults.object(forKey: "accentColorHex")
+        defer {
+            if let previous {
+                defaults.set(previous, forKey: "accentColorHex")
+            } else {
+                defaults.removeObject(forKey: "accentColorHex")
+            }
+        }
+        defaults.set("#990000", forKey: "accentColorHex")
+        let manager = ThemeManager()
+        #expect(manager.accentHex == "#990000")
+        #expect(defaults.string(forKey: "accentColorHex") == "#990000")
+        manager.appTheme = .light
+        #expect(manager.effectiveTint.hexString == "#990000")
+    }
+
+    @Test func presentAccentIsCapturedAndApplied() throws {
         let suite = "AccentInkTests.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
 
-        defaults.set("#2468AC", forKey: "accentColorHex")
+        defaults.set("#112233", forKey: "accentColorHex")
         var settings = KudosBackupSettings.capture(defaults: defaults)
-        #expect(settings.accentColorHex == "#990000")
+        #expect(settings.accentColorHex == "#112233")
 
-        settings.accentColorHex = "#EEDDBB"
+        defaults.set("#445566", forKey: "accentColorHex")
         settings.apply(to: defaults)
-        #expect(defaults.string(forKey: "accentColorHex") == "#2468AC")
+        #expect(defaults.string(forKey: "accentColorHex") == "#112233")
+    }
+
+    @Test func absentAccentLeavesTheLocalValue() throws {
+        let suite = "AccentInkTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        defaults.set("#445566", forKey: "accentColorHex")
+        let captured = KudosBackupSettings.capture(defaults: defaults)
+        let data = try JSONEncoder().encode(captured)
+        var object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        object.removeValue(forKey: "accentColorHex")
+        let missing = try JSONSerialization.data(withJSONObject: object)
+        let decoded = try JSONDecoder().decode(KudosBackupSettings.self, from: missing)
+        #expect(decoded.accentColorHex == nil)
+        decoded.apply(to: defaults)
+        #expect(defaults.string(forKey: "accentColorHex") == "#445566")
+
+        object["accentColorHex"] = NSNull()
+        let nullKey = try JSONSerialization.data(withJSONObject: object)
+        let fromNull = try JSONDecoder().decode(KudosBackupSettings.self, from: nullKey)
+        #expect(fromNull.accentColorHex == nil)
+        fromNull.apply(to: defaults)
+        #expect(defaults.string(forKey: "accentColorHex") == "#445566")
+    }
+
+    @Test func legacyRedRestoresAsItself() throws {
+        let suite = "AccentInkTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        defaults.set("#821019", forKey: "accentColorHex")
+        var settings = KudosBackupSettings.capture(defaults: defaults)
+        settings.accentColorHex = "#990000"
+        settings.apply(to: defaults)
+        #expect(defaults.string(forKey: "accentColorHex") == "#990000")
+    }
+
+    @Test func captureWithoutAStoredAccentWritesTheNewDefault() throws {
+        let suite = "AccentInkTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        defaults.removeObject(forKey: "accentColorHex")
+        let settings = KudosBackupSettings.capture(defaults: defaults)
+        #expect(settings.accentColorHex == "#821019")
     }
 
     @MainActor @Test func worksFilterHeaderGroundIsSepiaAndOtherThemesKeepTheirGround() throws {
