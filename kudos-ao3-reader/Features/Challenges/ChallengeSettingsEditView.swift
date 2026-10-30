@@ -604,7 +604,7 @@ struct ChallengeSettingsEditView: View {
             .frame(maxWidth: .infinity)
             .frame(minHeight: 44)
             .background(
-                RoundedRectangle(cornerRadius: SubjectMetrics.controlRadius(dynamicTypeSize), style: .continuous)
+                SubjectMetrics.controlShape(dynamicTypeSize)
                     .fill(theme.effectiveTint)
             )
         }

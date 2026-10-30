@@ -241,7 +241,11 @@ struct CategoryCardSkeleton: View {
                     .padding(.top, 2)
                 FlowLayout(spacing: 6, rowSpacing: 6) {
                     ForEach(0 ..< chipCount, id: \.self) { index in
-                        SkeletonBlock(height: 28, width: index.isMultiple(of: 2) ? 116 : 82, cornerRadius: SubjectMetrics.capsuleRadius)
+                        SkeletonBlock(
+                            height: 28,
+                            width: index.isMultiple(of: 2) ? 116 : 82,
+                            cornerRadius: SubjectMetrics.capsuleRadius
+                        )
                     }
                 }
             }

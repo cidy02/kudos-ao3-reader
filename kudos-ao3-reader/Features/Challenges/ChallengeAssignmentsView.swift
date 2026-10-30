@@ -432,7 +432,9 @@ struct ChallengeAssignmentsView: View {
         }
         .buttonStyle(.bordered)
         .foregroundStyle(tint)
-        .buttonBorderShape(dynamicTypeSize.isAccessibilitySize ? .roundedRectangle(radius: SubjectMetrics.cornerRadius) : .automatic)
+        .buttonBorderShape(
+            dynamicTypeSize.isAccessibilitySize ? .roundedRectangle(radius: SubjectMetrics.cornerRadius) : .automatic
+        )
         .tint(tint)
     }
 
@@ -702,10 +704,10 @@ extension ChallengeAssignmentsView {
                     .frame(minHeight: 44)
                     .fixedSize(horizontal: false, vertical: true)
                     .background(
-                        RoundedRectangle(cornerRadius: SubjectMetrics.controlRadius(dynamicTypeSize), style: .continuous)
+                        SubjectMetrics.controlShape(dynamicTypeSize)
                             .fill(theme.appTheme.glassFill(0.10))
                             .overlay(
-                                RoundedRectangle(cornerRadius: SubjectMetrics.controlRadius(dynamicTypeSize), style: .continuous)
+                                SubjectMetrics.controlShape(dynamicTypeSize)
                                     .strokeBorder(theme.appTheme.glassStroke(0.16), lineWidth: 0.5)
                             )
                     )
@@ -722,7 +724,7 @@ extension ChallengeAssignmentsView {
                     .frame(maxWidth: .infinity)
                     .frame(minHeight: 44)
                     .fixedSize(horizontal: false, vertical: true)
-                    .background(RoundedRectangle(cornerRadius: SubjectMetrics.controlRadius(dynamicTypeSize), style: .continuous).fill(theme.effectiveTint))
+                    .background(SubjectMetrics.controlShape(dynamicTypeSize).fill(theme.effectiveTint))
             }
             .buttonStyle(.plain)
             .disabled(unmatched.isEmpty || itemInFlight != nil)

@@ -336,7 +336,10 @@ struct MediaBrowserView: View {
         .background(
             RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
                 .fill(themeManager.appTheme.carouselCardSurface)
-                .overlay(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous).fill(palette.cardWash))
+                .overlay(
+                    RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
+                        .fill(palette.cardWash)
+                )
                 .shadow(color: themeManager.appTheme.carouselCardShadow.color,
                         radius: themeManager.appTheme.carouselCardShadow.radius,
                         x: 0, y: themeManager.appTheme.carouselCardShadow.y)

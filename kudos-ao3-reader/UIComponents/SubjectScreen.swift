@@ -649,7 +649,7 @@ struct FandomClusterChip: View {
     }
 
     private var chipBackground: some View {
-        let shape = RoundedRectangle(cornerRadius: SubjectMetrics.controlRadius(dynamicTypeSize), style: .continuous)
+        let shape = SubjectMetrics.controlShape(dynamicTypeSize)
         return shape
             .fill(themeManager.appTheme.glassFill(0.07))
             .overlay(shape.strokeBorder(themeManager.appTheme.glassStroke(0.10), lineWidth: 0.5))
