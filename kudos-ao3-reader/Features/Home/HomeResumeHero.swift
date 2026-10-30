@@ -495,15 +495,17 @@ struct WorkResumeCard: View {
     /// it keeps that row's language, chapters, comments, bookmarks and hits too.
     private var metadataLine: String? {
         if variant == .next {
+            // The chapter caption already prints the posted count and
+            // "Updated …". Passing them here showed each fact twice.
             let figures = WorkStat.ledgerFigures(
                 language: model.language,
                 wordCount: model.words,
-                chapters: model.chapters,
+                chapters: "",
                 comments: model.commentCount,
                 kudos: model.statKudos,
                 bookmarks: model.bookmarkCount,
                 hits: model.hitCount,
-                dateUpdated: model.updated,
+                dateUpdated: "",
                 showsZeroStats: showsZeroStats,
                 zeroCountsRequireWords: true
             )
