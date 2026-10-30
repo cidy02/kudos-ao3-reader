@@ -445,7 +445,7 @@ struct AO3AuthorWorksSection: View {
                 expandAll: expandAll,
                 isSelecting: true,
                 isSelected: isSelected,
-                presentation: arrangement == .list ? .searchLedger : .standard,
+                presentation: arrangement == nil ? .standard : .searchLedger,
                 showsSummary: arrangement == nil && showsSummary
             )
         }

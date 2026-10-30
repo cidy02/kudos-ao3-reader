@@ -162,8 +162,10 @@ struct AO3AccountWorksList: View {
     /// an `AO3SearchPage` and throw them away.
     @State private var bookmarkDetails: [Int: AO3AuthorBookmark] = [:]
     @State private var expandAll = false
-    /// Matches Account tab's layout preference so Refine screens stay consistent.
-    @AppStorage("account.displayMode") private var displayMode: WorkListDisplayMode = .compact
+    /// List or Grid for Marked for Later, Bookmarks, History, and a collection.
+    /// Subscriptions keeps its own rows and does not store one. Resolved once
+    /// from the shared `account.displayMode` key; that key is left in place.
+    @State private var arrangement: WorkListArrangement = .list
     /// Client-side refine of the loaded page — narrows the works on screen in place,
     /// contextual to this account list rather than a fresh AO3 search.
     @State private var filters = AO3SearchFilters()
@@ -305,17 +307,14 @@ struct AO3AccountWorksList: View {
                                 MatureRevealToggle()
                             }
                             if hasWorks {
-                                // 1o is one layout — covers for what changed, ledger
-                                // rows for the rest — so the account-wide display
-                                // switch would change a preference this screen
-                                // does not draw. Subscriptions is one list too:
-                                // the chapter range and the unsubscribe swipe
-                                // are on that row, and the switch would not draw them.
-                                if kind != .markedForLater, kind != .subscriptions {
-                                    DisplayModeMenuPicker(mode: $displayMode)
-                                    if displayMode != .compact {
-                                        ExpandAllMenuItem(expandAll: $expandAll)
-                                    }
+                                // Subscriptions keeps the chapter range and the
+                                // unsubscribe swipe. It has no List/Grid switch.
+                                // The other lists are ledger rows: List or Grid,
+                                // and no Expand All (the summary is on long-press).
+                                if kind == .subscriptions {
+                                    ExpandAllMenuItem(expandAll: $expandAll)
+                                } else {
+                                    ListGridMenuPicker(arrangement: $arrangement)
                                 }
                                 if tracksNewChapters, worksWithNewChapters > 0 {
                                     Button(action: markAllSeen) {
@@ -384,6 +383,10 @@ struct AO3AccountWorksList: View {
                     // generation keeps the page, so this is not a new load.
                     enrichLoadedSubscriptionPage(works, generation: auth.sessionGeneration)
                 }
+            }
+            .onAppear(perform: loadArrangement)
+            .onChange(of: arrangement) { _, newValue in
+                persistArrangement(newValue)
             }
             .onDisappear { subscriptionEnrichment?.cancel() }
             .sheet(isPresented: $showLogin) { AO3LoginView() }
@@ -563,8 +566,7 @@ struct AO3AccountWorksList: View {
                 AO3HistoryWorksBrowser(
                     entries: historyDisplayedEntries,
                     readings: readingEntries,
-                    displayMode: displayMode,
-                    expandAll: expandAll,
+                    arrangement: arrangement,
                     palette: accountPalette,
                     kicker: originKicker,
                     subtitle: headerTallyLine,
@@ -580,6 +582,7 @@ struct AO3AccountWorksList: View {
                 AO3MarkedForLaterWorksBrowser(
                     entries: visibleEntries,
                     watermarks: markedForLaterWatermarks,
+                    arrangement: arrangement,
                     expandAll: expandAll,
                     palette: accountPalette,
                     kicker: originKicker,
@@ -598,8 +601,7 @@ struct AO3AccountWorksList: View {
                 AO3BookmarksWorksBrowser(
                     entries: visibleEntries,
                     bookmarks: bookmarkDetails,
-                    displayMode: displayMode,
-                    expandAll: expandAll,
+                    arrangement: arrangement,
                     palette: accountPalette,
                     kicker: originKicker,
                     showPagination: showPagination,
@@ -628,7 +630,7 @@ struct AO3AccountWorksList: View {
                     onUnsubscribe: { pendingUnsubscribe = $0 },
                     onEnriched: noteEnrichedSubscription
                 )
-            } else if displayMode == .compact {
+            } else if arrangement == .grid {
                 ScrollView {
                     VStack(spacing: 12) {
                         subjectHeader.padding(.top, 20)
@@ -638,10 +640,8 @@ struct AO3AccountWorksList: View {
                     }
                     .padding(.vertical, 8)
                 }
-                // The wash, not the flat backdrop: the compact grid is a different
-                // arrangement of this list, not a different screen, and a page
-                // that changed colour at a display-mode switch would be a bug in
-                // waiting. `subjectScreenWash` paints the backdrop itself.
+                // The wash, not the flat backdrop: the grid is a different
+                // arrangement of this list, not a different screen.
                 .subjectScreenWash(palette: accountPalette)
             } else {
                 List {
@@ -660,8 +660,10 @@ struct AO3AccountWorksList: View {
                                 readingAnnotated(entry) {
                                     SensitiveWorkRow(
                                         work: work,
-                                        expandAll: expandAll,
-                                        presentation: displayMode == .ledger ? .ledger : .standard
+                                        presentation: .ledger,
+                                        showsFavoriteStar: true,
+                                        showsFullLedgerStats: true,
+                                        showsSummary: false
                                     )
                                 }
                                     // The badge belongs on this branch too: a
@@ -685,8 +687,8 @@ struct AO3AccountWorksList: View {
                                 readingAnnotated(entry) {
                                     EnrichingAO3WorkRow(
                                         work: remote,
-                                        expandAll: expandAll,
-                                        presentation: displayMode == .ledger ? .searchLedger : .standard
+                                        presentation: .searchLedger,
+                                        showsSummary: false
                                     )
                                 }
                                 .overlay(alignment: .topTrailing) {
@@ -721,6 +723,35 @@ struct AO3AccountWorksList: View {
             }
         }
         .refreshable { await load(page: currentPage) }
+    }
+
+    /// Per-list key. Nil for Subscriptions, which has no List/Grid switch.
+    private var arrangementKey: String? {
+        switch kind {
+        case .markedForLater: WorkListKeys.markedForLaterArrangement
+        case .bookmarks: WorkListKeys.bookmarksArrangement
+        case .history: WorkListKeys.ao3HistoryArrangement
+        case let .collection(name, _): WorkListKeys.ao3CollectionArrangement(name)
+        case .subscriptions: nil
+        }
+    }
+
+    /// Copies a stored Compact/Detailed/Ledger value onto this list's key once.
+    /// A missing key stays missing and the screen draws List.
+    private func loadArrangement() {
+        guard let arrangementKey else { return }
+        let resolved = WorkListLayoutMigration.resolve(
+            arrangementKey: arrangementKey,
+            legacyDisplayModeKey: WorkListKeys.accountDisplayMode
+        )
+        if arrangement != resolved {
+            arrangement = resolved
+        }
+    }
+
+    private func persistArrangement(_ value: WorkListArrangement) {
+        guard let arrangementKey else { return }
+        UserDefaults.standard.set(value.rawValue, forKey: arrangementKey)
     }
 
     // MARK: Subscriptions — what is new since you last looked (spec 1p)
@@ -1162,10 +1193,12 @@ enum AO3AccountWorksPaging {
 /// of duplication that drifts.
 struct EnrichingAO3WorkRow: View {
     let work: AO3WorkSummary
-    let expandAll: Bool
+    var expandAll: Bool = false
     var presentation: AO3WorkRow.Presentation = .standard
     /// 1q: a bookmark turns the row into the bookmark card (note, tags, date).
     var bookmark: AO3AuthorBookmark?
+    /// Detailed rows. Off hides the summary paragraph only.
+    var showsSummary = true
     /// Fired when enrichment produced a summary. Nil for every caller except
     /// the subscriptions list, which needs the work page's chapter count for
     /// grouping. The row's own card still uses `enriched` either way.
@@ -1176,7 +1209,13 @@ struct EnrichingAO3WorkRow: View {
     private var displayed: AO3WorkSummary { enriched ?? work }
 
     var body: some View {
-        AO3WorkRow(work: displayed, expandAll: expandAll, presentation: presentation, bookmark: bookmark)
+        AO3WorkRow(
+            work: displayed,
+            expandAll: expandAll,
+            presentation: presentation,
+            bookmark: bookmark,
+            showsSummary: showsSummary
+        )
             .cardNavigation(to: displayed, accessibilityLabel: displayed.title)
             .task(id: work.id) {
                 // `.task(id:)` so recycling this row onto a different work cancels

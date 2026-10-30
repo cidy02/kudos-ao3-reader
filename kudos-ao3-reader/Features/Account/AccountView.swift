@@ -31,17 +31,14 @@ struct AccountView: View {
     @State private var showingInboxFilters = false
     @State private var filters = AO3SearchFilters()
     @State private var showingFilters = false
+    /// Still read by the unused profile-content helper. The hub no longer draws
+    /// an inline work list, so nothing toggles it.
     @State private var expandAll = false
-    /// Detailed list rows vs compact two-up cover cards — shared across Account
-    /// work lists (Reading / Writing / Activity) and persisted like Home/Library.
-    @AppStorage("account.displayMode") private var displayMode: WorkListDisplayMode = .compact
     /// The reader's chosen Shortcuts, as an ordered list of raw values.
     @AppStorage(AccountShortcutStore.key) private var shortcutsRaw = ""
     @State private var editingShortcuts = false
     @AppStorage("hideMatureContent") private var hideMature = true
     @State private var postingPseudName: String?
-    /// Bumped by pull-to-refresh on list-style Reading/Activity segments.
-    @State private var listReloadToken = 0
     @State private var confirmingLogOut = false
 
     enum Route: Hashable {
@@ -317,39 +314,6 @@ struct AccountView: View {
         model.activate(auth: auth)
     }
 
-    private func refreshCurrentTab() async {
-        guard auth.isLoggedIn else { return }
-        switch selectedTab {
-        case .overview:
-            if let model = profileModel { await model.refresh(auth: auth) }
-        case .reading:
-            switch readingTab {
-            case .bookmarks:
-                if let model = profileModel { await model.refresh(auth: auth) }
-            case .later, .subscriptions:
-                listReloadToken += 1
-            case .collections:
-                // Collections is a push-only card (full list is `AO3CollectionsList`);
-                // nothing inline observes `listReloadToken`.
-                break
-            }
-        case .writing:
-            switch writingTab {
-            case .works, .series:
-                if let model = profileModel { await model.refresh(auth: auth) }
-            case .drafts:
-                break
-            }
-        case .activity:
-            switch activityTab {
-            case .history:
-                listReloadToken += 1
-            case .inbox:
-                await inboxModel.refresh(auth: auth)
-            }
-        }
-    }
-
     // MARK: Destinations & toolbar
 
     @ViewBuilder
@@ -410,8 +374,8 @@ struct AccountView: View {
         )
     }
 
-    /// Work-list chrome (Detailed/Compact + Expand) for Account segments that
-    /// show work cards. Series / Drafts / Inbox / Overview skip it.
+    /// The hub's rows open their own screens. Those screens own List/Grid and
+    /// Show Summaries. This page has no inline work list to switch.
     private var showsWorkListControls: Bool {
         guard auth.isLoggedIn else { return false }
         switch selectedTab {
@@ -970,7 +934,6 @@ struct AccountView: View {
                     AO3AuthorWorksSection(
                         model: model,
                         expandAll: expandAll,
-                        displayMode: displayMode,
                         layout: layout,
                         filters: filters
                     )
@@ -978,7 +941,6 @@ struct AccountView: View {
                     AO3AuthorBookmarksSection(
                         model: model,
                         expandAll: expandAll,
-                        displayMode: displayMode,
                         layout: layout
                     )
                 }
@@ -1098,10 +1060,7 @@ private extension AccountView {
             showingInboxFilters: $showingInboxFilters,
             isWorksVisible: selectedTab == .writing && writingTab == .works,
             showingWorksFilter: $showingFilters,
-            showsMatureRevealControl: showsMatureRevealControl,
-            showsWorkListControls: showsWorkListControls,
-            displayMode: $displayMode,
-            expandAll: $expandAll
+            showsMatureRevealControl: showsMatureRevealControl
         )
     }
 
