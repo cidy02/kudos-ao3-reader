@@ -85,7 +85,7 @@ struct SettingsAppearancePage: View {
                     pickerBridge.present(initialHex: hex)
                 }
             }
-            Button("Keep AO3 Red") { themeManager.resetAccent() }
+            Button("Keep AO3 Red", role: .cancel) {}
         } message: {
             Text("Kudos is designed around its six accent colours. They keep text readable in Light, Sepia, Dark and OLED, and stay clear of the red used for Delete. A custom colour may make some buttons and links harder to read.")
         }
