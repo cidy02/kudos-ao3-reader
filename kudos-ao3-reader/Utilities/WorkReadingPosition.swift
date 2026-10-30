@@ -31,9 +31,15 @@ enum WorkReadingPosition {
     /// order, nil for an item outside Readium's reading order (no positions, no progress).
     static func publicationProgress(spineIndex: Int, chapterFraction: Double, resourceLengths: [Int?]) -> Double? {
         guard resourceLengths.indices.contains(spineIndex), resourceLengths[spineIndex] != nil else { return nil }
-        let positions = resourceLengths.map { $0.map { max(1, Int((Double($0) / 1024).rounded(.up))) } ?? 0 }
+        let positions = resourceLengths.map { $0.map(Self.positions(forEntryLength:)) ?? 0 }
         let before = positions[..<spineIndex].reduce(0, +)
         let within = min(max(chapterFraction, 0), 1) * Double(positions[spineIndex])
         return (Double(before) + within) / Double(positions.reduce(0, +))
+    }
+
+    /// Readium's position weight for one ZIP entry: `max(1, ceil(bytes / 1024))`.
+    /// A missing entry is not this — callers pass 0 positions for those.
+    static func positions(forEntryLength bytes: Int) -> Int {
+        max(1, Int((Double(max(0, bytes)) / 1024).rounded(.up)))
     }
 }

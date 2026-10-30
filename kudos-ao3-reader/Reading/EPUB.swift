@@ -287,6 +287,34 @@ nonisolated struct EPUBDocument {
         return EPUBPackageInspection(metadata: metadata, readableItemCount: readableItemCount)
     }
 
+    /// One Readium position-weight per story chapter, in reading order.
+    /// Front matter (Preface, Summary, Afterword) is left out. Lengths are the
+    /// ZIP entry sizes Readium already uses (`WorkReadingPosition`), read without
+    /// keeping the unzipped tree. Equal bars are the caller's job when this throws.
+    static func storyChapterPositionWeights(ofEPUBAt url: URL) throws -> [Int] {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("chapter-lengths-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let document = try EPUBDocument.open(epubURL: url, into: directory)
+        let hrefs = document.spineURLs.map(\.lastPathComponent)
+        let sections = ReaderSectionBuilder.build(
+            tocEntries: document.chapters.map {
+                ReaderSectionBuilder.RawTOCEntry(title: $0.title, spineIndex: $0.spineIndex)
+            },
+            spineHrefs: hrefs
+        )
+        let weights = sections.compactMap { section -> Int? in
+            guard section.kind == .chapter else { return nil }
+            let bytes = document.spineEntryLengths.indices.contains(section.spineIndex)
+                ? (document.spineEntryLengths[section.spineIndex] ?? 0)
+                : 0
+            return WorkReadingPosition.positions(forEntryLength: bytes)
+        }
+        guard !weights.isEmpty else { throw EPUBError.noReadableContent }
+        return weights
+    }
+
     /// Pulls the OPF path out of META-INF/container.xml.
     private static func rootfilePath(from containerData: Data) -> String? {
         final class ContainerDelegate: NSObject, XMLParserDelegate {
