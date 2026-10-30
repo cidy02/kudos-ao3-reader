@@ -119,13 +119,13 @@ private struct UnblurredHomeResumeHero: View {
     @ScaledMetric(relativeTo: .subheadline) private var buttonSize: CGFloat = 14
     @ScaledMetric(relativeTo: .caption) private var ringSize: CGFloat = 68
 
-    /// Spec 1b floats the four-signal tray in the card's top-trailing corner and
+    /// Spec 1b floats the four-tag grid in the card's top-trailing corner and
     /// reserves 94pt of the kicker's and title's trailing edge for it, so long
     /// titles wrap before they reach it instead of running underneath. An
-    /// overlay rather than an HStack sibling: the tray is much taller than one
+    /// overlay rather than an HStack sibling: the grid is much taller than one
     /// line of kicker, and in an HStack its height would drive the whole row's
     /// spacing to whatever sits below.
-    private let signalTrayReservedWidth: CGFloat = 94
+    private let signalGridReservedWidth: CGFloat = 94
 
     /// Individual author names for the byline — matches WorkDetailView's
     /// `displayAuthorList` derivation for the same work.
@@ -165,10 +165,10 @@ private struct UnblurredHomeResumeHero: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if dynamicTypeSize.isAccessibilitySize { signalTray }
+            if dynamicTypeSize.isAccessibilitySize { signalGrid }
             if let primaryFandomName {
                 SubjectKicker(text: primaryFandomName, palette: subjectPalette, size: 9.5, ruleSpacing: 7)
-                    .padding(.trailing, dynamicTypeSize.isAccessibilitySize ? 0 : signalTrayReservedWidth)
+                    .padding(.trailing, dynamicTypeSize.isAccessibilitySize ? 0 : signalGridReservedWidth)
             }
 
             Text(work.title)
@@ -178,7 +178,7 @@ private struct UnblurredHomeResumeHero: View {
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.trailing, dynamicTypeSize.isAccessibilitySize ? 0 : signalTrayReservedWidth)
+                .padding(.trailing, dynamicTypeSize.isAccessibilitySize ? 0 : signalGridReservedWidth)
 
             metadataLine
             resumeRow
@@ -189,21 +189,21 @@ private struct UnblurredHomeResumeHero: View {
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .background(heroCardBackground)
         .overlay(alignment: .topTrailing) {
-            if !dynamicTypeSize.isAccessibilitySize { signalTray.padding(14) }
+            // On the card's own content insets, now no tray pads it in (I-1).
+            if !dynamicTypeSize.isAccessibilitySize { signalGrid.padding(.top, 16).padding(.trailing, 18) }
         }
         .contentShape(RoundedRectangle(cornerRadius: SubjectMetrics.heroRadius, style: .continuous))
         .workCardZoomSource(work.zoomKey, in: zoomNamespace)
     }
 
-    private var signalTray: some View {
+    private var signalGrid: some View {
         WorkStatusIconGrid(
                 rating: work.rating.isEmpty ? nil : work.rating,
                 categories: work.workCategories,
                 warnings: work.workWarnings,
                 completion: work.completionStatus,
-                tileSize: 22,
-                announcesToVoiceOver: true,
-                showsTray: true
+                tileSize: 24,
+                announcesToVoiceOver: true
         )
     }
 

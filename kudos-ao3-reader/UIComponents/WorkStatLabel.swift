@@ -108,10 +108,15 @@ struct WorkTopStatsRow: View {
     var stacked: Bool = false
 
     struct Item {
+        /// Which of AO3's four tags an item states; nil for the other stats
+        /// (`WorkListStatsRow`'s language, words…) that reuse this type.
+        enum Facet { case rating, category, warnings, completion }
+
         let text: String
         let symbol: String
         let accessibilityLabel: String
         var iconColor: Color?
+        var facet: Facet?
     }
 
     /// Checking `categories` for emptiness isn't enough: an unrecognized
@@ -124,14 +129,12 @@ struct WorkTopStatsRow: View {
     /// The category chips only, for tests: the collapse rule is the thing worth
     /// pinning and `topItems` mixes in three other facets.
     var categoryChipTexts: [String] {
-        topItems.filter { $0.symbol == "person.2.fill" }.map(\.text)
+        topItems.filter { $0.facet == .category }.map(\.text)
     }
 
-    /// The warning chips only — same reason as `categoryChipTexts`. All three
-    /// warning states share one symbol (colour carries the distinction), and no
-    /// other facet uses it, so it identifies the group.
+    /// The warning chips only — same reason as `categoryChipTexts`.
     var warningChipTexts: [String] {
-        topItems.filter { $0.symbol == "exclamationmark.circle.fill" }.map(\.text)
+        topItems.filter { $0.facet == .warnings }.map(\.text)
     }
 
     var topItems: [Item] {
@@ -141,7 +144,8 @@ struct WorkTopStatsRow: View {
                 text: WorkStat.ratingLetter(rating) ?? rating,
                 symbol: "checkmark.shield",
                 accessibilityLabel: rating,
-                iconColor: WorkStat.ratingColor(rating)
+                iconColor: WorkStat.ratingColor(rating),
+                facet: .rating
             ))
         }
         let recognized = categories.filter { WorkStat.categoryColor($0) != nil }
@@ -156,14 +160,16 @@ struct WorkTopStatsRow: View {
                 text: "Multi",
                 symbol: "person.2.fill",
                 accessibilityLabel: "Categories: \(recognized.joined(separator: ", "))",
-                iconColor: WorkStat.categoryColor("Multi")
+                iconColor: WorkStat.categoryColor("Multi"),
+                facet: .category
             ))
         } else if recognized.isEmpty {
             result.append(Item(
                 text: "N/A",
                 symbol: "person.2.fill",
                 accessibilityLabel: "Category: not categorized",
-                iconColor: .gray
+                iconColor: .gray,
+                facet: .category
             ))
         } else {
             for category in recognized {
@@ -171,7 +177,8 @@ struct WorkTopStatsRow: View {
                     text: category,
                     symbol: "person.2.fill",
                     accessibilityLabel: WorkStat.categoryAccessibilityLabel(category),
-                    iconColor: WorkStat.categoryColor(category)
+                    iconColor: WorkStat.categoryColor(category),
+                    facet: .category
                 ))
             }
         }
@@ -187,7 +194,8 @@ struct WorkTopStatsRow: View {
                     text: warning,
                     symbol: status.symbol,
                     accessibilityLabel: "Warning: \(warning)",
-                    iconColor: status.color
+                    iconColor: status.color,
+                    facet: .warnings
                 ))
             }
         } else {
@@ -195,14 +203,16 @@ struct WorkTopStatsRow: View {
                 text: status.text,
                 symbol: status.symbol,
                 accessibilityLabel: status.accessibilityLabel(rawWarnings: warnings),
-                iconColor: status.color
+                iconColor: status.color,
+                facet: .warnings
             ))
         }
         result.append(Item(
             text: completion.shortText,
             symbol: completion.symbol,
             accessibilityLabel: "Status: \(completion.text)",
-            iconColor: completion.color
+            iconColor: completion.color,
+            facet: .completion
         ))
         return result
     }
@@ -260,12 +270,8 @@ struct WorkTopStatsRow: View {
                 // "In Progress"). A FlowLayout, not an HStack, only so a rare
                 // expanded/long combination still wraps instead of
                 // overflowing the card.
-                let ratingAndCategory = topItems.filter {
-                    $0.symbol == "checkmark.shield" || $0.symbol == "person.2.fill"
-                }
-                let rest = topItems.filter {
-                    $0.symbol != "checkmark.shield" && $0.symbol != "person.2.fill"
-                }
+                let ratingAndCategory = topItems.filter { $0.facet == .rating || $0.facet == .category }
+                let rest = topItems.filter { $0.facet != .rating && $0.facet != .category }
                 if !ratingAndCategory.isEmpty {
                     FlowLayout(spacing: 6, rowSpacing: 5) {
                         ForEach(Array(ratingAndCategory.enumerated()), id: \.offset) { _, item in
@@ -287,19 +293,24 @@ struct WorkTopStatsRow: View {
     }
 }
 
-/// Rating/category/warnings/completion as a compact icon-only 2×2 grid — AO3's
-/// own quadrant "tag grid" idea (Symbols Key: rating upper-left, category
-/// upper-right, warnings lower-right, completion lower-left — this follows the
-/// same reading order), reimagined in this app's own chip colors and symbols
-/// rather than AO3's flat colored-square-with-white-glyph badges.
+/// Rating, category, warnings and completion as four solid tiles — AO3's own
+/// required-tags grid in AO3's own colours (T-479, decision TILES), in the
+/// Symbols board's order: rating and category on top, warnings and completion
+/// below. Every tile always draws something: a tag that is absent (not rated,
+/// no category, no warnings, status unknown) is a grey tile, not a gap.
+/// `WorkSymbolTile` holds what each tile draws.
 ///
-/// Purely decorative — `topItems`' `WorkTopStatsRow.Item.accessibilityLabel`
-/// never reaches VoiceOver here (`.accessibilityHidden`), so callers must keep
-/// a real accessible summary of the same facts elsewhere (`WorkTopStatsRow`'s
+/// No tray behind it anywhere (I-1): solid tiles carry their own contrast on a
+/// plain row, a washed card and a gradient alike.
+///
+/// Purely decorative unless `announcesToVoiceOver` — callers that leave it off
+/// keep a real accessible summary of the same facts elsewhere (`WorkTopStatsRow`'s
 /// own text chips, or the card's title/stats row).
 struct WorkStatusIconGrid: View {
     enum Arrangement {
+        /// The 2×2 grid.
         case grid
+        /// One row of four, the spare width going between the tiles.
         case strip
     }
 
@@ -307,22 +318,20 @@ struct WorkStatusIconGrid: View {
     var categories: [String] = []
     var warnings: [String] = []
     var completion: WorkCompletionStatus = .unknown
-    var isExpanded: Bool = false
-    /// Each tile's edge length; gap/corner-radius/glyph sizes all scale with it
-    /// so the grid stays proportional at any size a caller asks for.
-    var tileSize: CGFloat = 18
+    /// Each tile's edge before Dynamic Type; the gap, corners and glyphs scale
+    /// with it. I-2: 24 for a grid or a strip, 22 for one tile in a filter
+    /// chip, 20 inline.
+    var tileSize: CGFloat = 24
     /// True when this grid is a card's *only* summary of rating/category/
     /// warnings/completion, with no separate always-visible text row to
     /// carry the accessible version — announces the same facts as one
-    /// VoiceOver stop instead of staying fully hidden. Default false matches
-    /// every existing caller, which keeps its own accessible text elsewhere.
+    /// VoiceOver stop instead of staying fully hidden.
     var announcesToVoiceOver: Bool = false
-    /// The established AO3-like quadrant remains the default. Compact redesigned
-    /// covers opt into a single horizontal signal strip.
     var arrangement: Arrangement = .grid
-    /// Adds the translucent signal tray used by the redesign while keeping the
-    /// existing bare-grid callers unchanged.
-    var showsTray: Bool = false
+
+    /// The board's tile geometry, as fractions of the tile.
+    static let cornerRadiusRatio: CGFloat = 0.24
+    static let gapRatio: CGFloat = 0.12
 
     var body: some View {
         WorkStatusIconGridContent(
@@ -330,30 +339,24 @@ struct WorkStatusIconGrid: View {
             categories: categories,
             warnings: warnings,
             completion: completion,
-            isExpanded: isExpanded,
             tileSize: tileSize,
             announcesToVoiceOver: announcesToVoiceOver,
-            arrangement: arrangement,
-            showsTray: showsTray
+            arrangement: arrangement
         )
         .dynamicTypeSize(.xSmall ... .accessibility2)
     }
 
-    /// The drawn height of the 2x2 tray, from the same constants it lays itself
-    /// out with — two tiles, the gap between them, and the tray's own vertical
-    /// padding. Exposed so a neighbour (the ledger row's progress ring) can match
-    /// its size instead of hard-coding a number that drifts the next time a tile
-    /// changes.
-    static func trayHeight(tileSize: CGFloat) -> CGFloat {
-        let gap = tileSize * 3 / 18
-        let verticalPadding = tileSize / 4
-        return tileSize * 2 + gap + verticalPadding * 2
+    /// The drawn height of the 2×2 grid — two tiles and the gap between them.
+    /// Exposed so a neighbour (the ledger row's progress ring) can match it
+    /// instead of hard-coding a number that drifts the next time a tile changes.
+    static func gridHeight(tileSize: CGFloat) -> CGFloat {
+        tileSize * (2 + gapRatio)
     }
 }
 
-/// Hands `content` the tray's drawn height at the current Dynamic Type size,
-/// under the same cap and scale the tray uses, so a neighbour sized to it grows with it.
-struct WorkStatusTrayMatched<Content: View>: View {
+/// Hands `content` the grid's drawn height at the current Dynamic Type size,
+/// under the same cap and scale the grid uses, so a neighbour sized to it grows with it.
+struct WorkStatusGridMatched<Content: View>: View {
     let tileSize: CGFloat
     @ViewBuilder var content: (CGFloat) -> Content
 
@@ -368,7 +371,7 @@ struct WorkStatusTrayMatched<Content: View>: View {
         @ScaledMetric(relativeTo: .caption2) private var scale: CGFloat = 1
 
         var body: some View {
-            content(WorkStatusIconGrid.trayHeight(tileSize: tileSize * scale))
+            content(WorkStatusIconGrid.gridHeight(tileSize: tileSize * scale))
         }
     }
 }
@@ -378,288 +381,127 @@ private struct WorkStatusIconGridContent: View {
     var categories: [String]
     var warnings: [String]
     var completion: WorkCompletionStatus
-    var isExpanded: Bool
     var tileSize: CGFloat
     var announcesToVoiceOver: Bool
     var arrangement: WorkStatusIconGrid.Arrangement
-    var showsTray: Bool
 
-    @Environment(ThemeManager.self) private var themeManager
+    @Environment(\.colorScheme) private var colorScheme
     @ScaledMetric(relativeTo: .caption2) private var scale: CGFloat = 1
 
-    private var items: [WorkTopStatsRow.Item] {
-        WorkTopStatsRow(
-            rating: rating, categories: categories, warnings: warnings,
-            completion: completion, isExpanded: isExpanded
-        ).topItems
-    }
+    private var side: CGFloat { tileSize * scale }
+    private var gap: CGFloat { side * WorkStatusIconGrid.gapRatio }
 
-    private var scaledTileSize: CGFloat { tileSize * scale }
-    private var gap: CGFloat { scaledTileSize * 3 / 18 }
-    private var cornerRadius: CGFloat { scaledTileSize * 4 / 18 }
-    private var iconSize: CGFloat { scaledTileSize * 10 / 18 }
-    private var shieldSize: CGFloat { scaledTileSize * 12 / 18 }
-    private var letterSize: CGFloat { scaledTileSize * 6 / 18 }
-    /// The Unicode pairing glyphs (⚢/⚣/⚤/♅) read smaller than the SF Symbol
-    /// icons around them at the same point size — Apple Symbols draws them
-    /// with more internal padding than SF Symbols' own icon metrics.
-    private var pairingSymbolSize: CGFloat { scaledTileSize * 12 / 18 }
-    /// Gen's sun glyph (☉) specifically reads much smaller than the other
-    /// icons at `pairingSymbolSize` — Apple Symbols draws it with far more
-    /// internal padding than the doubled-gender glyphs get. Measured its
-    /// rendered ink against the warning tile's own exclamationmark-circle
-    /// ink at both tile sizes: a font size equal to `tileSize` itself (not
-    /// `pairingSymbolSize`) lands within a couple percent of matching it.
-    private var genSymbolSize: CGFloat { scaledTileSize }
-    /// Multi tile geometry — plain design ratio, not anything measured. Two
-    /// quadrants across exactly fill the tile.
-    private var multiQuadrantSize: CGFloat { scaledTileSize / 2 }
+    /// Always the collapsed fold: a tile has room for one category, so several
+    /// are Multi whether or not the card around it is expanded.
+    private var tiles: [WorkSymbolTile] {
+        let dark = colorScheme == .dark
+        return [
+            .rating(rating, dark: dark),
+            .category(categories, dark: dark),
+            .warnings(WorkWarningStatus(rawWarnings: warnings), dark: dark),
+            .completion(completion, dark: dark),
+        ]
+    }
 
     var body: some View {
-        let resolvedItems = items
         if announcesToVoiceOver {
-            presentedIcons(resolvedItems)
-                .combinedAccessibilityRow(resolvedItems.map(\.accessibilityLabel).joined(separator: ", "))
+            // The text chips' own labels, so the grid says what they would.
+            let items = WorkTopStatsRow(
+                rating: rating, categories: categories, warnings: warnings, completion: completion
+            ).topItems
+            layout.combinedAccessibilityRow(items.map(\.accessibilityLabel).joined(separator: ", "))
         } else {
-            presentedIcons(resolvedItems).accessibilityHidden(true)
-        }
-    }
-
-    /// The tray is a flat translucent fill, NOT a material: it sits on a card
-    /// that already carries the subject's wash, and blurring an
-    /// already-translucent surface reads as a smear rather than as glass. Spec:
-    /// `rgba(255,255,255,.10)` under a `rgba(255,255,255,.16)` hairline, with
-    /// padding tied to the tile size (`8×6` at 24pt, `6×5` at 22pt).
-    @ViewBuilder
-    private func presentedIcons(_ items: [WorkTopStatsRow.Item]) -> some View {
-        if showsTray {
-            let shape = RoundedRectangle(cornerRadius: SubjectMetrics.trayRadius, style: .continuous)
-            iconLayout(items)
-                .padding(.horizontal, scaledTileSize / 3)
-                .padding(.vertical, scaledTileSize / 4)
-                .background(themeManager.appTheme.glassFill(0.10), in: shape)
-                .overlay { shape.strokeBorder(themeManager.appTheme.glassStroke(), lineWidth: 0.5) }
-        } else {
-            iconLayout(items)
+            layout.accessibilityHidden(true)
         }
     }
 
     @ViewBuilder
-    private func iconLayout(_ items: [WorkTopStatsRow.Item]) -> some View {
+    private var layout: some View {
+        let resolved = tiles
         switch arrangement {
         case .grid:
             VStack(spacing: gap) {
                 HStack(spacing: gap) {
-                    tile(!items.isEmpty ? items[0] : nil)
-                    tile(items.count > 1 ? items[1] : nil)
+                    tile(resolved[0])
+                    tile(resolved[1])
                 }
                 HStack(spacing: gap) {
-                    tile(items.count > 2 ? items[2] : nil)
-                    tile(items.count > 3 ? items[3] : nil)
+                    tile(resolved[2])
+                    tile(resolved[3])
                 }
             }
         case .strip:
             HStack(spacing: 0) {
-                ForEach(0 ..< 4, id: \.self) { index in
-                    tile(items.indices.contains(index) ? items[index] : nil)
-                    if index < 3 {
+                ForEach(resolved.indices, id: \.self) { index in
+                    if index > 0 {
                         Spacer(minLength: gap)
                     }
+                    tile(resolved[index])
                 }
             }
             .frame(maxWidth: .infinity)
         }
     }
 
-    @ViewBuilder
-    private func tile(_ item: WorkTopStatsRow.Item?) -> some View {
-        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-        if let item {
-            shape
-                // Multi's own icon IS a full multicolor quadrant — a tint
-                // behind it would just be a fifth, redundant color peeking
-                // around its edges.
-                .fill(
-                    item.text == "Multi" ? AnyShapeStyle(.clear) : AnyShapeStyle((item.iconColor ?? .gray).opacity(0.3))
-                )
-                .overlay {
-                    // Rating (AO3's own quadrant reads a letter, not a checkmark):
-                    // no `{letter}.shield` SF Symbol exists — confirmed against
-                    // the live catalog, unlike `{letter}.circle`/`.square`, which
-                    // do — so the letter is composited by hand over a filled
-                    // shield instead of a single systemName.
-                    if item.symbol == "checkmark.shield" {
-                        ratingShield(item)
-                    } else if item.symbol == "person.2.fill" {
-                        categoryGlyph(item)
-                    } else {
-                        Image(systemName: item.symbol)
-                            .font(.system(size: iconSize, weight: .bold))
-                            .foregroundStyle(item.iconColor ?? .gray)
-                    }
-                }
-                .frame(width: scaledTileSize, height: scaledTileSize)
-        } else {
-            Color.clear.frame(width: scaledTileSize, height: scaledTileSize)
-        }
-    }
-
-    private func ratingShield(_ item: WorkTopStatsRow.Item) -> some View {
-        // "NR" (WorkStat.ratingLetter's own text for Not Rated) is two
-        // characters — cramped at this size, and "?" already reads as
-        // "unrated/unknown" without needing to fit two glyphs.
-        let letter = item.text == "NR" ? "?" : item.text
-        let color = item.iconColor ?? .gray
-        return ZStack {
-            // Filled, with the letter knocked out (owner, 2026-10-28, T-465):
-            // the outline read as an empty frame next to the other tiles'
-            // solid glyphs. White on G/M/E/NR and on Light's mustard Teen; dark on
-            // Dark's bright Teen yellow.
-            Image(systemName: "shield.fill")
-                .font(.system(size: shieldSize))
-                .foregroundStyle(color)
-            // Centring: no vertical offset (an ImageRenderer ink measurement
-            // found the shield's symbol frame balances its taper, and every
-            // letter centres in it vertically); the letters' ink sits ~0.3pt
-            // left of the shield's at both 18pt and 27pt tiles, a fixed
-            // offset rather than a proportional one.
-            Text(letter)
-                .font(.system(size: letterSize, weight: .bold, design: .rounded))
-                .foregroundStyle(item.text == "T" ? Self.teenLetterInk : .white)
-                .offset(x: 0.3)
-        }
-    }
-
-    /// Teen's letter: the canvas's dark #3A2C00 on Dark's bright system yellow,
-    /// white on Light's dark mustard (where the dark ink all but vanished).
-    private static let teenLetterInk: Color = {
-        #if os(iOS)
-        Color(uiColor: UIColor { traits in
-            traits.userInterfaceStyle == .dark ? UIColor(red: 0x3A / 255, green: 0x2C / 255, blue: 0, alpha: 1) : .white
-        })
-        #else
-        Color(nsColor: NSColor(name: nil) { appearance in
-            appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-                ? NSColor(red: 0x3A / 255, green: 0x2C / 255, blue: 0, alpha: 1) : .white
-        })
-        #endif
-    }()
-
-    /// Category (AO3's own quadrant pairs a gender symbol per orientation, not
-    /// one generic icon for all of them): no SF Symbol ships literal gender
-    /// glyphs — Apple dropped them from the catalog — and the raw ♀/♂
-    /// characters aren't in SF Pro either (confirmed: they resolve to
-    /// `CJKSymbolsFallbackSC`, not SF, regardless of what font is requested —
-    /// fallback happens per-glyph for characters the requested font doesn't
-    /// contain). Unicode's Miscellaneous Symbols block already has real,
-    /// single, purpose-drawn glyphs for the *combined* signs though — used
-    /// here instead of manually overlapping two separate characters. Same
-    /// fallback situation (`AppleSymbols`, not SF — accepted as-is: a clean,
-    /// purpose-built system font, not a mismatched decorative one), but a
-    /// properly kerned glyph instead of a hand-offset approximation of one.
-    /// `item.text` is AO3's own raw category string ("F/F"/"M/M"/"F/M"/"Gen"/
-    /// "Multi"/"Other"/"N/A"), already resolved by `WorkTopStatsRow.topItems`
-    /// — reused here rather than re-deriving the category from anywhere else.
-    @ViewBuilder
-    private func categoryGlyph(_ item: WorkTopStatsRow.Item) -> some View {
-        switch item.text {
-        case "F/F":
-            categoryText("⚢", size: pairingSymbolSize, verticalOffset: 0.193, item) // U+26A2 DOUBLED FEMALE SIGN
-        case "M/M":
-            categoryText("⚣", size: pairingSymbolSize, verticalOffset: 0.249, item) // U+26A3 DOUBLED MALE SIGN
-        case "F/M":
-            categoryText("⚤", size: pairingSymbolSize, verticalOffset: 0.102, item) // U+26A4 INTERLOCKED F+M SIGN
-        case "Gen":
-            // AO3's own icon here is the Sun astronomical symbol on a green
-            // background — no pairing to symbolize since Gen means no
-            // romantic/sexual focus. See archiveofourown.org/help/symbols_key.
-            // Sized to genSymbolSize, not pairingSymbolSize: measured against
-            // the warning tile's own ink, this glyph reads much smaller than
-            // the other pairing glyphs at the same font size.
-            categoryText("☉", size: genSymbolSize, verticalOffset: 0.120, item) // U+2609 SUN
-        case "Multi":
-            multiIcon
-        case "Other":
-            // AO3's own icon here is the Uranus astrological symbol on a black
-            // background — the design team's pick for relationships that don't
-            // fit the other categories. See archiveofourown.org/help/symbols_key.
-            categoryText("♅", size: pairingSymbolSize, verticalOffset: 0.129, item) // U+2645 URANUS
-        default:
-            // "N/A" — nothing to symbolize.
-            Image(systemName: item.symbol)
-                .font(.system(size: iconSize, weight: .bold))
-                .foregroundStyle(item.iconColor ?? .gray)
-        }
-    }
-
-    /// - Parameter size: font size to render `symbol` at — `pairingSymbolSize`
-    ///   for every glyph except Gen's sun, which needs its own larger size.
-    /// - Parameter verticalOffset: fraction of `size` to shift down by. Apple
-    ///   Symbols' line-box metrics (ascent/descent) don't match these
-    ///   glyphs' own ink bounds — every one of them sits above the center of
-    ///   the box `Text` centers by default, so an un-offset glyph reads
-    ///   high, and by an amount that varies per glyph (measured via
-    ///   CTFontGetBoundingRectsForGlyphs against CTFontGetAscent/GetDescent:
-    ///   ⚢ 19.3%, ⚣ 24.9%, ⚤ 10.2%, ☉ 12.0%, ♅ 12.9% of point size) rather
-    ///   than one constant that would only look right for one of them.
-    private func categoryText(_ symbol: String, size: CGFloat, verticalOffset: CGFloat, _ item: WorkTopStatsRow.Item)
-        -> some View {
-        // `.system` hands these glyphs to the font-fallback cascade, which
-        // doesn't always land on Apple Symbols even when it has the glyph —
-        // confirmed via CoreText that ♅ resolves to Menlo instead, despite
-        // Apple Symbols containing it. Naming the font directly skips the
-        // cascade and guarantees the glyph AO3's own icon set intends.
-        Text(symbol)
-            // `fixedSize:` — `size` already carries the tile's Dynamic Type
-            // scale; `.custom(_:size:)` would scale it a second time, and at
-            // accessibility sizes the glyph outgrew its tile.
-            .font(.custom("AppleSymbols", fixedSize: size))
-            .foregroundStyle(item.iconColor ?? .gray)
-            .offset(y: size * verticalOffset)
-    }
-
-    /// Multi has no single relationship to symbolize — AO3's own icon here is
-    /// a small multi-color grid. This draws just that: four colored
-    /// quadrants, no glyph in any of them (an earlier version filled each
-    /// with a ring-and-stem motif; A/B'd against a plain color-only version
-    /// and the plain one won). Each quadrant is tinted per relationship
-    /// type: General (green, matching `categoryColor("Gen")`), F/M
-    /// (purple), F/F (red), M/M (blue) — at the same `.opacity(0.3)` every
-    /// other tile's background uses.
-    ///
-    /// Quadrant centers sit at (±quadrantSize/2, ±quadrantSize/2), and since
-    /// quadrantSize is exactly tileSize/2, two quadrants across always fill
-    /// the tile exactly — no per-size measurement needed the way the
-    /// font-glyph version this replaced required.
-    private var multiIcon: some View {
-        let half = multiQuadrantSize / 2
-        let quadrants: [(center: CGPoint, color: Color)] = [
-            (CGPoint(x: -half, y: -half), .green), // top-left — Gen
-            (CGPoint(x: half, y: -half), .purple), // top-right — F/M
-            (CGPoint(x: -half, y: half), .red), // bottom-left — F/F
-            (CGPoint(x: half, y: half), .blue), // bottom-right — M/M
-        ]
-        return ZStack {
-            ForEach(quadrants.indices, id: \.self) { i in
-                // Only the corner facing away from the tile's center is
-                // rounded — the other three meet a neighbor or the shared
-                // center point and stay sharp, so the four quadrants read as
-                // one shape from outside.
-                let center = quadrants[i].center
-                UnevenRoundedRectangle(
-                    topLeadingRadius: center.x < 0 && center.y < 0 ? cornerRadius : 0,
-                    bottomLeadingRadius: center.x < 0 && center.y > 0 ? cornerRadius : 0,
-                    bottomTrailingRadius: center.x > 0 && center.y > 0 ? cornerRadius : 0,
-                    topTrailingRadius: center.x > 0 && center.y < 0 ? cornerRadius : 0,
-                    style: .continuous
-                )
-                .fill(quadrants[i].color.opacity(0.3))
-                .frame(width: multiQuadrantSize, height: multiQuadrantSize)
-                .offset(x: center.x, y: center.y)
+    private func tile(_ symbol: WorkSymbolTile) -> some View {
+        ZStack {
+            if symbol.mark == .multi {
+                multiQuadrants
+            } else {
+                symbol.fill
+                glyph(symbol)
             }
         }
-        .frame(width: scaledTileSize, height: scaledTileSize)
-        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        .frame(width: side, height: side)
+        .clipShape(RoundedRectangle(cornerRadius: side * WorkStatusIconGrid.cornerRadiusRatio, style: .continuous))
+    }
+
+    /// Every glyph sits in one box, 0.68 of the tile, centred on its own ink
+    /// (I-3); the shield is the exception at 0.84, its letter centred on the
+    /// shield's body rather than the tile.
+    @ViewBuilder
+    private func glyph(_ symbol: WorkSymbolTile) -> some View {
+        switch symbol.mark {
+        case .shield(let letter):
+            let box = side * WorkSymbolTile.shieldBoxRatio
+            ZStack {
+                WorkSymbolTile.path(for: symbol.mark, in: box)
+                    .fill(symbol.ink)
+                // Cut out: the letter is the tile's own colour.
+                Text(letter)
+                    .font(.system(size: side * 0.36, weight: .heavy, design: .rounded))
+                    .foregroundStyle(symbol.fill)
+                    .offset(y: box * WorkSymbolTile.shieldBodyOffset)
+            }
+            .frame(width: box, height: box)
+        case .exclamation, .question:
+            // SF Symbols, which are drawn centred on their own ink already.
+            Image(systemName: symbol.mark == .exclamation ? "exclamationmark" : "questionmark")
+                .font(.system(size: side * 0.6, weight: .heavy))
+                .foregroundStyle(symbol.ink)
+                .frame(width: side * WorkSymbolTile.glyphBoxRatio, height: side * WorkSymbolTile.glyphBoxRatio)
+        default:
+            let box = side * WorkSymbolTile.glyphBoxRatio
+            WorkSymbolTile.path(for: symbol.mark, in: box)
+                .fill(symbol.ink)
+                .frame(width: box, height: box)
+        }
+    }
+
+    /// Multi has no one relationship to symbolize — AO3's own icon is a small
+    /// multicolour grid. Four solid quadrants in the Gen, F/M, F/F and M/M
+    /// colours, clipped to the tile's corners with it.
+    private var multiQuadrants: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 0) {
+                AO3TagPalette.general
+                AO3TagPalette.femaleMale
+            }
+            HStack(spacing: 0) {
+                AO3TagPalette.femaleFemale
+                AO3TagPalette.maleMale
+            }
+        }
     }
 }
 
@@ -826,21 +668,21 @@ enum WorkCompletionStatus: Equatable {
         }
     }
 
-    /// The compact cover cards already shipped checkmark.seal/circle.dashed for
-    /// the two known states — kept as-is; questionmark.circle.fill fills the
-    /// one gap (unknown status previously showed no badge at all).
+    /// The text chip's glyph: the same plain check, half-filled ring and "?"
+    /// the tile draws (`WorkSymbolTile.completion`).
     var symbol: String {
         switch self {
-        case .complete: "checkmark.seal"
-        case .inProgress: "circle.dashed"
-        case .unknown: "questionmark.circle.fill"
+        case .complete: "checkmark"
+        case .inProgress: "circle.lefthalf.filled"
+        case .unknown: "questionmark"
         }
     }
 
+    /// The text chip's tint. WIP takes its soft tile's ink, not Mature's orange.
     var color: Color {
         switch self {
-        case .complete: .green
-        case .inProgress: .orange
+        case .complete: AO3TagPalette.general
+        case .inProgress: AO3TagPalette.wipInk
         case .unknown: .gray
         }
     }
@@ -888,15 +730,21 @@ enum WorkWarningStatus: Equatable {
         }
     }
 
-    /// One icon for all three states — like the rating shield and category
-    /// glyph, color alone carries the distinction.
-    var symbol: String { "exclamationmark.circle.fill" }
+    /// The text chip's glyph: the dash, "?" and "!" the tile draws
+    /// (`WorkSymbolTile.warnings`).
+    var symbol: String {
+        switch self {
+        case .none: "minus"
+        case .undisclosed: "questionmark"
+        case .present: "exclamationmark"
+        }
+    }
 
     var color: Color {
         switch self {
         case .none: .gray
-        case .undisclosed: .orange
-        case .present: .red
+        case .undisclosed: AO3TagPalette.mature
+        case .present: AO3TagPalette.explicit
         }
     }
 
@@ -909,9 +757,8 @@ enum WorkWarningStatus: Equatable {
     /// paints it green for that reason; the other two keep the ramp's colours.
     var figureColor: Color {
         switch self {
-        case .none: .green
-        case .undisclosed: .orange
-        case .present: .red
+        case .none: AO3TagPalette.general
+        case .undisclosed, .present: color
         }
     }
 
@@ -1016,14 +863,15 @@ enum WorkStat {
         }
     }
 
-    /// AO3's own General/Teen/Mature/Explicit rating-icon color coding, so the
-    /// icon carries meaning at a glance instead of every rating looking the same.
+    /// AO3's own General/Teen/Mature/Explicit colour coding, in AO3's own hexes
+    /// (`AO3TagPalette`), so the rating carries meaning at a glance. As text on a
+    /// page use `ratingInk(_:on:)`: these are tile fills.
     static func ratingColor(_ rating: String) -> Color? {
         switch rating {
-        case "General Audiences": .green
-        case "Teen And Up Audiences": teenYellow
-        case "Mature": .orange
-        case "Explicit": .red
+        case "General Audiences": AO3TagPalette.general
+        case "Teen And Up Audiences": AO3TagPalette.teen
+        case "Mature": AO3TagPalette.mature
+        case "Explicit": AO3TagPalette.explicit
         // Explicitly gray rather than nil: falling through to `.tint` painted
         // it the app's red accent, which reads as the most severe rating —
         // the opposite of what "no rating given" means. AO3 leaves its own
@@ -1033,35 +881,34 @@ enum WorkStat {
         }
     }
 
-    /// System yellow on its own 30% tint over a light card is ~1.3:1 — the "T"
-    /// all but vanished in Light and Sepia. Light appearances get a dark mustard
-    /// (~4.5:1 there); Dark and OLED keep the system yellow.
-    private static let teenYellow: Color = {
-        #if os(iOS)
-        Color(uiColor: UIColor { traits in
-            traits.userInterfaceStyle == .dark ? .systemYellow : UIColor(red: 0.55, green: 0.40, blue: 0, alpha: 1)
-        })
-        #else
-        Color(nsColor: NSColor(name: nil) { appearance in
-            appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-                ? .systemYellow : NSColor(red: 0.55, green: 0.40, blue: 0, alpha: 1)
-        })
-        #endif
-    }()
+    /// A rating's colour as *text* on a page (Work Detail's figure strip), not
+    /// as a tile. Teen's tile yellow is ~1.6:1 on a light page, so the light
+    /// themes print it in L3-TH-4's dark mustard; Dark and OLED take T-419's
+    /// readable step, as every accent text does there.
+    static func ratingInk(_ rating: String, on theme: ReaderTheme) -> Color? {
+        guard let color = ratingColor(rating) else { return nil }
+        if theme.colorScheme == .light, rating == "Teen And Up Audiences" {
+            return AO3TagPalette.teenTextOnLight
+        }
+        return theme.accentInk(for: color)
+    }
 
-    /// AO3's own category color coding (a small colored badge per
-    /// relationship-category tag, e.g. F/F, Gen, Multi). SF Symbols has no
-    /// venus/mars/gender glyphs to tell the categories apart by shape, so every
-    /// category shares one real SF Symbol ("person.2.fill", same treatment as
-    /// the rating shield) and color alone carries the distinction.
+    /// AO3's own category colour coding (a small coloured badge per
+    /// relationship-category tag, e.g. F/F, Gen, Multi), in AO3's hexes. The
+    /// text chips share one SF Symbol ("person.2.fill") and the colour carries
+    /// the distinction; the tiles draw each category's own sign
+    /// (`WorkSymbolTile`). Non-nil is also what makes a string a category.
     static func categoryColor(_ category: String) -> Color? {
         switch category {
-        case "F/F": .red
-        case "F/M": .pink
-        case "Gen": .green
-        case "M/M": .blue
+        case "F/F": AO3TagPalette.femaleFemale
+        case "F/M": AO3TagPalette.femaleMale
+        case "Gen": AO3TagPalette.general
+        case "M/M": AO3TagPalette.maleMale
+        // The board has no one colour for Multi (its tile is four quadrants);
+        // the text chip keeps its purple tint.
         case "Multi": .purple
-        case "Other": .black
+        // The light-theme hex; the tile itself lifts it on Dark and OLED.
+        case "Other": AO3TagPalette.other
         default: nil
         }
     }

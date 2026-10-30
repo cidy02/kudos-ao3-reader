@@ -72,7 +72,9 @@ struct WorkDetailIdentityHeader: View {
 ///
 /// Only rating and warnings take a colour. Spec 1a leaves category and chapters
 /// white, and that is right for more than fidelity: `WorkStat.categoryColor`
-/// paints "Other" black, which on a near-black page is an invisible cell.
+/// paints "Other" near-black, which on a near-black page is an invisible cell.
+/// The two coloured cells are text, so they take the text step of AO3's tile
+/// colours (`WorkStat.ratingInk`), not the fills themselves.
 struct WorkDetailFigureStrip: View {
     /// What a cell prints when the field is genuinely unknown, rather than
     /// leaving a blank quarter of the strip that reads as a layout gap.
@@ -84,6 +86,8 @@ struct WorkDetailFigureStrip: View {
     let chapters: String
     let completion: WorkCompletionStatus
     let palette: SubjectPalette
+
+    @Environment(ThemeManager.self) private var themeManager
 
     private var warningStatus: WorkWarningStatus {
         WorkWarningStatus(rawWarnings: warnings)
@@ -101,7 +105,7 @@ struct WorkDetailFigureStrip: View {
         return SubjectStatStrip.Cell(
             value: printed,
             label: "Rating",
-            tint: WorkStat.ratingColor(rating),
+            tint: WorkStat.ratingInk(rating, on: themeManager.appTheme),
             accessibilityText: spoken
         )
     }
@@ -110,7 +114,7 @@ struct WorkDetailFigureStrip: View {
         SubjectStatStrip.Cell(
             value: warningStatus.figureText,
             label: "Warnings",
-            tint: warningStatus.figureColor,
+            tint: themeManager.appTheme.accentInk(for: warningStatus.figureColor),
             accessibilityText: warningStatus.accessibilityLabel(rawWarnings: warnings)
         )
     }

@@ -58,9 +58,9 @@ struct WorkRow: View {
     /// Worth an expand toggle only when there's more to reveal than the clamped view:
     /// a long summary or any categorized tags. Exposed statically so SensitiveWorkRow
     /// can decide whether to render an external expand button without building a row.
-    /// Spec 1ad's 22pt signal tiles. Named because the ring opposite is sized
-    /// from it.
-    static let ledgerTileSize: CGFloat = 22
+    /// The four-tag grid's 24pt tiles (I-2). Named because the ring opposite is
+    /// sized from it.
+    static let ledgerTileSize: CGFloat = 24
 
     static func isExpandable(for work: SavedWork) -> Bool {
         isExpandable(strippedSummary: work.summary.strippingHTML(), for: work)
@@ -146,12 +146,11 @@ struct WorkRow: View {
                 // (1h.1) — `.cardRow(leadingNumber:)` draws it. The card has
                 // nothing in this slot then.
                 if positionNumber == nil {
-                    // Sized to the signal tray facing it across the card. Spec 1ad
-                    // draws this ring at 44 and the tray's tiles at 22, which makes
-                    // the tray ~59 tall — a third bigger than the ring, and it reads
-                    // that way. Both come from the tray's own constants and Dynamic
-                    // Type scale, so the two stay the same size.
-                    WorkStatusTrayMatched(tileSize: Self.ledgerTileSize) { diameter in
+                    // Sized to the four-tag grid facing it across the card. Spec 1ad
+                    // draws this ring at 44 beside a taller grid, and the mismatch
+                    // reads. Both come from the grid's own constants and Dynamic
+                    // Type scale, so the two stay the same size (~51 at 24pt tiles).
+                    WorkStatusGridMatched(tileSize: Self.ledgerTileSize) { diameter in
                         WorkReadingOrDownloadRing(
                             work: work,
                             progress: work.readingProgress ?? 0,
@@ -169,8 +168,7 @@ struct WorkRow: View {
                         warnings: work.workWarnings,
                         completion: work.completionStatus,
                         tileSize: Self.ledgerTileSize,
-                        announcesToVoiceOver: true,
-                        showsTray: true
+                        announcesToVoiceOver: true
                     )
                     if isSelecting {
                         WorkSelectionBubble(isSelected: isSelected)

@@ -104,8 +104,8 @@ struct AO3WorkRow: View {
     private var standardCard: some View {
         VStack(alignment: .leading, spacing: 6) {
             // Title + author share a tight block so the hierarchy reads as one unit.
-            // AO3's own quadrant tag grid trails the row, in this app's chip
-            // colors/symbols (WorkStatusIconGrid) — a glanceable rating/category/
+            // AO3's own quadrant tag grid trails the row, in AO3's own colours
+            // (WorkStatusIconGrid) — a glanceable rating/category/
             // warnings/completion alongside the title, the same information
             // WorkListStatsRow's text chips repeat lower on the card. The updated
             // date moved down to bottom-left, beside the expand control.
@@ -128,10 +128,7 @@ struct AO3WorkRow: View {
                     categories: work.categories,
                     warnings: work.warnings,
                     completion: WorkCompletionStatus(isComplete: work.isComplete),
-                    isExpanded: expanded,
-                    // 1.5x the default (18) — this card has more room to spend
-                    // on it than the Reading Queue mini-cards do.
-                    tileSize: 27
+                    tileSize: 24
                 )
                 if isSelecting {
                     WorkSelectionBubble(isSelected: isSelected)
@@ -296,9 +293,8 @@ struct AO3WorkRow: View {
                 categories: work.categories,
                 warnings: work.warnings,
                 completion: WorkCompletionStatus(isComplete: work.isComplete),
-                tileSize: 22,
-                announcesToVoiceOver: true,
-                showsTray: true
+                tileSize: 24,
+                announcesToVoiceOver: true
             )
             if isSelecting {
                 WorkSelectionBubble(isSelected: isSelected)
