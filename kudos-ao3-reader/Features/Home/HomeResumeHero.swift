@@ -376,6 +376,139 @@ struct WorkResumeCard: View {
         .accessibilityLabel(accessibilityLabel)
     }
 
+    /// The queue's fraction while a download or restore is in flight
+    /// (`DownloadQueue.liveDownloadFraction`), otherwise the reading fraction.
+    @ViewBuilder
+    private func progressDial(diameter: CGFloat, showsLabel: Bool) -> some View {
+        if let localWork, downloads.liveDownloadFraction(for: localWork, at: .now) != nil {
+            TimelineView(.animation) { context in
+                progressRing(
+                    fraction: downloads.liveDownloadFraction(for: localWork, at: context.date) ?? 1,
+                    diameter: diameter,
+                    showsLabel: showsLabel,
+                    accessibilityLabel: "Download progress"
+                )
+            }
+        } else if variant == .detail, model.progress == nil {
+            EmptyView()
+        } else {
+            progressRing(
+                fraction: model.progress ?? 0,
+                diameter: diameter,
+                showsLabel: showsLabel,
+                accessibilityLabel: "Reading progress"
+            )
+        }
+    }
+
+    private func progressRing(
+        fraction: Double,
+        diameter: CGFloat,
+        showsLabel: Bool,
+        accessibilityLabel: String
+    ) -> some View {
+        let clamped = min(max(fraction, 0), 1)
+        let percent = Int((clamped * 100).rounded())
+        let size = dynamicTypeSize.isAccessibilitySize ? diameter * 1.35 : diameter
+        return ZStack {
+            Circle().stroke(Color.white.opacity(0.24), lineWidth: showsLabel ? 10 : 6)
+            Circle()
+                .trim(from: 0, to: clamped)
+                .stroke(
+                    Color.white,
+                    style: StrokeStyle(lineWidth: showsLabel ? 10 : 6, lineCap: .round)
+                )
+                .rotationEffect(.degrees(-90))
+            if showsLabel {
+                VStack(spacing: 0) {
+                    Text("\(percent)%")
+                        .font(.system(.title3, design: .rounded, weight: .bold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.5)
+                    Text(accessibilityLabel == "Download progress" ? "Download" : "Read")
+                        .font(.caption2.weight(.semibold))
+                        .textCase(.uppercase)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.5)
+                }
+                .padding(showsLabel ? 12 : 6)
+            }
+        }
+        .frame(minWidth: diameter, minHeight: diameter)
+        .frame(width: size, height: size)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityValue("\(percent) percent")
+    }
+
+    private var cardBackground: some View {
+        RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
+            .fill(CoverArt.workGradient(for: model.art))
+            .overlay(alignment: .bottomTrailing) {
+                if showsInitial {
+                    Text(model.title.trimmingCharacters(in: .whitespacesAndNewlines).first.map(String.init) ?? "")
+                        .font(.system(size: 250, weight: .semibold, design: .serif))
+                        .foregroundStyle(Color.white.opacity(0.08))
+                        .offset(x: 10, y: 58)
+                        .accessibilityHidden(true)
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5)
+            )
+            .shadow(
+                color: themeManager.appTheme.carouselCardShadow.color,
+                radius: themeManager.appTheme.carouselCardShadow.radius + 6,
+                x: 0,
+                y: themeManager.appTheme.carouselCardShadow.y + 2
+            )
+    }
+
+    private var detailDates: String {
+        var parts: [String] = []
+        if !model.published.isEmpty { parts.append("Published \(model.published)") }
+        if !model.updated.isEmpty { parts.append("updated \(model.updated)") }
+        if let lastReadLabel = model.lastReadLabel { parts.append(lastReadLabel) }
+        return parts.joined(separator: " · ")
+    }
+
+    private var accessibilityLabel: String {
+        let prefix = variant == .next
+            ? "Up next"
+            : variant == .detail ? "Your reading" : "Continue reading"
+        return "\(prefix): \(model.title), \(model.workPercent) percent read"
+    }
+
+    private var chapterCacheKey: String {
+        guard let localWork, localWork.hasEPUB else { return "none" }
+        let values = try? localWork.fileURL.resourceValues(
+            forKeys: [.fileSizeKey, .contentModificationDateKey]
+        )
+        return "\(localWork.id)-\(values?.fileSize ?? -1)-"
+            + "\(values?.contentModificationDate?.timeIntervalSince1970 ?? -1)"
+    }
+
+    private func loadChapterWeights() async {
+        guard let localWork, localWork.hasEPUB else {
+            chapterWeights = nil
+            return
+        }
+        let id = localWork.id
+        let url = localWork.fileURL
+        let weights = await Task.detached(priority: .utility) {
+            ChapterLengthCache.weights(workID: id, fileURL: url)
+        }.value
+        guard localWork.modelContext != nil else { return }
+        chapterWeights = weights
+    }
+}
+
+// Variant headers, the chapter block and the action row live here so
+// `WorkResumeCard`'s own body stays under SwiftLint's type_body_length
+// warning (450). The members are unchanged.
+extension WorkResumeCard {
     private var homeHeader: some View {
         Group {
             if dynamicTypeSize.isAccessibilitySize {
@@ -706,134 +839,6 @@ struct WorkResumeCard: View {
         .buttonStyle(.plain)
         .disabled(!isInteractive)
         .accessibilityLabel(title)
-    }
-
-    /// The queue's fraction while a download or restore is in flight
-    /// (`DownloadQueue.liveDownloadFraction`), otherwise the reading fraction.
-    @ViewBuilder
-    private func progressDial(diameter: CGFloat, showsLabel: Bool) -> some View {
-        if let localWork, downloads.liveDownloadFraction(for: localWork, at: .now) != nil {
-            TimelineView(.animation) { context in
-                progressRing(
-                    fraction: downloads.liveDownloadFraction(for: localWork, at: context.date) ?? 1,
-                    diameter: diameter,
-                    showsLabel: showsLabel,
-                    accessibilityLabel: "Download progress"
-                )
-            }
-        } else if variant == .detail, model.progress == nil {
-            EmptyView()
-        } else {
-            progressRing(
-                fraction: model.progress ?? 0,
-                diameter: diameter,
-                showsLabel: showsLabel,
-                accessibilityLabel: "Reading progress"
-            )
-        }
-    }
-
-    private func progressRing(
-        fraction: Double,
-        diameter: CGFloat,
-        showsLabel: Bool,
-        accessibilityLabel: String
-    ) -> some View {
-        let clamped = min(max(fraction, 0), 1)
-        let percent = Int((clamped * 100).rounded())
-        let size = dynamicTypeSize.isAccessibilitySize ? diameter * 1.35 : diameter
-        return ZStack {
-            Circle().stroke(Color.white.opacity(0.24), lineWidth: showsLabel ? 10 : 6)
-            Circle()
-                .trim(from: 0, to: clamped)
-                .stroke(
-                    Color.white,
-                    style: StrokeStyle(lineWidth: showsLabel ? 10 : 6, lineCap: .round)
-                )
-                .rotationEffect(.degrees(-90))
-            if showsLabel {
-                VStack(spacing: 0) {
-                    Text("\(percent)%")
-                        .font(.system(.title3, design: .rounded, weight: .bold))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.5)
-                    Text(accessibilityLabel == "Download progress" ? "Download" : "Read")
-                        .font(.caption2.weight(.semibold))
-                        .textCase(.uppercase)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.5)
-                }
-                .padding(showsLabel ? 12 : 6)
-            }
-        }
-        .frame(minWidth: diameter, minHeight: diameter)
-        .frame(width: size, height: size)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(accessibilityLabel)
-        .accessibilityValue("\(percent) percent")
-    }
-
-    private var cardBackground: some View {
-        RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
-            .fill(CoverArt.workGradient(for: model.art))
-            .overlay(alignment: .bottomTrailing) {
-                if showsInitial {
-                    Text(model.title.trimmingCharacters(in: .whitespacesAndNewlines).first.map(String.init) ?? "")
-                        .font(.system(size: 250, weight: .semibold, design: .serif))
-                        .foregroundStyle(Color.white.opacity(0.08))
-                        .offset(x: 10, y: 58)
-                        .accessibilityHidden(true)
-                }
-            }
-            .clipShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5)
-            )
-            .shadow(
-                color: themeManager.appTheme.carouselCardShadow.color,
-                radius: themeManager.appTheme.carouselCardShadow.radius + 6,
-                x: 0,
-                y: themeManager.appTheme.carouselCardShadow.y + 2
-            )
-    }
-
-    private var detailDates: String {
-        var parts: [String] = []
-        if !model.published.isEmpty { parts.append("Published \(model.published)") }
-        if !model.updated.isEmpty { parts.append("updated \(model.updated)") }
-        if let lastReadLabel = model.lastReadLabel { parts.append(lastReadLabel) }
-        return parts.joined(separator: " · ")
-    }
-
-    private var accessibilityLabel: String {
-        let prefix = variant == .next
-            ? "Up next"
-            : variant == .detail ? "Your reading" : "Continue reading"
-        return "\(prefix): \(model.title), \(model.workPercent) percent read"
-    }
-
-    private var chapterCacheKey: String {
-        guard let localWork, localWork.hasEPUB else { return "none" }
-        let values = try? localWork.fileURL.resourceValues(
-            forKeys: [.fileSizeKey, .contentModificationDateKey]
-        )
-        return "\(localWork.id)-\(values?.fileSize ?? -1)-"
-            + "\(values?.contentModificationDate?.timeIntervalSince1970 ?? -1)"
-    }
-
-    private func loadChapterWeights() async {
-        guard let localWork, localWork.hasEPUB else {
-            chapterWeights = nil
-            return
-        }
-        let id = localWork.id
-        let url = localWork.fileURL
-        let weights = await Task.detached(priority: .utility) {
-            ChapterLengthCache.weights(workID: id, fileURL: url)
-        }.value
-        guard localWork.modelContext != nil else { return }
-        chapterWeights = weights
     }
 }
 
