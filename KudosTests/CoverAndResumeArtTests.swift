@@ -32,9 +32,15 @@ struct CoverAndResumeArtTests {
         #expect(who.shade == holmes.shade)
     }
 
-    @Test func readingMetaNamesPostedChaptersAndPercent() {
-        #expect(WorkCoverMetadata.reading(chapters: "12/30", progress: 0.4) == "Ch 12 of 30 · 40%")
-        #expect(WorkCoverMetadata.reading(chapters: "12/?", progress: 0.4) == "Ch 12 · 40%")
+    @Test func readingMetaNamesTheChapterBeingRead() {
+        // Posted and current differ: 0.4 of 30 equal chapters is chapter 13,
+        // because the boundary belongs to the chapter it enters.
+        let current = ChapterBarGeometry.readingChapter(posted: 30, progress: 0.4, weights: nil)
+        #expect(current == 13)
+        #expect(current != 30)
+        #expect(WorkCoverMetadata.reading(chapters: "30/30", progress: 0.4) == "Ch 13 of 30 · 40%")
+        #expect(WorkCoverMetadata.reading(chapters: "12/30", progress: 0.4) == "Ch 5 of 30 · 40%")
+        #expect(WorkCoverMetadata.reading(chapters: "12/?", progress: 0.4) == "Ch 5 · 40%")
         #expect(WorkCoverMetadata.reading(chapters: "", progress: 1) == "100%")
     }
 
