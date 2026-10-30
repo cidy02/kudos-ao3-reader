@@ -96,16 +96,16 @@ struct AO3WorkRowSkeleton: View {
                         .padding(.top, 2)
                 }
                 Spacer(minLength: 0)
-                // 2x2 tag grid (WorkStatusIconGrid, tileSize 27) — same math as
+                // 2x2 tag grid (WorkStatusIconGrid, tileSize 24) — same math as
                 // WorkCoverCardSkeleton's own grid (see that struct's comment).
-                Grid(horizontalSpacing: 4.5, verticalSpacing: 4.5) {
+                Grid(horizontalSpacing: 2.88, verticalSpacing: 2.88) {
                     GridRow {
-                        SkeletonBlock(height: 27, width: 27, cornerRadius: 6)
-                        SkeletonBlock(height: 27, width: 27, cornerRadius: 6)
+                        SkeletonBlock(height: 24, width: 24, cornerRadius: 5.76)
+                        SkeletonBlock(height: 24, width: 24, cornerRadius: 5.76)
                     }
                     GridRow {
-                        SkeletonBlock(height: 27, width: 27, cornerRadius: 6)
-                        SkeletonBlock(height: 27, width: 27, cornerRadius: 6)
+                        SkeletonBlock(height: 24, width: 24, cornerRadius: 5.76)
+                        SkeletonBlock(height: 24, width: 24, cornerRadius: 5.76)
                     }
                 }
             }
@@ -161,16 +161,16 @@ struct WorkCoverCardSkeleton: View {
             // WorkStatusIconGrid renders as four individually-colored quadrants
             // (rating/category/warnings/completion), and a single block read as
             // a plain icon rather than previewing that grid shape. Sizes match
-            // WorkStatusIconGrid's own tileSize 27 -> gap/cornerRadius math (see
-            // WorkStatLabel.swift): gap = 27*3/18 = 4.5, cornerRadius = 27*4/18 = 6.
-            Grid(horizontalSpacing: 4.5, verticalSpacing: 4.5) {
+            // WorkStatusIconGrid's own tileSize 24 -> gap/cornerRadius math (see
+            // WorkStatLabel.swift): gap = 24*0.12 = 2.88, cornerRadius = 24*0.24 = 5.76.
+            Grid(horizontalSpacing: 2.88, verticalSpacing: 2.88) {
                 GridRow {
-                    SkeletonBlock(height: 27, width: 27, cornerRadius: 6)
-                    SkeletonBlock(height: 27, width: 27, cornerRadius: 6)
+                    SkeletonBlock(height: 24, width: 24, cornerRadius: 5.76)
+                    SkeletonBlock(height: 24, width: 24, cornerRadius: 5.76)
                 }
                 GridRow {
-                    SkeletonBlock(height: 27, width: 27, cornerRadius: 6)
-                    SkeletonBlock(height: 27, width: 27, cornerRadius: 6)
+                    SkeletonBlock(height: 24, width: 24, cornerRadius: 5.76)
+                    SkeletonBlock(height: 24, width: 24, cornerRadius: 5.76)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .center)
