@@ -1606,6 +1606,10 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
     var accentColorHex: String
     var autoPreserveSmallSeriesOnSaveForLater: Bool
     var autoPreserveSeriesWorkThreshold: Int
+    /// Which Library shelves are sections, and which are buttons. Absent on an
+    /// older archive: the reader gets the default (Favourites, Collections,
+    /// Downloaded as carousels). Additive — no manifest version bump.
+    var libraryPageArrangement: LibraryPageArrangement
 
     init(
         readerFontID: String,
@@ -1628,7 +1632,8 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         matchAppReaderTheme: Bool,
         accentColorHex: String,
         autoPreserveSmallSeriesOnSaveForLater: Bool,
-        autoPreserveSeriesWorkThreshold: Int
+        autoPreserveSeriesWorkThreshold: Int,
+        libraryPageArrangement: LibraryPageArrangement = .default
     ) {
         self.readerFontID = readerFontID
         self.readerMode = readerMode
@@ -1651,6 +1656,7 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         self.accentColorHex = accentColorHex
         self.autoPreserveSmallSeriesOnSaveForLater = autoPreserveSmallSeriesOnSaveForLater
         self.autoPreserveSeriesWorkThreshold = autoPreserveSeriesWorkThreshold
+        self.libraryPageArrangement = libraryPageArrangement
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -1675,6 +1681,7 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         case accentColorHex
         case autoPreserveSmallSeriesOnSaveForLater
         case autoPreserveSeriesWorkThreshold
+        case libraryPageArrangement
     }
 
     init(from decoder: Decoder) throws {
@@ -1717,7 +1724,11 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
             autoPreserveSeriesWorkThreshold: container.decodeIfPresent(
                 Int.self,
                 forKey: .autoPreserveSeriesWorkThreshold
-            ) ?? 5
+            ) ?? 5,
+            libraryPageArrangement: container.decodeIfPresent(
+                LibraryPageArrangement.self,
+                forKey: .libraryPageArrangement
+            ) ?? .default
         )
     }
 
@@ -1770,7 +1781,8 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
                 defaults,
                 "autoPreserveSeriesWorkThreshold",
                 fallback: 5
-            ))
+            )),
+            libraryPageArrangement: LibraryPageArrangement.stored(in: defaults)
         )
     }
 
@@ -1829,6 +1841,9 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         // applied because the app colour is fixed to AO3 red.
         defaults.set(autoPreserveSmallSeriesOnSaveForLater, forKey: "autoPreserveSmallSeriesOnSaveForLater")
         defaults.set(autoPreserveSeriesWorkThreshold, forKey: "autoPreserveSeriesWorkThreshold")
+        // Older archives omit the key and decode as the default, which is what
+        // a restore writes. A newer archive carries the reader's own order.
+        defaults.set(libraryPageArrangement.rawValue, forKey: LibraryPageArrangement.storageKey)
     }
 
     private static func bool(
