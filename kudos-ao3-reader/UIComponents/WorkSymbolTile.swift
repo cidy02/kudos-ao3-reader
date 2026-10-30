@@ -69,7 +69,7 @@ struct WorkSymbolTile: Equatable {
     let ink: Color
 
     static func rating(_ rating: String?, dark: Bool) -> WorkSymbolTile {
-        switch rating {
+        switch rating ?? "" {
         case "General Audiences": solid(.shield("G"), AO3TagPalette.general)
         case "Teen And Up Audiences":
             WorkSymbolTile(mark: .shield("T"), fill: AO3TagPalette.teen, ink: AO3TagPalette.teenInk)
