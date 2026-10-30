@@ -651,6 +651,7 @@ struct WorkResumeCard: View {
         }
     }
 
+    // T-476b: re-wires this circle next; unreachable while updateDownload is nil.
     private func updateCircle(_ onUpdate: @escaping () -> Void) -> some View {
         ZStack(alignment: .topTrailing) {
             actionCircle(
