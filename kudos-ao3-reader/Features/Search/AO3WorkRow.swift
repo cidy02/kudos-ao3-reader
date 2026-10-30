@@ -29,6 +29,9 @@ struct AO3WorkRow: View {
     /// Search's computed-sort figure (T-473 "Show the signal on each result"),
     /// drawn under the ledger's figures in their style. Nil draws nothing.
     var signal: String?
+    /// Detailed surfaces. Off hides the summary paragraph only; tags, the stat
+    /// line and the bookmark note stay.
+    var showsSummary = true
 
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var themeManager
@@ -44,7 +47,8 @@ struct AO3WorkRow: View {
     /// and no tags would hide its extra fandoms behind no control at all.
     private var isExpandable: Bool {
         if bookmark != nil { return work.fandoms.count > 1 }
-        return work.summary.count > 120 || work.fandoms.count > 1 || !additionalTags.isEmpty
+        let summaryWarrants = showsSummary && work.summary.count > 120
+        return summaryWarrants || work.fandoms.count > 1 || !additionalTags.isEmpty
             || !work.relationships.isEmpty || !work.characters.isEmpty || !work.warnings.isEmpty
     }
 
@@ -169,7 +173,7 @@ struct AO3WorkRow: View {
                 .font(.caption)
             }
 
-            if !work.summary.isEmpty {
+            if showsSummary, !work.summary.isEmpty {
                 Text(work.summary)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -236,7 +240,7 @@ struct AO3WorkRow: View {
         VStack(alignment: .leading, spacing: 12) {
             searchLedgerHeading
 
-            if !work.summary.isEmpty {
+            if showsSummary, !work.summary.isEmpty {
                 Text(work.summary)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)

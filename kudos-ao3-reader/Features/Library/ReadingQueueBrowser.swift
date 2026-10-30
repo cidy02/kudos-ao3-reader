@@ -55,20 +55,12 @@ struct ReadingQueueBrowserView: View {
     @State private var showingQueueTags = false
     /// 1h's "+": the Library picker (`AddLibraryWorksSheet`).
     @State private var showingAddWorks = false
-    /// Cover grid stays the default. 1h's In line switch sets it per queue;
+    /// List is the default. A stored Compact on this queue becomes Grid.
     /// `ReadingQueue` has no field for it, so it lives in UserDefaults under
-    /// the queue's id (`displayModeKey`), loaded when the selected queue changes.
-    @State private var displayMode: WorkListDisplayMode = .compact
+    /// the queue's id, loaded when the selected queue changes.
+    @State private var arrangement: WorkListArrangement = .list
 
-    /// Which row the chosen mode draws. Ledger, Compact and Detailed are three
-    /// separate presentations and a screen shows one of them — this used to pass
-    /// `.ledger` unconditionally, so "Detailed" drew ledger rows.
-    /// Grid mode selects in the numbered ledger (1bg), so it reads as ledger too.
-    private var rowPresentation: WorkRow.Presentation {
-        displayMode == .detailed ? .standard : .ledger
-    }
     @State private var isReordering = false
-    @State private var expandAll = false
     @State private var refreshTask: Task<Void, Never>?
     @State private var draggedWorkID: UUID?
     @State private var pendingCompactOrder: [UUID]?
@@ -242,12 +234,14 @@ struct ReadingQueueBrowserView: View {
     ) -> some View {
         SensitiveWorkRow(
             work: work,
-            expandAll: expandAll,
             openMode: .reader,
             isSelecting: isSelecting,
             isSelected: selection.contains(work.id),
             onToggleSelection: { toggleSelection(work) },
-            presentation: presentation ?? rowPresentation,
+            presentation: presentation ?? .ledger,
+            showsFavoriteStar: true,
+            showsFullLedgerStats: true,
+            showsSummary: false,
             queueMenu: queueMenu(for: work)
         )
         .swipeActions(edge: .trailing) {
@@ -280,10 +274,6 @@ struct ReadingQueueBrowserView: View {
         #endif
     }
 
-    private static func displayModeKey(_ queueID: UUID) -> String {
-        "library.readingQueueBrowser.displayMode.\(queueID.uuidString)"
-    }
-
     // MARK: - Body
 
     var body: some View {
@@ -304,17 +294,18 @@ struct ReadingQueueBrowserView: View {
                 if DebugLaunchRoute.takeSheet("addworks") { showingAddWorks = true }
                 #endif
             }
-            // Per-queue layout (1h): load the queue's own choice when the queue
-            // changes, store it when the reader changes it. No stored choice
-            // keeps the default grid.
+            // Per-queue List / Grid. A missing key is List. Compact stored on the
+            // old key becomes Grid, once, and that old key stays.
             .onChange(of: selectedQueue?.id, initial: true) { _, id in
                 guard let id else { return }
-                let raw = UserDefaults.standard.string(forKey: Self.displayModeKey(id)) ?? ""
-                displayMode = WorkListDisplayMode(rawValue: raw) ?? .compact
+                arrangement = WorkListLayoutMigration.resolve(
+                    arrangementKey: WorkListKeys.queueArrangement(id),
+                    legacyDisplayModeKey: WorkListKeys.queueDisplayMode(id)
+                )
             }
-            .onChange(of: displayMode) { _, mode in
+            .onChange(of: arrangement) { _, arrangement in
                 guard let id = selectedQueue?.id else { return }
-                UserDefaults.standard.set(mode.rawValue, forKey: Self.displayModeKey(id))
+                UserDefaults.standard.set(arrangement.rawValue, forKey: WorkListKeys.queueArrangement(id))
             }
             .sheet(isPresented: $showingNewQueue) { newQueueSheet }
             .sheet(isPresented: $showingQueueTags) {
@@ -463,7 +454,7 @@ extension ReadingQueueBrowserView {
         } else {
             Group {
                 // 1bg: Select is the numbered ledger even when the page is a grid.
-                if displayMode != .compact || isSelecting {
+                if arrangement != .grid || isSelecting {
                     detailedList
                 } else {
                     compactGrid
@@ -791,10 +782,7 @@ extension ReadingQueueBrowserView {
                             )
                         }
                         .disabled(isNarrowed || hidesMatureWorks)
-                        DisplayModeMenuPicker(mode: $displayMode)
-                        if displayMode == .detailed {
-                            ExpandAllMenuItem(expandAll: $expandAll)
-                        }
+                        ListGridMenuPicker(arrangement: $arrangement)
                         Divider()
                         queueMenuItems
                     })

@@ -118,6 +118,10 @@ struct SensitiveWorkRow: View {
     var presentation: WorkRow.Presentation = .standard
     /// Forwarded to `WorkRow` for 1aj's Favorites star.
     var showsFavoriteStar = false
+    /// Forwarded to `WorkRow`. Ledger lists that replaced a detailed card pass true.
+    var showsFullLedgerStats = false
+    /// Forwarded to `WorkRow`. Off hides the summary; tags still expand.
+    var showsSummary = true
     /// Lists use their row-activation link; ScrollView dashboards need a real
     /// link inside the privacy boundary. Insets belong inside that same boundary
     /// so tapping the card's padding reveals/selects exactly like its content.
@@ -150,14 +154,17 @@ struct SensitiveWorkRow: View {
             // at the card's true edge, not from an overlay here (matches WorkRow).
             // Ledger rows do not expand at all (see WorkRow), so a blurred one
             // must not sprout the control the unblurred row no longer has.
-            let isExpandableWork = presentation == .standard && WorkRow.isExpandable(for: work)
+            let isExpandableWork = presentation == .standard
+                && WorkRow.isExpandable(for: work, showsSummary: showsSummary)
             let content = WorkRow(
                 work: work,
                 expandAll: expandAll,
                 showsExpandButton: false,
                 externalExpanded: $blurredExpanded,
                 presentation: presentation,
-                showsFavoriteStar: showsFavoriteStar
+                showsFavoriteStar: showsFavoriteStar,
+                showsFullLedgerStats: showsFullLedgerStats,
+                showsSummary: showsSummary
             )
                 .padding(contentInsets)
                 .environment(\.ao3AuthorNavigationEnabled, false)
@@ -227,7 +234,9 @@ struct SensitiveWorkRow: View {
             isSelecting: isSelecting,
             isSelected: isSelected,
             presentation: presentation,
-            showsFavoriteStar: showsFavoriteStar
+            showsFavoriteStar: showsFavoriteStar,
+            showsFullLedgerStats: showsFullLedgerStats,
+            showsSummary: showsSummary
         )
         .padding(contentInsets)
         .contentShape(Rectangle())

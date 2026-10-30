@@ -94,17 +94,13 @@ enum LibrarySectionKind: String, Identifiable, Hashable, CaseIterable {
         }
     }
 
-    /// The row layout a section's list opens in until the reader picks one.
-    ///
-    /// History and Favorites open as ledger rows because 1ah, 1ai and 1aj draw
-    /// them that way — the log facts under each row are the point of both pages.
-    /// Only the default: the stored choice is per section
-    /// (`library.<kind>.displayMode`), so a reader who already picked a layout
-    /// keeps it and the other five sections are untouched.
-    var defaultDisplayMode: WorkListDisplayMode {
+    /// What T-466 draws for this section. History keeps its own timeline.
+    /// Collections is not a work list. The other shelves are ledger lists.
+    var surface: WorkSurface {
         switch self {
-        case .history, .favorites: .ledger
-        default: .detailed
+        case .history: .readingHistory
+        case .collections: .library
+        case .readingNow, .savedForLater, .finished, .downloaded, .favorites: .shelf
         }
     }
 

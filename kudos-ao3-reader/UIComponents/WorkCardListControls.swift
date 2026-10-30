@@ -1,48 +1,8 @@
 import SwiftUI
 
-/// A category detail page's card layout — "Detailed" is the existing full `WorkRow`/
-/// `AO3WorkRow` list; "Compact" lays the same works out as `WorkCoverCard`/
-/// `AO3WorkCoverCard` cover cards, two side-by-side, Apple Books-style.
-/// How a work list draws each work. Three presentations, and a screen shows one
-/// of them — mixing two on one page is a bug, not a density choice.
-///
-/// `ledger` was missing, and its absence was doing real damage: screens that
-/// wanted ledger rows checked `== .compact`, fell through, and drew ledger under
-/// a menu that said "Detailed". Worse, a list holding both local and remote works
-/// drew `WorkRow.ledger` for the saved ones and `AO3WorkRow.searchLedger` for the
-/// rest — two different-looking rows on one screen, decided by whether a work
-/// happened to be in the library.
-///
-/// Raw values are unchanged for the two existing cases, so a stored preference
-/// still decodes.
-nonisolated enum WorkListDisplayMode: String, CaseIterable {
-    /// The full card: summary, complete metadata line, expandable tags.
-    case detailed
-    /// The dense single-work row: kicker, rule, title, byline, signal grid.
-    case ledger
-    /// The two-up cover grid.
-    case compact
-
-    var title: String {
-        switch self {
-        case .detailed: "Detailed"
-        case .ledger: "Ledger"
-        case .compact: "Compact"
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .detailed: "list.bullet.rectangle"
-        case .ledger: "list.bullet"
-        case .compact: "square.grid.2x2"
-        }
-    }
-}
-
 /// The filter button + its "Clear All Filters" long-press menu — the one control
 /// that stays directly visible in every work-list toolbar app-wide. Everything else
-/// (Privacy, Select, Reorder, Expand/Collapse, Detailed/Compact, Reading Insights,
+/// (Privacy, Select, Reorder, Expand/Collapse, Show Summaries, List/Grid, Reading Insights,
 /// Rename/Delete…) lives behind `WorkListMoreMenu`.
 ///
 /// `filtersActive` is passed as a plain Bool so the same control serves pages backed by
@@ -106,7 +66,7 @@ struct FilterButton: View {
 
 /// The app-wide "..." overflow menu for a work-list toolbar. Every control except
 /// `FilterButton` lives here — each page supplies whichever of `MatureRevealToggle` /
-/// Select / Reorder / `DisplayModeMenuPicker` / `ExpandAllMenuItem` / page-specific
+/// Select / Reorder / `ShowSummariesMenuItem` / `ListGridMenuPicker` / `ExpandAllMenuItem` / page-specific
 /// items (Reading Insights, Rename, Delete…) actually apply, via `content`.
 struct WorkListMoreMenu<Content: View>: View {
     @ViewBuilder var content: () -> Content
@@ -144,21 +104,29 @@ struct ExpandAllMenuItem: View {
     }
 }
 
-/// Detailed/Compact — a `WorkListMoreMenu` item. A `Picker` placed directly inside a
-/// `Menu`'s content renders as a checkmarked submenu section, the standard system
-/// idiom for "view options" (replaces the old segmented `DisplayModeToggle`, which
-/// needed its own toolbar slot).
-struct DisplayModeMenuPicker: View {
-    @Binding var mode: WorkListDisplayMode
-    /// The layouts this page can draw. History has no cover grid (1ah: "the
-    /// tile format cannot carry this much metadata legibly").
-    var modes: [WorkListDisplayMode] = WorkListDisplayMode.allCases
+/// Show Summaries — a `WorkListMoreMenu` item on a detailed surface. On by
+/// default. Tags stay on the row either way; this only hides the paragraph.
+struct ShowSummariesMenuItem: View {
+    @Binding var isOn: Bool
 
     var body: some View {
-        Picker("Layout", selection: $mode) {
-            ForEach(modes, id: \.self) { mode in
-                Label(mode.title, systemImage: mode.systemImage).tag(mode)
+        Toggle("Show Summaries", isOn: $isOn)
+            .accessibilityHint("Shows or hides the summary under each work. Tags stay on the row.")
+    }
+}
+
+/// List / Grid — a `WorkListMoreMenu` item on a ledger list. A `Picker` inside
+/// a `Menu` renders as a checkmarked section, the same idiom the old layout
+/// picker used.
+struct ListGridMenuPicker: View {
+    @Binding var arrangement: WorkListArrangement
+
+    var body: some View {
+        Picker("Layout", selection: $arrangement) {
+            ForEach(WorkListArrangement.allCases, id: \.self) { arrangement in
+                Label(arrangement.title, systemImage: arrangement.systemImage).tag(arrangement)
             }
         }
+        .accessibilityLabel("Layout")
     }
 }

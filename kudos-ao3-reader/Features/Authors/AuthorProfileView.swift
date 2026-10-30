@@ -26,9 +26,10 @@ struct AuthorProfileView: View {
 
     @State private var model: AO3AuthorProfileModel
     @State private var expandAll = false
-    /// Per-screen, like Home's and Library's section lists. This screen drew its
-    /// rows from the *layout* before, so Ledger and Detailed were unreachable.
-    @AppStorage("authorProfile.displayMode") private var displayMode: WorkListDisplayMode = .ledger
+    /// Your Works only. Migrated once from `authorProfile.displayMode`, which
+    /// other author lists no longer read.
+    @AppStorage(WorkListKeys.yourWorksArrangement) private var yourWorksArrangement: WorkListArrangement = .list
+    @AppStorage(WorkListKeys.authorListsShowSummaries) private var showSummaries = true
     @State private var bulkSelection = RemoteWorkSelectionController()
     /// 1bn: pushed rather than presented, so the bulk form gets a real back stack.
     @State private var isBulkEditing = false
@@ -217,6 +218,7 @@ struct AuthorProfileView: View {
                     Text(form.message)
                 }
             }
+            .onAppear(perform: migrateYourWorksArrangement)
             .onChange(of: authenticationScope, initial: true) { _, _ in
                 bulkSelection.exitSelectMode()
                 model.activate(auth: auth)
@@ -242,11 +244,83 @@ private extension AuthorProfileView {
 
     private var isOverview: Bool { !showsDashboard && !isContentDestination }
 
+    /// Own works and gifts, on the pushed list. The dashboard's recent works
+    /// stay an author list.
+    private var isYourWorksList: Bool {
+        isOwnProfile && !showsDashboard && !isOverview
+            && (model.selectedTab == .works || model.selectedTab == .gifts)
+    }
+
+    private var showsYourWorksGrid: Bool {
+        isYourWorksList && yourWorksArrangement == .grid && !bulkSelection.isSelecting
+    }
+
+    /// Copies a stored author Ledger/Detailed/Compact choice onto Your Works
+    /// once. The old key stays.
+    private func migrateYourWorksArrangement() {
+        let resolved = WorkListLayoutMigration.resolve(
+            arrangementKey: WorkListKeys.yourWorksArrangement,
+            legacyDisplayModeKey: WorkListKeys.authorProfileDisplayMode
+        )
+        if yourWorksArrangement != resolved {
+            yourWorksArrangement = resolved
+        }
+    }
+
     private var authorPalette: SubjectPalette {
         theme.appTheme.subjectPalette(hue: CoverArt.hue(for: model.route.username))
     }
 
     private var profileList: some View {
+        Group {
+            if showsYourWorksGrid {
+                yourWorksGridPage
+            } else {
+                authorList
+            }
+        }
+        .subjectScreenWash(palette: isOverview ? authorPalette : theme.scopePalette)
+        .refreshable { await model.refresh(auth: auth) }
+        .onChange(of: auth.lastSeriesWrite) { _, write in
+            guard write != nil, isOwnProfile else { return }
+            Task { await model.refresh(auth: auth) }
+        }
+        .filterPanelPresentation(isPresented: $showingWorksFilters) {
+            AO3AuthorWorksFilterPanel(model: model, onWillChange: bulkSelection.exitSelectMode) {
+                showingWorksFilters = false
+            }
+        }
+    }
+
+    /// Grid cannot host its covers inside a List cell. The header, scope and
+    /// fandom rail use their scroll forms; selecting returns to the list.
+    private var yourWorksGridPage: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                accountHeader
+                if model.isShowingStaleCache {
+                    Label("Showing cached AO3 data", systemImage: "wifi.slash")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, SubjectMetrics.accountGutter)
+                }
+                AO3AuthorWorksScopeSection(
+                    model: model,
+                    layout: .scroll,
+                    showsScopes: isOwnProfile,
+                    onWillChange: bulkSelection.exitSelectMode,
+                    usesToolbarFilter: true
+                )
+                AO3AuthorFandomFilterSection(
+                    model: model, onWillChange: bulkSelection.exitSelectMode, layout: .scroll
+                )
+                contentRows
+            }
+            .padding(.bottom, 12)
+        }
+    }
+
+    private var authorList: some View {
         List {
             if usesAccountHeader {
                 accountHeader
@@ -301,7 +375,7 @@ private extension AuthorProfileView {
                     header: header,
                     route: model.route,
                     expandAll: expandAll,
-                    displayMode: displayMode,
+                    showsSummary: showSummaries,
                     onSeeAll: { dashboardDestination = .tab($0) }
                 )
             } else if isOverview {
@@ -329,18 +403,6 @@ private extension AuthorProfileView {
             }
         }
         .cardList()
-        .subjectScreenWash(palette: isOverview ? authorPalette : theme.scopePalette)
-        .refreshable { await model.refresh(auth: auth) }
-        // The writer's own series list after a series was saved, reordered or lost a work.
-        .onChange(of: auth.lastSeriesWrite) { _, write in
-            guard write != nil, isOwnProfile else { return }
-            Task { await model.refresh(auth: auth) }
-        }
-        .filterPanelPresentation(isPresented: $showingWorksFilters) {
-            AO3AuthorWorksFilterPanel(model: model, onWillChange: bulkSelection.exitSelectMode) {
-                showingWorksFilters = false
-            }
-        }
     }
 
     private var usesAccountHeader: Bool { showsDashboard || (isOwnProfile && isContentDestination) }
@@ -480,7 +542,8 @@ private extension AuthorProfileView {
             AO3AuthorWorksSection(
                 model: model,
                 expandAll: expandAll,
-                displayMode: displayMode,
+                arrangement: isYourWorksList ? yourWorksArrangement : nil,
+                showsSummary: showSummaries,
                 isSelecting: bulkSelection.isSelecting,
                 selection: bulkSelection.selection,
                 onToggleSelection: bulkSelection.toggle,
@@ -502,11 +565,10 @@ private extension AuthorProfileView {
         case .series:
             AO3AuthorSeriesSection(
                 model: model,
-                showsNewSeriesOnAO3: isOwnProfile,
-                displayMode: displayMode
+                showsNewSeriesOnAO3: isOwnProfile
             )
         case .bookmarks:
-            AO3AuthorBookmarksSection(model: model, expandAll: expandAll, displayMode: displayMode)
+            AO3AuthorBookmarksSection(model: model, expandAll: expandAll)
         case .about:
             aboutRows
         }
@@ -939,13 +1001,16 @@ private extension AuthorProfileView {
                     Label("Select Works", systemImage: "checklist")
                 }
             }
-            if !isOverview, showsDashboard || (!currentContentIsEmpty && model.selectedTab != .about) {
-                // A List page: no cover grid (1u / 1w draw the ledger).
-                DisplayModeMenuPicker(mode: $displayMode, modes: [.ledger, .detailed])
-                // Expand All acts on cards, so it has nothing to do in Compact.
-                if displayMode != .compact {
-                    ExpandAllMenuItem(expandAll: $expandAll)
-                }
+            if !isOverview, isYourWorksList, !model.works.isEmpty {
+                ListGridMenuPicker(arrangement: $yourWorksArrangement)
+                Divider()
+            } else if !isOverview, showsDashboard
+                || ((model.selectedTab == .works || model.selectedTab == .gifts) && !currentContentIsEmpty) {
+                ShowSummariesMenuItem(isOn: $showSummaries)
+                ExpandAllMenuItem(expandAll: $expandAll)
+                Divider()
+            } else if !isOverview, model.selectedTab == .bookmarks, !currentContentIsEmpty {
+                ExpandAllMenuItem(expandAll: $expandAll)
                 Divider()
             }
             if showsDashboard {

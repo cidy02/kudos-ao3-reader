@@ -26,6 +26,7 @@ struct AO3SeriesDetailView: View {
     @State private var loadMoreError: String?
     @State private var isShowingStaleCache = false
     @State private var expandAll = false
+    @AppStorage(WorkListKeys.seriesShowSummaries) private var showSummaries = true
     /// Select over the series' works — Browse's remote selection shell and
     /// bulk bar (T-339).
     @State private var bulkSelection = RemoteWorkSelectionController()
@@ -105,6 +106,7 @@ struct AO3SeriesDetailView: View {
                                     }
                                 }
                                 if !works.isEmpty {
+                                    ShowSummariesMenuItem(isOn: $showSummaries)
                                     ExpandAllMenuItem(expandAll: $expandAll)
                                     Divider()
                                 }
@@ -197,17 +199,19 @@ struct AO3SeriesDetailView: View {
                 if bulkSelection.isSelecting, let remote = entry.remote {
                     // Every entry is remote-led, so selection runs over the AO3
                     // summaries — the list the bulk bar acts on.
-                    SelectableAO3WorkRow(work: remote, expandAll: expandAll, controller: bulkSelection)
+                    SelectableAO3WorkRow(
+                        work: remote, expandAll: expandAll, controller: bulkSelection, showsSummary: showSummaries
+                    )
                         .cardRow(isSelected: bulkSelection.selection.contains(remote.id))
                 } else if let work = entry.local {
                     // No .cardNavigation here: SensitiveWorkRow already applies it
                     // internally (MatureContent.swift) for its non-blurred, non-selecting
                     // branch — re-wrapping it stacks a second, unhidden, real-titled
                     // NavigationLink behind the blurred branch's reveal gate.
-                    SensitiveWorkRow(work: work, expandAll: expandAll)
+                    SensitiveWorkRow(work: work, expandAll: expandAll, showsSummary: showSummaries)
                         .cardRow()
                 } else if let remote = entry.remote {
-                    AO3WorkRow(work: remote, expandAll: expandAll)
+                    AO3WorkRow(work: remote, expandAll: expandAll, showsSummary: showSummaries)
                         .cardNavigation(to: remote, accessibilityLabel: remote.title)
                         .cardRow()
                 }

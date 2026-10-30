@@ -73,12 +73,17 @@ struct AO3AuthorWorksScopeSection: View {
     var body: some View {
         if usesToolbarFilter {
             if model.selectedTab == .works, showsScopes {
-                Section {
+                if layout == .scroll {
                     WorksScopeSegments(scope: scopeBinding)
-                        .listRowInsets(EdgeInsets(top: 4, leading: SubjectMetrics.gutter,
-                                                  bottom: 4, trailing: SubjectMetrics.gutter))
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
+                        .padding(.horizontal, SubjectMetrics.gutter)
+                } else {
+                    Section {
+                        WorksScopeSegments(scope: scopeBinding)
+                            .listRowInsets(EdgeInsets(top: 4, leading: SubjectMetrics.gutter,
+                                                      bottom: 4, trailing: SubjectMetrics.gutter))
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                    }
                 }
             }
         } else if model.selectedTab == .works {
