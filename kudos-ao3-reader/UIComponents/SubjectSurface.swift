@@ -9,7 +9,7 @@ import SwiftUI
 /// colours of its own:
 ///
 ///   1. `SubjectPalette`      — hue → wash / accent / chip / border colours
-///   2. `subjectWash()`       — the full-bleed gradient behind a pushed screen
+///   2. `subjectWash()`       — the full-bleed gradient behind a subject's own page
 ///   3. `SubjectHeaderBlock`  — kicker · rule · 32pt hero · tallies
 ///   4. `SectionRuleHeader`   — Home/Library's kicker · count · hairline · chevron
 ///   5. `SubjectStatStrip`    — the four-cell divided figure strip
@@ -113,9 +113,8 @@ struct SubjectPalette {
         }
     }
 
-    /// The page wash behind a pushed subject screen: saturated at the top,
-    /// falling to the app's own backdrop by the bottom of the header region.
-    /// Spec: `linear-gradient(178deg, …)` with stops at 0 / 26 / 52 / 74 / 100%.
+    /// The page wash behind a subject's own page, falling to the plain content
+    /// ground by the end of its 380-point header region.
     var wash: LinearGradient {
         LinearGradient(
             stops: washStops,
@@ -128,54 +127,13 @@ struct SubjectPalette {
     /// picked colour reaches the wash as itself. A `LinearGradient` cannot be
     /// introspected, so the stops are the only testable seam.
     var washStops: [Gradient.Stop] {
-        if let picked {
-            // The same five stop positions, with the chosen colour fading out
-            // instead of five different colours sharing its hue. The alphas are
-            // fitted to the weight the derived stops already had for the default
-            // AO3 red, so the stock look barely moves and a chosen colour finally
-            // reads as itself. Sepia and Light take a gentler ramp: the colour
-            // sits on a pale page there, where the same alpha reads far heavier.
-            let alphas: [Double] = switch theme {
-            case .dark: [0.41, 0.33, 0.21, 0.09]
-            // OLED's page is true black, so the same colour reads darker on it.
-            case .oled: [0.48, 0.40, 0.28, 0.17]
-            case .light: [0.17, 0.13, 0.07, 0.03]
-            case .sepia: [0.14, 0.10, 0.06, 0.02]
-            }
-            let locations: [Double] = [0, 0.26, 0.52, 0.74]
-            return zip(alphas, locations).map {
-                .init(color: picked.opacity($0.0), location: $0.1)
-            } + [.init(color: theme.cardBackdrop, location: 1)]
-        }
-        switch theme {
-        case .dark, .oled:
-            return [
-                .init(color: Color(hue: hue, saturation: 0.55, brightness: 0.29), location: 0),
-                .init(color: Color(hue: hue, saturation: 0.53, brightness: 0.24), location: 0.26),
-                .init(color: Color(hue: hue, saturation: 0.42, brightness: 0.17), location: 0.52),
-                .init(color: Color(hue: hue, saturation: 0.26, brightness: 0.10), location: 0.74),
-                .init(color: theme.cardBackdrop, location: 1),
-            ]
-        case .light:
-            return [
-                .init(color: Color(hue: hue, saturation: 0.20, brightness: 0.98), location: 0),
-                .init(color: Color(hue: hue, saturation: 0.15, brightness: 0.98), location: 0.26),
-                .init(color: Color(hue: hue, saturation: 0.09, brightness: 0.99), location: 0.52),
-                .init(color: Color(hue: hue, saturation: 0.04, brightness: 0.99), location: 0.74),
-                .init(color: theme.cardBackdrop, location: 1),
-            ]
-        case .sepia:
-            return [
-                .init(color: Color(hue: hue, saturation: 0.22, brightness: 0.92), location: 0),
-                .init(color: Color(hue: hue, saturation: 0.17, brightness: 0.92), location: 0.26),
-                .init(color: Color(hue: hue, saturation: 0.11, brightness: 0.92), location: 0.52),
-                .init(color: Color(hue: hue, saturation: 0.05, brightness: 0.92), location: 0.74),
-                .init(color: theme.cardBackdrop, location: 1),
-            ]
+        let washColor = picked ?? accent
+        return zip(SubjectWashGeometry.opacities, SubjectWashGeometry.locations).map {
+            .init(color: washColor.opacity($0.0), location: $0.1)
         }
     }
 
-    /// A subject page's own diagonal wash (fandom, series, queue face). Generated
+    /// A subject page's own diagonal wash (fandom, author, series, work). Generated
     /// work covers and the Resume card do not use this: they share
     /// `CoverArt.workGradient`, the dark two-stop art, in every theme. This wash
     /// stays theme-aware on purpose. One hue at two brightnesses — a hue shift
@@ -1219,6 +1177,13 @@ struct GlassCircleButton<Label: View>: View {
 
 // MARK: - Wash background
 
+/// The one wash geometry shared by every page entitled to an identity wash.
+enum SubjectWashGeometry {
+    static let height: CGFloat = 380
+    static let opacities: [Double] = [0.20, 0.12, 0.05, 0]
+    static let locations: [Double] = [0, 0.5, 0.75, 1]
+}
+
 private struct SubjectWashedScreenKey: EnvironmentKey {
     static let defaultValue = false
 }
@@ -1250,23 +1215,20 @@ extension EnvironmentValues {
     }
 }
 
-/// Paints the subject wash behind a screen's content, full-bleed under the
-/// status bar. `height` is how far down the saturated part reaches before it
-/// has fully resolved to the page — the spec varies it by how much chrome the
-/// screen floats over it (380pt for a plain list, 600–620pt for a hero).
+/// Paints the one subject wash behind a screen's content, full-bleed under the
+/// status bar. It always resolves to the plain content ground at 380 points.
 private struct SubjectWash: ViewModifier {
     let palette: SubjectPalette
-    let height: CGFloat
 
     func body(content: Content) -> some View {
         content
             .background(alignment: .top) {
                 palette.wash
-                    .frame(height: height)
+                    .frame(height: SubjectWashGeometry.height)
                     .frame(maxHeight: .infinity, alignment: .top)
                     .ignoresSafeArea()
             }
-            .background(palette.theme.cardBackdrop.ignoresSafeArea())
+            .background(palette.theme.contentBackdrop.ignoresSafeArea())
             // Announced downwards, not just painted: the content this wraps is
             // usually a `cardList()` List, whose own opaque backdrop would sit
             // in front of everything here. Reaching it needs the environment —
@@ -1277,9 +1239,9 @@ private struct SubjectWash: ViewModifier {
 }
 
 extension View {
-    /// The full-bleed gradient a pushed, subject-scoped screen sits on.
-    func subjectWash(_ palette: SubjectPalette, height: CGFloat = 380) -> some View {
-        modifier(SubjectWash(palette: palette, height: height))
+    /// The full-bleed gradient a subject's own screen sits on.
+    func subjectWash(_ palette: SubjectPalette) -> some View {
+        modifier(SubjectWash(palette: palette))
     }
 
     /// Reinforces the app-control tint inside a subject wash. The concrete

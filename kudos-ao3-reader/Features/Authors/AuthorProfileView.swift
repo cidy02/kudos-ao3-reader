@@ -279,7 +279,10 @@ private extension AuthorProfileView {
                 authorList
             }
         }
-        .subjectScreenWash(palette: isOverview ? authorPalette : theme.scopePalette)
+        .subjectScreenWash(
+            palette: isOverview ? authorPalette : theme.scopePalette,
+            role: isOverview ? .subjectWash : .grouped
+        )
         .refreshable { await model.refresh(auth: auth) }
         .onChange(of: auth.lastSeriesWrite) { _, write in
             guard write != nil, isOwnProfile else { return }
@@ -865,7 +868,7 @@ private extension AuthorProfileView {
             }
         }
         .cardList()
-        .subjectScreenWash(palette: theme.scopePalette)
+        .subjectScreenWash(palette: theme.scopePalette, role: .grouped)
     }
 
     @ViewBuilder

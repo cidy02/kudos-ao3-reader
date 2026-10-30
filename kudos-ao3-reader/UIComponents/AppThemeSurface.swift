@@ -1,5 +1,57 @@
 import SwiftUI
 
+/// The two page grounds in the redesign. Subject pages add their identity wash
+/// above the content ground; all other screens choose one of these directly.
+enum AppScreenSurfaceRole: Equatable {
+    case content
+    case grouped
+}
+
+enum SubjectScreenRole: Equatable {
+    case content
+    case grouped
+    case subjectWash
+
+    var usesSubjectWash: Bool { self == .subjectWash }
+
+    var baseSurface: AppScreenSurfaceRole {
+        self == .grouped ? .grouped : .content
+    }
+}
+
+private struct SubjectScreenRoleKey: EnvironmentKey {
+    static let defaultValue: SubjectScreenRole = .grouped
+}
+
+extension EnvironmentValues {
+    var subjectScreenRole: SubjectScreenRole {
+        get { self[SubjectScreenRoleKey.self] }
+        set { self[SubjectScreenRoleKey.self] = newValue }
+    }
+}
+
+private struct AppScreenSurface: ViewModifier {
+    @Environment(ThemeManager.self) private var theme
+    let role: SubjectScreenRole
+
+    func body(content: Content) -> some View {
+        let backdrop = role.baseSurface == .content
+            ? theme.appTheme.contentBackdrop
+            : theme.appTheme.cardBackdrop
+        content
+            .background(backdrop.ignoresSafeArea())
+            .environment(\.subjectScreenRole, role)
+    }
+}
+
+extension View {
+    /// Gives a screen its plain content or grouped List/Form ground. Subject
+    /// washes use `subjectWash`, which also supplies the identity colour.
+    func appScreenSurface(_ role: SubjectScreenRole) -> some View {
+        modifier(AppScreenSurface(role: role))
+    }
+}
+
 /// App-wide surface theming, driven entirely by `ReaderTheme.appBaseBackground` /
 /// `appElevatedBackground`. Light keeps the native system surfaces unchanged;
 /// Sepia (which the system has no scheme for) swaps in warm paper backgrounds;
@@ -66,6 +118,17 @@ struct CardShadow {
 /// thread cards) build on the SAME surfaces instead of inventing near-misses that
 /// drift from the Library baseline.
 extension ReaderTheme {
+    /// The plain ground for content screens. Light intentionally uses white,
+    /// while the other themes retain their existing app surface.
+    var contentBackdrop: Color {
+        if let appBaseBackground { return appBaseBackground }
+        #if os(iOS)
+        return Color(uiColor: .systemBackground)
+        #else
+        return Color(nsColor: .windowBackgroundColor)
+        #endif
+    }
+
     /// The page behind the cards.
     var cardBackdrop: Color {
         if self == .dark { return Color(red: 11 / 255, green: 11 / 255, blue: 13 / 255) }
@@ -196,15 +259,21 @@ enum CardListMetrics {
 private struct CardList: ViewModifier {
     @Environment(ThemeManager.self) private var theme
     @Environment(\.isOnSubjectWash) private var isOnSubjectWash
+    @Environment(\.subjectScreenRole) private var screenRole
 
     func body(content: Content) -> some View {
+        let backdrop = isOnSubjectWash
+            ? Color.clear
+            : screenRole.baseSurface == .content
+                ? theme.appTheme.contentBackdrop
+                : theme.appTheme.cardBackdrop
         content
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
             // A washed screen has already declared what its backdrop is, and it
             // is painted behind this modifier. Filling it flat here would hide
             // the wash completely — see `EnvironmentValues.isOnSubjectWash`.
-            .background((isOnSubjectWash ? Color.clear : theme.appTheme.cardBackdrop).ignoresSafeArea())
+            .background(backdrop.ignoresSafeArea())
     }
 }
 

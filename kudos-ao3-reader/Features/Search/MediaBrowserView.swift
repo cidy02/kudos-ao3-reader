@@ -105,8 +105,7 @@ struct MediaBrowserView: View {
                 if cardsReady { categoryList } else { CategoryCardSkeletonList() }
             }
         }
-        // Sepia's ground, as every other tab root has: Browse was the system's white under it.
-        .appThemedScroll()
+        .appScreenSurface(.content)
         .task { if categories.isEmpty { await load() } }
         // Derive per-category stats off the main render path, refired (and debounced)
         // whenever a fandom list lands or the library changes.

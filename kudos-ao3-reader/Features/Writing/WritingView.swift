@@ -53,7 +53,7 @@ struct WritingView: View {
             #endif
             // Not `subjectScreenWash`: that hides the tab bar, for pushed screens.
             // This is a tab root, so there would be no way out of it.
-            .subjectWash(theme.scopePalette)
+            .subjectScreenSurface(.content, palette: theme.scopePalette)
             .hidesNavigationBarChrome()
             .navigationDestination(for: WritingRoute.self, destination: writingDestination)
             .navigationDestination(item: $editingWorkID) {
