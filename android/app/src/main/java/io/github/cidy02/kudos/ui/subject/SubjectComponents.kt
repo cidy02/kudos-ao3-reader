@@ -97,7 +97,6 @@ object SubjectMetrics {
     val rowRadius = 16.dp
     val heroRadius = 18.dp
     val chipRadius = 8.dp
-    val trayRadius = 10.dp
     val defaultWashHeight = 380.dp
     val panelRadius = 14.dp
 }
@@ -523,7 +522,7 @@ fun SubjectChip(
     val shape = if (pill) RoundedCornerShape(percent = 50) else RoundedCornerShape(SubjectMetrics.chipRadius)
     val foreground = contentColor ?: when (style) {
         SubjectChipStyle.Neutral -> tokens.primaryInk
-        SubjectChipStyle.Tinted -> palette?.accentOnFill ?: tokens.primaryInk
+        SubjectChipStyle.Tinted -> palette?.controlInk ?: tokens.accentInk
         SubjectChipStyle.Dashed -> tokens.secondaryInk
         is SubjectChipStyle.Pill -> if (style.isSelected) {
             SubjectPalette.label(palette?.tint ?: tokens.accent)
@@ -536,8 +535,8 @@ fun SubjectChip(
             .background(tokens.glassFill(0.09), shape)
             .border(0.5.dp, tokens.glassStroke(0.14), shape)
         SubjectChipStyle.Tinted -> Modifier
-            .background(palette?.chipFill ?: tokens.accent.withOpacity(0.24), shape)
-            .border(0.5.dp, palette?.chipStroke ?: tokens.accent.withOpacity(0.5), shape)
+            .background(palette?.controlChipFill ?: tokens.accent.withOpacity(0.24), shape)
+            .border(0.5.dp, palette?.controlChipStroke ?: tokens.accent.withOpacity(0.5), shape)
         SubjectChipStyle.Dashed -> dashedChip(tokens.glassStroke(0.26))
         is SubjectChipStyle.Pill -> if (style.isSelected) {
             Modifier.background(palette?.tint ?: tokens.accent, shape)
@@ -671,11 +670,11 @@ private fun StatCell(
     val tokens = LocalKudosTokens.current
     val opens = cell.onClick != null
     val figureColor = cell.tint ?: when {
-        opens -> palette.accent
+        opens -> palette.controlInk
         cell.isHighlighted -> palette.accentOnFill
         else -> tokens.primaryInk
     }
-    val labelColor = if (opens) palette.accent else tokens.secondaryInk
+    val labelColor = if (opens) palette.controlInk else tokens.secondaryInk
     Column(
         modifier
             .then(if (cell.onClick != null) Modifier.clickable(onClick = cell.onClick) else Modifier)
@@ -886,7 +885,7 @@ fun ToolbarCircleButton(
     content: @Composable () -> Unit
 ) {
     val tokens = LocalKudosTokens.current
-    val accent = palette?.accent ?: tokens.accent
+    val accent = tokens.accent
     val named = modifier.semantics { contentDescription = accessibilityName }
     val glyph: @Composable () -> Unit = {
         if (badge == null) content() else BadgedBox(badge = { ToolbarBadge(badge, accent) }) { content() }
@@ -897,7 +896,7 @@ fun ToolbarCircleButton(
             modifier = named,
             colors = IconButtonDefaults.filledTonalIconButtonColors(
                 containerColor = accent.withOpacity(AccentContainerOpacity),
-                contentColor = (palette ?: LocalSubjectPalette.current).accentOnFill
+                contentColor = tokens.accentInk
             ),
             content = glyph
         )
@@ -1018,7 +1017,7 @@ fun FilterButton(
     filterHelp: String? = null
 ) {
     val tokens = LocalKudosTokens.current
-    val tint = if (filtersActive) LocalSubjectPalette.current.accentOnFill else tokens.primaryInk
+    val tint = if (filtersActive) tokens.accentInk else tokens.primaryInk
     var menuOpen by remember { mutableStateOf(false) }
     val label = if (badgeCount > 0) "Filter, $badgeCount active" else "Filter"
     Box(modifier) {

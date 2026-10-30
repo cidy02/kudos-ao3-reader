@@ -1,8 +1,5 @@
 package io.github.cidy02.kudos.ui.components
 
-import io.github.cidy02.kudos.ui.subject.ReaderTheme
-import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
-
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -11,7 +8,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.Book
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.FavoriteBorder
@@ -30,14 +26,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.outlined.People
-import androidx.compose.material.icons.outlined.WarningAmber
-import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.Surface
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.platform.LocalDensity
@@ -142,26 +135,26 @@ data class WorkStatItem(
     val icon: ImageVector? = null,
     /** AO3's own colour coding for this value, if it has one — see [AO3StatusTint].
      *  Only [WorkStatusChipRow] paints it; the plain count labels ignore it. */
-    val tint: Color? = null
+    val tint: Color? = null,
+    /** A T-479 vector mark for warning/completion chips; ordinary stat rows keep [icon]. */
+    val symbolMark: WorkSymbolMark? = null
 )
 
 /**
  * AO3's rating and category colour coding, as the site itself uses it, so a rating
  * or a ship category is identifiable before the text is read.
  *
- * Apple's system palette rather than Material's, deliberately: this is product
- * data shared with the iOS client (`WorkStat.ratingColor` / `categoryColor`), not
- * platform styling, and the two apps should agree on what "Explicit" looks like.
- * [forAppearance] resolves system red and readable teen yellow for the current
- * appearance; the same colours also tint the cover-card status glyphs.
+ * Product data shared with iOS (`AO3TagPalette`), not platform styling. These
+ * fixed hexes do not shift with Material or system appearance.
  */
 object AO3StatusTint {
-    val green = Color(0xFF34C759)
-    val yellow = Color(0xFFFFCC00)
-    val orange = Color(0xFFFF9500)
-    val red = ReaderTheme.Light.destructive
-    val pink = Color(0xFFFF2D55)
-    val blue = Color(0xFF007AFF)
+    val green = AO3TagPalette.General
+    val yellow = AO3TagPalette.Teen
+    val orange = AO3TagPalette.Mature
+    val red = AO3TagPalette.Explicit
+    val femaleFemale = AO3TagPalette.FemaleFemale
+    val pink = AO3TagPalette.FemaleMale
+    val blue = AO3TagPalette.MaleMale
     val purple = Color(0xFFAF52DE)
     val gray = Color(0xFF8E8E93)
 
@@ -177,26 +170,18 @@ object AO3StatusTint {
     }
 
     fun category(category: String): Color? = when (category.trim()) {
-        "F/F" -> red
+        "F/F" -> femaleFemale
         "F/M" -> pink
         "Gen" -> green
         "M/M" -> blue
         "Multi" -> purple
-        // AO3's own coding is black for Other (iOS `categoryColor`; A58).
-        "Other" -> Color.Black
+        "Other" -> AO3TagPalette.Other
         else -> null
     }
 
-    /**
-     * Teen's yellow on a light card was about 1.3:1 and the "T" vanished: light appearances get
-     * iOS's dark mustard (about 4.5:1), dark ones keep the yellow (iOS `teenYellow`; A58).
-     */
-    fun forAppearance(tint: Color, isDark: Boolean): Color =
-        when {
-            tint == yellow && !isDark -> Color(0xFF8C6600)
-            tint == red -> if (isDark) ReaderTheme.Dark.destructive else ReaderTheme.Light.destructive
-            else -> tint
-        }
+    /** Retained for callers that still pass appearance; T-479's palette itself never changes. */
+    @Suppress("UNUSED_PARAMETER")
+    fun forAppearance(tint: Color, isDark: Boolean): Color = tint
 }
 
 object WorkStatIcons {
@@ -449,28 +434,28 @@ fun statusChips(
             chips += WorkStatItem(
                 text = warning,
                 accessibilityLabel = "Warning: $warning",
-                icon = Icons.Outlined.WarningAmber,
-                tint = AO3StatusTint.red
+                tint = AO3StatusTint.red,
+                symbolMark = WorkSymbolMark.Exclamation
             )
         }
     } else chips += when {
         real.isNotEmpty() && !chooseNotTo -> WorkStatItem(
             text = if (real.size == 1) "1 Warning" else "${real.size} Warnings",
             accessibilityLabel = "Warnings: ${real.joinToString(", ")}",
-            icon = Icons.Outlined.WarningAmber,
-            tint = AO3StatusTint.red
+            tint = AO3StatusTint.red,
+            symbolMark = WorkSymbolMark.Exclamation
         )
         chooseNotTo -> WorkStatItem(
             text = "Not Disclosed",
             accessibilityLabel = "Creator chose not to use archive warnings",
-            icon = Icons.Outlined.WarningAmber,
-            tint = AO3StatusTint.orange
+            tint = AO3StatusTint.orange,
+            symbolMark = WorkSymbolMark.Question
         )
         else -> WorkStatItem(
             text = "No Warnings",
             accessibilityLabel = "No archive warnings apply",
-            icon = Icons.Outlined.CheckCircle,
-            tint = AO3StatusTint.gray
+            tint = AO3StatusTint.gray,
+            symbolMark = WorkSymbolMark.Dash
         )
     }
 
@@ -478,22 +463,21 @@ fun statusChips(
         true -> WorkStatItem(
             text = "Complete",
             accessibilityLabel = "Status: complete",
-            icon = Icons.Outlined.CheckCircle,
-            tint = AO3StatusTint.green
+            tint = AO3StatusTint.green,
+            symbolMark = WorkSymbolMark.Check
         )
         false -> WorkStatItem(
             text = "WIP",
             accessibilityLabel = "Status: work in progress",
-            icon = Icons.Outlined.Schedule,
-            tint = AO3StatusTint.orange
+            tint = AO3TagPalette.WipInk,
+            symbolMark = WorkSymbolMark.HalfRing
         )
         // An import with no declared status must not become a WIP.
         null -> WorkStatItem(
             text = "Unknown",
             accessibilityLabel = "Status: unknown",
-            // Its own mark, as iOS's `questionmark.circle`: WIP's clock said "in progress" (A61 #28).
-            icon = Icons.AutoMirrored.Outlined.HelpOutline,
-            tint = AO3StatusTint.gray
+            tint = AO3StatusTint.gray,
+            symbolMark = WorkSymbolMark.Question
         )
     }
 
@@ -519,17 +503,7 @@ fun WorkStatusChipRow(
         horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        stats.forEachIndexed { index, stat ->
-            if (index > 0) {
-                Text(
-                    text = "•",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier
-                        .align(Alignment.CenterVertically)
-                        .clearAndSetSemantics {}
-                )
-            }
+        stats.forEach { stat ->
             // The capsule carries AO3's colour coding, not the glyph — a chip is a
             // block of colour, so painting it is what the coding is for. Icon and
             // text stay on the theme's own onSurfaceVariant: legible on every tint
@@ -537,7 +511,7 @@ fun WorkStatusChipRow(
             // hue just goes muddy. Tinted, not filled — "Explicit" is red and four
             // solid blocks of that beside the cover art would read as an error.
             Surface(
-                color = stat.tint?.let { AO3StatusTint.forAppearance(it, LocalKudosTokens.current.theme.isDarkFamily) }?.copy(alpha = 0.22f)
+                color = stat.tint?.copy(alpha = 0.22f)
                     ?: MaterialTheme.colorScheme.surfaceContainerHighest,
                 shape = MaterialTheme.shapes.small
             ) {
@@ -548,7 +522,13 @@ fun WorkStatusChipRow(
                         .padding(horizontal = 8.dp, vertical = 3.dp)
                         .semantics { contentDescription = stat.accessibilityLabel ?: stat.text }
                 ) {
-                    stat.icon?.let {
+                    stat.symbolMark?.let {
+                        WorkSymbolMarkView(
+                            mark = it,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(iconSize)
+                        )
+                    } ?: stat.icon?.let {
                         Icon(
                             imageVector = it,
                             contentDescription = null,

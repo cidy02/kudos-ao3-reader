@@ -1,11 +1,8 @@
 package io.github.cidy02.kudos.ui.subject
 
-import androidx.compose.material.icons.filled.People
-import androidx.compose.material.icons.filled.Help
 import io.github.cidy02.kudos.ui.components.hiddenMatureWorkSemantics
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -21,12 +18,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Error
-import androidx.compose.material.icons.outlined.CheckCircle
-import androidx.compose.material.icons.outlined.ErrorOutline
-import androidx.compose.material.icons.outlined.RadioButtonUnchecked
-import androidx.compose.material.icons.outlined.Shield
-import androidx.compose.material.icons.outlined.Verified
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.Icon
@@ -39,18 +30,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.text.PlatformTextStyle
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.LineHeightStyle
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -59,7 +42,9 @@ import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.home.HomeFacts
 import io.github.cidy02.kudos.library.readingProgressFraction
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
-import io.github.cidy02.kudos.ui.components.AO3StatusTint
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import io.github.cidy02.kudos.ui.components.statusChips
 import io.github.cidy02.kudos.works.DownloadQueue
 import io.github.cidy02.kudos.works.DownloadQueueStatus
 import io.github.cidy02.kudos.works.WorkTags
@@ -275,7 +260,7 @@ fun SubjectRemoteCoverCard(
                     rating = summary.rating,
                     categories = summary.categories,
                     warnings = summary.warnings,
-                    isComplete = summary.isComplete == true,
+                    isComplete = summary.isComplete,
                     arrangement = HomeStatusArrangement.Strip,
                     tileSize = 24.dp,
                     modifier = Modifier.fillMaxWidth()
@@ -336,11 +321,7 @@ internal fun CoverSurface(
     }
 }
 
-/**
- * iOS `WorkStatusIconGrid`: AO3's own quadrant, in this app's symbols. A work AO3 gave no
- * rating for has no rating tile (a sparse list row); no category is the two figures, not a
- * dash; and a completion nobody knows is "?", not the ring of a work in progress.
- */
+/** iOS `WorkStatusIconGrid`: four solid AO3 required-tag tiles, with no tray behind them. */
 @Composable
 fun HomeStatusTray(
     rating: String,
@@ -352,181 +333,43 @@ fun HomeStatusTray(
     modifier: Modifier = Modifier
 ) {
     val tokens = LocalKudosTokens.current
-    val fontScale = LocalDensity.current.fontScale
+    val fontScale = LocalDensity.current.fontScale.coerceAtMost(1.8f)
     val scaledTileSize = tileSize * fontScale
-    val ratingTint = AO3StatusTint.forAppearance(AO3StatusTint.rating(rating) ?: AO3StatusTint.gray, tokens.theme.isDarkFamily)
-    val category = categories.firstOrNull { AO3StatusTint.category(it) != null }
-    val categoryTint = AO3StatusTint.forAppearance(category?.let { AO3StatusTint.category(it) } ?: AO3StatusTint.gray, tokens.theme.isDarkFamily)
-    val warningTint = if (HomeFacts.hasRealArchiveWarning(warnings)) AO3StatusTint.orange else AO3StatusTint.gray
-    val completeTint = if (isComplete == true) AO3StatusTint.green else AO3StatusTint.gray
-    val tiles: List<@Composable () -> Unit> = buildList {
-        if (rating.isNotBlank()) {
-            add { StatusTile(scaledTileSize, ratingTint) { RatingMark(rating, ratingTint, scaledTileSize) } }
-        }
-        add { StatusTile(scaledTileSize, categoryTint) { CategoryMark(categories, categoryTint, scaledTileSize) } }
-        add {
-            StatusTile(scaledTileSize, warningTint) {
-                Icon(
-                    Icons.Filled.Error,
-                    contentDescription = "Warnings",
-                    tint = warningTint,
-                    modifier = Modifier.size(scaledTileSize * 0.58f)
-                )
-            }
-        }
-        add { StatusTile(scaledTileSize, completeTint) { CompletionMark(isComplete, completeTint, scaledTileSize) } }
-    }
-    val trayShape = RoundedCornerShape(SubjectMetrics.trayRadius)
+    val tiles = listOf(
+        io.github.cidy02.kudos.ui.components.WorkSymbolTile.rating(rating, tokens.theme.isDarkFamily),
+        io.github.cidy02.kudos.ui.components.WorkSymbolTile.category(categories, tokens.theme.isDarkFamily),
+        io.github.cidy02.kudos.ui.components.WorkSymbolTile.warnings(warnings, tokens.theme.isDarkFamily),
+        io.github.cidy02.kudos.ui.components.WorkSymbolTile.completion(isComplete, tokens.theme.isDarkFamily)
+    )
+    val gap = scaledTileSize * 0.12f
+    val spoken = buildList {
+        add(rating.ifBlank { "Not rated" })
+        add(if (categories.isEmpty()) "No category" else "Categories: ${categories.joinToString(", ")}")
+        add(statusChips("", emptyList(), warnings, isComplete).drop(1).first().accessibilityLabel.orEmpty())
+        add(if (isComplete == true) "Status: complete" else if (isComplete == false) "Status: work in progress" else "Status: unknown")
+    }.joinToString(", ")
+    val accessibleModifier = modifier.clearAndSetSemantics { contentDescription = spoken }
     if (arrangement == HomeStatusArrangement.Grid) {
         Column(
-            modifier.background(tokens.glassFill(0.16), trayShape).padding(4.dp * fontScale),
-            verticalArrangement = Arrangement.spacedBy(3.dp * fontScale)
+            accessibleModifier,
+            verticalArrangement = Arrangement.spacedBy(gap)
         ) {
             tiles.chunked(2).forEach { pair ->
-                Row(horizontalArrangement = Arrangement.spacedBy(3.dp * fontScale)) { pair.forEach { it() } }
+                Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
+                    pair.forEach {
+                        io.github.cidy02.kudos.ui.components.WorkSymbolTileView(it, scaledTileSize)
+                    }
+                }
             }
         }
     } else {
         Row(
-            modifier.background(tokens.glassFill(0.16), trayShape).padding(
-                horizontal = 6.dp * fontScale,
-                vertical = 4.dp * fontScale
-            ),
-            horizontalArrangement = Arrangement.spacedBy(4.dp * fontScale, Alignment.CenterHorizontally),
+            accessibleModifier,
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            tiles.forEach { it() }
+            tiles.forEach { io.github.cidy02.kudos.ui.components.WorkSymbolTileView(it, scaledTileSize) }
         }
-    }
-}
-
-@Composable
-private fun RatingMark(rating: String, tint: Color, tileSize: Dp) {
-    val letter = when (rating.trim()) {
-        "General Audiences" -> "G"
-        "Teen And Up Audiences" -> "T"
-        "Mature" -> "M"
-        "Explicit" -> "E"
-        else -> "?"
-    }
-    Box(Modifier.size(tileSize * 0.72f), contentAlignment = Alignment.Center) {
-        Icon(
-            Icons.Outlined.Shield,
-            contentDescription = rating.ifBlank { "Not Rated" },
-            tint = tint,
-            modifier = Modifier.fillMaxSize()
-        )
-        Text(
-            text = letter,
-            color = tint,
-            fontSize = with(LocalDensity.current) { (tileSize * 0.34f).toSp() },
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center,
-            style = CenteredGlyph
-        )
-    }
-}
-
-/**
- * Centres a single glyph on its box. Without trimming the font padding and
- * line height, the letter sat at the bottom of the shield and the category
- * symbols shrank to dots (owner report, 2026-10-02).
- */
-private val CenteredGlyph = TextStyle(
-    platformStyle = PlatformTextStyle(includeFontPadding = false),
-    lineHeightStyle = LineHeightStyle(
-        alignment = LineHeightStyle.Alignment.Center,
-        trim = LineHeightStyle.Trim.Both
-    )
-)
-
-@Composable
-private fun CategoryMark(categories: List<String>, tint: Color, tileSize: Dp) {
-    val named = categories.firstOrNull { AO3StatusTint.category(it) != null }?.trim()
-    if (named == "Multi") {
-        val red = LocalKudosTokens.current.destructive
-        Canvas(
-            Modifier
-                .size(tileSize * 0.55f)
-                .clip(RoundedCornerShape(2.dp))
-        ) {
-            val w = size.width / 2f
-            val h = size.height / 2f
-            drawRect(AO3StatusTint.green, Offset.Zero, Size(w, h))
-            drawRect(AO3StatusTint.purple, Offset(w, 0f), Size(w, h))
-            drawRect(red, Offset(0f, h), Size(w, h))
-            drawRect(AO3StatusTint.blue, Offset(w, h), Size(w, h))
-        }
-        return
-    }
-    if (named == null) {
-        // No category given: iOS's two figures ("N/A"), not a dash.
-        Icon(
-            Icons.Filled.People,
-            contentDescription = "No category",
-            tint = tint,
-            modifier = Modifier.size(tileSize * 0.6f)
-        )
-        return
-    }
-    val glyph = when (named) {
-        "F/F" -> "⚢"
-        "M/M" -> "⚣"
-        "F/M" -> "⚤"
-        "Gen" -> "☉"
-        "Other" -> "♅"
-        else -> "–"
-    }
-    // iOS sizes the sun larger than the pairing signs (its ink reads smaller).
-    val scale = if (named == "Gen") 0.78f else 0.62f
-    Text(
-        text = glyph,
-        color = tint,
-        fontSize = with(LocalDensity.current) { (tileSize * scale).toSp() },
-        textAlign = TextAlign.Center,
-        style = CenteredGlyph
-    )
-}
-
-@Composable
-private fun CompletionMark(isComplete: Boolean?, tint: Color, tileSize: Dp) {
-    if (isComplete == null) {
-        // Nobody knows: iOS `questionmark.circle.fill`. It drew the ring of a work in progress.
-        Icon(
-            Icons.Filled.Help,
-            contentDescription = "Completion unknown",
-            tint = tint,
-            modifier = Modifier.size(tileSize * 0.58f)
-        )
-    } else if (isComplete) {
-        Icon(
-            Icons.Outlined.Verified,
-            contentDescription = "Complete",
-            tint = tint,
-            modifier = Modifier.size(tileSize * 0.58f)
-        )
-    } else {
-        Canvas(Modifier.size(tileSize * 0.5f)) {
-            drawCircle(
-                color = tint,
-                style = Stroke(
-                    width = 1.5.dp.toPx(),
-                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(3.dp.toPx(), 2.dp.toPx()))
-                )
-            )
-        }
-    }
-}
-
-@Composable
-private fun StatusTile(size: Dp, tint: Color, content: @Composable () -> Unit) {
-    Box(
-        Modifier
-            .size(size)
-            .background(tint.withOpacity(0.20), RoundedCornerShape(5.dp)),
-        contentAlignment = Alignment.Center
-    ) {
-        content()
     }
 }
 

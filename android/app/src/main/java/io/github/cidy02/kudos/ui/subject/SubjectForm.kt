@@ -111,7 +111,7 @@ internal fun formLabelText(label: String): androidx.compose.ui.text.AnnotatedStr
     if (!label.endsWith(REQUIRED_MARK)) androidx.compose.ui.text.AnnotatedString(label)
     else androidx.compose.ui.text.buildAnnotatedString {
         append(label.dropLast(1))
-        pushStyle(androidx.compose.ui.text.SpanStyle(color = LocalSubjectPalette.current.accent))
+        pushStyle(androidx.compose.ui.text.SpanStyle(color = LocalSubjectPalette.current.controlInk))
         append(label.last())
     }
 
@@ -151,7 +151,7 @@ fun SubjectFormRow(
     val tokens = LocalKudosTokens.current
     val stackValue = isAccessibilityFontScale() && value != null
     val choice = showsChoice && onClick != null
-    val valueInk = valueColor ?: if (choice) LocalSubjectPalette.current.accent else tokens.secondaryInk
+    val valueInk = valueColor ?: if (choice) LocalSubjectPalette.current.controlInk else tokens.secondaryInk
     Row(
         modifier
             .fillMaxWidth()
@@ -164,7 +164,7 @@ fun SubjectFormRow(
             Icon(
                 imageVector = leadingIcon,
                 contentDescription = null,
-                tint = statusInk ?: LocalSubjectPalette.current.accent,
+                tint = statusInk ?: LocalSubjectPalette.current.controlInk,
                 modifier = Modifier.padding(end = 4.dp).size(with(LocalDensity.current) { 18.sp.toDp() })
             )
         }
@@ -222,7 +222,7 @@ fun SubjectFormRow(
             Icon(
                 imageVector = Icons.Filled.ExpandMore,
                 contentDescription = null,
-                tint = LocalSubjectPalette.current.accent,
+                tint = LocalSubjectPalette.current.controlInk,
                 modifier = Modifier.testTag("Choice indicator").size(with(LocalDensity.current) { 18.sp.toDp() })
             )
         }

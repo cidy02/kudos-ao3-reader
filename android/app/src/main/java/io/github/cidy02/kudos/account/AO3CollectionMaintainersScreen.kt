@@ -66,10 +66,10 @@ fun AO3CollectionMaintainersScreen(
         MaterialTheme(colorScheme = MaterialTheme.colorScheme.copy(
             primary = palette.tint, onPrimary = palette.labelOnTint,
             secondary = palette.tint, onSecondary = palette.labelOnTint,
-            primaryContainer = palette.chipFill, onPrimaryContainer = palette.controlInk,
-            secondaryContainer = palette.chipFill, onSecondaryContainer = palette.controlInk,
+            primaryContainer = palette.controlChipFill, onPrimaryContainer = palette.controlInk,
+            secondaryContainer = palette.controlChipFill, onSecondaryContainer = palette.controlInk,
             tertiary = palette.tint, onTertiary = palette.labelOnTint,
-            tertiaryContainer = palette.chipFill, onTertiaryContainer = palette.controlInk,
+            tertiaryContainer = palette.controlChipFill, onTertiaryContainer = palette.controlInk,
             inversePrimary = palette.tint, inverseSurface = tokens.cardFill, inverseOnSurface = tokens.primaryInk,
             error = red, onError = SubjectPalette.label(red), errorContainer = tokens.panelFill, onErrorContainer = tokens.primaryInk,
             surfaceTint = palette.tint, surfaceVariant = tokens.cardFill,

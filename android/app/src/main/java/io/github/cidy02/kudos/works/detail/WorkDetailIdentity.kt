@@ -29,6 +29,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.home.HomeFacts
+import io.github.cidy02.kudos.ui.components.AO3StatusTint
+import io.github.cidy02.kudos.ui.components.AO3TagPalette
 import io.github.cidy02.kudos.ui.subject.ReaderTheme
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SubjectHeaderBlock
@@ -57,9 +59,9 @@ sealed class WorkWarningStatus {
         }
 
     fun figureColor(theme: ReaderTheme): Color = when (this) {
-        is None -> Color(0xFF35C46A)
-        is Undisclosed -> Color(0xFFFF9500)
-        is Present -> theme.destructive
+        is None -> AO3TagPalette.General
+        is Undisclosed -> AO3TagPalette.Mature
+        is Present -> AO3TagPalette.Explicit
     }
 
     companion object {
@@ -92,14 +94,9 @@ object WorkStatRating {
     }
 
     fun color(rating: String, isDark: Boolean): Color? {
-        return when (rating.trim()) {
-            "General Audiences" -> Color(0xFF35C46A)
-            "Teen And Up Audiences" -> if (isDark) Color(0xFFFFCC00) else Color(0xFF8C6600)
-            "Mature" -> Color(0xFFFF9500)
-            "Explicit" -> if (isDark) ReaderTheme.Dark.destructive else ReaderTheme.Light.destructive
-            "Not Rated" -> Color(0xFF8E8E93)
-            else -> null
-        }
+        val fill = AO3StatusTint.rating(rating) ?: return null
+        if (!isDark && rating.trim() == "Teen And Up Audiences") return AO3TagPalette.TeenTextOnLight
+        return if (isDark) ReaderTheme.Dark.accentInk(fill) else fill
     }
 }
 

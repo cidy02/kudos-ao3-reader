@@ -74,11 +74,11 @@ fun AO3CollectionModerationScreen(
     SubjectPaletteTheme(palette) {
     MaterialTheme(colorScheme = MaterialTheme.colorScheme.copy(
         primary = palette.tint, onPrimary = palette.labelOnTint,
-        primaryContainer = palette.chipFill, onPrimaryContainer = palette.controlInk,
+        primaryContainer = palette.controlChipFill, onPrimaryContainer = palette.controlInk,
         secondary = palette.tint, onSecondary = palette.labelOnTint,
-        secondaryContainer = palette.chipFill, onSecondaryContainer = palette.controlInk,
+        secondaryContainer = palette.controlChipFill, onSecondaryContainer = palette.controlInk,
         tertiary = palette.tint, onTertiary = palette.labelOnTint,
-        tertiaryContainer = palette.chipFill, onTertiaryContainer = palette.controlInk,
+        tertiaryContainer = palette.controlChipFill, onTertiaryContainer = palette.controlInk,
         inversePrimary = palette.tint, inverseSurface = tokens.cardFill, inverseOnSurface = tokens.primaryInk,
         surface = tokens.cardFill, surfaceContainerHigh = tokens.cardFill,
         surfaceVariant = tokens.cardFill, surfaceContainer = tokens.cardFill,

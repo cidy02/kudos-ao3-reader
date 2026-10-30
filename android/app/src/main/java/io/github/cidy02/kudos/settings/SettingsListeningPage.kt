@@ -283,7 +283,7 @@ internal fun ListeningSpeedPresets(rate: Float, onSelect: (Float) -> Unit) {
             val inUse = rate == preset
             Box(
                 Modifier.weight(1f).heightIn(min = 44.dp)
-                    .background(if (inUse) tokens.glassFill(0.15) else tokens.scopePalette.accent.copy(alpha = 0.15f),
+                    .background(if (inUse) tokens.glassFill(0.15) else tokens.scopePalette.controlChipFill,
                         androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
                     .clickable(enabled = !inUse, role = androidx.compose.ui.semantics.Role.Button) { onSelect(preset) }
                     .padding(horizontal = 6.dp, vertical = 8.dp),
@@ -291,7 +291,7 @@ internal fun ListeningSpeedPresets(rate: Float, onSelect: (Float) -> Unit) {
             ) {
                 Text(label, fontSize = 13.sp, lineHeight = 17.sp,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                    color = if (inUse) tokens.primaryInk else tokens.scopePalette.accent)
+                    color = if (inUse) tokens.primaryInk else tokens.scopePalette.controlInk)
             }
         }
     }

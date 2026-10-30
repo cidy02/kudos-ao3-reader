@@ -96,7 +96,7 @@ private fun ChallengeSignUpsContent(slug: String, title: String, viewerIsOwner: 
     val filtered = state.filtered(filter) // derive every drawn row from collected state
     val large = isAccessibilityFontScale()
     MaterialTheme(colorScheme = MaterialTheme.colorScheme.copy(primary = palette.tint,
-        primaryContainer = palette.chipFill, onPrimaryContainer = palette.controlInk,
+        primaryContainer = palette.controlChipFill, onPrimaryContainer = palette.controlInk,
         surface = tokens.cardFill, onSurface = tokens.primaryInk,
         surfaceContainerHigh = tokens.cardFill, surfaceContainerHighest = tokens.cardFill,
         surfaceVariant = tokens.cardFill, onSurfaceVariant = tokens.secondaryInk,

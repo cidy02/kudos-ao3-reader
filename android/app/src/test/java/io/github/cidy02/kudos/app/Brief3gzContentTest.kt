@@ -240,11 +240,11 @@ class Brief3gzContentTest {
             compose.runOnIdle { mode = theme }
             val selected = compose.onNodeWithContentDescription("Page 2").fetchSemanticsNode().boundsInRoot
             val ordinary = compose.onNodeWithContentDescription("Page 3").fetchSemanticsNode().boundsInRoot
-            assertColor(tokens.scopePalette.chipFill.compositeOver(tokens.background), pixel(view, Offset(selected.center.x, selected.top + 8f)))
+            assertColor(tokens.scopePalette.controlChipFill.compositeOver(tokens.background), pixel(view, Offset(selected.center.x, selected.top + 8f)))
             assertColor(tokens.glassFill(0.08).compositeOver(tokens.background), pixel(view, Offset(ordinary.center.x, ordinary.top + 8f)))
             val layouts = mutableListOf<TextLayoutResult>()
             compose.onNode(hasText("2") and hasAnyAncestor(hasContentDescription("Page 2")), useUnmergedTree = true).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
-            assertEquals(tokens.scopePalette.accentOnFill, layouts.single().layoutInput.style.color)
+            assertEquals(tokens.scopePalette.controlInk, layouts.single().layoutInput.style.color)
         }
         compose.onNodeWithContentDescription("Page 3").performClick()
         compose.runOnIdle { assertNull(committed) }

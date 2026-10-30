@@ -322,14 +322,12 @@ fun SensitiveWorkRow(
                                         Icon(
                                             imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
                                             contentDescription = if (expanded) "Show less" else "Show more",
-                                            tint = palette.accent
+                                            tint = palette.controlInk
                                         )
                                     }
                                 }
-                                // iOS `standardCard`: AO3's own quadrant beside the title, a glance
-                                // at what the chips below say in words. Not spoken (the chips
-                                // are), and not at the large text sizes, where it would take the
-                                // title's room.
+                                // iOS `standardCard`: AO3's required-tag grid beside the title.
+                                // It remains one accessible summary and moves out at large text.
                                 if (showsStatusTray && !isAccessibilityFontScale()) {
                                     HomeStatusTray(
                                         rating = rating,
@@ -337,8 +335,7 @@ fun SensitiveWorkRow(
                                         warnings = warnings,
                                         isComplete = isComplete,
                                         arrangement = HomeStatusArrangement.Grid,
-                                        tileSize = 22.dp,
-                                        modifier = Modifier.clearAndSetSemantics {}
+                                        tileSize = 24.dp
                                     )
                                 }
                             }
@@ -464,7 +461,7 @@ fun SensitiveWorkRow(
                                             Icon(
                                                 imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
                                                 contentDescription = if (expanded) "Show less" else "Show more",
-                                                tint = palette.accent
+                                                tint = palette.controlInk
                                             )
                                         }
                                     }
@@ -605,7 +602,7 @@ private fun LedgerBody(
             warnings = warnings,
             isComplete = isComplete,
             arrangement = HomeStatusArrangement.Grid,
-            tileSize = 22.dp
+            tileSize = 24.dp
         )
     }
     if (accessibility) {
@@ -660,7 +657,7 @@ private fun LedgerBody(
                 Icon(
                     imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
                     contentDescription = if (expanded) "Show less" else "Show more",
-                    tint = palette.accent,
+                    tint = palette.controlInk,
                     modifier = Modifier
                         .size(20.dp)
                         .clickable(role = Role.Button, onClick = onToggleExpanded)

@@ -207,7 +207,7 @@ fun WorkLedgerRow(
                             if (favorite) Text("★", color = Color(0xFFFFC107), fontSize = 13.sp)
                         }
                         Text(metadata, color = tokens.secondaryInk, fontSize = 11.5.sp)
-                        HomeStatusTray(rating, categories, warnings, isComplete, HomeStatusArrangement.Grid, tileSize = 22.dp)
+                        HomeStatusTray(rating, categories, warnings, isComplete, HomeStatusArrangement.Grid, tileSize = 24.dp)
                     }
                 } else Row(
                     Modifier
@@ -245,7 +245,7 @@ fun WorkLedgerRow(
                             overflow = TextOverflow.Ellipsis
                         )
                     }
-                    HomeStatusTray(rating, categories, warnings, isComplete, HomeStatusArrangement.Grid, tileSize = 22.dp)
+                    HomeStatusTray(rating, categories, warnings, isComplete, HomeStatusArrangement.Grid, tileSize = 24.dp)
                 }
             }
         }

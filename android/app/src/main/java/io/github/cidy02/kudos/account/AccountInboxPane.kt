@@ -687,7 +687,7 @@ private fun AccountInboxFilterSheet(
                                         Icon(
                                             Icons.Outlined.Check,
                                             contentDescription = "Selected",
-                                            tint = palette.accent,
+                                            tint = palette.controlInk,
                                             modifier = Modifier.size(18.dp)
                                         )
                                     }
