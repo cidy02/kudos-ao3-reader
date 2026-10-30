@@ -10,11 +10,16 @@ enum WorkCoverMetadata {
     static func reading(chapters: String, progress: Double) -> String {
         let posted = SavedWork.postedChapterCount(from: chapters)
         let total = SavedWork.totalChapterCount(from: chapters)
+        let fraction = min(max(progress, 0), 1)
         var parts: [String] = []
         if posted > 0 {
-            parts.append(total.map { "Ch \(posted) of \($0)" } ?? "Ch \(posted)")
+            // N is the chapter being read, the same index the Resume card uses.
+            let current = ChapterBarGeometry.readingChapter(
+                posted: posted, progress: fraction, weights: nil
+            )
+            parts.append(total.map { "Ch \(current) of \($0)" } ?? "Ch \(current)")
         }
-        parts.append("\(Int((min(max(progress, 0), 1) * 100).rounded()))%")
+        parts.append("\(Int((fraction * 100).rounded()))%")
         return parts.joined(separator: " · ")
     }
 
