@@ -80,10 +80,15 @@ nonisolated enum ChapterLengthCache {
         return base.appendingPathComponent("ChapterLengths", isDirectory: true)
     }
 
+    /// Read from the file system each time: `URL.resourceValues` caches size and
+    /// date on the URL instance, so a caller holding one URL across a rewrite of
+    /// the file would see the old stamp and get the old lengths back.
     private static func stamp(of url: URL) -> (bytes: Int64, modified: TimeInterval)? {
-        let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
-        guard let bytes = values?.fileSize, let modified = values?.contentModificationDate else { return nil }
-        return (Int64(bytes), modified.timeIntervalSince1970)
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
+              let bytes = (attributes[.size] as? NSNumber)?.int64Value,
+              let modified = attributes[.modificationDate] as? Date
+        else { return nil }
+        return (bytes, modified.timeIntervalSince1970)
     }
 
     private static func file(in directory: URL) -> URL {
