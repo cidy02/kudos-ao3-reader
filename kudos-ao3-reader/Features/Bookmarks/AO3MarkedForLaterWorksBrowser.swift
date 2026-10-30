@@ -216,6 +216,10 @@ enum AO3MarkedForLaterDownloadLine {
 struct AO3MarkedForLaterWorksBrowser: View {
     let entries: [CanonicalWork]
     let watermarks: [Int: SubscriptionWatermark]
+    /// List draws every run as a ledger row. Grid draws every run as covers.
+    /// The grouping function's own layouts stay as they are; this only chooses
+    /// which of those two drawings the reader sees.
+    let arrangement: WorkListArrangement
     let expandAll: Bool
     let palette: SubjectPalette
     let kicker: String
@@ -243,6 +247,17 @@ struct AO3MarkedForLaterWorksBrowser: View {
         )
     }
 
+    /// The grouping function's layouts are what the tests pin. List and Grid
+    /// override them here so All's "updated" run can be a ledger row, and
+    /// Downloaded can be covers, without changing that function.
+    private var displayedSections: [AO3MarkedForLaterSection<CanonicalWork>] {
+        sections.map { section in
+            var shown = section
+            shown.layout = arrangement == .grid ? .covers : .ledger
+            return shown
+        }
+    }
+
     private var shownCount: Int {
         sections.reduce(0) { $0 + $1.items.count }
     }
@@ -256,7 +271,7 @@ struct AO3MarkedForLaterWorksBrowser: View {
                 if sections.isEmpty {
                     filterEmpty
                 } else {
-                    ForEach(sections) { section in
+                    ForEach(displayedSections) { section in
                         sectionBlock(section)
                     }
                 }
@@ -335,7 +350,14 @@ struct AO3MarkedForLaterWorksBrowser: View {
             }
             switch section.layout {
             case .covers:
-                AccountWorksCompactGrid(entries: section.items) { unmarkButton($0) }
+                AccountWorksCompactGrid(entries: section.items) { entry in
+                    VStack(alignment: .leading, spacing: 4) {
+                        if let line = downloadLine(for: entry) {
+                            AO3MarkedForLaterDownloadFootnote(text: line)
+                        }
+                        unmarkButton(entry)
+                    }
+                }
             case .ledger:
                 VStack(spacing: 10) {
                     ForEach(section.items) { entry in
@@ -373,13 +395,16 @@ struct AO3MarkedForLaterWorksBrowser: View {
             SensitiveWorkRow(
                 work: work,
                 expandAll: expandAll,
-                presentation: .ledger
+                presentation: .ledger,
+                showsFullLedgerStats: true,
+                showsSummary: false
             )
         } else if let remote = entry.remote {
             EnrichingAO3WorkRow(
                 work: remote,
                 expandAll: expandAll,
-                presentation: .searchLedger
+                presentation: .searchLedger,
+                showsSummary: false
             )
         }
     }

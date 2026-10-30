@@ -624,7 +624,6 @@ private final class AccountWorksInlineSectionCache {
 struct AccountWorksInlineSection: View {
     let kind: AO3AccountWorksList.Kind
     var expandAll: Bool
-    var displayMode: WorkListDisplayMode = .detailed
     var layout: AccountWorksLayout = .list
     /// Bumped by the host's pull-to-refresh; a change forces a cache bypass.
     var reloadToken: Int
@@ -772,10 +771,9 @@ struct AccountWorksInlineSection: View {
         if phase == .idle, !bypass,
            let cached = AccountWorksInlineSectionCache.shared.snapshot(for: cacheKey),
            !cached.works.isEmpty {
-            // This is a freshly (re)constructed instance — e.g. Account just
-            // swapped between its Detailed (List) and Compact (ScrollView) roots,
-            // or the user switched subsections and back. Restore the page it was
-            // on instead of silently snapping back to page 1.
+            // This is a freshly (re)constructed instance — the user switched
+            // subsections and back. Restore the page it was on instead of
+            // silently snapping back to page 1.
             works = cached.works
             currentPage = cached.currentPage
             totalPages = cached.totalPages
@@ -795,35 +793,25 @@ struct AccountWorksInlineSection: View {
 
     @ViewBuilder
     private func rows(useCardRow: Bool) -> some View {
-        if displayMode == .compact {
-            AccountWorksCompactGrid(entries: entries)
-            if totalPages > 1 {
-                SearchPaginationBar(currentPage: currentPage, totalPages: totalPages) { page in
-                    launch(page: page)
-                }
-                .padding(.horizontal, CardListMetrics.sideMargin)
+        ForEach(entries) { entry in
+            if let work = entry.local {
+                // No .cardNavigation here: SensitiveWorkRow already applies it
+                // internally (MatureContent.swift) for its non-blurred, non-selecting
+                // branch — re-wrapping it stacks a second, unhidden, real-titled
+                // NavigationLink behind the blurred branch's reveal gate.
+                SensitiveWorkRow(work: work, expandAll: expandAll)
+                    .modifier(OptionalCardRow(enabled: useCardRow))
+            } else if let remote = entry.remote {
+                AO3WorkRow(work: remote, expandAll: expandAll)
+                    .cardNavigation(to: remote, accessibilityLabel: remote.title)
+                    .modifier(OptionalCardRow(enabled: useCardRow))
             }
-        } else {
-            ForEach(entries) { entry in
-                if let work = entry.local {
-                    // No .cardNavigation here: SensitiveWorkRow already applies it
-                    // internally (MatureContent.swift) for its non-blurred, non-selecting
-                    // branch — re-wrapping it stacks a second, unhidden, real-titled
-                    // NavigationLink behind the blurred branch's reveal gate.
-                    SensitiveWorkRow(work: work, expandAll: expandAll)
-                        .modifier(OptionalCardRow(enabled: useCardRow))
-                } else if let remote = entry.remote {
-                    AO3WorkRow(work: remote, expandAll: expandAll)
-                        .cardNavigation(to: remote, accessibilityLabel: remote.title)
-                        .modifier(OptionalCardRow(enabled: useCardRow))
-                }
+        }
+        if totalPages > 1 {
+            SearchPaginationBar(currentPage: currentPage, totalPages: totalPages) { page in
+                launch(page: page)
             }
-            if totalPages > 1 {
-                SearchPaginationBar(currentPage: currentPage, totalPages: totalPages) { page in
-                    launch(page: page)
-                }
-                .modifier(OptionalCardRow(enabled: useCardRow))
-            }
+            .modifier(OptionalCardRow(enabled: useCardRow))
         }
     }
 

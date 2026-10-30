@@ -44,9 +44,6 @@ struct AccountToolbarContent: ToolbarContent {
     let isWorksVisible: Bool
     @Binding var showingWorksFilter: Bool
     let showsMatureRevealControl: Bool
-    let showsWorkListControls: Bool
-    @Binding var displayMode: WorkListDisplayMode
-    @Binding var expandAll: Bool
 
     @ToolbarContentBuilder
     var body: some ToolbarContent {
@@ -82,17 +79,9 @@ struct AccountToolbarContent: ToolbarContent {
     /// bar the inbox's selection mode still needs cannot drift apart.
     var actionItems: [AnyView] {
         [
-            (showsWorkListControls || showsMatureRevealControl)
+            showsMatureRevealControl
                     ? AnyView(WorkListMoreMenu {
-                        if showsMatureRevealControl {
-                            MatureRevealToggle()
-                        }
-                        if showsWorkListControls {
-                            DisplayModeMenuPicker(mode: $displayMode)
-                            if displayMode != .compact {
-                                ExpandAllMenuItem(expandAll: $expandAll)
-                            }
-                        }
+                        MatureRevealToggle()
                     })
                     : nil,
                 (isInboxVisible && model.canFilter)
