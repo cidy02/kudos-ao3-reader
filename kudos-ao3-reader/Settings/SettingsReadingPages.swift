@@ -153,19 +153,16 @@ struct SettingsListeningPage: View {
 }
 #endif
 
-/// The six named swatches plus a custom well. VoiceOver gets a real picker for
-/// the six (radio group on the Mac, inline on iPhone — iOS has no radio trait)
-/// and a separate Custom colour button, so the warning still opens.
+/// The six named swatches plus a custom well. Each swatch is its own button,
+/// with the colour's name and a selected trait, the way `SubjectChip` marks a
+/// chosen pill. The custom well says "Custom colour" and never a raw hex.
 private struct AccentColourPicker: View {
     let accentHex: String
     let onSelectNamed: (String) -> Void
     let onCustom: () -> Void
 
-    private var namedSelection: Binding<String?> {
-        Binding(
-            get: { AppAccent.named(hex: accentHex)?.fillHex },
-            set: { if let hex = $0 { onSelectNamed(hex) } }
-        )
+    private var selectedFill: String? {
+        AppAccent.named(hex: accentHex)?.fillHex
     }
 
     private var customHex: String? {
@@ -176,14 +173,17 @@ private struct AccentColourPicker: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 0) {
                 ForEach(AppAccent.all) { accent in
+                    let selected = selectedFill == accent.fillHex
                     Button {
                         onSelectNamed(accent.fillHex)
                     } label: {
-                        AccentSwatch(fillHex: accent.fillHex, selected: namedSelection.wrappedValue == accent.fillHex)
+                        AccentSwatch(fillHex: accent.fillHex, selected: selected)
                     }
                     .buttonStyle(.plain)
                     .frame(maxWidth: .infinity, minHeight: 44)
                     .contentShape(Rectangle())
+                    .accessibilityLabel(accent.name)
+                    .accessibilityAddTraits(selected ? .isSelected : [])
                 }
                 Button(action: onCustom) {
                     AccentCustomWell(selectedHex: customHex)
@@ -191,24 +191,8 @@ private struct AccentColourPicker: View {
                 .buttonStyle(.plain)
                 .frame(maxWidth: .infinity, minHeight: 44)
                 .contentShape(Rectangle())
-            }
-            .accessibilityRepresentation {
-                VStack(alignment: .leading, spacing: 0) {
-                    Picker("Accent colour", selection: namedSelection) {
-                        ForEach(AppAccent.all) { accent in
-                            Text(accent.isDefault ? "\(accent.name), Default" : accent.name)
-                                .tag(Optional(accent.fillHex))
-                        }
-                    }
-                    #if os(macOS)
-                    .pickerStyle(.radioGroup)
-                    #else
-                    .pickerStyle(.inline)
-                    #endif
-                    Button("Custom colour", action: onCustom)
-                        .accessibilityAddTraits(customHex == nil ? [] : .isSelected)
-                        .accessibilityValue(customHex ?? "")
-                }
+                .accessibilityLabel("Custom colour")
+                .accessibilityAddTraits(customHex == nil ? [] : .isSelected)
             }
 
             HStack {
