@@ -758,7 +758,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         .padding(.horizontal, 14)
         .padding(.vertical, 6)
         .background {
-            let shape = RoundedRectangle(cornerRadius: SubjectMetrics.rowRadius, style: .continuous)
+            let shape = RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
             shape.fill(themeManager.appTheme.cardSurface)
                 .overlay(
                     shape.strokeBorder(
