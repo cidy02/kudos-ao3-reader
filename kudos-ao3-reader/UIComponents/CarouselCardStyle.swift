@@ -221,9 +221,17 @@ extension CarouselCardMetrics {
     }
 
     /// How many grid columns fit when none may be narrower than `minimum`.
-    static func gridColumnCount(availableWidth: CGFloat, minimum: CGFloat, spacing: CGFloat) -> Int {
+    /// `tolerance` is the same 2 pt `adaptiveCardColumns` shaves off, so a
+    /// 358 pt row (a 390 pt phone) still holds three 112 pt covers. Three
+    /// exact columns need 360.
+    static func gridColumnCount(
+        availableWidth: CGFloat,
+        minimum: CGFloat,
+        spacing: CGFloat,
+        tolerance: CGFloat = 2
+    ) -> Int {
         let width = max(0, availableWidth)
-        let slot = max(1, minimum) + spacing
+        let slot = max(1, minimum - tolerance) + spacing
         guard width > 0 else { return 1 }
         return max(1, Int((width + spacing) / slot))
     }

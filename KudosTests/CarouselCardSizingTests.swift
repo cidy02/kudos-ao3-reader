@@ -91,13 +91,15 @@ struct CarouselCardSizingTests {
         #expect(CarouselCardMetrics.gridCardWidth(
             availableWidth: 360, columns: 3, spacing: spacing
         ) == 112)
-        // A phone row that cannot hold a third 112 pt column stays 2-up and fills.
+        // A 390 pt phone has 358 pt of content. Three exact 112 pt columns need
+        // 360; the 2 pt tolerance keeps the row 3-up.
         #expect(CarouselCardMetrics.gridColumnCount(
             availableWidth: 358, minimum: 112, spacing: spacing
-        ) == 2)
-        #expect(CarouselCardMetrics.gridCardWidth(
-            availableWidth: 358, columns: 2, spacing: spacing
-        ) == 173)
+        ) == 3)
+        let filled = CarouselCardMetrics.gridCardWidth(
+            availableWidth: 358, columns: 3, spacing: spacing
+        )
+        #expect(abs(filled - (CGFloat(358) - 2 * spacing) / 3) < 0.001)
         // Cover aspect stays width × 1.42 whatever the column becomes.
         let stretched = CarouselCardMetrics.gridCardWidth(
             availableWidth: 358, columns: 2, spacing: spacing
