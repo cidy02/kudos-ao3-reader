@@ -39,6 +39,48 @@ enum WorkCoverMetadata {
         return text.isEmpty ? nil : text
     }
 
+    /// The chapter count alone. A 120 pt card drops the word count first.
+    static func chaptersOnly(_ chapters: String) -> String? {
+        let trimmed = chapters.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    /// Downloaded copy wins even when a progress fraction is also set. Reading
+    /// wins over a footer or the words summary. A non-badge footer is itself
+    /// the line; a "+N" badge stays beside the summary.
+    static func line(
+        style: WorkCoverMetadataStyle,
+        downloadedDate: String?,
+        downloadedSize: String?,
+        progress: Double?,
+        chapters: String,
+        footer: String?,
+        words: Int?
+    ) -> String? {
+        if style == .downloaded {
+            return downloaded(date: downloadedDate, size: downloadedSize)
+        }
+        if let progress {
+            return reading(chapters: chapters, progress: progress)
+        }
+        if let footer, updateBadge(from: footer) == nil { return footer }
+        return summary(words: words, chapters: chapters)
+    }
+
+    /// True when the line is the words-and-chapters summary, so a narrow card
+    /// may drop the words and keep the chapter count. Reading and download
+    /// lines are not that case.
+    static func dropsWordsBeforeChapters(
+        style: WorkCoverMetadataStyle,
+        progress: Double?,
+        footer: String?
+    ) -> Bool {
+        if style == .downloaded { return false }
+        if progress != nil { return false }
+        if let footer, updateBadge(from: footer) == nil { return false }
+        return true
+    }
+
     static func updateBadge(from footer: String?) -> String? {
         guard let footer, footer.first == "+" else { return nil }
         let count = footer.dropFirst().prefix { $0.isNumber }
@@ -140,15 +182,34 @@ struct WorkCoverCard: View {
 
     private var coverMeta: some View {
         HStack(spacing: 6) {
-            Text(metaLine ?? "")
+            metaText
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
-                .fixedSize(horizontal: false, vertical: dynamicTypeSize.isAccessibilitySize)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if let badge = WorkCoverMetadata.updateBadge(from: footer) {
                 updateBadge(badge)
             }
+        }
+    }
+
+    @ViewBuilder
+    private var metaText: some View {
+        let full = metaLine ?? ""
+        if dynamicTypeSize.isAccessibilitySize {
+            Text(full)
+                .fixedSize(horizontal: false, vertical: true)
+        } else if WorkCoverMetadata.dropsWordsBeforeChapters(
+            style: metadataStyle,
+            progress: progressValue,
+            footer: footer
+        ), let chapters = WorkCoverMetadata.chaptersOnly(work.chapters), chapters != full {
+            ViewThatFits(in: .horizontal) {
+                Text(full).lineLimit(1)
+                Text(chapters).lineLimit(1)
+            }
+        } else {
+            Text(full)
+                .lineLimit(1)
         }
     }
 
@@ -157,13 +218,25 @@ struct WorkCoverCard: View {
             let date = work.downloadedAt?.formatted(.dateTime.month(.abbreviated).day())
             let values = try? work.fileURL.resourceValues(forKeys: [.fileSizeKey])
             let size = values?.fileSize.map { LocalStorageFootprint.formatted(bytes: Int64($0)) }
-            return WorkCoverMetadata.downloaded(date: date, size: size)
+            return WorkCoverMetadata.line(
+                style: .downloaded,
+                downloadedDate: date,
+                downloadedSize: size,
+                progress: progressValue,
+                chapters: work.chapters,
+                footer: footer,
+                words: work.wordCount
+            )
         }
-        if let progressValue {
-            return WorkCoverMetadata.reading(chapters: work.chapters, progress: progressValue)
-        }
-        if let footer, WorkCoverMetadata.updateBadge(from: footer) == nil { return footer }
-        return WorkCoverMetadata.summary(words: work.wordCount, chapters: work.chapters)
+        return WorkCoverMetadata.line(
+            style: metadataStyle,
+            downloadedDate: nil,
+            downloadedSize: nil,
+            progress: progressValue,
+            chapters: work.chapters,
+            footer: footer,
+            words: work.wordCount
+        )
     }
 
     private func updateBadge(_ text: String) -> some View {
