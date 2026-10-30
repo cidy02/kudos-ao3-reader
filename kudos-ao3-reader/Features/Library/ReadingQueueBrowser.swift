@@ -255,8 +255,8 @@ struct ReadingQueueBrowserView: View {
         }
         .cardRow(
             isSelected: isSelecting && selection.contains(work.id),
-            tintHue: CoverArt.workHue(fandoms: work.workFandoms, title: work.title),
-            leadingNumber: position
+            leadingNumber: position,
+            chrome: .plain
         )
         // The number is drawn in the row's background, outside the card.
         .accessibilityValue(position.map { "Position \($0)" } ?? "")
@@ -591,10 +591,10 @@ extension ReadingQueueBrowserView {
         )
     }
 
-    /// 1h's grid: "Up next stays a ringed row either way", so the front of the
-    /// queue is a standalone ledger row on `WorkLedgerCardBackground` (the
-    /// card `.cardRow` paints inside a `List`) and In line is the cover grid.
-    /// Reordering drops the split: a drag has to reach every work, Up next too.
+    /// 1h's grid: the front of the queue is a plain ledger row and In line is
+    /// the cover grid. The section header supplies the next rule, so this row
+    /// draws no separator. Reordering drops the split: a drag has to reach
+    /// every work, Up next too.
     private var compactGrid: some View {
         ScrollView {
             // The same gaps as `detailedList`, so switching Ledger ↔ Compact does
@@ -627,18 +627,13 @@ extension ReadingQueueBrowserView {
                             isSelected: selection.contains(upNextWork.id),
                             onToggleSelection: { toggleSelection(upNextWork) },
                             presentation: .ledger,
+                            showsSeparator: false,
                             usesInlineNavigation: true,
-                            contentInsets: EdgeInsets(
-                                top: CardListMetrics.innerVertical, leading: CardListMetrics.innerHorizontal,
-                                bottom: CardListMetrics.innerVertical, trailing: CardListMetrics.innerHorizontal
-                            ),
                             scopedRemoval: ScopedRemoval(title: "Remove from Queue") {
                                 pendingRemoval = upNextWork
                             },
                             queueMenu: queueMenu(for: upNextWork)
                         )
-                        .background(WorkLedgerCardBackground(work: upNextWork))
-                        .padding(.horizontal, CardListMetrics.sideMargin)
                         .padding(.top, Self.afterRule)
                     }
                     if !inLineWorks.isEmpty {

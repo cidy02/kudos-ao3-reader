@@ -303,193 +303,198 @@ extension Color {
 }
 
 extension EnvironmentValues {
-    /// True greys a `WorkLedgerRow`'s fandom kicker — 1ai's Abandoned rows, which
+    /// True greys a ledger row's fandom label — 1ai's Abandoned rows, which
     /// the spec draws "dropped to grey rather than a fandom accent". An
     /// environment value because the row is built three views down
     /// (`SensitiveWorkRow` → `WorkRow` → here) and only one screen sets it.
     @Entry var ledgerKickerMuted = false
-    /// A queue position that replaces a `WorkLedgerRow`'s progress ring — 1h's
-    /// numbered In line rows. Set by the one screen that numbers its rows, for
-    /// the same three-views-down reason as `ledgerKickerMuted`.
+    /// A queue position drawn by `.cardRow(leadingNumber:)` to the left of the
+    /// row. Set by the one screen that numbers its rows, for the same
+    /// three-views-down reason as `ledgerKickerMuted`. The row itself does not
+    /// draw the number.
     @Entry var ledgerPositionNumber: Int?
 }
 
-/// The redesign's full-width work row — the "ledger row" the spec names on
-/// artboards 1c/1d, 1k, 1o, 1t, 1u, 1x, 1ad, 1ah, 1ai and 1aj.
-///
-/// A washed card carrying, in order: a leading progress ring (or position
-/// number), the fandom kicker over its rule, the title, one dot-separated
-/// metadata line, and the four-signal tray at the trailing edge.
-///
-/// It takes already-formatted strings rather than a model, because the same row
-/// has to render a local `SavedWork`, a remote `AO3WorkSummary`, a queue entry
-/// and a history entry — each of which derives these facts differently. The
-/// caller does the deriving; this owns the layout, so the ten screens that use
-/// it cannot drift apart.
-struct WorkLedgerRow<Leading: View, Trailing: View>: View {
-    let palette: SubjectPalette
-    /// Uppercase subject line — normally the work's primary fandom.
-    var kicker: String?
-    /// Fandoms beyond the first, shown as the kicker's dimmed `+N`.
-    var additionalKickerCount: Int = 0
-    let title: String
-    /// A glyph beside the title — 1aj's filled star.
-    ///
-    /// The `metadataSymbol`/`metadataSymbolTint` pair that used to sit on the
-    /// metadata line went out with the offline tick, a density reduction the owner
-    /// approved, and the note recording that said the slot could come back for
-    /// whichever of 1t or 1aj was built first. This is that slot, on the title line
-    /// where 1aj draws it rather than back on the metadata line. The offline tick
-    /// itself stays gone.
-    var titleSymbol: String?
-    /// Defaults to the card's own accent; 1aj overrides it with the star gold.
-    var titleSymbolTint: Color?
-    /// Pre-joined by the caller; drawn with the spec's dimmed middle dots.
-    var metadataSegments: [String] = []
-    /// Sits at the leading edge — a `WorkProgressRing`, a position number, or
-    /// nothing at all on a row with no progress to report.
-    @ViewBuilder var leading: () -> Leading
-    /// The trailing edge — normally the four-signal tray.
-    @ViewBuilder var trailing: () -> Trailing
-    /// False when the row sits in a `List` whose `.cardRow(tintHue:)` already
-    /// paints the same wash on the row's true outer edge. Two backgrounds would
-    /// draw the hairline twice, half a point apart. Standalone contexts — a
-    /// `ScrollView`, a queue grid — leave it on and get the whole card here.
-    var drawsBackground: Bool = true
+/// Padding and the separator inset shared by every plain work row.
+enum WorkRowMetrics {
+    static let horizontalPadding: CGFloat = 16
+    static let verticalPadding: CGFloat = 12
+    static let columnGap: CGFloat = 12
+    /// Two 24 pt tiles plus the 0.12 gap, the 51 pt the separator math uses.
+    static let gridColumn: CGFloat = 51
+    static let screenInset: CGFloat = 16
+    /// 16 screen + 51 grid + 12 gap. The text column, on a row that is not wide
+    /// and not stacked for an accessibility size. Selecting does not move it:
+    /// the selection bubble stays at the trailing edge, so there is no leading
+    /// check to clear.
+    static let textColumnInset: CGFloat = screenInset + gridColumn + columnGap
+}
 
-    @Environment(ThemeManager.self) private var themeManager
-    @Environment(\.ledgerKickerMuted) private var kickerMuted
-
-    @ScaledMetric(relativeTo: .headline) private var titleSize: CGFloat = 16.5
-    @ScaledMetric(relativeTo: .caption) private var metadataSize: CGFloat = 11.5
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+/// 0.5 pt system separator. Inset is from the row's own leading edge.
+struct WorkRowSeparator: View {
+    var inset: CGFloat = WorkRowMetrics.textColumnInset
 
     var body: some View {
-        // Everything pins to the top, where spec 1ad centres the row
-        // (`align-items:center; gap:13px`) — owner's call, 2026-09-12. The fandom
-        // holds the top-left corner, the signal tray the top-right, and they stay
-        // put rather than drifting with the text beside them.
-        //
-        // Kicker, title and metadata are three single lines in one column, which
-        // comes to about the ring's own height — so the row is as tall as the
-        // ring and the tray flanking it, and not a line taller.
-        Group {
-            if dynamicTypeSize.isAccessibilitySize {
-                // One column at accessibility sizes: there is no room to put
-                // anything beside anything else.
-                VStack(alignment: .leading, spacing: 12) {
-                    kickerView
-                    leading()
-                    titleLine
-                    if !metadataSegments.isEmpty { metadataLine }
-                    trailing()
-                }
-            } else {
-                HStack(alignment: .top, spacing: 13) {
-                    leading()
-
-                    VStack(alignment: .leading, spacing: 5) {
-                        kickerView
-                        titleLine
-                        if !metadataSegments.isEmpty { metadataLine }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                    trailing()
-                }
-            }
-        }
-        // Standalone, the card is this view's own: spec 1ad's `padding:15px 16px`.
-        //
-        // Inside a `List` the card is `.cardRow()`'s and supplies its own padding,
-        // so this row adds none — a second helping is what made the gap above the
-        // ring measure 22pt on device. An earlier version of this note claimed
-        // `.cardRow()` gave 16 × 16 by counting half the inter-card gap as part of
-        // it; that 6pt falls *outside* the card, between cards, so what it really
-        // gave was 16 to the sides and 10 above and below. `CardListMetrics`
-        // carries the corrected derivation, and `innerVertical` is 16 now.
-        .padding(.horizontal, drawsBackground ? 16 : 0)
-        .padding(.vertical, drawsBackground ? 15 : 0)
-        .background {
-            if drawsBackground { rowBackground }
-        }
-    }
-
-    /// A work with no fandom keeps the kicker's space rather than collapsing:
-    /// one short row in a list of tall ones is the same unevenness a wrapped
-    /// title used to cause.
-    private var kickerView: some View {
-        SubjectKicker(
-            text: kicker ?? " ",
-            palette: palette,
-            trailingCount: kicker == nil ? 0 : additionalKickerCount,
-            size: 9,
-            ruleSpacing: 5
-        )
-        // 1ai drops an Abandoned row's kicker and rule to grey. Desaturating the
-        // one view keeps the palette's per-theme contrast, which a hand-picked
-        // grey would have to re-solve for all four themes.
-        .saturation(kickerMuted ? 0 : 1)
-        .opacity(kicker == nil ? 0 : 1)
-        .accessibilityHidden(kicker == nil)
-    }
-
-    /// The title, with 1aj's star beside it when one is set. The star is
-    /// `flex:none` on the artboard and the title `min-width:0` — the glyph keeps its
-    /// size and the title truncates into what is left.
-    ///
-    /// Hidden from VoiceOver: the only screen that sets it is one whose every row is
-    /// favourited, where reading "favorited" aloud on all 34 rows is noise, and the
-    /// swipe action that changes the state is labelled.
-    @ViewBuilder
-    private var titleLine: some View {
-        if let titleSymbol {
-            HStack(spacing: 6) {
-                titleText
-                Image(systemName: titleSymbol)
-                    .font(.system(size: titleSize * 0.78, weight: .semibold))
-                    .foregroundStyle(titleSymbolTint ?? palette.accent)
-                    .accessibilityHidden(true)
-            }
-        } else {
-            titleText
-        }
-    }
-
-    @ViewBuilder
-    private var titleText: some View {
-        let text = Text(title)
-            .font(.system(size: titleSize, weight: .semibold))
-            .foregroundStyle(.primary)
-            .fixedSize(horizontal: false, vertical: true)
-        if dynamicTypeSize.isAccessibilitySize {
-            // Never truncate text someone has asked to be larger; a uniform grid
-            // is not worth that trade.
-            text.lineLimit(nil)
-        } else {
-            // One line, truncated — owner's call, 2026-09-12. The second line a
-            // title used to reserve is the metadata's now, which buys the byline
-            // and the figures a line without making the card any taller.
-            text.lineLimit(1)
-        }
-    }
-
-    private var metadataLine: some View {
-        Text(metadataSegments.joined(separator: "  ·  "))
-            .font(.system(size: metadataSize))
-            .foregroundStyle(Color.primary.opacity(0.72))
-            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
-            .combinedAccessibilityRow(metadataSegments.joined(separator: ", "))
-    }
-
-    private var rowBackground: some View {
-        let rowShape = RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
-        return rowShape
-            .fill(themeManager.appTheme.cardSurface)
-            .overlay(rowShape.fill(palette.rowWash))
-            .overlay(rowShape.strokeBorder(palette.rowBorder, lineWidth: 0.5))
+        Rectangle()
+            .fill(.separator)
+            .frame(height: 0.5)
+            .padding(.leading, inset)
+            .accessibilityHidden(true)
     }
 }
+
+/// Caption 1 semibold, caps, 0.06 em. No rule: the title under a row label is
+/// Headline, not a Title-size heading, so I-18's 16×2 mark stays off this row.
+/// The colour is the fandom's, including when the label is also a search button.
+struct WorkFandomLabel: View {
+    var title: String
+    var palette: SubjectPalette
+    var additionalCount: Int = 0
+    var action: (() -> Void)?
+
+    @Environment(\.ledgerKickerMuted) private var muted
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .caption) private var tracking: CGFloat = 0.72
+
+    var body: some View {
+        if let action {
+            Button(action: action) { label }
+                .buttonStyle(.borderless)
+        } else {
+            label
+        }
+    }
+
+    private var label: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
+            Text(title.uppercased())
+                .foregroundStyle(muted ? Color.secondary : palette.accent)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                .multilineTextAlignment(.leading)
+            if additionalCount > 0 {
+                Text("+\(additionalCount)")
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .font(.caption.weight(.semibold))
+        .tracking(tracking)
+        .fixedSize(horizontal: false, vertical: true)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(additionalCount > 0 ? "\(title), plus \(additionalCount) more" : title)
+    }
+}
+
+/// The plain work row: a leading grid, the title block, and whatever sits under
+/// it. Wide results keep the grid beside the title block and let the rest run
+/// the full width. An accessibility size stacks the grid above the text.
+struct WorkPlainRow<Leading: View, Heading: View, Remainder: View>: View {
+    var wide = false
+    var showsSeparator = true
+    @ViewBuilder var leading: () -> Leading
+    @ViewBuilder var heading: () -> Heading
+    @ViewBuilder var remainder: () -> Remainder
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    private var stacked: Bool { dynamicTypeSize.isAccessibilitySize }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 12) {
+                if stacked {
+                    leading()
+                    heading()
+                    remainder()
+                } else if wide {
+                    HStack(alignment: .top, spacing: WorkRowMetrics.columnGap) {
+                        leading()
+                        heading()
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    remainder()
+                } else {
+                    HStack(alignment: .top, spacing: WorkRowMetrics.columnGap) {
+                        leading()
+                        VStack(alignment: .leading, spacing: 12) {
+                            heading()
+                            remainder()
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }
+            .padding(.horizontal, WorkRowMetrics.horizontalPadding)
+            .padding(.vertical, WorkRowMetrics.verticalPadding)
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if showsSeparator {
+                WorkRowSeparator(
+                    inset: stacked || wide ? WorkRowMetrics.screenInset : WorkRowMetrics.textColumnInset
+                )
+            }
+        }
+    }
+}
+
+/// Chapter bars and the "Ch 7 · 58%" label. Empty when the work has no chapter plan.
+struct WorkChapterBarLine: View {
+    var items: [ChapterBarItem]
+    var label: String?
+
+    var body: some View {
+        if !items.isEmpty {
+            HStack(alignment: .center, spacing: 8) {
+                ChapterBars(items: items, scale: .row, accessibilityLabel: spoken)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if let label {
+                    Text(label)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: true, vertical: true)
+                        .accessibilityHidden(true)
+                }
+            }
+        }
+    }
+
+    private var spoken: String {
+        var parts = [ChapterBarGeometry.accessibilityLabel(for: items)]
+        if let label { parts.append(label) }
+        return parts.joined(separator: ", ")
+    }
+}
+
+/// The 3 pt read-progress bar on a standard row. Hidden at zero.
+struct WorkReadProgressBar: View {
+    var progress: Double
+
+    @Environment(\.accentFill) private var accentFill
+
+    var body: some View {
+        let fraction = min(max(progress, 0), 1)
+        let percent = Int((fraction * 100).rounded())
+        HStack(spacing: 8) {
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.primary.opacity(0.14))
+                    Capsule()
+                        .fill(accentFill)
+                        .frame(width: max(fraction > 0 ? 2 : 0, geo.size.width * fraction))
+                }
+            }
+            .frame(height: 3)
+            .accessibilityHidden(true)
+            Text("\(percent)%")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .fixedSize()
+                .accessibilityHidden(true)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(percent) percent read")
+    }
+}
+
 
 // MARK: - Subject panel
 
@@ -497,7 +502,7 @@ struct WorkLedgerRow<Leading: View, Trailing: View>: View {
 /// per-category panel, where a name, its tallies and a cluster of fandom chips
 /// share one surface in that category's hue.
 ///
-/// Distinct from `WorkLedgerRow`, which *is* its content. A panel is a
+/// Distinct from a work row, which *is* its content. A panel is a
 /// container, so it takes the much quieter `panelWash`: chips sit inside it and
 /// have to stay legible against it.
 struct SubjectPanel<Heading: View, Content: View>: View {

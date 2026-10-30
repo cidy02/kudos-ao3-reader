@@ -252,21 +252,13 @@ struct QueueSelectionStatusRow: View {
     }
 }
 
-/// The ledger card a standalone `WorkRow(.ledger)` sits on outside a `List` —
-/// the same fill, wash and hairline `.cardRow(tintHue:)` paints inside one.
+/// A standalone ledger row used to sit on this wash. T-478 draws no card: the
+/// row pads itself. The type stays so a caller can keep the slot.
 struct WorkLedgerCardBackground: View {
     let work: SavedWork
 
-    @Environment(ThemeManager.self) private var themeManager
-
     var body: some View {
-        let palette = themeManager.appTheme.subjectPalette(
-            hue: CoverArt.workHue(fandoms: work.workFandoms, title: work.title)
-        )
-        let rowShape = RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
-        rowShape
-            .fill(themeManager.appTheme.cardSurface)
-            .overlay(rowShape.fill(palette.rowWash))
-            .overlay(rowShape.strokeBorder(palette.rowBorder, lineWidth: 0.5))
+        let _ = work.id
+        return Color.clear.accessibilityHidden(true)
     }
 }

@@ -257,7 +257,7 @@ struct AO3CollectionDetailView: View {
                     .overlay(alignment: .topTrailing) {
                         collectionStateBadge(for: work).padding(10)
                     }
-                    .cardRow(tintHue: CoverArt.workHue(fandoms: work.fandoms, title: work.title))
+                    .cardRow(chrome: .plain)
                 }
             }
         }

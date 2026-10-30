@@ -222,7 +222,7 @@ struct WritingView: View {
             if recentWorks.isEmpty {
                 if profileModel?.contentPhase == .loading || profileModel?.headerPhase == .loading {
                     ForEach(0 ..< 2, id: \.self) { _ in
-                        AO3WorkRowSkeleton().cardRow()
+                        AO3WorkRowSkeleton().cardRow(chrome: .plain)
                     }
                 } else {
                     Text("Your posted works will appear here.")
@@ -238,7 +238,7 @@ struct WritingView: View {
                         showsPerformance: true
                     )
                     .cardNavigation(to: work, accessibilityLabel: work.title)
-                    .cardRow(tintHue: CoverArt.workHue(fandoms: work.fandoms, title: work.title))
+                    .cardRow(chrome: .plain)
                 }
             }
         } header: {

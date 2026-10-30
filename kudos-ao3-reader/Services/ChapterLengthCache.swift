@@ -32,11 +32,11 @@ nonisolated enum ChapterLengthCache {
     /// transient read error does not freeze a wrong answer and a changed file
     /// does not keep the previous lengths.
     static func weights(workID: UUID, fileURL: URL, directory: URL = defaultDirectory) -> [Int]? {
-        guard let stamp = stamp(of: fileURL) else { return nil }
+        guard let fileStamp = stamp(of: fileURL) else { return nil }
         let key = workID.uuidString
         lock.lock()
         let store = load(directory)
-        if let kept = keptWeights(store.works[key], byteCount: stamp.bytes, modifiedAt: stamp.modified) {
+        if let kept = keptWeights(store.works[key], byteCount: fileStamp.bytes, modifiedAt: fileStamp.modified) {
             lock.unlock()
             return kept
         }
@@ -56,7 +56,7 @@ nonisolated enum ChapterLengthCache {
         save(fresh, directory: directory)
         // The file moved while it was being read. Don't hand back a measurement
         // that no longer belongs to it.
-        guard current.bytes == stamp.bytes, current.modified == stamp.modified else { return nil }
+        guard current.bytes == fileStamp.bytes, current.modified == fileStamp.modified else { return nil }
         return measured
     }
 

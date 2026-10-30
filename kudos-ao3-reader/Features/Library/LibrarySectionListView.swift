@@ -650,7 +650,7 @@ struct LibrarySectionListView: View {
             offTimelineRow: { work in
                 row(work, summary: summaries[work.id]).cardRow(
                     isSelected: isSelecting && selection.contains(work.id),
-                    tintHue: rowTintHue(work)
+                    chrome: .plain
                 )
             }
         )
@@ -670,14 +670,8 @@ struct LibrarySectionListView: View {
         kind == .history && ReadingLogService.isAbandoned(work: work)
     }
 
-    /// The fandom's hue, or none for an Abandoned row — 1ai drops those "to grey
-    /// rather than a fandom accent", and `nil` is the plain card surface.
-    private func rowTintHue(_ work: SavedWork) -> Double? {
-        isAbandonedRow(work) ? nil : CoverArt.workHue(fandoms: work.workFandoms, title: work.title)
-    }
-
-    /// Shelves are ledger rows. History's timeline uses the same short ledger
-    /// and does not grow a stat line or a favorite star.
+    /// Shelves and History both print the full ledger. History does not draw the
+    /// favorite star.
     private var showsShelfLedgerFacts: Bool { kind != .history }
 
     private var detailedList: some View {
@@ -718,7 +712,7 @@ struct LibrarySectionListView: View {
                             if let work = byID[id] {
                                 row(work, summary: summaries[id]).cardRow(
                                     isSelected: isSelecting && selection.contains(work.id),
-                                    tintHue: rowTintHue(work)
+                                    chrome: .plain
                                 )
                             }
                         }
@@ -820,10 +814,12 @@ struct LibrarySectionListView: View {
                     presentation: .ledger,
                     showsFavoriteStar: showsShelfLedgerFacts,
                     showsFullLedgerStats: showsShelfLedgerFacts,
-                    showsSummary: false
+                    showsSummary: false,
+                    showsSeparator: false
                 )
                 .environment(\.ledgerKickerMuted, isAbandonedRow(work))
                 factsStrip(work, summary: summary)
+                WorkRowSeparator()
             }
         } else {
             swipeableRow(work, summary: summary)
@@ -844,6 +840,7 @@ struct LibrarySectionListView: View {
                 palette: scopePalette,
                 style: kind == .history ? .history : .favorites
             )
+            .padding(.horizontal, WorkRowMetrics.horizontalPadding)
         }
     }
 
@@ -856,13 +853,16 @@ struct LibrarySectionListView: View {
                 presentation: .ledger,
                 showsFavoriteStar: showsShelfLedgerFacts,
                 showsFullLedgerStats: showsShelfLedgerFacts,
-                showsSummary: false
+                showsSummary: false,
+                showsSeparator: false
             )
             .environment(\.ledgerKickerMuted, isAbandonedRow(work))
             factsStrip(work, summary: summary)
             if isAbandonedRow(work) {
                 MoveBackToInProgressButton(work: work)
+                    .padding(.horizontal, WorkRowMetrics.horizontalPadding)
             }
+            WorkRowSeparator()
         }
             .libraryWorkSwipeActions(
                 work,

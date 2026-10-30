@@ -1,21 +1,16 @@
+import SwiftData
 import SwiftUI
 
 /// One row representing a saved work, reused across Library and Bookmarks. Mirrors
-/// the Search result card (`AO3WorkRow`) — title, author, fandoms, summary, and a
+/// the Search result row (`AO3WorkRow`) — title, author, fandoms, summary, and a
 /// stats line — so the two lists read consistently, plus a Library-specific
 /// favorite marker. The richer fields (fandoms, word count, chapters, kudos) fill
 /// in once the work has been refreshed from AO3 in the background.
 struct WorkRow: View {
-    /// Which of the two shapes the redesign gives a saved work this row should
-    /// take. `.standard` is the established card — title, author, fandoms,
-    /// summary, expandable tags and the full stats row. `.ledger` is the
-    /// redesign's compact washed row (spec 1c/1d, 1ad, 1o, 1t, 1u, 1x, 1ah): a
-    /// leading progress ring, the fandom kicker over its rule, the title, one
-    /// dot-separated metadata line, and the four-signal tray.
-    ///
-    /// Two presentations rather than a replacement, matching what `AO3WorkRow`
-    /// already does for remote works: the screens convert one at a time, and a
-    /// screen that has not converted keeps exactly the row it had.
+    /// `.standard` is the full row: title, author and fandom, a tag preview,
+    /// summary, expandable tag groups, the stats line, and a progress bar.
+    /// `.ledger` is the scan row: fandom label, title, author, a two-line
+    /// summary, every stat, and chapter bars.
     enum Presentation: Equatable {
         case standard
         case ledger
@@ -46,30 +41,37 @@ struct WorkRow: View {
     /// detailed card passes true, so the star is not lost when that list becomes
     /// a ledger.
     var showsFavoriteStar = false
-    /// Ledger lists that used to show `WorkListStatsRow` pass true. History keeps
-    /// the short author · words · chapters line.
+    /// Kept so existing call sites compile. A ledger row always prints every stat;
+    /// the flag no longer chooses a shorter line.
     var showsFullLedgerStats = false
     /// Detailed rows only. Off hides the summary paragraph; tags still expand.
+    /// A ledger row still shows a two-line summary when the work has one.
     var showsSummary = true
+    /// New chapters since the reader last looked. Draws the "+N" badge and marks
+    /// those bars. Only Subscriptions has a count today.
+    var badgeCount = 0
+    /// Results pages put the grid beside the title block only.
+    var wide = false
+    /// False when a footnote under this row draws the separator for the whole block.
+    var showsSeparator = true
 
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var theme
-    @Environment(\.ledgerPositionNumber) private var positionNumber
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @AppStorage("showsZeroStats") private var showsZeroStats = true
     @State private var internalExpanded = false
+    @State private var chapterWeights: [Int]?
 
     private var expandedBinding: Binding<Bool> {
         externalExpanded ?? $internalExpanded
     }
 
+    /// The four-tag grid's 24pt tiles.
+    static let ledgerTileSize: CGFloat = 24
+
     /// Worth an expand toggle only when there's more to reveal than the clamped view:
     /// a long summary or any categorized tags. Exposed statically so SensitiveWorkRow
     /// can decide whether to render an external expand button without building a row.
-    /// The four-tag grid's 24pt tiles (I-2). Named because the ring opposite is
-    /// sized from it.
-    static let ledgerTileSize: CGFloat = 24
-
     static func isExpandable(for work: SavedWork, showsSummary: Bool = true) -> Bool {
         let summary = showsSummary ? work.summary.strippingHTML() : ""
         return isExpandable(strippedSummary: summary, for: work, showsSummary: showsSummary)
@@ -88,23 +90,21 @@ struct WorkRow: View {
 
     @ViewBuilder
     var body: some View {
+        let _ = showsFullLedgerStats
         Group {
             switch presentation {
             case .standard: standardRow
-            // A ledger row does not expand. It is a different kind of card from a
-            // search result: one line that says which work this is and how far in
-            // you are, in a list you scan. The facts a disclosure used to reveal —
-            // byline, fandoms, dates, summary, tag groups — are what Work Detail is
-            // for, one tap away. Owner's call, 2026-09-12, reversing the widening
-            // in 74680bb.
-            case .ledger: ledgerRow
+            // A ledger row does not expand. The facts a disclosure used to reveal
+            // are on Work Detail, one tap away. Owner's call, 2026-09-12.
+            case .ledger:
+                ledgerRow.task(id: chapterCacheKey) { await loadChapterWeights() }
             }
         }
         .downloadDimmed(work)
         .onChange(of: expandAll, initial: true) { _, value in expandedBinding.wrappedValue = value }
     }
 
-    // MARK: - Ledger presentation
+    // MARK: - Ledger
 
     private var subjectHue: Double {
         CoverArt.workHue(fandoms: work.workFandoms, title: work.title)
@@ -118,184 +118,162 @@ struct WorkRow: View {
         work.workFandoms.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     }
 
-    /// History keeps author · words · chapters. A ledger list that replaced a
-    /// detailed card restores the full stat line those cards showed.
-    private var ledgerMetadataSegments: [String] {
-        if showsFullLedgerStats {
-            WorkStat.fullLedgerStatLine(
-                author: work.author,
-                language: work.language,
-                wordCount: work.wordCount,
-                chapters: work.chapters,
-                comments: work.comments,
-                kudos: work.kudos,
-                bookmarks: work.bookmarks,
-                hits: work.hits,
-                dateUpdated: work.dateUpdated,
-                showsZeroStats: showsZeroStats
-            )
-        } else {
-            WorkStat.localWorkMetadata(
-                author: work.author, wordCount: work.wordCount, chapters: work.chapters
-            )
-        }
+    private var ledgerSummaryText: String {
+        work.summary.strippingHTML()
     }
 
-    /// The word under the ring's percentage, matching the Home card's ring
-    /// (`HomeCards.progressRing`) — owner's call, 2026-09-12, along with the
-    /// percent sign the ledger ring used to drop.
-    ///
-    /// Nil at zero: a ledger row draws the ring for every work, including ones
-    /// never opened, and "0% READING" claims a session that never happened.
-    private var ledgerProgressState: String? {
-        guard let progress = work.readingProgress, progress > 0 else { return nil }
-        return progress >= 1 ? "Finished" : "Reading"
-    }
-
-    /// The washed background is left to the enclosing `List` row
-    /// (`.cardRow(tintHue:)`), which paints it at the card's true outer edge —
-    /// the same place the selection outline is drawn. A row that painted its own
-    /// would sit half a point inside that, drawing the hairline twice.
-    private var ledgerRow: some View {
-        WorkLedgerRow(
-            palette: subjectPalette,
-            kicker: nonemptyFandomNames.first.map(FandomDisplayName.bareTitle),
-            additionalKickerCount: max(0, nonemptyFandomNames.count - 1),
-            title: work.title,
-            titleSymbol: showsFavoriteStar && work.isFavorite ? "star.fill" : nil,
-            titleSymbolTint: .subjectFavoriteGold,
-            metadataSegments: ledgerMetadataSegments,
-            leading: {
-                // A queue's position number sits outside the card, to its left
-                // (1h.1) — `.cardRow(leadingNumber:)` draws it. The card has
-                // nothing in this slot then.
-                if positionNumber == nil {
-                    // Sized to the four-tag grid facing it across the card. Spec 1ad
-                    // draws this ring at 44 beside a taller grid, and the mismatch
-                    // reads. Both come from the grid's own constants and Dynamic
-                    // Type scale, so the two stay the same size (~51 at 24pt tiles).
-                    WorkStatusGridMatched(tileSize: Self.ledgerTileSize) { diameter in
-                        WorkReadingOrDownloadRing(
-                            work: work,
-                            progress: work.readingProgress ?? 0,
-                            state: ledgerProgressState,
-                            diameter: diameter
-                        )
-                    }
-                }
-            },
-            trailing: {
-                VStack(alignment: .trailing, spacing: 4) {
-                    WorkStatusIconGrid(
-                        rating: work.rating.isEmpty ? nil : work.rating,
-                        categories: work.workCategories,
-                        warnings: work.workWarnings,
-                        completion: work.completionStatus,
-                        tileSize: Self.ledgerTileSize,
-                        announcesToVoiceOver: true
-                    )
-                    if isSelecting {
-                        WorkSelectionBubble(isSelected: isSelected)
-                    }
-                }
-            },
-            drawsBackground: false
+    private var ledgerFigures: WorkStat.LedgerFigures {
+        WorkStat.ledgerFigures(
+            language: work.language,
+            wordCount: work.wordCount,
+            chapters: work.chapters,
+            comments: work.comments,
+            kudos: work.kudos,
+            bookmarks: work.bookmarks,
+            hits: work.hits,
+            dateUpdated: work.dateUpdated,
+            showsZeroStats: showsZeroStats,
+            zeroCountsRequireWords: true
         )
     }
 
-    // MARK: - Standard presentation
+    /// File size and modification date, so a replaced EPUB measures again.
+    /// "none" when there is no download: those bars stay equal.
+    private var chapterCacheKey: String {
+        guard work.hasEPUB else { return "none" }
+        let values = try? work.fileURL.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
+        let size = values?.fileSize ?? -1
+        let modified = values?.contentModificationDate?.timeIntervalSince1970 ?? -1
+        return "\(work.id.uuidString)-\(size)-\(modified)"
+    }
 
-    /// `@ViewBuilder` because the body opens with two `let` bindings before its
-    /// view expression. `View.body` is a builder implicitly; a plain computed
-    /// property is not, and would need an explicit `return` instead.
+    private var chapterBarItems: [ChapterBarItem] {
+        ChapterBarModel.items(
+            chapters: work.chapters,
+            progress: work.readingProgress,
+            isFinished: work.isFinished,
+            weights: chapterWeights,
+            newChapterCount: badgeCount
+        )
+    }
+
+    private var chapterProgressLabel: String? {
+        ChapterBarGeometry.progressLabel(
+            chapters: work.chapters,
+            progress: work.readingProgress,
+            isFinished: work.isFinished
+        )
+    }
+
+    private func loadChapterWeights() async {
+        guard work.hasEPUB else {
+            chapterWeights = nil
+            return
+        }
+        let id = work.id
+        let url = work.fileURL
+        let measured = await Task.detached(priority: .utility) {
+            ChapterLengthCache.weights(workID: id, fileURL: url)
+        }.value
+        guard work.modelContext != nil else { return }
+        chapterWeights = measured
+    }
+
+    private var ledgerRow: some View {
+        WorkPlainRow(wide: wide, showsSeparator: showsSeparator) {
+            statusGrid
+        } heading: {
+            ledgerHeading
+        } remainder: {
+            if !work.author.isEmpty {
+                AO3AuthorBylineView(
+                    displayText: work.author,
+                    identities: work.verifiedAuthorIdentities,
+                    font: .subheadline,
+                    compact: !dynamicTypeSize.isAccessibilitySize
+                )
+                .fixedSize(horizontal: false, vertical: true)
+            }
+            if !ledgerSummaryText.isEmpty {
+                Text(ledgerSummaryText)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            WorkLedgerStatsLine(figures: ledgerFigures)
+            WorkChapterBarLine(items: chapterBarItems, label: chapterProgressLabel)
+        }
+    }
+
+    @ViewBuilder
+    private var ledgerHeading: some View {
+        if let fandom = nonemptyFandomNames.first {
+            WorkFandomLabel(
+                title: FandomDisplayName.bareTitle(fandom),
+                palette: subjectPalette,
+                additionalCount: max(0, nonemptyFandomNames.count - 1),
+                action: { router.searchAO3(.fandom, fandom) }
+            )
+        }
+        titleLine(showsFavorite: showsFavoriteStar && work.isFavorite, favoriteTint: .subjectFavoriteGold)
+    }
+
+    // MARK: - Standard
+
+    private var standardProgress: Double? {
+        if work.isFinished { return 1 }
+        guard let progress = work.readingProgress, progress > 0 else { return nil }
+        return progress
+    }
+
     @ViewBuilder
     private var standardRow: some View {
         let summaryText = showsSummary ? work.summary.strippingHTML() : ""
         let isExpandable = Self.isExpandable(
             strippedSummary: summaryText, for: work, showsSummary: showsSummary
         )
-        VStack(alignment: .leading, spacing: 6) {
-            // Title + author, with the favorite star and expand control pinned top-trailing.
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(alignment: .top, spacing: 6) {
-                    // Never truncate text someone asked to be larger (WorkLedgerRow's rule).
-                    Text(work.title)
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .layoutPriority(1)
-                    Spacer(minLength: 4)
-                    if work.isFavorite {
-                        Image(systemName: "star.fill")
-                            .font(.caption)
-                            .foregroundStyle(theme.appTheme.favoriteColor)
-                    }
-                    WorkUpdatedDateBadge(
-                        dateUpdated: work.dateUpdated,
-                        datePublished: work.datePublished
-                    )
-                    if isExpandable && showsExpandButton { expandButton }
-                    if isSelecting {
-                        WorkSelectionBubble(isSelected: isSelected)
-                    }
-                }
-                if !work.author.isEmpty {
-                    AO3AuthorBylineView(
-                        displayText: work.author,
-                        identities: work.verifiedAuthorIdentities,
-                        font: .subheadline,
-                        compact: !dynamicTypeSize.isAccessibilitySize
-                    )
-                    .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-
-            if !work.workFandoms.isEmpty {
-                // Tight icon→text gap + bold accent glyph, matching the stats row. Only
-                // the icon is tinted — fandom text stays readable/secondary like the
-                // rest of the metadata (`WorkStatLabel`'s convention).
-                HStack(spacing: 4) {
-                    Image(systemName: "books.vertical")
-                        .fontWeight(.bold)
-                        .foregroundStyle(.tint)
-                    Text(work.workFandoms.joined(separator: ", "))
-                        .foregroundStyle(.secondary)
-                }
-                .font(.caption)
-                .lineLimit(expandedBinding.wrappedValue ? nil : 1)
-                // Snap the reflow — see AO3WorkRow: guards against an ancestor
-                // animation cross-fading two different text layouts.
-                .animation(nil, value: expandedBinding.wrappedValue)
-            }
-
-            workDetails(summaryText: summaryText)
+        WorkPlainRow(wide: wide, showsSeparator: showsSeparator) {
+            statusGrid
+        } heading: {
+            standardHeading(isExpandable: isExpandable)
+        } remainder: {
+            standardRemainder(summaryText: summaryText)
         }
-        .padding(.vertical, 6)
-        .frame(maxWidth: .infinity, alignment: .leading)
-
     }
 
     @ViewBuilder
-    private func workDetails(summaryText: String) -> some View {
+    private func standardHeading(isExpandable: Bool) -> some View {
+        titleLine(
+            showsFavorite: work.isFavorite,
+            favoriteTint: theme.appTheme.favoriteColor,
+            dateUpdated: work.dateUpdated,
+            datePublished: work.datePublished,
+            showsExpand: isExpandable && showsExpandButton
+        )
+        authorAndFandoms
+    }
+
+    @ViewBuilder
+    private func standardRemainder(summaryText: String) -> some View {
+        if !expandedBinding.wrappedValue {
+            WorkTagLineView(
+                relationships: work.workRelationships,
+                characters: work.workCharacters,
+                freeforms: work.hasCategorizedWorkTags ? work.workFreeforms : work.workTags,
+                onTap: { tag, field in router.searchAO3(field, tag) }
+            )
+        }
         if !summaryText.isEmpty {
             Text(summaryText)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-                .lineLimit(expandedBinding.wrappedValue ? nil : 3)
+                .lineLimit(expandedBinding.wrappedValue || dynamicTypeSize.isAccessibilitySize ? nil : 3)
                 .multilineTextAlignment(.leading)
-                // Snap the reflow — see AO3WorkRow: guards against an
-                // ancestor animation cross-fading two text layouts.
                 .animation(nil, value: expandedBinding.wrappedValue)
         }
-
-        // Categorized tags appear when expanded — the same blurb shape as AO3WorkRow.
         if expandedBinding.wrappedValue {
-            // The stats row's badge only says how many warnings apply, so
-            // without this the names would be unreachable on a saved work.
-            // No "Archive Warnings" group: expanding turns the stats row's
-            // count chip into the warnings themselves, so a labelled section
-            // right above was the same list twice. Matches AO3WorkRow.
             if work.hasCategorizedWorkTags {
                 chipGroup("Relationships", work.workRelationships, field: .relationship)
                 chipGroup("Characters", work.workCharacters, field: .character)
@@ -304,13 +282,6 @@ struct WorkRow: View {
                 chipGroup("Tags", work.workTags, field: .freeform)
             }
         }
-
-        // Space, not a rule — matching AO3WorkRow. The stats row below is
-        // already a band of capsules with its own edges, so a hairline against
-        // it drew a second boundary in the same place.
-        Spacer(minLength: 0).frame(height: 4)
-
-        // Stats wrap rather than truncate (matches AO3WorkRow).
         WorkListStatsRow(
             rating: work.rating.isEmpty ? nil : work.rating,
             categories: work.workCategories,
@@ -326,9 +297,93 @@ struct WorkRow: View {
             datePublished: work.datePublished.isEmpty ? nil : work.datePublished,
             isExpanded: expandedBinding.wrappedValue
         )
+        if let standardProgress {
+            WorkReadProgressBar(progress: standardProgress)
+        }
     }
 
-    /// Top-right expand/collapse control, matching AO3WorkRow.
+    private var statusGrid: some View {
+        WorkStatusIconGrid(
+            rating: work.rating.isEmpty ? nil : work.rating,
+            categories: work.workCategories,
+            warnings: work.workWarnings,
+            completion: work.completionStatus,
+            tileSize: Self.ledgerTileSize,
+            announcesToVoiceOver: true
+        )
+    }
+
+    private func titleLine(
+        showsFavorite: Bool,
+        favoriteTint: Color,
+        dateUpdated: String? = nil,
+        datePublished: String? = nil,
+        showsExpand: Bool = false
+    ) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            Text(work.title)
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                .fixedSize(horizontal: false, vertical: true)
+                .layoutPriority(1)
+            WorkPlusBadge(count: badgeCount)
+            Spacer(minLength: 4)
+            if showsFavorite {
+                Image(systemName: "star.fill")
+                    .font(.caption)
+                    .foregroundStyle(favoriteTint)
+                    .accessibilityHidden(true)
+            }
+            if let dateUpdated {
+                WorkUpdatedDateBadge(dateUpdated: dateUpdated, datePublished: datePublished)
+            }
+            if showsExpand { expandButton }
+            if isSelecting {
+                WorkSelectionBubble(isSelected: isSelected)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var authorAndFandoms: some View {
+        if !work.author.isEmpty || !nonemptyFandomNames.isEmpty {
+            ViewThatFits(in: .horizontal) {
+                byline(wraps: false)
+                byline(wraps: true)
+            }
+        }
+    }
+
+    private func byline(wraps: Bool) -> some View {
+        let layout = wraps
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 4))
+        return layout {
+            if !work.author.isEmpty {
+                AO3AuthorBylineView(
+                    displayText: work.author,
+                    identities: work.verifiedAuthorIdentities,
+                    font: .subheadline,
+                    compact: !dynamicTypeSize.isAccessibilitySize
+                )
+            }
+            if !work.author.isEmpty, !nonemptyFandomNames.isEmpty {
+                Text("·")
+                    .font(.subheadline)
+                    .foregroundStyle(.tertiary)
+            }
+            if !nonemptyFandomNames.isEmpty {
+                Text(nonemptyFandomNames.joined(separator: ", "))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(expandedBinding.wrappedValue || dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                    .animation(nil, value: expandedBinding.wrappedValue)
+            }
+        }
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
     private var expandButton: some View {
         WorkRowExpandButton(expanded: expandedBinding)
     }
@@ -366,10 +421,7 @@ struct WorkRowExpandButton: View {
         Button {
             // No `withAnimation`: these rows live in a `List`, and animating a
             // row's height change makes it composite a snapshot of the old cell
-            // over the new one. The two layouts differ in height, so every
-            // element — title, byline, fandom, stats — ghosts over the expanded
-            // summary and chips for the duration. Toggling instantly relayouts
-            // in one frame with nothing to cross-fade.
+            // over the new one. Toggling instantly relayouts in one frame.
             expanded.toggle()
         } label: {
             Image(systemName: expanded ? "chevron.up" : "chevron.down")

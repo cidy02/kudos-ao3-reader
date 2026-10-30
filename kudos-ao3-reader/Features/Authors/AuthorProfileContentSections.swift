@@ -13,7 +13,7 @@ import SwiftUI
 struct AO3AuthorLoadingRows: View {
     var body: some View {
         ForEach(0..<4, id: \.self) { _ in
-            AO3WorkRowSkeleton().cardRow()
+            AO3WorkRowSkeleton().cardRow(chrome: .plain)
         }
     }
 }
@@ -341,7 +341,7 @@ struct AO3AuthorWorksSection: View {
                 if isSelecting {
                     ForEach(model.works) { work in
                         selectableWorkRow(work)
-                            .cardRow(isSelected: selection.contains(work.id))
+                            .cardRow(isSelected: selection.contains(work.id), chrome: .plain)
                     }
                 } else {
                     ForEach(workEntries) { entry in

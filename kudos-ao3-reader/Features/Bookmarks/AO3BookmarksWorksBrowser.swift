@@ -108,7 +108,6 @@ struct AO3BookmarksWorksBrowser: View {
     @Binding var filter: AO3BookmarksFilter
     let onPage: (Int) -> Void
 
-    @Environment(ThemeManager.self) private var theme
     @Environment(PrivacyGate.self) private var gate
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
@@ -242,21 +241,15 @@ struct AO3BookmarksWorksBrowser: View {
         }
     }
 
-    /// Ledger content draws no card of its own. This branch is a `ScrollView`,
-    /// so the wash is `subjectCard` rather than `.cardRow` — the same reason
-    /// Marked for Later's ledger rows are wrapped that way.
+    /// The compact branch is a `ScrollView`. The row draws its own separator.
     private func compactRow(_ entry: CanonicalWork) -> some View {
         rowStack(entry, fullLedgerStats: false)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 15)
-            .subjectCard(palette: theme.appTheme.subjectPalette(hue: hue(for: entry)))
-            .padding(.horizontal, CardListMetrics.sideMargin)
     }
 
     @ViewBuilder
     private func detailedRow(_ entry: CanonicalWork) -> some View {
         let row = rowStack(entry, fullLedgerStats: true)
-            .cardRow(tintHue: hue(for: entry))
+            .cardRow(chrome: .plain)
         // A saved work's row takes Library's swipes, as it does everywhere else;
         // a remote row brings its own through `AO3WorkRow` (T-339).
         if let work = entry.local {
@@ -275,11 +268,13 @@ struct AO3BookmarksWorksBrowser: View {
     private func rowStack(_ entry: CanonicalWork, fullLedgerStats: Bool) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             rowBody(entry, fullLedgerStats: fullLedgerStats)
-            // A remote row draws its bookmark inside the 1q card. A saved work's
+            // A remote row draws its bookmark inside the row. A saved work's
             // row does not know about bookmarks, so the same pieces sit under it.
             if entry.local != nil, let bookmark = bookmark(for: entry), !isBlurred(entry) {
                 AO3BookmarkFootnote(bookmark: bookmark, showsStatus: true)
+                    .padding(.horizontal, WorkRowMetrics.horizontalPadding)
             }
+            WorkRowSeparator()
         }
     }
 
@@ -291,7 +286,8 @@ struct AO3BookmarksWorksBrowser: View {
                 presentation: .ledger,
                 showsFavoriteStar: fullLedgerStats,
                 showsFullLedgerStats: fullLedgerStats,
-                showsSummary: false
+                showsSummary: false,
+                showsSeparator: false
             )
         } else if let remote = entry.remote {
             // The remote ledger row already prints the full AO3 stat line.
@@ -300,7 +296,8 @@ struct AO3BookmarksWorksBrowser: View {
                 work: remote,
                 presentation: .searchLedger,
                 bookmark: bookmark(for: entry),
-                showsSummary: false
+                showsSummary: false,
+                showsSeparator: false
             )
         }
     }
@@ -322,15 +319,6 @@ struct AO3BookmarksWorksBrowser: View {
         return bookmarks[id]
     }
 
-    private func hue(for entry: CanonicalWork) -> Double {
-        if let work = entry.local {
-            return CoverArt.workHue(fandoms: work.workFandoms, title: work.title)
-        }
-        if let remote = entry.remote {
-            return CoverArt.workHue(fandoms: remote.fandoms, title: remote.title)
-        }
-        return 0
-    }
 }
 
 /// The same pill row History and Marked for Later use, including the quieter Reset.

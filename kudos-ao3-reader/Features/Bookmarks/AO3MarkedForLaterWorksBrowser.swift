@@ -235,7 +235,6 @@ struct AO3MarkedForLaterWorksBrowser: View {
     /// 1o.4: AO3's `mark_as_read`. The host runs the write and drops the row.
     var onUnmark: (CanonicalWork) -> Void = { _ in }
 
-    @Environment(ThemeManager.self) private var theme
     @ScaledMetric(relativeTo: .caption) private var footerSize: CGFloat = 11.5
 
     private var sections: [AO3MarkedForLaterSection<CanonicalWork>] {
@@ -368,10 +367,9 @@ struct AO3MarkedForLaterWorksBrowser: View {
         }
     }
 
-    /// Ledger content draws no card of its own (`WorkLedgerRow.drawsBackground`
-    /// is false inside `SensitiveWorkRow`). This screen is a `ScrollView`
-    /// because the updated run is `AccountWorksCompactGrid`, which cannot live
-    /// in a `List` cell, so the wash is `subjectCard` rather than `.cardRow`.
+    /// This screen is a `ScrollView` because the updated run is
+    /// `AccountWorksCompactGrid`, which cannot live in a `List` cell. The row
+    /// draws its own separator.
     private func ledgerRow(_ entry: CanonicalWork) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             ledgerRowBody(entry)
@@ -382,11 +380,9 @@ struct AO3MarkedForLaterWorksBrowser: View {
                 Spacer(minLength: 0)
                 unmarkButton(entry)
             }
+            .padding(.horizontal, WorkRowMetrics.horizontalPadding)
+            WorkRowSeparator()
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 15)
-        .subjectCard(palette: theme.appTheme.subjectPalette(hue: hue(for: entry)))
-        .padding(.horizontal, CardListMetrics.sideMargin)
     }
 
     @ViewBuilder
@@ -397,14 +393,16 @@ struct AO3MarkedForLaterWorksBrowser: View {
                 expandAll: expandAll,
                 presentation: .ledger,
                 showsFullLedgerStats: true,
-                showsSummary: false
+                showsSummary: false,
+                showsSeparator: false
             )
         } else if let remote = entry.remote {
             EnrichingAO3WorkRow(
                 work: remote,
                 expandAll: expandAll,
                 presentation: .searchLedger,
-                showsSummary: false
+                showsSummary: false,
+                showsSeparator: false
             )
         }
     }
@@ -446,15 +444,6 @@ struct AO3MarkedForLaterWorksBrowser: View {
         AO3MarkedForLaterClassification.isDownloaded(hasEPUB: entry.local?.isDownloaded)
     }
 
-    private func hue(for entry: CanonicalWork) -> Double {
-        if let work = entry.local {
-            return CoverArt.workHue(fandoms: work.workFandoms, title: work.title)
-        }
-        if let remote = entry.remote {
-            return CoverArt.workHue(fandoms: remote.fandoms, title: remote.title)
-        }
-        return 0
-    }
 }
 
 /// The same pill row History uses, including the quieter Reset.

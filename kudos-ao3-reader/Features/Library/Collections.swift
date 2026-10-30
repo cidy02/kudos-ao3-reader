@@ -386,7 +386,7 @@ struct CollectionDetailView: View {
                         }
                         .cardRow(
                             isSelected: isSelecting && selection.contains(work.id),
-                            tintHue: CoverArt.workHue(fandoms: work.workFandoms, title: work.title)
+                            chrome: .plain
                         )
                     }
                     } header: {

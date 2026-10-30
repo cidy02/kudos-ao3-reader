@@ -243,12 +243,9 @@ struct HomeSectionListView: View {
                             showsFullLedgerStats: true,
                             showsSummary: false
                         )
-                        // The row's wash is painted here, at the card's true outer
-                        // edge, rather than inside `WorkLedgerRow` — see its
-                        // `drawsBackground` note.
                         .cardRow(
                             isSelected: isSelecting && selection.contains(work.id),
-                            tintHue: CoverArt.workHue(fandoms: work.workFandoms, title: work.title)
+                            chrome: .plain
                         )
                         // The same local actions Library's rows carry, so a row means
                         // the same thing wherever it is drawn.

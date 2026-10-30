@@ -135,7 +135,9 @@ struct AO3HistoryWorksBrowser: View {
                     reading: reading,
                     localProgress: localProgress(for: entry)
                 )
+                .padding(.horizontal, WorkRowMetrics.horizontalPadding)
             }
+            WorkRowSeparator()
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             if canDelete(entry) {
@@ -147,7 +149,7 @@ struct AO3HistoryWorksBrowser: View {
                 }
             }
         }
-        .cardRow(tintHue: hue(for: entry))
+        .cardRow(chrome: .plain)
     }
 
     @ViewBuilder
@@ -158,13 +160,15 @@ struct AO3HistoryWorksBrowser: View {
                 presentation: .ledger,
                 showsFavoriteStar: true,
                 showsFullLedgerStats: true,
-                showsSummary: false
+                showsSummary: false,
+                showsSeparator: false
             )
         } else if let remote = entry.remote {
             EnrichingAO3WorkRow(
                 work: remote,
                 presentation: .searchLedger,
-                showsSummary: false
+                showsSummary: false,
+                showsSeparator: false
             )
         }
     }
@@ -188,15 +192,6 @@ struct AO3HistoryWorksBrowser: View {
         )
     }
 
-    private func hue(for entry: CanonicalWork) -> Double {
-        if let work = entry.local {
-            return CoverArt.workHue(fandoms: work.workFandoms, title: work.title)
-        }
-        if let remote = entry.remote {
-            return CoverArt.workHue(fandoms: remote.fandoms, title: remote.title)
-        }
-        return 0
-    }
 }
 
 /// The same pill row Library uses for a quick filter, including the quieter Reset.

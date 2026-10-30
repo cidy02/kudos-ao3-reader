@@ -202,18 +202,18 @@ struct AO3SeriesDetailView: View {
                     SelectableAO3WorkRow(
                         work: remote, expandAll: expandAll, controller: bulkSelection, showsSummary: showSummaries
                     )
-                        .cardRow(isSelected: bulkSelection.selection.contains(remote.id))
+                        .cardRow(isSelected: bulkSelection.selection.contains(remote.id), chrome: .plain)
                 } else if let work = entry.local {
                     // No .cardNavigation here: SensitiveWorkRow already applies it
                     // internally (MatureContent.swift) for its non-blurred, non-selecting
                     // branch — re-wrapping it stacks a second, unhidden, real-titled
                     // NavigationLink behind the blurred branch's reveal gate.
                     SensitiveWorkRow(work: work, expandAll: expandAll, showsSummary: showSummaries)
-                        .cardRow()
+                        .cardRow(chrome: .plain)
                 } else if let remote = entry.remote {
                     AO3WorkRow(work: remote, expandAll: expandAll, showsSummary: showSummaries)
                         .cardNavigation(to: remote, accessibilityLabel: remote.title)
-                        .cardRow()
+                        .cardRow(chrome: .plain)
                 }
             }
             AO3AuthorPaginationRows(

@@ -82,22 +82,10 @@ extension View {
 /// summary lines, and a stats row.
 struct AO3WorkRowSkeleton: View {
     var body: some View {
-        // Matches AO3WorkRow.card's current layout (Features/Search/AO3WorkRow.swift):
-        // title+author leading beside the trailing WorkStatusIconGrid, fandom row,
-        // summary, stats row, then a date chip + expand control at the bottom.
-        // Previously matched an older row shape (author/fandom stacked with no tag
-        // grid at all, a plain 3-stat row) from before that card's own redesign.
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .top, spacing: 8) {
-                VStack(alignment: .leading, spacing: 4) {
-                    SkeletonTextLine(height: 17, width: 200) // title
-                    SkeletonTextLine(height: 17, width: 140) // title, line 2 (often wraps)
-                    SkeletonTextLine(height: 14, width: 110) // author
-                        .padding(.top, 2)
-                }
-                Spacer(minLength: 0)
-                // 2x2 tag grid (WorkStatusIconGrid, tileSize 24) — same math as
-                // WorkCoverCardSkeleton's own grid (see that struct's comment).
+        // Matches the plain work row: the 24 pt grid leads, then title, author,
+        // fandom, summary and stats. The separator is the row's own.
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .top, spacing: 12) {
                 Grid(horizontalSpacing: 2.88, verticalSpacing: 2.88) {
                     GridRow {
                         SkeletonBlock(height: 24, width: 24, cornerRadius: 5.76)
@@ -108,34 +96,23 @@ struct AO3WorkRowSkeleton: View {
                         SkeletonBlock(height: 24, width: 24, cornerRadius: 5.76)
                     }
                 }
+                VStack(alignment: .leading, spacing: 6) {
+                    SkeletonTextLine(height: 17, width: 200)
+                    SkeletonTextLine(height: 17, width: 140)
+                    SkeletonTextLine(height: 14, width: 160)
+                    SkeletonTextLine(height: 13, width: 220)
+                    SkeletonTextLine(height: 13, width: 180)
+                    HStack(spacing: 12) {
+                        SkeletonBlock(height: 11, width: 46)
+                        SkeletonBlock(height: 11, width: 58)
+                        SkeletonBlock(height: 11, width: 40)
+                    }
+                }
             }
-
-            SkeletonTextLine(height: 12, width: 190) // fandom row
-                .padding(.top, 2)
-
-            VStack(alignment: .leading, spacing: 5) { // summary
-                SkeletonTextLine(height: 13)
-                SkeletonTextLine(height: 13)
-                SkeletonTextLine(height: 13, width: 210)
-            }
-            .padding(.top, 2)
-
-            HStack(spacing: 16) { // WorkListStatsRow
-                SkeletonBlock(height: 11, width: 46)
-                SkeletonBlock(height: 11, width: 58)
-                SkeletonBlock(height: 11, width: 40)
-                SkeletonBlock(height: 11, width: 52)
-            }
-            .padding(.top, 4)
-
-            HStack { // date TagChip (bottom-left) + expand control (bottom-right)
-                SkeletonBlock(height: 24, width: 96, cornerRadius: SubjectMetrics.capsuleRadius)
-                Spacer(minLength: 0)
-                SkeletonBlock(height: 24, width: 24, cornerRadius: 12)
-            }
-            .padding(.top, 4)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            WorkRowSeparator()
         }
-        .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
         .skeletonShimmer()
     }
@@ -491,7 +468,7 @@ struct AO3WorkRowSkeletonList: View {
         List {
             Section {
                 ForEach(0 ..< count, id: \.self) { _ in AO3WorkRowSkeleton() }
-                    .cardRow()
+                    .cardRow(chrome: .plain)
             }
         }
         .cardList()

@@ -79,6 +79,129 @@ struct WorkUpdatedDateBadge: View {
     }
 }
 
+/// I-8: one "+N" for new chapters. Caption 2 bold, 16 pt tall at the default
+/// size, 6 pt on the sides, fully round, app colour, white text. The ring is
+/// only for a badge that sits on top of a button. The height is a minimum so
+/// an accessibility size can grow instead of clipping the digits.
+struct WorkPlusBadge: View {
+    var count: Int
+    var showsRing = false
+
+    @Environment(\.accentFill) private var accentFill
+
+    var body: some View {
+        if count > 0 {
+            Text("+\(count)")
+                .font(.caption2.bold())
+                .foregroundStyle(.white)
+                .padding(.horizontal, 6)
+                .frame(minHeight: 16)
+                .background(accentFill, in: Capsule())
+                .overlay {
+                    if showsRing {
+                        Capsule().strokeBorder(.white, lineWidth: 1)
+                    }
+                }
+                .fixedSize()
+                .accessibilityLabel(count == 1 ? "1 new chapter" : "\(count) new chapters")
+        }
+    }
+}
+
+/// The ledger's full stat line. Wraps so a long line keeps every figure.
+struct WorkLedgerStatsLine: View {
+    var figures: WorkStat.LedgerFigures
+
+    var body: some View {
+        if !figures.visible.isEmpty {
+            Text(figures.visible.joined(separator: "  ·  "))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(nil)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(figures.spoken)
+        }
+    }
+}
+
+/// One collapsed tag on a work row, before the "+N" overflow.
+struct WorkTagChip: Identifiable, Equatable {
+    var text: String
+    var field: AO3TagSearch.Field
+    var id: String { "\(field)-\(text)" }
+    var isRelationship: Bool { field == .relationship }
+}
+
+enum WorkTagLine {
+    /// Relationships first, then characters, then freeforms. Three chips, then "+N".
+    static func chips(
+        relationships: [String],
+        characters: [String],
+        freeforms: [String],
+        limit: Int = 3
+    ) -> (shown: [WorkTagChip], extra: Int) {
+        let groups: [(AO3TagSearch.Field, [String])] = [
+            (.relationship, relationships),
+            (.character, characters),
+            (.freeform, freeforms)
+        ]
+        var seen = Set<String>()
+        var all: [WorkTagChip] = []
+        for (field, tags) in groups {
+            for tag in tags {
+                let text = tag.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !text.isEmpty, seen.insert(text.lowercased()).inserted else { continue }
+                all.append(WorkTagChip(text: text, field: field))
+            }
+        }
+        return (Array(all.prefix(limit)), max(0, all.count - limit))
+    }
+}
+
+/// Relationships take the app colour. Everything else is grey. Each chip searches.
+struct WorkTagLineView: View {
+    var relationships: [String]
+    var characters: [String] = []
+    var freeforms: [String] = []
+    var onTap: (String, AO3TagSearch.Field) -> Void
+
+    @Environment(\.accentFill) private var accentFill
+    @Environment(\.accentInk) private var accentInk
+
+    var body: some View {
+        let line = WorkTagLine.chips(
+            relationships: relationships, characters: characters, freeforms: freeforms
+        )
+        if !line.shown.isEmpty {
+            FlowLayout(spacing: 6, rowSpacing: 6) {
+                ForEach(line.shown) { chip in
+                    Button { onTap(chip.text, chip.field) } label: {
+                        Text(chip.text)
+                            .font(.caption.weight(chip.isRelationship ? .semibold : .regular))
+                            .foregroundStyle(chip.isRelationship ? accentInk : Color.secondary)
+                            .lineLimit(1)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(
+                                chip.isRelationship ? accentFill.opacity(0.10) : Color.primary.opacity(0.08),
+                                in: Capsule()
+                            )
+                    }
+                    .buttonStyle(.borderless)
+                    .minimumHitTarget(28)
+                }
+                if line.extra > 0 {
+                    Text("+\(line.extra)")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+}
+
 /// Rating, category, warnings, and completion status as color-coded capsule
 /// chips — the four fields AO3 itself always surfaces up front on a work.
 /// Every badge always shows something, even "Uncategorized"/"No Warnings" —
@@ -876,6 +999,80 @@ enum WorkStat {
         let updated = dateUpdated.trimmingCharacters(in: .whitespacesAndNewlines)
         if !updated.isEmpty { segments.append(displayDate(updated)) }
         return segments
+    }
+
+    /// Visible segments and the VoiceOver sentence for a ledger row.
+    ///
+    /// Author is not here: the row gives the byline its own line. Kudos is a
+    /// heart in the text and the word "kudos" when spoken. Chapters gain a
+    /// " ch" unit unless the string already has one. Words stay grouped, not
+    /// compact. The line wraps, so none of these facts are ellipsized away.
+    struct LedgerFigures: Equatable {
+        var visible: [String]
+        var spoken: String
+    }
+
+    /// `zeroCountsRequireWords` matches `fullLedgerStatLine`: a local 0 is
+    /// unknown until the work has a word count. Remote rows pass false, so an
+    /// explicit 0 still prints when the reader shows zeros, and nil stays unknown.
+    static func ledgerFigures(
+        language: String,
+        wordCount: Int?,
+        chapters: String,
+        comments: Int?,
+        kudos: Int?,
+        bookmarks: Int?,
+        hits: Int?,
+        dateUpdated: String,
+        showsZeroStats: Bool,
+        zeroCountsRequireWords: Bool = false
+    ) -> LedgerFigures {
+        let wordsKnown = (wordCount ?? 0) > 0
+        func printed(_ value: Int?) -> Int? {
+            guard let value else { return nil }
+            if value > 0 { return value }
+            guard showsZeroStats, value == 0 else { return nil }
+            if zeroCountsRequireWords, !wordsKnown { return nil }
+            return value
+        }
+
+        var visible: [String] = []
+        var spoken: [String] = []
+        func append(_ text: String, say: String? = nil) {
+            visible.append(text)
+            spoken.append(say ?? text)
+        }
+
+        let languageName = language.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !languageName.isEmpty { append(languageName) }
+        if let words = wordCount, words > 0 {
+            append("\(words.formatted()) words")
+        }
+        let chapterRange = chapters.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !chapterRange.isEmpty {
+            let shown = chapterRange.range(of: "ch", options: .caseInsensitive) == nil
+                ? "\(chapterRange) ch"
+                : chapterRange
+            append(shown)
+        }
+        if let comments = printed(comments) {
+            append("\(comments.formatted()) \(comments == 1 ? "comment" : "comments")")
+        }
+        if let kudos = printed(kudos) {
+            append("♥ \(kudos.formatted())", say: "\(kudos.formatted()) kudos")
+        }
+        if let bookmarks = printed(bookmarks) {
+            append("\(bookmarks.formatted()) \(bookmarks == 1 ? "bookmark" : "bookmarks")")
+        }
+        if let hits = printed(hits) {
+            append("\(hits.formatted()) \(hits == 1 ? "hit" : "hits")")
+        }
+        let updated = dateUpdated.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !updated.isEmpty {
+            let display = displayDate(updated)
+            append(display, say: "Updated \(display)")
+        }
+        return LedgerFigures(visible: visible, spoken: spoken.joined(separator: ", "))
     }
 
     /// AO3 rating → a short, glanceable name. Originally scoped to compact cover

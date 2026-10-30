@@ -352,7 +352,9 @@ struct AO3SubscriptionsWorksBrowser: View {
             rowBody(entry)
             if let label = chapterLabel(for: entry) {
                 AO3SubscriptionsChapterFootnote(text: label)
+                    .padding(.horizontal, WorkRowMetrics.horizontalPadding)
             }
+            WorkRowSeparator()
         }
         // A saved work renders `SensitiveWorkRow`, not `EnrichingAO3WorkRow`,
         // so the shared row never reports a chapter count for it. The page
@@ -371,18 +373,21 @@ struct AO3SubscriptionsWorksBrowser: View {
                 }
             }
         }
-        .cardRow(tintHue: hue(for: entry))
+        .cardRow(chrome: .plain)
     }
 
     @ViewBuilder
     private func rowBody(_ entry: CanonicalWork) -> some View {
         if let work = entry.local {
-            SensitiveWorkRow(work: work, expandAll: expandAll, presentation: .ledger)
+            SensitiveWorkRow(
+                work: work, expandAll: expandAll, presentation: .ledger, showsSeparator: false
+            )
         } else if let remote = entry.remote {
             EnrichingAO3WorkRow(
                 work: remote,
                 expandAll: expandAll,
                 presentation: .searchLedger,
+                showsSeparator: false,
                 onEnriched: onEnriched
             )
         }
@@ -424,15 +429,6 @@ struct AO3SubscriptionsWorksBrowser: View {
         return !path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    private func hue(for entry: CanonicalWork) -> Double {
-        if let work = entry.local {
-            return CoverArt.workHue(fandoms: work.workFandoms, title: work.title)
-        }
-        if let remote = entry.remote {
-            return CoverArt.workHue(fandoms: remote.fandoms, title: remote.title)
-        }
-        return 0
-    }
 }
 
 /// The same pill row Marked for Later uses, including the quieter Reset.
