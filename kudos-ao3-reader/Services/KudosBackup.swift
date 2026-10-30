@@ -1774,8 +1774,8 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
             readerTheme: defaults.string(forKey: "readerTheme") ?? ReaderTheme.light.rawValue,
             matchAppReaderTheme: bool(defaults, "matchAppReaderTheme", fallback: true),
             // Only a stored accent. Omitting the key keeps an unchosen device from
-            // replacing another device's colour through folder sync. Older builds
-            // decode a missing key as their own default.
+            // replacing a current build's colour through folder sync. Older builds
+            // and today's Android still apply #990000 for a missing key.
             accentColorHex: defaults.string(forKey: "accentColorHex"),
             autoPreserveSmallSeriesOnSaveForLater: bool(
                 defaults,
