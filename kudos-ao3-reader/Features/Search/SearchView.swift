@@ -317,6 +317,9 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 .onChange(of: scenePhase) { _, phase in
                     if phase != .active { rankTop100.cancel() }
                 }
+                .onChange(of: auth.sessionGeneration) { _, _ in
+                    resetRankTop100()
+                }
                 .onDisappear { rankTop100.cancel() }
         }
     }
@@ -386,6 +389,16 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                         Section { paginationRow.id(paginationTopID) }
                     }
 
+                    if totalPages > 1 {
+                        Section {
+                            RankTop100ProgressCard(
+                                controller: rankTop100,
+                                totalPages: totalPages
+                            )
+                            .bareListRow()
+                        }
+                    }
+
                     Section {
                         // Ranked from whatever is loaded, so it re-ranks as `results` changes.
                         ForEach(ranking.ranked(results)) { entry in
@@ -409,7 +422,12 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                         Section {
                             RankTop100Controls(
                                 controller: rankTop100,
+                                currentPage: currentPage,
                                 totalPages: totalPages,
+                                loadedWorks: results.count,
+                                totalWorks: resultSummary?.total ?? results.count,
+                                isPageLoading: phase == .loading,
+                                loadNextPage: { loadPage(currentPage + 1) },
                                 start: startRankTop100
                             )
                             .bareListRow()
@@ -659,6 +677,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
 
     /// Clears the query, falling back to the Media Browser if nothing's left to search.
     private func clearQuery() {
+        resetRankTop100()
         filters.query = ""
         if !filters.hasActiveFilters {
             filterHistory.removeAll()
@@ -672,6 +691,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     /// closing the filter panel there put the abandoned search's filters back for the next
     /// search, and a tag tap saved them as a level to go Back to (review A32-12).
     private func forgetSearch() {
+        resetRankTop100()
         loadedFilters = nil
         requestedFilters = nil
     }
@@ -722,6 +742,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
             onApply: runSearch,
             onSave: presentSaveDialog,
             onReset: {
+                resetRankTop100()
                 filterHistory.removeAll()
                 filters = AO3SearchFilters(query: filters.query)
                 // Nothing left to search → return to the Media Browser.
@@ -748,6 +769,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
             // it can't overwrite what we just restored. Selection is cleared because
             // the works (and their IDs) change wholesale, mirroring loadPage.
             loadToken += 1
+            resetRankTop100()
             bulkSelection.selection.removeAll()
             filters = previous.filters
             loadedFilters = previous.filters
@@ -767,8 +789,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     /// came from (a typed query or a tapped fandom chip) so Browse shows fresh.
     private func returnToBrowse() {
         loadToken += 1 // discard any in-flight load so it can't re-show results
-        rankTop100.cancel()
-        rankTop100Pages = [:]
+        resetRankTop100()
         filterHistory.removeAll()
         filters = AO3SearchFilters()
         results = []
@@ -816,8 +837,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         currentPage = 1
         totalPages = 1
         resultSummary = nil
-        rankTop100.cancel()
-        rankTop100Pages = [:]
+        resetRankTop100()
         load(page: 1)
     }
 
@@ -948,12 +968,14 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         loadToken += 1
         let token = loadToken
         let current = filters
+        let cacheScope = rankTop100Scope
+        let authenticatedRequest = auth.authenticatedRequest()
         requestedFilters = current
         loadTask?.cancel()
         loadTask = Task {
             do {
                 let result = try await AO3Client.shared.search(
-                    filters: current, page: page, request: auth.authenticatedRequest()
+                    filters: current, page: page, request: authenticatedRequest
                 )
                 // Backed out to Browse (or a newer search started) while this was in
                 // flight — drop the result so it can't yank the user back to results.
@@ -977,7 +999,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                         for: RankTop100PageRequest(
                             page: result.currentPage,
                             url: url,
-                            scope: rankTop100Scope
+                            scope: cacheScope
                         ),
                         at: Date()
                     )
@@ -998,6 +1020,11 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
 
     private var rankTop100Scope: String {
         auth.isLoggedIn ? "auth:\(auth.sessionGeneration)" : "anonymous"
+    }
+
+    private func resetRankTop100() {
+        rankTop100.cancel()
+        rankTop100Pages = [:]
     }
 
     private func startRankTop100() {

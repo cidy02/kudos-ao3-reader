@@ -450,15 +450,19 @@ actor AO3Client { // swiftlint:disable:this type_body_length
 
     /// One Rank Top 100 page through the existing session, allow-list, pacer and
     /// global request coordinator. Lookahead deliberately does not use
-    /// `withRetry`: its stricter policy stops the run on the first 429, 403, 503,
-    /// or other error instead of turning one reader tap into hidden retries.
+    /// `withRetry`: its stricter policy stops the run on the first 429, 403,
+    /// 502–504, or other error instead of turning one reader tap into hidden retries.
     func rankTop100Page(
         _ pageRequest: RankTop100PageRequest,
         authenticatedRequest: URLRequest? = nil
     ) async throws -> AO3SearchPage {
         try Self.rejectIfUntrusted(pageRequest.url)
-        return try await AO3RequestCoordinator.shared.withSlot { [self] in
-            try await performRankTop100Fetch(pageRequest, authenticatedRequest: authenticatedRequest)
+        do {
+            return try await AO3RequestCoordinator.shared.withSlot { [self] in
+                try await performRankTop100Fetch(pageRequest, authenticatedRequest: authenticatedRequest)
+            }
+        } catch let error as URLError where error.code == .cancelled {
+            throw CancellationError()
         }
     }
 

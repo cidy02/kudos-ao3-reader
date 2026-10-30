@@ -242,7 +242,7 @@ struct LiveAO3SessionValidator: AO3SessionValidating {
     }
 }
 
-nonisolated enum AO3AutomatedFeature: Sendable {
+nonisolated enum AO3AutomatedFeature: CaseIterable, Sendable {
     case rankTop100
 
     var token: String {
@@ -655,6 +655,7 @@ final class AO3AuthService {
                 "session. It won't be restored automatically — we'll keep retrying."
             Log.auth.error("Could not delete the saved AO3 session: \(error.localizedDescription, privacy: .public)")
         }
+        await RankTop100Store.shared.purgeCache()
         let cookieClear = enqueueCookieClear(expectedGeneration: logoutGeneration)
         await cookieClear.value
         // A new login can begin while WebKit finishes clearing the old account's
@@ -1067,6 +1068,8 @@ final class AO3AuthService {
         let clearingGeneration = advanceSessionGeneration()
         let clearedUsername = currentSession?.username
         currentSession = nil
+        status = .signedOut
+        sessionHealth = .unknown
         do {
             try vault.delete()
             removalTracker.clearRemovalPending()
@@ -1080,10 +1083,9 @@ final class AO3AuthService {
             )
         }
         sessionHintStore.deleteUsername()
-        status = .signedOut
         // Bare cleared state is "signed out / unknown"; callers meaning
         // "expired" set that explicitly after this returns.
-        sessionHealth = .unknown
+        await RankTop100Store.shared.purgeCache()
         let cookieClear = enqueueCookieClear(expectedGeneration: clearingGeneration)
         await cookieClear.value
         guard sessionGeneration == clearingGeneration else { return false }

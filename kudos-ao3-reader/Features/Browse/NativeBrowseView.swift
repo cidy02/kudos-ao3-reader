@@ -227,6 +227,15 @@ struct FandomWorksView: View {
                         }
                     }
                     if showPagination { Section { paginationRow } }
+                    if totalPages > 1 {
+                        Section {
+                            RankTop100ProgressCard(
+                                controller: rankTop100,
+                                totalPages: totalPages
+                            )
+                            .bareListRow()
+                        }
+                    }
                     Section {
                         ForEach(ranking.ranked(results)) { entry in
                             SelectableAO3WorkRow(
@@ -249,7 +258,12 @@ struct FandomWorksView: View {
                         Section {
                             RankTop100Controls(
                                 controller: rankTop100,
+                                currentPage: currentPage,
                                 totalPages: totalPages,
+                                loadedWorks: results.count,
+                                totalWorks: resultSummary?.total ?? results.count,
+                                isPageLoading: phase == .loading,
+                                loadNextPage: { Task { await load(page: currentPage + 1) } },
                                 start: startRankTop100
                             )
                             .bareListRow()
@@ -296,6 +310,10 @@ struct FandomWorksView: View {
             }
             .onChange(of: scenePhase) { _, phase in
                 if phase != .active { rankTop100.cancel() }
+            }
+            .onChange(of: auth.sessionGeneration) { _, _ in
+                rankTop100.cancel()
+                rankTop100Pages = [:]
             }
     }
 
@@ -397,6 +415,8 @@ struct FandomWorksView: View {
 
     private func load(page: Int) async {
         rankTop100.cancel()
+        let cacheScope = rankTop100Scope
+        let authenticatedRequest = auth.authenticatedRequest()
         // Always, not only on a first load: with results already on screen this
         // is what tells the pagination bar a fetch is running. The list itself
         // still shows the results (the skeleton branch is gated on `results`
@@ -420,7 +440,7 @@ struct FandomWorksView: View {
                     fandom: includedFandoms[0],
                     filters: filters,
                     page: page,
-                    request: auth.authenticatedRequest()
+                    request: authenticatedRequest
                 )
             } else if let clause = try await unionQueryClause() {
                 // `fandom` is cleared for this request: left in, AO3 would AND
@@ -433,7 +453,7 @@ struct FandomWorksView: View {
                 result = try await AO3Client.shared.search(
                     filters: unionFilters,
                     page: page,
-                    request: auth.authenticatedRequest(),
+                    request: authenticatedRequest,
                     additionalQueryClause: clause
                 )
             } else {
@@ -441,7 +461,7 @@ struct FandomWorksView: View {
                 result = try await AO3Client.shared.search(
                     filters: filters,
                     page: page,
-                    request: auth.authenticatedRequest()
+                    request: authenticatedRequest
                 )
             }
             guard token == loadToken else { return }
@@ -457,7 +477,7 @@ struct FandomWorksView: View {
                     for: RankTop100PageRequest(
                         page: result.currentPage,
                         url: url,
-                        scope: rankTop100Scope
+                        scope: cacheScope
                     ),
                     at: Date()
                 )
@@ -659,6 +679,15 @@ struct TagWorksView: View {
                         }
                     }
                     if showPagination { Section { paginationRow } }
+                    if totalPages > 1 {
+                        Section {
+                            RankTop100ProgressCard(
+                                controller: rankTop100,
+                                totalPages: totalPages
+                            )
+                            .bareListRow()
+                        }
+                    }
                     Section {
                         ForEach(ranking.ranked(results)) { entry in
                             SelectableAO3WorkRow(
@@ -681,7 +710,12 @@ struct TagWorksView: View {
                         Section {
                             RankTop100Controls(
                                 controller: rankTop100,
+                                currentPage: currentPage,
                                 totalPages: totalPages,
+                                loadedWorks: results.count,
+                                totalWorks: resultSummary?.total ?? results.count,
+                                isPageLoading: phase == .loading,
+                                loadNextPage: { Task { await load(page: currentPage + 1) } },
                                 start: startRankTop100
                             )
                             .bareListRow()
@@ -725,6 +759,10 @@ struct TagWorksView: View {
             }
             .onChange(of: scenePhase) { _, phase in
                 if phase != .active { rankTop100.cancel() }
+            }
+            .onChange(of: auth.sessionGeneration) { _, _ in
+                rankTop100.cancel()
+                rankTop100Pages = [:]
             }
     }
 
@@ -863,6 +901,8 @@ struct TagWorksView: View {
 
     private func load(page: Int) async {
         rankTop100.cancel()
+        let cacheScope = rankTop100Scope
+        let authenticatedRequest = auth.authenticatedRequest()
         // Always, not only on a first load: with results already on screen this
         // is what tells the pagination bar a fetch is running. The list itself
         // still shows the results (the skeleton branch is gated on `results`
@@ -874,7 +914,7 @@ struct TagWorksView: View {
         let token = loadToken
         do {
             let result = try await AO3Client.shared.worksPage(
-                at: request.url, filters: filters, page: page, request: auth.authenticatedRequest()
+                at: request.url, filters: filters, page: page, request: authenticatedRequest
             )
             guard token == loadToken else { return }
             results = ranking.noting(result.works)
@@ -889,7 +929,7 @@ struct TagWorksView: View {
                     for: RankTop100PageRequest(
                         page: result.currentPage,
                         url: url,
-                        scope: rankTop100Scope
+                        scope: cacheScope
                     ),
                     at: Date()
                 )
