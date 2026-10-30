@@ -78,10 +78,7 @@ struct CrossPlatformBackupTests {
         try CrossPlatformFixtureFields.clearAssets()
         let restored = try restore(androidArchive)
         defer { restored.cleanup() }
-        #expect(
-            restored.defaults.string(forKey: "accentColorHex")
-                == androidArchive.manifest.settings.accentColorHex
-        )
+        #expect(restored.defaults.string(forKey: "accentColorHex") == "#2468AC")
         try CrossPlatformFixtureFields.assertRestored(in: restored.container.mainContext)
         let reexported = try KudosBackupService.makeContents(
             works: restored.works,
