@@ -525,9 +525,16 @@ struct AccountView: View {
             : AnyLayout(HStackLayout(spacing: 8))
         return Section {
             layout {
+                // Board 35 gives this one more room (1.4 : 1 : 1); sized to its
+                // label it no longer wraps "View / Profile" onto two lines.
                 Button(action: openOwnProfile) {
                     Label("View Profile", systemImage: "person")
-                        .frame(maxWidth: .infinity)
+                        // Pressed for room, the adaptive label style drops the
+                        // title and leaves a bare icon; this button needs both.
+                        .labelStyle(.titleAndIcon)
+                        .lineLimit(1)
+                        .fixedSize(horizontal: !dynamicTypeSize.isAccessibilitySize, vertical: false)
+                        .frame(maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : nil)
                 }
                 .buttonStyle(.borderedProminent)
                 .accentFill()
@@ -535,6 +542,7 @@ struct AccountView: View {
 
                 ShareLink(item: model.route.dashboardURL) {
                     Label("Share", systemImage: "square.and.arrow.up")
+                        .lineLimit(1)
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
@@ -545,6 +553,7 @@ struct AccountView: View {
                     if let url = profileEditURL { router.open(url) }
                 } label: {
                     Label("Edit", systemImage: "pencil")
+                        .lineLimit(1)
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
@@ -552,6 +561,8 @@ struct AccountView: View {
                 .accentFill()
                 .disabled(profileEditURL == nil)
             }
+            // Board 35: 15 pt semibold labels, so the three fit one row.
+            .font(.subheadline.weight(.semibold))
             .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
         }
     }

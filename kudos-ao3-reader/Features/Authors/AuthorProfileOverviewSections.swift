@@ -258,8 +258,13 @@ struct AuthorProfileCountStrip: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel(countLabel(item))
                     .overlay(alignment: .leading) {
+                        // An explicit vertical hairline: a bare Divider outside an
+                        // HStack draws horizontally, across the middle of the cell.
                         if index % columns != 0 {
-                            Divider().padding(.vertical, 8)
+                            Rectangle()
+                                .fill(.separator)
+                                .frame(width: 0.5)
+                                .padding(.vertical, 8)
                         }
                     }
                     .overlay(alignment: .top) {
