@@ -161,9 +161,9 @@ struct CustomizeThemeView: View {
                     .frame(height: 36)
                     .allowsHitTesting(false)
                 }
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
                 .overlay {
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
                         .strokeBorder(Color.primary.opacity(0.08))
                 }
                 .shadow(color: .black.opacity(0.06), radius: 8, y: 2)

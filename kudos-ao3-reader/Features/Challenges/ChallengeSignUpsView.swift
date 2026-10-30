@@ -279,7 +279,7 @@ struct ChallengeSignUpsView: View { // swiftlint:disable:this type_body_length
             .padding(.horizontal, 7)
             .padding(.vertical, 3)
             .background(
-                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                Capsule()
                     .fill(isMatched ? palette.accent.opacity(0.18) : Color.white.opacity(0.10))
             )
     }
@@ -373,10 +373,10 @@ struct ChallengeSignUpsView: View { // swiftlint:disable:this type_body_length
                     .frame(maxWidth: .infinity)
                     .frame(minHeight: 44)
                     .background(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        RoundedRectangle(cornerRadius: SubjectMetrics.controlRadius(dynamicTypeSize), style: .continuous)
                             .fill(theme.appTheme.glassFill(0.10))
                             .overlay(
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                RoundedRectangle(cornerRadius: SubjectMetrics.controlRadius(dynamicTypeSize), style: .continuous)
                                     .strokeBorder(theme.appTheme.glassStroke(0.16), lineWidth: 0.5)
                             )
                     )
@@ -393,7 +393,7 @@ struct ChallengeSignUpsView: View { // swiftlint:disable:this type_body_length
                     .frame(maxWidth: .infinity)
                     .frame(minHeight: 44)
                     .background(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        RoundedRectangle(cornerRadius: SubjectMetrics.controlRadius(dynamicTypeSize), style: .continuous)
                             .fill(theme.effectiveTint)
                     )
             }

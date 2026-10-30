@@ -253,25 +253,17 @@ extension View {
 
 extension View {
     /// A `List` row that sits directly on the page wash: no card, no separator,
-    /// no row background, at the spec's own side gutter.
+    /// no row background, at the screen edge.
     ///
-    /// Artboard 1a's page is a stack of these, and it varies only two numbers
-    /// down its whole length — the space above each block, and whether the block
-    /// is a full-bleed panel (22pt) or prose and chips (26pt). Naming them here
-    /// keeps six call sites from each spelling out an `EdgeInsets` that has to
+    /// Artboard 1a's page is a stack of these, and it varies only the space
+    /// above each block: prose, chips and panels all take the one 16pt edge
+    /// (T-484 retired the 22pt panel and 26pt prose gutters). Naming it here
+    /// keeps call sites from each spelling out an `EdgeInsets` that has to
     /// agree with the others by eye.
-    func pageBodyRow(top: CGFloat, gutter: CGFloat = SubjectMetrics.headerGutter) -> some View {
+    func pageBodyRow(top: CGFloat, gutter: CGFloat = SubjectMetrics.gutter) -> some View {
         listRowInsets(EdgeInsets(top: top, leading: gutter, bottom: 0, trailing: gutter))
             .listRowSeparator(.hidden)
             .listRowBackground(Color.clear)
-    }
-
-    /// The gutter the spec gives a block that draws its own panel — the figure
-    /// strip, the resume card, the grouped facts card. Four points tighter than
-    /// prose, so a panel's edge and a paragraph's first letter do not line up
-    /// and fight.
-    func pagePanelRow(top: CGFloat) -> some View {
-        pageBodyRow(top: top, gutter: SubjectMetrics.panelGutter)
     }
 }
 
@@ -290,7 +282,7 @@ struct SubjectFilterRail<Chips: View>: View {
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 7) { chips() }
-                .padding(.horizontal, 22)
+                .padding(.horizontal, SubjectMetrics.gutter)
         }
         .horizontalScrollViewport()
         .dynamicTypeSize(.xSmall ... .accessibility2)
@@ -491,7 +483,7 @@ struct WorkLedgerRow<Leading: View, Trailing: View>: View {
     }
 
     private var rowBackground: some View {
-        let rowShape = RoundedRectangle(cornerRadius: SubjectMetrics.rowRadius, style: .continuous)
+        let rowShape = RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
         return rowShape
             .fill(themeManager.appTheme.cardSurface)
             .overlay(rowShape.fill(palette.rowWash))
@@ -561,7 +553,7 @@ struct SubjectPanel<Heading: View, Content: View>: View {
     }
 
     private var panelBackground: some View {
-        let shape = RoundedRectangle(cornerRadius: SubjectMetrics.rowRadius, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
         return shape
             .fill(themeManager.appTheme.cardBackdrop)
             .overlay(shape.fill(palette.panelWash))
@@ -657,7 +649,7 @@ struct FandomClusterChip: View {
     }
 
     private var chipBackground: some View {
-        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: SubjectMetrics.controlRadius(dynamicTypeSize), style: .continuous)
         return shape
             .fill(themeManager.appTheme.glassFill(0.07))
             .overlay(shape.strokeBorder(themeManager.appTheme.glassStroke(0.10), lineWidth: 0.5))

@@ -78,7 +78,7 @@ struct AO3CollectionDetailView: View {
                 header.pageBodyRow(top: 20, gutter: 0)
                 if let show, !statCells(for: show).isEmpty {
                     SubjectStatStrip(cells: statCells(for: show), palette: palette)
-                        .pageBodyRow(top: 12, gutter: SubjectMetrics.panelGutter)
+                        .pageBodyRow(top: 12, gutter: SubjectMetrics.gutter)
                 }
                 segmentStrip.pageBodyRow(top: 14, gutter: SubjectMetrics.accountGutter)
             }

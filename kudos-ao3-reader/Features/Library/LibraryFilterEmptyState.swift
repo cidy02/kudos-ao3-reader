@@ -77,7 +77,7 @@ struct LibraryFilterCollisionCard: View {
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 10)
                                 .background(
-                                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                                    RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
                                         .fill(themeManager.appTheme.glassFill(0.07))
                                 )
                             }
@@ -123,7 +123,7 @@ struct LibraryFilterCollisionCard: View {
             }
         }
         .padding(18)
-        .subjectPanel(cornerRadius: 18)
+        .subjectPanel()
     }
 
     private var collisionTitle: String {

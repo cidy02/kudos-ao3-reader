@@ -174,7 +174,7 @@ struct WritingTagsEditor: View {
                 .accessibilityLabel("Clear")
             }
         }
-        .subjectPanel(cornerRadius: 12)
+        .subjectPanel(cornerRadius: SubjectMetrics.capsuleRadius)
     }
 
     /// Order is what AO3 posts. A drag lands in front of the chip it is dropped

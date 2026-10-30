@@ -34,6 +34,7 @@ struct ChallengeSettingsEditView: View {
     /// Not private: the options menu in `ChallengeSettingsEditSections.swift` takes the app colour from it.
     @Environment(ThemeManager.self) var theme
     @Environment(AppRouter.self) private var router
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @ScaledMetric(relativeTo: .headline) private var stateTitleSize: CGFloat = 15
     @ScaledMetric(relativeTo: .subheadline) private var toggleTitleSize: CGFloat = 15
@@ -603,7 +604,7 @@ struct ChallengeSettingsEditView: View {
             .frame(maxWidth: .infinity)
             .frame(minHeight: 44)
             .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: SubjectMetrics.controlRadius(dynamicTypeSize), style: .continuous)
                     .fill(theme.effectiveTint)
             )
         }

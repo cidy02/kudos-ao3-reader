@@ -432,7 +432,7 @@ struct ChallengeAssignmentsView: View {
         }
         .buttonStyle(.bordered)
         .foregroundStyle(tint)
-        .buttonBorderShape(dynamicTypeSize.isAccessibilitySize ? .roundedRectangle(radius: 14) : .automatic)
+        .buttonBorderShape(dynamicTypeSize.isAccessibilitySize ? .roundedRectangle(radius: SubjectMetrics.cornerRadius) : .automatic)
         .tint(tint)
     }
 
@@ -637,7 +637,7 @@ extension ChallengeAssignmentsView {
                         .padding(.horizontal, 7)
                         .padding(.vertical, 3)
                         .background(
-                            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            Capsule()
                                 .fill(row.isOpen ? palette.accent.opacity(0.18) : Color.secondary.opacity(0.12))
                         )
                 }
@@ -702,10 +702,10 @@ extension ChallengeAssignmentsView {
                     .frame(minHeight: 44)
                     .fixedSize(horizontal: false, vertical: true)
                     .background(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        RoundedRectangle(cornerRadius: SubjectMetrics.controlRadius(dynamicTypeSize), style: .continuous)
                             .fill(theme.appTheme.glassFill(0.10))
                             .overlay(
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                RoundedRectangle(cornerRadius: SubjectMetrics.controlRadius(dynamicTypeSize), style: .continuous)
                                     .strokeBorder(theme.appTheme.glassStroke(0.16), lineWidth: 0.5)
                             )
                     )
@@ -722,7 +722,7 @@ extension ChallengeAssignmentsView {
                     .frame(maxWidth: .infinity)
                     .frame(minHeight: 44)
                     .fixedSize(horizontal: false, vertical: true)
-                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(theme.effectiveTint))
+                    .background(RoundedRectangle(cornerRadius: SubjectMetrics.controlRadius(dynamicTypeSize), style: .continuous).fill(theme.effectiveTint))
             }
             .buttonStyle(.plain)
             .disabled(unmatched.isEmpty || itemInFlight != nil)

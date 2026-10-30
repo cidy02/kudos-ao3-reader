@@ -148,7 +148,7 @@ struct ReaderPositionCard<MiniPlayer: View>: View {
             .padding(.top, showsMiniPlayer ? 12 : 13)
             .padding(.bottom, 15)
         }
-        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
     }
 
     @ViewBuilder

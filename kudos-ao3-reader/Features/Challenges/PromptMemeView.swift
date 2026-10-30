@@ -195,7 +195,7 @@ struct PromptMemeView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity)
                 .frame(minHeight: 44)
-                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(theme.effectiveTint))
+                .background(RoundedRectangle(cornerRadius: SubjectMetrics.controlRadius(dynamicTypeSize), style: .continuous).fill(theme.effectiveTint))
         }
         .buttonStyle(.plain)
         .padding(.horizontal, 16)

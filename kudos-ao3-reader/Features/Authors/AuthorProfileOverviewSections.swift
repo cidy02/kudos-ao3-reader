@@ -274,7 +274,7 @@ struct AuthorProfileCountStrip: View {
                     }
                 }
             }
-            .subjectPanel(cornerRadius: 16)
+            .subjectPanel()
             .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
         }
     }
@@ -306,7 +306,7 @@ private struct AuthorProfileOverviewFailure: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
-        .subjectPanel(cornerRadius: 16)
+        .subjectPanel()
     }
 }
 
@@ -578,7 +578,7 @@ struct AuthorProfileOverviewSections: View {
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(16)
-            .subjectPanel(cornerRadius: 16)
+            .subjectPanel()
             .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
     }
 
@@ -642,14 +642,14 @@ struct AuthorProfileLatestCard: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
-            RoundedRectangle(cornerRadius: SubjectMetrics.heroRadius, style: .continuous)
+            RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
                 .fill(theme.appTheme.carouselCardSurface)
                 .overlay(
-                    RoundedRectangle(cornerRadius: SubjectMetrics.heroRadius, style: .continuous)
+                    RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
                         .fill(palette.cardWash)
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: SubjectMetrics.heroRadius, style: .continuous)
+                    RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
                         .strokeBorder(palette.cardBorder, lineWidth: 0.5)
                 )
         }
@@ -732,7 +732,7 @@ struct AuthorProfileSeriesCard: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .subjectPanel(cornerRadius: 16)
+        .subjectPanel()
         .accessibilityElement(children: .combine)
     }
 
@@ -813,7 +813,7 @@ struct AuthorProfileBookmarkNoteCard: View {
         }
         .padding(14)
         .frame(width: cardWidth, alignment: .leading)
-        .subjectPanel(cornerRadius: 16)
+        .subjectPanel()
         .accessibilityElement(children: .combine)
     }
 

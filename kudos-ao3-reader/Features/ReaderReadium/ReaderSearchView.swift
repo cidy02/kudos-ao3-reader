@@ -309,7 +309,7 @@ struct ReaderSearchView: View {
         }
         .padding(.horizontal, 12)
         .frame(height: 38)
-        .background(.quaternary, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+        .background(.quaternary, in: Capsule())
         .padding(.horizontal, 16)
         .padding(.bottom, 12)
     }

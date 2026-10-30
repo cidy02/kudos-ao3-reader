@@ -277,7 +277,7 @@ struct AO3ProvenanceBadge: View {
             .foregroundStyle(Color.white.opacity(0.8))
             .padding(.vertical, 3)
             .padding(.horizontal, 6)
-            .background(Color.black.opacity(0.4), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+            .background(Color.black.opacity(0.4), in: Capsule())
             .accessibilityLabel("From AO3")
     }
 }
@@ -298,7 +298,7 @@ struct SelectableWorkCoverCard: View {
                     .padding(8)
             }
             .overlay {
-                RoundedRectangle(cornerRadius: CarouselCardMetrics.workCornerRadius, style: .continuous)
+                RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
                     .strokeBorder(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(Color.clear), lineWidth: 2)
             }
     }
@@ -391,11 +391,11 @@ private struct WorkSummaryCardSurface<Content: View>: View {
                 }
             )
             .background(
-                RoundedRectangle(cornerRadius: CarouselCardMetrics.workCornerRadius, style: .continuous)
+                RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
                     .fill(themeManager.appTheme.carouselCardSurface)
                     .overlay(hueTint)
                     .overlay(
-                        RoundedRectangle(cornerRadius: CarouselCardMetrics.workCornerRadius, style: .continuous)
+                        RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
                             .strokeBorder(
                                 hue.map { themeManager.appTheme.subjectPalette(hue: $0).cardBorder }
                                     ?? themeManager.appTheme.carouselCardBorder(hue: nil),
@@ -408,14 +408,14 @@ private struct WorkSummaryCardSurface<Content: View>: View {
                             y: themeManager.appTheme.carouselCardShadow.y)
             )
             .contentShape(
-                RoundedRectangle(cornerRadius: CarouselCardMetrics.workCornerRadius, style: .continuous)
+                RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
             )
     }
 
     @ViewBuilder
     private var hueTint: some View {
         if let hue {
-            RoundedRectangle(cornerRadius: CarouselCardMetrics.workCornerRadius, style: .continuous)
+            RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
                 .fill(themeManager.appTheme.subjectPalette(hue: hue).cardWash)
         }
     }

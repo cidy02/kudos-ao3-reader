@@ -369,14 +369,14 @@ struct WritingTextEditor: View {
             .padding(.horizontal, 11)
             .padding(.vertical, 7)
             .background(
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                Capsule()
                     .fill(theme.appTheme.glassFill(0.09))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                Capsule()
                     .strokeBorder(theme.appTheme.glassStroke(0.13), lineWidth: 0.5)
             )
-            .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .contentShape(Capsule())
         }
         .buttonStyle(.plain)
         .layoutFreeHitTarget { apply(tag) }

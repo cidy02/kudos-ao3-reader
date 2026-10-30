@@ -136,7 +136,7 @@ struct ReadingQueueSettingsView: View {
                             .font(.system(size: legendSize))
                             .foregroundStyle(.secondary)
                     }
-                    .pageBodyRow(top: 8, gutter: SubjectMetrics.headerGutter)
+                    .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
                 }
             }
 

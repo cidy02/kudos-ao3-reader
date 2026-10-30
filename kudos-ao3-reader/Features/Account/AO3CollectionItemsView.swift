@@ -735,7 +735,7 @@ struct AO3CollectionItemCard: View {
         .padding(.horizontal, 9)
         .padding(.vertical, 5)
         .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            Capsule()
                 .fill(color.opacity(0.15))
                 .strokeBorder(color.opacity(0.35), lineWidth: 0.5)
         )

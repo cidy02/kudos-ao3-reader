@@ -907,7 +907,7 @@ struct CommentsView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
             .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous).fill(theme.effectiveTint)
+                RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous).fill(theme.effectiveTint)
             )
         }
         .buttonStyle(.plain)
@@ -1571,7 +1571,7 @@ struct CommentComposerSheet: View {
                 .frame(width: 2)
                 .accessibilityHidden(true)
         }
-        .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
     }
 
     /// "{author} · {chapter}" in the app colour (the author is a link) — the parent's own byline. The

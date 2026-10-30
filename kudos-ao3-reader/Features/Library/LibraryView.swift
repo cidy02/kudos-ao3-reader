@@ -354,8 +354,8 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
 
     private var shelvesDashboard: some View {
         ScrollView {
-            // 1c: 22pt between sections, and 18 + 4 from the chips to the first.
-            VStack(alignment: .leading, spacing: 22) {
+            // 26pt between sections (Rules; 1c drew 22), the chips' row included.
+            VStack(alignment: .leading, spacing: SubjectMetrics.sectionSpacing) {
                 fandomFilterBar
                 localCarousel(.readingNow)
                 localCarousel(.savedForLater)

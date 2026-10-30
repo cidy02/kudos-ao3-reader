@@ -143,7 +143,7 @@ struct WritingDraftsView: View {
     /// app's, because it is AO3 that deletes them. The recovery copies are
     /// `WritingTextRecovery`'s, which AO3 never sees.
     private var deletionNotice: some View {
-        let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
         return Text("AO3 deletes an unposted draft 30 days after you create it. Recovery copies "
             + "stay on this device and aren't deleted with it.")
             .font(.system(size: noticeBodySize))

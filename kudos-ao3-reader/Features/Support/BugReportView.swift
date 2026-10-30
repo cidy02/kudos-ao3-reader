@@ -109,9 +109,9 @@ struct BugReportView: View {
                         .scaledToFit()
                         .frame(maxHeight: 240)
                         .frame(maxWidth: .infinity)
-                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .clipShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
                         .overlay(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
                                 .strokeBorder(.quaternary)
                         )
                         .padding(.vertical, 2)

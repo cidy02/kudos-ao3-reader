@@ -16,9 +16,9 @@ struct SubjectStateBadge: View {
             .padding(.vertical, 3)
             .background(color.opacity(0.15))
             .foregroundStyle(color)
-            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .clipShape(Capsule())
             .overlay(
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                Capsule()
                     .strokeBorder(color.opacity(0.35), lineWidth: 0.5)
             )
             .accessibilityLabel(title)

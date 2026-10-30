@@ -344,9 +344,9 @@ enum CommentFormattingLayout {
     /// The board's `grid-template-columns: repeat(4, 1fr)` and `gap: 7px`.
     static let restingColumnCount = 4
     static let gridGap: CGFloat = 7
-    /// The board's tile: 58pt tall, 11pt corner.
+    /// The board's tile: 58pt tall. Its corner is every tile's,
+    /// `SubjectMetrics.cornerRadius` (the board's 11 predates the rule).
     static let tileMinHeight: CGFloat = 58
-    static let tileCornerRadius: CGFloat = 11
     /// Inside the tile, so the glyph and the two labels are not flush to the edge.
     static let tilePaddingH: CGFloat = 6
     static let tilePaddingV: CGFloat = 8
@@ -519,11 +519,11 @@ private struct CommentFormatTileFace: View {
         .padding(.vertical, CommentFormattingLayout.tilePaddingV)
         .frame(maxWidth: .infinity, minHeight: CommentFormattingLayout.tileMinHeight)
         .background(
-            RoundedRectangle(cornerRadius: CommentFormattingLayout.tileCornerRadius, style: .continuous)
+            RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
                 .fill(theme.appTheme.glassFill(0.09))
         )
         .contentShape(
-            RoundedRectangle(cornerRadius: CommentFormattingLayout.tileCornerRadius, style: .continuous)
+            RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
         )
     }
 

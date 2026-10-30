@@ -174,7 +174,7 @@ struct AO3DashboardSections: View {
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(16)
-            .subjectPanel(cornerRadius: 16)
+            .subjectPanel()
             .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
     }
 }

@@ -15,6 +15,7 @@ struct FandomListFilterSheet: View {
     var onReset: () -> Void
 
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .caption) private var captionSize: CGFloat = 11.5
     @ScaledMetric(relativeTo: .subheadline) private var toggleTitleSize: CGFloat = 15
     @ScaledMetric(relativeTo: .caption) private var toggleDetailSize: CGFloat = 12
@@ -177,7 +178,7 @@ struct FandomListFilterSheet: View {
                 .padding(.vertical, 15)
                 .foregroundStyle(themeManager.onEffectiveTint)
                 .background(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    RoundedRectangle(cornerRadius: SubjectMetrics.controlRadius(dynamicTypeSize), style: .continuous)
                         .fill(themeManager.effectiveTint)
                 )
         }

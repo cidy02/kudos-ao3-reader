@@ -501,10 +501,10 @@ extension ChallengeSignUpView {
                     .frame(maxWidth: .infinity)
                     .frame(minHeight: 44)
                     .background(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        RoundedRectangle(cornerRadius: SubjectMetrics.controlRadius(dynamicTypeSize), style: .continuous)
                             .fill(theme.appTheme.glassFill(0.10))
                             .overlay(
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                RoundedRectangle(cornerRadius: SubjectMetrics.controlRadius(dynamicTypeSize), style: .continuous)
                                     .strokeBorder(theme.appTheme.glassStroke(0.16), lineWidth: 0.5)
                             )
                     )
@@ -529,7 +529,7 @@ extension ChallengeSignUpView {
                 .frame(maxWidth: .infinity)
                 .frame(minHeight: 44)
                 .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    RoundedRectangle(cornerRadius: SubjectMetrics.controlRadius(dynamicTypeSize), style: .continuous)
                         .fill(theme.effectiveTint)
                 )
             }

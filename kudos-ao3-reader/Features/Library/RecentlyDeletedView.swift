@@ -727,7 +727,7 @@ private struct RecentlyDeletedRow: View {
         .subjectCard(palette: palette)
         .overlay {
             if isSelected {
-                RoundedRectangle(cornerRadius: SubjectMetrics.rowRadius, style: .continuous)
+                RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
                     .strokeBorder(.tint, lineWidth: 2)
             }
         }
@@ -792,7 +792,7 @@ private struct RedownloadWarningNote: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             Color.orange.opacity(0.14),
-            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+            in: RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
         )
         .accessibilityElement(children: .combine)
     }
