@@ -234,9 +234,11 @@ struct ReadingQueueBrowserView: View {
     /// call the old Up next row used, and the compact grid (a scroll view,
     /// where that background link never fires) uses a `NavigationLink` to the
     /// same destination. A blurred mature work keeps its reveal tap only.
+    /// While selecting, neither link is there: the tap only toggles, and
+    /// VoiceOver is not offered an "open".
     @ViewBuilder
     private func upNextLinked(_ work: SavedWork) -> some View {
-        if gate.isBlurred(work, enabled: hideMature, mode: matureMode) {
+        if isSelecting || gate.isBlurred(work, enabled: hideMature, mode: matureMode) {
             upNextResume(work)
         } else {
             upNextResume(work)
@@ -252,7 +254,7 @@ struct ReadingQueueBrowserView: View {
         let card = upNextResume(work)
             .padding(.horizontal, 16)
             .padding(.top, Self.afterRule)
-        if gate.isBlurred(work, enabled: hideMature, mode: matureMode) {
+        if isSelecting || gate.isBlurred(work, enabled: hideMature, mode: matureMode) {
             card
         } else {
             NavigationLink(value: LocalWorkDestination.reader(work)) {
