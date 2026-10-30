@@ -326,7 +326,8 @@ struct SensitiveWorkCoverCard: View {
                 work: work,
                 footer: footer,
                 progress: progress,
-                metadataStyle: metadataStyle
+                metadataStyle: metadataStyle,
+                showsInitial: false
             )
                 .environment(\.ao3AuthorNavigationEnabled, false)
                 .blur(radius: 6)
