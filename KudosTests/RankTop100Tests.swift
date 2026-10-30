@@ -607,7 +607,9 @@ struct RankTop100Tests {
         )
 
         await controller.refreshAvailability()
-        for _ in 0 ..< 5 { await Task.yield() }
+        // Bounded: the refresh is a background task, and five yields weren't
+        // always enough for it under the full suite's load (gate g20).
+        for _ in 0 ..< 10_000 where controller.availability != .available { await Task.yield() }
 
         #expect(controller.availability == .available)
         #expect(controller.canStart)
