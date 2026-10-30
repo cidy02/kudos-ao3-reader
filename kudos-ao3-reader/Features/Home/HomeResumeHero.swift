@@ -623,7 +623,14 @@ struct WorkResumeCard: View {
 
     @ViewBuilder
     private var actionContents: some View {
-        if variant != .detail {
+        if variant == .detail {
+            primaryButton
+            // T-458: the circle stays hidden until Read Aloud can start speech.
+            // Detail puts it after Resume; Home and Up next keep it before.
+            if model.newChapterCount > 0, let onUpdate {
+                updateCircle(onUpdate)
+            }
+        } else {
             WorkStatusIconGrid(
                 rating: model.rating.isEmpty ? nil : model.rating,
                 categories: model.categories,
@@ -634,25 +641,26 @@ struct WorkResumeCard: View {
                 arrangement: .strip
             )
             Spacer(minLength: 0)
+            // T-458: the circle stays hidden until Read Aloud can start speech.
+            primaryButton
         }
-        // T-458: the circle stays hidden until Read Aloud can start speech.
-        primaryButton
-        if variant == .detail, model.newChapterCount > 0, let onUpdate {
-            ZStack(alignment: .topTrailing) {
-                actionCircle(
-                    title: "Update download, \(model.newChapterCount) new chapters",
-                    systemImage: "arrow.down.to.line",
-                    action: onUpdate
-                )
-                Text("\(model.newChapterCount)")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(.white)
-                    .frame(minWidth: 18, minHeight: 18)
-                    .background(accentFill, in: Circle())
-                    .overlay(Circle().stroke(Color.white, lineWidth: 2))
-                    .offset(x: 2, y: -2)
-                    .accessibilityHidden(true)
-            }
+    }
+
+    private func updateCircle(_ onUpdate: @escaping () -> Void) -> some View {
+        ZStack(alignment: .topTrailing) {
+            actionCircle(
+                title: "Update download, \(model.newChapterCount) new chapters",
+                systemImage: "arrow.down.to.line",
+                action: onUpdate
+            )
+            Text("\(model.newChapterCount)")
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(.white)
+                .frame(minWidth: 18, minHeight: 18)
+                .background(accentFill, in: Circle())
+                .overlay(Circle().stroke(Color.white, lineWidth: 2))
+                .offset(x: 2, y: -2)
+                .accessibilityHidden(true)
         }
     }
 
