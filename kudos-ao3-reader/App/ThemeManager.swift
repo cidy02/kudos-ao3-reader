@@ -24,6 +24,15 @@ struct AppAccent: Identifiable, Equatable {
     static func named(hex: String) -> AppAccent? {
         all.first { $0.fillHex.caseInsensitiveCompare(hex) == .orderedSame }
     }
+
+    /// What the Appearance picker shows for a stored accent. A named fill
+    /// selects itself. A string that is not a colour selects AO3 Red, which
+    /// is what the app already paints. Any other hex stays, for the custom well.
+    static func pickerHex(for stored: String) -> String {
+        if named(hex: stored) != nil { return stored }
+        if Color(hex: stored) == nil { return ThemeManager.ao3Red }
+        return stored
+    }
 }
 
 /// Central theme state for the whole app. `appTheme` themes the app (pages, menus,

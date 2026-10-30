@@ -161,21 +161,25 @@ private struct AccentColourPicker: View {
     let onSelectNamed: (String) -> Void
     let onCustom: () -> Void
 
+    /// A stored string that is not a colour is AO3 Red here. The stored string
+    /// is left unchanged.
+    private var shownHex: String { AppAccent.pickerHex(for: accentHex) }
+
     private var selectedFill: String? {
-        AppAccent.named(hex: accentHex)?.fillHex
+        AppAccent.named(hex: shownHex)?.fillHex
     }
 
     private var customHex: String? {
-        AppAccent.named(hex: accentHex) == nil ? accentHex : nil
+        AppAccent.named(hex: shownHex) == nil ? shownHex : nil
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text(AppAccent.named(hex: accentHex)?.name ?? "Custom")
+                Text(AppAccent.named(hex: shownHex)?.name ?? "Custom")
                     .font(.body)
                 Spacer()
-                if accentHex.caseInsensitiveCompare(ThemeManager.ao3Red) == .orderedSame {
+                if shownHex.caseInsensitiveCompare(ThemeManager.ao3Red) == .orderedSame {
                     Text("Default")
                         .font(.subheadline)
                         .foregroundStyle(Color(hex: "#8E8E93") ?? .secondary)

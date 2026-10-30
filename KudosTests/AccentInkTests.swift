@@ -73,6 +73,13 @@ struct AccentInkTests {
         }
     }
 
+    @Test func aMalformedStoredHexSelectsAO3RedInThePicker() {
+        #expect(AppAccent.pickerHex(for: "nope") == "#821019")
+        #expect(AppAccent.named(hex: AppAccent.pickerHex(for: "nope"))?.name == "AO3 Red")
+        #expect(AppAccent.pickerHex(for: "#2468AC") == "#2468AC")
+        #expect(AppAccent.named(hex: AppAccent.pickerHex(for: "#2468AC")) == nil)
+    }
+
     @Test func aCustomColourUsesTheReadableStep() throws {
         let custom = try #require(Color(hex: "#2468AC"))
         #expect(AppAccent.named(hex: custom.hexString) == nil)
