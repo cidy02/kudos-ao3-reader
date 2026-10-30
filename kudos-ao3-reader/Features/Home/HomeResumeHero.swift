@@ -274,10 +274,27 @@ struct HomeResumeHero: View {
                 work: work, onSelect: onSelect, scopedRemoval: scopedRemoval, queueMenu: queueMenu
             )
         } else {
-            resumeCard(interactive: true)
+            // Home is a ScrollView. A background `cardNavigation` link never
+            // receives the tap there — the card's own background sits in front
+            // of it — so the hero is a `NavigationLink`, as it was before.
+            // Up next is a List row or a compact scroll, so its caller attaches
+            // the link. Detail opens through `read()`, not this destination.
+            readerLinkedCard
                 .localWorkContextMenu(
                     work: work, onSelect: onSelect, scopedRemoval: scopedRemoval, queueMenu: queueMenu
                 )
+        }
+    }
+
+    @ViewBuilder
+    private var readerLinkedCard: some View {
+        if variant == .home {
+            NavigationLink(value: LocalWorkDestination.reader(work)) {
+                resumeCard(interactive: true)
+            }
+            .buttonStyle(.plain)
+        } else {
+            resumeCard(interactive: true)
         }
     }
 

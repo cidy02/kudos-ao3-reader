@@ -229,7 +229,40 @@ struct ReadingQueueBrowserView: View {
         works.firstIndex { $0.id == work.id }.map { $0 + 1 }
     }
 
-    /// The Resume card's next variant. Start and Read Aloud open the reader.
+    /// The Resume card's next variant. Start opens the reader. A tap on the
+    /// rest of the card does too: the list uses `cardNavigation`, the same
+    /// call the old Up next row used, and the compact grid (a scroll view,
+    /// where that background link never fires) uses a `NavigationLink` to the
+    /// same destination. A blurred mature work keeps its reveal tap only.
+    @ViewBuilder
+    private func upNextLinked(_ work: SavedWork) -> some View {
+        if gate.isBlurred(work, enabled: hideMature, mode: matureMode) {
+            upNextResume(work)
+        } else {
+            upNextResume(work)
+                .cardNavigation(
+                    to: LocalWorkDestination.reader(work),
+                    accessibilityLabel: work.title
+                )
+        }
+    }
+
+    @ViewBuilder
+    private func upNextCompact(_ work: SavedWork) -> some View {
+        let card = upNextResume(work)
+            .padding(.horizontal, 16)
+            .padding(.top, Self.afterRule)
+        if gate.isBlurred(work, enabled: hideMature, mode: matureMode) {
+            card
+        } else {
+            NavigationLink(value: LocalWorkDestination.reader(work)) {
+                card
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    /// The Resume card's next variant. Start opens the reader.
     /// Remove, move and the rest of the row menu stay on the card.
     private func upNextResume(_ work: SavedWork) -> some View {
         HomeResumeHero(
@@ -526,7 +559,7 @@ extension ReadingQueueBrowserView {
                         SectionRuleHeader(title: "Up Next")
                             .padding(.bottom, Self.listRuleBottom)
                             .pageBodyRow(top: Self.ruleTop, gutter: 0)
-                        upNextResume(upNextWork)
+                        upNextLinked(upNextWork)
                             .bareListRow()
                             .swipeActions(edge: .trailing) {
                                 if !isSelecting {
@@ -652,9 +685,7 @@ extension ReadingQueueBrowserView {
                     if let upNextWork {
                         SectionRuleHeader(title: "Up Next")
                             .padding(.top, Self.ruleTop)
-                        upNextResume(upNextWork)
-                            .padding(.horizontal, 16)
-                            .padding(.top, Self.afterRule)
+                        upNextCompact(upNextWork)
                     }
                     if !inLineWorks.isEmpty {
                         inLineHeader.padding(.top, Self.ruleTop)

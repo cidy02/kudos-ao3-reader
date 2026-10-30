@@ -171,16 +171,24 @@ struct WorkDetailResumeCard: View {
     let updateDownload: (() -> Void)?
 
     var body: some View {
-        WorkResumeCard(
-            model: model,
-            localWork: localWork,
-            variant: .detail,
-            primaryLabel: actionTitle,
-            isBusy: isBusy,
-            onPrimary: action,
-            onReadAloud: readAloud,
-            onContents: contents,
-            onUpdate: updateDownload
-        )
+        // The whole card opens the reader, the way the old detail card did.
+        // Resume, Contents and Update stay their own buttons inside the label,
+        // so a tap on one of them does not also fire this one.
+        Button(action: action) {
+            WorkResumeCard(
+                model: model,
+                localWork: localWork,
+                variant: .detail,
+                primaryLabel: actionTitle,
+                isBusy: isBusy,
+                onPrimary: action,
+                onReadAloud: readAloud,
+                onContents: contents,
+                onUpdate: updateDownload
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(isBusy)
+        .accessibilityElement(children: .contain)
     }
 }
