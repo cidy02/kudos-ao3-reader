@@ -60,9 +60,16 @@ final class ThemeManager {
         didSet { UserDefaults.standard.set(accentHex, forKey: Self.accentKey) }
     }
 
-    /// Default accent when nothing is stored. A stored value, including the old
-    /// `#990000`, is never rewritten to this.
+    /// Default accent when nothing is stored. A stored value is never rewritten
+    /// to this.
     nonisolated static let ao3Red = AppAccent.ao3Red.fillHex
+    /// The pre-2026-10-29 default. Old builds, and the current Android build,
+    /// write this when the reader never chose a colour, so it carries no choice.
+    nonisolated static let legacyUnchosenAccentHex = "#990000"
+
+    nonisolated static func isLegacyUnchosenAccent(_ hex: String) -> Bool {
+        hex.caseInsensitiveCompare(legacyUnchosenAccentHex) == .orderedSame
+    }
     private static let matchKey = "matchAppReaderTheme"
     nonisolated private static let accentKey = "accentColorHex"
     /// Reader-only paper colour from the theme well. Not a `ReaderTheme` raw
