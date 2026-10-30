@@ -300,9 +300,8 @@ private struct DraftCard: View {
                     categories: work.categories,
                     warnings: work.warnings,
                     completion: WorkCompletionStatus(isComplete: work.isComplete),
-                    tileSize: 22,
-                    announcesToVoiceOver: true,
-                    showsTray: true
+                    tileSize: 24,
+                    announcesToVoiceOver: true
                 )
             }
             if !work.summary.isEmpty {
