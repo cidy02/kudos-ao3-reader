@@ -318,6 +318,39 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     /// The resume card carries the screen's primary action, so the quick-action
     /// grid no longer opens with a Read tile — two controls for one action, a
     /// thumb-length apart, is a coin toss the reader should not have to make.
+    private var resumeCardModel: ResumeCardModel {
+        let opened = localWork?.lastReadDate?.formatted(.relative(presentation: .named))
+        let chapterProgress = localWork.flatMap {
+            WorkReadingPosition.chapterProgress(from: $0.readiumLocator)
+        }
+        let chapterName = localWork.flatMap {
+            WorkReadingPosition.title(from: $0.readiumLocator)
+        }
+        let freshChapters = localWork.map {
+            max(0, $0.postedChapterCount - $0.knownChapterCount)
+        } ?? 0
+        return ResumeCardModel(
+            title: displayTitle,
+            authors: displayAuthorList,
+            authorIdentities: displayAuthorIdentities,
+            fandoms: displayFandoms,
+            rating: displayRating,
+            categories: displayCategories,
+            warnings: displayWarnings,
+            completion: displayCompletionStatus,
+            words: displayWords,
+            kudos: displayKudos,
+            chapters: displayChapters,
+            progress: resumeCardReadingProgress,
+            chapterProgress: chapterProgress,
+            chapterName: chapterName,
+            published: displayPublishedDate,
+            updated: displayUpdatedDate,
+            newChapterCount: freshChapters,
+            lastReadLabel: opened
+        )
+    }
+
     private var resumeCardRow: some View {
         let label = WorkDetailPresentation.readAction(
             working: working,
@@ -326,43 +359,26 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         )
         return WorkDetailResumeCard(
             actionTitle: label.title,
-            model: ResumeCardModel(
-                title: displayTitle,
-                authors: displayAuthorList,
-                authorIdentities: displayAuthorIdentities,
-                fandoms: displayFandoms,
-                rating: displayRating,
-                categories: displayCategories,
-                warnings: displayWarnings,
-                completion: displayCompletionStatus,
-                words: displayWords,
-                kudos: displayKudos,
-                chapters: displayChapters,
-                progress: resumeCardReadingProgress,
-                chapterProgress: localWork.flatMap {
-                    WorkReadingPosition.chapterProgress(from: $0.readiumLocator)
-                },
-                chapterName: localWork.flatMap {
-                    WorkReadingPosition.title(from: $0.readiumLocator)
-                },
-                published: displayPublishedDate,
-                updated: displayUpdatedDate,
-                newChapterCount: localWork.map {
-                    max(0, $0.postedChapterCount - $0.knownChapterCount)
-                } ?? 0
-            ),
+            model: resumeCardModel,
             localWork: localWork,
             isBusy: working,
             action: read,
             readAloud: read,
-            contents: {
-                router.panel = .readerChapters
-                read()
-            },
-            updateDownload: localWork?.hasUpdate == true ? updateDownloadedWork : nil
+            contents: openContents,
+            updateDownload: resumeUpdate
         )
         .downloadDimmed(localWork)
         .pageBodyRow(top: 14)
+    }
+
+    private func openContents() {
+        router.panel = .readerChapters
+        read()
+    }
+
+    private var resumeUpdate: (() -> Void)? {
+        guard localWork?.hasUpdate == true else { return nil }
+        return updateDownloadedWork
     }
 
     /// Nil unless this work has actually been opened on this device. A ring at

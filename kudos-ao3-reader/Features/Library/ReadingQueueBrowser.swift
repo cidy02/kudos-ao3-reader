@@ -66,6 +66,8 @@ struct ReadingQueueBrowserView: View {
     @State private var pendingCompactOrder: [UUID]?
     @State private var isSelecting = false
     @State private var selection = Set<UUID>()
+    /// Start and Read Aloud on the Up next Resume card push the reader.
+    @State private var readerDestination: LocalWorkDestination?
 
     /// Saved for Later first, then customs by `sortOrder`.
     var orderedQueues: [ReadingQueue] {
@@ -227,8 +229,25 @@ struct ReadingQueueBrowserView: View {
         works.firstIndex { $0.id == work.id }.map { $0 + 1 }
     }
 
-    /// `presentation` is the page's choice except for Up Next, which 1h keeps
-    /// "a ringed row either way".
+    /// The Resume card's next variant. Start and Read Aloud open the reader.
+    /// Remove, move and the rest of the row menu stay on the card.
+    private func upNextResume(_ work: SavedWork) -> some View {
+        HomeResumeHero(
+            work: work,
+            variant: .next,
+            isSelecting: isSelecting,
+            isSelected: selection.contains(work.id),
+            onToggleSelection: { toggleSelection(work) },
+            onPrimary: { readerDestination = .reader(work) },
+            onReadAloud: { readerDestination = .reader(work) },
+            scopedRemoval: ScopedRemoval(title: "Remove from Queue") {
+                pendingRemoval = work
+            },
+            queueMenu: queueMenu(for: work)
+        )
+    }
+
+    /// `presentation` is the page's choice. Up next is the Resume card, not a row.
     private func ledgerRow(
         _ work: SavedWork, position: Int? = nil, presentation: WorkRow.Presentation? = nil
     ) -> some View {
@@ -316,6 +335,9 @@ struct ReadingQueueBrowserView: View {
                 #if os(iOS)
                     .modifier(ScopeSurfaceAccent())
                 #endif
+            }
+            .navigationDestination(item: $readerDestination) { destination in
+                LocalWorkDestinationView(destination: destination)
             }
             .navigationDestination(isPresented: $showingQueueDetails) {
                 if let selectedQueue {
@@ -504,7 +526,17 @@ extension ReadingQueueBrowserView {
                         SectionRuleHeader(title: "Up Next")
                             .padding(.bottom, Self.listRuleBottom)
                             .pageBodyRow(top: Self.ruleTop, gutter: 0)
-                        ledgerRow(upNextWork, presentation: .ledger)
+                        upNextResume(upNextWork)
+                            .bareListRow()
+                            .swipeActions(edge: .trailing) {
+                                if !isSelecting {
+                                    Button(role: .destructive) {
+                                        pendingRemoval = upNextWork
+                                    } label: {
+                                        Label("Remove", systemImage: "minus.circle")
+                                    }
+                                }
+                            }
                     }
                 }
                 if !inLineWorks.isEmpty {
@@ -620,21 +652,9 @@ extension ReadingQueueBrowserView {
                     if let upNextWork {
                         SectionRuleHeader(title: "Up Next")
                             .padding(.top, Self.ruleTop)
-                        SensitiveWorkRow(
-                            work: upNextWork,
-                            openMode: .reader,
-                            isSelecting: isSelecting,
-                            isSelected: selection.contains(upNextWork.id),
-                            onToggleSelection: { toggleSelection(upNextWork) },
-                            presentation: .ledger,
-                            showsSeparator: false,
-                            usesInlineNavigation: true,
-                            scopedRemoval: ScopedRemoval(title: "Remove from Queue") {
-                                pendingRemoval = upNextWork
-                            },
-                            queueMenu: queueMenu(for: upNextWork)
-                        )
-                        .padding(.top, Self.afterRule)
+                        upNextResume(upNextWork)
+                            .padding(.horizontal, 16)
+                            .padding(.top, Self.afterRule)
                     }
                     if !inLineWorks.isEmpty {
                         inLineHeader.padding(.top, Self.ruleTop)
