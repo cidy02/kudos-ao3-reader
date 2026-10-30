@@ -79,7 +79,7 @@ struct SettingsAppearancePage: View {
                 }
                 customPick?.cancel()
                 customPick = Task { @MainActor in
-                    // Let the alert finish dismissing before the system picker.
+                    // UIKit drops a present started while this alert is still dismissing.
                     try? await Task.sleep(for: .milliseconds(450))
                     guard !Task.isCancelled else { return }
                     pickerBridge.present(initialHex: hex)
@@ -87,7 +87,9 @@ struct SettingsAppearancePage: View {
             }
             Button("Keep AO3 Red", role: .cancel) {}
         } message: {
-            Text("Kudos is designed around its six accent colours. They keep text readable in Light, Sepia, Dark and OLED, and stay clear of the red used for Delete. A custom colour may make some buttons and links harder to read.")
+            Text("Kudos is designed around its six accent colours. They keep text readable in Light, "
+                + "Sepia, Dark and OLED, and stay clear of the red used for Delete. A custom colour "
+                + "may make some buttons and links harder to read.")
         }
         .onDisappear {
             customPick?.cancel()
