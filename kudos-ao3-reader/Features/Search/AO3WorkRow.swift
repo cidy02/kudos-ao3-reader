@@ -30,15 +30,20 @@ struct AO3WorkRow: View {
     /// drawn under the ledger's figures in their style. Nil draws nothing.
     var signal: String?
     /// Detailed surfaces. Off hides the summary paragraph only; tags, the stat
-    /// line and the bookmark note stay.
+    /// line and the bookmark note stay. A ledger row still shows its summary.
     var showsSummary = true
+    /// New chapters since the reader last looked. The "+N" badge and the red bars.
+    var badgeCount = 0
+    /// Search and fandom results: the grid sits beside the title block only.
+    var wide = false
+    /// False when a footnote under this row draws the separator for the whole block.
+    var showsSeparator = true
 
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var themeManager
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @AppStorage("showsZeroStats") private var showsZeroStats = true
     @ScaledMetric(relativeTo: .title3) private var bookmarkTitleSize: CGFloat = 19
-    @ScaledMetric(relativeTo: .caption) private var bookmarkMetadataSize: CGFloat = 11.5
     @State private var expanded = false
 
     /// Worth an expand toggle only when there's more to show than the clamped view:
@@ -90,165 +95,88 @@ struct AO3WorkRow: View {
         }
     }
 
-    /// 1q is one fixed card shape in every Bookmarks layout. Work summary/tags
-    /// stay out: the bookmark's note/tags occupy that middle space instead.
+    /// 1q keeps the bookmark's note where the summary would be. The rest of the
+    /// ledger — fandom, title, author, every stat, chapter bars — stays.
     private var bookmarkCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            searchLedgerHeading
-            if let bookmark,
-               !bookmark.notes.isEmpty || !bookmark.tags.isEmpty {
+        WorkPlainRow(wide: wide, showsSeparator: showsSeparator) {
+            statusGrid
+        } heading: {
+            searchLedgerIdentity
+        } remainder: {
+            if let bookmark, !bookmark.notes.isEmpty || !bookmark.tags.isEmpty {
                 AO3BookmarkFootnote(bookmark: bookmark)
             }
-            bookmarkMetadataRow
+            ledgerFacts
+            if let bookmark, !bookmark.date.isEmpty {
+                Text(bookmark.date)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("Bookmarked \(bookmark.date)")
+            }
         }
-        .padding(.vertical, 6)
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var standardCard: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            // Title + author share a tight block so the hierarchy reads as one unit.
-            // AO3's own quadrant tag grid trails the row, in AO3's own colours
-            // (WorkStatusIconGrid) — a glanceable rating/category/
-            // warnings/completion alongside the title, the same information
-            // WorkListStatsRow's text chips repeat lower on the card. The updated
-            // date moved down to bottom-left, beside the expand control.
-            HStack(alignment: .top, spacing: 8) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(work.title)
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-                        .lineLimit(2)
-                    AO3AuthorBylineView(
-                        names: work.authors,
-                        identities: work.authorIdentities,
-                        font: .subheadline,
-                        compact: true
-                    )
-                }
-                Spacer(minLength: 0)
-                WorkStatusIconGrid(
-                    rating: work.rating.isEmpty ? nil : work.rating,
-                    categories: work.categories,
-                    warnings: work.warnings,
-                    completion: WorkCompletionStatus(isComplete: work.isComplete),
-                    tileSize: 24
+        WorkPlainRow(wide: wide, showsSeparator: showsSeparator) {
+            statusGrid
+        } heading: {
+            standardHeading
+        } remainder: {
+            if !expanded {
+                WorkTagLineView(
+                    relationships: work.relationships,
+                    characters: work.characters,
+                    freeforms: additionalTags,
+                    onTap: { tag, field in router.searchAO3(field, tag) }
                 )
-                if isSelecting {
-                    WorkSelectionBubble(isSelected: isSelected)
-                }
             }
-
-            if !work.fandoms.isEmpty {
-                // Each fandom is individually tappable → AO3 search for that fandom.
-                // Only the icon is tinted — fandom text stays readable/secondary like
-                // the rest of the metadata (`WorkStatLabel`'s convention), not
-                // accent-colored like a link.
-                HStack(alignment: .top, spacing: 4) {
-                    Image(systemName: "books.vertical")
-                        .fontWeight(.bold)
-                        .foregroundStyle(.tint)
-                    FlowLayout(spacing: 4, rowSpacing: 2) {
-                        ForEach(visibleFandoms, id: \.self) { fandom in
-                            Button { router.searchAO3(.fandom, fandom) } label: {
-                                // A canonical AO3 fandom is long enough to wrap on
-                                // its own ("僕のヒーローアカデミア | Boku no Hero
-                                // Academia | My Hero Academia (Anime & Manga)"), and
-                                // a Button centres its label by default — the second
-                                // line drifted to the middle of the card.
-                                Text(fandom).multilineTextAlignment(.leading)
-                            }
-                            .buttonStyle(.borderless)
-                            .foregroundStyle(.secondary)
-                        }
-                        // Plain text, not a button: the card already has one expand
-                        // control, and a second one that only opens the same card
-                        // would be two affordances for one action.
-                        if hiddenFandomCount > 0 {
-                            Text("+\(hiddenFandomCount) other\(hiddenFandomCount == 1 ? "" : "s")")
-                                .foregroundStyle(.tertiary)
-                        }
-                    }
-                }
-                .font(.caption)
-            }
-
             if showsSummary, !work.summary.isEmpty {
                 Text(work.summary)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                    .lineLimit(expanded ? nil : 3)
+                    .lineLimit(expanded || dynamicTypeSize.isAccessibilitySize ? nil : 3)
                     .multilineTextAlignment(.leading)
-                    // Belt-and-braces against an *ancestor* animation: the
-                    // toggle itself no longer animates, but if any caller ever
-                    // wraps `expandAll` in a `withAnimation`, this keeps the
-                    // reflow out of it. SwiftUI can't interpolate one text
-                    // layout into another — it cross-fades the clamped and full
-                    // renderings, and the glyphs visibly ghost past each other.
                     .animation(nil, value: expanded)
             }
-
-            // Categorized tags appear when expanded — they can be numerous on AO3.
             if expanded {
-                // No "Archive Warnings" group: expanding now turns the stats row's
-                // "3 Warnings" chip into the three warnings themselves, and a
-                // labelled section repeating them right above was the same list
-                // twice. The stats row keeps AO3's red, which the neutral tag chips
-                // here never had.
+                // No "Archive Warnings" group: expanding turns the stats row's
+                // warning chip into the warnings themselves.
                 chipGroup("Relationships", work.relationships, field: .relationship)
                 chipGroup("Characters", work.characters, field: .character)
                 chipGroup("Additional Tags", additionalTags, field: .freeform)
             }
-
-            // Space, not a rule. The stats row is already a band of capsules with
-            // its own edges — a hairline above it drew a second boundary in the
-            // same place, and one card ended up with two horizontal lines through
-            // it. Whitespace separates the content from the metadata on its own.
-            Spacer(minLength: 0).frame(height: 4)
-
-            // Stats wrap to a second line rather than truncating when they don't fit
-            // (long ratings like "Teen And Up Audiences" no longer clip the row).
             statsRow
-
-            // Date bottom-left, expand control bottom-right — omitted
-            // entirely (not just hidden) when there's nothing to show:
-            // unlike an always-reserved slot, neither depends on the
-            // other's alignment.
-            if !work.dateUpdated.isEmpty || isExpandable {
-                HStack {
-                    // A chip (TagChip), not the plain WorkUpdatedDateBadge every
-                    // other row uses — search results are the one place this date
-                    // sits alone in its own row rather than beside other stat text,
-                    // so it reads better with a bit of its own visual weight.
-                    if !work.dateUpdated.isEmpty {
-                        TagChip(text: WorkStat.displayDate(work.dateUpdated), symbol: "calendar.badge.clock")
-                    }
-                    Spacer(minLength: 0)
-                    if isExpandable {
-                        expandButton
-                    }
-                }
+            if showsPerformance {
+                AO3AuthorPerformanceStrip(work: work)
             }
         }
-        .padding(.vertical, 6)
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// Search's denser ledger composition: fandom palette first, readable title
-    /// and summary, one icon signal tray, then plain bullet-delimited metadata.
+    /// Fandom label, title, author, summary, every stat, and equal chapter bars.
+    /// A remote work has no downloaded lengths and no reading progress.
     private var searchLedgerCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            searchLedgerHeading
-
-            if showsSummary, !work.summary.isEmpty {
+        WorkPlainRow(wide: wide, showsSeparator: showsSeparator) {
+            statusGrid
+        } heading: {
+            searchLedgerIdentity
+        } remainder: {
+            if !work.summary.isEmpty {
                 Text(work.summary)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                    .lineLimit(expanded ? nil : 3)
+                    .lineLimit(expanded || dynamicTypeSize.isAccessibilitySize ? nil : 2)
                     .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
                     .animation(nil, value: expanded)
             }
-
+            if !expanded {
+                WorkTagLineView(
+                    relationships: work.relationships,
+                    characters: work.characters,
+                    freeforms: additionalTags,
+                    onTap: { tag, field in router.searchAO3(field, tag) }
+                )
+            }
             if expanded {
                 chipGroup("Fandoms", Array(nonemptyFandoms.dropFirst()), field: .fandom)
                 chipGroup("Archive Warnings", work.warnings, field: .warning)
@@ -256,54 +184,129 @@ struct AO3WorkRow: View {
                 chipGroup("Characters", work.characters, field: .character)
                 chipGroup("Additional Tags", additionalTags, field: .freeform)
             }
-
-            VStack(alignment: .leading, spacing: 4) {
-                searchLedgerMetadataRow
-                searchLedgerSignal
-            }
+            ledgerFacts
+            searchLedgerSignal
             if showsPerformance {
                 AO3AuthorPerformanceStrip(work: work)
             }
         }
-        .padding(.vertical, 6)
-        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var standardHeading: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .top, spacing: 6) {
+                Text(work.title)
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .layoutPriority(1)
+                WorkPlusBadge(count: badgeCount)
+                Spacer(minLength: 4)
+                if !work.dateUpdated.isEmpty {
+                    WorkUpdatedDateBadge(dateUpdated: work.dateUpdated)
+                }
+                if isExpandable { expandButton }
+                if isSelecting { WorkSelectionBubble(isSelected: isSelected) }
+            }
+            authorAndFandoms
+        }
     }
 
     @ViewBuilder
-    private var searchLedgerHeading: some View {
-        if dynamicTypeSize.isAccessibilitySize {
-            VStack(alignment: .leading, spacing: 10) {
-                searchLedgerIdentity
-                searchLedgerSignals
-            }
-        } else {
-            HStack(alignment: .top, spacing: 13) {
-                searchLedgerIdentity
-                searchLedgerSignals
+    private var authorAndFandoms: some View {
+        if !work.authors.isEmpty || !nonemptyFandoms.isEmpty {
+            ViewThatFits(in: .horizontal) {
+                authorFandomLine(wraps: false)
+                authorFandomLine(wraps: true)
             }
         }
+    }
+
+    private func authorFandomLine(wraps: Bool) -> some View {
+        let layout = wraps
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 4))
+        return layout {
+            if !work.authors.isEmpty {
+                AO3AuthorBylineView(
+                    names: work.authors,
+                    identities: work.authorIdentities,
+                    font: .subheadline,
+                    compact: !dynamicTypeSize.isAccessibilitySize
+                )
+            }
+            if !work.authors.isEmpty, !visibleFandoms.isEmpty {
+                Text("·")
+                    .font(.subheadline)
+                    .foregroundStyle(.tertiary)
+            }
+            if !visibleFandoms.isEmpty {
+                FlowLayout(spacing: 4, rowSpacing: 2) {
+                    ForEach(visibleFandoms, id: \.self) { fandom in
+                        Button { router.searchAO3(.fandom, fandom) } label: {
+                            Text(fandom).multilineTextAlignment(.leading)
+                        }
+                        .buttonStyle(.borderless)
+                        .foregroundStyle(.secondary)
+                    }
+                    if hiddenFandomCount > 0 {
+                        Text("+\(hiddenFandomCount) other\(hiddenFandomCount == 1 ? "" : "s")")
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                .font(.subheadline)
+            }
+        }
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var statusGrid: some View {
+        WorkStatusIconGrid(
+            rating: work.rating.isEmpty ? nil : work.rating,
+            categories: work.categories,
+            warnings: work.warnings,
+            completion: WorkCompletionStatus(isComplete: work.isComplete),
+            tileSize: 24,
+            announcesToVoiceOver: true
+        )
+    }
+
+    private var remoteFigures: WorkStat.LedgerFigures {
+        let isFullBlurb = work.words != nil
+        func count(_ value: Int?) -> Int? { value ?? (isFullBlurb ? 0 : nil) }
+        return WorkStat.ledgerFigures(
+            language: work.language,
+            wordCount: work.words,
+            chapters: work.chapters,
+            comments: count(work.comments),
+            kudos: count(work.kudos),
+            bookmarks: count(work.bookmarks),
+            hits: count(work.hits),
+            dateUpdated: work.dateUpdated,
+            showsZeroStats: showsZeroStats,
+            zeroCountsRequireWords: false
+        )
+    }
+
+    @ViewBuilder
+    private var ledgerFacts: some View {
+        WorkLedgerStatsLine(figures: remoteFigures)
+        WorkChapterBarLine(
+            items: ChapterBarModel.items(
+                chapters: work.chapters,
+                progress: nil,
+                weights: nil,
+                newChapterCount: badgeCount
+            ),
+            label: nil
+        )
     }
 
     /// Series, Private and Rec sit on the kicker's line. Without a fandom there was
     /// no line, so a private bookmark of a work that names none did not say so.
     private var hasLedgerBadges: Bool {
         work.seriesTitle != nil || bookmark?.isPrivate == true || bookmark?.isRecommendation == true
-    }
-
-    private var searchLedgerSignals: some View {
-        VStack(spacing: 8) {
-            WorkStatusIconGrid(
-                rating: work.rating.isEmpty ? nil : work.rating,
-                categories: work.categories,
-                warnings: work.warnings,
-                completion: WorkCompletionStatus(isComplete: work.isComplete),
-                tileSize: 24,
-                announcesToVoiceOver: true
-            )
-            if isSelecting {
-                WorkSelectionBubble(isSelected: isSelected)
-            }
-        }
     }
 
     private var statsRow: some View {
@@ -329,32 +332,6 @@ struct AO3WorkRow: View {
         )
     }
 
-    @ViewBuilder
-    private var searchLedgerMetadataRow: some View {
-        let metadata = searchLedgerMetadata
-        let updated = WorkStat.displayDate(work.dateUpdated)
-        if !metadata.isEmpty || !updated.isEmpty {
-            metadataLayout {
-                if !metadata.isEmpty {
-                    Text(metadata.joined(separator: "  ·  "))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                } else {
-                    Spacer(minLength: 0)
-                }
-                if !updated.isEmpty {
-                    Text(updated)
-                        .fixedSize(horizontal: true, vertical: false)
-                }
-            }
-            .font(.caption2)
-            .foregroundStyle(.secondary)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(
-                (metadata + (updated.isEmpty ? [] : ["Updated \(updated)"])).joined(separator: ", ")
-            )
-        }
-    }
-
     /// One more figure, so it reads as the row's stats do: same size, same grey.
     @ViewBuilder
     private var searchLedgerSignal: some View {
@@ -364,51 +341,6 @@ struct AO3WorkRow: View {
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityLabel("Ranking: \(signal)")
-        }
-    }
-
-    /// The figures and, beside them, the date. At the accessibility sizes the date, which may
-    /// not shrink, left the figures a column a few letters wide ("Eng- / lish · / 12,34 / 5"):
-    /// there the date goes under them.
-    private var metadataLayout: AnyLayout {
-        dynamicTypeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
-            : AnyLayout(HStackLayout(alignment: .lastTextBaseline, spacing: 8))
-    }
-
-    private var searchLedgerMetadata: [String] {
-        Self.ledgerMetadata(for: work, showsZeroStats: showsZeroStats, includesPerformance: !showsPerformance)
-    }
-
-    @ViewBuilder
-    private var bookmarkMetadataRow: some View {
-        if let bookmark {
-            let metadata = Self.ledgerMetadata(
-                for: work,
-                showsZeroStats: showsZeroStats,
-                includesPerformance: false
-            )
-            if !metadata.isEmpty || !bookmark.date.isEmpty {
-                metadataLayout {
-                    if !metadata.isEmpty {
-                        Text(metadata.joined(separator: "  ·  "))
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    } else {
-                        Spacer(minLength: 0)
-                    }
-                    if !bookmark.date.isEmpty {
-                        Text(bookmark.date)
-                            .fixedSize(horizontal: true, vertical: false)
-                    }
-                }
-                .font(.system(size: bookmarkMetadataSize))
-                .foregroundStyle(.secondary)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(
-                    (metadata + (bookmark.date.isEmpty ? [] : ["Bookmarked \(bookmark.date)"]))
-                        .joined(separator: ", ")
-                )
-            }
         }
     }
 
@@ -564,18 +496,7 @@ extension AO3WorkRow {
                     // ("THE LOCKED T…"). It takes the width and wraps, as a
                     // page kicker does; the badges wrap under it.
                     VStack(alignment: .leading, spacing: 6) {
-                        if let primaryFandom {
-                            Button { router.searchAO3(.fandom, primaryFandom) } label: {
-                                SubjectKicker(
-                                    text: primaryFandom,
-                                    palette: palette,
-                                    trailingCount: expanded ? 0 : max(0, nonemptyFandoms.count - 1),
-                                    lineLimit: 3
-                                )
-                            }
-                            .buttonStyle(.borderless)
-                            .fixedSize(horizontal: false, vertical: true)
-                        }
+                        fandomLabel
                         if hasLedgerBadges || isExpandable {
                             FlowLayout(spacing: 5, rowSpacing: 6) {
                                 if work.seriesTitle != nil {
@@ -595,16 +516,7 @@ extension AO3WorkRow {
                     }
                 } else {
                     HStack(alignment: .top, spacing: 5) {
-                        if let primaryFandom {
-                            Button { router.searchAO3(.fandom, primaryFandom) } label: {
-                                SubjectKicker(
-                                    text: primaryFandom,
-                                    palette: palette,
-                                    trailingCount: expanded ? 0 : max(0, nonemptyFandoms.count - 1)
-                                )
-                            }
-                            .buttonStyle(.borderless)
-                        }
+                        fandomLabel
                         // 1u row 2: "Series" beside the kicker. Gift is drawn
                         // too, but no gift flag is parsed onto the summary yet.
                         if work.seriesTitle != nil {
@@ -624,13 +536,21 @@ extension AO3WorkRow {
                     }
                 }
             }
-            Text(work.title)
-                .font(bookmark == nil
-                    ? .title3.weight(.semibold)
-                    : .system(size: bookmarkTitleSize, weight: .semibold))
-                .foregroundStyle(.primary)
-                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 2)
-                .fixedSize(horizontal: false, vertical: true)
+            HStack(alignment: .top, spacing: 6) {
+                Text(work.title)
+                    .font(bookmark == nil
+                        ? .headline.weight(.semibold)
+                        : .system(size: bookmarkTitleSize, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .layoutPriority(1)
+                WorkPlusBadge(count: badgeCount)
+                Spacer(minLength: 4)
+                if isSelecting {
+                    WorkSelectionBubble(isSelected: isSelected)
+                }
+            }
             AO3AuthorBylineView(
                 names: work.authors,
                 identities: work.authorIdentities,
@@ -641,5 +561,17 @@ extension AO3WorkRow {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .layoutPriority(1)
+    }
+
+    @ViewBuilder
+    private var fandomLabel: some View {
+        if let fandom = nonemptyFandoms.first {
+            WorkFandomLabel(
+                title: FandomDisplayName.bareTitle(fandom),
+                palette: palette,
+                additionalCount: expanded ? 0 : max(0, nonemptyFandoms.count - 1),
+                action: { router.searchAO3(.fandom, fandom) }
+            )
+        }
     }
 }

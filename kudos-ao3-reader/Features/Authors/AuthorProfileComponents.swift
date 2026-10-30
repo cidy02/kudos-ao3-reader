@@ -656,7 +656,7 @@ struct AO3AuthorProfileSkeleton: View {
             }
             Section {
                 ForEach(0..<4, id: \.self) { _ in
-                    AO3WorkRowSkeleton().cardRow()
+                    AO3WorkRowSkeleton().cardRow(chrome: .plain)
                 }
             }
         }

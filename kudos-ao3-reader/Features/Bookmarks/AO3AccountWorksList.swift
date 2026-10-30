@@ -663,22 +663,11 @@ struct AO3AccountWorksList: View {
                                         presentation: .ledger,
                                         showsFavoriteStar: true,
                                         showsFullLedgerStats: true,
-                                        showsSummary: false
+                                        showsSummary: false,
+                                        badgeCount: newChapterCount(for: entry)
                                     )
                                 }
-                                    // The badge belongs on this branch too: a
-                                    // subscribed work already in the library renders
-                                    // here, and it is the one most worth telling
-                                    // someone about — they can open it right now.
-                                    .overlay(alignment: .topTrailing) {
-                                        newChapterBadge(newChapterCount(for: entry)).padding(10)
-                                    }
-                                    // The row's wash is painted here, at the card's true
-                                    // outer edge, rather than inside the row — see
-                                    // `WorkLedgerRow.drawsBackground`.
-                                    .cardRow(tintHue: CoverArt.workHue(
-                                        fandoms: work.workFandoms, title: work.title
-                                    ))
+                                    .cardRow(chrome: .plain)
                             } else if let remote = entry.remote {
                                 let newChapters = newChapterCount(for: entry)
                                 // Local and remote take the *same* presentation, so a
@@ -688,15 +677,11 @@ struct AO3AccountWorksList: View {
                                     EnrichingAO3WorkRow(
                                         work: remote,
                                         presentation: .searchLedger,
-                                        showsSummary: false
+                                        showsSummary: false,
+                                        badgeCount: newChapters
                                     )
                                 }
-                                .overlay(alignment: .topTrailing) {
-                                    newChapterBadge(newChapters).padding(10)
-                                }
-                                .cardRow(tintHue: CoverArt.workHue(
-                                    fandoms: remote.fandoms, title: remote.title
-                                ))
+                                .cardRow(chrome: .plain)
                             }
                         }
                     }
@@ -775,25 +760,6 @@ struct AO3AccountWorksList: View {
         AO3SubscriptionsChapterSource.summary(
             remote: remote, enrichedSummaries: enrichedSubscriptionSummaries
         )
-    }
-
-    @ViewBuilder
-    private func newChapterBadge(_ count: Int) -> some View {
-        if count > 0 {
-            Text(count == 1 ? "1 NEW" : "\(count) NEW")
-                .font(.system(size: smallCaptionSize, weight: .semibold))
-                .foregroundStyle(accountPalette.accentOnFill)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(
-                    Capsule()
-                        .fill(accountPalette.chipFill)
-                        .overlay(Capsule().strokeBorder(accountPalette.chipStroke, lineWidth: 0.5))
-                )
-                .accessibilityLabel(
-                    count == 1 ? "1 new chapter" : "\(count) new chapters"
-                )
-        }
     }
 
     /// Works on the page that have something new.
@@ -1197,8 +1163,12 @@ struct EnrichingAO3WorkRow: View {
     var presentation: AO3WorkRow.Presentation = .standard
     /// 1q: a bookmark turns the row into the bookmark card (note, tags, date).
     var bookmark: AO3AuthorBookmark?
-    /// Detailed rows. Off hides the summary paragraph only.
+    /// Detailed rows. Off hides the summary paragraph only. A ledger row still
+    /// shows its summary.
     var showsSummary = true
+    var badgeCount = 0
+    var wide = false
+    var showsSeparator = true
     /// Fired when enrichment produced a summary. Nil for every caller except
     /// the subscriptions list, which needs the work page's chapter count for
     /// grouping. The row's own card still uses `enriched` either way.
@@ -1214,7 +1184,10 @@ struct EnrichingAO3WorkRow: View {
             expandAll: expandAll,
             presentation: presentation,
             bookmark: bookmark,
-            showsSummary: showsSummary
+            showsSummary: showsSummary,
+            badgeCount: badgeCount,
+            wide: wide,
+            showsSeparator: showsSeparator
         )
             .cardNavigation(to: displayed, accessibilityLabel: displayed.title)
             .task(id: work.id) {

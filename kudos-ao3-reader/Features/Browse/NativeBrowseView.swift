@@ -228,11 +228,12 @@ struct FandomWorksView: View {
                                 expandAll: expandAll,
                                 controller: bulkSelection,
                                 presentation: .searchLedger,
-                                showsSummary: showSummaries
+                                showsSummary: showSummaries,
+                                wide: true
                             )
                             .cardRow(
                                 isSelected: bulkSelection.isSelecting && bulkSelection.selection.contains(work.id),
-                                tintHue: CoverArt.workHue(fandoms: work.fandoms, title: work.title)
+                                chrome: .plain
                             )
                         }
                     }
@@ -588,11 +589,12 @@ struct TagWorksView: View {
                                 expandAll: expandAll,
                                 controller: bulkSelection,
                                 presentation: .searchLedger,
-                                showsSummary: showSummaries
+                                showsSummary: showSummaries,
+                                wide: true
                             )
                             .cardRow(
                                 isSelected: bulkSelection.isSelecting && bulkSelection.selection.contains(work.id),
-                                tintHue: CoverArt.workHue(fandoms: work.fandoms, title: work.title)
+                                chrome: .plain
                             )
                         }
                     }

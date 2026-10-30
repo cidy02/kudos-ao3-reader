@@ -120,8 +120,15 @@ struct SensitiveWorkRow: View {
     var showsFavoriteStar = false
     /// Forwarded to `WorkRow`. Ledger lists that replaced a detailed card pass true.
     var showsFullLedgerStats = false
-    /// Forwarded to `WorkRow`. Off hides the summary; tags still expand.
+    /// Forwarded to `WorkRow`. Off hides the summary on a standard row; a ledger
+    /// row still shows its two-line summary. Tags still expand.
     var showsSummary = true
+    /// New chapters. Forwarded to the "+N" badge and the chapter bars.
+    var badgeCount = 0
+    /// Search and fandom results. Forwarded to `WorkRow`.
+    var wide = false
+    /// False when this row shares its list cell with a footnote that draws the separator.
+    var showsSeparator = true
     /// Lists use their row-activation link; ScrollView dashboards need a real
     /// link inside the privacy boundary. Insets belong inside that same boundary
     /// so tapping the card's padding reveals/selects exactly like its content.
@@ -164,7 +171,10 @@ struct SensitiveWorkRow: View {
                 presentation: presentation,
                 showsFavoriteStar: showsFavoriteStar,
                 showsFullLedgerStats: showsFullLedgerStats,
-                showsSummary: showsSummary
+                showsSummary: showsSummary,
+                badgeCount: badgeCount,
+                wide: wide,
+                showsSeparator: showsSeparator
             )
                 .padding(contentInsets)
                 .environment(\.ao3AuthorNavigationEnabled, false)
@@ -172,14 +182,16 @@ struct SensitiveWorkRow: View {
                 .overlay {
                     // Only while a tap would actually reveal — in select mode a tap
                     // toggles selection instead (use the toolbar's "Show mature" to
-                    // reveal while selecting), so the label shouldn't promise otherwise.
+                    // reveal while selecting), so the control shouldn't promise otherwise.
+                    // I-6: the real row stays, blurred, under one icon capsule.
                     if !isSelecting {
-                        Label("Tap to reveal", systemImage: "eye.slash.fill")
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
+                        Image(systemName: "eye.slash")
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(.primary)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
                             .background(.regularMaterial, in: Capsule())
+                            .accessibilityHidden(true)
                     }
                 }
                 .contentShape(Rectangle())
@@ -219,7 +231,8 @@ struct SensitiveWorkRow: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Hidden mature work. Activate to reveal.")
+                .accessibilityLabel("Hidden mature work")
+                .accessibilityHint("Activate to reveal.")
             }
         } else {
             visibleRow
@@ -236,7 +249,10 @@ struct SensitiveWorkRow: View {
             presentation: presentation,
             showsFavoriteStar: showsFavoriteStar,
             showsFullLedgerStats: showsFullLedgerStats,
-            showsSummary: showsSummary
+            showsSummary: showsSummary,
+            badgeCount: badgeCount,
+            wide: wide,
+            showsSeparator: showsSeparator
         )
         .padding(contentInsets)
         .contentShape(Rectangle())

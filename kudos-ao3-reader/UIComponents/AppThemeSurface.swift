@@ -208,17 +208,29 @@ private struct CardList: ViewModifier {
     }
 }
 
+/// Work rows are plain. Settings, forms, account, and comments stay cards.
+enum ListRowChrome: Equatable {
+    case card
+    case plain
+}
+
 /// Turns a List row into a fully-rounded card with consistent spacing. The card is
 /// the row's background (inset to create the gap between cards); row insets add the
 /// inner padding. Applies to a row, a `ForEach`, or a `Section`.
+///
+/// `.plain` draws no fill, border, shadow, or wash. The row pads itself and draws
+/// the separator, so the list insets stay 0 except for a queue's number column.
 private struct CardRow: ViewModifier {
     @Environment(ThemeManager.self) private var theme
+    @Environment(\.accentFill) private var accentFill
     /// True draws the card's own border in accent color instead of the default
     /// hairline — the selection outline for a row, at its true outer edge (the row's
     /// own background), rather than an inset overlay drawn on the row's content.
+    /// A plain row uses the same flag for a light accent wash. The selection bubble
+    /// stays the indicator on the row.
     var isSelected: Bool
     /// Opt-in fandom hue for redesigned ledger rows. Nil preserves the
-    /// established solid card surface for every other list.
+    /// established solid card surface for every other list. Ignored for `.plain`.
     var tintHue: Double?
     /// A queue's exact "+" colour (`colorHex`), which wins over `tintHue`.
     var tintHex: String?
@@ -227,6 +239,7 @@ private struct CardRow: ViewModifier {
     var interCardSpacing: CGFloat
     /// 1h.1's queue position, drawn left of the card rather than inside it.
     var leadingNumber: Int?
+    var chrome: ListRowChrome
 
     /// 1h.1: a 17pt number column, then 9pt, then the card.
     static let numberWidth: CGFloat = 17
@@ -234,6 +247,31 @@ private struct CardRow: ViewModifier {
     private var gutter: CGFloat { leadingNumber == nil ? 0 : Self.numberWidth + Self.numberGap }
 
     func body(content: Content) -> some View {
+        if chrome == .plain {
+            plain(content)
+        } else {
+            cardChrome(content)
+        }
+    }
+
+    private func plain(_ content: Content) -> some View {
+        var insets = EdgeInsets()
+        insets.leading = gutter
+        return content
+            .listRowSeparator(.hidden)
+            .listRowInsets(insets)
+            .listRowBackground(
+                ZStack(alignment: .leading) {
+                    Color.clear
+                    if isSelected {
+                        accentFill.opacity(0.08)
+                    }
+                    positionNumber
+                }
+            )
+    }
+
+    private func cardChrome(_ content: Content) -> some View {
         var insets = CardListMetrics.rowInsets(verticalPadding: verticalPadding, interCardSpacing: interCardSpacing)
         insets.leading += gutter
         var cardInsets = CardListMetrics.cardInsets(interCardSpacing: interCardSpacing)
@@ -243,17 +281,22 @@ private struct CardRow: ViewModifier {
             .listRowInsets(insets)
             .listRowBackground(
                 ZStack(alignment: .leading) {
-                    if let leadingNumber {
-                        Text("\(leadingNumber)")
-                            .font(.system(size: 12, weight: .medium, design: .monospaced))
-                            .monospacedDigit()
-                            .foregroundStyle(.tertiary)
-                            .frame(width: Self.numberWidth, alignment: .trailing)
-                            .padding(.leading, CardListMetrics.sideMargin)
-                    }
+                    positionNumber
                     card.padding(cardInsets)
                 }
             )
+    }
+
+    @ViewBuilder
+    private var positionNumber: some View {
+        if let leadingNumber {
+            Text("\(leadingNumber)")
+                .font(.system(size: 12, weight: .medium, design: .monospaced))
+                .monospacedDigit()
+                .foregroundStyle(.tertiary)
+                .frame(width: Self.numberWidth, alignment: .trailing)
+                .padding(.leading, CardListMetrics.sideMargin)
+        }
     }
 
     private var card: some View {
@@ -314,7 +357,8 @@ extension View {
         cornerRadius: CGFloat = SubjectMetrics.cornerRadius,
         verticalPadding: CGFloat = CardListMetrics.innerVertical,
         interCardSpacing: CGFloat = CardListMetrics.interCardSpacing,
-        leadingNumber: Int? = nil
+        leadingNumber: Int? = nil,
+        chrome: ListRowChrome = .card
     ) -> some View {
         modifier(CardRow(
             isSelected: isSelected,
@@ -323,7 +367,8 @@ extension View {
             cornerRadius: cornerRadius,
             verticalPadding: verticalPadding,
             interCardSpacing: interCardSpacing,
-            leadingNumber: leadingNumber
+            leadingNumber: leadingNumber,
+            chrome: chrome
         ))
     }
 

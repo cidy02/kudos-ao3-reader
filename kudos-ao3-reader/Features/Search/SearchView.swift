@@ -385,11 +385,12 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                                 controller: bulkSelection,
                                 presentation: .searchLedger,
                                 signal: ranking.signal(for: entry),
-                                showsSummary: showSummaries
+                                showsSummary: showSummaries,
+                                wide: true
                             )
                             .cardRow(
                                 isSelected: bulkSelection.isSelecting && bulkSelection.selection.contains(entry.id),
-                                tintHue: CoverArt.workHue(fandoms: entry.work.fandoms, title: entry.work.title)
+                                chrome: .plain
                             )
                         }
                     }

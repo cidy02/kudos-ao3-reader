@@ -201,11 +201,13 @@ struct AO3AuthorWorkCard: View {
                     expandAll: expandAll,
                     presentation: usesLedger ? .ledger : .standard,
                     showsFullLedgerStats: showsFullLedgerStats,
-                    showsSummary: usesLedger ? false : showsSummary
+                    showsSummary: usesLedger ? false : showsSummary,
+                    showsSeparator: false
                 )
                 if showsPerformance, let blurb = entry.remote,
                    !hideMature || !work.isAdult || gate.isRevealed(work) {
                     AO3AuthorPerformanceStrip(work: blurb)
+                        .padding(.horizontal, WorkRowMetrics.horizontalPadding)
                 }
             } else if let work = entry.remote {
                 AO3WorkRow(
@@ -213,18 +215,19 @@ struct AO3AuthorWorkCard: View {
                     expandAll: expandAll,
                     presentation: usesLedger ? .searchLedger : .standard,
                     showsPerformance: showsPerformance,
-                    showsSummary: usesLedger ? false : showsSummary
+                    showsSummary: usesLedger ? false : showsSummary,
+                    showsSeparator: false
                 )
                 .cardNavigation(to: work, accessibilityLabel: work.title)
             }
             if let giftLine = entry.remote?.giftLine {
                 WorkStateBadge(text: giftLine, symbol: "gift")
                     .font(.caption2)
+                    .padding(.horizontal, WorkRowMetrics.horizontalPadding)
             }
+            WorkRowSeparator()
         }
-        .cardRow(tintHue: usesLedger ? entry.remote.map {
-            CoverArt.workHue(fandoms: $0.fandoms, title: $0.title)
-        } : nil)
+        .cardRow(chrome: .plain)
     }
 }
 

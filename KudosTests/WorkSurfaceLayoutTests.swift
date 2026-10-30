@@ -152,6 +152,63 @@ struct WorkSurfaceLayoutTests {
         #expect(visible.tags == ["Fandom", "Romance"])
     }
 
+    @Test func ledgerFiguresNamesEveryStatAndSpeaksKudos() {
+        let figures = WorkStat.ledgerFigures(
+            language: "English",
+            wordCount: 84_210,
+            chapters: "12/20",
+            comments: 30,
+            kudos: 400,
+            bookmarks: 12,
+            hits: 9_000,
+            dateUpdated: "2020-01-02",
+            showsZeroStats: false,
+            zeroCountsRequireWords: true
+        )
+        #expect(figures.visible.contains("English"))
+        #expect(figures.visible.contains("\(84210.formatted()) words"))
+        #expect(figures.visible.contains("12/20 ch"))
+        #expect(figures.visible.contains("30 comments"))
+        #expect(figures.visible.contains("♥ \(400.formatted())"))
+        #expect(figures.visible.contains("12 bookmarks"))
+        #expect(figures.visible.contains("\(9000.formatted()) hits"))
+        #expect(figures.visible.contains("01/02/2020"))
+        #expect(figures.spoken.contains("\(400.formatted()) kudos"))
+        #expect(!figures.spoken.contains("♥"))
+
+        let unknown = WorkStat.ledgerFigures(
+            language: "",
+            wordCount: 0,
+            chapters: "3 chapters",
+            comments: 0,
+            kudos: 2,
+            bookmarks: 0,
+            hits: 0,
+            dateUpdated: "",
+            showsZeroStats: true,
+            zeroCountsRequireWords: true
+        )
+        #expect(unknown.visible == ["3 chapters", "♥ \(2.formatted())"])
+        #expect(unknown.spoken.contains("2 kudos"))
+
+        let knownZeros = WorkStat.ledgerFigures(
+            language: "",
+            wordCount: 10,
+            chapters: "",
+            comments: 0,
+            kudos: 0,
+            bookmarks: 0,
+            hits: 0,
+            dateUpdated: "",
+            showsZeroStats: true,
+            zeroCountsRequireWords: true
+        )
+        #expect(knownZeros.visible.contains("\(10.formatted()) words"))
+        #expect(knownZeros.visible.contains("0 comments"))
+        #expect(knownZeros.visible.contains("♥ 0"))
+        #expect(knownZeros.spoken.contains("0 kudos"))
+    }
+
     private func makeDefaults() -> UserDefaults {
         let name = "WorkSurfaceLayoutTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: name)!
