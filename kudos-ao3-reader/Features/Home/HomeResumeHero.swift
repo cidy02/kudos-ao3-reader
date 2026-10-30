@@ -241,7 +241,7 @@ struct HomeResumeHero: View {
     var body: some View {
         if blurred {
             ZStack {
-                resumeCard(interactive: false)
+                resumeCard(interactive: false, showsInitial: false)
                     .environment(\.ao3AuthorNavigationEnabled, false)
                     .blur(radius: 6)
                     .allowsHitTesting(false)
@@ -313,7 +313,7 @@ struct HomeResumeHero: View {
         }
     }
 
-    private func resumeCard(interactive: Bool) -> some View {
+    private func resumeCard(interactive: Bool, showsInitial: Bool = true) -> some View {
         WorkResumeCard(
             model: ResumeCardModel(work: work),
             localWork: work,
@@ -321,6 +321,7 @@ struct HomeResumeHero: View {
             primaryLabel: variant == .next ? "Start" : "Resume",
             isBusy: false,
             isInteractive: interactive,
+            showsInitial: showsInitial,
             onPrimary: { onPrimary?() },
             onReadAloud: { onReadAloud?() }
         )
@@ -335,6 +336,9 @@ struct WorkResumeCard: View {
     let primaryLabel: String
     var isBusy = false
     var isInteractive = true
+    /// A hidden mature work must not draw its initial: the letter stays
+    /// recognisable under the 6 pt blur. Every other card keeps it.
+    var showsInitial = true
     let onPrimary: () -> Void
     let onReadAloud: () -> Void
     var onContents: (() -> Void)?
@@ -760,11 +764,13 @@ struct WorkResumeCard: View {
         RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
             .fill(CoverArt.workGradient(for: model.art))
             .overlay(alignment: .bottomTrailing) {
-                Text(model.title.trimmingCharacters(in: .whitespacesAndNewlines).first.map(String.init) ?? "")
-                    .font(.system(size: 250, weight: .semibold, design: .serif))
-                    .foregroundStyle(Color.white.opacity(0.08))
-                    .offset(x: 10, y: 58)
-                    .accessibilityHidden(true)
+                if showsInitial {
+                    Text(model.title.trimmingCharacters(in: .whitespacesAndNewlines).first.map(String.init) ?? "")
+                        .font(.system(size: 250, weight: .semibold, design: .serif))
+                        .foregroundStyle(Color.white.opacity(0.08))
+                        .offset(x: 10, y: 58)
+                        .accessibilityHidden(true)
+                }
             }
             .clipShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
             .overlay(

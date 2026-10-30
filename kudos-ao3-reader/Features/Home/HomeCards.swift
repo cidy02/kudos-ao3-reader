@@ -53,6 +53,9 @@ struct WorkCoverCard: View {
     var footer: String?
     var progress: Double?
     var metadataStyle: WorkCoverMetadataStyle = .standard
+    /// A hidden mature work must not draw its initial: the letter stays
+    /// recognisable under the 6 pt blur.
+    var showsInitial: Bool = true
 
     @Environment(DownloadQueue.self) private var downloads
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -65,7 +68,8 @@ struct WorkCoverCard: View {
             art: CoverArt.workArt(fandoms: work.workFandoms, title: work.title),
             title: work.title,
             author: work.author,
-            fandom: primaryFandom
+            fandom: primaryFandom,
+            showsInitial: showsInitial
         ) {
             if downloads.isDownloading(work) {
                 TimelineView(.animation) { context in
@@ -327,6 +331,7 @@ private struct WorkSummaryCardSurface<Content: View>: View {
     let title: String
     let author: String
     let fandom: String?
+    var showsInitial: Bool = true
     @ViewBuilder var content: () -> Content
 
     /// Scales width and height together so the card grows proportionally at
@@ -344,7 +349,8 @@ private struct WorkSummaryCardSurface<Content: View>: View {
                 title: title,
                 author: author,
                 fandom: fandom,
-                width: cardSize.width
+                width: cardSize.width,
+                showsInitial: showsInitial
             )
             .frame(width: cardSize.width, height: cardSize.width * 1.42)
 
@@ -373,6 +379,7 @@ private struct GeneratedWorkCoverArt: View {
     let author: String
     let fandom: String?
     let width: CGFloat
+    var showsInitial: Bool = true
 
     @Environment(ThemeManager.self) private var themeManager
 
@@ -381,7 +388,7 @@ private struct GeneratedWorkCoverArt: View {
     var body: some View {
         ZStack {
             CoverArt.workGradient(for: art)
-            initial
+            if showsInitial { initial }
             layout
                 .padding(width * 0.1)
         }
