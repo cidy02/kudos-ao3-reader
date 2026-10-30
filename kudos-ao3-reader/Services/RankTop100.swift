@@ -11,6 +11,8 @@ enum RankTop100Feature {
     static let cacheLifetime: TimeInterval = 10 * 60
     static let requestBudget = 10
     static let throttleCooldown: TimeInterval = 24 * 60 * 60
+    static let minimumThrottleCooldown: TimeInterval = 120
+    static let cacheEntryLimit = 64
 }
 
 /// The exact listing URL family currently on screen. Pages are derived here so
@@ -109,19 +111,19 @@ actor RankTop100Store {
     private var cache: [RankTop100CacheKey: RankTop100CachedPage] = [:]
     private var requestStarts: [Date] = []
     private let defaults: UserDefaults
-    private let calendar: Calendar
+    private let isEnabled: Bool
 
-    init(defaults: UserDefaults = .standard, calendar: Calendar = .current) {
+    init(defaults: UserDefaults = .standard, isEnabled: Bool = RankTop100Feature.isEnabled) {
         self.defaults = defaults
-        self.calendar = calendar
+        self.isEnabled = isEnabled
     }
 
     func availability(at now: Date) -> RankTop100Availability {
-        guard RankTop100Feature.isEnabled else { return .releaseDisabled }
-        if let until = storedDate(forKey: Keys.throttledUntil), until > now {
+        guard isEnabled else { return .releaseDisabled }
+        if let until = storedFutureDate(forKey: Keys.throttledUntil, at: now) {
             return .throttledUntil(until)
         }
-        if let until = storedDate(forKey: Keys.retryAfter), until > now {
+        if let until = storedFutureDate(forKey: Keys.retryAfter, at: now) {
             return .retryAfter(until)
         }
         requestStarts.removeAll { now.timeIntervalSince($0) >= RankTop100Feature.cacheLifetime }
@@ -143,41 +145,55 @@ actor RankTop100Store {
     }
 
     func remember(_ page: AO3SearchPage, for request: RankTop100PageRequest, at now: Date) {
-        cache[RankTop100CacheKey(url: request.url, scope: request.scope)] = RankTop100CachedPage(
+        let key = RankTop100CacheKey(url: request.url, scope: request.scope)
+        if cache[key] == nil, cache.count >= RankTop100Feature.cacheEntryLimit,
+           let oldest = cache.min(by: { $0.value.fetchedAt < $1.value.fetchedAt })?.key {
+            cache[oldest] = nil
+        }
+        cache[key] = RankTop100CachedPage(
             value: page,
             fetchedAt: now
         )
     }
 
+    func purgeCache() {
+        cache.removeAll(keepingCapacity: false)
+    }
+
     /// Reserves one of the ten rolling-window starts immediately before the
-    /// loader hands the request to AO3Client.
-    func reserveRequest(at now: Date) -> Bool {
-        requestStarts.removeAll { now.timeIntervalSince($0) >= RankTop100Feature.cacheLifetime }
-        guard requestStarts.count < RankTop100Feature.requestBudget else { return false }
+    /// loader hands the request to AO3Client. This is the single final gate: a
+    /// throttle recorded by another live controller during our sleep stops us.
+    func reserveRequest(at now: Date) -> RankTop100Availability {
+        let current = availability(at: now)
+        guard current.allowsRun else { return current }
         requestStarts.append(now)
-        return true
+        return .available
     }
 
     @discardableResult
     func recordThrottle(_ error: AO3Error, at now: Date) -> RankTop100Availability? {
-        let status: Int
+        let retryAfter: TimeInterval?
         switch error {
-        case let .rateLimited(retryAfter):
-            status = 429
-            if let retryAfter, retryAfter > 0 {
-                defaults.set(now.addingTimeInterval(retryAfter).timeIntervalSince1970, forKey: Keys.retryAfter)
-            }
+        case let .rateLimited(serverDelay):
+            retryAfter = Self.validRetryAfter(serverDelay)
         case .forbidden:
-            status = 403
-        case .server(status: 503):
-            status = 503
+            retryAfter = nil
+        case .server(status: 502), .server(status: 503), .server(status: 504):
+            retryAfter = nil
         default:
             return nil
         }
 
+        let cooldown = max(RankTop100Feature.minimumThrottleCooldown, retryAfter ?? 0)
+        let retryUntil = now.addingTimeInterval(min(cooldown, RankTop100Feature.throttleCooldown))
+        defaults.set(retryUntil.timeIntervalSince1970, forKey: Keys.retryAfter)
+
         var runs = (defaults.array(forKey: Keys.throttleRuns) as? [Double] ?? [])
             .map { Date(timeIntervalSince1970: $0) }
-            .filter { calendar.isDate($0, inSameDayAs: now) }
+            .filter {
+                let age = now.timeIntervalSince($0)
+                return age >= 0 && age < RankTop100Feature.throttleCooldown
+            }
         runs.append(now)
         defaults.set(runs.map(\.timeIntervalSince1970), forKey: Keys.throttleRuns)
         if runs.count >= 2 {
@@ -185,15 +201,28 @@ actor RankTop100Store {
             defaults.set(until.timeIntervalSince1970, forKey: Keys.throttledUntil)
             return .throttledUntil(until)
         }
-        if status == 429, let until = storedDate(forKey: Keys.retryAfter), until > now {
-            return .retryAfter(until)
-        }
-        return .available
+        return .retryAfter(retryUntil)
     }
 
-    private func storedDate(forKey key: String) -> Date? {
+    private static func validRetryAfter(_ value: TimeInterval?) -> TimeInterval? {
+        guard let value, value.isFinite, value >= 0 else { return nil }
+        return min(value, RankTop100Feature.throttleCooldown)
+    }
+
+    private func storedFutureDate(forKey key: String, at now: Date) -> Date? {
         guard defaults.object(forKey: key) != nil else { return nil }
-        return Date(timeIntervalSince1970: defaults.double(forKey: key))
+        let seconds = defaults.double(forKey: key)
+        guard seconds.isFinite else {
+            defaults.removeObject(forKey: key)
+            return nil
+        }
+        let date = Date(timeIntervalSince1970: seconds)
+        let remaining = date.timeIntervalSince(now)
+        guard remaining > 0, remaining <= RankTop100Feature.throttleCooldown else {
+            defaults.removeObject(forKey: key)
+            return nil
+        }
+        return date
     }
 }
 
@@ -242,9 +271,9 @@ struct RankTop100Loader: Sendable {
                 }
                 try Task.checkCancellation()
                 let requestStart = await clock.now()
-                guard await store.reserveRequest(at: requestStart) else {
-                    let availability = await store.availability(at: requestStart)
-                    return RankTop100Outcome(pages: pages, stop: .unavailable(availability))
+                let reservation = await store.reserveRequest(at: requestStart)
+                guard reservation.allowsRun else {
+                    return RankTop100Outcome(pages: pages, stop: .unavailable(reservation))
                 }
                 lastRequestStart = requestStart
 
@@ -256,17 +285,17 @@ struct RankTop100Loader: Sendable {
             } catch is CancellationError {
                 return RankTop100Outcome(pages: pages, stop: .cancelled)
             } catch let error as AO3Error {
-                if await store.recordThrottle(error, at: await clock.now()) != nil {
-                    let retryUntil: Date?
-                    if case let .rateLimited(seconds) = error, let seconds {
-                        retryUntil = (await clock.now()).addingTimeInterval(seconds)
-                    } else {
-                        retryUntil = nil
+                if let throttleAvailability = await store.recordThrottle(error, at: await clock.now()) {
+                    let retryUntil = switch throttleAvailability {
+                    case let .retryAfter(date), let .throttledUntil(date): date
+                    default: nil
                     }
                     let status = switch error {
                     case .rateLimited: 429
                     case .forbidden: 403
+                    case .server(status: 502): 502
                     case .server(status: 503): 503
+                    case .server(status: 504): 504
                     default: 0
                     }
                     return RankTop100Outcome(
@@ -311,6 +340,8 @@ final class RankTop100Controller {
     @ObservationIgnored
     private var task: Task<Void, Never>?
     @ObservationIgnored
+    private var availabilityTask: Task<Void, Never>?
+    @ObservationIgnored
     private var generation = 0
 
     init(loader: RankTop100Loader = .shared) {
@@ -322,6 +353,7 @@ final class RankTop100Controller {
 
     func refreshAvailability() async {
         availability = await loader.store.availability(at: await loader.clock.now())
+        scheduleAvailabilityRefresh()
     }
 
     func start(
@@ -330,6 +362,7 @@ final class RankTop100Controller {
         load: @escaping @Sendable (RankTop100PageRequest) async throws -> AO3SearchPage,
         onPages: @escaping @MainActor @Sendable ([Int: AO3SearchPage]) -> Void
     ) {
+        guard canStart else { return }
         cancel()
         generation += 1
         let runGeneration = generation
@@ -364,12 +397,13 @@ final class RankTop100Controller {
             case .completed, .cancelled:
                 break
             case .unavailable:
-                message = availabilityText
-            case let .throttled(status, _):
-                message = "AO3 returned HTTP \(status). Ranking stopped."
+                message = nil
+            case .throttled:
+                message = nil
             case let .failed(text):
                 message = text
             }
+            scheduleAvailabilityRefresh()
         }
     }
 
@@ -378,6 +412,31 @@ final class RankTop100Controller {
         task?.cancel()
         task = nil
         progress = nil
+    }
+
+    private func scheduleAvailabilityRefresh() {
+        availabilityTask?.cancel()
+        let deadline: Date?
+        switch availability {
+        case let .retryAfter(date), let .throttledUntil(date), let .budgetRenews(date):
+            deadline = date
+        case .available, .releaseDisabled:
+            deadline = nil
+        }
+        guard let deadline else { return }
+        availabilityTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await loader.clock.sleepUntil(deadline)
+                try Task.checkCancellation()
+                availability = await loader.store.availability(at: await loader.clock.now())
+                if availability.allowsRun { message = nil }
+            } catch is CancellationError {
+                return
+            } catch {
+                return
+            }
+        }
     }
 
     var availabilityText: String? {
@@ -393,47 +452,94 @@ final class RankTop100Controller {
     }
 }
 
-/// Compact control and running state from Quality-RankDeeper.
-struct RankTop100Controls: View {
+/// Running state above the result rows, as Quality-RankDeeper draws it.
+struct RankTop100ProgressCard: View {
     let controller: RankTop100Controller
     let totalPages: Int
-    let start: () -> Void
 
+    @ViewBuilder
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if let progress = controller.progress {
+        if RankTop100Feature.isEnabled, let progress = controller.progress {
+            ViewThatFits(in: .horizontal) {
                 HStack(spacing: 12) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Ranking the top 100 · page \(progress.page) of \(min(totalPages, 5))")
-                            .font(.subheadline.weight(.semibold))
-                        ProgressView(value: Double(progress.page), total: Double(min(totalPages, 5)))
-                        Text("One page every 3 seconds · \(progress.loadedWorks) works so far")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
+                    progressDetails(progress)
                     Button("Cancel", action: controller.cancel)
                         .buttonStyle(.bordered)
                 }
-                .padding(12)
-                .background(.quaternary, in: RoundedRectangle(cornerRadius: 14))
-                .accessibilityElement(children: .contain)
-                .accessibilityLabel(
-                    "Ranking the top 100, page \(progress.page) of \(min(totalPages, 5)), "
-                        + "\(progress.loadedWorks) works loaded"
-                )
-            } else {
-                Button(action: start) {
-                    Label("Rank Top 100", systemImage: "line.3.horizontal.decrease")
+                VStack(alignment: .leading, spacing: 10) {
+                    progressDetails(progress)
+                    Button("Cancel", action: controller.cancel)
+                        .buttonStyle(.bordered)
                 }
-                .buttonStyle(.bordered)
-                .disabled(!controller.canStart || totalPages < 2)
+            }
+            .padding(12)
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 14))
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(
+                "Ranking the top 100, page \(progress.page) of \(min(totalPages, 5)), "
+                    + "\(progress.loadedWorks) works loaded"
+            )
+            .accessibilityAddTraits(.updatesFrequently)
+        }
+    }
+
+    private func progressDetails(_ progress: RankTop100Progress) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Ranking the top 100 · page \(progress.page) of \(min(totalPages, 5))")
+                .font(.subheadline.weight(.semibold))
+            ProgressView(value: Double(progress.page), total: Double(min(totalPages, 5)))
+            Text("One page every 3 seconds · \(progress.loadedWorks) works so far")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// Idle controls and loaded-count footnote below the result rows.
+struct RankTop100Controls: View {
+    let controller: RankTop100Controller
+    let currentPage: Int
+    let totalPages: Int
+    let loadedWorks: Int
+    let totalWorks: Int
+    let isPageLoading: Bool
+    let loadNextPage: () -> Void
+    let start: () -> Void
+
+    @ViewBuilder
+    var body: some View {
+        if RankTop100Feature.isEnabled {
+            VStack(alignment: .leading, spacing: 8) {
+                if controller.progress == nil {
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 8) { actionButtons }
+                        VStack(alignment: .leading, spacing: 8) { actionButtons }
+                    }
+                }
                 if let message = controller.message ?? controller.availabilityText {
                     Text(message)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+                Text("\(loadedWorks.formatted()) of \(totalWorks.formatted()) loaded · "
+                    + "ranking updates as each page arrives")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
+            .task { await controller.refreshAvailability() }
         }
-        .task { await controller.refreshAvailability() }
+    }
+
+    @ViewBuilder
+    private var actionButtons: some View {
+        Button("Load Page \(min(currentPage + 1, totalPages))", action: loadNextPage)
+            .buttonStyle(.bordered)
+            .disabled(isPageLoading || currentPage >= totalPages)
+        Button(action: start) {
+            Label("Rank Top 100", systemImage: "arrow.up.arrow.down")
+        }
+        .buttonStyle(.bordered)
+        .disabled(!controller.canStart || isPageLoading || totalPages < 2)
     }
 }

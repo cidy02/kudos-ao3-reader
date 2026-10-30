@@ -38,7 +38,8 @@ All paths relative to `kudos-ao3-reader/` unless noted. Confirmed as of 2026-07-
 |---|---|
 | Central client (all GETs/POSTs/EPUB downloads, pacing, retry, status→typed errors, parsers) | `Services/AO3Client.swift` (actor) |
 | Politeness primitives | `pace()` in AO3Client; `Services/AO3RequestCoordinator.swift` (3-slot concurrency cap); `Services/RequestCoalescer.swift` (in-flight dedup, anonymous by URL + authenticated by URL+Cookie) |
-| Auth (WebKit login, Keychain session, validator, generation-owned lifecycle, serialized WebKit-cookie reconciliation, `authenticatedRequest`, `accountWorks`) | `Services/AO3AuthService.swift` (incl. `AO3RequestDefaults.userAgent` — the single UA), `AO3SessionVault.swift`, `AO3WebLoginCoordinator.swift` |
+| Reader-requested Rank Top 100 lookahead (pages 2–5, cache, budget, throttle persistence, off switch) | `Services/RankTop100.swift`; entry points in `Features/Search/SearchView.swift` and `Features/Browse/NativeBrowseView.swift` |
+| Auth (WebKit login, Keychain session, validator, generation-owned lifecycle, serialized WebKit-cookie reconciliation, `authenticatedRequest`, `accountWorks`) | `Services/AO3AuthService.swift` (incl. `AO3RequestDefaults.userAgent` and `userAgent(feature:)` — the single UA source), `AO3SessionVault.swift`, `AO3WebLoginCoordinator.swift` |
 | Write actions (kudos/comments; CSRF; never retried/coalesced) | `Services/AO3WriteActions.swift` + `AO3Client.submitWrite` ⚠️ never live-verified against AO3 |
 | Tag/metadata enrichment | `Services/WorkTags.swift` (24h attempt cooldown), `WorkMetadataRefresh.swift`, `WorkUpdateChecker.swift` (WIP-only, 6h throttle incl. failures) |
 | Author/profile parsing, lazy state, and auth-scoped 5-minute HTML cache (Inbox private HTML/forms add session generation to their cache scope) | `Services/AO3Client+Authors.swift`, `AO3AuthorProfileService.swift`; values/routes in `Models/AO3AuthorModels.swift` |
