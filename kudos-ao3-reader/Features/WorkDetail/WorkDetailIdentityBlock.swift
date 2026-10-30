@@ -213,7 +213,7 @@ struct WorkDetailResumeCard: View {
             .padding(.vertical, 16)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(cardBackground)
-            .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
         }
         .buttonStyle(.plain)
         .disabled(isBusy)
@@ -303,7 +303,7 @@ struct WorkDetailResumeCard: View {
     }
 
     private var cardBackground: some View {
-        let shape = RoundedRectangle(cornerRadius: 20, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
         return shape
             .fill(themeManager.appTheme.glassFill(0.10))
             .overlay(shape.strokeBorder(themeManager.appTheme.glassStroke(0.14), lineWidth: 0.5))

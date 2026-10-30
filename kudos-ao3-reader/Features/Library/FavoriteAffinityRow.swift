@@ -209,7 +209,7 @@ struct FavoriteAffinityRow: View {
                         .padding(.horizontal, 7)
                         .padding(.vertical, 3)
                         .background(
-                            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            Capsule()
                                 .fill(palette.chipFill)
                         )
                 }

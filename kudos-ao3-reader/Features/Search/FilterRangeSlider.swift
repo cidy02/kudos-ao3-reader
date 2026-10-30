@@ -88,10 +88,10 @@ struct FilterRangeSlider: View {
         .padding(.horizontal, 11)
         .padding(.vertical, 8)
         .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
                 .fill(theme.appTheme.glassFill(0.10))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
                         .strokeBorder(theme.appTheme.glassStroke(0.16), lineWidth: 0.5)
                 )
         )

@@ -439,7 +439,7 @@ struct AccountView: View {
                     onLogin: { showingLogin = true }
                 )
                 .padding(16)
-                .subjectPanel(cornerRadius: 16)
+                .subjectPanel()
                 .pageBodyRow(top: 10, gutter: SubjectMetrics.accountGutter)
             }
         }
@@ -574,7 +574,7 @@ struct AccountView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .padding(16)
-                    .subjectPanel(cornerRadius: 16)
+                    .subjectPanel()
                     .pageBodyRow(top: 10, gutter: SubjectMetrics.accountGutter)
             }
         }
@@ -592,7 +592,7 @@ struct AccountView: View {
                 SubjectRowSeparator()
                 accountInboxPreview
             }
-            .subjectPanel(cornerRadius: 16)
+            .subjectPanel()
             .pageBodyRow(top: 18, gutter: SubjectMetrics.accountGutter)
         }
     }
@@ -662,7 +662,7 @@ struct AccountView: View {
                 SubjectRowSeparator()
                 panelActionRow(title: "Open AO3", systemImage: "safari", action: openAO3FromAccount)
             }
-            .subjectPanel(cornerRadius: 16)
+            .subjectPanel()
             .pageBodyRow(top: 10, gutter: SubjectMetrics.accountGutter)
         } header: {
             SectionRuleHeader(title: "AO3")
@@ -683,7 +683,7 @@ struct AccountView: View {
                 SubjectRowSeparator()
                 panelNavRow(title: "About", systemImage: "info.circle", value: SettingsRoute.about)
             }
-            .subjectPanel(cornerRadius: 16)
+            .subjectPanel()
             .pageBodyRow(top: 10, gutter: SubjectMetrics.accountGutter)
         } header: {
             SectionRuleHeader(title: "Kudos")

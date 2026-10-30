@@ -40,10 +40,6 @@ enum CarouselCardMetrics {
     /// card types (e.g. a TabView of multiple cards) reads as one consistent
     /// shape instead of several near-but-not-quite-matching proportions.
     static let height: CGFloat = width * CGFloat(2).squareRoot()
-    static let cornerRadius: CGFloat = CardRadius.tile
-    /// Work covers use the redesign's softer 16pt silhouette. Queue and
-    /// collection tiles intentionally keep the tighter shared tile radius.
-    static let workCornerRadius: CGFloat = CardRadius.listRow
     /// Shared gaps for every compact cover grid; call sites use these, never
     /// their own numbers.
     /// 1h's cover grid, the spec's one card grid: `gap:14px 12px` — 14 between

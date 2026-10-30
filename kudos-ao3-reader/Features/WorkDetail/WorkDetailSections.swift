@@ -160,7 +160,7 @@ extension WorkDetailView {
             to: AO3CommentsRoute(workID: id, context: commentsWorkContext),
             accessibilityLabel: "All comments"
         )
-        .panelSegment(0, of: count, gutter: SubjectMetrics.headerGutter)
+        .panelSegment(0, of: count, gutter: SubjectMetrics.gutter)
 
         if hasChapterComments {
             SubjectFormRow(label: "Chapter comments", value: "", showsDisclosure: true)
@@ -170,7 +170,7 @@ extension WorkDetailView {
                     ),
                     accessibilityLabel: "Chapter comments"
                 )
-                .panelSegment(1, of: count, gutter: SubjectMetrics.headerGutter)
+                .panelSegment(1, of: count, gutter: SubjectMetrics.gutter)
         }
 
         SubjectFormRow(label: "Write a comment", value: "", showsDisclosure: true)
@@ -180,7 +180,7 @@ extension WorkDetailView {
                 ),
                 accessibilityLabel: "Write a comment"
             )
-            .panelSegment(count - 1, of: count, gutter: SubjectMetrics.headerGutter)
+            .panelSegment(count - 1, of: count, gutter: SubjectMetrics.gutter)
     }
 
     // MARK: - Library section
@@ -511,7 +511,7 @@ extension WorkDetailView {
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
-                .subjectPanel(cornerRadius: 10)
+                .subjectPanel()
 
                 if !suggestions.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
@@ -523,7 +523,7 @@ extension WorkDetailView {
                                         .foregroundStyle(.primary)
                                         .padding(.horizontal, 11)
                                         .padding(.vertical, 6)
-                                        .subjectPanel(cornerRadius: 8)
+                                        .subjectPanel(cornerRadius: SubjectMetrics.capsuleRadius)
                                 }
                                 .buttonStyle(.plain)
                                 .accessibilityLabel("Add tag \(name)")
@@ -559,10 +559,10 @@ extension WorkDetailView {
         .padding(.trailing, 9)
         .padding(.vertical, 6)
         .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: SubjectMetrics.controlRadius(dynamicTypeSize), style: .continuous)
                 .fill(.accentFill.opacity(0.16))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    RoundedRectangle(cornerRadius: SubjectMetrics.controlRadius(dynamicTypeSize), style: .continuous)
                         .strokeBorder(.tint.opacity(0.22), lineWidth: 0.5)
                 )
         )
@@ -611,9 +611,9 @@ struct DownloadedDateEditor: View {
 }
 
 extension View {
-    /// A My copy row: flush to the sheet's 22pt margins, no card, no separator.
+    /// A My copy row: flush to the sheet's edge, no card, no separator.
     func myCopyRow(top: CGFloat = 3, bottom: CGFloat = 3) -> some View {
-        listRowInsets(EdgeInsets(top: top, leading: 22, bottom: bottom, trailing: 22))
+        listRowInsets(EdgeInsets(top: top, leading: SubjectMetrics.gutter, bottom: bottom, trailing: SubjectMetrics.gutter))
             .listRowBackground(Color.clear)
             .listRowSeparator(.hidden)
     }

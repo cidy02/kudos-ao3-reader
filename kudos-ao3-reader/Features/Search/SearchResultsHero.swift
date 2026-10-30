@@ -93,7 +93,7 @@ struct SearchResultsHero: View {
             }
 
             SubjectStatStrip(cells: statStripCells, palette: palette)
-                .padding(.horizontal, 22)
+                .padding(.horizontal, SubjectMetrics.gutter)
 
             // The active filters only: the toolbar Filter opens the panel.
             if !nonSortFilterLabels.isEmpty {

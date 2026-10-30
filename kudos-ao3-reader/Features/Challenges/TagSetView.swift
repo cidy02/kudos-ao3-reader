@@ -356,7 +356,7 @@ struct TagSetView: View {
             .frame(maxWidth: .infinity)
             .frame(height: 44)
             .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                Capsule()
                     .fill(theme.effectiveTint)
             )
         }

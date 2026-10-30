@@ -31,7 +31,7 @@ struct CollectionLedgerRow: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
         .background {
-            let shape = RoundedRectangle(cornerRadius: SubjectMetrics.rowRadius, style: .continuous)
+            let shape = RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
             shape
                 .fill(themeManager.appTheme.cardSurface)
                 .overlay(shape.fill(themeManager.appTheme.glassFill(0.06)))
@@ -44,7 +44,7 @@ struct CollectionLedgerRow: View {
                     )
                 )
         }
-        .contentShape(RoundedRectangle(cornerRadius: SubjectMetrics.rowRadius, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(collection.name), \(totalWorkCount) work\(totalWorkCount == 1 ? "" : "s")")
         .accessibilityHint("Opens collection.")

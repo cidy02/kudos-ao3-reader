@@ -36,8 +36,8 @@ extension WorkDetailView {
                         row.view
                     }
                 }
-                .subjectPanel(cornerRadius: 16, isFilled: false)
-                .pagePanelRow(top: 24)
+                .subjectPanel(isFilled: false)
+                .pageBodyRow(top: 24)
             }
         }
     }
@@ -130,7 +130,7 @@ extension WorkDetailView {
         if !cells.isEmpty {
             Section {
                 SubjectStatStrip(cells: cells, palette: workPalette)
-                    .pagePanelRow(top: 14)
+                    .pageBodyRow(top: 14)
             }
         }
     }
@@ -239,10 +239,10 @@ struct WorkDetailOutlineButton: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 13)
                 .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    Capsule()
                         .strokeBorder(themeManager.appTheme.glassStroke(0.18), lineWidth: 1)
                 )
-                .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .contentShape(Capsule())
         }
         .buttonStyle(.plain)
     }
@@ -284,8 +284,8 @@ struct WorkDetailMyCopyRow: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
-            .subjectPanel(cornerRadius: 14)
-            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .subjectPanel()
+            .contentShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)

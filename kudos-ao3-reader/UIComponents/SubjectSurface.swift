@@ -341,17 +341,37 @@ extension ReaderTheme {
 
 /// The spec's own numbers. Named so a screen asks for the role, not the value —
 /// and so changing the language is one edit rather than a grep for `16`.
+///
+/// The Rules board's "Shape and space" is the members down to `controlRadius`,
+/// and nowhere else (T-484): they absorbed `CardRadius` and the per-surface
+/// radii and gutters that had drifted to 8, 12, 14, 18, 20, 22 and 26.
 enum SubjectMetrics {
-    /// Page gutter for full-width content on a washed screen (spec `0 16px`).
+    /// The screen edge: 16pt on every screen, for prose, headers and panels
+    /// alike (Rules: "16 pt edge on every screen").
     static let gutter: CGFloat = 16
-    /// The wider gutter the header block itself takes (spec `22px 26px 0`).
-    static let headerGutter: CGFloat = 26
-    /// Side gutter for a block that draws its own panel, four points tighter
-    /// than prose so the two edges do not line up and fight (spec 1a).
-    static let panelGutter: CGFloat = 22
-    /// The account's pushed lists sit ten points tighter than a subject's own
-    /// page — they are lists of other things, not a page about one (spec 1o).
-    static let accountGutter: CGFloat = 16
+    /// The same edge under the name the account's pushed lists have always
+    /// spelled it with. Not a second number — a hundred call sites say this, and
+    /// renaming them would only churn.
+    static let accountGutter: CGFloat = gutter
+    /// Between two sections of a content screen (Home, Library). Grouped
+    /// screens keep the system's own section spacing.
+    static let sectionSpacing: CGFloat = 26
+    /// Every card, tile, cover and panel (Rules: "16 pt corner radius
+    /// everywhere"). Not a Settings-style icon tile, which keeps the system's
+    /// proportional corner, and not the four-tag tile (`WorkStatusIconGrid`).
+    static let cornerRadius: CGFloat = 16
+    /// Chips and buttons are capsules. SwiftUI clamps a corner radius to half
+    /// the shape's shorter side, so a `RoundedRectangle` given this one draws a
+    /// capsule — and, unlike `AnyShape(Capsule())`, still takes `strokeBorder`.
+    static let capsuleRadius: CGFloat = .infinity
+
+    /// A chip's or button's corner. A capsule, until an accessibility size lets
+    /// the label wrap: its round ends would then cut into the words, so it
+    /// takes the card corner instead.
+    static func controlRadius(_ size: DynamicTypeSize) -> CGFloat {
+        size.isAccessibilitySize ? cornerRadius : capsuleRadius
+    }
+
     /// Floating glass chrome buttons — spec's 34px circles.
     static let chromeButton: CGFloat = 34
     /// The short rule under a kicker: 22×2.5 on a card, 26×2.5 on a page header.
@@ -361,12 +381,6 @@ enum SubjectMetrics {
     /// Read-progress ring, and the stroke it is drawn with.
     static let ringDiameter: CGFloat = 68
     static let ringStroke: CGFloat = 5
-    /// Radius of a washed ledger row / work card (spec `16px`), and of the
-    /// Home hero, which is one step softer (spec `18px`).
-    static let rowRadius: CGFloat = 16
-    static let heroRadius: CGFloat = 18
-    /// Chips in the redesign are rounded rects, not capsules (spec `8px`).
-    static let chipRadius: CGFloat = 8
 }
 
 // MARK: - Washed card
@@ -382,7 +396,7 @@ enum SubjectMetrics {
 /// notices for a release.
 struct SubjectCardBackground: ViewModifier {
     let palette: SubjectPalette
-    var cornerRadius: CGFloat = SubjectMetrics.rowRadius
+    var cornerRadius: CGFloat = SubjectMetrics.cornerRadius
 
     @Environment(ThemeManager.self) private var themeManager
 
@@ -407,7 +421,7 @@ extension View {
     /// A block of content on the subject's own tinted card.
     func subjectCard(
         palette: SubjectPalette,
-        cornerRadius: CGFloat = SubjectMetrics.rowRadius
+        cornerRadius: CGFloat = SubjectMetrics.cornerRadius
     ) -> some View {
         modifier(SubjectCardBackground(palette: palette, cornerRadius: cornerRadius))
     }
@@ -483,11 +497,9 @@ struct SubjectHeaderBlock<Trailing: View>: View {
     let title: String
     var subtitle: String?
     let palette: SubjectPalette
-    /// The spec runs two page gutters and they split by screen family, which is
-    /// measurable rather than a matter of taste: 26pt on a subject's own page
-    /// (1a, 1ad, 1k) and 16pt on the account's pushed lists (1o and its
-    /// siblings). Measured with `Scripts/redesign-spec-inventory.py`, not eyed.
-    var gutter: CGFloat = SubjectMetrics.headerGutter
+    /// The screen edge. The 2026-09 spec ran 26pt on a subject's own page and
+    /// 16pt on the account's lists; the Rules board made it 16 everywhere.
+    var gutter: CGFloat = SubjectMetrics.gutter
     /// Set by the initializers rather than inferred from `Trailing.self`:
     /// comparing metatypes to spot `EmptyView` works but reads as a trick, and
     /// this also lets a caller pass a conditional trailing view that is empty
@@ -567,7 +579,7 @@ extension SubjectHeaderBlock where Trailing == EmptyView {
         title: String,
         subtitle: String? = nil,
         palette: SubjectPalette,
-        gutter: CGFloat = SubjectMetrics.headerGutter
+        gutter: CGFloat = SubjectMetrics.gutter
     ) {
         self.init(
             kicker: kicker,
@@ -1140,7 +1152,7 @@ struct SubjectChip: View {
 
     @ViewBuilder
     private var background: some View {
-        let shape = RoundedRectangle(cornerRadius: SubjectMetrics.chipRadius, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: SubjectMetrics.controlRadius(dynamicTypeSize), style: .continuous)
         switch style {
         case .neutral:
             shape

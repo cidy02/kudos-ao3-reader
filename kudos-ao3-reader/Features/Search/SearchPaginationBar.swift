@@ -420,7 +420,7 @@ private struct PageJumpSheet: View {
     }
 
     private var fieldBackground: some View {
-        let shape = RoundedRectangle(cornerRadius: 11, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
         return shape
             .fill(themeManager.appTheme.glassFill(0.08))
             .overlay(shape.strokeBorder(themeManager.appTheme.glassStroke(0.14), lineWidth: 0.5))
@@ -450,7 +450,7 @@ private struct PageJumpSheet: View {
     }
 
     private func tileBackground(isSelected: Bool) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 11, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
         let isDark = themeManager.appTheme.isDarkFamily
         return shape
             .fill(isSelected ? selectedFill(isDark ? 0.24 : 0.16) : themeManager.appTheme.glassFill(0.08))

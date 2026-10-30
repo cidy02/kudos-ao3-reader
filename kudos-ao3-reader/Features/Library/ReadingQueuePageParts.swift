@@ -194,7 +194,7 @@ struct QueueHeaderDetails<FilterRail: View>: View {
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                .padding(.horizontal, SubjectMetrics.headerGutter)
+                .padding(.horizontal, SubjectMetrics.gutter)
             }
             // The same tag label the organizer's rows draw (1h, 1i).
             FlowLayout(spacing: 6, rowSpacing: 6) {
@@ -210,7 +210,7 @@ struct QueueHeaderDetails<FilterRail: View>: View {
                 .accessibilityLabel("Add a tag to this queue")
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, SubjectMetrics.headerGutter)
+            .padding(.horizontal, SubjectMetrics.gutter)
             .padding(.bottom, 4)
             SubjectPillRail(
                 options: QueueQuickFilter.allCases,
@@ -263,7 +263,7 @@ struct WorkLedgerCardBackground: View {
         let palette = themeManager.appTheme.subjectPalette(
             hue: CoverArt.workHue(fandoms: work.workFandoms, title: work.title)
         )
-        let rowShape = RoundedRectangle(cornerRadius: SubjectMetrics.rowRadius, style: .continuous)
+        let rowShape = RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
         rowShape
             .fill(themeManager.appTheme.cardSurface)
             .overlay(rowShape.fill(palette.rowWash))

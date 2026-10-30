@@ -260,10 +260,10 @@ struct CollectionMaintainersView: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
             .background(
-                RoundedRectangle(cornerRadius: 99, style: .continuous)
+                Capsule()
                     .fill(theme.appTheme.glassFill(0.08))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 99, style: .continuous)
+                        Capsule()
                             .strokeBorder(theme.appTheme.glassStroke(0.12), lineWidth: 0.5)
                     )
             )

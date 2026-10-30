@@ -27,7 +27,7 @@ import SwiftUI
 /// the page wash rather than a panel on it: that card sits inside the work's own
 /// colour and a fill would mute it.
 struct SubjectPanelBackground: ViewModifier {
-    var cornerRadius: CGFloat = 14
+    var cornerRadius: CGFloat = SubjectMetrics.cornerRadius
     var isFilled: Bool = true
 
     @Environment(ThemeManager.self) private var themeManager
@@ -44,7 +44,7 @@ struct SubjectPanelBackground: ViewModifier {
 extension View {
     /// Rounded glass ground with a hairline, for a group of form rows or a
     /// figure strip.
-    func subjectPanel(cornerRadius: CGFloat = 14, isFilled: Bool = true) -> some View {
+    func subjectPanel(cornerRadius: CGFloat = SubjectMetrics.cornerRadius, isFilled: Bool = true) -> some View {
         modifier(SubjectPanelBackground(cornerRadius: cornerRadius, isFilled: isFilled))
     }
 }
@@ -69,7 +69,7 @@ struct SubjectPanelSegmentRow: ViewModifier {
     /// Off for a `SubjectFormRow`, which carries its own 14pt row padding — and
     /// then the trailing inset is the card's edge, not room for a drag handle.
     var padsContent: Bool = true
-    var cornerRadius: CGFloat = 14
+    var cornerRadius: CGFloat = SubjectMetrics.cornerRadius
 
     @Environment(ThemeManager.self) private var themeManager
 
@@ -381,10 +381,11 @@ struct SubjectFormValue: View {
 /// Ascending / Descending, and the same shape wherever a form offers two or
 /// three mutually exclusive words.
 ///
-/// Not a `Picker(.segmented)`: the spec's is 9pt-radius over a 7pt-radius
-/// selection on a glass ground, and `WorkDetailView`'s own notes record that a
+/// Not a `Picker(.segmented)`: `WorkDetailView`'s own notes record that a
 /// native segmented picker clips rather than reflows at accessibility text
-/// sizes. This one lets its labels scale and shrink instead.
+/// sizes. This one lets its labels scale and shrink instead. A capsule
+/// selection in a capsule on a glass ground, as the native one draws (T-484:
+/// the spec's 9pt over 7pt rounded rects predate the Rules board).
 struct SubjectSegmentedControl<Value: Hashable>: View {
     let options: [Value]
     let title: (Value) -> String
@@ -400,10 +401,10 @@ struct SubjectSegmentedControl<Value: Hashable>: View {
         }
         .padding(2)
         .background(
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
+            Capsule()
                 .fill(themeManager.appTheme.glassFill(0.09))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    Capsule()
                         .strokeBorder(themeManager.appTheme.glassStroke(0.13), lineWidth: 0.5)
                 )
         )
@@ -431,7 +432,7 @@ struct SubjectSegmentedControl<Value: Hashable>: View {
     @ViewBuilder
     private func selectionBackground(isSelected: Bool) -> some View {
         if isSelected {
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
+            Capsule()
                 .fill(themeManager.appTheme.glassFill(0.16))
         }
     }

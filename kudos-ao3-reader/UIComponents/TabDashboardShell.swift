@@ -27,7 +27,7 @@ struct TabDashboardShell: View {
     var body: some View {
         DashboardRegionHost {
             ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
+                VStack(alignment: .leading, spacing: SubjectMetrics.sectionSpacing) {
                     if showFilterChips {
                         filterChipRow
                     }
@@ -70,7 +70,7 @@ struct TabDashboardShell: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 ForEach(Self.filterChipWidths.indices, id: \.self) { index in
-                    SkeletonBlock(height: 28, width: Self.filterChipWidths[index], cornerRadius: 14)
+                    SkeletonBlock(height: 28, width: Self.filterChipWidths[index], cornerRadius: SubjectMetrics.capsuleRadius)
                 }
             }
             .padding(.horizontal, 16)
@@ -166,7 +166,7 @@ private struct DashboardResumeSkeleton: View {
     var body: some View {
         if let regions, regions.resumePanes(hasNext: true, cardWidth: cardSize.width(in: nil)) != nil {
             HomeResumeComposition(hasNext: true) {
-                SkeletonBlock(height: 240, cornerRadius: SubjectMetrics.heroRadius)
+                SkeletonBlock(height: 240, cornerRadius: SubjectMetrics.cornerRadius)
             } next: {
                 ForEach(0 ..< 4, id: \.self) { _ in WorkCoverCardSkeleton() }
             }

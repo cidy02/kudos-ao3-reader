@@ -6,6 +6,7 @@ import SwiftUI
 struct MoveBackToInProgressButton: View {
     let work: SavedWork
     @Environment(\.modelContext) private var context
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @ScaledMetric(relativeTo: .footnote) private var buttonLabelSize: CGFloat = 12.5
 
@@ -18,7 +19,7 @@ struct MoveBackToInProgressButton: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 7)
                 .background(
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    RoundedRectangle(cornerRadius: SubjectMetrics.controlRadius(dynamicTypeSize), style: .continuous)
                         .fill(Color.primary.opacity(0.08))
                         .strokeBorder(Color.primary.opacity(0.16), lineWidth: 0.5)
                 )

@@ -143,7 +143,7 @@ struct AO3AuthorHero: View {
             // A small capsule clipped the label and left the chrome. A rounded
             // rect has room for the wrapped words, across the column.
             button
-                .buttonBorderShape(.roundedRectangle(radius: 14))
+                .buttonBorderShape(.roundedRectangle(radius: SubjectMetrics.cornerRadius))
                 .disabled(actionsBusy)
                 .accessibilityHint(subscriptionHint)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -554,6 +554,7 @@ struct AO3BookmarkFootnote: View {
 private struct BookmarkTagPill: View {
     let text: String
     @Environment(ThemeManager.self) private var theme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .footnote) private var tagTextSize: CGFloat = 13
 
     var body: some View {
@@ -563,10 +564,10 @@ private struct BookmarkTagPill: View {
             .padding(.horizontal, 11)
             .padding(.vertical, 6)
             .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                RoundedRectangle(cornerRadius: SubjectMetrics.controlRadius(dynamicTypeSize), style: .continuous)
                     .fill(theme.appTheme.glassFill(0.09))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        RoundedRectangle(cornerRadius: SubjectMetrics.controlRadius(dynamicTypeSize), style: .continuous)
                             .strokeBorder(theme.appTheme.glassStroke(0.14), lineWidth: 0.5)
                     )
             )

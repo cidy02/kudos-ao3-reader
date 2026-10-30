@@ -720,7 +720,7 @@ struct QueueRowTagLabel: View {
     @ScaledMetric(relativeTo: .caption2) private var fontSize: CGFloat = 9.5
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: 6, style: .continuous)
+        let shape = Capsule()
         Text(text.uppercased())
             .font(.system(size: fontSize, weight: .semibold))
             .tracking(fontSize * 0.06)
@@ -746,7 +746,6 @@ private extension View {
         cardRow(
             tintHue: queue.kind == .custom ? queue.displayHue : nil,
             tintHex: queue.kind == .custom ? queue.colorHex : nil,
-            cornerRadius: 16,
             verticalPadding: 11,
             interCardSpacing: 8
         )

@@ -536,7 +536,7 @@ struct AO3AuthorSeriesSection: View {
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .cardRow(cornerRadius: 18)
+                    .cardRow()
                 } else {
                     AO3AuthorContentMessage(
                         model: model,

@@ -85,7 +85,7 @@ extension View {
     @ViewBuilder
     func onboardingWrapsButton(at accessibilitySize: Bool) -> some View {
         if accessibilitySize {
-            buttonBorderShape(.roundedRectangle(radius: 14))
+            buttonBorderShape(.roundedRectangle(radius: SubjectMetrics.cornerRadius))
         } else {
             self
         }

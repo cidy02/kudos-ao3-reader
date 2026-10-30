@@ -228,11 +228,11 @@ struct PrivacyDataView: View {
         .padding(.horizontal, 18)
         .padding(.vertical, 16)
         .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
                 .fill(promisePalette.panelWash)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
                 .strokeBorder(promisePalette.rowBorder, lineWidth: 0.5)
         )
     }

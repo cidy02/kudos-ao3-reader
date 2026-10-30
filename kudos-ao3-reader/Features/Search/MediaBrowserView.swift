@@ -205,7 +205,7 @@ struct MediaBrowserView: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
             .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
                     .strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [5]))
                     .foregroundStyle(.tertiary)
             )
@@ -334,9 +334,9 @@ struct MediaBrowserView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(12)
         .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
+            RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
                 .fill(themeManager.appTheme.carouselCardSurface)
-                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(palette.cardWash))
+                .overlay(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous).fill(palette.cardWash))
                 .shadow(color: themeManager.appTheme.carouselCardShadow.color,
                         radius: themeManager.appTheme.carouselCardShadow.radius,
                         x: 0, y: themeManager.appTheme.carouselCardShadow.y)
@@ -506,7 +506,7 @@ struct MediaBrowserView: View {
             SkeletonBlock(height: 13, width: 88, cornerRadius: 4)
             SkeletonBlock(height: 11, width: 92, cornerRadius: 3)
                 .padding(.top, 6)
-            SkeletonBlock(height: 28, width: 116, cornerRadius: 14)
+            SkeletonBlock(height: 28, width: 116, cornerRadius: SubjectMetrics.capsuleRadius)
                 .padding(.top, 2)
         }
         .frame(maxWidth: .infinity, alignment: .leading)

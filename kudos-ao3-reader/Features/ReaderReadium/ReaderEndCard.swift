@@ -40,7 +40,7 @@ struct ReaderEndCard: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(ThemeManager.label(on: fill))
-                .background(fill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .background(fill, in: RoundedRectangle(cornerRadius: SubjectMetrics.controlRadius(dynamicTypeSize), style: .continuous))
                 .disabled(!kudosEnabled)
                 .accessibilityLabel(kudosGiven ? "Kudos given" : "Give Kudos")
             }
@@ -50,7 +50,7 @@ struct ReaderEndCard: View {
         .padding(16)
         .frame(maxWidth: 480)
         .frame(maxWidth: .infinity)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
         .accessibilityElement(children: .contain)
     }
 
@@ -95,7 +95,7 @@ struct ReaderEndCard: View {
         }
         .buttonStyle(.plain)
         .foregroundStyle(.accentInk)
-        .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: SubjectMetrics.controlRadius(dynamicTypeSize), style: .continuous))
         .disabled(!enabled)
         .minimumHitTarget()
         .accessibilityLabel(label)

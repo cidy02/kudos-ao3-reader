@@ -326,7 +326,7 @@ struct CollectionModerationView: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .subjectPanel(cornerRadius: 16)
+        .subjectPanel()
     }
 
     private func approveButton(for item: AO3CollectionItem) -> some View {

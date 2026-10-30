@@ -157,8 +157,8 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                 if hasSectionCache {
                     DashboardRegionHost {
                         ScrollView {
-                            // 1b: 22pt between sections.
-                            VStack(alignment: .leading, spacing: 22) {
+                            // 26pt between sections (Rules; 1b drew 22).
+                            VStack(alignment: .leading, spacing: SubjectMetrics.sectionSpacing) {
                                 resumeSection
                                 readingQueuesCarousel
                                 ForEach(HomeCollectionShelves.shelves(homeCollections)) { collection in

@@ -40,7 +40,7 @@ struct HomeResumeHero: View {
                             .padding(8)
                     }
                     .overlay {
-                        RoundedRectangle(cornerRadius: SubjectMetrics.heroRadius, style: .continuous)
+                        RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
                             .strokeBorder(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(Color.clear), lineWidth: 2)
                             .allowsHitTesting(false)
                     }
@@ -71,7 +71,7 @@ struct HomeResumeHero: View {
                             .padding(8)
                     }
                     .overlay {
-                        RoundedRectangle(cornerRadius: SubjectMetrics.heroRadius, style: .continuous)
+                        RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
                             .strokeBorder(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(Color.clear), lineWidth: 2)
                     }
             }
@@ -192,7 +192,7 @@ private struct UnblurredHomeResumeHero: View {
             // On the card's own content insets, now no tray pads it in (I-1).
             if !dynamicTypeSize.isAccessibilitySize { signalGrid.padding(.top, 16).padding(.trailing, 18) }
         }
-        .contentShape(RoundedRectangle(cornerRadius: SubjectMetrics.heroRadius, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
         .workCardZoomSource(work.zoomKey, in: zoomNamespace)
     }
 
@@ -296,7 +296,7 @@ private struct UnblurredHomeResumeHero: View {
     }
 
     private var heroCardBackground: some View {
-        let heroShape = RoundedRectangle(cornerRadius: SubjectMetrics.heroRadius, style: .continuous)
+        let heroShape = RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
         return heroShape
             .fill(themeManager.appTheme.carouselCardSurface)
             .overlay(heroShape.fill(subjectPalette.cardWash))

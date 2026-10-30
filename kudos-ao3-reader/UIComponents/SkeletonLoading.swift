@@ -129,7 +129,7 @@ struct AO3WorkRowSkeleton: View {
             .padding(.top, 4)
 
             HStack { // date TagChip (bottom-left) + expand control (bottom-right)
-                SkeletonBlock(height: 24, width: 96, cornerRadius: 12)
+                SkeletonBlock(height: 24, width: 96, cornerRadius: SubjectMetrics.capsuleRadius)
                 Spacer(minLength: 0)
                 SkeletonBlock(height: 24, width: 24, cornerRadius: 12)
             }
@@ -187,7 +187,7 @@ struct WorkCoverCardSkeleton: View {
                height: CarouselCardMetrics.height,
                alignment: .topLeading)
         .background(Color.primary.opacity(0.04),
-                    in: RoundedRectangle(cornerRadius: CarouselCardMetrics.cornerRadius,
+                    in: RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius,
                                          style: .continuous))
         .skeletonShimmer()
     }
@@ -241,7 +241,7 @@ struct CategoryCardSkeleton: View {
                     .padding(.top, 2)
                 FlowLayout(spacing: 6, rowSpacing: 6) {
                     ForEach(0 ..< chipCount, id: \.self) { index in
-                        SkeletonBlock(height: 28, width: index.isMultiple(of: 2) ? 116 : 82, cornerRadius: 14)
+                        SkeletonBlock(height: 28, width: index.isMultiple(of: 2) ? 116 : 82, cornerRadius: SubjectMetrics.capsuleRadius)
                     }
                 }
             }
@@ -259,16 +259,16 @@ struct CategoryCardSkeleton: View {
         // Applied before .background, not after, so the shadow (drawn as part
         // of that background layer) keeps its own soft edge instead of also
         // getting clipped.
-        .clipShape(RoundedRectangle(cornerRadius: CardListMetrics.cornerRadius, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
         // Same card chrome as the real grid cell (theme.appTheme.cardSurface/
         // cardBorder/cardShadow) — this renders inside a plain masonry column,
         // not a List row, so it needs its own background the way .cardRow()
         // used to supply for free.
         .background(
-            RoundedRectangle(cornerRadius: CardListMetrics.cornerRadius, style: .continuous)
+            RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
                 .fill(themeManager.appTheme.cardSurface)
                 .overlay(
-                    RoundedRectangle(cornerRadius: CardListMetrics.cornerRadius, style: .continuous)
+                    RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
                         .strokeBorder(themeManager.appTheme.cardBorder, lineWidth: 0.5)
                 )
                 .shadow(color: themeManager.appTheme.cardShadow.color,
@@ -448,7 +448,7 @@ struct ReaderPositionCardSkeleton: View {
         .padding(.top, 13)
         .padding(.bottom, 15)
         .frame(maxWidth: .infinity)
-        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
         .skeletonShimmer()
         .accessibilityHidden(true)
     }

@@ -348,7 +348,7 @@ struct NewReadingQueueSheet: View {
             .padding(.horizontal, 13)
             .padding(.vertical, 11)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .subjectPanel(cornerRadius: 11)
+            .subjectPanel()
     }
 
     private var offlinePanel: some View {

@@ -4,7 +4,7 @@ import SwiftUI
 // and the pure label/state helpers behind it. Visual language matches the
 // Account tab where the two hubs are playing the same role — the segmented
 // section Picker uses Account's own `accountControlCardRow()` chrome, and
-// `WorkQuickActionTile` shares `AccountShortcutGridTile`'s `CardRadius.tile` —
+// `WorkQuickActionTile` shares `AccountShortcutGridTile`'s card corner —
 // but work-content cards (tag/status/stats sections) deliberately keep the
 // Library's standard `.cardRow()` geometry instead, exactly as
 // `AccountControlStyle.swift` documents ("Work cards deliberately retain the
@@ -27,7 +27,7 @@ struct WorkQuickActionTile: View {
     var detail: String?
     var isBusy = false
 
-    private let cornerRadius: CGFloat = CardRadius.tile
+    private let cornerRadius: CGFloat = SubjectMetrics.cornerRadius
 
     var body: some View {
         VStack(spacing: 8) {

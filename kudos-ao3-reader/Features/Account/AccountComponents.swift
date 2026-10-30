@@ -144,7 +144,7 @@ struct AccountProfileCard: View {
                 .padding(.horizontal, 13)
                 .padding(.vertical, 7)
                 .background(theme.appTheme.glassFill(0.12), in: dynamicTypeSize.isAccessibilitySize
-                    ? AnyShape(RoundedRectangle(cornerRadius: 18, style: .continuous)) : AnyShape(Capsule()))
+                    ? AnyShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)) : AnyShape(Capsule()))
                 // 30pt drawn, 44pt to the finger, no taller row.
                 .contentShape(Capsule().inset(by: -7))
         }
@@ -353,10 +353,10 @@ struct AccountScrollChromeCard<Content: View>: View {
             .padding(.vertical, AccountControlMetrics.verticalPadding)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: AccountControlMetrics.cornerRadius, style: .continuous)
+                RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
                     .fill(theme.appTheme.cardSurface)
                     .overlay(
-                        RoundedRectangle(cornerRadius: AccountControlMetrics.cornerRadius, style: .continuous)
+                        RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
                             .strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5)
                     )
             )
@@ -468,7 +468,7 @@ struct AccountShortcutGridTile: View {
     @ScaledMetric(relativeTo: .caption) private var titleSize: CGFloat = 11.5
     @ScaledMetric(relativeTo: .caption2) private var countSize: CGFloat = 11
 
-    private let cornerRadius: CGFloat = 14
+    private let cornerRadius: CGFloat = SubjectMetrics.cornerRadius
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -710,7 +710,7 @@ struct AccountWorksInlineSection: View {
             .buttonStyle(.bordered)
             .foregroundStyle(.accentInk)
             .accentFill()
-            .buttonBorderShape(.roundedRectangle(radius: AccountControlMetrics.inlineCornerRadius))
+            .buttonBorderShape(.capsule)
             .controlSize(.small)
         }
     }

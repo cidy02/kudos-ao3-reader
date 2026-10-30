@@ -309,7 +309,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                 completion: displayCompletionStatus,
                 palette: workPalette
             )
-            .pagePanelRow(top: 16)
+            .pageBodyRow(top: 16)
 
             resumeCardRow
         }
@@ -335,7 +335,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             action: read
         )
         .downloadDimmed(localWork)
-        .pagePanelRow(top: 14)
+        .pageBodyRow(top: 14)
     }
 
     /// Nil unless this work has actually been opened on this device. A ring at
@@ -474,7 +474,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             .layoutFreeHitTarget { showingMyCopy = false }
             .accessibilityLabel("Close")
         }
-        .padding(.horizontal, 22)
+        .padding(.horizontal, SubjectMetrics.gutter)
         .padding(.top, 21)
         .padding(.bottom, 14)
     }
