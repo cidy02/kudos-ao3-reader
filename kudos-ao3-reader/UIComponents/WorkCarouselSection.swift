@@ -21,6 +21,9 @@ struct WorkCarouselSection<Cards: View, Empty: View>: View {
     /// it — a section whose count is not a fact worth stating (an AO3-paged
     /// list showing one page of many) should not print a misleading one.
     private let itemCount: Int?
+    /// Wins over `itemCount` when a section's count is not a bare number,
+    /// such as Downloaded's "98 · 2.1 GB".
+    private let countText: String?
     /// Between cards side by side on a shelf.
     private let cardSpacing: CGFloat
     private let onSeeAll: (() -> Void)?
@@ -35,6 +38,7 @@ struct WorkCarouselSection<Cards: View, Empty: View>: View {
         collapseKey: String,
         hasItems: Bool,
         itemCount: Int? = nil,
+        countText: String? = nil,
         cardSpacing: CGFloat = CarouselCardMetrics.compactGridColumnSpacing,
         onSeeAll: (() -> Void)? = nil,
         @ViewBuilder cards: @escaping () -> Cards,
@@ -43,6 +47,7 @@ struct WorkCarouselSection<Cards: View, Empty: View>: View {
         self.title = title
         self.hasItems = hasItems
         self.itemCount = itemCount
+        self.countText = countText
         self.cardSpacing = cardSpacing
         self.onSeeAll = onSeeAll
         self.cards = cards
@@ -74,6 +79,7 @@ struct WorkCarouselSection<Cards: View, Empty: View>: View {
         SectionRuleHeader(
             title: title,
             count: itemCount,
+            countText: countText,
             isCollapsed: collapsed,
             onToggleCollapse: {
                 withAnimationUnlessReduced(.snappy(duration: 0.22), reduceMotion: reduceMotion) {
