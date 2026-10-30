@@ -5,6 +5,8 @@ import androidx.compose.ui.graphics.Color
 // AO3's signature dark red. Must match Apple ThemeManager.ao3Red (#990000) and the
 // SETTINGS_CONTRACT accentColorHex default for cross-platform visual parity.
 val Ao3Red = Color(0xFF990000)
+/** Readable AO3-red text/link step on Dark and OLED; filled controls keep [Ao3Red]. */
+val Ao3RedInkDark = Color(0xFFFF7A70)
 val Ao3RedDark = Color(0xFF660000)
 val SepiaTint = Color(0xFF9A6732)
 val Ink = Color(0xFF23201D)

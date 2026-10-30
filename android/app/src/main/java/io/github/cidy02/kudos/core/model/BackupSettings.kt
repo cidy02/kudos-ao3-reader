@@ -43,7 +43,8 @@ data class BackupSettings(
             app = AppSettings(
                 confirmBeforeDelete = confirmBeforeDelete,
                 appTheme = AppThemeSetting.fromStorage(appTheme),
-                accentColorHex = accentColorHex,
+                // Decode the legacy field, but never apply a stored non-red accent.
+                accentColorHex = KudosSettings.Defaults.app.accentColorHex,
                 autoPreserveSmallSeriesOnSaveForLater = autoPreserveSmallSeriesOnSaveForLater,
                 autoPreserveSeriesWorkThreshold = autoPreserveSeriesWorkThreshold
             ),
@@ -76,7 +77,8 @@ data class BackupSettings(
                 appTheme = settings.app.appTheme.storageValue,
                 readerTheme = settings.reader.readerTheme.storageValue,
                 matchAppReaderTheme = settings.reader.matchAppReaderTheme,
-                accentColorHex = settings.app.accentColorHex,
+                // The key remains in the cross-platform contract for older clients.
+                accentColorHex = KudosSettings.Defaults.app.accentColorHex,
                 autoPreserveSmallSeriesOnSaveForLater =
                     settings.app.autoPreserveSmallSeriesOnSaveForLater,
                 autoPreserveSeriesWorkThreshold = settings.app.autoPreserveSeriesWorkThreshold

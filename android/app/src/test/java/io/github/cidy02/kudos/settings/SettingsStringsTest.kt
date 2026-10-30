@@ -11,7 +11,7 @@ import java.io.File
  */
 class SettingsStringsTest {
     private val restored = listOf(
-        "App Theme", "Reader Theme", "Accent color", "Apply accent", "Reset to AO3 Red",
+        "App Theme", "Reader Theme",
         "Text size", "Customize Theme…", "Import font",
         "Could not import font.", "Could not delete font.",
         // Import results now come from the app-wide import path (KudosApp), not this page.

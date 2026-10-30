@@ -92,7 +92,6 @@ class SettingsRepositoryTest {
         repository.updateReaderMode(ReaderMode.Paged)
         repository.updateReaderTheme(ReaderThemeSetting.Sepia)
         repository.updateAppTheme(AppThemeSetting.Dark)
-        repository.updateAccentColor("#123456")
         repository.updateReaderCustomize(true)
         repository.updateReaderBoldText(true)
         repository.updateReaderFontId("georgia")
@@ -237,7 +236,6 @@ class SettingsRepositoryTest {
         repository.updateMatureContentMode(MatureContentMode.Hide)
         repository.updateRequireBiometricToReveal(true)
         repository.updateConfirmBeforeDelete(false)
-        repository.updateAccentColor("#0B57D0")
         repository.updateKeepsWorksYouRead(true)
 
         val settings = repository.snapshot()
@@ -246,8 +244,19 @@ class SettingsRepositoryTest {
         assertEquals(MatureContentMode.Hide, settings.privacy.matureContentMode)
         assertTrue(settings.privacy.requireBiometricToReveal)
         assertFalse(settings.app.confirmBeforeDelete)
-        assertEquals("#0B57D0", settings.app.accentColorHex)
+        assertEquals("#990000", settings.app.accentColorHex)
         assertTrue(settings.app.keepsWorksYouRead)
+    }
+
+    @Test
+    fun restoredCustomAccentIsIgnored() = runBlocking {
+        repository.replaceAll(
+            KudosSettings.Defaults.copy(
+                app = KudosSettings.Defaults.app.copy(accentColorHex = "#0B57D0")
+            )
+        )
+
+        assertEquals("#990000", repository.snapshot().app.accentColorHex)
     }
 
     @Test

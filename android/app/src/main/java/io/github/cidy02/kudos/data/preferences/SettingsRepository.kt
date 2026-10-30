@@ -402,10 +402,6 @@ class SettingsRepository(
         dataStore.edit { it[Keys.ReaderWordSpacing] = em }
     }
 
-    suspend fun updateAccentColor(hex: String) {
-        dataStore.edit { it[Keys.AccentColorHex] = hex }
-    }
-
     suspend fun updateSyncIsEnabled(enabled: Boolean) {
         dataStore.edit { it[Keys.SyncIsEnabled] = enabled }
     }
@@ -600,7 +596,7 @@ class SettingsRepository(
             prefs[Keys.AppTheme] = settings.app.appTheme.storageValue
             prefs[Keys.ReaderTheme] = settings.reader.readerTheme.storageValue
             prefs[Keys.MatchAppReaderTheme] = settings.reader.matchAppReaderTheme
-            prefs[Keys.AccentColorHex] = settings.app.accentColorHex
+            prefs.remove(Keys.AccentColorHex)
             prefs[Keys.AutoPreserveSmallSeries] = settings.app.autoPreserveSmallSeriesOnSaveForLater
             prefs[Keys.AutoPreserveSeriesThreshold] = settings.app.autoPreserveSeriesWorkThreshold
         }
@@ -647,8 +643,8 @@ class SettingsRepository(
                 downloadOnSubscribe = preferences[Keys.DownloadOnSubscribe]
                     ?: defaults.app.downloadOnSubscribe,
                 appTheme = AppThemeSetting.fromStorage(preferences[Keys.AppTheme]),
-                accentColorHex = preferences[Keys.AccentColorHex]
-                    ?: defaults.app.accentColorHex,
+                // Older installs and backups may still carry this preference.
+                accentColorHex = defaults.app.accentColorHex,
                 autoPreserveSmallSeriesOnSaveForLater = preferences[Keys.AutoPreserveSmallSeries]
                     ?: defaults.app.autoPreserveSmallSeriesOnSaveForLater,
                 autoPreserveSeriesWorkThreshold = preferences[Keys.AutoPreserveSeriesThreshold]

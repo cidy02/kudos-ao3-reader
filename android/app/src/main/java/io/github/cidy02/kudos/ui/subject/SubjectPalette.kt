@@ -24,13 +24,9 @@ class SubjectPalette private constructor(
 
     override fun hashCode(): Int = 31 * (31 * hue.hashCode() + theme.hashCode()) + (picked?.hashCode() ?: 0)
 
-    /**
-     * Control tint. A picked colour is used exactly, on every theme (T-348).
-     * A derived subject uses [accent] instead, so a fandom's buttons are that
-     * fandom's colour rather than the app accent.
-     */
+    /** App-control tint. Subject colours stay in washes, artwork and identity labels. */
     val tint: Color
-        get() = picked?.let { controlColor(it, theme) } ?: accent
+        get() = theme.appTint
 
     val accent: Color
         get() = when (theme) {
@@ -184,14 +180,9 @@ class SubjectPalette private constructor(
         fun fromColor(color: Color, theme: ReaderTheme) =
             SubjectPalette(color.hueComponent(), theme, color)
 
-        /**
-         * A picked colour as a control colour. Returns the colour itself on every
-         * theme. Dark and OLED used to lift it toward white; the owner wants the
-         * colour as picked (T-348). [theme] stays in the signature so a later
-         * change has the same call site as iOS.
-         */
+        /** Legacy seam retained for callers; app controls no longer accept a subject colour. */
         @Suppress("UNUSED_PARAMETER")
-        fun controlColor(color: Color, theme: ReaderTheme): Color = color
+        fun controlColor(color: Color, theme: ReaderTheme): Color = theme.appTint
 
         /** Black or white, whichever clears WCAG's 0.179 luminance crossover. */
         fun label(on: Color): Color =

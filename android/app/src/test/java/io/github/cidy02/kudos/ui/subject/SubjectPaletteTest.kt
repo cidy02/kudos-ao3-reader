@@ -2,6 +2,8 @@ package io.github.cidy02.kudos.ui.subject
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import io.github.cidy02.kudos.ui.theme.Ao3Red
+import io.github.cidy02.kudos.ui.theme.Ao3RedInkDark
 import io.github.cidy02.kudos.ui.theme.SepiaTint
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
@@ -35,8 +37,8 @@ class SubjectPaletteTest {
         assertClose(hsb(hue, 0.18, 0.97), dark.accentOnFill)
         assertClose(hsb(hue, 0.55, 0.29), dark.washStops[0].color)
         assertClose(hsb(hue, 0.53, 0.24), dark.washStops[1].color)
-        assertClose(dark.accent.withOpacity(0.24), dark.chipFill)
-        assertClose(dark.accent.withOpacity(0.50), dark.chipStroke)
+        assertClose(Ao3Red.withOpacity(0.24), dark.chipFill)
+        assertClose(Ao3Red.withOpacity(0.50), dark.chipStroke)
         assertClose(hsb(hue, 0.54, 0.36), dark.cardWashColors[0])
         assertClose(hsb(hue, 0.52, 0.155), dark.cardWashColors[1])
         assertEquals(1f, dark.cardWashColors[0].alpha, 0.001f)
@@ -47,8 +49,8 @@ class SubjectPaletteTest {
         val light = SubjectPalette.fromHue(hue, ReaderTheme.Light)
         assertClose(hsb(hue, 0.72, 0.52), light.accent)
         assertClose(hsb(hue, 0.20, 0.98), light.washStops[0].color)
-        assertClose(light.accent.withOpacity(0.16), light.chipFill)
-        assertClose(light.accent.withOpacity(0.40), light.chipStroke)
+        assertClose(Ao3Red.withOpacity(0.16), light.chipFill)
+        assertClose(Ao3Red.withOpacity(0.40), light.chipStroke)
         assertClose(light.accent.withOpacity(0.16), light.cardBorder)
 
         val sepia = SubjectPalette.fromHue(hue, ReaderTheme.Sepia)
@@ -113,11 +115,12 @@ class SubjectPaletteTest {
     }
 
     @Test
-    fun controlsUseThePickedAccentExactly() {
+    fun controlsUseTheFixedAppColourAndSubjectsKeepTheirIdentity() {
         val picked = Color(0xFF336699)
         for (theme in ReaderTheme.entries) {
-            assertEquals(picked.toArgb(), SubjectPalette.controlColor(picked, theme).toArgb())
-            assertEquals(picked.toArgb(), SubjectPalette.fromColor(picked, theme).tint.toArgb())
+            val expected = if (theme == ReaderTheme.Sepia) SepiaTint else Ao3Red
+            assertEquals(expected.toArgb(), SubjectPalette.controlColor(picked, theme).toArgb())
+            assertEquals(expected.toArgb(), SubjectPalette.fromColor(picked, theme).tint.toArgb())
         }
         val dark = SubjectPalette.fromColor(picked, ReaderTheme.Dark)
         assertNotEquals(dark.accent.toArgb(), dark.tint.toArgb())
@@ -125,11 +128,11 @@ class SubjectPaletteTest {
         val sepiaScope = ReaderTheme.Sepia.scopePalette(picked)
         assertEquals(SepiaTint.toArgb(), sepiaScope.tint.toArgb())
         val darkScope = ReaderTheme.Dark.scopePalette(picked)
-        assertEquals(picked.toArgb(), darkScope.tint.toArgb())
+        assertEquals(Ao3Red.toArgb(), darkScope.tint.toArgb())
 
         val darkTokens = KudosTokens.of(ReaderTheme.Dark, picked)
-        assertEquals(picked.toArgb(), darkTokens.accent.toArgb())
-        assertEquals(picked.toArgb(), darkTokens.scopePalette.tint.toArgb())
+        assertEquals(Ao3Red.toArgb(), darkTokens.accent.toArgb())
+        assertEquals(Ao3Red.toArgb(), darkTokens.scopePalette.tint.toArgb())
         val sepiaTokens = KudosTokens.of(ReaderTheme.Sepia, picked)
         assertEquals(SepiaTint.toArgb(), sepiaTokens.accent.toArgb())
         assertEquals(SepiaTint.toArgb(), sepiaTokens.scopePalette.tint.toArgb())
@@ -184,8 +187,7 @@ class SubjectPaletteTest {
         for (theme in listOf(ReaderTheme.Dark, ReaderTheme.Oled)) {
             val tokens = KudosTokens.of(theme, red)
             assertEquals(red, tokens.accent)
-            assertTrue(contrastRatio(tokens.accentInk, theme.cardBackdrop) >= 4.5)
-            assertTrue(tokens.accentInk.red > tokens.accentInk.green) // still red
+            assertEquals(Ao3RedInkDark, tokens.accentInk)
         }
         for (theme in listOf(ReaderTheme.Light, ReaderTheme.Sepia)) {
             val tokens = KudosTokens.of(theme, red)

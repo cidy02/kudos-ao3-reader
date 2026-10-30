@@ -1,11 +1,9 @@
 package io.github.cidy02.kudos.settings
 
 import android.content.Intent
-import android.graphics.Color as AndroidColor
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -38,8 +36,6 @@ import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -52,9 +48,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -94,8 +88,6 @@ import kotlinx.coroutines.withContext
 
 // iOS's .data catch-all: the importer, rather than the picker, explains unsupported files.
 internal val EpubOpenMimeTypes = arrayOf("*/*")
-
-private val AccentPresets = listOf("#990000", "#0B57D0", "#0F6B46", "#7A3E00", "#5B2C6F")
 
 @Composable
 fun SettingsLibraryPage(repository: SettingsRepository, settings: KudosSettings) {
@@ -318,8 +310,7 @@ fun SettingsAboutPage(
         item {
             SettingsSection(
                 footnote = "These settings only change Kudos. Change anything AO3 stores about your " +
-                    "account in AO3 Preferences. Your accent colour from Appearance also colours " +
-                    "this tab."
+                    "account in AO3 Preferences. Controls use Kudos' AO3-red app colour."
             ) {
                 SubjectFormRow("Version", value = BuildConfig.VERSION_NAME)
                 SubjectRowSeparator()
@@ -817,90 +808,12 @@ private fun StepButton(label: String, enabled: Boolean, onClick: () -> Unit) {
     }
 }
 
-@Composable
-fun AccentColorWell(color: Color, modifier: Modifier = Modifier) {
-    Canvas(modifier.size(28.dp)) {
-        val stroke = 2.5.dp.toPx()
-        val radius = size.minDimension / 2f
-        drawCircle(
-            brush = Brush.sweepGradient(
-                listOf(Color.Red, Color.Yellow, Color.Green, Color.Cyan, Color.Blue, Color.Magenta, Color.Red)
-            ),
-            radius = radius - stroke / 2f,
-            style = Stroke(width = stroke)
-        )
-        drawCircle(color = color, radius = radius - stroke - 1.5.dp.toPx())
-    }
-}
-
-@Composable
-fun AccentCustomizeBlock(accentHex: String, onCommit: (String) -> Unit) {
-    val tokens = LocalKudosTokens.current
-    var draft by remember { mutableStateOf(accentHex) }
-    LaunchedEffect(accentHex) { draft = accentHex }
-    Column(
-        modifier = Modifier.padding(horizontal = 13.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            AccentPresets.forEach { preset ->
-                val selected = accentHex.equals(preset, ignoreCase = true)
-                Box(
-                    Modifier
-                        .size(28.dp)
-                        .clip(CircleShape)
-                        .background(accentColorOrFallback(preset))
-                        .border(
-                            width = if (selected) 2.dp else 0.5.dp,
-                            color = if (selected) tokens.primaryInk else tokens.glassStroke(0.4),
-                            shape = CircleShape
-                        )
-                        .clickable {
-                            draft = preset
-                            onCommit(preset)
-                        }
-                        .semantics { contentDescription = preset }
-                )
-            }
-        }
-        OutlinedTextField(
-            value = draft,
-            onValueChange = { draft = it },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            label = { Text("Hex") },
-            supportingText = { Text("e.g. #990000") }
-        )
-        OutlinedButton(
-            onClick = { normalizeAccentHex(draft)?.let(onCommit) },
-            enabled = normalizeAccentHex(draft) != null
-        ) {
-            Text("Apply accent")
-        }
-    }
-}
-
-internal fun accentColorOrFallback(hex: String): Color {
-    val parsed = runCatching { AndroidColor.parseColor(if (hex.startsWith("#")) hex else "#$hex") }.getOrNull()
-        ?: AndroidColor.parseColor("#990000")
-    return Color(parsed)
-}
-
 enum class ThemeChipOption(val label: String, val setting: AppThemeSetting) {
     Light("Light", AppThemeSetting.Light),
     Sepia("Sepia", AppThemeSetting.Sepia),
     Dark("Dark", AppThemeSetting.Dark),
     Oled("OLED", AppThemeSetting.Oled),
     System("System", AppThemeSetting.System)
-}
-
-private fun normalizeAccentHex(raw: String): String? {
-    val trimmed = raw.trim()
-    val hex = if (trimmed.startsWith("#")) trimmed.drop(1) else trimmed
-    if (hex.length != 3 && hex.length != 6) return null
-    if (!hex.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }) return null
-    val expanded = if (hex.length == 3) hex.map { "$it$it" }.joinToString("") else hex
-    return "#${expanded.uppercase()}"
 }
 
 private fun syncFolderName(uri: String): String {
