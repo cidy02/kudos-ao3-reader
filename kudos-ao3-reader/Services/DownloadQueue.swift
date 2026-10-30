@@ -29,6 +29,15 @@ final class DownloadQueue {
     /// keeps it at once): when each one's short fill started, by `SavedWork.id`.
     private(set) var instantDownloads: [UUID: Date] = [:]
 
+    /// An in-place chapter update. `enqueue` skips a work that already has its
+    /// EPUB, so this is the only way the Resume circle's fraction moves.
+    private var updateDownloads: [UUID: UpdateTrack] = [:]
+
+    private struct UpdateTrack {
+        var fraction: Double
+        var startedAt: Date
+    }
+
     /// The fill a download with nothing to fetch still shows (owner, 2026-10-01).
     static let instantDuration: TimeInterval = 0.7
 
@@ -86,7 +95,27 @@ final class DownloadQueue {
 
     /// Whether `work`'s progress ring should show a download right now.
     func isDownloading(_ work: SavedWork) -> Bool {
-        instantDownloads[work.id] != nil || activeItem(for: work) != nil
+        instantDownloads[work.id] != nil
+            || updateDownloads[work.id] != nil
+            || activeItem(for: work) != nil
+    }
+
+    /// Starts the fraction the Resume update circle reads. `at` is the creep's
+    /// origin; production passes the default.
+    func beginUpdateDownload(for id: UUID, at now: Date = Date()) {
+        updateDownloads[id] = UpdateTrack(fraction: 0, startedAt: now)
+    }
+
+    /// AO3's reported fraction, when the response includes a size. Ignored
+    /// once the update has ended, so a late callback cannot revive it.
+    func noteUpdateDownloadProgress(_ fraction: Double, for id: UUID) {
+        guard var track = updateDownloads[id] else { return }
+        track.fraction = max(track.fraction, fraction)
+        updateDownloads[id] = track
+    }
+
+    func endUpdateDownload(for id: UUID) {
+        updateDownloads[id] = nil
     }
 
     /// The download fill for `work`'s ring at `now`, or nil when it is not
@@ -94,13 +123,22 @@ final class DownloadQueue {
     /// floor that creeps toward 90%, so the ring moves while AO3 paces the
     /// request or sends no file size; it reaches 100% when the file is in.
     func downloadFraction(for work: SavedWork, at now: Date) -> Double? {
+        if let update = updateDownloads[work.id] {
+            return Self.creepingFraction(from: update.startedAt, reported: update.fraction, at: now)
+        }
         if let start = instantDownloads[work.id] {
             return min(1, now.timeIntervalSince(start) / Self.instantDuration)
         }
         guard let item = activeItem(for: work) else { return nil }
         guard let start = item.startedAt else { return 0 }
+        return Self.creepingFraction(from: start, reported: item.fraction, at: now)
+    }
+
+    /// Shared by a queue row and an in-place update: AO3's fraction, or a floor
+    /// that creeps toward 90% while the size is unknown.
+    private static func creepingFraction(from start: Date, reported: Double, at now: Date) -> Double {
         let creep = 0.9 * (1 - exp(-now.timeIntervalSince(start) / 4))
-        return max(item.fraction, creep)
+        return max(reported, creep)
     }
 
     /// The fill a cover bar or Resume ring draws while `work` is downloading,
