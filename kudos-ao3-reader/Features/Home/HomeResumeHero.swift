@@ -142,6 +142,21 @@ struct ResumeCardModel {
 
     var workPercent: Int { Int(((progress ?? 0) * 100).rounded()) }
     var chapterPercent: Int { Int(((chapterProgress ?? 0) * 100).rounded()) }
+
+    /// Nil when nothing has been read. A locator with no in-chapter fraction
+    /// keeps the work half and drops the chapter half, instead of printing 0%.
+    var detailProgressLine: String? {
+        guard progress != nil else { return nil }
+        let work = "\(workPercent)% of the work"
+        guard chapterProgress != nil else { return work }
+        return "\(chapterPercent)% of the chapter · \(work)"
+    }
+
+    /// "Read" (the caller's title) until there is a position to resume.
+    func detailPrimaryTitle(fallback: String) -> String {
+        guard progress != nil else { return fallback }
+        return "Resume Chapter \(chapterNumber)"
+    }
     var postedChapters: Int { SavedWork.postedChapterCount(from: chapters) }
     var plannedChapters: Int {
         max(SavedWork.totalChapterCount(from: chapters) ?? postedChapters, postedChapters)
@@ -493,10 +508,12 @@ struct WorkResumeCard: View {
             Text(model.displayedChapterName)
                 .font(.headline)
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
-            Text("\(model.chapterPercent)% of the chapter · \(model.workPercent)% of the work")
-                .font(.footnote)
-                .foregroundStyle(Color.white.opacity(0.85))
-                .fixedSize(horizontal: false, vertical: true)
+            if let line = model.detailProgressLine {
+                Text(line)
+                    .font(.footnote)
+                    .foregroundStyle(Color.white.opacity(0.85))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -634,7 +651,7 @@ struct WorkResumeCard: View {
                 } else {
                     Image(systemName: "play.fill").font(.caption)
                 }
-                Text(variant == .detail ? "Resume Chapter \(model.chapterNumber)" : primaryLabel)
+                Text(variant == .detail ? model.detailPrimaryTitle(fallback: primaryLabel) : primaryLabel)
                     .lineLimit(1)
             }
             .font(.headline)
@@ -678,6 +695,8 @@ struct WorkResumeCard: View {
                     accessibilityLabel: "Download progress"
                 )
             }
+        } else if variant == .detail, model.progress == nil {
+            EmptyView()
         } else {
             progressRing(
                 fraction: model.progress ?? 0,
