@@ -31,17 +31,14 @@ struct AccountView: View {
     @State private var showingInboxFilters = false
     @State private var filters = AO3SearchFilters()
     @State private var showingFilters = false
+    /// Still read by the unused profile-content helper. The hub no longer draws
+    /// an inline work list, so nothing toggles it.
     @State private var expandAll = false
-    /// Detailed list rows vs compact two-up cover cards — shared across Account
-    /// work lists (Reading / Writing / Activity) and persisted like Home/Library.
-    @AppStorage("account.displayMode") private var displayMode: WorkListDisplayMode = .compact
     /// The reader's chosen Shortcuts, as an ordered list of raw values.
     @AppStorage(AccountShortcutStore.key) private var shortcutsRaw = ""
     @State private var editingShortcuts = false
     @AppStorage("hideMatureContent") private var hideMature = true
     @State private var postingPseudName: String?
-    /// Bumped by pull-to-refresh on list-style Reading/Activity segments.
-    @State private var listReloadToken = 0
     @State private var confirmingLogOut = false
 
     enum Route: Hashable {
@@ -129,24 +126,12 @@ struct AccountView: View {
     static let writingRowOrder: [AccountWritingTab] = [.works, .series, .drafts]
     static let activityRowOrder: [AccountActivityTab] = [.history, .inbox]
 
-    /// Compact work lists use Library/Home's root `ScrollView` + `NavigationLink`
-    /// pattern. Stacking many links inside one List row breaks tap targets.
-    private var usesLibraryStyleCompactLayout: Bool {
-        auth.isLoggedIn && displayMode == .compact && showsWorkListControls
-    }
-
     /// The floating gear fades while you scroll down (owner, 2026-10-01).
     @State private var chromeScrolledAway = false
 
     var body: some View {
         NavigationStack(path: $path) {
-            Group {
-                if usesLibraryStyleCompactLayout {
-                    libraryStyleCompactRoot
-                } else {
-                    standardListRoot
-                }
-            }
+            standardListRoot
             .navigationTitle("Account")
                 .navigationDestination(for: Route.self, destination: destination)
                 #if DEBUG
@@ -280,72 +265,6 @@ struct AccountView: View {
         theme.scopePalette
     }
 
-    /// Matches LibrarySectionListView compact: `ScrollView` + two-up `NavigationLink` cards.
-    private var libraryStyleCompactRoot: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: AccountControlMetrics.compactSpacing) {
-                // No `SubjectHeaderBlock` here either: `usesLibraryStyleCompactLayout`
-                // is only ever true while signed in, so this one was always the
-                // duplicate name. The identity row inside the card below is the
-                // same one the list layout shows — this branch is a different
-                // *arrangement* of the Account tab, not a different screen.
-                AccountProfileCard(
-                    profileModel: profileModel,
-                    postingPseudName: $postingPseudName,
-                    onViewProfile: openOwnProfile,
-                    onLogin: { showingLogin = true }
-                )
-                .padding(.horizontal, SubjectMetrics.accountGutter)
-
-                if let notice = auth.noticeMessage {
-                    Text(notice)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, CardListMetrics.sideMargin)
-                }
-
-                SubjectSegmentedControl(
-                    options: AccountTab.allCases,
-                    title: \.rawValue,
-                    selection: $selectedTab
-                )
-                .accessibilityLabel("Account Content")
-                .padding(.horizontal, SubjectMetrics.accountGutter)
-
-                compactScopeChrome
-                compactWorksContent
-            }
-            .padding(.vertical, 12)
-        }
-        // This is a tab root, so keep the tab bar while painting its wash.
-        .subjectWash(accountPalette)
-        .refreshable { await refreshCurrentTab() }
-    }
-
-    @ViewBuilder
-    private var compactScopeChrome: some View {
-        // Compact swaps the list host, not 1bt's scope membership or controls.
-        switch selectedTab {
-        case .reading:
-            readingScopeGroups
-        case .writing:
-            writingScopeGroups
-        case .activity:
-            activityScopeGroups
-        case .overview:
-            EmptyView()
-        }
-    }
-
-    /// Dead in practice: `usesLibraryStyleCompactLayout` requires
-    /// `showsWorkListControls`, which every scope now returns false for, because
-    /// no scope draws an inline work list any more. Kept exhaustive rather than
-    /// deleted in the same commit as the display-mode fix.
-    @ViewBuilder
-    private var compactWorksContent: some View {
-        EmptyView()
-    }
-
     // MARK: Activation
 
     private var activationKey: String {
@@ -383,39 +302,6 @@ struct AccountView: View {
         guard let model = profileModel else { return }
         model.selectTab(tab, auth: auth)
         model.activate(auth: auth)
-    }
-
-    private func refreshCurrentTab() async {
-        guard auth.isLoggedIn else { return }
-        switch selectedTab {
-        case .overview:
-            if let model = profileModel { await model.refresh(auth: auth) }
-        case .reading:
-            switch readingTab {
-            case .bookmarks:
-                if let model = profileModel { await model.refresh(auth: auth) }
-            case .later, .subscriptions:
-                listReloadToken += 1
-            case .collections:
-                // Collections is a push-only card (full list is `AO3CollectionsList`);
-                // nothing inline observes `listReloadToken`.
-                break
-            }
-        case .writing:
-            switch writingTab {
-            case .works, .series:
-                if let model = profileModel { await model.refresh(auth: auth) }
-            case .drafts:
-                break
-            }
-        case .activity:
-            switch activityTab {
-            case .history:
-                listReloadToken += 1
-            case .inbox:
-                await inboxModel.refresh(auth: auth)
-            }
-        }
     }
 
     // MARK: Destinations & toolbar
@@ -477,8 +363,8 @@ struct AccountView: View {
         )
     }
 
-    /// Work-list chrome (Detailed/Compact + Expand) for Account segments that
-    /// show work cards. Series / Drafts / Inbox / Overview skip it.
+    /// The hub's rows open their own screens. Those screens own List/Grid and
+    /// Show Summaries. This page has no inline work list to switch.
     private var showsWorkListControls: Bool {
         guard auth.isLoggedIn else { return false }
         switch selectedTab {
@@ -828,7 +714,6 @@ struct AccountView: View {
                     AO3AuthorWorksSection(
                         model: model,
                         expandAll: expandAll,
-                        displayMode: displayMode,
                         layout: layout,
                         filters: filters
                     )
@@ -836,7 +721,6 @@ struct AccountView: View {
                     AO3AuthorBookmarksSection(
                         model: model,
                         expandAll: expandAll,
-                        displayMode: displayMode,
                         layout: layout
                     )
                 }
@@ -956,10 +840,7 @@ private extension AccountView {
             showingInboxFilters: $showingInboxFilters,
             isWorksVisible: selectedTab == .writing && writingTab == .works,
             showingWorksFilter: $showingFilters,
-            showsMatureRevealControl: showsMatureRevealControl,
-            showsWorkListControls: showsWorkListControls,
-            displayMode: $displayMode,
-            expandAll: $expandAll
+            showsMatureRevealControl: showsMatureRevealControl
         )
     }
 
@@ -1239,7 +1120,7 @@ private extension AccountView {
         AccountScopeGroup(
             title: title,
             count: nil,
-            layout: usesLibraryStyleCompactLayout ? .scroll : .list
+            layout: .list
         ) {
             VStack(spacing: 0) {
                 ForEach(Array(destinations.enumerated()), id: \.element.id) { index, destination in

@@ -91,16 +91,14 @@ enum AO3BookmarksCopy {
 /// Bookmarks' own list inside `AO3AccountWorksList`. Other account lists do
 /// not come through here.
 ///
-/// Compact is not the cover grid the other lists use. A cover has nowhere to
-/// put the note, the bookmark tags, the date, and the private or rec mark,
-/// and compact is the account default — the grid would have kept the gap this
-/// screen exists to close. Compact is the ledger row in a scroll view, with
-/// those facts under it. Detailed and ledger stay in the list.
+/// Grid is not the cover grid the other lists use. A cover has nowhere to
+/// put the note, the bookmark tags, the date, and the private or rec mark.
+/// Grid keeps the old compact scroll: the bookmark card, with those facts
+/// under it. List is the same card in a list, with the full stat line.
 struct AO3BookmarksWorksBrowser: View {
     let entries: [CanonicalWork]
     let bookmarks: [Int: AO3AuthorBookmark]
-    let displayMode: WorkListDisplayMode
-    let expandAll: Bool
+    let arrangement: WorkListArrangement
     let palette: SubjectPalette
     let kicker: String
     let showPagination: Bool
@@ -131,7 +129,7 @@ struct AO3BookmarksWorksBrowser: View {
 
     var body: some View {
         Group {
-            if displayMode == .compact {
+            if arrangement == .grid {
                 compactBody
             } else {
                 detailedBody
@@ -248,7 +246,7 @@ struct AO3BookmarksWorksBrowser: View {
     /// so the wash is `subjectCard` rather than `.cardRow` — the same reason
     /// Marked for Later's ledger rows are wrapped that way.
     private func compactRow(_ entry: CanonicalWork) -> some View {
-        rowStack(entry, ledger: true)
+        rowStack(entry, fullLedgerStats: false)
             .padding(.horizontal, 16)
             .padding(.vertical, 15)
             .subjectCard(palette: theme.appTheme.subjectPalette(hue: hue(for: entry)))
@@ -257,7 +255,7 @@ struct AO3BookmarksWorksBrowser: View {
 
     @ViewBuilder
     private func detailedRow(_ entry: CanonicalWork) -> some View {
-        let row = rowStack(entry, ledger: displayMode == .ledger)
+        let row = rowStack(entry, fullLedgerStats: true)
             .cardRow(tintHue: hue(for: entry))
         // A saved work's row takes Library's swipes, as it does everywhere else;
         // a remote row brings its own through `AO3WorkRow` (T-339).
@@ -274,9 +272,9 @@ struct AO3BookmarksWorksBrowser: View {
         }
     }
 
-    private func rowStack(_ entry: CanonicalWork, ledger: Bool) -> some View {
+    private func rowStack(_ entry: CanonicalWork, fullLedgerStats: Bool) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            rowBody(entry, ledger: ledger)
+            rowBody(entry, fullLedgerStats: fullLedgerStats)
             // A remote row draws its bookmark inside the 1q card. A saved work's
             // row does not know about bookmarks, so the same pieces sit under it.
             if entry.local != nil, let bookmark = bookmark(for: entry), !isBlurred(entry) {
@@ -286,19 +284,23 @@ struct AO3BookmarksWorksBrowser: View {
     }
 
     @ViewBuilder
-    private func rowBody(_ entry: CanonicalWork, ledger: Bool) -> some View {
+    private func rowBody(_ entry: CanonicalWork, fullLedgerStats: Bool) -> some View {
         if let work = entry.local {
             SensitiveWorkRow(
                 work: work,
-                expandAll: expandAll,
-                presentation: ledger ? .ledger : .standard
+                presentation: .ledger,
+                showsFavoriteStar: fullLedgerStats,
+                showsFullLedgerStats: fullLedgerStats,
+                showsSummary: false
             )
         } else if let remote = entry.remote {
+            // The remote ledger row already prints the full AO3 stat line.
+            // The bookmark note replaces the summary either way.
             EnrichingAO3WorkRow(
                 work: remote,
-                expandAll: expandAll,
-                presentation: ledger ? .searchLedger : .standard,
-                bookmark: bookmark(for: entry)
+                presentation: .searchLedger,
+                bookmark: bookmark(for: entry),
+                showsSummary: false
             )
         }
     }

@@ -6,8 +6,9 @@ import SwiftUI
 struct AO3HistoryWorksBrowser: View {
     let entries: [CanonicalWork]
     let readings: [Int: AO3ReadingEntry]
-    let displayMode: WorkListDisplayMode
-    let expandAll: Bool
+    /// Grid is the old compact cover layout. List is the ledger row plus the
+    /// visit footnote.
+    let arrangement: WorkListArrangement
     let palette: SubjectPalette
     let kicker: String
     let subtitle: String
@@ -28,7 +29,7 @@ struct AO3HistoryWorksBrowser: View {
 
     var body: some View {
         Group {
-            if displayMode == .compact {
+            if arrangement == .grid {
                 compactBody
             } else {
                 detailedBody
@@ -154,14 +155,16 @@ struct AO3HistoryWorksBrowser: View {
         if let work = entry.local {
             SensitiveWorkRow(
                 work: work,
-                expandAll: expandAll,
-                presentation: displayMode == .ledger ? .ledger : .standard
+                presentation: .ledger,
+                showsFavoriteStar: true,
+                showsFullLedgerStats: true,
+                showsSummary: false
             )
         } else if let remote = entry.remote {
             EnrichingAO3WorkRow(
                 work: remote,
-                expandAll: expandAll,
-                presentation: displayMode == .ledger ? .searchLedger : .standard
+                presentation: .searchLedger,
+                showsSummary: false
             )
         }
     }
