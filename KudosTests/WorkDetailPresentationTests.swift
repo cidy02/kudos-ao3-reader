@@ -228,7 +228,7 @@ struct WorkDetailPresentationTests {
         // flagged" among badge icons and as "dimmed out" as a cell's only text,
         // so the figure form takes green. The other two states must not drift.
         #expect(WorkWarningStatus(rawWarnings: []).color == .gray)
-        #expect(WorkWarningStatus(rawWarnings: []).figureColor == .green)
+        #expect(WorkWarningStatus(rawWarnings: []).figureColor == AO3TagPalette.general)
 
         let undisclosed = WorkWarningStatus(rawWarnings: ["Creator Chose Not To Use Archive Warnings"])
         #expect(undisclosed.color == undisclosed.figureColor)
