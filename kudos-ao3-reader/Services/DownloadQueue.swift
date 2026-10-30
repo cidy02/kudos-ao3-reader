@@ -36,6 +36,9 @@ final class DownloadQueue {
     private struct UpdateTrack {
         var fraction: Double
         var startedAt: Date
+        /// The `beginUpdateDownload` call that created this entry. A later
+        /// `endUpdateDownload` removes the entry only when it presents this.
+        var token: UUID
     }
 
     /// The fill a download with nothing to fetch still shows (owner, 2026-10-01).
@@ -100,10 +103,15 @@ final class DownloadQueue {
             || activeItem(for: work) != nil
     }
 
-    /// Starts the fraction the Resume update circle reads. `at` is the creep's
-    /// origin; production passes the default.
-    func beginUpdateDownload(for id: UUID, at now: Date = Date()) {
-        updateDownloads[id] = UpdateTrack(fraction: 0, startedAt: now)
+    /// Starts the fraction the Resume update circle reads. Returns false when
+    /// this work already has an update in flight, so a second view does not
+    /// start another request. `token` identifies the entry this call created.
+    /// `at` is the creep's origin; production passes the default.
+    @discardableResult
+    func beginUpdateDownload(for id: UUID, token: UUID, at now: Date = Date()) -> Bool {
+        guard updateDownloads[id] == nil else { return false }
+        updateDownloads[id] = UpdateTrack(fraction: 0, startedAt: now, token: token)
+        return true
     }
 
     /// AO3's reported fraction, when the response includes a size. Ignored
@@ -114,7 +122,11 @@ final class DownloadQueue {
         updateDownloads[id] = track
     }
 
-    func endUpdateDownload(for id: UUID) {
+    /// Removes the entry only when `token` is the one `beginUpdateDownload`
+    /// stored. The view that lost the race must not clear the winner, and a
+    /// late end must not clear an update that started after this one finished.
+    func endUpdateDownload(for id: UUID, token: UUID) {
+        guard updateDownloads[id]?.token == token else { return }
         updateDownloads[id] = nil
     }
 
