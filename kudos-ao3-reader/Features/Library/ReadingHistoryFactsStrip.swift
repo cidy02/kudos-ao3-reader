@@ -19,7 +19,7 @@ struct MoveBackToInProgressButton: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 7)
                 .background(
-                    RoundedRectangle(cornerRadius: SubjectMetrics.controlRadius(dynamicTypeSize), style: .continuous)
+                    SubjectMetrics.controlShape(dynamicTypeSize)
                         .fill(Color.primary.opacity(0.08))
                         .strokeBorder(Color.primary.opacity(0.16), lineWidth: 0.5)
                 )

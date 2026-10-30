@@ -70,7 +70,9 @@ struct TabDashboardShell: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 ForEach(Self.filterChipWidths.indices, id: \.self) { index in
-                    SkeletonBlock(height: 28, width: Self.filterChipWidths[index], cornerRadius: SubjectMetrics.capsuleRadius)
+                    SkeletonBlock(
+                        height: 28, width: Self.filterChipWidths[index], cornerRadius: SubjectMetrics.capsuleRadius
+                    )
                 }
             }
             .padding(.horizontal, 16)

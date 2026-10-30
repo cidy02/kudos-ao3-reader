@@ -907,7 +907,8 @@ struct CommentsView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
             .background(
-                RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous).fill(theme.effectiveTint)
+                RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
+                    .fill(theme.effectiveTint)
             )
         }
         .buttonStyle(.plain)

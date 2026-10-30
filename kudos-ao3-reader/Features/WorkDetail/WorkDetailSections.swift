@@ -559,10 +559,10 @@ extension WorkDetailView {
         .padding(.trailing, 9)
         .padding(.vertical, 6)
         .background(
-            RoundedRectangle(cornerRadius: SubjectMetrics.controlRadius(dynamicTypeSize), style: .continuous)
+            SubjectMetrics.controlShape(dynamicTypeSize)
                 .fill(.accentFill.opacity(0.16))
                 .overlay(
-                    RoundedRectangle(cornerRadius: SubjectMetrics.controlRadius(dynamicTypeSize), style: .continuous)
+                    SubjectMetrics.controlShape(dynamicTypeSize)
                         .strokeBorder(.tint.opacity(0.22), lineWidth: 0.5)
                 )
         )
@@ -613,7 +613,8 @@ struct DownloadedDateEditor: View {
 extension View {
     /// A My copy row: flush to the sheet's edge, no card, no separator.
     func myCopyRow(top: CGFloat = 3, bottom: CGFloat = 3) -> some View {
-        listRowInsets(EdgeInsets(top: top, leading: SubjectMetrics.gutter, bottom: bottom, trailing: SubjectMetrics.gutter))
+        let edge = SubjectMetrics.gutter
+        return listRowInsets(EdgeInsets(top: top, leading: edge, bottom: bottom, trailing: edge))
             .listRowBackground(Color.clear)
             .listRowSeparator(.hidden)
     }

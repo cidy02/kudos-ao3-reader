@@ -178,7 +178,7 @@ struct FandomListFilterSheet: View {
                 .padding(.vertical, 15)
                 .foregroundStyle(themeManager.onEffectiveTint)
                 .background(
-                    RoundedRectangle(cornerRadius: SubjectMetrics.controlRadius(dynamicTypeSize), style: .continuous)
+                    SubjectMetrics.controlShape(dynamicTypeSize)
                         .fill(themeManager.effectiveTint)
                 )
         }

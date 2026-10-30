@@ -143,8 +143,7 @@ struct AccountProfileCard: View {
                 .foregroundStyle(.primary)
                 .padding(.horizontal, 13)
                 .padding(.vertical, 7)
-                .background(theme.appTheme.glassFill(0.12), in: dynamicTypeSize.isAccessibilitySize
-                    ? AnyShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)) : AnyShape(Capsule()))
+                .background(theme.appTheme.glassFill(0.12), in: SubjectMetrics.controlShape(dynamicTypeSize))
                 // 30pt drawn, 44pt to the finger, no taller row.
                 .contentShape(Capsule().inset(by: -7))
         }

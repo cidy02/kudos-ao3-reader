@@ -342,7 +342,7 @@ extension ReaderTheme {
 /// The spec's own numbers. Named so a screen asks for the role, not the value —
 /// and so changing the language is one edit rather than a grep for `16`.
 ///
-/// The Rules board's "Shape and space" is the members down to `controlRadius`,
+/// The Rules board's "Shape and space" is the members down to `controlShape`,
 /// and nowhere else (T-484): they absorbed `CardRadius` and the per-surface
 /// radii and gutters that had drifted to 8, 12, 14, 18, 20, 22 and 26.
 enum SubjectMetrics {
@@ -365,11 +365,11 @@ enum SubjectMetrics {
     /// capsule — and, unlike `AnyShape(Capsule())`, still takes `strokeBorder`.
     static let capsuleRadius: CGFloat = .infinity
 
-    /// A chip's or button's corner. A capsule, until an accessibility size lets
+    /// A chip's or button's shape. A capsule, until an accessibility size lets
     /// the label wrap: its round ends would then cut into the words, so it
     /// takes the card corner instead.
-    static func controlRadius(_ size: DynamicTypeSize) -> CGFloat {
-        size.isAccessibilitySize ? cornerRadius : capsuleRadius
+    static func controlShape(_ size: DynamicTypeSize) -> RoundedRectangle {
+        RoundedRectangle(cornerRadius: size.isAccessibilitySize ? cornerRadius : capsuleRadius, style: .continuous)
     }
 
     /// Floating glass chrome buttons — spec's 34px circles.
@@ -1152,7 +1152,7 @@ struct SubjectChip: View {
 
     @ViewBuilder
     private var background: some View {
-        let shape = RoundedRectangle(cornerRadius: SubjectMetrics.controlRadius(dynamicTypeSize), style: .continuous)
+        let shape = SubjectMetrics.controlShape(dynamicTypeSize)
         switch style {
         case .neutral:
             shape

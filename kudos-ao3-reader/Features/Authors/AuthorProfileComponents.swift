@@ -564,10 +564,10 @@ private struct BookmarkTagPill: View {
             .padding(.horizontal, 11)
             .padding(.vertical, 6)
             .background(
-                RoundedRectangle(cornerRadius: SubjectMetrics.controlRadius(dynamicTypeSize), style: .continuous)
+                SubjectMetrics.controlShape(dynamicTypeSize)
                     .fill(theme.appTheme.glassFill(0.09))
                     .overlay(
-                        RoundedRectangle(cornerRadius: SubjectMetrics.controlRadius(dynamicTypeSize), style: .continuous)
+                        SubjectMetrics.controlShape(dynamicTypeSize)
                             .strokeBorder(theme.appTheme.glassStroke(0.14), lineWidth: 0.5)
                     )
             )
