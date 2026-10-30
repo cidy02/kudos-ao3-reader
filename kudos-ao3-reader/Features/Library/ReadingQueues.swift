@@ -23,7 +23,10 @@ struct ReadingQueueCard: View {
 
     /// Scales width and height together so the card grows proportionally at
     /// large Dynamic Type sizes instead of only getting taller.
-    var cardSize = ScaledCarouselCardSize()
+    var cardSize = ScaledCarouselCardSize(
+        width: CarouselCardMetrics.stackWidth,
+        height: CarouselCardMetrics.stackHeight
+    )
 
     /// Explicit, non-defaulted init — the compiler-synthesized memberwise
     /// init's defaulted `cardSize:` parameter measurably slows type-checking
@@ -42,8 +45,8 @@ struct ReadingQueueCard: View {
         ReadingQueueService.orderedWorks(in: queue)
     }
 
-    /// 1b's numbers are for a 164pt card; the deck scales with it.
-    private var scale: CGFloat { cardSize.width / CarouselCardMetrics.width }
+    /// The stack's measurements are for its 150pt shelf width; the deck scales with it.
+    private var scale: CGFloat { cardSize.width / CarouselCardMetrics.stackWidth }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 9 * scale) {

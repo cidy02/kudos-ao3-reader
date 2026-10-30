@@ -30,7 +30,11 @@ struct LibraryEntityGridView<Item: Identifiable, Destination: Hashable, Card: Vi
             SubjectHeaderBlock(kicker: "Library", title: title, subtitle: tally, palette: themeManager.scopePalette)
                 .padding(.top, 20)
             // Collection piles side by side get `coverStackSpacing` (T-461).
-            CarouselCardGrid(uniformHeights: true, columnSpacing: CarouselCardMetrics.coverStackSpacing) {
+            CarouselCardGrid(
+                uniformHeights: true,
+                columnSpacing: CarouselCardMetrics.coverStackSpacing,
+                cardWidth: CarouselCardMetrics.stackWidth
+            ) {
                 ForEach(items) { item in
                     NavigationLink(value: destination(item)) { card(item) }
                         .buttonStyle(.plain)

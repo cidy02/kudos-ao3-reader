@@ -776,6 +776,7 @@ struct LibrarySectionListView: View {
                 if isSelecting {
                     SensitiveWorkCoverCard(
                         work: work,
+                        metadataStyle: kind == .downloaded ? .downloaded : .standard,
                         isSelecting: true,
                         isSelected: selection.contains(work.id),
                         onToggleSelection: { toggleSelection(work) }
@@ -783,7 +784,10 @@ struct LibrarySectionListView: View {
                     .localWorkContextMenu(work: work)
                 } else {
                     NavigationLink(value: LocalWorkDestination.reader(work)) {
-                        SensitiveWorkCoverCard(work: work)
+                        SensitiveWorkCoverCard(
+                            work: work,
+                            metadataStyle: kind == .downloaded ? .downloaded : .standard
+                        )
                     }
                     .buttonStyle(.plain)
                     .localWorkContextMenu(

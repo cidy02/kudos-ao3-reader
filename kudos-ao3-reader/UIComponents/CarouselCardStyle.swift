@@ -12,34 +12,98 @@ import AppKit
 /// Shared stable hue helper for non-work decorative tiles, such as Collections and
 /// Reading Queues.
 enum CoverArt {
+    struct WorkArt: Equatable, Sendable {
+        let familyHue: Int
+        let shade: Int
+        let hue: Int
+        let layout: Int
+    }
+
     /// A stable hue in 0...1 derived from the title (djb2-ish hash).
     static func hue(for string: String) -> Double {
         let hash = string.unicodeScalars.reduce(UInt64(5381)) { ($0 &* 33) &+ UInt64($1.value) }
         return Double(hash % 360) / 360
     }
 
-    /// Work palettes follow the work's primary fandom so the same subject keeps
-    /// the same visual identity across Home and Search. Title is only a fallback
-    /// for imports and malformed blurbs that carry no fandom.
+    /// One deterministic art choice for every generated surface of a work. The
+    /// primary fandom owns the colour family; the title supplies only a nearby
+    /// shade and one of the three cover compositions.
+    static func workArt(fandoms: [String], title: String) -> WorkArt {
+        let fandom = fandoms.first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        let familySeed = coverSeed(fandom.map(FandomDisplayName.bareTitle) ?? title)
+        let titleSeed = coverSeed(title)
+        let familyHue = Int(familySeed % 360)
+        let shade = Int(titleSeed % 25) - 12
+        return WorkArt(
+            familyHue: familyHue,
+            shade: shade,
+            hue: (familyHue + shade + 360) % 360,
+            layout: Int(titleSeed % 3)
+        )
+    }
+
+    /// The shared work hue, including the title's ±12° shade. Existing work
+    /// surfaces call this helper, so a cover, Resume card and compact swatch do
+    /// not quietly choose separate colours for the same work.
     static func workHue(fandoms: [String], title: String) -> Double {
-        let subject = fandoms.first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-        return hue(for: subject ?? title)
+        Double(workArt(fandoms: fandoms, title: title).hue) / 360
+    }
+
+    /// The generated-art gradient from the design export: HSL 46%/27% to
+    /// hue+22° at 50%/41%, running at CSS 155°.
+    static func workGradient(fandoms: [String], title: String) -> LinearGradient {
+        workGradient(for: workArt(fandoms: fandoms, title: title))
+    }
+
+    static func workGradient(for art: WorkArt) -> LinearGradient {
+        LinearGradient(
+            colors: [
+                hsl(hue: Double(art.hue), saturation: 0.46, lightness: 0.27),
+                hsl(hue: Double((art.hue + 22) % 360), saturation: 0.50, lightness: 0.41)
+            ],
+            startPoint: UnitPoint(x: 0.2887, y: 0.0468),
+            endPoint: UnitPoint(x: 0.7113, y: 0.9532)
+        )
+    }
+
+    /// The component export hashes JavaScript UTF-16 code units. Matching that
+    /// here keeps non-BMP titles stable between the design fixtures and Swift.
+    private static func coverSeed(_ text: String) -> UInt32 {
+        text.utf16.reduce(UInt32(7)) { seed, value in
+            seed &* 31 &+ UInt32(value)
+        }
+    }
+
+    private static func hsl(hue: Double, saturation: Double, lightness: Double) -> Color {
+        let chroma = (1 - abs(2 * lightness - 1)) * saturation
+        let sector = (hue.truncatingRemainder(dividingBy: 360) + 360)
+            .truncatingRemainder(dividingBy: 360) / 60
+        let second = chroma * (1 - abs(sector.truncatingRemainder(dividingBy: 2) - 1))
+        let rgb: (Double, Double, Double) = switch sector {
+        case 0 ..< 1: (chroma, second, 0)
+        case 1 ..< 2: (second, chroma, 0)
+        case 2 ..< 3: (0, chroma, second)
+        case 3 ..< 4: (0, second, chroma)
+        case 4 ..< 5: (second, 0, chroma)
+        default: (chroma, 0, second)
+        }
+        let match = lightness - chroma / 2
+        return Color(red: rgb.0 + match, green: rgb.1 + match, blue: rgb.2 + match)
     }
 }
 
 /// Common tile size for every carousel card type (Work, Reading Queue, Collection),
 /// so they read as the same visual weight side by side.
 enum CarouselCardMetrics {
-    static let width: CGFloat = 164
-    /// sqrt(2):1 — the ISO 216 "A-series" paper ratio (A4, A5, …) — computed from
-    /// `width` rather than a rounded literal, so the two can never silently drift
-    /// out of exact ratio. Every compact card (Work, Reading Queue, Collection)
-    /// shares this one proportion via `ScaledCarouselCardSize`, which already
-    /// preserves whatever ratio these two constants define through both Dynamic
-    /// Type scaling and the container-width clamp — so a future layout that mixes
-    /// card types (e.g. a TabView of multiple cards) reads as one consistent
-    /// shape instead of several near-but-not-quite-matching proportions.
-    static let height: CGFloat = width * CGFloat(2).squareRoot()
+    /// Portrait work art on a shelf. Its under-cover progress, symbols and meta
+    /// bring the complete card to `height`.
+    static let width: CGFloat = 120
+    static let artHeight: CGFloat = width * 1.42
+    static let height: CGFloat = artHeight + 55
+    /// Collections and queues remain the wider T-461 stack rather than inheriting
+    /// the narrower work-cover width.
+    static let stackWidth: CGFloat = 150
+    static let stackHeight: CGFloat = 140
     /// Shared gaps for every compact cover grid; call sites use these, never
     /// their own numbers.
     /// 1h's cover grid, the spec's one card grid: `gap:14px 12px` — 14 between
@@ -68,9 +132,17 @@ enum CarouselCardMetrics {
 /// `var` of this type rather than redeclaring the two `@ScaledMetric`
 /// properties itself.
 struct ScaledCarouselCardSize: DynamicProperty {
-    @ScaledMetric(relativeTo: .body) private var scaledWidth: CGFloat = CarouselCardMetrics.width
-    @ScaledMetric(relativeTo: .body) private var scaledHeight: CGFloat = CarouselCardMetrics.height
+    @ScaledMetric(relativeTo: .body) private var scaledWidth: CGFloat
+    @ScaledMetric(relativeTo: .body) private var scaledHeight: CGFloat
     @Environment(\.carouselCardAvailableWidth) private var availableWidth
+
+    init(
+        width: CGFloat = CarouselCardMetrics.width,
+        height: CGFloat = CarouselCardMetrics.height
+    ) {
+        _scaledWidth = ScaledMetric(wrappedValue: width, relativeTo: .body)
+        _scaledHeight = ScaledMetric(wrappedValue: height, relativeTo: .body)
+    }
 
     /// iOS hosts measure after safe areas and gutters. macOS keeps its existing
     /// window sizing policy; no screen measurement participates in the iOS clamp.

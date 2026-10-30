@@ -243,13 +243,15 @@ struct ChapterBars: View {
     var scale: ChapterBarScale = .row
     /// Resume card and other gradient surfaces. Read bars turn white.
     var onGradient = false
+    /// Resume uses 52pt on Home/Up next and 76pt on Work Detail.
+    var height: CGFloat?
     var accessibilityLabel: String?
 
     @Environment(\.accentFill) private var accentFill
     @ScaledMetric(relativeTo: .caption) private var trackHeight: CGFloat = 16
 
-    private var height: CGFloat {
-        scale == .row ? trackHeight : scale.trackHeight
+    private var resolvedHeight: CGFloat {
+        height ?? (scale == .row ? trackHeight : scale.trackHeight)
     }
 
     var body: some View {
@@ -273,7 +275,7 @@ struct ChapterBars: View {
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
                 }
-                .frame(height: height)
+                .frame(height: resolvedHeight)
             }
         }
         .accessibilityElement(children: .ignore)
@@ -290,7 +292,7 @@ struct ChapterBars: View {
 
     private func bar(_ item: ChapterBarItem, metrics: ChapterBarGeometry.Metrics, tallest: Double) -> some View {
         let fraction = tallest > 0 ? item.weight / tallest : 1
-        let barHeight = max(2, height * fraction)
+        let barHeight = max(2, resolvedHeight * fraction)
         return Group {
             switch item.role {
             case .notPosted:

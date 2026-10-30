@@ -24,6 +24,19 @@ extension SavedWork {
     }
 }
 
+/// One reveal affordance everywhere a mature item keeps its blurred footprint.
+struct MatureRevealCapsule: View {
+    var body: some View {
+        Label("Tap to reveal", systemImage: "eye.slash")
+            .font(.caption.weight(.medium))
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(.regularMaterial, in: Capsule())
+            .accessibilityHidden(true)
+    }
+}
+
 /// Tracks which sensitive works the user has temporarily revealed this session,
 /// and gates reveals behind device biometrics when the user has enabled that.
 @MainActor
@@ -185,13 +198,7 @@ struct SensitiveWorkRow: View {
                     // reveal while selecting), so the control shouldn't promise otherwise.
                     // I-6: the real row stays, blurred, under one icon capsule.
                     if !isSelecting {
-                        Image(systemName: "eye.slash")
-                            .font(.body.weight(.semibold))
-                            .foregroundStyle(.primary)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
-                            .background(.regularMaterial, in: Capsule())
-                            .accessibilityHidden(true)
+                        MatureRevealCapsule()
                     }
                 }
                 .contentShape(Rectangle())
@@ -301,6 +308,7 @@ struct SensitiveWorkCoverCard: View {
     let work: SavedWork
     var footer: String?
     var progress: Double?
+    var metadataStyle: WorkCoverMetadataStyle = .standard
     var isSelecting: Bool = false
     var isSelected: Bool = false
     var onToggleSelection: (() -> Void)?
@@ -314,7 +322,12 @@ struct SensitiveWorkCoverCard: View {
 
     var body: some View {
         if blurred {
-            let card = WorkCoverCard(work: work, footer: footer, progress: progress)
+            let card = WorkCoverCard(
+                work: work,
+                footer: footer,
+                progress: progress,
+                metadataStyle: metadataStyle
+            )
                 .environment(\.ao3AuthorNavigationEnabled, false)
                 .blur(radius: 6)
                 .overlay {
@@ -322,12 +335,7 @@ struct SensitiveWorkCoverCard: View {
                     // toggles selection instead (use the toolbar's "Show mature" to
                     // reveal while selecting), so the label shouldn't promise otherwise.
                     if !isSelecting {
-                        Label("Tap to reveal", systemImage: "eye.slash.fill")
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(.regularMaterial, in: Capsule())
+                        MatureRevealCapsule()
                     }
                 }
                 .contentShape(Rectangle())
@@ -358,7 +366,8 @@ struct SensitiveWorkCoverCard: View {
                 card
                     .onTapGesture { gate.reveal(work) }
                     .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("Hidden mature work. Activate to reveal.")
+                    .accessibilityLabel("Hidden mature work")
+                    .accessibilityHint("Activate to reveal.")
             }
         } else if isSelecting {
             // A tap while selecting must always toggle selection, never open an
@@ -367,7 +376,13 @@ struct SensitiveWorkCoverCard: View {
             Button {
                 onToggleSelection?()
             } label: {
-                SelectableWorkCoverCard(work: work, footer: footer, progress: progress, isSelected: isSelected)
+                SelectableWorkCoverCard(
+                    work: work,
+                    footer: footer,
+                    progress: progress,
+                    metadataStyle: metadataStyle,
+                    isSelected: isSelected
+                )
                     .environment(\.ao3AuthorNavigationEnabled, false)
             }
             .buttonStyle(.plain)
@@ -376,7 +391,12 @@ struct SensitiveWorkCoverCard: View {
             .accessibilityHint("Double-tap to \(isSelected ? "deselect" : "select") this work.")
             .accessibilityAddTraits(isSelected ? .isSelected : [])
         } else {
-            WorkCoverCard(work: work, footer: footer, progress: progress)
+            WorkCoverCard(
+                work: work,
+                footer: footer,
+                progress: progress,
+                metadataStyle: metadataStyle
+            )
         }
     }
 }

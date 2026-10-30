@@ -26,6 +26,7 @@ struct WorkCarouselSection<Cards: View, Empty: View>: View {
     private let countText: String?
     /// Between cards side by side on a shelf.
     private let cardSpacing: CGFloat
+    private let cardWidth: CGFloat
     private let onSeeAll: (() -> Void)?
     private let cards: () -> Cards
     private let emptyState: () -> Empty
@@ -40,6 +41,7 @@ struct WorkCarouselSection<Cards: View, Empty: View>: View {
         itemCount: Int? = nil,
         countText: String? = nil,
         cardSpacing: CGFloat = CarouselCardMetrics.compactGridColumnSpacing,
+        cardWidth: CGFloat = CarouselCardMetrics.width,
         onSeeAll: (() -> Void)? = nil,
         @ViewBuilder cards: @escaping () -> Cards,
         @ViewBuilder emptyState: @escaping () -> Empty
@@ -49,6 +51,7 @@ struct WorkCarouselSection<Cards: View, Empty: View>: View {
         self.itemCount = itemCount
         self.countText = countText
         self.cardSpacing = cardSpacing
+        self.cardWidth = cardWidth
         self.onSeeAll = onSeeAll
         self.cards = cards
         self.emptyState = emptyState
@@ -64,7 +67,11 @@ struct WorkCarouselSection<Cards: View, Empty: View>: View {
             header
             if !collapsed {
                 if hasItems {
-                    DashboardCardShelf(compactSpacing: cardSpacing, columnSpacing: cardSpacing) { cards() }
+                    DashboardCardShelf(
+                        compactSpacing: cardSpacing,
+                        columnSpacing: cardSpacing,
+                        cardWidth: cardWidth
+                    ) { cards() }
                 } else {
                     emptyState()
                         .frame(maxWidth: .infinity, alignment: .leading)
