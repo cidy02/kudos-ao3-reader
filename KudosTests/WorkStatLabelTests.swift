@@ -428,4 +428,15 @@ struct WorkSymbolTileTests {
         }
         #expect(checked > 100)
     }
+
+    /// Author "Latest" and Account "Your Latest" share this card, and it is
+    /// the only grid on either screen. The card keeps its own dark tray.
+    @Test func latestCardTurnsTheGridBackingOff() throws {
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appending(path: "kudos-ao3-reader/Features/Authors/AuthorProfileOverviewSections.swift")
+        let source = try String(contentsOf: url, encoding: .utf8)
+        #expect(source.contains("backed: false"))
+    }
 }

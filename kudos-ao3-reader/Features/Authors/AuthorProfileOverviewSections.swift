@@ -607,7 +607,11 @@ struct AuthorProfileLatestCard: View {
                     warnings: work.warnings,
                     completion: WorkCompletionStatus(isComplete: work.isComplete),
                     tileSize: 24,
-                    announcesToVoiceOver: true
+                    announcesToVoiceOver: true,
+                    // This card is the Author "Latest" and Account "Your Latest"
+                    // tray. It already paints the dark surface, so the grid
+                    // does not add a second one.
+                    backed: false
                 )
                 VStack(alignment: .leading, spacing: 3) {
                     if let kicker = latestKicker {
