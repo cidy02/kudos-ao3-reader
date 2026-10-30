@@ -25,6 +25,8 @@ struct LibraryCatalogueListView: View {
     @AppStorage private var arrangement: WorkListArrangement
     @State private var pendingDelete: SavedWork?
     @State private var pendingRemoval: PendingLibraryRemoval?
+    @State private var isSelecting = false
+    @State private var selection = Set<UUID>()
 
     init(kind: LibraryCatalogueDestination.Kind) {
         self.kind = kind
@@ -68,17 +70,43 @@ struct LibraryCatalogueListView: View {
                 list
             }
         }
-        .navigationTitle(title)
+        .navigationTitle(isSelecting ? WorkSelectionTitle.text(selectedCount: selectedWorks.count) : title)
         #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
         #endif
             .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    WorkListMoreMenu {
-                        ListGridMenuPicker(arrangement: $arrangement)
+                if isSelecting {
+                    ToolbarItem(placement: .confirmationAction) {
+                        SelectAllButton(allSelected: allSelected, action: toggleSelectAll)
+                    }
+                    #if os(iOS)
+                    ToolbarItemGroup(placement: .bottomBar) {
+                        WorkBulkActionBar(
+                            selectedWorks: selectedWorks,
+                            onDeleted: exitSelectMode,
+                            onDone: exitSelectMode
+                        )
+                    }
+                    #else
+                    ToolbarItemGroup(placement: .primaryAction) {
+                        WorkBulkActionBar(
+                            selectedWorks: selectedWorks,
+                            onDeleted: exitSelectMode,
+                            onDone: exitSelectMode
+                        )
+                    }
+                    #endif
+                } else {
+                    ToolbarItem(placement: .primaryAction) {
+                        WorkListMoreMenu {
+                            ListGridMenuPicker(arrangement: $arrangement)
+                        }
                     }
                 }
             }
+        #if os(iOS)
+            .toolbar(isSelecting ? .hidden : .automatic, for: .tabBar)
+        #endif
             .libraryWorkRemovalConfirmations(
                 pendingDelete: $pendingDelete,
                 pendingRemoval: $pendingRemoval
@@ -133,10 +161,24 @@ struct LibraryCatalogueListView: View {
                     .padding(.top, 12)
                 CarouselCardGrid {
                     ForEach(items) { work in
-                        NavigationLink(value: LocalWorkDestination.reader(work)) {
-                            SensitiveWorkCoverCard(work: work)
+                        if isSelecting {
+                            SensitiveWorkCoverCard(
+                                work: work,
+                                isSelecting: true,
+                                isSelected: selection.contains(work.id),
+                                onToggleSelection: { toggleSelection(work) }
+                            )
+                            .localWorkContextMenu(work: work)
+                        } else {
+                            NavigationLink(value: LocalWorkDestination.reader(work)) {
+                                SensitiveWorkCoverCard(work: work)
+                            }
+                            .buttonStyle(.plain)
+                            .localWorkContextMenu(
+                                work: work,
+                                onSelect: { isSelecting = true; selection = [work.id] }
+                            )
                         }
-                        .buttonStyle(.plain)
                     }
                 }
                 .padding(.horizontal, 16)
@@ -148,5 +190,31 @@ struct LibraryCatalogueListView: View {
 
     private func passesPrivacy(_ work: SavedWork) -> Bool {
         !gate.isHidden(work, enabled: hideMature, mode: matureMode)
+    }
+
+    private var selectedWorks: [SavedWork] {
+        items.filter { selection.contains($0.id) }
+    }
+
+    private var allSelected: Bool {
+        let ids = Set(items.map(\.id))
+        return !ids.isEmpty && ids.isSubset(of: selection)
+    }
+
+    private func toggleSelection(_ work: SavedWork) {
+        if selection.contains(work.id) {
+            selection.remove(work.id)
+        } else {
+            selection.insert(work.id)
+        }
+    }
+
+    private func toggleSelectAll() {
+        selection = allSelected ? [] : Set(items.map(\.id))
+    }
+
+    private func exitSelectMode() {
+        isSelecting = false
+        selection = []
     }
 }
