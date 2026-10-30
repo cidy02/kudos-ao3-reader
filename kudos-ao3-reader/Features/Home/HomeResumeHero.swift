@@ -28,6 +28,19 @@ struct ResumeCardModel {
     let published: String
     let updated: String
     let newChapterCount: Int
+    /// Plain summary. The queue's Up next row used to print it; the next variant keeps it.
+    let summary: String
+    let language: String
+    let commentCount: Int
+    let bookmarkCount: Int
+    let hitCount: Int
+    let statKudos: Int
+    let isFavorite: Bool
+    /// Relative last-opened label the previous hero and detail card printed.
+    let lastReadLabel: String?
+    let extraFandomCount: Int
+    /// Raw primary fandom, for the search the ledger row's kicker performed.
+    let primaryFandomFull: String?
 
     init(work: SavedWork) {
         title = work.title
@@ -49,6 +62,17 @@ struct ResumeCardModel {
         published = work.datePublished
         updated = work.dateUpdated
         newChapterCount = max(0, work.postedChapterCount - work.knownChapterCount)
+        summary = work.summary.strippingHTML()
+        language = work.language
+        commentCount = work.comments
+        bookmarkCount = work.bookmarks
+        hitCount = work.hits
+        statKudos = work.kudos
+        isFavorite = work.isFavorite
+        lastReadLabel = work.lastReadDate?.formatted(.relative(presentation: .named))
+        let named = work.workFandoms.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        extraFandomCount = max(0, named.count - 1)
+        primaryFandomFull = named.first
     }
 
     init(
@@ -68,7 +92,17 @@ struct ResumeCardModel {
         chapterName: String?,
         published: String,
         updated: String,
-        newChapterCount: Int
+        newChapterCount: Int,
+        summary: String = "",
+        language: String = "",
+        commentCount: Int = 0,
+        bookmarkCount: Int = 0,
+        hitCount: Int = 0,
+        statKudos: Int = 0,
+        isFavorite: Bool = false,
+        lastReadLabel: String? = nil,
+        extraFandomCount: Int = 0,
+        primaryFandomFull: String? = nil
     ) {
         self.title = title
         self.authors = authors
@@ -87,6 +121,16 @@ struct ResumeCardModel {
         self.published = published
         self.updated = updated
         self.newChapterCount = max(0, newChapterCount)
+        self.summary = summary
+        self.language = language
+        self.commentCount = commentCount
+        self.bookmarkCount = bookmarkCount
+        self.hitCount = hitCount
+        self.statKudos = statKudos
+        self.isFavorite = isFavorite
+        self.lastReadLabel = lastReadLabel
+        self.extraFandomCount = max(0, extraFandomCount)
+        self.primaryFandomFull = primaryFandomFull
     }
 
     var art: CoverArt.WorkArt { CoverArt.workArt(fandoms: fandoms, title: title) }
@@ -119,11 +163,18 @@ struct ResumeCardModel {
         )
     }
 
-    var displayedChapterName: String { chapterName ?? "Chapter \(chapterNumber)" }
+    var displayedChapterName: String {
+        if let chapterName { return chapterName }
+        if progress == nil || progress == 0 {
+            return lastReadLabel == nil ? "Ready to resume" : "Last opened"
+        }
+        return "Chapter \(chapterNumber)"
+    }
 
     var postedLabel: String {
         guard plannedChapters > 0 else { return chapters }
-        if plannedChapters == postedChapters {
+        let unread = (progress ?? 0) <= 0
+        if plannedChapters == postedChapters && unread {
             return "\(postedChapters) chapter\(postedChapters == 1 ? "" : "s")"
         }
         return "\(postedChapters) of \(plannedChapters) posted"
@@ -136,7 +187,7 @@ struct ResumeCardModel {
     var figureLine: String? {
         var parts: [String] = []
         if let words { parts.append("\(words.formatted()) words") }
-        if let kudos { parts.append("♥ \(kudos.compactCount)") }
+        if let kudos { parts.append("♥ \(kudos.formatted())") }
         let text = parts.joined(separator: " · ")
         return text.isEmpty ? nil : text
     }
@@ -160,6 +211,8 @@ struct HomeResumeHero: View {
     var onSelect: (() -> Void)?
     var onPrimary: (() -> Void)?
     var onReadAloud: (() -> Void)?
+    var scopedRemoval: ScopedRemoval? = nil
+    var queueMenu: QueueItemMenuActions? = nil
 
     @Environment(PrivacyGate.self) private var gate
     @Environment(\.workCardTransitionNamespace) private var zoomNamespace
@@ -190,7 +243,9 @@ struct HomeResumeHero: View {
             .accessibilityLabel("Hidden mature work")
             .accessibilityValue(isSelecting ? (isSelected ? "Selected" : "Not selected") : "")
             .accessibilityHint(isSelecting ? "Double-tap to toggle selection." : "Activate to reveal.")
-            .localWorkContextMenu(work: work, onSelect: onSelect)
+            .localWorkContextMenu(
+                work: work, onSelect: onSelect, scopedRemoval: scopedRemoval, queueMenu: queueMenu
+            )
         } else if isSelecting {
             ZStack {
                 resumeCard(interactive: false)
@@ -215,10 +270,14 @@ struct HomeResumeHero: View {
             .accessibilityValue(isSelected ? "Selected" : "Not selected")
             .accessibilityHint("Double-tap to \(isSelected ? "deselect" : "select") this work.")
             .accessibilityAddTraits(isSelected ? .isSelected : [])
-            .localWorkContextMenu(work: work, onSelect: onSelect)
+            .localWorkContextMenu(
+                work: work, onSelect: onSelect, scopedRemoval: scopedRemoval, queueMenu: queueMenu
+            )
         } else {
             resumeCard(interactive: true)
-                .localWorkContextMenu(work: work, onSelect: onSelect)
+                .localWorkContextMenu(
+                    work: work, onSelect: onSelect, scopedRemoval: scopedRemoval, queueMenu: queueMenu
+                )
         }
     }
 
@@ -250,8 +309,10 @@ struct WorkResumeCard: View {
     var onUpdate: (() -> Void)?
 
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(AppRouter.self) private var router
     @Environment(\.accentFill) private var accentFill
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @AppStorage("showsZeroStats") private var showsZeroStats = true
     @State private var chapterWeights: [Int]?
 
     var body: some View {
@@ -317,18 +378,29 @@ struct WorkResumeCard: View {
     private var identity: some View {
         VStack(alignment: .leading, spacing: 2) {
             if let fandom = model.primaryFandom {
-                Text(fandom.uppercased())
-                    .font(.caption.weight(.semibold))
-                    .tracking(0.8)
-                    .foregroundStyle(Color.white.opacity(0.9))
-                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    fandomLabel(fandom)
+                    if model.extraFandomCount > 0 {
+                        Text("+\(model.extraFandomCount)")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Color.white.opacity(0.9))
+                            .accessibilityLabel("plus \(model.extraFandomCount) more")
+                    }
+                }
                 Capsule().fill(Color.white.opacity(0.9)).frame(width: 16, height: 2)
                     .padding(.vertical, 2)
             }
-            Text(model.title)
-                .font(.system(.title2, design: .serif, weight: .semibold))
-                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 3)
-                .fixedSize(horizontal: false, vertical: true)
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(model.title)
+                    .font(.system(.title2, design: .serif, weight: .semibold))
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 3)
+                    .fixedSize(horizontal: false, vertical: true)
+                if variant == .next, model.isFavorite {
+                    Image(systemName: "star.fill")
+                        .font(.caption)
+                        .accessibilityLabel("Favorite")
+                }
+            }
             AO3AuthorBylineView(
                 names: model.authors,
                 identities: model.authorIdentities,
@@ -339,13 +411,63 @@ struct WorkResumeCard: View {
                 expandsHitTarget: false
             )
             .tint(.white)
-            if let figureLine = model.figureLine {
-                Text(figureLine)
+            if let line = metadataLine {
+                Text(line)
                     .font(.footnote)
                     .foregroundStyle(Color.white.opacity(0.85))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if variant == .next {
+                let summary = model.summary.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !summary.isEmpty {
+                    Text(summary)
+                        .font(.subheadline)
+                        .foregroundStyle(Color.white.opacity(0.85))
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func fandomLabel(_ fandom: String) -> some View {
+        let label = Text(fandom.uppercased())
+            .font(.caption.weight(.semibold))
+            .tracking(0.8)
+            .foregroundStyle(Color.white.opacity(0.9))
+            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+            .multilineTextAlignment(.leading)
+        if variant == .next, let full = model.primaryFandomFull, isInteractive {
+            Button { router.searchAO3(.fandom, full) } label: { label }
+                .buttonStyle(.plain)
+                .accessibilityHint("Search this fandom")
+        } else {
+            label
+        }
+    }
+
+    /// Home keeps the spec's words and kudos. Up next replaces a ledger row, so
+    /// it keeps that row's language, chapters, comments, bookmarks and hits too.
+    private var metadataLine: String? {
+        if variant == .next {
+            let figures = WorkStat.ledgerFigures(
+                language: model.language,
+                wordCount: model.words,
+                chapters: model.chapters,
+                comments: model.commentCount,
+                kudos: model.statKudos,
+                bookmarks: model.bookmarkCount,
+                hits: model.hitCount,
+                dateUpdated: model.updated,
+                showsZeroStats: showsZeroStats,
+                zeroCountsRequireWords: true
+            )
+            let text = figures.visible.joined(separator: "  ·  ")
+            if !text.isEmpty { return text }
+        }
+        return model.figureLine
     }
 
     private var detailChapterLabels: some View {
@@ -381,24 +503,45 @@ struct WorkResumeCard: View {
                 onGradient: true,
                 height: variant.barsHeight
             )
+            .frame(maxWidth: barMaxWidth, alignment: .leading)
             if variant == .detail {
                 chapterLegend
-                if !model.published.isEmpty || !model.updated.isEmpty {
+                if !detailDates.isEmpty {
                     Text(detailDates)
                         .font(.footnote)
                         .foregroundStyle(Color.white.opacity(0.85))
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             } else {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(model.displayedChapterName + " · " + model.postedLabel)
-                        .lineLimit(1)
-                    Spacer(minLength: 4)
-                    if !model.updated.isEmpty { Text("Updated \(model.updated)").lineLimit(1) }
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(model.displayedChapterName + " · " + model.postedLabel)
+                        Spacer(minLength: 4)
+                        if !model.updated.isEmpty { Text("Updated \(model.updated)") }
+                    }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(model.displayedChapterName + " · " + model.postedLabel)
+                        if !model.updated.isEmpty { Text("Updated \(model.updated)") }
+                    }
                 }
                 .font(.caption)
                 .foregroundStyle(Color.white.opacity(0.85))
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                if let lastReadLabel = model.lastReadLabel {
+                    Text(lastReadLabel)
+                        .font(.caption)
+                        .foregroundStyle(Color.white.opacity(0.85))
+                }
             }
         }
+    }
+
+    /// A short work must not stretch one bar across the card. The export caps
+    /// fewer than ten chapters at 30 pt each; the card gap stays ChapterBars'.
+    private var barMaxWidth: CGFloat {
+        let planned = model.plannedChapters
+        guard planned > 0, planned < 10 else { return .infinity }
+        return CGFloat(planned) * 30
     }
 
     private var chapterLegend: some View {
@@ -448,7 +591,11 @@ struct WorkResumeCard: View {
         primaryButton
         if variant == .detail, model.newChapterCount > 0, let onUpdate {
             ZStack(alignment: .topTrailing) {
-                actionCircle(title: "Update download", systemImage: "arrow.down", action: onUpdate)
+                actionCircle(
+                    title: "Update download, \(model.newChapterCount) new chapters",
+                    systemImage: "arrow.down.to.line",
+                    action: onUpdate
+                )
                 Text("\(model.newChapterCount)")
                     .font(.caption2.weight(.bold))
                     .foregroundStyle(.white)
@@ -550,6 +697,7 @@ struct WorkResumeCard: View {
         var parts: [String] = []
         if !model.published.isEmpty { parts.append("Published \(model.published)") }
         if !model.updated.isEmpty { parts.append("updated \(model.updated)") }
+        if let lastReadLabel = model.lastReadLabel { parts.append(lastReadLabel) }
         return parts.joined(separator: " · ")
     }
 
