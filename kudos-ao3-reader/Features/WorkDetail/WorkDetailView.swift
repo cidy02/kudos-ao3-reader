@@ -386,7 +386,8 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     /// 0% would claim a work nobody here has touched is being tracked, and a
     /// remote work browsed from Search is exactly that. A work that *has* been
     /// opened but stored no fraction — only a `lastReadDate`, which the legacy
-    /// reader path can leave behind — is honestly at 0%.
+    /// reader path can leave behind — is honestly at 0%. A missing in-chapter
+    /// locator progression stays nil so the card omits that half.
     private var resumeCardReadingProgress: Double? {
         guard let work = localWork, work.hasStartedReading else { return nil }
         return work.readingProgress ?? 0
