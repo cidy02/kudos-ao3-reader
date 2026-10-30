@@ -86,6 +86,8 @@ struct AO3WorkRowSkeleton: View {
         // fandom, summary and stats. The separator is the row's own.
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .top, spacing: 12) {
+                // Same backing inset as `WorkStatusIconGrid`, so this placeholder
+                // is the 63 pt column the separator is aligned to.
                 Grid(horizontalSpacing: 2.88, verticalSpacing: 2.88) {
                     GridRow {
                         SkeletonBlock(height: 24, width: 24, cornerRadius: 5.76)
@@ -96,6 +98,14 @@ struct AO3WorkRowSkeleton: View {
                         SkeletonBlock(height: 24, width: 24, cornerRadius: 5.76)
                     }
                 }
+                .padding(WorkStatusIconGrid.backingPadding(tileSize: 24))
+                .background(
+                    RoundedRectangle(
+                        cornerRadius: WorkStatusIconGrid.backingCornerRadius(tileSize: 24),
+                        style: .continuous
+                    )
+                    .fill(.quaternary)
+                )
                 VStack(alignment: .leading, spacing: 6) {
                     SkeletonTextLine(height: 17, width: 200)
                     SkeletonTextLine(height: 17, width: 140)

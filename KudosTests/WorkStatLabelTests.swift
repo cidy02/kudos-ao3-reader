@@ -241,7 +241,8 @@ struct WorkStatLabelTests {
     }
 }
 
-/// The four tags as AO3's own solid tiles (T-479, decision TILES; I-1, I-2, I-3).
+/// The four tags as AO3's own solid tiles (T-479, decision TILES; I-2, I-3)
+/// and the full-grid backing (T-479b).
 struct WorkSymbolTileTests {
     private typealias Tile = WorkSymbolTile
 
@@ -359,13 +360,59 @@ struct WorkSymbolTileTests {
         #expect(Tile.path(for: .multi, in: 100).isEmpty)
     }
 
-    /// I-2's 24pt grid is two tiles and a 0.12 gap: ~51pt, the row thumbnail's size.
+    /// I-2's 24pt grid is two tiles and a 0.12 gap: ~51pt, before the backing.
     @Test func gridHeightIsTwoTilesAndOneGap() {
         #expect(abs(WorkStatusIconGrid.gridHeight(tileSize: 24) - 50.88) < 0.001)
     }
 
-    /// I-1: no tray anywhere. The parameter is gone, so this guards against it
-    /// (or a hand-rolled tray) coming back at a call site.
+    /// Symbols board: `round(tile × 0.27)` and `round(tile × 0.58)`.
+    @Test func backingPaddingAndRadiusRoundTheTileFraction() {
+        let cases: [(CGFloat, CGFloat, CGFloat)] = [
+            (22, 6, 13),
+            (24, 6, 14),
+            (26, 7, 15),
+        ]
+        for (tile, pad, radius) in cases {
+            #expect(WorkStatusIconGrid.backingPadding(tileSize: tile) == pad)
+            #expect(WorkStatusIconGrid.backingCornerRadius(tileSize: tile) == radius)
+        }
+    }
+
+    /// The full 2×2 is backed unless the caller turns it off. A strip is not,
+    /// which is also how a single tile and a labelled chip stay bare: they
+    /// are not the grid variant.
+    @Test func backingFollowsTheVariant() {
+        #expect(WorkStatusIconGrid.drawsBacking(arrangement: .grid, backed: true))
+        #expect(!WorkStatusIconGrid.drawsBacking(arrangement: .grid, backed: false))
+        #expect(!WorkStatusIconGrid.drawsBacking(arrangement: .strip, backed: true))
+        #expect(!WorkStatusIconGrid.drawsBacking(arrangement: .strip, backed: false))
+    }
+
+    @Test func backingColoursMatchTheBoard() {
+        let sepia = WorkStatusIconGrid.BackingColor.board(.sepia)
+        #expect(sepia.red == 120 / 255 && sepia.green == 92 / 255 && sepia.blue == 56 / 255)
+        #expect(sepia.alpha == 0.12)
+        let light = WorkStatusIconGrid.BackingColor.board(.light)
+        #expect(light.red == 118 / 255 && light.green == 118 / 255 && light.blue == 128 / 255)
+        #expect(light.alpha == 0.12)
+        for theme in [ReaderTheme.dark, .oled] {
+            let fill = WorkStatusIconGrid.BackingColor.board(theme)
+            #expect(fill.red == light.red && fill.green == light.green && fill.blue == light.blue)
+            #expect(fill.alpha == 0.24)
+        }
+        #expect(WorkStatusIconGrid.backingFill(theme: .sepia).hexString == "#785C38")
+    }
+
+    /// 16 + the backed column + 12. The ledger's 89 assumed a 61 pt column;
+    /// the padding formula makes the column 63, so the text starts at 91.
+    @Test func listTextStartsBesideTheBackedGrid() {
+        let outer = WorkStatusIconGrid.outerSide(tileSize: 24)
+        #expect(abs(outer - 62.88) < 0.001)
+        #expect(WorkRowMetrics.gridColumn == 63)
+        #expect(WorkRowMetrics.textColumnInset == 91)
+    }
+
+    /// The old tray parameter stays gone. Backing is the one `backed` flag.
     @Test func noCallSitePassesATray() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

@@ -320,13 +320,19 @@ enum WorkRowMetrics {
     static let horizontalPadding: CGFloat = 16
     static let verticalPadding: CGFloat = 12
     static let columnGap: CGFloat = 12
-    /// Two 24 pt tiles plus the 0.12 gap, the 51 pt the separator math uses.
-    static let gridColumn: CGFloat = 51
+    /// The backed list grid, rounded to the point the separator uses.
+    ///
+    /// Two 24 pt tiles, the 0.12 gap and `round(24 × 0.27)` of padding on each
+    /// side: 62.88 pt, so 63. The ledger calls the column 61 and the text 89,
+    /// which is the old 51 pt column plus 10. The padding formula adds 12, and
+    /// the separator follows the grid the row actually draws.
+    static let gridColumn: CGFloat = WorkStatusIconGrid.outerSide(tileSize: 24).rounded()
     static let screenInset: CGFloat = 16
-    /// 16 screen + 51 grid + 12 gap. The text column, on a row that is not wide
+    /// 16 screen + 63 grid + 12 gap. The text column, on a row that is not wide
     /// and not stacked for an accessibility size. Selecting does not move it:
     /// the selection bubble stays at the trailing edge, so there is no leading
-    /// check to clear.
+    /// check to clear. A wide result keeps the separator at `screenInset`,
+    /// because the tags and stats run the full width under the title.
     static let textColumnInset: CGFloat = screenInset + gridColumn + columnGap
 }
 

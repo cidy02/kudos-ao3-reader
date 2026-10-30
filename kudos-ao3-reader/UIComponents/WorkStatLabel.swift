@@ -423,8 +423,9 @@ struct WorkTopStatsRow: View {
 /// no category, no warnings, status unknown) is a grey tile, not a gap.
 /// `WorkSymbolTile` holds what each tile draws.
 ///
-/// No tray behind it anywhere (I-1): solid tiles carry their own contrast on a
-/// plain row, a washed card and a gradient alike.
+/// The full 2×2 sits on one rounded backing (owner, 2026-10-29). A strip does
+/// not, and a card that already paints a dark tray passes `backed: false`.
+/// There is no second grid for that.
 ///
 /// Purely decorative unless `announcesToVoiceOver` — callers that leave it off
 /// keep a real accessible summary of the same facts elsewhere (`WorkTopStatsRow`'s
@@ -435,6 +436,30 @@ struct WorkStatusIconGrid: View {
         case grid
         /// One row of four, the spare width going between the tiles.
         case strip
+    }
+
+    /// The board's backing colours. Light is rgba(118, 118, 128, 0.12),
+    /// Dark and OLED the same ink at 0.24, Sepia rgba(120, 92, 56, 0.12).
+    struct BackingColor: Equatable {
+        var red: Double
+        var green: Double
+        var blue: Double
+        var alpha: Double
+
+        static func board(_ theme: ReaderTheme) -> BackingColor {
+            switch theme {
+            case .sepia:
+                BackingColor(red: 120 / 255, green: 92 / 255, blue: 56 / 255, alpha: 0.12)
+            case .light:
+                BackingColor(red: 118 / 255, green: 118 / 255, blue: 128 / 255, alpha: 0.12)
+            case .dark, .oled:
+                BackingColor(red: 118 / 255, green: 118 / 255, blue: 128 / 255, alpha: 0.24)
+            }
+        }
+
+        var color: Color {
+            Color(red: red, green: green, blue: blue, opacity: alpha)
+        }
     }
 
     var rating: String?
@@ -451,10 +476,52 @@ struct WorkStatusIconGrid: View {
     /// VoiceOver stop instead of staying fully hidden.
     var announcesToVoiceOver: Bool = false
     var arrangement: Arrangement = .grid
+    /// The full 2×2's backing. Default on. Strips ignore it. The Author
+    /// card's Latest and Account's Your Latest pass false: those cards
+    /// already draw a dark tray.
+    var backed: Bool = true
 
     /// The board's tile geometry, as fractions of the tile.
     static let cornerRadiusRatio: CGFloat = 0.24
     static let gapRatio: CGFloat = 0.12
+    /// Padding and corner of the backing, each a fraction of the tile,
+    /// rounded to a point the way the Symbols board does.
+    static let backingPaddingRatio: CGFloat = 0.27
+    static let backingRadiusRatio: CGFloat = 0.58
+
+    static func backingPadding(tileSize: CGFloat) -> CGFloat {
+        (tileSize * backingPaddingRatio).rounded()
+    }
+
+    static func backingCornerRadius(tileSize: CGFloat) -> CGFloat {
+        (tileSize * backingRadiusRatio).rounded()
+    }
+
+    /// Full 2×2 only. A strip stays bare even when `backed` is left on.
+    /// Single tiles and labelled chips are not this view.
+    static func drawsBacking(arrangement: Arrangement, backed: Bool) -> Bool {
+        arrangement == .grid && backed
+    }
+
+    /// Edge of the square a row lays out. Backed adds the padding on both
+    /// sides of the two tiles and the one gap between them.
+    static func outerSide(tileSize: CGFloat, backed: Bool = true) -> CGFloat {
+        let tiles = gridHeight(tileSize: tileSize)
+        guard drawsBacking(arrangement: .grid, backed: backed) else { return tiles }
+        return tiles + 2 * backingPadding(tileSize: tileSize)
+    }
+
+    /// iOS Light/Dark/OLED use `tertiarySystemFill`, which is the board's
+    /// grey. Sepia has no system scheme. macOS's system fill is not that
+    /// grey, so both use the board's values.
+    static func backingFill(theme: ReaderTheme) -> Color {
+        #if os(iOS)
+        if theme != .sepia {
+            return Color(uiColor: .tertiarySystemFill)
+        }
+        #endif
+        return BackingColor.board(theme).color
+    }
 
     var body: some View {
         WorkStatusIconGridContent(
@@ -464,7 +531,8 @@ struct WorkStatusIconGrid: View {
             completion: completion,
             tileSize: tileSize,
             announcesToVoiceOver: announcesToVoiceOver,
-            arrangement: arrangement
+            arrangement: arrangement,
+            backed: backed
         )
         .dynamicTypeSize(.xSmall ... .accessibility2)
     }
@@ -507,8 +575,10 @@ private struct WorkStatusIconGridContent: View {
     var tileSize: CGFloat
     var announcesToVoiceOver: Bool
     var arrangement: WorkStatusIconGrid.Arrangement
+    var backed: Bool
 
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(ThemeManager.self) private var theme
     @ScaledMetric(relativeTo: .caption2) private var scale: CGFloat = 1
 
     private var side: CGFloat { tileSize * scale }
@@ -527,15 +597,33 @@ private struct WorkStatusIconGridContent: View {
     }
 
     var body: some View {
+        let content = backedLayout
         if announcesToVoiceOver {
             // The text chips' own labels, so the grid says what they would.
             let items = WorkTopStatsRow(
                 rating: rating, categories: categories, warnings: warnings, completion: completion
             ).topItems
-            layout.combinedAccessibilityRow(items.map(\.accessibilityLabel).joined(separator: ", "))
+            content.combinedAccessibilityRow(items.map(\.accessibilityLabel).joined(separator: ", "))
         } else {
-            layout.accessibilityHidden(true)
+            content.accessibilityHidden(true)
         }
+    }
+
+    /// Padding, then the fill, so the tray includes the inset. A strip and a
+    /// caller that passes `backed: false` draw the tiles alone.
+    private var backedLayout: some View {
+        let show = WorkStatusIconGrid.drawsBacking(arrangement: arrangement, backed: backed)
+        return layout
+            .padding(show ? WorkStatusIconGrid.backingPadding(tileSize: side) : 0)
+            .background {
+                if show {
+                    RoundedRectangle(
+                        cornerRadius: WorkStatusIconGrid.backingCornerRadius(tileSize: side),
+                        style: .continuous
+                    )
+                    .fill(WorkStatusIconGrid.backingFill(theme: theme.appTheme))
+                }
+            }
     }
 
     @ViewBuilder
