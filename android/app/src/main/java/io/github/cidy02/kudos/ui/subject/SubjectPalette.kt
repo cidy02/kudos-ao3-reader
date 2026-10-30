@@ -28,6 +28,15 @@ class SubjectPalette private constructor(
     val tint: Color
         get() = theme.appTint
 
+    /** Text, icons, links, spinners and text-button labels on a control: the app colour's readable ink. */
+    val controlInk: Color
+        get() = theme.accentInk(tint)
+
+    /** A label or glyph on a control filled with [tint]. */
+    val labelOnTint: Color
+        get() = label(tint)
+
+    /** The subject's identity colour (kickers, rules, covers). Never a control's colour; use [tint]/[controlInk]. */
     val accent: Color
         get() = when (theme) {
             ReaderTheme.Dark, ReaderTheme.Oled -> hsb(hue, 0.48, 0.86)

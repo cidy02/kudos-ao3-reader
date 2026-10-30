@@ -85,7 +85,7 @@ private fun ChallengeSettingsEditContent(slug: String, title: String, viewerIsOw
         confirmButton = { TextButton(onClick = { scope.launch { model.save(revealConfirmed = true) } }, enabled = !busy) {
             Text("Save and reveal", color = tokens.destructive, lineHeight = 20.sp)
         } },
-        dismissButton = { TextButton(onClick = model::cancelReveal) { Text("Cancel", color = palette.accent, lineHeight = 20.sp) } }
+        dismissButton = { TextButton(onClick = model::cancelReveal) { Text("Cancel", color = palette.controlInk, lineHeight = 20.sp) } }
     )
     dateEditing?.let { (key, date) -> Dialog(onDismissRequest = { dateEditing = null }) {
         Column(Modifier.dialogGround().writingSuggestionPanel(first = true, last = true).padding(vertical = 12.dp)) {
@@ -286,10 +286,10 @@ private fun ChallengeSettingsEditContent(slug: String, title: String, viewerIsOw
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         ChallengeEditValue(count.toString())
                                         IconButton(onClick = { model.change(key, (count - 1).toString()) }, enabled = !busy && form.editable(key) && count > 0) {
-                                            Icon(Icons.Default.Remove, "Decrease $label", tint = palette.accent)
+                                            Icon(Icons.Default.Remove, "Decrease $label", tint = palette.controlInk)
                                         }
                                         IconButton(onClick = { model.change(key, (count + 1).toString()) }, enabled = !busy && form.editable(key) && count < 10) {
-                                            Icon(Icons.Default.Add, "Increase $label", tint = palette.accent)
+                                            Icon(Icons.Default.Add, "Increase $label", tint = palette.controlInk)
                                         }
                                     }
                                 })
@@ -330,8 +330,8 @@ private fun ChallengeSettingsEditContent(slug: String, title: String, viewerIsOw
         }
         androidx.compose.material3.Button(onClick = { scope.launch { model.save() } },
             enabled = viewerIsOwner && form != null && !busy,
-            colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = palette.accent,
-                contentColor = palette.labelOnAccent),
+            colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = palette.tint,
+                contentColor = palette.labelOnTint),
             modifier = Modifier.fillMaxWidth().padding(horizontal = SubjectMetrics.accountGutter)
                 .padding(top = 12.dp, bottom = 26.dp).heightIn(min = 50.dp)) {
             Text(if (state.saving) "Saving…" else "Save changes", fontSize = 16.sp, lineHeight = 22.sp)
@@ -343,7 +343,7 @@ private data class ChallengeEditChoice(val label: String, val name: String, val 
     val pick: ((String) -> Unit)? = null, val selected: String? = null)
 @Composable private fun ChallengeCountChoice(label: String, value: String, enabled: Boolean, onClick: () -> Unit) {
     TextButton(onClick = onClick, enabled = enabled, modifier = Modifier.testTag(label)) {
-        Text(value, color = if (enabled) LocalKudosTokens.current.scopePalette.accent else LocalKudosTokens.current.secondaryInk,
+        Text(value, color = if (enabled) LocalKudosTokens.current.scopePalette.controlInk else LocalKudosTokens.current.secondaryInk,
             fontSize = 13.sp, lineHeight = 19.sp)
     }
 }
@@ -375,7 +375,7 @@ private data class ChallengeEditChoice(val label: String, val name: String, val 
 @Composable private fun ChallengeEditLoading(message: String) {
     val tokens = LocalKudosTokens.current
     Row(Modifier.fillMaxWidth().padding(24.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-        CircularProgressIndicator(color = tokens.scopePalette.accent, trackColor = tokens.separator, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+        CircularProgressIndicator(color = tokens.scopePalette.controlInk, trackColor = tokens.separator, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
         Text(message, color = tokens.secondaryInk, fontSize = 14.sp, lineHeight = 20.sp, modifier = Modifier.padding(start = 10.dp))
     }
 }

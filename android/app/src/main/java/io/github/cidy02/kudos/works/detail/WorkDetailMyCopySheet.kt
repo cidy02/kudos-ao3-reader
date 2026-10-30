@@ -646,14 +646,14 @@ private fun MyCopyOriginSection(
                 Icon(
                     imageVector = Icons.Outlined.Refresh,
                     contentDescription = null,
-                    tint = if (!isWorking) palette.accent else tokens.tertiaryInk,
+                    tint = if (!isWorking) palette.controlInk else tokens.tertiaryInk,
                     modifier = Modifier.size(16.dp)
                 )
                 Text(
                     text = if (isWorking) "Rebuilding…" else "Rebuild from Original",
                     fontSize = 14.5.sp,
                     fontWeight = FontWeight.Medium,
-                    color = if (!isWorking) palette.accent else tokens.tertiaryInk
+                    color = if (!isWorking) palette.controlInk else tokens.tertiaryInk
                 )
             }
 
@@ -744,7 +744,7 @@ private fun MyTagsSection(
                     fontSize = 14.sp,
                     color = tokens.primaryInk
                 ),
-                cursorBrush = SolidColor(palette.accent),
+                cursorBrush = SolidColor(palette.controlInk),
                 modifier = Modifier.weight(1f),
                 decorationBox = { innerTextField ->
                     if (newTagName.isEmpty()) {
@@ -757,7 +757,7 @@ private fun MyTagsSection(
                 text = "Add",
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
-                color = if (newTagName.isNotBlank() && !isWorking) palette.accent else tokens.tertiaryInk,
+                color = if (newTagName.isNotBlank() && !isWorking) palette.controlInk else tokens.tertiaryInk,
                 modifier = Modifier.clickable(
                     enabled = newTagName.isNotBlank() && !isWorking,
                     onClick = onAddTag
@@ -805,8 +805,8 @@ private fun MyTagChip(
     Row(
         modifier = Modifier
             .clip(shape)
-            .background(palette.accent.copy(alpha = 0.16f))
-            .border(0.5.dp, palette.accent.copy(alpha = 0.22f), shape)
+            .background(palette.tint.copy(alpha = 0.16f))
+            .border(0.5.dp, palette.tint.copy(alpha = 0.22f), shape)
             .padding(start = 11.dp, end = 9.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(7.dp)
@@ -815,7 +815,7 @@ private fun MyTagChip(
             text = name,
             fontSize = 13.5.sp,
             fontWeight = FontWeight.Medium,
-            color = palette.accent,
+            color = palette.controlInk,
             modifier = Modifier.clickable(enabled = enabled, onClick = onClick)
         )
         Box(
@@ -827,7 +827,7 @@ private fun MyTagChip(
             Icon(
                 imageVector = Icons.Filled.Remove,
                 contentDescription = "Remove tag $name",
-                tint = palette.accent.copy(alpha = 0.6f),
+                tint = palette.controlInk.copy(alpha = 0.6f),
                 modifier = Modifier.size(12.dp)
             )
         }
@@ -890,7 +890,7 @@ private fun MyCopyToggleRow(
             Icon(
                 imageVector = Icons.Filled.CheckCircle,
                 contentDescription = "On",
-                tint = palette.accent,
+                tint = palette.controlInk,
                 modifier = Modifier.size(18.dp)
             )
         }
@@ -951,7 +951,7 @@ private fun MyCopyAddLabel(
         Icon(
             imageVector = Icons.Filled.Add,
             contentDescription = null,
-            tint = if (enabled) palette.accent else LocalKudosTokens.current.tertiaryInk,
+            tint = if (enabled) palette.controlInk else LocalKudosTokens.current.tertiaryInk,
             modifier = Modifier.size(14.dp)
         )
         Text(
@@ -959,7 +959,7 @@ private fun MyCopyAddLabel(
             fontSize = 14.sp,
             lineHeight = 19.sp,
             fontWeight = FontWeight.Medium,
-            color = if (enabled) palette.accent else LocalKudosTokens.current.tertiaryInk
+            color = if (enabled) palette.controlInk else LocalKudosTokens.current.tertiaryInk
         )
     }
 }

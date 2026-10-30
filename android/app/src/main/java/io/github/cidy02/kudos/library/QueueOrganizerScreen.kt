@@ -365,18 +365,18 @@ private fun OrganizerToolbarActions(
     onDone: () -> Unit
 ) {
     if (selecting) {
-        TextButton(onClick = onSelectAll) { Text(if (allSelected) "Deselect All" else "Select All", color = palette.accent) }
-        TextButton(onClick = onPin, enabled = canPin) { Text(pinLabel, color = palette.accent) }
-        TextButton(onClick = onTag, enabled = selectedCount > 0) { Text("Tag", color = palette.accent) }
+        TextButton(onClick = onSelectAll) { Text(if (allSelected) "Deselect All" else "Select All", color = palette.controlInk) }
+        TextButton(onClick = onPin, enabled = canPin) { Text(pinLabel, color = palette.controlInk) }
+        TextButton(onClick = onTag, enabled = selectedCount > 0) { Text("Tag", color = palette.controlInk) }
         TextButton(onClick = onDelete, enabled = canDelete,
             colors = ButtonDefaults.textButtonColors(contentColor = LocalKudosTokens.current.destructive)) { Text("Delete") }
-        TextButton(onClick = onDone) { Text("Done", color = palette.accent) }
+        TextButton(onClick = onDone) { Text("Done", color = palette.controlInk) }
     } else {
         ToolbarCircleButton(
             onClick = onNew,
             accessibilityName = "New Queue"
         ) {
-            Icon(Icons.Filled.Add, contentDescription = null, tint = palette.accent)
+            Icon(Icons.Filled.Add, contentDescription = null, tint = palette.controlInk)
         }
         Box {
             ToolbarCircleButton(

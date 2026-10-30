@@ -95,15 +95,15 @@ internal fun WritingChaptersScreen(
                 Column(Modifier.fillMaxWidth().padding(top = 18.dp).padding(horizontal = SubjectMetrics.accountGutter),
                     horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(message, color = tokens.secondaryInk, fontSize = 14.sp, lineHeight = 20.sp, textAlign = TextAlign.Center)
-                    TextButton(onClick = { attempt++ }, colors = ButtonDefaults.textButtonColors(contentColor = palette.accent)) {
-                        Text("Try Again", color = palette.accent, fontSize = 14.sp, lineHeight = 20.sp)
+                    TextButton(onClick = { attempt++ }, colors = ButtonDefaults.textButtonColors(contentColor = palette.controlInk)) {
+                        Text("Try Again", color = palette.controlInk, fontSize = 14.sp, lineHeight = 20.sp)
                     }
                 }
             }
             else -> item {
                 Row(Modifier.fillMaxWidth().padding(top = 18.dp), horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically) {
-                    CircularProgressIndicator(color = palette.accent, trackColor = tokens.separator,
+                    CircularProgressIndicator(color = palette.controlInk, trackColor = tokens.separator,
                         modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                     Text("Loading chapters…", color = tokens.secondaryInk, fontSize = 14.sp, lineHeight = 20.sp,
                         modifier = Modifier.padding(start = 10.dp))

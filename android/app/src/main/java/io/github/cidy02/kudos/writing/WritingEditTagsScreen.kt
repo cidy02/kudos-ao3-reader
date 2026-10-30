@@ -60,7 +60,7 @@ internal fun WritingEditTagsScreen(
     val save: (@Composable RowScope.() -> Unit)? = if (form == null) null else {
         {
             TextButton(enabled = !state.saving && !state.saved, onClick = onSave,
-                colors = ButtonDefaults.textButtonColors(contentColor = palette.accent, disabledContentColor = tokens.tertiaryInk)) {
+                colors = ButtonDefaults.textButtonColors(contentColor = palette.controlInk, disabledContentColor = tokens.tertiaryInk)) {
                 Text("Save", fontSize = 15.sp, lineHeight = 21.sp)
             }
         }
@@ -71,7 +71,7 @@ internal fun WritingEditTagsScreen(
             titleContentColor = tokens.primaryInk, textContentColor = tokens.secondaryInk,
             title = { Text("AO3 could not save the change", lineHeight = 28.sp) },
             text = { Text(message, lineHeight = 22.sp) }, confirmButton = {
-                TextButton(onClick = model::dismissSaveError) { Text("OK", color = palette.accent, lineHeight = 20.sp) }
+                TextButton(onClick = model::dismissSaveError) { Text("OK", color = palette.controlInk, lineHeight = 20.sp) }
             })
     }
     BoxWithConstraints(Modifier.fillMaxSize().subjectScreenWash(palette)) {
@@ -100,11 +100,11 @@ internal fun WritingEditTagsScreen(
                     if (failure != null) {
                         Text(failure, color = tokens.secondaryInk, fontSize = 14.sp, lineHeight = 20.sp)
                         TextButton(onClick = { scope.launch { model.load(retry = true) } },
-                            colors = ButtonDefaults.textButtonColors(contentColor = palette.accent)) {
-                            Text("Try Again", color = palette.accent, fontSize = 14.sp, lineHeight = 20.sp)
+                            colors = ButtonDefaults.textButtonColors(contentColor = palette.controlInk)) {
+                            Text("Try Again", color = palette.controlInk, fontSize = 14.sp, lineHeight = 20.sp)
                         }
                     } else Row(verticalAlignment = Alignment.CenterVertically) {
-                        CircularProgressIndicator(color = palette.accent, trackColor = tokens.separator,
+                        CircularProgressIndicator(color = palette.controlInk, trackColor = tokens.separator,
                             modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                         Text("Loading tags…", color = tokens.secondaryInk, fontSize = 14.sp, lineHeight = 20.sp,
                             modifier = Modifier.padding(start = 10.dp))
@@ -117,7 +117,7 @@ internal fun WritingEditTagsScreen(
                         .writingSuggestionPanel(index == 0, index == form.ratingOptions.lastIndex)) {
                         SubjectFormRow(option.title, onClick = { model.choice(WorkFormChoice.Rating, option.value) }, trailing = {
                             if (form.rating == option.value) Icon(Icons.Default.Check, "Selected",
-                                tint = palette.accent, modifier = Modifier.size(18.dp))
+                                tint = palette.controlInk, modifier = Modifier.size(18.dp))
                         })
                         if (index < form.ratingOptions.lastIndex) SubjectRowSeparator()
                     }
@@ -128,7 +128,7 @@ internal fun WritingEditTagsScreen(
                         .writingSuggestionPanel(index == 0, index == form.warningOptions.lastIndex)) {
                         SubjectFormRow(option.title, onClick = { model.toggleTag(WorkFormTags.Warnings, option.value) }, trailing = {
                             if (option.value in form.warnings) Icon(Icons.Default.Check, "Selected",
-                                tint = palette.accent, modifier = Modifier.size(18.dp))
+                                tint = palette.controlInk, modifier = Modifier.size(18.dp))
                         })
                         if (index < form.warningOptions.lastIndex) SubjectRowSeparator()
                     }

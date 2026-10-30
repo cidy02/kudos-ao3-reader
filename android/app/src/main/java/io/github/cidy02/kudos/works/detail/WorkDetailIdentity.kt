@@ -134,7 +134,7 @@ internal fun VerifiedAuthorByline(
     onOpenAuthor: (String) -> Unit = LocalOpenAuthor.current,
     includesBy: Boolean = false
 ) {
-    AuthorBylineRow(authorNames, author, LocalKudosTokens.current.scopePalette.accent,
+    AuthorBylineRow(authorNames, author, LocalKudosTokens.current.scopePalette.controlInk,
         compact = compact, includesBy = includesBy,
         isLinked = { io.github.cidy02.kudos.network.ao3.author.AO3AuthorIdentities.byline(identities, it) != null },
         onOpenAuthor = { name ->
@@ -173,7 +173,7 @@ fun WorkDetailIdentityHeader(
             AuthorBylineRow(
                 authorNames = authorNames,
                 displayAuthor = author,
-                accent = palette.accent,
+                accent = palette.controlInk,
                 isLinked = isLinked,
                 onOpenAuthor = onOpenAuthor
             )

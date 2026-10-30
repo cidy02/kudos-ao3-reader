@@ -97,7 +97,7 @@ internal fun WritingSeriesContent(model: WritingSeriesState, title: String, subt
     val saveButton: (@Composable RowScope.() -> Unit)? = if (form != null || state.rows != null) {
         {
             TextButton(enabled = canSave, onClick = { scope.launch { model.save(order = ordering) } },
-                colors = ButtonDefaults.textButtonColors(contentColor = palette.accent, disabledContentColor = tokens.tertiaryInk)) {
+                colors = ButtonDefaults.textButtonColors(contentColor = palette.controlInk, disabledContentColor = tokens.tertiaryInk)) {
                 Text("Save", fontSize = 15.sp, lineHeight = 21.sp)
             }
         }
@@ -245,7 +245,7 @@ internal fun WritingSeriesContent(model: WritingSeriesState, title: String, subt
             text = { Text("The work stays posted on AO3.", lineHeight = 22.sp) },
             confirmButton = { TextButton(onClick = { confirmRemoval = null; scope.launch { model.remove(row) } }) {
                 Text("Remove from series", color = tokens.destructive, lineHeight = 20.sp) } },
-            dismissButton = { TextButton(onClick = { confirmRemoval = null }) { Text("Cancel", color = palette.accent, lineHeight = 20.sp) } })
+            dismissButton = { TextButton(onClick = { confirmRemoval = null }) { Text("Cancel", color = palette.controlInk, lineHeight = 20.sp) } })
     }
 }
 
@@ -259,11 +259,11 @@ private fun SeriesLoadingRow(failure: String?, saving: Boolean = false, retry: (
         if (failure != null) {
             Text("Couldn't load from AO3", color = tokens.primaryInk, fontSize = 20.sp, lineHeight = 27.sp)
             Text(failure, color = tokens.secondaryInk, fontSize = 14.sp, lineHeight = 20.sp)
-            TextButton(onClick = retry, colors = ButtonDefaults.textButtonColors(contentColor = tokens.scopePalette.accent)) {
+            TextButton(onClick = retry, colors = ButtonDefaults.textButtonColors(contentColor = tokens.scopePalette.controlInk)) {
                 Text("Try Again", fontSize = 14.sp, lineHeight = 20.sp)
             }
         } else Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            CircularProgressIndicator(color = tokens.scopePalette.accent, trackColor = tokens.separator,
+            CircularProgressIndicator(color = tokens.scopePalette.controlInk, trackColor = tokens.separator,
                 modifier = Modifier.size(20.dp).semantics { contentDescription = if (saving) "Saving…" else "Loading…"; liveRegion = LiveRegionMode.Polite },
                 strokeWidth = 2.dp)
         }

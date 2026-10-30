@@ -73,13 +73,13 @@ fun AO3CollectionModerationScreen(
 
     SubjectPaletteTheme(palette) {
     MaterialTheme(colorScheme = MaterialTheme.colorScheme.copy(
-        primary = palette.accent, onPrimary = SubjectPalette.label(palette.accent),
-        primaryContainer = palette.chipFill, onPrimaryContainer = palette.accentOnFill,
-        secondary = palette.accent, onSecondary = SubjectPalette.label(palette.accent),
-        secondaryContainer = palette.chipFill, onSecondaryContainer = palette.accentOnFill,
-        tertiary = palette.accent, onTertiary = SubjectPalette.label(palette.accent),
-        tertiaryContainer = palette.chipFill, onTertiaryContainer = palette.accentOnFill,
-        inversePrimary = palette.accent, inverseSurface = tokens.cardFill, inverseOnSurface = tokens.primaryInk,
+        primary = palette.tint, onPrimary = palette.labelOnTint,
+        primaryContainer = palette.chipFill, onPrimaryContainer = palette.controlInk,
+        secondary = palette.tint, onSecondary = palette.labelOnTint,
+        secondaryContainer = palette.chipFill, onSecondaryContainer = palette.controlInk,
+        tertiary = palette.tint, onTertiary = palette.labelOnTint,
+        tertiaryContainer = palette.chipFill, onTertiaryContainer = palette.controlInk,
+        inversePrimary = palette.tint, inverseSurface = tokens.cardFill, inverseOnSurface = tokens.primaryInk,
         surface = tokens.cardFill, surfaceContainerHigh = tokens.cardFill,
         surfaceVariant = tokens.cardFill, surfaceContainer = tokens.cardFill,
         surfaceContainerHighest = tokens.cardFill, surfaceContainerLow = tokens.cardFill,
@@ -87,7 +87,7 @@ fun AO3CollectionModerationScreen(
         onSurface = tokens.primaryInk, onSurfaceVariant = tokens.secondaryInk,
         error = errorColor, onError = SubjectPalette.label(errorColor), errorContainer = tokens.panelFill, onErrorContainer = tokens.primaryInk,
         background = tokens.background, onBackground = tokens.primaryInk,
-        outline = tokens.separator, outlineVariant = tokens.separator, surfaceTint = palette.accent,
+        outline = tokens.separator, outlineVariant = tokens.separator, surfaceTint = palette.tint,
         scrim = tokens.primaryInk.copy(alpha = 0.32f)
     )) {
         state.pending?.let { decision ->
@@ -98,7 +98,7 @@ fun AO3CollectionModerationScreen(
                 confirmButton = { TextButton(onClick = { scope.launch { model.confirm() } }, enabled = !state.busy) {
                     Text(decision.button, color = errorColor, lineHeight = 20.sp)
                 } }, dismissButton = { TextButton(onClick = model::cancel) {
-                    Text("Cancel", color = palette.accent, lineHeight = 20.sp)
+                    Text("Cancel", color = palette.controlInk, lineHeight = 20.sp)
                 } })
         }
         KudosRefreshBox(onRefresh = { if (!state.busy && state.pending == null) model.load() },
@@ -121,7 +121,7 @@ fun AO3CollectionModerationScreen(
                     state.loading -> item {
                         Row(Modifier.fillMaxWidth().padding(vertical = 24.dp), horizontalArrangement = Arrangement.Center,
                             verticalAlignment = Alignment.CenterVertically) {
-                            CircularProgressIndicator(color = palette.accent, trackColor = tokens.separator,
+                            CircularProgressIndicator(color = palette.controlInk, trackColor = tokens.separator,
                                 modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                             Text("Loading moderation…", color = tokens.secondaryInk, fontSize = 14.sp, lineHeight = 20.sp,
                                 modifier = Modifier.padding(start = 10.dp))
@@ -305,7 +305,7 @@ private fun ModerationPill(title: String, palette: SubjectPalette, enabled: Bool
         if (prominent) palette.tint else tokens.glassStroke(0.16), shape)
         .clickable(enabled = enabled, role = Role.Button, onClick = onClick).padding(horizontal = 14.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-        val ink = if (prominent) SubjectPalette.label(palette.accent) else tokens.primaryInk
+        val ink = if (prominent) palette.labelOnTint else tokens.primaryInk
         if (loading) CircularProgressIndicator(color = ink, trackColor = tokens.separator,
             modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
         Text(title, color = ink.copy(alpha = if (enabled || loading) 1f else 0.45f), fontSize = 12.5.sp,

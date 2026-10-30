@@ -621,11 +621,11 @@ private fun PageToolbarActions(
 ) {
     if (selecting) {
         TextButton(onClick = onSelectAll) {
-            Text(if (selectedCount == total && total > 0) "Deselect All" else "Select All", color = palette.accent)
+            Text(if (selectedCount == total && total > 0) "Deselect All" else "Select All", color = palette.controlInk)
         }
         if (showsRemove) TextButton(onClick = onRemove, enabled = selectedCount > 0,
             colors = ButtonDefaults.textButtonColors(contentColor = LocalKudosTokens.current.destructive)) { Text("Remove") }
-        TextButton(onClick = onDone) { Text("Done", color = palette.accent) }
+        TextButton(onClick = onDone) { Text("Done", color = palette.controlInk) }
     } else {
         // iOS 1h: "an accent-filled + for adding works" (.glassProminent).
         ToolbarAddButton(onClick = onAdd, accessibilityName = "Add Works", palette = palette, prominent = true)

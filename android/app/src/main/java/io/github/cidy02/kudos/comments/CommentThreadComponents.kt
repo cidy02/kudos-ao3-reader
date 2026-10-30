@@ -378,7 +378,7 @@ fun CommentConversationRow(
                     Text(
                         text = text,
                         style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-                        color = palette.accent
+                        color = palette.controlInk
                     )
                 }
             }
@@ -398,7 +398,7 @@ fun CommentConversationRow(
                         text = "Continue thread",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium,
-                        color = palette.accent
+                        color = palette.controlInk
                     )
                     Text("·", color = tokens.tertiaryInk, fontSize = 12.sp)
                     Text(
@@ -410,7 +410,7 @@ fun CommentConversationRow(
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                         contentDescription = null,
-                        tint = palette.accent,
+                        tint = palette.controlInk,
                         modifier = Modifier.size(14.dp)
                     )
                 }
@@ -648,12 +648,12 @@ fun CommentPostRow(
                         text = cutoffText,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium,
-                        color = palette.accent
+                        color = palette.controlInk
                     )
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                         contentDescription = null,
-                        tint = palette.accent,
+                        tint = palette.controlInk,
                         modifier = Modifier.size(14.dp)
                     )
                 }
@@ -787,7 +787,7 @@ fun CommentActionRowLayout(
         if (canReply) {
             CommentReplyButton(
                 accessibilityLabel = "Reply to ${comment.author.name}",
-                plainAccent = palette.accent,
+                plainAccent = palette.controlInk,
                 onClick = { handlers.onReply(comment) }
             )
         }
@@ -982,8 +982,8 @@ fun ContentUnavailableView(
             Button(
                 onClick = onAction,
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = palette?.accent ?: tokens.accent,
-                    contentColor = palette?.labelOnAccent ?: Color.White
+                    containerColor = palette?.tint ?: tokens.accent,
+                    contentColor = palette?.labelOnTint ?: Color.White
                 ),
                 shape = RoundedCornerShape(percent = 50)
             ) {

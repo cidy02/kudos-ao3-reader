@@ -86,12 +86,12 @@ internal fun WritingChapterFormScreen(model: WritingChapterFormState, workTitle:
             Column(Modifier.fillMaxWidth().padding(top = 60.dp).padding(horizontal = SubjectMetrics.accountGutter),
                 horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 val failure = state.failure
-                if (failure == null) CircularProgressIndicator(color = palette.accent, trackColor = tokens.separator)
+                if (failure == null) CircularProgressIndicator(color = palette.controlInk, trackColor = tokens.separator)
                 else {
                     Text("Couldn't load from AO3", color = tokens.primaryInk, fontSize = 20.sp, lineHeight = 27.sp)
                     Text(failure, color = tokens.secondaryInk, fontSize = 14.sp, lineHeight = 20.sp)
-                    TextButton(onClick = { scope.launch { model.load(retry = true) } }, colors = ButtonDefaults.textButtonColors(contentColor = palette.accent)) {
-                        Text("Try Again", color = palette.accent, fontSize = 14.sp, lineHeight = 20.sp)
+                    TextButton(onClick = { scope.launch { model.load(retry = true) } }, colors = ButtonDefaults.textButtonColors(contentColor = palette.controlInk)) {
+                        Text("Try Again", color = palette.controlInk, fontSize = 14.sp, lineHeight = 20.sp)
                     }
                 }
             }
@@ -200,7 +200,7 @@ private fun ChapterNumberField(value: String, label: String, hint: String, enabl
     androidx.compose.foundation.text.BasicTextField(value, onValueChange = change, enabled = enabled,
         singleLine = true, keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
         textStyle = androidx.compose.ui.text.TextStyle(color = tokens.primaryInk, fontSize = 14.5.sp, lineHeight = 20.sp, textAlign = androidx.compose.ui.text.style.TextAlign.End),
-        cursorBrush = androidx.compose.ui.graphics.SolidColor(tokens.scopePalette.accent),
+        cursorBrush = androidx.compose.ui.graphics.SolidColor(tokens.scopePalette.controlInk),
         modifier = Modifier.width(90.dp).testTag(label).semantics { contentDescription = label }, decorationBox = { input ->
             Box(contentAlignment = Alignment.CenterEnd) {
                 if (value.isEmpty()) Text(hint, color = tokens.tertiaryInk, fontSize = 14.5.sp, lineHeight = 20.sp)
@@ -218,7 +218,7 @@ internal fun WritingErrorAlert(title: String, message: String, dismiss: () -> Un
     AlertDialog(onDismissRequest = dismiss, containerColor = tokens.cardFill,
         titleContentColor = tokens.primaryInk, textContentColor = tokens.secondaryInk,
         title = { Text(title, lineHeight = 28.sp) }, text = { Text(message, lineHeight = 22.sp) },
-        confirmButton = { TextButton(onClick = dismiss) { Text("OK", color = tokens.scopePalette.accent, lineHeight = 20.sp) } })
+        confirmButton = { TextButton(onClick = dismiss) { Text("OK", color = tokens.scopePalette.controlInk, lineHeight = 20.sp) } })
 }
 
 /** Draft work chapter entrances are debug-only: iOS's production work form exposes only posted chapters. */

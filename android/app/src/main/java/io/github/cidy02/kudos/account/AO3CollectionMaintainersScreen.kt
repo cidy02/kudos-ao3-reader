@@ -64,15 +64,15 @@ fun AO3CollectionMaintainersScreen(
     SubjectPaletteTheme(palette) {
         // The shared refresh/dialog/menu chrome must also use subject tokens on all four themes.
         MaterialTheme(colorScheme = MaterialTheme.colorScheme.copy(
-            primary = palette.accent, onPrimary = SubjectPalette.label(palette.accent),
-            secondary = palette.accent, onSecondary = SubjectPalette.label(palette.accent),
-            primaryContainer = palette.chipFill, onPrimaryContainer = palette.accentOnFill,
-            secondaryContainer = palette.chipFill, onSecondaryContainer = palette.accentOnFill,
-            tertiary = palette.accent, onTertiary = SubjectPalette.label(palette.accent),
-            tertiaryContainer = palette.chipFill, onTertiaryContainer = palette.accentOnFill,
-            inversePrimary = palette.accent, inverseSurface = tokens.cardFill, inverseOnSurface = tokens.primaryInk,
+            primary = palette.tint, onPrimary = palette.labelOnTint,
+            secondary = palette.tint, onSecondary = palette.labelOnTint,
+            primaryContainer = palette.chipFill, onPrimaryContainer = palette.controlInk,
+            secondaryContainer = palette.chipFill, onSecondaryContainer = palette.controlInk,
+            tertiary = palette.tint, onTertiary = palette.labelOnTint,
+            tertiaryContainer = palette.chipFill, onTertiaryContainer = palette.controlInk,
+            inversePrimary = palette.tint, inverseSurface = tokens.cardFill, inverseOnSurface = tokens.primaryInk,
             error = red, onError = SubjectPalette.label(red), errorContainer = tokens.panelFill, onErrorContainer = tokens.primaryInk,
-            surfaceTint = palette.accent, surfaceVariant = tokens.cardFill,
+            surfaceTint = palette.tint, surfaceVariant = tokens.cardFill,
             surfaceDim = tokens.background, surfaceBright = tokens.cardFill,
             surfaceContainerLowest = tokens.background, surfaceContainerLow = tokens.cardFill,
             surfaceContainerHighest = tokens.cardFill, surface = tokens.cardFill,
@@ -109,7 +109,7 @@ fun AO3CollectionMaintainersScreen(
                                 Text(state.loadError ?: "Log in to AO3 before using this feature.", color = tokens.secondaryInk,
                                     fontSize = 13.sp, lineHeight = 19.sp, textAlign = TextAlign.Center)
                                 TextButton(onClick = { scope.launch { model.load() } }, enabled = authState.isSignedIn) {
-                                    Text("Try Again", color = palette.accent, lineHeight = 20.sp)
+                                    Text("Try Again", color = palette.controlInk, lineHeight = 20.sp)
                                 }
                             }
                         }
@@ -157,7 +157,7 @@ fun AO3CollectionMaintainersScreen(
                                             Spacer(Modifier.width(8.dp))
                                         }
                                         Text("Send invitation to ${state.username.trim()}",
-                                            color = palette.accent.copy(alpha = if (state.busy) 0.45f else 1f),
+                                            color = palette.controlInk.copy(alpha = if (state.busy) 0.45f else 1f),
                                             fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold,
                                             textAlign = TextAlign.Center)
                                     }
@@ -204,9 +204,9 @@ fun AO3CollectionMaintainersScreen(
                     confirmButton = { TextButton(onClick = {
                         if (lastOwner) model.cancelDialog() else scope.launch { model.confirmLeave() }
                     }) { Text(if (lastOwner) "OK" else if (owner) "Step Down" else "Leave",
-                        color = if (lastOwner) palette.accent else red, lineHeight = 20.sp) } },
+                        color = if (lastOwner) palette.controlInk else red, lineHeight = 20.sp) } },
                     dismissButton = { if (!lastOwner) TextButton(onClick = model::cancelDialog) {
-                        Text("Cancel", color = palette.accent, lineHeight = 20.sp)
+                        Text("Cancel", color = palette.controlInk, lineHeight = 20.sp)
                     } })
             }
         }
@@ -225,7 +225,7 @@ private fun MaintainersPanel(content: @Composable ColumnScope.() -> Unit) {
 
 @Composable
 private fun MaintainersSpinner(palette: SubjectPalette) {
-    CircularProgressIndicator(color = palette.accent, trackColor = LocalKudosTokens.current.separator, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+    CircularProgressIndicator(color = palette.controlInk, trackColor = LocalKudosTokens.current.separator, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
 }
 
 @Composable

@@ -4,6 +4,8 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.Color
 import io.github.cidy02.kudos.reader.settings.ReaderColorTheme
 import io.github.cidy02.kudos.reader.settings.backgroundColor
+import io.github.cidy02.kudos.ui.subject.KudosTokens
+import io.github.cidy02.kudos.ui.subject.ReaderTheme
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -24,8 +26,29 @@ class ThemeTest {
     }
 
     @Test
-    fun parseAccentColorParsesValidHexAndFallsBackToAo3RedOtherwise() {
-        assertEquals(Ao3Red, parseAccentColor("not a color"))
-        assertEquals(0xFF0B57D0.toInt(), parseAccentColor("#0B57D0").toArgb())
+    fun theAppColourIsOneFixedAo3RedExceptSepiasBrown() {
+        assertEquals(0xFF990000.toInt(), Ao3Red.toArgb())
+        assertEquals(0xFFFF7A70.toInt(), Ao3RedInkDark.toArgb())
+        assertEquals("#990000", DefaultAccentHex)
+        for (theme in ReaderTheme.entries) {
+            val expected = if (theme == ReaderTheme.Sepia) SepiaTint else Ao3Red
+            assertEquals(expected, theme.appTint)
+            assertEquals(expected, KudosTokens.of(theme).accent)
+            assertEquals(expected, theme.scopePalette().tint)
+        }
+    }
+
+    @Test
+    fun darkAndOledTextTakesTheLighterRedStepWhileFillsKeepAo3Red() {
+        for (theme in listOf(ReaderTheme.Dark, ReaderTheme.Oled)) {
+            val tokens = KudosTokens.of(theme)
+            assertEquals(Ao3Red, tokens.accent)
+            assertEquals(Ao3RedInkDark, tokens.accentInk)
+            assertEquals(Ao3RedInkDark, theme.scopePalette().controlInk)
+            assertEquals(Ao3Red, theme.scopePalette().tint)
+        }
+        for (theme in listOf(ReaderTheme.Light, ReaderTheme.Sepia)) {
+            assertEquals(theme.appTint, theme.scopePalette().controlInk)
+        }
     }
 }

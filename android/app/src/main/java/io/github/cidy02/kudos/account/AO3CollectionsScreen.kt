@@ -311,7 +311,7 @@ internal fun AO3CollectionRow(collection: AO3Collection, onClick: () -> Unit, on
             ao3CollectionRowActions(collection).forEachIndexed { index, action ->
                 DropdownMenuItem(text = { Text(action.label, color = tokens.primaryInk, fontSize = 14.5.sp, lineHeight = 20.sp) },
                     leadingIcon = { Icon(if (index == 0) Icons.Filled.Edit else Icons.Filled.Inbox,
-                        contentDescription = null, tint = palette.accent) },
+                        contentDescription = null, tint = palette.controlInk) },
                     onClick = { menuOpen = false; onAction(action.route) })
             }
         }
@@ -419,7 +419,7 @@ fun AO3CollectionCard(
             Icon(
                 imageVector = androidx.compose.material.icons.Icons.Default.KeyboardArrowRight,
                 contentDescription = null,
-                tint = palette.accent,
+                tint = palette.controlInk,
                 // Padding first: inside the size it squeezed the chevron. 18dp is a form row's
                 // disclosure; at 12 the arrow itself was half the size of the iPhone's.
                 modifier = Modifier.padding(top = 2.dp).size(18.dp)
@@ -436,7 +436,7 @@ fun AO3CollectionCard(
                     Text(
                         text = if (index < names.lastIndex) "$name," else name,
                         fontSize = 12.5.sp,
-                        color = palette.accent,
+                        color = palette.controlInk,
                         modifier = Modifier.clickable(onClickLabel = "open $name's profile") { onOpenMaintainer(name) }
                     )
                 }

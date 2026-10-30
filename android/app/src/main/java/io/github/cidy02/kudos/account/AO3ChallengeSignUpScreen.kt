@@ -100,7 +100,7 @@ private fun ChallengeSignUpContent(slug: String, title: String, existingID: Int?
             scope.launch { model.withdraw() }
         }, enabled = !busy) { Text("Withdraw Sign-up", color = destructive, lineHeight = 20.sp) } },
         dismissButton = { TextButton(onClick = { confirmingWithdraw = false }) {
-            Text("Cancel", color = palette.accent, lineHeight = 20.sp)
+            Text("Cancel", color = palette.controlInk, lineHeight = 20.sp)
         } }
     )
     Column(Modifier.fillMaxSize().subjectScreenWash(palette).imePadding()) {
@@ -123,7 +123,7 @@ private fun ChallengeSignUpContent(slug: String, title: String, existingID: Int?
                     state.loading -> item {
                         Row(Modifier.fillMaxWidth().padding(24.dp), horizontalArrangement = Arrangement.Center,
                             verticalAlignment = Alignment.CenterVertically) {
-                            CircularProgressIndicator(color = palette.accent, trackColor = tokens.separator,
+                            CircularProgressIndicator(color = palette.controlInk, trackColor = tokens.separator,
                                 modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                             Text("Loading sign-up…", color = tokens.secondaryInk, fontSize = 14.sp, lineHeight = 20.sp,
                                 modifier = Modifier.padding(start = 10.dp))
@@ -237,7 +237,7 @@ private fun ChallengeSignUpContent(slug: String, title: String, existingID: Int?
         }
         val submitAction: @Composable () -> Unit = {
             if (state.saving) Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.Center) {
-                CircularProgressIndicator(color = palette.accent, trackColor = tokens.separator,
+                CircularProgressIndicator(color = palette.controlInk, trackColor = tokens.separator,
                     modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
             }
             ChallengePrimaryAction("Submit sign-up", form != null && !busy, Modifier.fillMaxWidth()) { scope.launch { model.save() } }
@@ -280,7 +280,7 @@ private fun SignUpTagsEditor(prompt: SignUpPrompt, position: Int, onDone: (Map<S
     BackHandler(onBack = onBack)
     ProvidePushedShellChrome(hasSubjectHeader = true, hideTabBar = true, onBack = onBack, trailingContent = {
         IconButton(onClick = { onDone(text.mapValues { splitSignUpTags(it.value) }) }) {
-            Icon(Icons.Default.Check, "Done", tint = tokens.scopePalette.accent)
+            Icon(Icons.Default.Check, "Done", tint = tokens.scopePalette.controlInk)
         }
     })
     LazyColumn(Modifier.fillMaxSize().subjectScreenWash(tokens.scopePalette).imePadding(),

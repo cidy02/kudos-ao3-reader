@@ -71,13 +71,13 @@ fun AO3TagSetScreen(
     ProvidePushedShellChrome(hasSubjectHeader = true, onBack = if (editing) ({ editing = false }) else null)
     SubjectPaletteTheme(palette) {
     MaterialTheme(colorScheme = MaterialTheme.colorScheme.copy(
-        primary = palette.accent, onPrimary = SubjectPalette.label(palette.accent),
-        primaryContainer = palette.chipFill, onPrimaryContainer = palette.accentOnFill,
+        primary = palette.tint, onPrimary = palette.labelOnTint,
+        primaryContainer = palette.chipFill, onPrimaryContainer = palette.controlInk,
         surface = tokens.cardFill, onSurface = tokens.primaryInk,
         surfaceContainerHigh = tokens.cardFill, surfaceContainerHighest = tokens.cardFill,
         surfaceVariant = tokens.cardFill, onSurfaceVariant = tokens.secondaryInk,
         background = tokens.background, onBackground = tokens.primaryInk,
-        outline = tokens.separator, outlineVariant = tokens.separator, surfaceTint = palette.accent
+        outline = tokens.separator, outlineVariant = tokens.separator, surfaceTint = palette.tint
     )) {
         if (editing) {
             TagSetEditor(effectiveTitle, state, model, palette, onSave = { scope.launch { model.save() } })
@@ -97,7 +97,7 @@ fun AO3TagSetScreen(
                     state.loading || (data == null && state.failure == null) -> item {
                         Row(Modifier.fillMaxWidth().padding(vertical = 24.dp), horizontalArrangement = Arrangement.Center,
                             verticalAlignment = Alignment.CenterVertically) {
-                            CircularProgressIndicator(color = palette.accent, trackColor = tokens.separator,
+                            CircularProgressIndicator(color = palette.controlInk, trackColor = tokens.separator,
                                 modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                             Text("Loading tag set…", color = tokens.secondaryInk, fontSize = 14.sp, lineHeight = 20.sp,
                                 modifier = Modifier.padding(start = 10.dp))
@@ -112,7 +112,7 @@ fun AO3TagSetScreen(
                                 Text(state.failure.orEmpty(), color = tokens.secondaryInk, fontSize = 13.sp,
                                     lineHeight = 19.sp, textAlign = TextAlign.Center)
                                 TextButton(onClick = { scope.launch { model.load() } }) {
-                                    Text("Try Again", color = palette.accent, fontSize = 14.sp, lineHeight = 20.sp)
+                                    Text("Try Again", color = palette.controlInk, fontSize = 14.sp, lineHeight = 20.sp)
                                 }
                             }
                         }
@@ -270,10 +270,10 @@ internal fun TagSetEditor(title: String, state: TagSetUiState, model: AO3TagSetS
         item {
             TextButton(onClick = onSave, enabled = !state.saving,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth()
-                    .background(palette.accent, RoundedCornerShape(50))) {
-                if (state.saving) CircularProgressIndicator(color = palette.labelOnAccent,
+                    .background(palette.tint, RoundedCornerShape(50))) {
+                if (state.saving) CircularProgressIndicator(color = palette.labelOnTint,
                     modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                Text("Save tags", color = palette.labelOnAccent, modifier = Modifier.padding(8.dp))
+                Text("Save tags", color = palette.labelOnTint, modifier = Modifier.padding(8.dp))
             }
         }
     }

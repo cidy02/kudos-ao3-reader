@@ -78,7 +78,7 @@ class A88dSmallFixesTest {
             { changes = it(changes) }, {}) }
         val add = compose.onNodeWithText("Add", useUnmergedTree = true)
         compose.onNodeWithText("Add").assertIsNotEnabled()
-        assertNotEquals(tokens.scopePalette.accent, textColor(add))
+        assertNotEquals(tokens.scopePalette.controlInk, textColor(add))
         compose.onNodeWithContentDescription("Collection name").performTextInput("Winter")
         compose.onNodeWithText("Add").assertIsEnabled()
         compose.onNodeWithText("Add").performClick()

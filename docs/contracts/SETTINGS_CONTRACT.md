@@ -33,7 +33,7 @@ Current backup settings fields:
 - `appTheme`
 - `readerTheme`
 - `matchAppReaderTheme`
-- `accentColorHex`
+- `accentColorHex` (legacy, T-459/A-459: still decoded from older files, always written as `#990000`, never applied)
 
 ## Current Defaults
 
@@ -57,7 +57,7 @@ Current backup settings fields:
 | `appTheme` | `light` |
 | `readerTheme` | `light` |
 | `matchAppReaderTheme` | `true` |
-| `accentColorHex` | `#990000` |
+| `accentColorHex` | `#990000` (fixed; the app has one control colour, so a stored non-red value is ignored on restore) |
 
 > Note: this table documents the literal **backup-capture** fallbacks (reference:
 > `KudosBackup.swift`). `appTheme` captures as `light`. Separately, on first launch

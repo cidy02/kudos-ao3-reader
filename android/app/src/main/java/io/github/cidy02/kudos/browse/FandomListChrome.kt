@@ -564,11 +564,11 @@ fun FandomListFilterSheet(
                 modifier = Modifier
                     .padding(top = 16.dp)
                     .fillMaxWidth()
-                    .background(palette.accent, RoundedCornerShape(14.dp))
+                    .background(palette.tint, RoundedCornerShape(14.dp))
             ) {
                 Text(
                     text = "Show ${groupedCount(remaining)} tags",
-                    color = palette.labelOnAccent,
+                    color = palette.labelOnTint,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(vertical = 8.dp)

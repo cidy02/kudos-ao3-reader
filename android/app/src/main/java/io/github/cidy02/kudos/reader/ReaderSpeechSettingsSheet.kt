@@ -74,7 +74,7 @@ internal fun ReaderSpeechSettingsContent(
                 Text("Read Aloud", color = tokens.primaryInk, fontSize = 17.sp,
                     fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                 ToolbarCircleButton(onClick = onDone, accessibilityName = "Done") {
-                    Icon(Icons.Filled.Check, contentDescription = null, tint = tokens.scopePalette.accent)
+                    Icon(Icons.Filled.Check, contentDescription = null, tint = tokens.scopePalette.controlInk)
                 }
             }
             listeningContent { content ->

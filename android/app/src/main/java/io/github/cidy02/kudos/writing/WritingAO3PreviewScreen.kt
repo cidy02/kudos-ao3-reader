@@ -58,7 +58,7 @@ internal fun WritingAO3PreviewScreen(preview: AO3ChapterPreview, subtitle: Strin
         }
         val paragraphs = rows
         if (paragraphs == null) item { Box(Modifier.fillMaxWidth().padding(18.dp), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(color = palette.accent, trackColor = tokens.separator)
+            CircularProgressIndicator(color = palette.controlInk, trackColor = tokens.separator)
         } } else itemsIndexed(paragraphs) { _, row ->
             Column(Modifier.padding(horizontal = SubjectMetrics.accountGutter).padding(top = 10.dp)) {
                 val paragraph = row.paragraph
@@ -101,7 +101,7 @@ internal fun WritingPostRow(title: String, icon: ImageVector?, color: Color, ena
         if (icon != null) Icon(icon, contentDescription = null,
             tint = if (enabled || busy) color else tokens.tertiaryInk, modifier = Modifier.size(20.dp))
         Text(title, color = if (enabled || busy) color else tokens.tertiaryInk, fontSize = 15.sp, lineHeight = 21.sp, modifier = Modifier.weight(1f))
-        if (busy) CircularProgressIndicator(color = tokens.scopePalette.accent, trackColor = tokens.separator,
+        if (busy) CircularProgressIndicator(color = tokens.scopePalette.controlInk, trackColor = tokens.separator,
             strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
     }
 }
@@ -112,6 +112,6 @@ internal fun WorkPostAlert(message: String, confirmTitle: String, onDismiss: () 
     AlertDialog(onDismissRequest = onDismiss, containerColor = tokens.cardFill,
         titleContentColor = tokens.primaryInk, textContentColor = tokens.secondaryInk,
         title = { Text("Post this work?", lineHeight = 28.sp) }, text = { Text(message, lineHeight = 22.sp) },
-        confirmButton = { TextButton(onClick = onConfirm) { Text(confirmTitle, color = tokens.scopePalette.accent, lineHeight = 20.sp) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = tokens.scopePalette.accent, lineHeight = 20.sp) } })
+        confirmButton = { TextButton(onClick = onConfirm) { Text(confirmTitle, color = tokens.scopePalette.controlInk, lineHeight = 20.sp) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = tokens.scopePalette.controlInk, lineHeight = 20.sp) } })
 }

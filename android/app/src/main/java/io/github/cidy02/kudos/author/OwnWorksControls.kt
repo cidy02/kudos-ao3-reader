@@ -68,10 +68,10 @@ internal fun OwnWorksBulkBar(count: Int, busy: Boolean, onEdit: (String?) -> Uni
         for ((title, focus) in listOf((if (count > 0) "Edit $count" else "Edit") to null,
             "Collections" to "Collections and gifts", "Visibility" to "Comments and visibility", "Delete" to "delete")) {
             TextButton(enabled = count > 0 && !busy, onClick = { if (focus == "delete") onDelete() else onEdit(focus) },
-                colors = ButtonDefaults.textButtonColors(contentColor = if (focus == "delete") tokens.destructive else tokens.scopePalette.accent,
+                colors = ButtonDefaults.textButtonColors(contentColor = if (focus == "delete") tokens.destructive else tokens.scopePalette.controlInk,
                     disabledContentColor = tokens.tertiaryInk)) { Text(title, fontSize = 14.sp, lineHeight = 20.sp) }
         }
-        if (busy) CircularProgressIndicator(color = tokens.scopePalette.accent, trackColor = tokens.separator, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+        if (busy) CircularProgressIndicator(color = tokens.scopePalette.controlInk, trackColor = tokens.separator, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
     }
 }
 
@@ -86,7 +86,7 @@ internal fun OwnWorkRow(work: AO3WorkSummary, onAction: (String) -> Unit, conten
     }) {
         content {
             Box {
-                IconButton(onClick = { expanded = true }) { Icon(Icons.Default.MoreVert, "Actions for ${work.title}", tint = tokens.scopePalette.accent) }
+                IconButton(onClick = { expanded = true }) { Icon(Icons.Default.MoreVert, "Actions for ${work.title}", tint = tokens.scopePalette.controlInk) }
                 DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, containerColor = tokens.cardFill) {
                     for ((label, action) in listOf("Delete" to "delete", "Chapter" to "chapter", "Tags" to "tags", "Edit" to "edit")) {
                         if (action == "chapter" && !offersOwnWorkChapter(work)) continue

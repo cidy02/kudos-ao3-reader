@@ -42,7 +42,7 @@ internal fun AccountShortcutsEditorContent(chosen: List<AccountShortcut>, onChan
     val palette = tokens.scopePalette
     val available = AccountShortcut.entries.filter { it !in chosen }
     ProvidePushedShellChrome(hasSubjectHeader = true, hideTabBar = true, trailingContent = {
-        IconButton(onClick = onDone) { Icon(Icons.Default.Check, "Done", tint = palette.accent) }
+        IconButton(onClick = onDone) { Icon(Icons.Default.Check, "Done", tint = palette.controlInk) }
     })
     LazyColumn(Modifier.fillMaxSize().testTag("Account shortcuts editor").subjectScreenWash(palette), contentPadding = PaddingValues(
         top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 76.dp, bottom = 40.dp)) {
@@ -62,11 +62,11 @@ internal fun AccountShortcutsEditorContent(chosen: List<AccountShortcut>, onChan
                 val reorder: @Composable () -> Unit = {
                     IconButton(enabled = index > 0, onClick = { move(index - 1) }) {
                         Icon(Icons.Default.KeyboardArrowUp, "Move ${shortcut.title} up",
-                            tint = if (index > 0) palette.accent else tokens.tertiaryInk)
+                            tint = if (index > 0) palette.controlInk else tokens.tertiaryInk)
                     }
                     IconButton(enabled = index < chosen.lastIndex, onClick = { move(index + 1) }) {
                         Icon(Icons.Default.KeyboardArrowDown, "Move ${shortcut.title} down",
-                            tint = if (index < chosen.lastIndex) palette.accent else tokens.tertiaryInk)
+                            tint = if (index < chosen.lastIndex) palette.controlInk else tokens.tertiaryInk)
                     }
                 }
                 if (isAccessibilityFontScale()) {
@@ -99,7 +99,7 @@ internal fun AccountShortcutsEditorContent(chosen: List<AccountShortcut>, onChan
                 Row(Modifier.fillMaxWidth().clickable(enabled = enabled, role = Role.Button) {
                     onChange(AccountShortcutStore.defaults)
                 }.padding(13.dp)) {
-                    Text("Reset to Default", color = if (enabled) palette.accent else tokens.tertiaryInk,
+                    Text("Reset to Default", color = if (enabled) palette.controlInk else tokens.tertiaryInk,
                         fontSize = 14.5.sp, lineHeight = 20.sp)
                 }
             }

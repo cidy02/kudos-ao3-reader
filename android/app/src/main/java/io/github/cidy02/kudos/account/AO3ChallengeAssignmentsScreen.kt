@@ -73,7 +73,7 @@ private fun ChallengeAssignmentsContent(slug: String, title: String, viewerIsOwn
     DisposableEffect(model) { onDispose { model.close() } }
     ProvidePushedShellChrome(hasSubjectHeader = true, trailingContent = if (!state.loaded || state.terminal) null else { {
         IconButton(onClick = { scope.launch { model.load(refresh = true) } }, enabled = !disabled) {
-            Icon(Icons.Default.Refresh, "Refresh assignments", tint = palette.accent)
+            Icon(Icons.Default.Refresh, "Refresh assignments", tint = palette.controlInk)
         }
     } })
     state.picking?.let { kind ->
@@ -95,9 +95,9 @@ private fun ChallengeAssignmentsContent(slug: String, title: String, viewerIsOwn
             title = { Text(write.kind.confirmTitle, lineHeight = 28.sp) },
             text = { Text(state.confirmation(write), lineHeight = 22.sp) },
             confirmButton = { TextButton(enabled = !disabled, onClick = { scope.launch { model.perform() } }) {
-                Text(write.kind.confirmButton, color = if (write.kind == AssignmentWrite.Default) tokens.destructive else palette.accent, lineHeight = 20.sp)
+                Text(write.kind.confirmButton, color = if (write.kind == AssignmentWrite.Default) tokens.destructive else palette.controlInk, lineHeight = 20.sp)
             } },
-            dismissButton = { TextButton(onClick = { model.cancel() }) { Text("Cancel", color = palette.accent, lineHeight = 20.sp) } })
+            dismissButton = { TextButton(onClick = { model.cancel() }) { Text("Cancel", color = palette.controlInk, lineHeight = 20.sp) } })
     }
     Column(Modifier.fillMaxSize().subjectScreenWash(palette)) {
         KudosRefreshBox(onRefresh = { model.load(refresh = true) }, modifier = Modifier.weight(1f)) {
@@ -246,7 +246,7 @@ private fun AssignmentPanelRow(first: Boolean, last: Boolean, content: @Composab
 private fun AssignmentsLoading() {
     val tokens = LocalKudosTokens.current
     Row(Modifier.fillMaxWidth().padding(24.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
-        CircularProgressIndicator(color = tokens.scopePalette.accent, trackColor = tokens.separator, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
+        CircularProgressIndicator(color = tokens.scopePalette.controlInk, trackColor = tokens.separator, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
         AssignmentText("Loading assignments…", modifier = Modifier.padding(start = 10.dp))
     }
 }
@@ -270,9 +270,9 @@ private fun AssignmentsFailure(title: String, message: String, retry: Boolean, o
 internal fun ChallengePrimaryAction(text: String, enabled: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val palette = LocalKudosTokens.current.scopePalette
     Box(modifier.padding(6.dp).alpha(if (enabled) 1f else 0.45f)
-        .background(palette.accent, RoundedCornerShape(12.dp)).clickable(enabled = enabled, onClick = onClick)
+        .background(palette.tint, RoundedCornerShape(12.dp)).clickable(enabled = enabled, onClick = onClick)
         .heightIn(min = 44.dp).padding(horizontal = 12.dp, vertical = 10.dp), contentAlignment = Alignment.Center) {
-        Text(text, color = palette.labelOnAccent, fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold,
+        Text(text, color = palette.labelOnTint, fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center)
     }
 }
@@ -298,10 +298,10 @@ internal fun ChallengeBottomActions(
         listOf(Triple(secondary, secondaryEnabled, onSecondary), Triple(primary, primaryEnabled, onPrimary))
             .forEachIndexed { index, (label, enabled, action) ->
                 Box(Modifier.weight(1f).alpha(if (enabled) 1f else 0.45f)
-                    .background(if (index == 1) tokens.scopePalette.accent else tokens.glassFill(0.10), RoundedCornerShape(12.dp))
+                    .background(if (index == 1) tokens.scopePalette.tint else tokens.glassFill(0.10), RoundedCornerShape(12.dp))
                     .clickable(enabled = enabled, onClick = action).heightIn(min = 44.dp)
                     .padding(horizontal = 10.dp, vertical = 10.dp), contentAlignment = Alignment.Center) {
-                    Text(label, color = if (index == 1) tokens.scopePalette.labelOnAccent else tokens.primaryInk,
+                    Text(label, color = if (index == 1) tokens.scopePalette.labelOnTint else tokens.primaryInk,
                         fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold,
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                 }

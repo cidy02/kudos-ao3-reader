@@ -23,7 +23,7 @@ second, About last):
 
 | Group | Row → page | Contents today (moved, not rewritten) |
 |---|---|---|
-| **Reading** | Appearance › | Theme, accent colour, text size |
+| **Reading** | Appearance › | Theme and text size; controls use fixed AO3 red |
 | | Font › | Font picker, custom fonts |
 | | Reader › | Reading mode and the other reader options (`ReaderOptionsForm`), keep screen awake |
 | | Listening › | Text-to-speech (`ReaderSpeechSettingsSection`); Developer settings stay behind their own gate |

@@ -87,7 +87,7 @@ internal fun CustomizeThemeSheet(repository: SettingsRepository, customFontRepos
     onDismiss: () -> Unit) {
     val settings by repository.settings.collectAsState(initial = KudosSettings.Defaults)
     val theme = ReaderSettingsMapper().resolveTheme(settings.reader, settings.app)
-    val tokens = KudosTokens.of(ReaderTheme.valueOf(theme.name), LocalKudosTokens.current.accent)
+    val tokens = KudosTokens.of(ReaderTheme.valueOf(theme.name))
     ModalBottomSheet(onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         containerColor = tokens.background, contentColor = tokens.primaryInk) {
@@ -111,7 +111,7 @@ internal fun CustomizeThemeContent(
     val scope = rememberCoroutineScope()
     val reader = settings.reader
     val theme = ReaderSettingsMapper().resolveTheme(reader, settings.app)
-    val tokens = KudosTokens.of(ReaderTheme.valueOf(theme.name), LocalKudosTokens.current.accent)
+    val tokens = KudosTokens.of(ReaderTheme.valueOf(theme.name))
     var choosingFont by remember { mutableStateOf(false) }
     val selectedFont = fonts.firstOrNull { it.selectionId == reader.readerFontId }
     // Embed the selected local font; the preview has no file/content or network access.
@@ -132,7 +132,7 @@ internal fun CustomizeThemeContent(
                     Text(if (choosingFont) "Font" else "Customize Theme", color = tokens.primaryInk,
                         fontSize = 17.sp, modifier = Modifier.weight(1f))
                     ToolbarCircleButton(onClick = onDismiss, accessibilityName = "Done") {
-                        Icon(Icons.Filled.Check, contentDescription = null, tint = tokens.scopePalette.accent)
+                        Icon(Icons.Filled.Check, contentDescription = null, tint = tokens.scopePalette.controlInk)
                     }
                 }
                 if (choosingFont) {
@@ -147,7 +147,7 @@ internal fun CustomizeThemeContent(
                                     },
                                     trailing = {
                                         if (reader.readerFontId == option.id) Icon(Icons.Filled.Check,
-                                            contentDescription = "Selected", tint = tokens.scopePalette.accent)
+                                            contentDescription = "Selected", tint = tokens.scopePalette.controlInk)
                                     })
                             }
                         }
@@ -206,8 +206,8 @@ internal fun CustomizeThemeContent(
                                             modifier = Modifier.clearAndSetSemantics {})
                                     }
                                     if (selected) Icon(Icons.Filled.Check, contentDescription = null,
-                                        tint = tokens.scopePalette.labelOnAccent,
-                                        modifier = Modifier.align(Alignment.TopEnd).size(16.dp).background(tokens.scopePalette.accent, CircleShape))
+                                        tint = tokens.scopePalette.labelOnTint,
+                                        modifier = Modifier.align(Alignment.TopEnd).size(16.dp).background(tokens.scopePalette.tint, CircleShape))
                                 }
                                 Text(title, color = if (selected) tokens.primaryInk else tokens.secondaryInk,
                                     fontSize = 11.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,

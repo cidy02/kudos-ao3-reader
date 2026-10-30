@@ -154,7 +154,7 @@ internal fun WritingAssociationPicker(
                                     SubjectTextFieldRow("Add", gift, "Username or pseud", { gift = it }, autocorrect = false,
                                         fieldOnly = true, onSubmit = addGift, trailing = {
                                             TextButton(onClick = addGift, enabled = trimWritingTag(gift).isNotEmpty(),
-                                                colors = ButtonDefaults.textButtonColors(contentColor = palette.accent, disabledContentColor = tokens.tertiaryInk)) {
+                                                colors = ButtonDefaults.textButtonColors(contentColor = palette.controlInk, disabledContentColor = tokens.tertiaryInk)) {
                                                 Text("Add", fontSize = 14.5.sp, lineHeight = 20.sp)
                                             }
                                         })
@@ -258,7 +258,7 @@ private fun AssociationPickRow(title: String, detail: String?, selected: Boolean
         horizontalArrangement = Arrangement.spacedBy(11.dp)) {
         Icon(when { current -> Icons.Default.CheckCircle; add -> Icons.Default.AddCircleOutline;
             selected -> Icons.Default.CheckCircle; else -> Icons.Default.RadioButtonUnchecked }, null,
-            tint = if (current || selected || add) tokens.scopePalette.accent else tokens.secondaryInk,
+            tint = if (current || selected || add) tokens.scopePalette.controlInk else tokens.secondaryInk,
             // Sized in sp so it grows with the text, as iOS's symbol does (3hk).
             modifier = Modifier.size(with(LocalDensity.current) { 18.sp.toDp() }))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {

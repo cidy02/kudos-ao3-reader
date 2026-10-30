@@ -1405,10 +1405,10 @@ private fun LibrarySectionContent(
         trailingContent = {
             if (state.selectionMode) {
                 TextButton(onClick = { onSetSelection(if (allSelected) emptySet() else ids) }) {
-                    Text(if (allSelected) "Deselect All" else "Select All", color = tokens.scopePalette.accent)
+                    Text(if (allSelected) "Deselect All" else "Select All", color = tokens.scopePalette.controlInk)
                 }
                 TextButton(onClick = onExitSelection) {
-                    Text("Done", color = tokens.scopePalette.accent)
+                    Text("Done", color = tokens.scopePalette.controlInk)
                 }
             } else {
                 if (!showsFavoriteScopes || hasWorkContent) FilterButton(
@@ -1448,7 +1448,7 @@ private fun LibrarySectionContent(
                     DropdownMenu(expanded = showLayoutMenu, onDismissRequest = { showLayoutMenu = false }) {
                         allowedModes.forEach { mode ->
                             DropdownMenuItem(text = { Text(mode.name) },
-                                trailingIcon = { if (displayMode == mode) Text("✓", color = tokens.scopePalette.accent) },
+                                trailingIcon = { if (displayMode == mode) Text("✓", color = tokens.scopePalette.controlInk) },
                                 onClick = { displayMode = mode; showLayoutMenu = false })
                         }
                     }
@@ -1649,8 +1649,8 @@ private fun MoveBackToInProgressButton(onClick: () -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Icon(Icons.AutoMirrored.Outlined.Undo, contentDescription = null,
-            tint = tokens.scopePalette.accent, modifier = Modifier.size(16.dp))
-        Text("Move back to In progress", color = tokens.scopePalette.accent,
+            tint = tokens.scopePalette.controlInk, modifier = Modifier.size(16.dp))
+        Text("Move back to In progress", color = tokens.scopePalette.controlInk,
             modifier = Modifier.weight(1f, fill = false), fontSize = 12.5.sp, lineHeight = 18.sp, fontWeight = FontWeight.Medium)
     }
 }
@@ -1665,7 +1665,7 @@ private fun HistoryGroupingStrip(
         SettingsPanel {
             LibraryHistoryGrouping.entries.forEachIndexed { index, option ->
                 if (index > 0) SubjectRowSeparator()
-                Text(option.title, color = if (grouping == option) tokens.scopePalette.accent else tokens.primaryInk,
+                Text(option.title, color = if (grouping == option) tokens.scopePalette.controlInk else tokens.primaryInk,
                     fontSize = 13.sp, lineHeight = 19.sp, fontWeight = FontWeight.Medium,
                     modifier = Modifier.fillMaxWidth().semantics { selected = grouping == option }
                         .clickable(role = Role.RadioButton) { onSelect(option) }.padding(14.dp))

@@ -289,8 +289,7 @@ private fun ReaderReading(
         ReaderColorTheme.Dark -> ReaderTheme.Dark
         ReaderColorTheme.Oled -> ReaderTheme.Oled
     }
-    val currentAccent = LocalKudosTokens.current.accent
-    val tokens = KudosTokens.of(readerTheme, currentAccent)
+    val tokens = KudosTokens.of(readerTheme)
 
     DisposableEffect(speechController) {
         onDispose { speechController.shutdown() }

@@ -138,7 +138,7 @@ internal fun WorkDetailBookmarkForm(
     val close = { if (!working) onClose() }
     DetailForm(if (isEdit) "Edit Bookmark on AO3" else "Bookmark on AO3", close, allowDismiss = !working,
         leading = { FormToolbarAction("Cancel", !working, close) }, actions = {
-        if (working) CircularProgressIndicator(color = LocalKudosTokens.current.scopePalette.accent,
+        if (working) CircularProgressIndicator(color = LocalKudosTokens.current.scopePalette.controlInk,
             trackColor = LocalKudosTokens.current.separator, modifier = Modifier.size(20.dp))
         else FormToolbarAction("Save", true, onSave)
     }) {
@@ -237,9 +237,9 @@ internal fun WorkDetailQueueForm(
                     // iOS: the queue's Label is .primary, its icon too (ReadingQueues.swift:482).
                     statusInk = LocalKudosTokens.current.primaryInk,
                     onClick = { if (!working && !preserving) onAdd(queue) }, trailing = {
-                    if (queue.id == workingQueueId) CircularProgressIndicator(color = LocalKudosTokens.current.scopePalette.accent,
+                    if (queue.id == workingQueueId) CircularProgressIndicator(color = LocalKudosTokens.current.scopePalette.controlInk,
                         trackColor = LocalKudosTokens.current.separator, modifier = Modifier.size(20.dp))
-                    else if (queue.id in selected) Text("✓", color = LocalKudosTokens.current.scopePalette.accent, fontSize = 15.sp, lineHeight = 21.sp,
+                    else if (queue.id in selected) Text("✓", color = LocalKudosTokens.current.scopePalette.controlInk, fontSize = 15.sp, lineHeight = 21.sp,
                         modifier = Modifier.semantics { contentDescription = "In this queue" })
                 })
             }
@@ -251,13 +251,13 @@ internal fun WorkDetailQueueForm(
                 if (checkingPreview) Row(Modifier.fillMaxWidth().padding(13.dp),
                     verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    CircularProgressIndicator(color = LocalKudosTokens.current.scopePalette.accent,
+                    CircularProgressIndicator(color = LocalKudosTokens.current.scopePalette.controlInk,
                         trackColor = LocalKudosTokens.current.separator, modifier = Modifier.size(20.dp))
                     Text("Checking series size…", color = LocalKudosTokens.current.secondaryInk,
                         fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.weight(1f))
                 } else if (prompt != null) DetailFormText(prompt.message)
                 if (preserving) SubjectFormRow("Add Series to Selected Queues", trailing = {
-                    CircularProgressIndicator(color = LocalKudosTokens.current.scopePalette.accent,
+                    CircularProgressIndicator(color = LocalKudosTokens.current.scopePalette.controlInk,
                         trackColor = LocalKudosTokens.current.separator, modifier = Modifier.size(20.dp))
                 }) else SettingsActionRow("Add Series to Selected Queues", onPreserve, icon = Icons.Outlined.Layers,
                     enabled = selected.isNotEmpty() && !checkingPreview && !working)
@@ -274,7 +274,7 @@ internal fun WorkDetailSeriesStatus(progress: SeriesPreservationResult?, notice:
     val tokens = LocalKudosTokens.current
     Column(Modifier.fillMaxWidth().padding(horizontal = SubjectMetrics.panelGutter)) {
         if (running && progress != null && progress.total > 0) LinearProgressIndicator(
-            progress = { progress.completed.toFloat() / progress.total }, color = tokens.scopePalette.accent,
+            progress = { progress.completed.toFloat() / progress.total }, color = tokens.scopePalette.controlInk,
             trackColor = tokens.separator, modifier = Modifier.fillMaxWidth())
         if (notice != null) DetailFormText(notice)
         if (running) SettingsActionRow("Cancel Series Preservation", onCancel, icon = Icons.Outlined.Cancel)
