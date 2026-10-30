@@ -45,18 +45,30 @@ struct AccentInkTests {
     }
 
     @Test func eachNamedAccentKeepsItsFillAndDarkStep() throws {
-        #expect(AppAccent.all.count == 6)
-        #expect(AppAccent.ao3Red.isDefault)
+        // Literals from the Accent-Options board, not AppAccent's own fields.
+        let table: [(name: String, fill: String, dark: String)] = [
+            ("AO3 Red", "#821019", "#EE8A93"),
+            ("Plum", "#7B2D6B", "#D88BC7"),
+            ("Ink Blue", "#24508F", "#7FA6E8"),
+            ("Deep Teal", "#11707A", "#5CC3CC"),
+            ("Forest", "#2F6B4F", "#7CC59E"),
+            ("Ochre", "#9A5B00", "#E7A84B"),
+        ]
+        #expect(AppAccent.all.map(\.name) == table.map(\.name))
         #expect(ThemeManager.ao3Red == "#821019")
-        for accent in AppAccent.all {
-            let fill = try #require(Color(hex: accent.fillHex))
-            #expect(fill.hexString == accent.fillHex)
-            #expect(AppAccent.named(hex: accent.fillHex.lowercased()) == accent)
+        for row in table {
+            let accent = try #require(AppAccent.all.first { $0.name == row.name })
+            #expect(accent.fillHex == row.fill)
+            #expect(accent.darkInkHex == row.dark)
+            #expect(accent.isDefault == (row.fill == "#821019"))
+            let fill = try #require(Color(hex: row.fill))
+            #expect(fill.hexString == row.fill)
+            #expect(AppAccent.named(hex: row.fill.lowercased())?.fillHex == row.fill)
             for theme in [ReaderTheme.dark, .oled] {
-                #expect(theme.accentInk(for: fill).hexString == accent.darkInkHex)
+                #expect(theme.accentInk(for: fill).hexString == row.dark)
             }
             for theme in [ReaderTheme.light, .sepia] {
-                #expect(theme.accentInk(for: fill) == fill)
+                #expect(theme.accentInk(for: fill).hexString == row.fill)
             }
         }
     }
