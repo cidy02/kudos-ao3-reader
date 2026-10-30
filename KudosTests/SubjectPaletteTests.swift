@@ -57,6 +57,6 @@ struct SubjectPaletteTests {
         let picked = SubjectPalette(color: .orange, theme: .dark).washStops.map(\.location)
         let derived = SubjectPalette(hue: 0.1, theme: .dark).washStops.map(\.location)
         #expect(picked == derived)
-        #expect(picked == SubjectWashGeometry.locations)
+        #expect(picked.map(Double.init) == SubjectWashGeometry.locations)
     }
 }
