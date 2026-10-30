@@ -26,9 +26,6 @@ struct BulkTagStatePicker: View {
                 ForEach(options) { option in
                     row(option)
                 }
-            } footer: {
-                Text("Tap an option once to add it to every selected work, twice to remove it, "
-                    + "or three times to leave it unchanged.")
             }
             .appThemedRows()
         }
@@ -62,6 +59,7 @@ struct BulkTagStatePicker: View {
         .buttonStyle(.plain)
         .accessibilityLabel(option.title)
         .accessibilityValue(stateLabel(state) ?? "Unchanged")
+        .accessibilityHint("Cycles through add to every selected work, remove, and unchanged")
     }
 
     /// `.included` is "add", `.excluded` is "remove" — the same two verbs the

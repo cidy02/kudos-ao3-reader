@@ -541,8 +541,6 @@ struct AO3FilterPanel: View {
                            fandomContext: selectedFandoms)
         } header: {
             groupLabel("Tags")
-        } footer: {
-            Text("Tap a tag once to include it, twice to exclude it, and a third time to clear it.")
         }
     }
 

@@ -237,7 +237,7 @@ struct WritingTextEditor: View {
             ContentUnavailableView(
                 "Couldn't render this HTML",
                 systemImage: "exclamationmark.triangle",
-                description: Text("Your text is unchanged. Tap Edit to go back to it.")
+                description: Text("Your text is unchanged.")
             )
         }
     }
