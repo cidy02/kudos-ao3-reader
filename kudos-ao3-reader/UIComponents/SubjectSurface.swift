@@ -173,10 +173,11 @@ struct SubjectPalette {
         }
     }
 
-    /// A work card's own diagonal wash — the 164×232 cover on Home, the hero,
-    /// and the queue tile. Spec: `linear-gradient(158deg,#5B3A2A,#281A13)`, one
-    /// hue at two brightnesses. Deliberately NOT a hue shift: two ends of a
-    /// slightly different hue made adjacent cards read as two fandoms.
+    /// A subject page's own diagonal wash (fandom, series, queue face). Generated
+    /// work covers and the Resume card do not use this: they share
+    /// `CoverArt.workGradient`, the dark two-stop art, in every theme. This wash
+    /// stays theme-aware on purpose. One hue at two brightnesses — a hue shift
+    /// here made adjacent subject cards read as two fandoms.
     var cardWash: LinearGradient {
         if let picked {
             return LinearGradient(

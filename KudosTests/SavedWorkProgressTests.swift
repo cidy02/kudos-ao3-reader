@@ -94,11 +94,16 @@ struct SavedWorkProgressTests {
     }
 
     @Test func coverPaletteUsesPrimaryFandomBeforeTitle() {
-        let first = CoverArt.workHue(fandoms: ["Doctor Who"], title: "First Work")
-        let second = CoverArt.workHue(fandoms: ["Doctor Who"], title: "Another Work")
-        #expect(first == second)
-        #expect(CoverArt.workHue(fandoms: [], title: "First Work") == CoverArt.hue(for: "First Work"))
-        #expect((0 ... 1).contains(first))
+        // The fandom owns the family. The title only moves a shade inside ±12°.
+        let first = CoverArt.workArt(fandoms: ["Doctor Who"], title: "First Work")
+        let second = CoverArt.workArt(fandoms: ["Doctor Who"], title: "Another Work")
+        #expect(first.familyHue == second.familyHue)
+        #expect(first.shade != second.shade)
+        #expect((-12 ... 12).contains(first.shade))
+        #expect((-12 ... 12).contains(second.shade))
+        let fromTitle = CoverArt.workArt(fandoms: [], title: "First Work")
+        #expect(fromTitle.familyHue == CoverArt.workArt(fandoms: ["First Work"], title: "Other").familyHue)
+        #expect((0 ... 1).contains(CoverArt.workHue(fandoms: ["Doctor Who"], title: "First Work")))
     }
 
     // MARK: Readium reader progress (the iOS path)

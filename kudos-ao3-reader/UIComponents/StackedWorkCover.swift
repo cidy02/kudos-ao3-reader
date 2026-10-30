@@ -168,7 +168,7 @@ struct CoverStackLayout: Equatable {
 
 /// A collection's or a queue's cover stack (`CoverStackKind`), drawn by
 /// `CoverStackLayout`. The covers behind are the works' own: each in its fandom's
-/// colour family (`CoverArt.workHue`, the work cards' `cardWash`), never the app's
+/// colour family (`CoverArt.workArt`, the same gradient as the shelf cover), never the app's
 /// red. The front is the collection's or queue's own colour and initial
 /// (`init(kind:name:hue:pickedHex:backs:size:)`), or a face the caller draws.
 ///
@@ -225,13 +225,13 @@ struct StackedWorkCover<Face: View>: View {
         .frame(width: size.width, height: size.height, alignment: .topLeading)
     }
 
-    /// A work's cover seen from behind the front card: its own wash, with the
-    /// hairline the old mosaic's cells had.
+    /// A work's cover seen from behind the front card: the same generated art
+    /// the shelf cover uses, with the hairline the old mosaic's cells had.
     private func backCover(_ work: SavedWork, dimming: Double, shape: RoundedRectangle) -> some View {
         let theme = themeManager.appTheme
-        let palette = theme.subjectPalette(hue: CoverArt.workHue(fandoms: work.workFandoms, title: work.title))
+        let art = CoverArt.workArt(fandoms: work.workFandoms, title: work.title)
         return shape
-            .fill(palette.cardWash)
+            .fill(CoverArt.workGradient(for: art))
             .overlay(shape.strokeBorder(theme.glassStroke(0.10), lineWidth: 0.5))
             .brightness(-dimming)
             .accessibilityHidden(true)
