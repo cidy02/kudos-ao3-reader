@@ -1159,7 +1159,7 @@ struct SubjectChip: View {
 /// A 34pt circular glass button — the redesign's back, filter, select and
 /// overflow controls, which float over the wash rather than sitting in a bar.
 ///
-/// `isAccented` gives it the fixed app tint, for the one control on a screen
+/// `isAccented` gives it the reader's accent, for the one control on a screen
 /// that is the point of it (Filter on results, + on a queue).
 struct GlassCircleButton<Label: View>: View {
     var isAccented: Bool = false
