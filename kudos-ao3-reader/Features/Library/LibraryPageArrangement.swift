@@ -152,6 +152,13 @@ nonisolated struct LibraryPageArrangement: Codable, Equatable, Sendable, RawRepr
         return string
     }
 
+    /// Shelves, not the JSON `rawValue`. `RawRepresentable` would compare that
+    /// string, and `JSONEncoder` does not keep key order, so a layout would
+    /// not equal itself and a stored copy would fail a round trip.
+    static func == (lhs: LibraryPageArrangement, rhs: LibraryPageArrangement) -> Bool {
+        lhs.sections == rhs.sections && lhs.buttons == rhs.buttons
+    }
+
     static func stored(in defaults: UserDefaults) -> LibraryPageArrangement {
         guard let raw = defaults.string(forKey: storageKey) else { return .default }
         return LibraryPageArrangement(rawValue: raw) ?? .default
