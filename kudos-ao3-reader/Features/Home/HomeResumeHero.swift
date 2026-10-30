@@ -784,23 +784,88 @@ extension WorkResumeCard {
         }
     }
 
-    // T-476b: re-wires this circle next; unreachable while updateDownload is nil.
+    /// While the new file is arriving, the arrow gives way to
+    /// `DownloadQueue.liveDownloadFraction` — the same fill the cover bar and
+    /// the reading ring use.
     private func updateCircle(_ onUpdate: @escaping () -> Void) -> some View {
-        ZStack(alignment: .topTrailing) {
-            actionCircle(
-                title: "Update download, \(model.newChapterCount) new chapters",
-                systemImage: "arrow.down.to.line",
-                action: onUpdate
-            )
+        let chapterValue = updateChapterValue
+        let showsDownload = localWork.map {
+            downloads.liveDownloadFraction(for: $0, at: .now) != nil
+        } ?? false
+        return ZStack(alignment: .topTrailing) {
+            if showsDownload, let localWork {
+                TimelineView(.animation) { context in
+                    updateCircleButton(
+                        onUpdate,
+                        fraction: downloads.liveDownloadFraction(for: localWork, at: context.date),
+                        chapterValue: chapterValue
+                    )
+                }
+            } else {
+                updateCircleButton(onUpdate, fraction: nil, chapterValue: chapterValue)
+            }
             Text("\(model.newChapterCount)")
                 .font(.caption2.weight(.bold))
                 .foregroundStyle(.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
                 .frame(minWidth: 18, minHeight: 18)
                 .background(accentFill, in: Circle())
                 .overlay(Circle().stroke(Color.white, lineWidth: 2))
                 .offset(x: 2, y: -2)
                 .accessibilityHidden(true)
         }
+    }
+
+    /// "2 new chapters" — the circle's VoiceOver value. The label stays
+    /// "Update download" so the count is the value, not part of the name.
+    private var updateChapterValue: String {
+        let count = model.newChapterCount
+        if count == 1 { return "1 new chapter" }
+        return "\(count) new chapters"
+    }
+
+    private var updateCircleSide: CGFloat {
+        let base = variant.primaryHeight
+        return dynamicTypeSize.isAccessibilitySize ? base * 1.35 : base
+    }
+
+    private func updateCircleButton(
+        _ onUpdate: @escaping () -> Void,
+        fraction: Double?,
+        chapterValue: String
+    ) -> some View {
+        Button {
+            if isInteractive, !isBusy { onUpdate() }
+        } label: {
+            ZStack {
+                Circle().fill(Color.white.opacity(0.18))
+                if let fraction {
+                    let clamped = min(max(fraction, 0), 1)
+                    Circle()
+                        .trim(from: 0, to: clamped)
+                        .stroke(Color.white, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                        .padding(3)
+                    Text("\(Int((clamped * 100).rounded()))%")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.5)
+                        .padding(6)
+                        .accessibilityHidden(true)
+                } else {
+                    Image(systemName: "arrow.down.to.line")
+                        .font(.body.weight(.medium))
+                        .foregroundStyle(.white)
+                }
+            }
+            .frame(minWidth: updateCircleSide, minHeight: updateCircleSide)
+        }
+        .buttonStyle(.plain)
+        .disabled(!isInteractive)
+        .accessibilityLabel("Update download")
+        .accessibilityValue(chapterValue)
     }
 
     private var primaryButton: some View {
@@ -822,23 +887,6 @@ extension WorkResumeCard {
         }
         .buttonStyle(.plain)
         .disabled(!isInteractive || isBusy)
-    }
-
-    private func actionCircle(
-        title: String,
-        systemImage: String,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button { if isInteractive { action() } } label: {
-            Image(systemName: systemImage)
-                .font(.body.weight(.medium))
-                .foregroundStyle(.white)
-                .frame(minWidth: variant.primaryHeight, minHeight: variant.primaryHeight)
-                .background(Color.white.opacity(0.18), in: Circle())
-        }
-        .buttonStyle(.plain)
-        .disabled(!isInteractive)
-        .accessibilityLabel(title)
     }
 }
 
