@@ -263,7 +263,7 @@ struct AccountView: View {
             ZStack(alignment: .top) {
                 theme.appTheme.cardBackdrop
                 if auth.isLoggedIn {
-                    accountPalette.wash.frame(height: 380)
+                    accountPalette.wash.frame(height: SubjectWashGeometry.height)
                 }
             }
             .ignoresSafeArea()

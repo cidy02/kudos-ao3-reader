@@ -135,8 +135,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 }
             }
             .scrollAwayTopChrome()
-            .heroWash(dashboardWorks(for: .readingNow).first)
-            .background((themeManager.appTheme.appBaseBackground ?? Color.clear).ignoresSafeArea())
+            .background(themeManager.appTheme.contentBackdrop.ignoresSafeArea())
             .navigationTitle(isSelecting ? WorkSelectionTitle.text(selectedCount: selectedWorks.count) : "Library")
             #if os(iOS)
                 .toolbarTitleDisplayMode(.inlineLarge)

@@ -430,7 +430,7 @@ struct CollectionDetailView: View {
         }
         // Named by its header block, on its own colour — the queue page's
         // language. macOS keeps a real window title (the wash empties it on iOS).
-        .subjectScreenWash(palette: palette)
+        .subjectScreenWash(palette: palette, role: .content)
         .onAppear(perform: loadArrangement)
         .onChange(of: arrangement) { _, arrangement in
             UserDefaults.standard.set(

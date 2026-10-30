@@ -14,6 +14,7 @@ struct AO3SeriesDetailView: View {
     @Environment(AO3AuthService.self) private var auth
     @Environment(AppRouter.self) private var router
     @Environment(PrivacyGate.self) private var gate
+    @Environment(ThemeManager.self) private var theme
     @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }) private var localWorks: [SavedWork]
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
@@ -76,6 +77,7 @@ struct AO3SeriesDetailView: View {
             }
         }
         .cardList()
+        .subjectWash(seriesPalette)
         .navigationTitle("Series")
         #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -169,6 +171,10 @@ struct AO3SeriesDetailView: View {
         var shown = series
         if let savedTitle { shown.title = savedTitle }
         return shown
+    }
+
+    private var seriesPalette: SubjectPalette {
+        theme.appTheme.subjectPalette(hue: CoverArt.hue(for: shownSeries.title))
     }
 
     @ViewBuilder

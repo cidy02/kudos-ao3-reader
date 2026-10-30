@@ -51,7 +51,7 @@ struct WritingView: View {
             #if os(iOS)
             .toolbarTitleDisplayMode(.inlineLarge)
             #endif
-            .subjectScreenWash(palette: theme.scopePalette)
+            .subjectScreenWash(palette: theme.scopePalette, role: .content)
             .navigationDestination(for: WritingRoute.self, destination: writingDestination)
             .navigationDestination(item: $editingWorkID) {
                 WritingWorkDestination(workID: $0) { draftsReload += 1 }

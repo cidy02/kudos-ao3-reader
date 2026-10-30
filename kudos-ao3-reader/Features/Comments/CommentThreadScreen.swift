@@ -97,7 +97,7 @@ struct CommentThreadScreen: View {
             .navigationTitle("Thread")
             #endif
             .hidesFloatingTabBar()
-            .subjectScreenWash(palette: palette, washHeight: 480)
+            .subjectScreenWash(palette: palette, role: .content)
         }
     }
 

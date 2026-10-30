@@ -119,7 +119,7 @@ struct AO3CollectionDetailView: View {
         .cardList()
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
-        .subjectScreenWash(palette: palette)
+        .subjectScreenWash(palette: palette, role: .content)
         #if DEBUG
         // A shot's manage screen opens from the page, not from its row: at the largest
         // text the row is below the fold, and a `List` never builds a row it hasn't shown.

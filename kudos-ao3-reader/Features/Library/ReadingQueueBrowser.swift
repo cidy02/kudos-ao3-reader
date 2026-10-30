@@ -598,7 +598,7 @@ extension ReadingQueueBrowserView {
         // padded it top and bottom and put ~10pt more round each rule than
         // Compact draws.
         .environment(\.defaultMinListRowHeight, 0)
-        .subjectScreenWash(palette: subjectPalette, washHeight: 560)
+        .subjectScreenWash(palette: subjectPalette, role: .content)
         #if os(iOS)
             .environment(\.editMode, dragEditMode)
         #endif
@@ -698,7 +698,7 @@ extension ReadingQueueBrowserView {
             }
             .padding(.bottom, 16)
         }
-        .subjectScreenWash(palette: subjectPalette, washHeight: 560)
+        .subjectScreenWash(palette: subjectPalette, role: .content)
     }
 
     /// 1h.1: 18 between blocks, 10 from a section rule to what it heads. Both
