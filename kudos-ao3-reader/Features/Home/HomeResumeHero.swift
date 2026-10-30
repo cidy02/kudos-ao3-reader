@@ -675,7 +675,6 @@ struct WorkResumeCard: View {
                     Image(systemName: "play.fill").font(.caption)
                 }
                 Text(variant == .detail ? model.detailPrimaryTitle(fallback: primaryLabel) : primaryLabel)
-                    .lineLimit(1)
             }
             .font(.headline)
             .foregroundStyle(accentFill)
