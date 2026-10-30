@@ -342,6 +342,23 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
 
     private var isBlurred: Bool { gate.isBlurred(work, enabled: hideMature, mode: matureMode) }
 
+    /// A blurred mature work stays unnamed. Summary and tags are not in the preview.
+    private var longPressFacts: WorkLongPressFacts {
+        guard !isBlurred else { return .hidden() }
+        return .visible(
+            title: work.title,
+            summaryHTML: work.summary,
+            tagGroups: [
+                work.workFandoms,
+                work.workWarnings,
+                work.workRelationships,
+                work.workCharacters,
+                work.workFreeforms,
+                work.hasCategorizedWorkTags ? [] : work.workTags
+            ]
+        )
+    }
+
     func body(content: Content) -> some View {
         content
             .contextMenu {
@@ -459,6 +476,8 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
                         Label("Delete", systemImage: "trash")
                     }
                 }
+            } preview: {
+                WorkLongPressPreview(facts: longPressFacts)
             }
             // Neutral, not the ambient accent (red) — matches WorkListMoreMenu.
             // Destructive items (Delete above) keep their system red regardless,
@@ -706,6 +725,12 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
                 NavigationLink(value: work) {
                     Label("Work Details", systemImage: "info.circle")
                 }
+            } preview: {
+                WorkLongPressPreview(facts: .visible(
+                    title: work.title,
+                    summaryHTML: work.summary,
+                    tagGroups: [work.fandoms, work.warnings, work.relationships, work.characters, work.tags]
+                ))
             }
             // Neutral, not the ambient accent (red) — matches WorkListMoreMenu /
             // LocalWorkContextMenuModifier. Delete keeps its system red regardless.
@@ -836,6 +861,39 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
                 actionError = WorkCardActionError.message(for: error)
             }
         }
+    }
+}
+
+/// Long-press preview: title, summary and tags. No fixed height, so an
+/// accessibility size can grow the text instead of clipping it. A blurred
+/// work passes `WorkLongPressFacts.hidden()` and shows none of the rest.
+struct WorkLongPressPreview: View {
+    var facts: WorkLongPressFacts
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(facts.title)
+                .font(.headline)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+            if !facts.summary.isEmpty {
+                Text(facts.summary)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if !facts.tags.isEmpty {
+                Text(facts.tags.joined(separator: ", "))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: 360, alignment: .leading)
+        .accessibilityElement(children: .combine)
     }
 }
 

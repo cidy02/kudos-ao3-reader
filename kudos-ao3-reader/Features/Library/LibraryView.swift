@@ -30,11 +30,8 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     @Query(filter: #Predicate<SavedWork> { $0.isPendingDeletion }) private var deletedWorks: [SavedWork]
     @Query(filter: #Predicate<WorkCollection> { $0.isPendingDeletion }) private var deletedCollections: [WorkCollection]
     @Query(filter: #Predicate<ReadingQueue> { $0.isPendingDeletion }) private var deletedQueues: [ReadingQueue]
-    /// Shelves or ledger, for the whole dashboard — artboards 1c and 1d. One key
-    /// for the page rather than one per section: the spec draws this as a single
-    /// decision about how the page reads, and a page half in each mode is
-    /// neither of them.
-    @AppStorage("library.dashboard.layout") private var dashboardLayout: WorkSectionLayout = .shelves
+    /// `library.dashboard.layout` is left in UserDefaults and never read. The
+    /// dashboard is shelves. T-472 is the place a reader picks a Library layout.
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
 
@@ -67,8 +64,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     @State private var isSelecting = false
     @State private var selection = Set<UUID>()
     @State private var showingSelectionList = false
-    @State private var pendingDelete: SavedWork?
-    @State private var pendingRemoval: PendingLibraryRemoval?
     /// Tracks the select-mode list's in-flight refresh so it can be cancelled if the
     /// user switches tabs (see `cancelRefreshOnTabChange`) — this can be the whole Library.
     @State private var refreshTask: Task<Void, Never>?
@@ -355,124 +350,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         }
     }
 
-    @ViewBuilder
-    private var realDashboard: some View {
-        if dashboardLayout == .ledger {
-            ledgerDashboard.dashboardLeadingRegion(fillsHeight: true)
-        } else {
-            shelvesDashboard
-        }
-    }
-
-    /// 1d as a `List`, so every work row swipes like it does on its section page.
-    private var ledgerDashboard: some View {
-        List {
-            fandomFilterBar.dashboardListRow(EdgeInsets())
-            // 1d: 16 + 2 from the chips to the first section.
-            localLedgerSection(.readingNow, topSpacing: 18)
-            localLedgerSection(.savedForLater)
-            localLedgerSection(.finished)
-            collectionsLedgerSection
-            localLedgerSection(.downloaded)
-            localLedgerSection(.history)
-            localLedgerSection(.favorites)
-            onAO3Panel.dashboardListRow(EdgeInsets(top: 18, leading: 0, bottom: 8, trailing: 0))
-            if recentlyDeletedCount > 0 {
-                recentlyDeletedRow.dashboardListRow(EdgeInsets(top: 16, leading: 0, bottom: 12, trailing: 0))
-            }
-        }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
-        .environment(\.defaultMinListRowHeight, 0)
-        .refreshable { await refreshLibraryDashboard() }
-        .libraryWorkRemovalConfirmations(pendingDelete: $pendingDelete, pendingRemoval: $pendingRemoval)
-    }
-
-    private func localLedgerSection(_ kind: LibrarySectionKind, topSpacing: CGFloat = 22) -> some View {
-        let sectionWorks = cachedWorks(for: kind)
-        return WorkLedgerListSection(
-            title: kind.title,
-            collapseKey: "library.\(kind.rawValue)",
-            hasItems: !sectionWorks.isEmpty,
-            itemCount: sectionWorks.count,
-            onSeeAll: !sectionWorks.isEmpty
-                ? { path.append(LibrarySectionRoute(kind: kind, originKicker: "Library")) }
-                : nil,
-            topSpacing: topSpacing
-        ) {
-            ForEach(sectionWorks.prefix(12)) { work in
-                swipeableLedgerRow(work, kind: kind)
-            }
-        } emptyState: {
-            SectionEmptyState(message: kind.emptyMessage, systemImage: kind.emptyIcon)
-        }
-    }
-
-    /// Swipes are the section page's, per section (History removes, Favorites
-    /// unstars). Selecting drops them, as every list does.
-    @ViewBuilder
-    private func swipeableLedgerRow(_ work: SavedWork, kind: LibrarySectionKind) -> some View {
-        if isSelecting {
-            listLedgerRow(work)
-        } else {
-            listLedgerRow(work)
-                .libraryWorkSwipeActions(
-                    work,
-                    kind: kind,
-                    isFavoritesList: kind == .favorites,
-                    pendingDelete: $pendingDelete,
-                    pendingRemoval: $pendingRemoval
-                )
-        }
-    }
-
-    /// The section page's ledger row, card and all: `cardRow` paints the wash
-    /// in the row background and hides the List's disclosure chevron, which
-    /// the dashboard's own `usesInlineNavigation` row would otherwise grow.
-    private func listLedgerRow(_ work: SavedWork) -> some View {
-        SensitiveWorkRow(
-            work: work,
-            openMode: .reader,
-            onSelect: selectAction(for: work),
-            isSelecting: isSelecting,
-            isSelected: selection.contains(work.id),
-            onToggleSelection: { toggleSelection(work) },
-            presentation: .ledger
-        )
-        .cardRow(
-            isSelected: isSelecting && selection.contains(work.id),
-            tintHue: CoverArt.workHue(fandoms: work.workFandoms, title: work.title)
-        )
-    }
-
-    private var collectionsLedgerSection: some View {
-        let kind = LibrarySectionKind.collections
-        return WorkLedgerListSection(
-            title: kind.title,
-            collapseKey: "library.\(kind.rawValue)",
-            hasItems: !collections.isEmpty,
-            itemCount: collections.count,
-            onSeeAll: !collections.isEmpty ? { path.append(AllCollectionsDestination()) } : nil
-        ) {
-            // The "New collection" row is the toolbar's "+" now (owner,
-            // 2026-10-01: global actions live in the top-right chrome).
-            ForEach(collections.prefix(12)) { collection in
-                NavigationLink(value: collection) {
-                    CollectionLedgerRow(
-                        collection: collection,
-                        previewWorks: collectionPreviewWorks(for: collection)
-                    )
-                    .collectionCardMenu(collection)
-                }
-                .buttonStyle(.plain)
-                .dashboardListRow()
-            }
-        } emptyState: {
-            Text("Use + above to create a collection for works you want to group together.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-        }
-    }
+    private var realDashboard: some View { shelvesDashboard }
 
     private var shelvesDashboard: some View {
         ScrollView {
@@ -571,7 +449,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             collapseKey: "library.\(kind.rawValue)",
             hasItems: !sectionWorks.isEmpty,
             itemCount: sectionWorks.count,
-            layout: dashboardLayout,
             onSeeAll: !sectionWorks.isEmpty
                 ? { path.append(LibrarySectionRoute(kind: kind, originKicker: "Library")) }
                 : nil
@@ -591,48 +468,23 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             collapseKey: "library.\(kind.rawValue)",
             hasItems: !collections.isEmpty,
             itemCount: collections.count,
-            layout: dashboardLayout,
             cardSpacing: CarouselCardMetrics.coverStackSpacing,
             onSeeAll: !collections.isEmpty ? { path.append(AllCollectionsDestination()) } : nil
         ) {
             // The "New collection" card is the toolbar's "+" now (owner,
             // 2026-10-01: global actions live in the top-right chrome).
-            switch dashboardLayout {
-            case .shelves:
-                ForEach(collections.prefix(12)) { collection in
-                    NavigationLink(value: collection) {
-                        CollectionCard(collection: collection)
-                            .collectionCardMenu(collection)
-                    }
-                    .buttonStyle(.plain)
-                }
-            case .ledger:
-                ForEach(collections.prefix(12)) { collection in
-                    NavigationLink(value: collection) {
-                        CollectionLedgerRow(
-                            collection: collection,
-                            previewWorks: collectionPreviewWorks(for: collection)
-                        )
+            ForEach(collections.prefix(12)) { collection in
+                NavigationLink(value: collection) {
+                    CollectionCard(collection: collection)
                         .collectionCardMenu(collection)
-                    }
-                    .buttonStyle(.plain)
                 }
+                .buttonStyle(.plain)
             }
         } emptyState: {
             Text("Use + above to create a collection for works you want to group together.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
-    }
-
-    /// Works previewed on artboard 1d's collection ledger row. A miniature cover
-    /// carries a title and an author, so a work the privacy setting is keeping back
-    /// is left off it: Hide mode's, and Blur mode's too (it was drawn by name here
-    /// while its own row, lower down, was blurred). As the tile, `CollectionCard`.
-    private func collectionPreviewWorks(for collection: WorkCollection) -> [SavedWork] {
-        collection.works
-            .filter { !$0.isPendingDeletion && !gate.isConcealed($0, enabled: hideMature) }
-            .sorted { $0.dateAdded > $1.dateAdded }
     }
 
     /// A light, horizontal quick-filter chip row: tap a fandom to filter every
@@ -777,16 +629,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                                     Label("Select", systemImage: "checklist")
                                 }
                             }
-                            // Spec 1c puts the layout choice in the "…" rather
-                            // than on the page: it is set once and then lived
-                            // with, unlike Filters, which is changed constantly
-                            // and keeps its own button.
-                            Picker("Layout", selection: $dashboardLayout) {
-                                ForEach(WorkSectionLayout.allCases, id: \.self) { layout in
-                                    Label(layout.title, systemImage: layout.symbol).tag(layout)
-                                }
-                            }
-                            // A page item, so after Select and the layout (pass2-2).
+                            // A page item, so after Select (pass2-2).
                             if showsStatistics {
                                 NavigationLink(value: ReadingInsightsDestination()) {
                                     Label("Reading Insights", systemImage: "chart.bar.xaxis")
@@ -881,10 +724,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
 
     @ViewBuilder
     private func localCarouselCard(work: SavedWork, footer: String?, progress: Double?) -> some View {
-        switch dashboardLayout {
-        case .shelves: localCoverCard(work: work, footer: footer, progress: progress)
-        case .ledger: localLedgerRow(work: work)
-        }
+        localCoverCard(work: work, footer: footer, progress: progress)
     }
 
     @ViewBuilder
@@ -906,28 +746,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             .buttonStyle(.plain)
             .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
         }
-    }
-
-    /// Artboard 1d's row. `footer` and `progress` are dropped deliberately: the
-    /// ledger row carries the reading ring itself, from the work's own state, so
-    /// a section's per-card footer ("+2 new", "Ch 3") has nowhere to sit and
-    /// nothing to add — 1d prints the same row in every section.
-    ///
-    /// The row paints its own wash here, unlike in a `List`, because a dashboard
-    /// section is a `VStack` with no row background to hand the job to.
-    private func localLedgerRow(work: SavedWork) -> some View {
-        SensitiveWorkRow(
-            work: work,
-            openMode: .reader,
-            onSelect: selectAction(for: work),
-            isSelecting: isSelecting,
-            isSelected: selection.contains(work.id),
-            onToggleSelection: { toggleSelection(work) },
-            presentation: .ledger,
-            usesInlineNavigation: true,
-            contentInsets: EdgeInsets(top: 15, leading: 16, bottom: 15, trailing: 16)
-        )
-        .background(WorkLedgerCardBackground(work: work))
     }
 
     private func toggleSelection(_ work: SavedWork) {

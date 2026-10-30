@@ -202,6 +202,7 @@ struct SelectableAO3WorkRow: View {
     var presentation: AO3WorkRow.Presentation = .standard
     /// Search's computed-sort figure for this work, when the reader shows it.
     var signal: String?
+    var showsSummary = true
 
     var body: some View {
         let row = AO3WorkRow(
@@ -210,7 +211,8 @@ struct SelectableAO3WorkRow: View {
             isSelecting: controller.isSelecting,
             isSelected: controller.selection.contains(work.id),
             presentation: presentation,
-            signal: signal
+            signal: signal,
+            showsSummary: showsSummary
         )
         if controller.isSelecting {
             let isSelected = controller.selection.contains(work.id)

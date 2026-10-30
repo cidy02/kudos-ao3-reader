@@ -240,9 +240,10 @@ nonisolated enum AO3OwnWorkAction: Identifiable, Hashable, Sendable {
 struct AO3AuthorWorksSection: View {
     var model: AO3AuthorProfileModel
     var expandAll: Bool
-    /// Account (and other hosts) can switch to a two-up cover grid; author
-    /// profile keeps the default detailed list.
-    var displayMode: WorkListDisplayMode = .detailed
+    /// Nil is an author list: the detailed row. List and Grid are Your Works.
+    var arrangement: WorkListArrangement? = nil
+    /// Author lists. Your Works ledger rows ignore it and hide the summary.
+    var showsSummary = true
     /// `.scroll` hosts compact grids the Library way (outside a List).
     var layout: AccountWorksLayout = .list
     var isSelecting: Bool = false
@@ -281,7 +282,7 @@ struct AO3AuthorWorksSection: View {
 
     var body: some View {
         Group {
-            if layout == .scroll, displayMode == .compact, !isSelecting {
+            if (arrangement == .grid || layout == .scroll), !isSelecting {
                 scrollCompactBody
             } else {
                 listBody
@@ -347,10 +348,9 @@ struct AO3AuthorWorksSection: View {
                         AO3AuthorWorkCard(
                             entry: entry,
                             expandAll: expandAll,
-                            // The chosen mode, not the layout: the list layout drew
-                            // ledger whatever the reader picked (Detailed did nothing).
-                            // Compact on a list host has no grid, so it stays ledger.
-                            usesLedger: displayMode != .detailed,
+                            usesLedger: arrangement == .list,
+                            showsSummary: showsSummary,
+                            showsFullLedgerStats: arrangement == .list,
                             showsPerformance: showsPerformance
                         )
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
@@ -444,7 +444,9 @@ struct AO3AuthorWorksSection: View {
                 work: work,
                 expandAll: expandAll,
                 isSelecting: true,
-                isSelected: isSelected
+                isSelected: isSelected,
+                presentation: arrangement == .list ? .searchLedger : .standard,
+                showsSummary: arrangement == nil && showsSummary
             )
         }
         .buttonStyle(.plain)
@@ -469,7 +471,6 @@ struct AO3AuthorSeriesSection: View {
     /// Other authors get the existing empty copy. Creating a series is an AO3 write
     /// this screen does not implement.
     var showsNewSeriesOnAO3: Bool = false
-    var displayMode: WorkListDisplayMode = .detailed
     var layout: AccountWorksLayout = .list
 
     @Environment(AO3AuthService.self) private var auth
@@ -549,14 +550,7 @@ struct AO3AuthorSeriesSection: View {
                     AO3AuthorInlineErrorRow(message: message)
                 }
                 ForEach(model.series) { series in
-                    // Follows the chosen mode, not the layout. It used to draw
-                    // ledger rows on the list layout whatever the reader picked,
-                    // which is the same Ledger/Detailed conflation fixed
-                    // elsewhere — and this screen had no picker at all until now.
-                    AO3SeriesRow(
-                        series: series,
-                        presentation: displayMode == .detailed ? .standard : .ledger
-                    )
+                    AO3SeriesRow(series: series, presentation: .standard)
                         .cardNavigation(to: series, accessibilityLabel: series.title)
                         .cardRow()
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
@@ -628,13 +622,12 @@ struct AO3AuthorSeriesSection: View {
 struct AO3AuthorBookmarksSection: View {
     var model: AO3AuthorProfileModel
     var expandAll: Bool
-    var displayMode: WorkListDisplayMode = .detailed
     var layout: AccountWorksLayout = .list
 
     @Environment(AO3AuthService.self) private var auth
 
     var body: some View {
-        if layout == .scroll, displayMode == .compact {
+        if layout == .scroll {
             scrollCompactBody
         } else {
             listBody
