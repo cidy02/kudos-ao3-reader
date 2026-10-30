@@ -99,7 +99,8 @@ class Parity3heControlsTest {
             compose.runOnIdle { mode = theme }
             compose.waitForIdle()
             val bitmap = snapshot()
-            listOf("Default" to tokens.scopePalette.tint, "Publication date" to tokens.scopePalette.tint, "Sheet" to green).forEach { (label, fill) ->
+            listOf("Default", "Publication date", "Sheet").forEach { label ->
+                val fill = tokens.scopePalette.tint
                 val node = compose.onNode(hasContentDescription(label) and isToggleable()).fetchSemanticsNode().boundsInRoot
                 // On: the thumb is at the right. The left-middle pixel is unblended track.
                 val actual = Color(bitmap.getPixel((node.left + node.width * 0.15f).toInt(), node.center.y.toInt()))

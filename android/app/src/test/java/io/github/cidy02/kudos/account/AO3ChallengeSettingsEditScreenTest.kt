@@ -101,9 +101,7 @@ class AO3ChallengeSettingsEditScreenTest {
             fill = Color(image.getPixel((before.left + 20).toInt(), before.center.y.toInt()))
             image.recycle()
         }
-        val expected = io.github.cidy02.kudos.ui.subject.SubjectPalette.fromHue(
-            io.github.cidy02.kudos.home.HomeFacts.workHue(emptyList(), "Winter Exchange 2026"),
-            io.github.cidy02.kudos.ui.subject.ReaderTheme.Light).accent
+        val expected = io.github.cidy02.kudos.ui.theme.Ao3Red
         assertEquals(expected.red, fill.red, 0.012f)
         assertEquals(expected.green, fill.green, 0.012f)
         assertEquals(expected.blue, fill.blue, 0.012f)

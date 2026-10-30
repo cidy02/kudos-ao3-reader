@@ -417,7 +417,9 @@ fun QueueTagManager(
                         }
                     }
                 },
-                confirmButton = { TextButton(onClick = { copying = null }) { Text("Cancel") } }
+                confirmButton = {
+                    TextButton(onClick = { copying = null }) { Text("Cancel", color = tokens.accentInk) }
+                }
             )
         }
         pending?.let { tag ->
@@ -449,7 +451,9 @@ internal fun QueueTagRemovalDialog(tag: Tag, count: Int, onDismiss: () -> Unit, 
             })
         },
         confirmButton = { TextButton(onClick = onConfirm) { Text("Remove", color = LocalKudosTokens.current.destructive) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel", color = LocalKudosTokens.current.accentInk) }
+        }
     )
 }
 

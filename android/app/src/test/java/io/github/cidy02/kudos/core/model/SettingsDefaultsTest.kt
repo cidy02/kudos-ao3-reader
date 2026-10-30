@@ -1,5 +1,8 @@
 package io.github.cidy02.kudos.core.model
 
+import io.github.cidy02.kudos.backup.BackupSettingsPayload
+import io.github.cidy02.kudos.backup.BackupValidator
+import io.github.cidy02.kudos.backup.toBackupSettingsPayload
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -82,6 +85,19 @@ class SettingsDefaultsTest {
         assertEquals(
             "#990000",
             BackupSettings(accentColorHex = "#0B57D0").toSettings().app.accentColorHex
+        )
+        // The decoded model still holds the legacy hex. Normalize and re-export do not.
+        assertEquals("#0B57D0", BackupSettings(accentColorHex = "#0B57D0").accentColorHex)
+        assertEquals(
+            "#990000",
+            BackupSettings(accentColorHex = "#2468AC").toBackupSettingsPayload().accentColorHex
+        )
+        assertEquals(
+            "#990000",
+            BackupValidator.normalizeSettings(
+                BackupSettingsPayload(accentColorHex = "#0B57D0"),
+                availableFontFileNames = emptySet()
+            ).accentColorHex
         )
     }
 }

@@ -570,9 +570,9 @@ internal fun DownloadedDateEditorDialog(
             confirmButton = {
                 TextButton(onClick = {
                     state.selectedDateMillis?.let { onSave(pickerInstant(it)) }
-                }) { Text("Save") }
+                }) { Text("Save", color = ink) }
             },
-            dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+            dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = ink) } }
         ) {
             DatePicker(state = state, colors = colors,
                 title = { Text("Downloaded", modifier = Modifier.padding(24.dp)) })

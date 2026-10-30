@@ -307,10 +307,7 @@ class AO3CollectionMaintainersScreenTest {
         val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
         compose.onNodeWithText("Moderator", useUnmergedTree = true)
             .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(layouts) }
-        val palette = io.github.cidy02.kudos.ui.subject.SubjectPalette.fromHue(
-            io.github.cidy02.kudos.home.HomeFacts.workHue(emptyList(), "Winter Exchange 2026"),
-            tokens.theme)
-        assertEquals(palette.accent, layouts.single().layoutInput.style.color)
+        assertEquals(tokens.accentInk, layouts.single().layoutInput.style.color)
         assertTrue(client.posts.isEmpty())
     }
 

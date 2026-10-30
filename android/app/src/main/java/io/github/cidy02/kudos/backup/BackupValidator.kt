@@ -20,7 +20,6 @@ object BackupValidator {
     private val appThemes = AppThemeSetting.entries.map { it.storageValue }.toSet()
     private val matureModes = MatureContentMode.entries.map { it.storageValue }.toSet()
     private val builtInFontIds = ReaderFontCatalog.builtInIds
-    private val accentPattern = Regex("^#[0-9A-Fa-f]{6}$")
 
     fun decodeManifest(bytes: ByteArray): KudosBackupManifest {
         if (bytes.size > BackupLimits.MAX_MANIFEST_BYTES) {
@@ -239,8 +238,9 @@ object BackupValidator {
                 ?: defaults.matureContentMode,
             appTheme = settings.appTheme.takeIf { it in appThemes } ?: defaults.appTheme,
             readerTheme = settings.readerTheme.takeIf { it in readerThemes } ?: defaults.readerTheme,
-            accentColorHex = settings.accentColorHex.takeIf { accentPattern.matches(it) }
-                ?: defaults.accentColorHex
+            // Older files still decode. A valid legacy hex is accepted and then
+            // discarded: every archive this app writes carries the one app colour.
+            accentColorHex = defaults.accentColorHex
         )
     }
 

@@ -197,7 +197,9 @@ class SubjectPaletteTest {
             val tokens = KudosTokens.of(theme, red)
             assertEquals(tokens.accent, tokens.accentInk)
         }
-        val alreadyReadable = Color(0xFFFFD54F)
-        assertEquals(alreadyReadable, KudosTokens.of(ReaderTheme.Dark, alreadyReadable).accentInk)
+        // A passed colour is not applied. Dark text stays the one lightened app ink.
+        val ignored = Color(0xFFFFD54F)
+        assertEquals(Ao3RedInkDark, KudosTokens.of(ReaderTheme.Dark, ignored).accentInk)
+        assertEquals(Ao3Red, KudosTokens.of(ReaderTheme.Dark, ignored).accent)
     }
 }

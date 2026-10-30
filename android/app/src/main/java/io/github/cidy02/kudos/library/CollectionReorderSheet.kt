@@ -127,7 +127,9 @@ internal fun CollectionReorderContent(
                 .padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            TextButton(onClick = onDismiss, enabled = !saving) { Text("Cancel") }
+            TextButton(onClick = onDismiss, enabled = !saving) {
+                Text("Cancel", color = tokens.theme.accentInk(palette.tint))
+            }
             Text(
                 text = "Reorder works",
                 modifier = Modifier.weight(1f),

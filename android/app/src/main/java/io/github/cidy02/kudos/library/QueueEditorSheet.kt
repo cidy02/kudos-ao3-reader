@@ -152,7 +152,9 @@ fun QueueEditorSheet(
                 Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                TextButton(onClick = onDismiss, enabled = !saving) { Text("Cancel") }
+                TextButton(onClick = onDismiss, enabled = !saving) {
+                    Text("Cancel", color = tokens.theme.accentInk(palette.tint))
+                }
                 Text(
                     text = if (editing) "Edit queue" else "New queue",
                     modifier = Modifier.weight(1f),

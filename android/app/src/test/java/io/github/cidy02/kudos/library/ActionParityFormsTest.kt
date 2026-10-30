@@ -138,7 +138,6 @@ class ActionParityFormsTest {
     }
 
     @Test fun queueEditorUsesThePickedFillForItsSwitchAndReadableSheetInkForCancel() {
-        val picked = Color(0xFF193B97)
         val queue = runBlocking { queues.createQueue("Blue queue", hue = 0.62, colorHex = "#193B97", keepsWorksOffline = true) }
         val oldInspector = isDebugInspectorInfoEnabled
         isDebugInspectorInfoEnabled = true
@@ -146,15 +145,14 @@ class ActionParityFormsTest {
             compose.setContent { KudosTheme(io.github.cidy02.kudos.ui.theme.KudosThemeMode.Dark) {
                 QueueEditorSheet(queues, queue, {}, {})
             } }
-            assertSwitchFill("Keep works offline", picked)
+            assertSwitchFill("Keep works offline", Color(0xFF990000))
             val layouts = mutableListOf<TextLayoutResult>()
             compose.onNodeWithText("Cancel").performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
-            assertEquals(ReaderTheme.Dark.accentInk(picked), layouts.single().layoutInput.style.color)
+            assertEquals(ReaderTheme.Dark.accentInk(Color(0xFF990000)), layouts.single().layoutInput.style.color)
         } finally { isDebugInspectorInfoEnabled = oldInspector }
     }
 
     @Test fun collectionEditorUsesThePickedFillForBothSwitches() {
-        val picked = Color(0xFF193B97)
         val collection = runBlocking { works.createCollection("Blue collection", hue = 0.62, colorHex = "#193B97",
             keepsWorksOffline = true, showsOnHome = true) }
         val oldInspector = isDebugInspectorInfoEnabled
@@ -163,8 +161,8 @@ class ActionParityFormsTest {
             compose.setContent { KudosTheme(io.github.cidy02.kudos.ui.theme.KudosThemeMode.Oled) {
                 CollectionEditorSheet(works, collection, {}, {})
             } }
-            assertSwitchFill("Keep downloads", picked)
-            assertSwitchFill("Show on Home", picked)
+            assertSwitchFill("Keep downloads", Color(0xFF990000))
+            assertSwitchFill("Show on Home", Color(0xFF990000))
         } finally { isDebugInspectorInfoEnabled = oldInspector }
     }
 
