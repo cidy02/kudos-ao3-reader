@@ -370,14 +370,17 @@ struct WorkResumeCard: View {
     }
 
     private var homeHeader: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 14) {
-                progressDial(diameter: 96, showsLabel: true)
-                identity
-            }
-            VStack(alignment: .leading, spacing: 12) {
-                progressDial(diameter: 96, showsLabel: true)
-                identity
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 12) {
+                    progressDial(diameter: 96, showsLabel: true)
+                    identity
+                }
+            } else {
+                HStack(spacing: 14) {
+                    progressDial(diameter: 96, showsLabel: true)
+                    identity
+                }
             }
         }
     }
@@ -392,18 +395,21 @@ struct WorkResumeCard: View {
     }
 
     private var detailHeader: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 12) {
-                progressDial(diameter: 52, showsLabel: false)
-                detailChapterLabels
-                contentsButton
-            }
-            VStack(alignment: .leading, spacing: 10) {
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 12) {
+                        progressDial(diameter: 52, showsLabel: false)
+                        detailChapterLabels
+                    }
+                    contentsButton
+                }
+            } else {
                 HStack(spacing: 12) {
                     progressDial(diameter: 52, showsLabel: false)
                     detailChapterLabels
+                    contentsButton
                 }
-                contentsButton
             }
         }
     }
@@ -426,7 +432,7 @@ struct WorkResumeCard: View {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(model.title)
                     .font(.system(.title2, design: .serif, weight: .semibold))
-                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 3)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                     .fixedSize(horizontal: false, vertical: true)
                 if variant == .next, model.isFavorite {
                     Image(systemName: "star.fill")
@@ -602,9 +608,12 @@ struct WorkResumeCard: View {
     }
 
     private var actions: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 10) { actionContents }
-            VStack(alignment: .leading, spacing: 10) { actionContents }
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 10) { actionContents }
+            } else {
+                HStack(spacing: 10) { actionContents }
+            }
         }
     }
 
