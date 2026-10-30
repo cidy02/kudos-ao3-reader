@@ -51,7 +51,10 @@ struct WritingView: View {
             #if os(iOS)
             .toolbarTitleDisplayMode(.inlineLarge)
             #endif
-            .subjectScreenWash(palette: theme.scopePalette)
+            // Not `subjectScreenWash`: that hides the tab bar, for pushed screens.
+            // This is a tab root, so there would be no way out of it.
+            .subjectWash(theme.scopePalette)
+            .hidesNavigationBarChrome()
             .navigationDestination(for: WritingRoute.self, destination: writingDestination)
             .navigationDestination(item: $editingWorkID) {
                 WritingWorkDestination(workID: $0) { draftsReload += 1 }
