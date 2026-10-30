@@ -66,6 +66,21 @@ struct CarouselCardSizingTests {
     }
     #endif
 
+    @Test func onlyThe120PointCoverGridStretches() {
+        #expect(CarouselCardMetrics.stretchesToFill(baseWidth: CarouselCardMetrics.width))
+        #expect(!CarouselCardMetrics.stretchesToFill(baseWidth: CarouselCardMetrics.stackWidth))
+        // A stack that inherits a cover column keeps its own width.
+        #expect(CarouselCardMetrics.resolvedCardWidth(
+            designWidth: CarouselCardMetrics.stackWidth, scaledWidth: 150, gridCardWidth: 114
+        ) == 150)
+        #expect(CarouselCardMetrics.resolvedCardWidth(
+            designWidth: CarouselCardMetrics.width, scaledWidth: 120, gridCardWidth: 112
+        ) == 112)
+        #expect(CarouselCardMetrics.resolvedCardWidth(
+            designWidth: CarouselCardMetrics.width, scaledWidth: 120, gridCardWidth: nil
+        ) == 120)
+    }
+
     @Test func gridsFitAsManyColumnsAs112PointsAllowAndStretch() {
         let spacing = CarouselCardMetrics.compactGridColumnSpacing
         #expect(CarouselCardMetrics.gridMinimumWidth == 112)
