@@ -474,6 +474,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                             onToggleSelection: { toggleSelection(heroWork) },
                             onSelect: selectAction(for: heroWork),
                             onPrimary: { path.append(LocalWorkDestination.reader(heroWork)) },
+                            // T-458: no entry starts speech, and macOS has no TTS.
                             onReadAloud: { path.append(LocalWorkDestination.reader(heroWork)) }
                         )
                         .downloadDimmed(heroWork)

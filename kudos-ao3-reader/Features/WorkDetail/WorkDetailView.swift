@@ -363,6 +363,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             localWork: localWork,
             isBusy: working,
             action: read,
+            // T-458: no entry starts speech, and macOS has no TTS.
             readAloud: read,
             contents: openContents,
             updateDownload: resumeUpdate
