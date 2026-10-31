@@ -97,3 +97,81 @@ struct ReadingStatistics {
             }
     }
 }
+
+/// Figures for Home's stats line under the title (T-487):
+/// "4 h 10 m this week · 2 finished · 9-day streak"
+struct HomeReadingStats: Equatable, Sendable {
+    var durationSeconds: Double
+    var finishedCount: Int
+    var streakDays: Int
+
+    init(durationSeconds: Double = 0, finishedCount: Int = 0, streakDays: Int = 0) {
+        self.durationSeconds = durationSeconds
+        self.finishedCount = finishedCount
+        self.streakDays = streakDays
+    }
+
+    /// "4 h 10 m", "35 m", "2 h", or "0 m"
+    var formattedDuration: String {
+        let totalMinutes = Int((max(0, durationSeconds) / 60).rounded())
+        if totalMinutes < 60 {
+            return "\(totalMinutes) m"
+        }
+        let hours = totalMinutes / 60
+        let minutes = totalMinutes % 60
+        return minutes == 0 ? "\(hours) h" : "\(hours) h \(minutes) m"
+    }
+
+    /// "4 hours 10 minutes" for VoiceOver
+    var spokenDuration: String {
+        let totalMinutes = Int((max(0, durationSeconds) / 60).rounded())
+        guard totalMinutes > 0 else { return "0 minutes" }
+        var parts: [String] = []
+        if totalMinutes >= 60 {
+            let h = totalMinutes / 60
+            parts.append("\(h) hour\(h == 1 ? "" : "s")")
+        }
+        let m = totalMinutes % 60
+        if m > 0 {
+            parts.append("\(m) minute\(m == 1 ? "" : "s")")
+        }
+        return parts.joined(separator: " ")
+    }
+
+    /// "9-day"
+    var formattedStreak: String {
+        "\(streakDays)-day"
+    }
+
+    /// Spoken label for VoiceOver accessibility
+    var accessibilityLabel: String {
+        "\(spokenDuration) this week, \(finishedCount) finished, \(streakDays)-day streak"
+    }
+
+    /// Calculates the weekly duration, works finished this week, and current streak
+    /// from reading session facts.
+    static func calculate(
+        facts: [ReadingSessionFacts],
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> HomeReadingStats {
+        let weekInterval = calendar.dateInterval(of: .weekOfYear, for: now)
+        let weekFacts = facts.filter { fact in
+            guard let weekInterval else { return false }
+            return weekInterval.contains(fact.startedAt)
+        }
+        let durationSeconds = weekFacts.reduce(0) { $0 + $1.durationSeconds }
+        let finishedCount = Set(weekFacts.filter(\.didFinish).map(\.workID)).count
+        let streakDays = ReadingHistoryTimeline.streak(
+            through: now,
+            isToday: true,
+            facts: facts,
+            calendar: calendar
+        )
+        return HomeReadingStats(
+            durationSeconds: durationSeconds,
+            finishedCount: finishedCount,
+            streakDays: streakDays
+        )
+    }
+}

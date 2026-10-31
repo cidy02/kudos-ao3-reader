@@ -651,6 +651,7 @@ struct SectionRuleHeader: View {
     /// When nil and `onSeeAll` is non-nil, defaults to "See All".
     var actionTitle: String?
     var isCollapsed: Bool = false
+    var isPinned: Bool = false
     var onToggleCollapse: (() -> Void)?
     var onSeeAll: (() -> Void)?
 
@@ -687,6 +688,13 @@ struct SectionRuleHeader: View {
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                 .fixedSize(horizontal: false, vertical: true)
                 .layoutPriority(1)
+
+            if isPinned {
+                Image(systemName: "pin.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("Pinned to Home")
+            }
 
             if let countText {
                 Text(countText)

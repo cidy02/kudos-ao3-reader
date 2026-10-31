@@ -16,7 +16,7 @@ enum HomeSectionKind: String, Identifiable, Hashable, CaseIterable {
     var title: String {
         switch self {
         case .readingNow: "Reading Now"
-        case .recentlyUpdated: "Recently Updated"
+        case .recentlyUpdated: "New Chapters"
         }
     }
 
@@ -53,7 +53,7 @@ enum HomeSectionKind: String, Identifiable, Hashable, CaseIterable {
     var groupTitle: String {
         switch self {
         case .readingNow: "In progress"
-        case .recentlyUpdated: "New chapters"
+        case .recentlyUpdated: "New Chapters"
         }
     }
 
