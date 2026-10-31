@@ -135,6 +135,25 @@ enum ReadingQueueFacts {
         return "\(progress.finished) finished · \(progress.inProgress) in progress · "
             + "\(progress.unread) unread · \(offline)"
     }
+
+    /// Redesigned queue page status legend (T-491, board 04):
+    /// "2 finished · 1 in progress · 5 to go".
+    static func progressLegend(_ progress: Progress) -> String {
+        var parts: [String] = []
+        if progress.finished > 0 {
+            parts.append("\(progress.finished) finished")
+        }
+        if progress.inProgress > 0 {
+            parts.append("\(progress.inProgress) in progress")
+        }
+        if progress.unread > 0 {
+            parts.append("\(progress.unread) to go")
+        }
+        if parts.isEmpty {
+            return progress.total > 0 ? "All finished" : "Empty queue"
+        }
+        return parts.joined(separator: " · ")
+    }
 }
 
 /// 1h's quick filters: All · Unread · Offline · WIP, each with its count. Shaped
@@ -212,8 +231,147 @@ struct QueueProgressStrip: View {
         .clipShape(Capsule())
         .accessibilityElement()
         .accessibilityLabel(
-            "\(progress.finished) of \(progress.total) finished, \(progress.inProgress) in progress"
+            "\(progress.finished) of \(progress.total) finished, \(progress.inProgress) in progress, \(progress.unread) to go"
         )
+    }
+}
+
+/// Redesigned queue page header (T-491, board 04):
+/// Cover stack (96×96) in queue colour, title (Title 1, 28pt bold), description/notes,
+/// detail line ("8 works · about 9 h 40 min · 6 offline"),
+/// segmented bar in the queue colour,
+/// legend ("2 finished · 1 in progress · 5 to go") + neutral tag chips.
+struct QueuePageHeader<FilterRail: View>: View {
+    let queue: ReadingQueue
+    let works: [SavedWork]
+    let preservedIDs: Set<UUID>
+    let palette: SubjectPalette
+    let onAddTag: () -> Void
+    @ViewBuilder var filterRail: () -> FilterRail
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        let totalWords = works.reduce(0) { $0 + max(0, $1.wordCount) }
+        let progress = ReadingQueueFacts.progress(of: works.map(\.readingState))
+        let fills = works.map {
+            ReadingQueueFacts.segmentFill(state: $0.readingState, progress: $0.readingProgress)
+        }
+        let detailLine = ReadingQueueFacts.rowDetail(
+            workCount: works.count,
+            totalWordCount: totalWords,
+            offlineCount: preservedIDs.count
+        )
+
+        VStack(alignment: .leading, spacing: 14) {
+            headerTop(detailLine: detailLine)
+
+            if !works.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    QueueProgressStrip(
+                        progress: progress,
+                        palette: palette,
+                        fills: fills,
+                        height: 5,
+                        gap: 3
+                    )
+
+                    progressAndTagsRow(progress: progress)
+                }
+            }
+
+            filterRail()
+        }
+    }
+
+    @ViewBuilder
+    private func headerTop(detailLine: String) -> some View {
+        let titleBlock = VStack(alignment: .leading, spacing: 2) {
+            Text(queue.displayName)
+                .font(.title.bold())
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+                .subjectOwnHeadingScrollEffect()
+
+            if let notes = queue.notes?.trimmingCharacters(in: .whitespacesAndNewlines), !notes.isEmpty {
+                Text(notes)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Text(detailLine)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 12) {
+                coverStack
+                titleBlock
+            }
+        } else {
+            HStack(alignment: .center, spacing: 14) {
+                coverStack
+                titleBlock
+                Spacer(minLength: 0)
+            }
+        }
+    }
+
+    private var coverStack: some View {
+        StackedWorkCover(
+            kind: .queue,
+            name: queue.displayName,
+            hue: queue.displayHue,
+            pickedHex: queue.colorHex,
+            backs: Array(works.prefix(CoverStackLayout.maxBacks)),
+            size: CGSize(width: 96, height: 96)
+        )
+        .accessibilityHidden(true)
+    }
+
+    @ViewBuilder
+    private func progressAndTagsRow(progress: ReadingQueueFacts.Progress) -> some View {
+        let legend = ReadingQueueFacts.progressLegend(progress)
+        let sortedTags = queue.tags.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .center, spacing: 6) {
+                Text(legend)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+
+                Spacer(minLength: 8)
+
+                tagChips(sortedTags)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(legend)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+
+                tagChips(sortedTags)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func tagChips(_ sortedTags: [Tag]) -> some View {
+        FlowLayout(spacing: 6, rowSpacing: 6) {
+            ForEach(sortedTags) { tag in
+                TagChip(text: tag.name)
+            }
+            Button(action: onAddTag) {
+                TagChip(text: "+ Tag")
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Add tag to queue")
+        }
     }
 }
 
