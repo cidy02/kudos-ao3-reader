@@ -33,10 +33,17 @@ public struct KudosButtonStyle: ButtonStyle {
     public let variant: Variant
     public let size: Size
 
-    public init(variant: Variant = .primary, size: Size = .regular) {
+    public init(variant: Variant = .primary, size: Size = .regular, dense: Bool = false) {
         self.variant = variant
         self.size = size
+        self.dense = dense
     }
+
+    /// Three labelled buttons in one row (board 35): 15 pt semibold and tighter
+    /// sides, so none truncates. Same heights as every other button.
+    private let dense: Bool
+    private var labelFont: Font { dense ? .subheadline.weight(.semibold) : .headline }
+    private var sidePadding: CGFloat { dense ? 10 : (size == .confirm ? 22 : 18) }
 
     @Environment(\.accentFill) private var envAccentFill
     @Environment(\.accentInk) private var envAccentInk
@@ -68,9 +75,9 @@ public struct KudosButtonStyle: ButtonStyle {
                 let bg = isDestructive ? Color.red : effectiveAccent
                 let fg = isDestructive ? Color.white : ThemeManager.label(on: bg)
                 configuration.label
-                    .font(.headline)
+                    .font(labelFont)
                     .foregroundStyle(fg)
-                    .padding(.horizontal, size == .confirm ? 22 : 18)
+                    .padding(.horizontal, sidePadding)
                     .padding(.vertical, 8)
                     .frame(minHeight: size.minHeight)
                     .background(bg, in: shape)
@@ -80,9 +87,9 @@ public struct KudosButtonStyle: ButtonStyle {
                 let bg = isDestructive ? Color.red.opacity(0.12) : effectiveAccent.opacity(0.12)
                 let fg = isDestructive ? Color.red : effectiveInk
                 configuration.label
-                    .font(.headline)
+                    .font(labelFont)
                     .foregroundStyle(fg)
-                    .padding(.horizontal, size == .confirm ? 22 : 18)
+                    .padding(.horizontal, sidePadding)
                     .padding(.vertical, 8)
                     .frame(minHeight: size.minHeight)
                     .background(bg, in: shape)
@@ -155,9 +162,10 @@ extension ButtonStyle where Self == KudosButtonStyle {
 
     public static func kudos(
         variant: KudosButtonStyle.Variant = .primary,
-        size: KudosButtonStyle.Size = .regular
+        size: KudosButtonStyle.Size = .regular,
+        dense: Bool = false
     ) -> KudosButtonStyle {
-        KudosButtonStyle(variant: variant, size: size)
+        KudosButtonStyle(variant: variant, size: size, dense: dense)
     }
 }
 
