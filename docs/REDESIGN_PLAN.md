@@ -103,7 +103,7 @@ with a shared language file rather than with a screen.
 | Part | Where it lives | Spec source |
 |---|---|---|
 | hue → wash / accent / chip / border | `SubjectPalette` | 1b, 1k, 1h |
-| full-bleed page gradient | `.subjectWash(_:height:)` | 1k, 1l, 1t, 1u |
+| full-bleed page gradient | `.subjectWash(_:)` | 1k, 1l, 1t, 1u |
 | kicker · rule | `SubjectKicker` | everywhere |
 | kicker · rule · 32pt hero · tallies | `SubjectHeaderBlock` | 1k, 1l, 1t, 1u, 1h |
 | section header with hairline + see-all | `SectionRuleHeader` | 1b, 1c |

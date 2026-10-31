@@ -119,7 +119,7 @@ struct AO3NamedSubscriptionsList: View {
             content
         }
         .cardList()
-        .subjectScreenWash(palette: palette)
+        .subjectScreenWash(palette: palette, role: .content)
         .onChange(of: scope) { page = 1 }
         // Another account can subscribe to the same series path.
         .onChange(of: auth.sessionGeneration) { unsubscribed = [] }

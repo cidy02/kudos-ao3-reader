@@ -279,7 +279,7 @@ struct AO3MarkedForLaterWorksBrowser: View {
             }
             .padding(.vertical, 8)
         }
-        .subjectScreenWash(palette: palette)
+        .subjectScreenWash(palette: palette, role: .content)
     }
 
     /// "synced 2 min ago" is a duration, not a fixed fact, and a
