@@ -126,7 +126,7 @@ enum WorkDetailPresentation {
     static func laterAction(isQueued: Bool) -> (title: String, systemImage: String) {
         let icons = WorkActionLabels.savedForLater(isQueued: isQueued)
         return (
-            isQueued ? "Remove from Later" : "Save for Later",
+            isQueued ? "Remove from Want to Read" : "Want to Read",
             icons.systemImage
         )
     }

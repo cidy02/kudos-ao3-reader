@@ -960,14 +960,14 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     }
 
     var displayName: String {
-        kind == .savedForLater ? "Saved for Later" : name
+        kind == .savedForLater ? "Want to Read" : name
     }
 
     /// The hue every queue surface should paint with: the stored one when the
     /// reader has chosen it, and otherwise the name hash this app used before
     /// `hue` existed, so an untouched queue keeps exactly the colour it had.
     var displayHue: Double {
-        hue ?? CoverArt.hue(for: displayName)
+        hue ?? CoverArt.hue(for: name)
     }
 
     func markModified(_ date: Date = Date()) {

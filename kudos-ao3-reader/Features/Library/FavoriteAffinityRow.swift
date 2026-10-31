@@ -319,7 +319,7 @@ struct FavoriteAffinityRow: View {
     private var libraryExtras: String? {
         var extras: [String] = []
         if row.downloadedInLibrary > 0 { extras.append("\(row.downloadedInLibrary) downloaded") }
-        if row.savedForLater > 0 { extras.append("\(row.savedForLater) in Saved for Later") }
+        if row.savedForLater > 0 { extras.append("\(row.savedForLater) in Want to Read") }
         return extras.isEmpty ? nil : extras.joined(separator: " · ")
     }
 }

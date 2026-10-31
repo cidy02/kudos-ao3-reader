@@ -657,7 +657,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     private func emptyCopy(for shelf: LibraryShelfID) -> String {
         switch shelf {
         case .wantToRead:
-            "You haven't saved any works for later. Add a work to Want to Read to see it here."
+            LibrarySectionKind.savedForLater.emptyMessage
         case .imported:
             "Works you import, or bring in from another site, appear here."
         case .queues:

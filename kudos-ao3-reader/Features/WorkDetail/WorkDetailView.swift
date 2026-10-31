@@ -755,18 +755,18 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             switch work.epubPreservationStatus {
             case .preserved:
                 if WorkReaderPreparation.hasReadableEPUB(for: work) {
-                    return "Saved for Later. A downloaded copy stays on your device for reading "
+                    return "Want to Read. A downloaded copy stays on your device for reading "
                         + "without internet."
                 }
-                return "Saved for Later, but its downloaded copy needs to be restored."
+                return "Want to Read, but its downloaded copy needs to be restored."
             case .preserving:
-                return "Saving for Later. A downloaded copy is being kept on your device."
+                return "Adding to Want to Read. A downloaded copy is being kept on your device."
             case .failed, .missingFile:
-                return "Saved for Later, but its downloaded copy needs to be restored."
+                return "Want to Read, but its downloaded copy needs to be restored."
             case .queued:
-                return "Saved for Later. Its download is waiting to be kept on your device."
+                return "Want to Read. Its download is waiting to be kept on your device."
             case .notPreserved:
-                return "Saved for Later."
+                return "Want to Read."
             }
         }
         if work.isQueuedForLater {
@@ -931,7 +931,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                 working = true
                 _ = await ReadingQueueService.addToSavedForLater(work, in: context)
                 working = false
-                queueNotice = "Saved for Later."
+                queueNotice = "Added to Want to Read."
                 maybeOfferSeriesPreservation(for: work)
             }
             return
@@ -945,13 +945,13 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                 let work = try await ReadingQueueService.addToSavedForLater(summary, in: context)
                 localWork = work
                 working = false
-                queueNotice = "Saved for Later."
+                queueNotice = "Added to Want to Read."
                 maybeOfferSeriesPreservation(for: work)
             } catch let error as AO3Error {
                 loadError = error.errorDescription
                 working = false
             } catch {
-                loadError = "The work couldn't be saved for later."
+                loadError = "The work couldn't be added to Want to Read."
                 working = false
             }
         }
@@ -979,7 +979,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             hasRemoteSource: canShowRemote
         ) {
         case .keepLocal:
-            queueNotice = "Removed from Saved for Later."
+            queueNotice = "Removed from Want to Read."
         case .showRemote:
             // Prefer the original remote payload; otherwise rebuild a blurb from
             // the local fields so the page doesn't slam shut on Library opens.
@@ -988,9 +988,9 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             }
             localWork = nil
             queueNotice = work.isPendingDeletion
-                ? "Removed from Saved for Later. Offline copy is in Recently Deleted "
+                ? "Removed from Want to Read. Offline copy is in Recently Deleted "
                     + "for \(PreservedWorkService.recoveryWindowText)."
-                : "Removed from Saved for Later."
+                : "Removed from Want to Read."
         case .dismiss:
             // No AO3 identity and the local record is soft-deleted — nothing left
             // to display without mutating a hidden row.
@@ -1045,12 +1045,12 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             if autoPreserveSmallSeriesOnSaveForLater, prompt.canAutoPreserve {
                 startSeriesPreservation(with: preview.works)
             } else {
-                queueNotice = "Saved for Later."
+                queueNotice = "Added to Want to Read."
                 seriesPrompt = prompt
                 showingSeriesQueuePrompt = true
             }
         } catch {
-            queueNotice = "Saved for Later."
+            queueNotice = "Added to Want to Read."
             seriesPrompt = ReadingQueueService.seriesPrompt(
                 for: nil,
                 threshold: autoPreserveSeriesWorkThreshold,
