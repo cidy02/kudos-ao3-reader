@@ -3,7 +3,7 @@ package io.github.cidy02.kudos.ui.subject
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import io.github.cidy02.kudos.ui.theme.Ao3Red
-import io.github.cidy02.kudos.ui.theme.Ao3RedInkDark
+import io.github.cidy02.kudos.ui.theme.AppAccents
 import io.github.cidy02.kudos.ui.theme.SepiaTint
 
 /**
@@ -45,9 +45,8 @@ enum class ReaderTheme {
             Oled -> Color(red = 0.110f, green = 0.110f, blue = 0.118f)
         }
 
-    /** One app-control colour: AO3 red, except Sepia's cohesive warm brown. */
-    val appTint: Color
-        get() = if (this == Sepia) SepiaTint else Ao3Red
+    /** Sepia refuses the chosen accent and keeps its cohesive warm brown. */
+    fun appTint(userAccent: Color): Color = if (this == Sepia) SepiaTint else userAccent
 
     /** iOS 26 system red; destructive/error marks ignore the picked accent. */
     val destructive: Color
@@ -83,14 +82,13 @@ enum class ReaderTheme {
 
     fun glassStroke(opacity: Double = 0.16): Color = glass(opacity)
 
-    /** Scope palette: the fixed app colour. [legacyAccent] is accepted only for source compatibility. */
-    @Suppress("UNUSED_PARAMETER")
-    fun scopePalette(legacyAccent: Color = Ao3Red): SubjectPalette =
-        SubjectPalette.fromColor(appTint, this)
+    /** Scope palette: the chosen accent, except Sepia's warm brown. */
+    fun scopePalette(userAccent: Color = Ao3Red): SubjectPalette =
+        SubjectPalette.fromColor(appTint(userAccent), this, userAccent)
 
     /** Readable glyph/text ink; filled controls keep the supplied colour. */
     fun accentInk(color: Color): Color = when {
-        isDarkFamily && color == Ao3Red -> Ao3RedInkDark
+        isDarkFamily && AppAccents.named(color) != null -> AppAccents.named(color)!!.darkInk
         isDarkFamily -> color.readableOn(cardBackdrop)
         else -> color
     }
@@ -153,9 +151,8 @@ data class KudosTokens(
     fun glassStroke(opacity: Double = 0.16): Color = theme.glassStroke(opacity)
 
     companion object {
-        @Suppress("UNUSED_PARAMETER")
-        fun of(theme: ReaderTheme, legacyAccent: Color = Ao3Red): KudosTokens {
-            val accent = theme.appTint
+        fun of(theme: ReaderTheme, userAccent: Color = Ao3Red): KudosTokens {
+            val accent = theme.appTint(userAccent)
             return KudosTokens(
                 theme = theme,
                 accent = accent,

@@ -2,11 +2,27 @@ package io.github.cidy02.kudos.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// AO3's signature dark red. Must match Apple ThemeManager.ao3Red (#990000) and the
-// SETTINGS_CONTRACT accentColorHex default for cross-platform visual parity.
-val Ao3Red = Color(0xFF990000)
-/** Readable AO3-red text/link step on Dark and OLED; filled controls keep [Ao3Red]. */
-val Ao3RedInkDark = Color(0xFFFF7A70)
+/** One named Appearance accent: its exact control fill and Dark/OLED text step. */
+data class AppAccent(val name: String, val fillHex: String, val darkInkHex: String) {
+    val fill: Color get() = Color(android.graphics.Color.parseColor(fillHex))
+    val darkInk: Color get() = Color(android.graphics.Color.parseColor(darkInkHex))
+}
+
+object AppAccents {
+    val Ao3Red = AppAccent("AO3 Red", "#821019", "#EE8A93")
+    val Plum = AppAccent("Plum", "#7B2D6B", "#D88BC7")
+    val InkBlue = AppAccent("Ink Blue", "#24508F", "#7FA6E8")
+    val DeepTeal = AppAccent("Deep Teal", "#11707A", "#5CC3CC")
+    val Forest = AppAccent("Forest", "#2F6B4F", "#7CC59E")
+    val Ochre = AppAccent("Ochre", "#9A5B00", "#E7A84B")
+    val all = listOf(Ao3Red, Plum, InkBlue, DeepTeal, Forest, Ochre)
+
+    fun named(hex: String): AppAccent? = all.firstOrNull { it.fillHex.equals(hex, ignoreCase = true) }
+    fun named(color: Color): AppAccent? = all.firstOrNull { it.fill == color }
+}
+
+/** Default app accent. A stored legacy #990000 resolves to this without being rewritten. */
+val Ao3Red = AppAccents.Ao3Red.fill
 val Ao3RedDark = Color(0xFF660000)
 val SepiaTint = Color(0xFF9A6732)
 val Ink = Color(0xFF23201D)
