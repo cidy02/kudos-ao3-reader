@@ -149,9 +149,7 @@ fun KudosTheme(
     val systemDark = isSystemInDarkTheme()
     val accent = remember(accentColorHex) { parseAccentColor(accentColorHex) }
     val previousAccent = remember { ActiveAppAccent.value }
-    if (ActiveAppAccent.value != accent) {
-        ActiveAppAccent.value = accent
-    }
+    SideEffect { ActiveAppAccent.value = accent }
     androidx.compose.runtime.DisposableEffect(Unit) {
         onDispose { ActiveAppAccent.value = previousAccent }
     }

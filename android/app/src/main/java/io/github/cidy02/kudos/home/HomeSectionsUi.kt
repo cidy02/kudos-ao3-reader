@@ -21,6 +21,7 @@ import androidx.compose.material.icons.outlined.CollectionsBookmark
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Queue
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -190,11 +191,18 @@ fun NewQueueDialog(
 
 @Composable
 fun ContinueReadingActions(onOpenBrowse: () -> Unit, onOpenLibrary: () -> Unit) {
+    val tokens = LocalKudosTokens.current
     Row(
         Modifier.padding(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Button(onClick = onOpenBrowse) { Text("Browse AO3") }
+        Button(
+            onClick = onOpenBrowse,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = tokens.accent,
+                contentColor = io.github.cidy02.kudos.ui.subject.SubjectPalette.label(tokens.accent)
+            )
+        ) { Text("Browse AO3") }
         OutlinedButton(onClick = onOpenLibrary) { Text("Open Library") }
     }
 }

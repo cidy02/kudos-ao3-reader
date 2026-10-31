@@ -40,6 +40,7 @@ import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.VolumeOff
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -77,6 +78,7 @@ import io.github.cidy02.kudos.ui.subject.SubjectFieldLabel
 import io.github.cidy02.kudos.ui.subject.SubjectFormRow
 import io.github.cidy02.kudos.ui.subject.SubjectHeaderBlock
 import io.github.cidy02.kudos.ui.subject.SubjectMetrics
+import io.github.cidy02.kudos.ui.subject.SubjectPalette
 import io.github.cidy02.kudos.ui.subject.SubjectRowSeparator
 import io.github.cidy02.kudos.ui.subject.SubjectToggle
 import io.github.cidy02.kudos.ui.subject.subjectPanel
@@ -197,7 +199,15 @@ fun AO3PreferencesScreen(
     }
     LaunchedEffect(saving, loading, hasEdits, snapshot) {
         chrome.trailingContent = {
-            Button(onClick = { save() }, enabled = !saving && !loading && hasEdits && snapshot != null) {
+            val tokens = LocalKudosTokens.current
+            Button(
+                onClick = { save() },
+                enabled = !saving && !loading && hasEdits && snapshot != null,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = tokens.accent,
+                    contentColor = SubjectPalette.label(tokens.accent)
+                )
+            ) {
                 Text(if (saving) "Saving…" else "Save")
             }
         }

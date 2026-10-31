@@ -46,8 +46,14 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.setProgress
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -394,6 +400,23 @@ private fun SaturationValueSquare(
             .fillMaxWidth()
             .aspectRatio(1.35f)
             .clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+            .semantics {
+                contentDescription = "Saturation and brightness"
+                stateDescription = "Saturation ${(saturation * 100f).roundToInt()}%, brightness ${(value * 100f).roundToInt()}%"
+                progressBarRangeInfo = ProgressBarRangeInfo(saturation.coerceIn(0f, 1f), 0f..1f)
+                setProgress { target ->
+                    onChange(target.coerceIn(0f, 1f), value)
+                    true
+                }
+                customActions = listOf(
+                    CustomAccessibilityAction("Increase brightness") {
+                        onChange(saturation, (value + 0.1f).coerceIn(0f, 1f)); true
+                    },
+                    CustomAccessibilityAction("Decrease brightness") {
+                        onChange(saturation, (value - 0.1f).coerceIn(0f, 1f)); true
+                    }
+                )
+            }
             .pointerInput(Unit) {
                 fun apply(position: Offset) {
                     val s = (position.x / size.width).coerceIn(0f, 1f)
@@ -419,6 +442,15 @@ private fun HueSlider(hue: Float, onChange: (Float) -> Unit) {
             .fillMaxWidth()
             .height(28.dp)
             .clip(CircleShape)
+            .semantics {
+                contentDescription = "Hue"
+                stateDescription = "${(hue * 360f).roundToInt()} degrees"
+                progressBarRangeInfo = ProgressBarRangeInfo(hue.coerceIn(0f, 1f), 0f..1f)
+                setProgress { target ->
+                    onChange(target.coerceIn(0f, 1f))
+                    true
+                }
+            }
             .pointerInput(Unit) {
                 fun apply(x: Float) { onChange((x / size.width).coerceIn(0f, 1f)) }
                 detectTapGestures { apply(it.x) }

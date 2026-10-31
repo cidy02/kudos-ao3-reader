@@ -141,8 +141,6 @@ class WorkSymbolTileTest {
         assertFalse(WorkSymbolGeometry.drawsBacking(HomeStatusArrangement.Grid, backed = false))
         assertFalse(WorkSymbolGeometry.drawsBacking(HomeStatusArrangement.Strip, backed = true))
         assertFalse(WorkSymbolGeometry.drawsBacking(HomeStatusArrangement.Strip, backed = false))
-        assertTrue(abs(WorkSymbolGeometry.outerSide(24f) - 62.88f) < 0.001f)
-        assertTrue(abs(WorkSymbolGeometry.outerSide(24f, backed = false) - 50.88f) < 0.001f)
 
         compose.setContent {
             KudosTheme(KudosThemeMode.Light) {

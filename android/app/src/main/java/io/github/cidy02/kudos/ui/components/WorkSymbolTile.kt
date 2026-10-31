@@ -243,13 +243,6 @@ internal object WorkSymbolGeometry {
         backed: Boolean
     ): Boolean = arrangement == io.github.cidy02.kudos.ui.subject.HomeStatusArrangement.Grid && backed
 
-    /** Edge of the square a row lays out, including backing padding on both sides when backed. */
-    fun outerSide(tileSize: Float, backed: Boolean = true): Float {
-        val tiles = gridExtent(tileSize)
-        if (!drawsBacking(io.github.cidy02.kudos.ui.subject.HomeStatusArrangement.Grid, backed)) return tiles
-        return tiles + 2f * backingPadding(tileSize)
-    }
-
     fun backingFill(theme: io.github.cidy02.kudos.ui.subject.ReaderTheme): Color =
         WorkSymbolBackingColor.board(theme).color
 

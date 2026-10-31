@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -887,11 +888,19 @@ fun WorkDetailScreen(
             ) {
                 Text("Chapter Index", style = MaterialTheme.typography.titleLarge)
                 if (state.ao3WorkId != null) {
+                    val tokens = LocalKudosTokens.current
                     val navigateUrl = "https://archiveofourown.org/works/${state.ao3WorkId}/navigate"
-                    Button(onClick = {
-                        chapterIndexSheetOpen = false
-                        uriHandler.openUri(navigateUrl)
-                    }, modifier = Modifier.fillMaxWidth()) {
+                    Button(
+                        onClick = {
+                            chapterIndexSheetOpen = false
+                            uriHandler.openUri(navigateUrl)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = tokens.accent,
+                            contentColor = SubjectPalette.label(tokens.accent)
+                        )
+                    ) {
                         Text("Open Chapter Index on AO3")
                     }
                 } else {

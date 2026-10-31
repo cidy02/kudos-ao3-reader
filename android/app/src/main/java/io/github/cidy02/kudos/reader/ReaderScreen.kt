@@ -1,6 +1,8 @@
 package io.github.cidy02.kudos.reader
 
+import io.github.cidy02.kudos.ui.theme.ActiveAppAccent
 import io.github.cidy02.kudos.ui.theme.SheetSystemBars
+import io.github.cidy02.kudos.ui.theme.parseAccentColor
 import io.github.cidy02.kudos.ui.subject.LocalSettingsFormGround
 import io.github.cidy02.kudos.app.DebugShotEffect
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -64,6 +66,7 @@ import androidx.compose.material.icons.filled.ScreenRotation
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -121,7 +124,9 @@ import io.github.cidy02.kudos.ui.components.ReaderPageSkeleton
 import io.github.cidy02.kudos.ui.components.workCardZoomDestination
 import io.github.cidy02.kudos.ui.subject.KudosTokens
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
+import io.github.cidy02.kudos.ui.subject.LocalSubjectPalette
 import io.github.cidy02.kudos.ui.subject.ReaderTheme
+import io.github.cidy02.kudos.ui.subject.SubjectPalette
 import kotlinx.coroutines.launch
 
 /**
@@ -151,8 +156,8 @@ fun ReaderScreen(
     customFontRepository: io.github.cidy02.kudos.files.CustomFontRepository? = null
 ) {
     val uiState by viewModel.state.collectAsState()
-    val settingsState = settingsRepository?.settings?.collectAsState(initial = io.github.cidy02.kudos.core.model.KudosSettings.Defaults)
-    val settings = settingsState?.value ?: io.github.cidy02.kudos.core.model.KudosSettings.Defaults
+    val settings by (settingsRepository ?: viewModel.readerSettingsRepository)
+        .settings.collectAsState(initial = io.github.cidy02.kudos.core.model.KudosSettings.Defaults)
 
     val backgroundColor = (uiState as? ReaderUiState.Reading)
         ?.preferences?.theme?.backgroundColor()
@@ -283,13 +288,7 @@ private fun ReaderReading(
     val writeMessage by viewModel.writeMessage.collectAsState()
     val kudosWorking by viewModel.kudosWorking.collectAsState()
 
-    val readerTheme = when (state.preferences.theme) {
-        ReaderColorTheme.Light -> ReaderTheme.Light
-        ReaderColorTheme.Sepia -> ReaderTheme.Sepia
-        ReaderColorTheme.Dark -> ReaderTheme.Dark
-        ReaderColorTheme.Oled -> ReaderTheme.Oled
-    }
-    val tokens = KudosTokens.of(readerTheme)
+    val tokens = readerChromeTokens(state.preferences.theme, settings)
 
     DisposableEffect(speechController) {
         onDispose { speechController.shutdown() }
@@ -1025,6 +1024,7 @@ private fun ReaderReading(
                     SheetSystemBars(tokens)
                     CompositionLocalProvider(
                         LocalKudosTokens provides tokens,
+                        LocalSubjectPalette provides tokens.scopePalette,
                         LocalContentColor provides tokens.primaryInk
                     ) {
                         ReaderDisplaySheet(
@@ -1215,6 +1215,7 @@ private fun ReaderErrorView(
     onRetry: () -> Unit,
     onRemoveOfflineCopy: (() -> Unit)?
 ) {
+    val tokens = LocalKudosTokens.current
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(
             modifier = Modifier.padding(24.dp),
@@ -1232,13 +1233,34 @@ private fun ReaderErrorView(
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = onBack) { Text("Back") }
-                Button(onClick = onRetry) { Text("Retry") }
+                Button(
+                    onClick = onRetry,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = tokens.accent,
+                        contentColor = SubjectPalette.label(tokens.accent)
+                    )
+                ) { Text("Retry") }
             }
             if (onRemoveOfflineCopy != null) {
                 TextButton(onClick = onRemoveOfflineCopy) { Text("Remove offline copy") }
             }
         }
     }
+}
+
+internal fun readerChromeTokens(
+    theme: ReaderColorTheme,
+    settings: io.github.cidy02.kudos.core.model.KudosSettings,
+    fallbackAccent: androidx.compose.ui.graphics.Color = ActiveAppAccent.value
+): KudosTokens {
+    val readerTheme = when (theme) {
+        ReaderColorTheme.Light -> ReaderTheme.Light
+        ReaderColorTheme.Sepia -> ReaderTheme.Sepia
+        ReaderColorTheme.Dark -> ReaderTheme.Dark
+        ReaderColorTheme.Oled -> ReaderTheme.Oled
+    }
+    val userAccent = settings.app.chosenAccentColorHex?.let(::parseAccentColor) ?: fallbackAccent
+    return KudosTokens.of(readerTheme, userAccent)
 }
 
 private fun openExternal(context: Context, url: String) {
