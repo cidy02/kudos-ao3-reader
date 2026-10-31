@@ -711,9 +711,8 @@ struct QueueRowTagLabel: View {
 
     var body: some View {
         let shape = Capsule()
-        Text(text.uppercased())
+        Text(text)
             .font(.system(size: fontSize, weight: .semibold))
-            .tracking(fontSize * 0.06)
             .foregroundStyle(.secondary)
             .lineLimit(1)
             .padding(.vertical, 3)

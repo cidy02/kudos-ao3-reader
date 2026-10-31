@@ -37,6 +37,7 @@ struct HomeCollectionShelf: View {
             collapseKey: "home.collection.\(collection.id.uuidString)",
             hasItems: !works.isEmpty,
             itemCount: works.isEmpty ? nil : works.count,
+            visibleCount: min(works.count, 12),
             onSeeAll: onSeeAll
         ) {
             ForEach(works.prefix(12)) { work in

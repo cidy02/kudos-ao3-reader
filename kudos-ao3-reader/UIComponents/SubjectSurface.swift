@@ -11,7 +11,7 @@ import SwiftUI
 ///   1. `SubjectPalette`      — hue → wash / accent / chip / border colours
 ///   2. `subjectWash()`       — the full-bleed gradient behind a subject's own page
 ///   3. `SubjectPageHeading`  — own-heading subject title that shrinks into the bar on scroll
-///   4. `SectionRuleHeader`   — Home/Library's kicker · count · hairline · chevron
+///   4. `SectionRuleHeader`   — bold Title 3 · sentence case · grey count · See All link
 ///   5. `SubjectStatStrip`    — the four-cell divided figure strip
 ///   6. `WorkProgressRing`    — the 68pt read-progress ring
 ///
@@ -634,91 +634,89 @@ extension SubjectPageFact where Trailing == EmptyView {
 
 // MARK: - Section header
 
-/// Home and Library's section header: the label, its count, a disclosure caret,
-/// then a hairline that runs to a trailing see-all chevron. The hairline is the
-/// part that makes a shelf read as a section without a heavy title bar.
+/// Content screen section header (T-483): bold Title 3, sentence case, with a grey
+/// count beside it and a trailing See All or action link ("Organise") only when
+/// appropriate per the See All rule.
 ///
-/// `onSeeAll` nil drops the trailing chevron rather than disabling it — a
-/// section with no destination should not offer one.
+/// `onSeeAll` nil drops the trailing action link.
 struct SectionRuleHeader: View {
     let title: String
     var count: Int?
-    /// A count that is not a bare number: 1bn's "3 / 12", 1bv's "2,140 words".
+    /// A count that is not a bare number: 1bn's "3 / 12", 1bv's "2,140 words", "98 · 2.1 GB".
     /// Wins over `count` when both are set.
     var countText: String?
     /// A quiet phrase after the count — 1i's "All queues 5 · Drag to reorder".
     var note: String?
+    /// Custom link title when everything fits or a specific action is provided, e.g. "Organise", "Edit".
+    /// When nil and `onSeeAll` is non-nil, defaults to "See All".
+    var actionTitle: String?
     var isCollapsed: Bool = false
     var onToggleCollapse: (() -> Void)?
     var onSeeAll: (() -> Void)?
 
-    @ScaledMetric(relativeTo: .caption2) private var labelSize: CGFloat = 11
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        // Twice its ordinary size and no more: above that a header's one long word no longer
-        // fits beside its count and broke in the middle ("SUBSCRIPTI / ONS" at AX5).
-        let labelSize = min(labelSize, 22)
-        return HStack(spacing: 8) {
-            Text(title.uppercased())
-                .font(.system(size: labelSize, weight: .bold))
-                .tracking(labelSize * 0.127)
-                .foregroundStyle(.secondary)
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 6) {
+                    titleBlock
+                    if let onSeeAll {
+                        actionButton(onSeeAll)
+                    }
+                }
+            } else {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    titleBlock
+                    Spacer(minLength: 8)
+                    if let onSeeAll {
+                        actionButton(onSeeAll)
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, SubjectMetrics.gutter)
+    }
+
+    @ViewBuilder
+    private var titleBlock: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(title)
+                .font(.title3.weight(.bold))
+                .foregroundStyle(.primary)
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                 .fixedSize(horizontal: false, vertical: true)
-                // The title is what the section is; a note gives way to it
-                // ("NO READING TIME REC…" lost the title to its note).
                 .layoutPriority(1)
 
             if let countText {
                 Text(countText)
-                    .font(.system(size: labelSize, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.tertiary)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
             } else if let count {
-                Text(count.compactCount)
-                    .font(.system(size: labelSize, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.tertiary)
+                Text(count.formatted())
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
 
             if let note {
                 Text("· " + note)
-                    .font(.system(size: labelSize, weight: .medium))
-                    .foregroundStyle(.tertiary)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
-
-            if let onToggleCollapse {
-                Button(action: onToggleCollapse) {
-                    Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.tertiary)
-                }
-                .buttonStyle(.plain)
-                // Header stays one text line tall (1b: 11pt to the cards).
-                .layoutFreeHitTarget(action: onToggleCollapse)
-                .accessibilityLabel(isCollapsed ? "Expand \(title)" : "Collapse \(title)")
-            }
-
-            // A filled leader rule ran here — one component, every section
-            // header in the app. Owner call: too many hairlines across a
-            // scrolling screen read as visual noise rather than structure, so
-            // this is now a plain spacer: it keeps the same layout job (push
-            // count/collapse to the left, chevron to the right) without
-            // drawing anything.
-            Spacer(minLength: 2)
-
-            if let onSeeAll {
-                Button(action: onSeeAll) {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: labelSize, weight: .semibold))
-                        .foregroundStyle(.tertiary)
-                }
-                .buttonStyle(.plain)
-                .layoutFreeHitTarget(action: onSeeAll)
-                .accessibilityLabel("See all \(title)")
-            }
         }
-        .padding(.horizontal, SubjectMetrics.gutter)
+    }
+
+    private func actionButton(_ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(actionTitle ?? "See All")
+                .font(.body)
+                .foregroundStyle(.accentInk)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(actionTitle ?? "See all") \(title)")
     }
 }
 

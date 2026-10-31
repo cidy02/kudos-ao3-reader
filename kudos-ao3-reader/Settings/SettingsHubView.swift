@@ -26,14 +26,8 @@ struct SettingsHubView: View {
     var body: some View {
         let inputs = self.inputs
         List {
-            ForEach(Array(SettingsRoute.hubGroups.enumerated()), id: \.element.id) { groupIndex, group in
-                Section {
-                    // Pads itself to `SubjectMetrics.gutter`.
-                    // 1ab: 10 from the rule to its panel. The List's minimum
-                    // row height used to supply the gap, and ~20 more with it.
-                    SectionRuleHeader(title: group.title)
-                        .padding(.bottom, 10)
-                        .pageBodyRow(top: groupIndex == 0 ? 12 : 22, gutter: 0)
+            ForEach(Array(SettingsRoute.hubGroups.enumerated()), id: \.element.id) { _, group in
+                Section(group.title) {
                     // One `List` row per link: in one row, a tap fires every link.
                     ForEach(Array(group.routes.enumerated()), id: \.element) { index, route in
                         let value = SettingsHubValue.row(route, inputs)
