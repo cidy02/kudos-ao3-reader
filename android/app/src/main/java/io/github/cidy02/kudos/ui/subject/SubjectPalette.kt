@@ -16,17 +16,20 @@ data class WashStop(val color: Color, val location: Float)
 class SubjectPalette private constructor(
     val hue: Double,
     val theme: ReaderTheme,
-    private val picked: Color?
+    private val picked: Color?,
+    private val appAccent: Color
 ) {
     // Value equality: screens build the same palette afresh on every pass.
     override fun equals(other: Any?): Boolean =
-        other is SubjectPalette && hue == other.hue && theme == other.theme && picked == other.picked
+        other is SubjectPalette && hue == other.hue && theme == other.theme &&
+            picked == other.picked && appAccent == other.appAccent
 
-    override fun hashCode(): Int = 31 * (31 * hue.hashCode() + theme.hashCode()) + (picked?.hashCode() ?: 0)
+    override fun hashCode(): Int = 31 * (31 * (31 * hue.hashCode() + theme.hashCode()) +
+        (picked?.hashCode() ?: 0)) + appAccent.hashCode()
 
     /** App-control tint. Subject colours stay in washes, artwork and identity labels. */
     val tint: Color
-        get() = theme.appTint
+        get() = theme.appTint(appAccent)
 
     /** Text, icons, links, spinners and text-button labels on a control: the app colour's readable ink. */
     val controlInk: Color
@@ -190,14 +193,15 @@ class SubjectPalette private constructor(
         WashStop(hsb(hue, saturation, brightness), location)
 
     companion object {
-        fun fromHue(hue: Double, theme: ReaderTheme) = SubjectPalette(hue, theme, null)
+        fun fromHue(hue: Double, theme: ReaderTheme, appAccent: Color = Ao3Red) =
+            SubjectPalette(hue, theme, null, appAccent)
 
-        fun fromColor(color: Color, theme: ReaderTheme) =
-            SubjectPalette(color.hueComponent(), theme, color)
+        fun fromColor(color: Color, theme: ReaderTheme, appAccent: Color = Ao3Red) =
+            SubjectPalette(color.hueComponent(), theme, color, appAccent)
 
         /** Legacy seam retained for callers; app controls no longer accept a subject colour. */
         @Suppress("UNUSED_PARAMETER")
-        fun controlColor(color: Color, theme: ReaderTheme): Color = theme.appTint
+        fun controlColor(color: Color, theme: ReaderTheme): Color = theme.appTint(color)
 
         /** Black or white, whichever clears WCAG's 0.179 luminance crossover. */
         fun label(on: Color): Color =

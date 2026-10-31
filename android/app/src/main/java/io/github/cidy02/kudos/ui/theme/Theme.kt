@@ -134,14 +134,16 @@ internal fun SheetSystemBars(tokens: KudosTokens) {
 @Composable
 fun KudosTheme(
     themeMode: KudosThemeMode,
+    accentColorHex: String = DefaultAccentHex,
     content: @Composable () -> Unit
 ) {
     val systemDark = isSystemInDarkTheme()
+    val accent = remember(accentColorHex) { parseAccentColor(accentColorHex) }
     val colorScheme = when (themeMode) {
-        KudosThemeMode.System -> if (systemDark) darkScheme(Ao3Red) else lightScheme(Ao3Red)
-        KudosThemeMode.Light -> lightScheme(Ao3Red)
-        KudosThemeMode.Dark -> darkScheme(Ao3Red)
-        KudosThemeMode.Oled -> oledScheme(Ao3Red)
+        KudosThemeMode.System -> if (systemDark) darkScheme(accent) else lightScheme(accent)
+        KudosThemeMode.Light -> lightScheme(accent)
+        KudosThemeMode.Dark -> darkScheme(accent)
+        KudosThemeMode.Oled -> oledScheme(accent)
         KudosThemeMode.Sepia -> SepiaScheme
     }
     // System dark follows Dark, not OLED — the same split the Material schemes use.
@@ -152,11 +154,11 @@ fun KudosTheme(
         KudosThemeMode.Oled -> ReaderTheme.Oled
         KudosThemeMode.Sepia -> ReaderTheme.Sepia
     }
-    val tokens = remember(themeMode, systemDark) {
-        KudosTokens.of(readerTheme)
+    val tokens = remember(themeMode, systemDark, accentColorHex) {
+        KudosTokens.of(readerTheme, accent)
     }
-    val scopePalette = remember(themeMode, systemDark) {
-        readerTheme.scopePalette()
+    val scopePalette = remember(themeMode, systemDark, accentColorHex) {
+        readerTheme.scopePalette(accent)
     }
 
     // The bars' icons follow the app's theme, not the phone's. `enableEdgeToEdge()` alone leaves
@@ -179,7 +181,19 @@ fun KudosTheme(
     }
 }
 
-const val DefaultAccentHex = "#990000"
+const val DefaultAccentHex = "#821019"
+const val LegacyDefaultAccentHex = "#990000"
+
+/** Read compatibility only: old default and malformed strings paint AO3 Red without rewriting storage. */
+fun resolvedAccentHex(stored: String?): String = when {
+    stored == null || stored.equals(LegacyDefaultAccentHex, ignoreCase = true) -> DefaultAccentHex
+    runCatching { android.graphics.Color.parseColor(stored) }.isSuccess -> stored
+    else -> DefaultAccentHex
+}
+
+fun parseAccentColor(hex: String): Color = runCatching {
+    Color(android.graphics.Color.parseColor(resolvedAccentHex(hex)))
+}.getOrDefault(Ao3Red)
 
 private object ColorTokens {
     val SepiaSurface = androidx.compose.ui.graphics.Color(0xFFFFF6E8)
