@@ -52,6 +52,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     /// AO3's own result-count heading for the current results, when it sent one.
     @State private var resultSummary: AO3ResultSummary?
     @State private var phase: Phase = .idle
+    @State private var lastAppendError: String?
     @State private var path = NavigationPath()
     /// Drives the toolbar "expand/collapse all" toggle for the result cards.
     @State private var expandAllCards = false
@@ -377,16 +378,14 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                                         bulkSelection.selection.removeAll()
                                         runSearch()
                                     }
-                                )
+                                ),
+                                showSummaries: $showSummaries,
+                                query: filters.query
                             )
                             // Its own gutters, like every page header: bareListRow's
                             // card insets on top of them pushed it 26pt right of the cards.
                             .pageBodyRow(top: 8, gutter: 0)
                         }
-                    }
-
-                    if showPagination {
-                        Section { paginationRow.id(paginationTopID) }
                     }
 
                     if totalPages > 1 {
@@ -427,15 +426,29 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                                 loadedWorks: results.count,
                                 totalWorks: resultSummary?.total ?? results.count,
                                 isPageLoading: phase == .loading,
-                                loadNextPage: { loadPage(currentPage + 1) },
+                                loadNextPage: loadNextPage,
                                 start: startRankTop100
                             )
                             .bareListRow()
                         }
                     }
 
-                    if showPagination {
-                        Section { paginationRow }
+                    Section {
+                        AO3ResultListEndFooter(
+                            loadedCount: results.count,
+                            totalCount: resultSummary?.total ?? results.count,
+                            currentPage: currentPage,
+                            totalPages: totalPages,
+                            isLoading: phase == .loading,
+                            targetPage: requestedPage,
+                            errorMessage: lastAppendError,
+                            loadNextPage: loadNextPage,
+                            retry: {
+                                lastAppendError = nil
+                                loadNextPage()
+                            }
+                        )
+                        .bareListRow()
                     }
                 }
                 // Card-based list: each result is a fully-rounded card with ~12pt
@@ -450,11 +463,6 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 // this is the likeliest way a refresh gets abandoned.
                 .cancelRefreshOnTabChange($loadTask)
                 .overlay { statusOverlay }
-                .onChange(of: currentPage) { _, _ in
-                    withAnimation {
-                        proxy.scrollTo(paginationTopID, anchor: .top)
-                    }
-                }
             }
         }
     }
@@ -631,24 +639,6 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     private func exitLocalSelect() {
         isSelectingLocal = false
         localSelection = []
-    }
-
-    private var showPagination: Bool {
-        totalPages > 1 && !results.isEmpty
-    }
-
-    private let paginationTopID = "pagination-top"
-
-    private var paginationRow: some View {
-        SearchPaginationBar(
-            currentPage: currentPage,
-            totalPages: totalPages,
-            isLoading: phase == .loading,
-            palette: resultsPalette
-        ) { page in
-            loadPage(page)
-        }
-        .bareListRow()
     }
 
     // MARK: Search bar + filter button
@@ -829,6 +819,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         phase = .loading
         results = []
         loadedFilters = nil
+        lastAppendError = nil
         currentPage = 1
         totalPages = 1
         resultSummary = nil
@@ -932,9 +923,13 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         try? context.save()
     }
 
-    /// Navigates to a specific page, replacing the visible results (AO3-style
-    /// paging rather than infinite scroll). Keeps the old page on screen while
-    /// the new one loads so the pagination bar doesn't flicker away.
+    private func loadNextPage() {
+        guard phase != .loading, currentPage < totalPages else { return }
+        lastAppendError = nil
+        load(page: currentPage + 1)
+    }
+
+    /// Navigates to a specific page or loads next page.
     private func loadPage(_ page: Int) {
         guard page >= 1, page <= totalPages, page != currentPage else { return }
         // A different page replaces `results` with different works entirely — a
@@ -969,22 +964,30 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         loadTask?.cancel()
         loadTask = Task {
             do {
-                let result = try await AO3Client.shared.search(
-                    filters: current, page: page, request: authenticatedRequest
-                )
+                let result = try await AO3RequestCoordinator.shared.withSlot {
+                    try await AO3Client.shared.search(
+                        filters: current, page: page, request: authenticatedRequest
+                    )
+                }
                 // Backed out to Browse (or a newer search started) while this was in
                 // flight — drop the result so it can't yank the user back to results.
                 // Cancellation is cooperative, so this token check still matters as a
                 // second line of defence when a cancel loses the race.
                 guard token == loadToken else { return }
                 // Noted in Momentum's record on the way in (T-473).
-                results = ranking.noting(result.works)
+                let newWorks = ranking.noting(result.works)
+                if page == 1 {
+                    results = newWorks
+                } else {
+                    results = AO3ResultListPaging.appendUnique(newWorks: newWorks, to: results)
+                }
                 rankTop100Pages[result.currentPage] = result
                 currentPage = result.currentPage
                 totalPages = result.totalPages
                 resultSummary = result.summary
                 loadedFilters = current
                 requestedPage = nil
+                lastAppendError = nil
                 if let url = RankTop100URLSource.search(
                     filters: current,
                     additionalQueryClause: nil
@@ -1005,10 +1008,23 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 return
             } catch let error as AO3Error {
                 guard token == loadToken else { return }
-                phase = .failed(error.errorDescription ?? "Something went wrong.")
+                if page == 1 {
+                    phase = .failed(error.errorDescription ?? "Something went wrong.")
+                } else {
+                    phase = .loaded
+                    lastAppendError = error.errorDescription ?? "Something went wrong."
+                }
+                requestedPage = nil
             } catch {
                 guard token == loadToken else { return }
-                phase = .failed(UserFacingError.message(for: error))
+                let msg = UserFacingError.message(for: error)
+                if page == 1 {
+                    phase = .failed(msg)
+                } else {
+                    phase = .loaded
+                    lastAppendError = msg
+                }
+                requestedPage = nil
             }
         }
     }
