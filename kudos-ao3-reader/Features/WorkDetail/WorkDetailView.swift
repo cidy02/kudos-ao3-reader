@@ -535,14 +535,47 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             ),
             AnyView(
                 Menu {
-                    localWorkMenuItems
                     if let id = ao3WorkID {
-                        Divider()
                         AO3WorkActionsMenu(
                             workID: id, actions: workActions,
                             workContext: commentsWorkContext,
-                            onSubscribeSuccess: downloadIfSubscribedWithoutEPUB
+                            onSubscribeSuccess: downloadIfSubscribedWithoutEPUB,
+                            shareURL: ao3URL,
+                            hasGivenKudos: localWork?.hasGivenKudos ?? false,
+                            showsTopRow: true
+                        ).topRow
+                    } else if let share = ao3URL ?? (localWork.flatMap { WorkShareLink.url(for: $0) }) {
+                        MenuTopRow {
+                            ShareLink(item: share) {
+                                Label("Share", systemImage: "square.and.arrow.up")
+                            }
+                        }
+                    }
+
+                    if localWork != nil {
+                        Section("Library") {
+                            localWorkMenuItems
+                        }
+                    }
+
+                    if let id = ao3WorkID {
+                        AO3WorkActionsMenu(
+                            workID: id, actions: workActions,
+                            workContext: commentsWorkContext,
+                            onSubscribeSuccess: downloadIfSubscribedWithoutEPUB,
+                            shareURL: ao3URL,
+                            hasGivenKudos: localWork?.hasGivenKudos ?? false,
+                            showsTopRow: false
                         )
+                    }
+
+                    if let work = localWork {
+                        Button(role: .destructive) {
+                            PreservedWorkService.softDelete(work, in: context)
+                            dismiss()
+                        } label: {
+                            Label("Delete from Library", systemImage: "trash")
+                        }
                     }
                 } label: {
                     Label("More actions", systemImage: "ellipsis")

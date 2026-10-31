@@ -170,7 +170,9 @@ struct ReaderView: View {
                             if let id = WorkTags.ao3WorkID(from: work.sourceURL) {
                                 AO3WorkActionsMenu(workID: id, actions: workActions,
                                                    workContext: .init(savedWork: work),
-                                                   commentsInitialChapterPosition: currentAO3Chapter)
+                                                   commentsInitialChapterPosition: currentAO3Chapter,
+                                                   shareURL: WorkShareLink.url(for: work),
+                                                   hasGivenKudos: work.hasGivenKudos)
                             }
                         } label: {
                             Label("More actions", systemImage: "ellipsis")
