@@ -433,13 +433,19 @@ struct AO3AuthorProfileStateTests {
         let auth = AO3AuthService()
 
         model.selectScope(slow, auth: auth)
-        // One yield was not always enough under load: the second scope could
-        // cancel the slow load before its request started, so nothing was
-        // cancelled mid-request. Wait for the request itself (bounded, so a
-        // load that never starts fails the expectation instead of hanging).
-        for _ in 0..<10_000 where !slowLoadStarted { await Task.yield() }
+        // Wait for the slow load to start before triggering the superseding scope.
+        // A bounded loop with ContinuousClock avoids CPU churn while ensuring the request
+        // is in-flight before being cancelled under high simulator or CI load.
+        let startDeadline = ContinuousClock.now + Duration.seconds(5)
+        while !slowLoadStarted, ContinuousClock.now < startDeadline {
+            await Task.yield()
+        }
         model.selectScope(final, auth: auth)
         await model.waitForActiveLoad()
+        let cancelDeadline = ContinuousClock.now + Duration.seconds(5)
+        while !cancelledSlowLoad, ContinuousClock.now < cancelDeadline {
+            await Task.yield()
+        }
 
         #expect(cancelledSlowLoad)
         #expect(model.route == final)
