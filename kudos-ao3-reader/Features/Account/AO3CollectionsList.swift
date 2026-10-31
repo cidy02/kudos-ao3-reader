@@ -85,7 +85,6 @@ struct AO3CollectionsList: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
-        .hidesFloatingTabBar()
         .toolbar {
             if auth.isLoggedIn {
                 ToolbarItem(placement: .primaryAction) {

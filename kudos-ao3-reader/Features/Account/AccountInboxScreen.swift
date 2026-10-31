@@ -99,6 +99,9 @@ struct AccountInboxScreen: View {
         .cardList()
         .subjectScreenWash(title: "Inbox", palette: theme.scopePalette)
         .toolbar { toolbarContent }
+        #if os(iOS)
+        .toolbar(model.isSelecting ? .hidden : .automatic, for: .tabBar)
+        #endif
         .sheet(isPresented: $showingFilters) {
             AccountInboxFilterSheet(model: model)
             #if os(iOS)

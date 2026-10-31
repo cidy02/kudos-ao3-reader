@@ -19,9 +19,11 @@ nonisolated struct AO3CommentsRoute: Hashable {
     var composes = false
 }
 
-/// Ordinary sizes keep the floating pill in a bottom safe-area inset. Accessibility
+/// Ordinary sizes keep the floating pill in a bottom safe-area inset (or the system
+/// bottom accessory beside the minimised tab when pushed on iOS). Accessibility
 /// sizes pin the same control under the list so it cannot cover a row.
 private struct CommentWriteBarPlacement<Bar: View>: ViewModifier {
+    var isAccessoryActive: Bool
     var accessibilitySize: Bool
     @ViewBuilder var bar: () -> Bar
 
@@ -31,8 +33,10 @@ private struct CommentWriteBarPlacement<Bar: View>: ViewModifier {
                 content
                 bar()
             }
-        } else {
+        } else if !isAccessoryActive {
             content.safeAreaInset(edge: .bottom) { bar() }
+        } else {
+            content
         }
     }
 }
@@ -203,13 +207,25 @@ struct CommentsView: View {
                     onFocusOutsideSubtree: { scrollToComment($0, proxy: proxy) }
                 )
             }
-            // `subjectScreenWash` already hides the floating tab bar.
             // At accessibility sizes the inset did not keep the list clear of the
             // pill, and the pill covered "All comments". The bar then sits under
-            // the list, full width, on its own ground.
-            .modifier(CommentWriteBarPlacement(accessibilitySize: dynamicTypeSize.isAccessibilitySize) {
-                writeCommentBar
-            })
+            // the list, full width, on its own ground. Pushed at standard sizes on iOS,
+            // Comments uses the system bottom accessory beside the minimised tab (T-482).
+            .modifier(
+                CommentWriteBarPlacement(
+                    isAccessoryActive: usesTabViewBottomAccessory,
+                    accessibilitySize: dynamicTypeSize.isAccessibilitySize
+                ) {
+                    writeCommentBar
+                }
+            )
+            #if os(iOS)
+            .tabViewBottomAccessory {
+                if usesTabViewBottomAccessory, case .loaded = model.phase {
+                    commentAccessoryBar
+                }
+            }
+            #endif
             .refreshable { await model.load(auth: auth, forceRefresh: true) }
             .task {
                 await model.loadInitial(auth: auth)
@@ -974,6 +990,53 @@ struct CommentsView: View {
             .accessibilityLabel(title)
     }
 
+    private var usesTabViewBottomAccessory: Bool {
+        #if os(iOS)
+        CommentsWriteBarPlacementPolicy.usesBottomAccessory(
+            isModal: isModal,
+            isAccessibilitySize: dynamicTypeSize.isAccessibilitySize
+        )
+        #else
+        false
+        #endif
+    }
+
+    #if os(iOS)
+    /// Board 21: the comment bar alongside the minimised tab on iOS.
+    private var commentAccessoryBar: some View {
+        let title = auth.isLoggedIn ? "Comment on the work…" : "Log in to comment"
+        return Button {
+            if auth.isLoggedIn {
+                model.startComposer(auth: auth)
+            } else {
+                showingLogin = true
+            }
+        } label: {
+            HStack(spacing: 10) {
+                Text(title)
+                    .font(.system(size: 16, weight: .regular))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: "arrow.up")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 38, height: 38)
+                    .background(Circle().fill(theme.effectiveTint))
+            }
+            .padding(.leading, 18)
+            .padding(.trailing, 8)
+            .frame(height: 52)
+            .glassEffect(.regular.interactive(), in: .capsule)
+        }
+        .buttonStyle(.plain)
+        .disabled(model.isOffline)
+        .opacity(model.isOffline ? 0.45 : 1)
+        .accessibilityLabel(title)
+    }
+    #endif
+
     // MARK: Sheets + bindings
 
     private var composerBinding: Binding<Bool> {
@@ -1457,8 +1520,8 @@ struct CommentComposerSheet: View {
                 editorFocused = true
             }
         }
-        // Sheet surface, not `subjectScreenWash` (which hides the floating tab bar
-        // for pushed pages). Applied under the presentation modifiers so those stay outermost.
+        // Sheet surface, not `subjectScreenWash` (which applies the pushed-page chrome).
+        // Applied under the presentation modifiers so those stay outermost.
         .appScreenSurface(.grouped)
         // Two numbers, not two layouts (spec 1be): `.medium` is the artboard's
         // 462pt of sheet, and the system re-lays it out at the shorter height on

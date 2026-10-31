@@ -262,7 +262,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                     }
                 }
             #if os(iOS)
-                .toolbar(.hidden, for: .tabBar)
+                .toolbar((isSelectingLocal || bulkSelection.isSelecting) ? .hidden : .automatic, for: .tabBar)
                 // Focused Search has a custom Back button (results → Browse → previous
                 // tab, not a navigation pop), so mirror it with a left-edge swipe.
                 // Only at the root — pushed detail pages use the normal swipe-to-pop.

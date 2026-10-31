@@ -110,7 +110,6 @@ struct AuthorProfileView: View {
                 isOverviewLoaded: model.headerPhase == .loaded
             )
         )
-            .hidesFloatingTabBar()
             .toolbar { toolbarContent }
             .navigationDestination(item: $dashboardDestination) { destination in
                 AuthorProfileView(

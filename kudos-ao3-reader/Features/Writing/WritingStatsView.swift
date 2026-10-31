@@ -27,7 +27,6 @@ struct WritingStatsView: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
-        .hidesFloatingTabBar()
         .subjectScreenWash(palette: theme.scopePalette)
         .task(id: loadKey) { await load() }
     }
