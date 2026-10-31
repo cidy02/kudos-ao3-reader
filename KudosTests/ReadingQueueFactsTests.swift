@@ -7,6 +7,23 @@ import Testing
 /// filter counts, "Last read", the kicker path, and 1j's tags on create.
 @MainActor
 struct ReadingQueueFactsTests {
+    @Test func rowDetailIncludesRoundedReadingTimeAndOfflineCount() {
+        #expect(ReadingQueueFacts.rowDetail(workCount: 0, totalWordCount: 0, offlineCount: 0) == "No works yet")
+        #expect(ReadingQueueFacts.rowDetail(workCount: 8, totalWordCount: 116_000, offlineCount: 6)
+            == "8 works · about 9 h 40 min · 6 offline")
+        #expect(ReadingQueueFacts.rowDetail(workCount: 5, totalWordCount: 49_000, offlineCount: 5)
+            == "5 works · about 4 h 5 min · all offline")
+    }
+
+    @Test func segmentFillFollowsEachWorksOwnProgress() {
+        #expect(ReadingQueueFacts.segmentFill(state: .finished, progress: 0.2) == 1)
+        #expect(ReadingQueueFacts.segmentFill(state: .inProgress, progress: 0.6) == 0.6)
+        #expect(ReadingQueueFacts.segmentFill(state: .inProgress, progress: nil) == 0.45)
+        #expect(ReadingQueueFacts.segmentFill(state: .inProgress, progress: 2) == 1)
+        #expect(ReadingQueueFacts.segmentFill(state: .unread, progress: 0.8) == 0)
+        #expect(ReadingQueueFacts.segmentFill(state: .freedHistory, progress: nil) == 0)
+    }
+
     @Test func stripBucketsSumToTheQueueWithFreedCopiesAsUnread() {
         let progress = ReadingQueueFacts.progress(of: [.finished, .finished, .inProgress, .unread, .freedHistory])
         #expect(progress == ReadingQueueFacts.Progress(finished: 2, inProgress: 1, unread: 2))
@@ -31,10 +48,9 @@ struct ReadingQueueFactsTests {
         #expect(ReadingQueueFacts.cardFooter(states: []) == "0 works")
     }
 
-    /// Home's card face and the queue page's Up next row are one rule. For
-    /// [finished A, unread B] both are B, and the footer's "next up 2" names
-    /// the same work; A stays In line. A fully read queue leads with its first.
-    @Test func homeCardAndQueuePageAgreeOnUpNext() throws {
+    /// The queue page and the covers behind its identity card share one rule.
+    /// For [finished A, unread B], B is next and A stays In line.
+    @Test func queuePageAndCoverStackAgreeOnUpNext() throws {
         let context = try makeContext()
         let finished = work(in: context, title: "A")
         finished.isFinished = true
@@ -53,34 +69,6 @@ struct ReadingQueueFactsTests {
         #expect(allRead.upNext?.title == "A")
         #expect(allRead.inLine.map(\.title) == ["B", "C"])
         #expect(ReadingQueueFacts.upNext(in: []).upNext == nil)
-    }
-
-    /// The card's face never names a work the privacy setting keeps back: a hidden
-    /// one is passed over (as on the queue's page), a blurred one is unnamed.
-    @Test func cardFacePassesOverAHiddenWorkAndDoesNotNameABlurredOne() throws {
-        let context = try makeContext()
-        let first = work(in: context, title: "First")
-        first.rating = "Explicit"
-        let second = work(in: context, title: "Second")
-        let gate = PrivacyGate()
-        func face(hideMature: Bool, mode: MaturePrivacyMode) -> (work: SavedWork?, blurred: Bool) {
-            ReadingQueueFacts.cardFace(
-                in: [first, second],
-                isHidden: { gate.isHidden($0, enabled: hideMature, mode: mode) },
-                isBlurred: { gate.isBlurred($0, enabled: hideMature, mode: mode) }
-            )
-        }
-
-        #expect(face(hideMature: false, mode: .obscure).work?.title == "First")
-        #expect(face(hideMature: false, mode: .obscure).blurred == false)
-        #expect(face(hideMature: true, mode: .obscure).work?.title == "First")
-        #expect(face(hideMature: true, mode: .obscure).blurred)
-        #expect(face(hideMature: true, mode: .hide).work?.title == "Second")
-        #expect(face(hideMature: true, mode: .hide).blurred == false)
-
-        gate.reveal(first)
-        #expect(face(hideMature: true, mode: .obscure).blurred == false)
-        #expect(face(hideMature: true, mode: .hide).work?.title == "First")
     }
 
     @Test func kickerNamesTheOriginTab() {

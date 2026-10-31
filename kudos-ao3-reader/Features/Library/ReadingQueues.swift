@@ -16,23 +16,16 @@ struct AllReadingQueuesDestination: Hashable {
 
 struct ReadingQueueCard: View {
     @AppStorage("hideMatureContent") private var hideMature = true
-    @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
     @Environment(ThemeManager.self) private var themeManager
     @Environment(PrivacyGate.self) private var gate
     let queue: ReadingQueue
 
-    /// Scales width and height together so the card grows proportionally at
-    /// large Dynamic Type sizes instead of only getting taller.
-    var cardSize = ScaledCarouselCardSize(
-        width: CarouselCardMetrics.stackWidth,
-        height: CarouselCardMetrics.stackHeight
-    )
+    static let width: CGFloat = 300
+    static let spacing: CGFloat = 16
 
-    /// Explicit, non-defaulted init — the compiler-synthesized memberwise
-    /// init's defaulted `cardSize:` parameter measurably slows type-checking
-    /// of the already-long `.navigationDestination` chain this card is
-    /// constructed inside (LibraryView.swift), to the point of a hard
-    /// "unable to type-check in reasonable time" build failure.
+    @ScaledMetric(relativeTo: .headline) private var titleSize: CGFloat = 17
+    @ScaledMetric(relativeTo: .footnote) private var detailSize: CGFloat = 13
+
     init(queue: ReadingQueue) {
         self.queue = queue
     }
@@ -45,114 +38,74 @@ struct ReadingQueueCard: View {
         ReadingQueueService.orderedWorks(in: queue)
     }
 
-    /// The stack's measurements are for its 150pt shelf width; the deck scales with it.
-    private var scale: CGFloat { cardSize.width / CarouselCardMetrics.stackWidth }
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 9 * scale) {
-            deck
-            VStack(alignment: .leading, spacing: 2) {
-                Text(queue.displayName)
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(2)
-                    .foregroundStyle(.primary)
-                Text(ReadingQueueFacts.cardFooter(states: works.map(\.readingState)))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-        }
-        .frame(width: cardSize.width, alignment: .leading)
-    }
-
-    /// Spec 1b's short deck, as a queue's cover stack (T-461): the next-up work's
-    /// face in front, the works after it stacked straight up behind, each a peek
-    /// higher and a step narrower, with the queue's numbered-list corner tab. The
-    /// face keeps 1b's landscape shape (88pt tall at 164pt), not a portrait cover:
-    /// it carries the next-up work's fandom, title and the queue's progress. The
-    /// owner caught the app drawing a 232pt work-sized card here once (2026-10-01).
-    private var deck: some View {
         let queued = works
-        let face = ReadingQueueFacts.cardFace(
-            in: queued,
-            isHidden: { gate.isHidden($0, enabled: hideMature, mode: matureMode) },
-            isBlurred: { gate.isBlurred($0, enabled: hideMature, mode: matureMode) }
-        )
-        // Two peeks (7% each) above an 89pt face; wider than the card, so the face
-        // fills its width and lines up with the name below.
-        return StackedWorkCover(
-            kind: .queue,
-            size: CGSize(width: cardSize.width, height: 104 * scale),
-            backs: worksBehind(face.work, in: queued),
-            frontAspect: 2
-        ) { layout in
-            faceContent(face, queued: queued, layout: layout)
-        }
-    }
-
-    /// The covers behind the face: the works after it in the queue's order. A cover
-    /// is its work's fandom colour, so a work the privacy setting keeps back is left out.
-    private func worksBehind(_ face: SavedWork?, in queued: [SavedWork]) -> [SavedWork] {
-        guard let face, let index = queued.firstIndex(where: { $0.id == face.id }) else { return [] }
-        let after = queued[queued.index(after: index)...].filter { !gate.isConcealed($0, enabled: hideMature) }
-        return Array(after.prefix(CoverStackLayout.maxBacks))
-    }
-
-    /// The next-up work's fandom and title over its own gradient — the work
-    /// cards' `cardWash` — with 1h's finished / in-progress / unread strip for
-    /// the whole queue along the bottom. A fully read queue shows its first
-    /// work; an empty one says so. The queue page's Up next row is this same
-    /// work (`ReadingQueueFacts.upNext`).
-    @ViewBuilder
-    private func faceContent(
-        _ face: (work: SavedWork?, blurred: Bool),
-        queued: [SavedWork],
-        layout: CoverStackLayout
-    ) -> some View {
-        // The first line steps around the corner tab (4pt clear of it); the lines
-        // below start under the tab's foot.
-        let tabClearance = layout.ribbon.map { max(0, layout.front.width - $0.minX - 6 * scale) } ?? 0
-        if let work = face.work {
-            // A blurred work gives the face neither its colour, its fandom nor its title.
-            let hiddenTitle = "Hidden mature work"
-            let palette = themeManager.appTheme.subjectPalette(
-                hue: face.blurred
-                    ? CoverArt.workHue(fandoms: [], title: hiddenTitle)
-                    : CoverArt.workHue(fandoms: work.workFandoms, title: work.title)
-            )
-            let fandom = face.blurred ? nil : work.workFandoms
-                .first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-                .map(FandomDisplayName.bareTitle)
-            VStack(alignment: .leading, spacing: 6 * scale) {
-                if let fandom {
-                    SubjectKicker(text: fandom, palette: palette, size: 8.5, ruleWidth: 18 * scale, ruleSpacing: 5)
-                        .padding(.trailing, tabClearance)
-                }
-                Text(face.blurred ? hiddenTitle : work.title)
-                    .font(.system(size: 13 * scale, weight: .bold))
-                    .lineLimit(2)
+        let progress = ReadingQueueFacts.progress(of: queued.map(\.readingState))
+        let palette = themeManager.appTheme.subjectPalette(hue: queue.displayHue, pickedHex: queue.colorHex)
+        HStack(spacing: 12) {
+            deck(works: queued)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(queue.displayName)
+                    .font(.system(size: titleSize, weight: .semibold))
                     .foregroundStyle(.primary)
-                    .padding(.trailing, fandom == nil ? tabClearance : 0)
-                Spacer(minLength: 0)
-                QueueProgressStrip(
-                    progress: ReadingQueueFacts.progress(of: queued.map(\.readingState)),
-                    palette: palette,
-                    height: 3.5 * scale,
-                    gap: 2.5 * scale
-                )
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(detailLine(works: queued))
+                    .font(.system(size: detailSize))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if !queued.isEmpty {
+                    QueueProgressStrip(
+                        progress: progress,
+                        palette: palette,
+                        fills: queued.map {
+                            ReadingQueueFacts.segmentFill(state: $0.readingState, progress: $0.readingProgress)
+                        },
+                        height: 4
+                    )
+                    .padding(.top, 3)
+                }
             }
-            .padding(10 * scale)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .background(palette.cardWash)
-        } else {
-            // A queue whose every work is hidden is not empty, and says nothing.
-            Text(queued.isEmpty ? "No works yet" : "")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .padding(10 * scale)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .background(themeManager.appTheme.glassFill(0.12))
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .frame(width: Self.width, alignment: .leading)
+    }
+
+    /// Board 00: a fixed 72pt queue stack beside the row's text. The front is
+    /// the queue's own identity; the next visible works wait behind it.
+    private func deck(works: [SavedWork]) -> some View {
+        StackedWorkCover(
+            kind: .queue,
+            name: queue.displayName,
+            hue: queue.displayHue,
+            pickedHex: queue.colorHex,
+            backs: worksBehind(in: works),
+            size: CGSize(width: 72, height: 72)
+        )
+        .accessibilityHidden(true)
+    }
+
+    private func detailLine(works: [SavedWork]) -> String {
+        let offlineCount = works.filter {
+            $0.hasEPUB && FileManager.default.fileExists(atPath: $0.fileURL.path)
+        }.count
+        let totalWordCount = works.allSatisfy { $0.wordCount > 0 }
+            ? works.reduce(0) { $0 + $1.wordCount }
+            : 0
+        return ReadingQueueFacts.rowDetail(
+            workCount: works.count,
+            totalWordCount: totalWordCount,
+            offlineCount: offlineCount
+        )
+    }
+
+    /// Blur and Hide both conceal a work's generated art; the count and progress
+    /// remain aggregate facts and reveal no title, fandom or cover colour.
+    private func worksBehind(in queued: [SavedWork]) -> [SavedWork] {
+        let visible = queued.filter { !gate.isConcealed($0, enabled: hideMature) }
+        let split = ReadingQueueFacts.upNext(in: visible)
+        var ordered = split.inLine
+        if let upNext = split.upNext { ordered.insert(upNext, at: 0) }
+        return Array(ordered.prefix(CoverStackLayout.maxBacks))
     }
 }
 
