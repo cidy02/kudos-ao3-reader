@@ -22,23 +22,40 @@ extension MediaBrowserView {
         workCountFor: (String) -> Int?,
         limit: Int
     ) -> [JumpBackInPick] {
-        struct Seen { let display: String; let at: Date; let order: Int }
+        struct Seen {
+            let display: String
+            let at: Date
+            let order: Int
+            let isFavorite: Bool
+        }
         var latest: [String: Seen] = [:]
         var order = 0
         for work in works.filter(\.hasBeenRead).sorted(by: { $0.recency > $1.recency }) {
-            for index in work.fandomsLower.indices where latest[work.fandomsLower[index]] == nil {
-                latest[work.fandomsLower[index]] = Seen(
-                    display: work.fandomsDisplay[index], at: work.recency, order: order
-                )
-                order += 1
+            for index in work.fandomsLower.indices {
+                let lower = work.fandomsLower[index]
+                if let known = latest[lower] {
+                    if work.isFavorite && !known.isFavorite {
+                        latest[lower] = Seen(display: known.display, at: known.at, order: known.order, isFavorite: true)
+                    }
+                } else {
+                    latest[lower] = Seen(
+                        display: work.fandomsDisplay[index],
+                        at: work.recency,
+                        order: order,
+                        isFavorite: work.isFavorite
+                    )
+                    order += 1
+                }
             }
         }
         for visit in visits {
             let lower = visit.fandom.lowercased()
             if let known = latest[lower] {
-                if visit.at > known.at { latest[lower] = Seen(display: known.display, at: visit.at, order: known.order) }
+                if visit.at > known.at {
+                    latest[lower] = Seen(display: known.display, at: visit.at, order: known.order, isFavorite: known.isFavorite)
+                }
             } else {
-                latest[lower] = Seen(display: visit.fandom, at: visit.at, order: order)
+                latest[lower] = Seen(display: visit.fandom, at: visit.at, order: order, isFavorite: false)
                 order += 1
             }
         }
@@ -48,7 +65,13 @@ extension MediaBrowserView {
         var picks: [JumpBackInPick] = []
         for (lower, entry) in ranked {
             guard let categoryID = categoryFor(lower) else { continue }
-            picks.append(JumpBackInPick(fandom: entry.display, categoryID: categoryID, workCount: workCountFor(lower)))
+            picks.append(JumpBackInPick(
+                fandom: entry.display,
+                categoryID: categoryID,
+                workCount: workCountFor(lower),
+                isFavorite: entry.isFavorite,
+                lastVisitedAt: entry.at
+            ))
             if picks.count == limit { break }
         }
         return picks
