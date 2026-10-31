@@ -178,4 +178,83 @@ struct ReadingInsightsTests {
         #expect(ReadingInsights.durationLabel(72 * 60) == "1h 12m")
         #expect(ReadingInsights.durationLabel(120 * 60) == "2h")
     }
+
+    // MARK: Redesign Figures (T-497)
+
+    @Test func novelsWorthCalculationRoundsToHalfAndHidesUnder35k() {
+        // Spec rule: Words read ÷ 70,000 to nearest half; hidden under 35,000 words.
+        #expect(ReadingInsights.novelsWorth(words: 30_000) == nil)
+        #expect(ReadingInsights.novelsWorth(words: 35_000) == 0.5)
+        #expect(ReadingInsights.novelsWorth(words: 70_000) == 1.0)
+        #expect(ReadingInsights.novelsWorth(words: 100_000) == 1.5)
+        #expect(ReadingInsights.novelsWorth(words: 212_600) == 3.0)
+
+        #expect(
+            ReadingInsights.novelsWorthLabel(words: 212_600) ==
+                "About 3 novels’ worth, at 70,000 words a novel"
+        )
+        #expect(ReadingInsights.novelsWorthLabel(words: 25_000) == nil)
+    }
+
+    @Test func lengthMixCategorizesWordCountsCorrectly() {
+        let words = [2_500, 15_000, 45_000, 60_000, 250_000]
+        let mix = ReadingInsights.lengthMix(words: words)
+
+        #expect(mix.under5k == 1)
+        #expect(mix.from5kTo50k == 2)
+        #expect(mix.from50kTo150k == 1)
+        #expect(mix.over150k == 1)
+        #expect(mix.totalWorks == 5)
+    }
+
+    @Test func romanticVsPlatonicRelationshipDetection() {
+        #expect(ReadingInsights.isRomanticRelationship("Anne Elliot/Frederick Wentworth") == true)
+        #expect(ReadingInsights.relationshipGlyph(for: "Anne Elliot/Frederick Wentworth") == "/")
+
+        #expect(ReadingInsights.isRomanticRelationship("Sherlock Holmes & John Watson") == false)
+        #expect(ReadingInsights.relationshipGlyph(for: "Sherlock Holmes & John Watson") == "&")
+    }
+
+    @Test func shipConcentrationCalculatesPercentageOnTopRelationship() {
+        let ships = [
+            RelationshipShare(
+                name: "A/B",
+                isRomantic: true,
+                fandom: "Persuasion",
+                worksCount: 4,
+                words: 80_000
+            ),
+            RelationshipShare(
+                name: "A&C",
+                isRomantic: false,
+                fandom: "Persuasion",
+                worksCount: 1,
+                words: 20_000
+            )
+        ]
+        let conc = ReadingInsights.shipConcentrations(relationships: ships)
+        #expect(conc.count == 1)
+        #expect(conc.first?.percentage == 80)
+        #expect(conc.first?.fandom == "Persuasion")
+    }
+
+    @Test func sittingBucketsDistributeCorrectlyByDuration() {
+        let facts = [
+            fact(on: 1, minutes: 5),    // < 10 m
+            fact(on: 2, minutes: 20),   // 10–30 m
+            fact(on: 3, minutes: 45),   // 30–60 m
+            fact(on: 4, minutes: 90),   // 1–2 h
+            fact(on: 5, minutes: 150)   // 2 h +
+        ]
+        let buckets = ReadingInsights.sittingBuckets(from: facts)
+        #expect(buckets.map(\.count) == [1, 1, 1, 1, 1])
+    }
+
+    @Test func lateNightDurationOnlyCountsSessionsBetween1And5AM() {
+        let facts = [
+            fact(on: 1, hour: 3, minutes: 30),  // late night
+            fact(on: 2, hour: 14, minutes: 60)  // afternoon
+        ]
+        #expect(ReadingInsights.lateNightDuration(from: facts, calendar: calendar) == 30 * 60)
+    }
 }

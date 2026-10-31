@@ -33,6 +33,10 @@ import SwiftData
     /// count is the count of finishing sessions.
     var didFinish: Bool = false
     var lastModifiedAt: Date = Date()
+    /// D4: reading mode (`read` or `listen`). Defaults to `read`.
+    var modeRaw: String = "read"
+    /// D4: playback rate for Read Aloud sessions (e.g. 1.0, 1.2).
+    var playbackRate: Double = 1.0
 
     init(
         id: UUID = UUID(),
@@ -49,7 +53,9 @@ import SwiftData
         wordCount: Int = 0,
         chapterCountAtVisit: Int = 0,
         didFinish: Bool = false,
-        lastModifiedAt: Date? = nil
+        lastModifiedAt: Date? = nil,
+        modeRaw: String = "read",
+        playbackRate: Double = 1.0
     ) {
         self.id = id
         self.workID = workID
@@ -66,5 +72,7 @@ import SwiftData
         self.chapterCountAtVisit = chapterCountAtVisit
         self.didFinish = didFinish
         self.lastModifiedAt = lastModifiedAt ?? endedAt
+        self.modeRaw = modeRaw
+        self.playbackRate = playbackRate
     }
 }
