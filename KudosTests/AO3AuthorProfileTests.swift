@@ -433,11 +433,13 @@ struct AO3AuthorProfileStateTests {
         let auth = AO3AuthService()
 
         model.selectScope(slow, auth: auth)
-        // One yield was not always enough under load: the second scope could
-        // cancel the slow load before its request started, so nothing was
-        // cancelled mid-request. Wait for the request itself (bounded, so a
-        // load that never starts fails the expectation instead of hanging).
-        for _ in 0..<10_000 where !slowLoadStarted { await Task.yield() }
+        // Wait for the request itself, bounded so a load that never starts
+        // fails the test instead of hanging or depending on scheduler speed.
+        let deadline = ContinuousClock.now + Duration.seconds(2)
+        while !slowLoadStarted, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        try #require(slowLoadStarted)
         model.selectScope(final, auth: auth)
         await model.waitForActiveLoad()
 
