@@ -1,69 +1,122 @@
-#if os(iOS)
+import SwiftData
 import SwiftUI
 
-/// The end of a work (board 34). Give Kudos is the full-width action; Comment
-/// and Bookmark sit side by side under it. All three call actions the reader
-/// already had. There is no new AO3 request here.
+/// The end of a work (board 34, T-496).
+///
+/// Complete: "The End", the title, "Read in 1 h 20 min · moved to Finished",
+/// Give Kudos (with a given state), Comment, Bookmark, then "Up next in <queue>" with Start.
+/// WIP: "You're caught up", the title, "Read in 1 h 20 min", Give Kudos, Comment, Bookmark.
 struct ReaderEndCard: View {
     let title: String
+    var isComplete: Bool = true
+    var durationSeconds: Double = 0
+    var wordCount: Int = 0
     /// Kudos and Comment exist only for a work that has an AO3 page.
-    var showsAO3Actions: Bool
-    var kudosGiven: Bool
-    var kudosEnabled: Bool
-    var isBookmarked: Bool
-    var bookmarkEnabled: Bool
-    var onKudos: () -> Void
-    var onComment: () -> Void
-    var onBookmark: () -> Void
+    var showsAO3Actions: Bool = true
+    var kudosGiven: Bool = false
+    var kudosEnabled: Bool = true
+    var isBookmarked: Bool = false
+    var bookmarkEnabled: Bool = true
+    var upNext: (queueName: String, nextWork: SavedWork)? = nil
+    var onKudos: () -> Void = {}
+    var onComment: () -> Void = {}
+    var onBookmark: () -> Void = {}
+    var onStartNextWork: ((SavedWork) -> Void)? = nil
 
     @Environment(\.accentFill) private var fill
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .title) private var headingSize: CGFloat = 30
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("The End")
-                .font(.title2.bold())
-                .foregroundStyle(.primary)
-                .accessibilityAddTraits(.isHeader)
-            Text(title)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 3)
-                .fixedSize(horizontal: false, vertical: true)
+        VStack(spacing: 14) {
+            headerBlock
 
-            if showsAO3Actions {
-                Button(action: onKudos) {
-                    Text(kudosGiven ? "Kudos given" : "Give Kudos")
-                        .font(.body.weight(.semibold))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(ThemeManager.label(on: fill))
-                .background(fill, in: SubjectMetrics.controlShape(dynamicTypeSize))
-                .disabled(!kudosEnabled)
-                .accessibilityLabel(kudosGiven ? "Kudos given" : "Give Kudos")
+            actionsBlock
+
+            if let upNext {
+                Divider()
+                    .padding(.vertical, 2)
+
+                upNextBlock(upNext)
             }
-
-            secondaryActions
         }
-        .padding(16)
+        .padding(18)
         .frame(maxWidth: 480)
         .frame(maxWidth: .infinity)
         .background(
             .regularMaterial,
             in: RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
         )
+        .shadow(color: Color.black.opacity(0.12), radius: 18, x: 0, y: 6)
         .accessibilityElement(children: .contain)
+        .accessibilityLabel(ReaderEndOfWorkFacts.heading(isComplete: isComplete))
     }
 
-    /// Side by side at the sizes where both labels fit. At the accessibility
-    /// sizes they stack, so neither title is cut.
+    // MARK: - Header
+
+    private var headerBlock: some View {
+        VStack(alignment: .center, spacing: 4) {
+            Text(ReaderEndOfWorkFacts.heading(isComplete: isComplete))
+                .font(.system(size: headingSize, weight: .semibold, design: .serif))
+                .foregroundStyle(.primary)
+                .accessibilityAddTraits(.isHeader)
+
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.primary)
+                .multilineTextAlignment(.center)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 3)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text(ReaderEndOfWorkFacts.subtitle(
+                durationSeconds: durationSeconds,
+                wordCount: wordCount,
+                isComplete: isComplete
+            ))
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    // MARK: - Actions
+
+    private var actionsBlock: some View {
+        VStack(spacing: 10) {
+            if showsAO3Actions {
+                kudosButton
+            }
+
+            secondaryActions
+        }
+    }
+
+    private var kudosButton: some View {
+        Button(action: onKudos) {
+            HStack(spacing: 8) {
+                Image(systemName: kudosGiven ? "heart.fill" : "heart")
+                    .font(.system(size: 18, weight: .semibold))
+                Text(kudosGiven ? "Kudos given" : "Give Kudos")
+                    .font(.headline)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 50)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(ThemeManager.label(on: fill))
+        .background(fill, in: SubjectMetrics.controlShape(dynamicTypeSize))
+        .disabled(!kudosEnabled || kudosGiven)
+        .accessibilityLabel(kudosGiven ? "Kudos given" : "Give Kudos")
+    }
+
     @ViewBuilder
     private var secondaryActions: some View {
-        let laidOut = dynamicTypeSize.isAccessibilitySize
+        let isAccessibility = dynamicTypeSize.isAccessibilitySize
+        let laidOut = isAccessibility
             ? AnyLayout(VStackLayout(spacing: 10))
             : AnyLayout(HStackLayout(spacing: 10))
+
         laidOut {
             if showsAO3Actions {
                 secondaryButton(
@@ -91,10 +144,14 @@ struct ReaderEndCard: View {
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            Label(title, systemImage: systemImage)
-                .font(.body.weight(.semibold))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
+            HStack(spacing: 7) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 16, weight: .semibold))
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 44)
         }
         .buttonStyle(.plain)
         .foregroundStyle(.accentInk)
@@ -103,5 +160,80 @@ struct ReaderEndCard: View {
         .minimumHitTarget()
         .accessibilityLabel(label)
     }
+
+    // MARK: - Up next in queue
+
+    private func upNextBlock(_ upNext: (queueName: String, nextWork: SavedWork)) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Up next in \(upNext.queueName)")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            let isAccessibility = dynamicTypeSize.isAccessibilitySize
+            let rowLayout = isAccessibility
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 10))
+                : AnyLayout(HStackLayout(spacing: 10))
+
+            rowLayout {
+                WorkStatusIconGrid(
+                    rating: upNext.nextWork.rating.isEmpty ? nil : upNext.nextWork.rating,
+                    categories: upNext.nextWork.workCategories,
+                    warnings: upNext.nextWork.workWarnings,
+                    completion: upNext.nextWork.completionStatus,
+                    tileSize: 17,
+                    announcesToVoiceOver: true,
+                    backed: true
+                )
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(upNext.nextWork.title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(isAccessibility ? nil : 1)
+
+                    let meta = ReaderEndOfWorkFacts.nextWorkMeta(
+                        author: upNext.nextWork.author,
+                        wordCount: upNext.nextWork.wordCount
+                    )
+                    if !meta.isEmpty {
+                        Text(meta)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(isAccessibility ? nil : 1)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                startNextWorkButton(for: upNext.nextWork)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func startNextWorkButton(for nextWork: SavedWork) -> some View {
+        if let onStartNextWork {
+            Button(action: { onStartNextWork(nextWork) }) {
+                startBadge
+            }
+            .buttonStyle(.plain)
+            .minimumHitTarget()
+            .accessibilityLabel("Start reading \(nextWork.title)")
+        } else {
+            NavigationLink(value: LocalWorkDestination.reader(nextWork)) {
+                startBadge
+            }
+            .buttonStyle(.plain)
+            .minimumHitTarget()
+            .accessibilityLabel("Start reading \(nextWork.title)")
+        }
+    }
+
+    private var startBadge: some View {
+        Text("Start")
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.accentInk)
+            .padding(.horizontal, 14)
+            .frame(height: 36)
+            .background(Color.primary.opacity(0.06), in: Capsule())
+    }
 }
-#endif
