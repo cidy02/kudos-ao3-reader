@@ -161,19 +161,19 @@ struct CommentsView: View {
         return ScrollViewReader { proxy in
             List {
                 Section {
-                    header.pageBodyRow(top: 18, gutter: 0)
+                    compactWorkRow.pageBodyRow(top: 14, gutter: gutter)
                     if model.page != nil {
-                        SubjectStatStrip(cells: signalCells(figures), palette: palette)
-                            .pageBodyRow(top: 14, gutter: gutter)
+                        metaLine(figures).pageBodyRow(top: 10, gutter: gutter)
                         if let note = signalScopeNote {
                             Text(note)
                                 .font(.system(size: noteSize))
                                 .foregroundStyle(Color.secondary.opacity(0.7))
                                 .fixedSize(horizontal: false, vertical: true)
-                                .pageBodyRow(top: 8, gutter: gutter + 4)
+                                .pageBodyRow(top: 6, gutter: gutter + 4)
                         }
                     }
-                    filterRail.pageBodyRow(top: 16, gutter: gutter)
+                    filterRail.pageBodyRow(top: 10, gutter: gutter)
+                    headerDivider.pageBodyRow(top: 14, gutter: gutter)
                 }
                 contentSections(scrollProxy: proxy, figures: figures)
                 if case .loaded = model.phase {
@@ -206,6 +206,9 @@ struct CommentsView: View {
                     // here; the list is the only place that can resolve it.
                     onFocusOutsideSubtree: { scrollToComment($0, proxy: proxy) }
                 )
+            }
+            .navigationDestination(for: AO3WorkSummary.self) { summary in
+                WorkDetailView(remote: summary)
             }
             // At accessibility sizes the inset did not keep the list clear of the
             // pill, and the pill covered "All comments". The bar then sits under
@@ -469,63 +472,136 @@ struct CommentsView: View {
 
     // MARK: Header
 
-    /// Spec 1f's page header: the chapter as kicker, the work at 32pt, the
-    /// byline underneath. It replaces the Work-Detail-style overview card that
-    /// used to open this screen — the rating/chapters figures it carried belong
-    /// to the work's own page, and the artboard spends that space on figures
-    /// about the *comments* instead (see `signalCells`).
-    ///
-    /// The byline goes through the trailing slot rather than the plain-string
-    /// `subtitle`, for the same reason `WorkDetailIdentityHeader` does: it has to
-    /// stay a real `AO3AuthorBylineView` so every co-author is still tappable
-    /// through to their profile, and — because this screen can be modal — so the
-    /// tap still routes through `openAuthor`'s dismiss-then-push queue.
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(model.workContext.title)
-                .font(.headline)
-                .fixedSize(horizontal: false, vertical: true)
-            if hasByline || selectedChapterFact != nil {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    if hasByline {
-                        AO3AuthorBylineView(
-                            names: model.workAuthors,
-                            identities: model.workAuthorIdentities,
-                            includesBy: false,
-                            font: .subheadline,
-                            expandsHitTarget: false,
-                            onOpenRoute: openAuthor
-                        )
-                    }
-                    if hasByline, selectedChapterFact != nil {
-                        Text("·")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                    if let selectedChapterFact {
-                        Text(selectedChapterFact)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
+    private var workSummary: AO3WorkSummary {
+        AO3WorkSummary(
+            id: workID,
+            title: model.workContext.title,
+            authors: model.workAuthors,
+            authorIdentities: model.workAuthorIdentities,
+            fandoms: model.workContext.fandoms,
+            rating: model.workContext.rating,
+            warnings: [],
+            categories: [],
+            dateUpdated: "",
+            tags: [],
+            summary: "",
+            language: "",
+            chapters: model.workContext.chapters
+        )
+    }
+
+    private var compactWorkRow: some View {
+        NavigationLink(value: workSummary) {
+            HStack(alignment: dynamicTypeSize.isAccessibilitySize ? .top : .center, spacing: 12) {
+                compactWorkCover
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(model.workContext.title)
+                        .font(.headline)
+                        .foregroundStyle(Color.primary)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
+                        .truncationMode(.tail)
+                        .fixedSize(horizontal: false, vertical: true)
+                    workSubtitle
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+                    .padding(.top, dynamicTypeSize.isAccessibilitySize ? 4 : 0)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(workRowAccessibilityLabel)
+        .accessibilityHint("Opens work details")
+    }
+
+    private var compactWorkCover: some View {
+        let title = model.workContext.title
+        let fandoms = model.workContext.fandoms
+        let initial = title.trimmingCharacters(in: .whitespacesAndNewlines).first.map { String($0).uppercased() } ?? ""
+        return ZStack(alignment: .bottomLeading) {
+            CoverArt.workGradient(fandoms: fandoms, title: title)
+            if !initial.isEmpty {
+                Text(initial)
+                    .font(.system(size: 44, weight: .semibold, design: .serif))
+                    .foregroundStyle(Color.white.opacity(0.18))
+                    .fixedSize()
+                    .alignmentGuide(.bottom) { $0[.lastTextBaseline] }
+                    .offset(x: -3, y: 12)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, gutter)
+        .frame(width: 40, height: 56)
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .shadow(color: Color.black.opacity(0.18), radius: 3, x: 0, y: 2)
+        .accessibilityHidden(true)
+    }
+
+    @ViewBuilder
+    private var workSubtitle: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
+            if hasByline {
+                AO3AuthorBylineView(
+                    names: model.workAuthors,
+                    identities: model.workAuthorIdentities,
+                    includesBy: false,
+                    font: .subheadline,
+                    compact: true,
+                    expandsHitTarget: false,
+                    onOpenRoute: openAuthor
+                )
+            }
+            if hasByline, selectedChapterFact != nil {
+                Text("·")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            if let selectedChapterFact {
+                Text(selectedChapterFact)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+    }
+
+    private var workRowAccessibilityLabel: String {
+        var label = model.workContext.title
+        if hasByline {
+            let names = model.workAuthors.isEmpty
+                ? model.workAuthorIdentities.map(\.displayName)
+                : model.workAuthors
+            label += " by \(names.joined(separator: ", "))"
+        }
+        if let chapterFact = selectedChapterFact {
+            label += ", \(chapterFact)"
+        }
+        return label
     }
 
     private var hasByline: Bool {
         !model.workAuthors.isEmpty || !model.workAuthorIdentities.isEmpty
     }
 
-    private var selectedChapterFact: String? {
-        guard model.scope == .byChapter, let chapter = model.selectedChapter else { return nil }
-        return "Chapter \(chapter.position)"
+    private var totalChapters: Int? {
+        CommentsHeaderLayout.totalChaptersCount(
+            chapters: model.chapters,
+            chaptersLoaded: model.chaptersLoaded,
+            rawChapters: model.workContext.chapters
+        )
     }
 
-    // MARK: Signal strip
+    private var selectedChapterFact: String? {
+        CommentsHeaderLayout.chapterSubtitle(
+            scope: model.scope,
+            selectedChapter: model.selectedChapter,
+            totalChapters: totalChapters
+        )
+    }
 
-    /// The three figures the strip counts rather than reads off AO3.
+    // MARK: Signal line & figures
+
+    /// The three figures counted from loaded comment threads.
     private struct LoadedFigures {
         var threads = 0
         var comments = 0
@@ -534,22 +610,12 @@ struct CommentsView: View {
     }
 
     /// One walk over the loaded page for all three.
-    ///
-    /// Deliberately a single pass: this is evaluated from `commentsBody`, which
-    /// re-runs whenever the list does, and three separate `flattened` walks of
-    /// the same tree is the kind of cost `conversationRows` was introduced to
-    /// avoid. Bounded by one AO3 page of comments, not by the work.
     private var loadedFigures: LoadedFigures {
         var figures = LoadedFigures()
         for root in model.displayThreads {
             figures.threads += 1
             for comment in root.flattened {
                 figures.comments += 1
-                // AO3 renders an Edit action only on the signed-in account's own
-                // comments, which is the same per-session signal
-                // `FlattenedReply.parentIsViewer` takes — and unlike matching
-                // the byline against `auth.username` it still holds for a comment
-                // left under a non-default pseud.
                 if comment.editPath != nil { figures.mine += 1 }
                 if let posted = comment.postedAt, posted > (figures.latest ?? .distantPast) {
                     figures.latest = posted
@@ -559,56 +625,57 @@ struct CommentsView: View {
         return figures
     }
 
-    /// Artboard 1f's COMMENTS / THREADS / YOURS / LATEST strip, minus any cell
-    /// this screen cannot source.
-    ///
-    /// Only COMMENTS is AO3's own: `AO3CommentsPage.totalComments` is the
-    /// work-level figure parsed off the page's stats line. AO3 publishes no
-    /// thread count, no per-viewer count and no "last comment at", so the other
-    /// three are counted from the page in front of the reader. `signalScopeNote`
-    /// says so out loud whenever that is less than the whole work — a figure
-    /// that looks authoritative and is not is the one failure this screen must
-    /// not ship.
-    private func signalCells(_ figures: LoadedFigures) -> [SubjectStatStrip.Cell] {
-        var cells: [SubjectStatStrip.Cell] = []
+    private func metaLine(_ figures: LoadedFigures) -> some View {
+        let totalComments = model.page?.totalComments ?? figures.comments
+        let latestRelative = figures.latest.map {
+            $0.formatted(.relative(presentation: .numeric, unitsStyle: .narrow))
+        }
+        let data = CommentsHeaderLayout.metaLineData(
+            totalComments: totalComments,
+            threads: figures.threads,
+            mine: figures.mine,
+            isLoggedIn: auth.isLoggedIn,
+            latestRelativeText: latestRelative
+        )
+        return HStack(spacing: 0) {
+            metaLineText(data)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(data.accessibilityLabel)
+    }
 
-        if let total = model.page?.totalComments {
-            cells.append(SubjectStatStrip.Cell(
-                value: total.compactCount,
-                label: "Comments",
-                accessibilityText: "\(total.formatted()) comments on AO3"
-            ))
+    private func metaLineText(_ data: CommentsHeaderLayout.MetaLineData) -> Text {
+        var text = Text(data.commentsText)
+            .fontWeight(.semibold)
+            .foregroundStyle(Color.primary)
+
+        text = text + Text(" · ") + Text(data.threadsText)
+
+        if let yoursText = data.yoursText {
+            if data.isYoursHighlighted {
+                text = text + Text(" · ") + Text(yoursText)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(theme.accentInk)
+            } else {
+                text = text + Text(" · ") + Text(yoursText)
+            }
         }
 
-        cells.append(SubjectStatStrip.Cell(
-            value: figures.threads.compactCount,
-            label: "Threads",
-            accessibilityText: "\(figures.threads.formatted()) conversations loaded"
-        ))
-
-        // Dropped rather than printed as a permanent zero when signed out: AO3
-        // emits no ownership signal at all for an anonymous reader, so the cell
-        // could only ever say "none" and would be reporting the session, not the
-        // comments.
-        if auth.isLoggedIn {
-            cells.append(SubjectStatStrip.Cell(
-                value: figures.mine.compactCount,
-                label: "Yours",
-                isHighlighted: figures.mine > 0,
-                accessibilityText: "\(figures.mine.formatted()) of the loaded comments are yours"
-            ))
+        if let latestText = data.latestText {
+            text = text + Text(" · ") + Text(latestText)
         }
 
-        if let latest = figures.latest {
-            cells.append(SubjectStatStrip.Cell(
-                value: latest.formatted(.relative(presentation: .numeric, unitsStyle: .narrow)),
-                label: "Latest",
-                accessibilityText: "Newest loaded comment "
-                    + latest.formatted(.relative(presentation: .named))
-            ))
-        }
+        return text
+    }
 
-        return cells
+    private var headerDivider: some View {
+        Divider()
+            .opacity(0.6)
+            .accessibilityHidden(true)
     }
 
     /// Printed under the strip whenever the loaded page is not the whole work.
@@ -651,8 +718,7 @@ struct CommentsView: View {
                     text: chapterPillTitle,
                     style: .pill(isSelected: model.scope == .byChapter),
                     systemImage: "book",
-                    trailingImage: "chevron.down",
-                    palette: palette
+                    trailingImage: "chevron.down"
                 )
             }
             .buttonStyle(.plain)
@@ -688,8 +754,7 @@ struct CommentsView: View {
                 text: model.newestFirst ? "Newest" : "Oldest",
                 style: .pill(isSelected: false),
                 systemImage: "arrow.up.arrow.down",
-                trailingImage: "chevron.down",
-                palette: palette
+                trailingImage: "chevron.down"
             )
         }
         .buttonStyle(.plain)
