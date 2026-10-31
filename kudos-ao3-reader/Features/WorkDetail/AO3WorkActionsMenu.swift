@@ -15,17 +15,18 @@ struct AO3WorkActionsMenu: View {
     /// See `WorkAO3ActionChips.onSubscribeSuccess` — same rule, same reason
     /// the two carry it independently rather than sharing one call site.
     var onSubscribeSuccess: (() -> Void)? = nil
+    var shareURL: URL? = nil
+    var hasGivenKudos: Bool = false
+    var showsTopRow: Bool = true
 
     @Environment(AppRouter.self) private var router
     @Environment(AO3AuthService.self) private var auth
 
     var body: some View {
+        if showsTopRow {
+            topRow
+        }
         Section("On AO3") {
-            Button { actions.giveKudos(workID: workID, auth: auth) } label: {
-                Label("Give Kudos", systemImage: "heart")
-            }
-            .disabled(actions.isWorking)
-
             Button {
                 actions.startViewingComments(context: workContext,
                                              initialChapterPosition: commentsInitialChapterPosition)
@@ -33,26 +34,8 @@ struct AO3WorkActionsMenu: View {
                 Label("Comments", systemImage: "bubble.left.and.bubble.right")
             }
 
-            Button { actions.startBookmark() } label: {
-                if actions.workPageStates?.existingBookmark != nil {
-                    Label("Edit Bookmark on AO3", systemImage: "bookmark.fill")
-                } else {
-                    Label("Bookmark on AO3", systemImage: "bookmark")
-                }
-            }
             Button { actions.markForLater(workID: workID, auth: auth) } label: {
                 Label("Mark for Later", systemImage: "clock.badge")
-            }
-            .disabled(actions.isWorking)
-
-            Button {
-                actions.subscribe(workID: workID, auth: auth, onSubscribed: onSubscribeSuccess)
-            } label: {
-                if actions.workPageStates?.isSubscribed == true {
-                    Label("Unsubscribe", systemImage: "bell.slash")
-                } else {
-                    Label("Subscribe", systemImage: "bell")
-                }
             }
             .disabled(actions.isWorking)
 
@@ -66,6 +49,37 @@ struct AO3WorkActionsMenu: View {
         // labels above reflect AO3 instead of always reading "Subscribe" /
         // "Bookmark on AO3".
         .onAppear { actions.refreshWorkPageStates(workID: workID, auth: auth) }
+    }
+
+    @ViewBuilder
+    var topRow: some View {
+        MenuTopRow {
+            Button { actions.giveKudos(workID: workID, auth: auth) } label: {
+                let isGiven = hasGivenKudos
+                Label("Kudos", systemImage: MenuTopRowRules.kudosSymbol(isGiven: isGiven))
+            }
+            .disabled(actions.isWorking || hasGivenKudos)
+            .accessibilityLabel(hasGivenKudos ? "Kudos given" : "Give Kudos")
+
+            Button { actions.startBookmark() } label: {
+                let isBookmarked = actions.workPageStates?.existingBookmark != nil
+                Label("Bookmark", systemImage: MenuTopRowRules.bookmarkSymbol(isBookmarked: isBookmarked))
+            }
+            .accessibilityLabel(actions.workPageStates?.existingBookmark != nil ? "Edit Bookmark on AO3" : "Bookmark on AO3")
+
+            Button {
+                actions.subscribe(workID: workID, auth: auth, onSubscribed: onSubscribeSuccess)
+            } label: {
+                let isSubscribed = actions.workPageStates?.isSubscribed == true
+                Label("Subscribe", systemImage: MenuTopRowRules.subscribeSymbol(isSubscribed: isSubscribed))
+            }
+            .disabled(actions.isWorking)
+            .accessibilityLabel(actions.workPageStates?.isSubscribed == true ? "Unsubscribe" : "Subscribe")
+
+            ShareLink(item: shareURL ?? AO3AuthService.workURL(workID)) {
+                Label("Share", systemImage: "square.and.arrow.up")
+            }
+        }
     }
 
     private func openWeb(_ path: String) {
