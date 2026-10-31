@@ -135,7 +135,7 @@ struct SettingsReadingQueuesPage: View {
                     Button {
                         showSavedWorkMigrationConfirmation = true
                     } label: {
-                        Label("Add Saved Works to Saved for Later", systemImage: "arrow.right.doc.on.clipboard")
+                        Label("Add Saved Works to Want to Read", systemImage: "arrow.right.doc.on.clipboard")
                     }
                     .disabled(isMigratingSavedWorks)
                 }
@@ -148,7 +148,7 @@ struct SettingsReadingQueuesPage: View {
                         )
                         .accentFill()
                         HStack(spacing: 12) {
-                            Text(savedWorkMigrationProgress ?? "Updating Saved for Later…")
+                            Text(savedWorkMigrationProgress ?? "Updating Want to Read…")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                             Spacer()
@@ -159,14 +159,14 @@ struct SettingsReadingQueuesPage: View {
                     }
                 }
             } footer: {
-                Text("Saved for Later keeps a downloaded copy. When you save a series, Kudos "
+                Text("Want to Read keeps a downloaded copy. When you save a series, Kudos "
                     + "asks before downloading each work unless this option is on and the series "
                     + "is within your limit.")
             }
         }
         .settingsNoticeAlert($notice)
         .confirmationDialog(
-            "Add saved works to Saved for Later?",
+            "Add saved works to Want to Read?",
             isPresented: $showSavedWorkMigrationConfirmation,
             titleVisibility: .visible
         ) {
@@ -178,7 +178,7 @@ struct SettingsReadingQueuesPage: View {
             // Split out of the ViewBuilder so the type checker can finish
             // (the surrounding modifier chain otherwise times out).
             let migrationMessage =
-                "Kudos will add your existing saved works to Saved for Later without changing "
+                "Kudos will add your existing saved works to Want to Read without changing "
                 + "whether they are saved. It makes each one available offline, one at a time, "
                 + "with a pause between visits to AO3."
             Text(migrationMessage)
@@ -220,7 +220,7 @@ struct SettingsReadingQueuesPage: View {
         isMigratingSavedWorks = true
         savedWorkMigrationCompleted = 0
         savedWorkMigrationTotal = candidates.count
-        savedWorkMigrationProgress = "Preparing Saved for Later…"
+        savedWorkMigrationProgress = "Preparing Want to Read…"
         defer {
             isMigratingSavedWorks = false
             savedWorkMigrationProgress = nil
@@ -263,7 +263,7 @@ struct SettingsReadingQueuesPage: View {
         }
 
         var message = "Added \(added.formatted()) saved work"
-            + "\(added == 1 ? "" : "s") to Saved for Later."
+            + "\(added == 1 ? "" : "s") to Want to Read."
         if unavailableOffline > 0 {
             message += " \(unavailableOffline.formatted()) need to be downloaded again before offline reading."
         }
@@ -272,7 +272,7 @@ struct SettingsReadingQueuesPage: View {
         }
 
         notice = SettingsNotice(
-            title: cancelled ? "Migration Cancelled" : "Saved for Later Updated",
+            title: cancelled ? "Migration Cancelled" : "Want to Read Updated",
             message: message
         )
     }

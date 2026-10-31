@@ -70,6 +70,6 @@ func bulkSaveForLaterRemote(_ selected: [AO3WorkSummary], in context: ModelConte
     }
     guard failureCount > 0 else { return nil }
     return failureCount == selected.count
-        ? "Couldn't save any of the selected works for later. Check your connection and try again."
-        : "\(failureCount) of \(selected.count) selected works couldn't be saved for later and were skipped."
+        ? "Couldn't add any of the selected works to Want to Read. Check your connection and try again."
+        : "\(failureCount) of \(selected.count) selected works couldn't be added to Want to Read and were skipped."
 }

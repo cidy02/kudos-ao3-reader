@@ -437,8 +437,8 @@ struct NewReadingQueueSheet: View {
             return nil
         case .savedForLater:
             guard let seedCount else { return nil }
-            guard seedCount > 0 else { return "You have no works in Saved for Later to copy." }
-            return "Copy \(seedCount) work\(seedCount == 1 ? "" : "s"). They stay in Saved for Later."
+            guard seedCount > 0 else { return "You have no works in Want to Read to copy." }
+            return "Copy \(seedCount) work\(seedCount == 1 ? "" : "s"). They stay in Want to Read."
         }
     }
 
@@ -528,7 +528,7 @@ nonisolated enum NewQueueSeed: String, CaseIterable, Identifiable, Sendable {
     var title: String {
         switch self {
         case .empty: "Empty"
-        case .savedForLater: "Saved for Later"
+        case .savedForLater: "Want to Read"
         }
     }
 }

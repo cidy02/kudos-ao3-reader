@@ -379,7 +379,7 @@ struct ContentView: View {
             ProgressiveTabContent(
                 shell: .dashboard(
                     title: "Library",
-                    sections: ["Reading Now", "Saved for Later", "Finished", "Reading Queues"],
+                    sections: ["Reading Now", "Want to Read", "Finished", "Reading Queues"],
                     showFilterChips: true
                 )
             ) {

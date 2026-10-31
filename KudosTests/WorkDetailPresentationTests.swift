@@ -131,8 +131,8 @@ struct WorkDetailPresentationTests {
             == WorkActionLabels.downloadedSymbol)
         #expect(WorkDetailPresentation.downloadState(.keptBy("Neon reread")).isEnabled == false)
 
-        #expect(WorkDetailPresentation.laterAction(isQueued: false).title == "Save for Later")
-        #expect(WorkDetailPresentation.laterAction(isQueued: true).title == "Remove from Later")
+        #expect(WorkDetailPresentation.laterAction(isQueued: false).title == "Want to Read")
+        #expect(WorkDetailPresentation.laterAction(isQueued: true).title == "Remove from Want to Read")
         #expect(WorkDetailPresentation.laterAction(isQueued: false).systemImage
             == WorkActionLabels.savedForLater(isQueued: false).systemImage)
     }

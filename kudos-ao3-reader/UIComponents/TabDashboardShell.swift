@@ -14,7 +14,7 @@ struct TabDashboardShell: View {
 
     init(
         title: String? = nil,
-        sectionTitles: [String] = ["Reading Now", "Saved for Later", "Finished"],
+        sectionTitles: [String] = ["Reading Now", "Want to Read", "Finished"],
         showFilterChips: Bool = false,
         showsResumeHero: Bool = false
     ) {

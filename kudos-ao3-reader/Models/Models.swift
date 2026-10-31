@@ -960,7 +960,7 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     }
 
     var displayName: String {
-        kind == .savedForLater ? "Saved for Later" : name
+        kind == .savedForLater ? "Want to Read" : name
     }
 
     /// The hue every queue surface should paint with: the stored one when the
