@@ -125,7 +125,6 @@ struct FandomListView: View {
         #if !os(macOS)
             .navigationBarTitleDisplayMode(.inline)
         #endif
-            .hidesFloatingTabBar()
             // Zooms out of the category card that pushed it. Keyed on the same
             // `category.id` that card advertises — one String on both ends, so
             // there is no cross-type mismatch to get wrong here (see WorkZoomKey
@@ -245,9 +244,6 @@ struct FandomListView: View {
                 await refresh()
             }
             .searchable(text: $query, prompt: "Search \(category.name)")
-            #if os(iOS)
-            .toolbar { DefaultToolbarItem(kind: .search, placement: .bottomBar) }
-            #endif
             // Top right, like every other filtered list (owner, 2026-10-01).
             .toolbar {
                 ActionToolbar(items: [AnyView(FilterButton(

@@ -117,7 +117,6 @@ struct SettingsPageForm<Content: View>: View {
         }
         .formStyle(.grouped)
         .appThemedScroll()
-        .hidesFloatingTabBar()
         .navigationTitle(route.title)
         #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)

@@ -261,6 +261,9 @@ extension View {
             } message: {
                 Text(controller.batchActionError ?? "")
             }
+            #if os(iOS)
+            .toolbar(controller.isSelecting ? .hidden : .automatic, for: .tabBar)
+            #endif
             .onDisappear { controller.batchTask?.cancel() }
     }
 }

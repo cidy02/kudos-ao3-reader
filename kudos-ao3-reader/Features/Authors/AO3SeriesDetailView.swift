@@ -82,7 +82,6 @@ struct AO3SeriesDetailView: View {
         #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
         #endif
-            .hidesFloatingTabBar()
             .toolbar {
                 if bulkSelection.isSelecting {
                     RemoteWorkSelectionToolbar(controller: bulkSelection) {

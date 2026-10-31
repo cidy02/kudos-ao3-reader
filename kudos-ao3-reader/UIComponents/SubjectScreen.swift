@@ -124,7 +124,6 @@ private struct SubjectScreenWash: ViewModifier {
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
-            .hidesFloatingTabBar()
     }
 }
 
