@@ -33,17 +33,15 @@ struct CoverStackLayoutTests {
     func everyCardStaysInsideItsFrameForOneToFiveCovers(kind: CoverStackKind) {
         for size in Self.sizes + Self.degenerateSizes {
             let frame = CGRect(origin: .zero, size: size)
-            for aspect in [CoverStackLayout.coverAspect, 2] {
-                for covers in 1...5 {
-                    let layout = CoverStackLayout(kind: kind, size: size, backCount: covers - 1, frontAspect: aspect)
-                    #expect(Self.isInside(layout.front, frame), "\(kind) \(size) \(covers): front")
-                    for back in layout.backs {
-                        #expect(Self.isInside(back.drawnBounds, frame), "\(kind) \(size) \(covers): \(back)")
-                    }
-                    if let ribbon = layout.ribbon {
-                        let face = CGRect(origin: .zero, size: layout.front.size)
-                        #expect(Self.isInside(ribbon, face), "\(kind) \(size): tab")
-                    }
+            for covers in 1...5 {
+                let layout = CoverStackLayout(kind: kind, size: size, backCount: covers - 1)
+                #expect(Self.isInside(layout.front, frame), "\(kind) \(size) \(covers): front")
+                for back in layout.backs {
+                    #expect(Self.isInside(back.drawnBounds, frame), "\(kind) \(size) \(covers): \(back)")
+                }
+                if let ribbon = layout.ribbon {
+                    let face = CGRect(origin: .zero, size: layout.front.size)
+                    #expect(Self.isInside(ribbon, face), "\(kind) \(size): tab")
                 }
             }
         }
@@ -92,11 +90,10 @@ struct CoverStackLayoutTests {
         #expect(CoverStackLayout(kind: .collection, size: CGSize(width: 150, height: 140), backCount: 0).ribbon != nil)
     }
 
-    @Test func homesLandscapeQueueFaceFillsTheCardWidth() {
-        let layout = CoverStackLayout(kind: .queue, size: CGSize(width: 164, height: 104), backCount: 2, frontAspect: 2)
-        #expect(layout.front.minX == 0)
-        #expect(layout.front.width == 164)
-        #expect(layout.front.height >= 88)
+    @Test func queueFrontKeepsTheDefaultCoverAspect() {
+        let layout = CoverStackLayout(kind: .queue, size: CGSize(width: 72, height: 72), backCount: 2)
+        #expect(abs(layout.front.width / layout.front.height - CoverStackLayout.coverAspect) < 0.001)
+        #expect(abs(layout.front.midX - 36) < 0.001)
     }
 
     @Test func columnsAllowForAWiderGap() {

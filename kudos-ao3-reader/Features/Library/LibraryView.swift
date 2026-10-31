@@ -816,8 +816,8 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             collapseKey: "library.queues",
             hasItems: !shelfQueues.isEmpty,
             itemCount: shelfQueues.count,
-            cardSpacing: CarouselCardMetrics.coverStackSpacing,
-            cardWidth: CarouselCardMetrics.stackWidth,
+            cardSpacing: ReadingQueueCard.spacing,
+            cardWidth: ReadingQueueCard.width,
             onSeeAll: { path.append(AllReadingQueuesDestination(initialQueueID: nil)) }
         ) {
             ForEach(shelfQueues.prefix(12)) { queue in

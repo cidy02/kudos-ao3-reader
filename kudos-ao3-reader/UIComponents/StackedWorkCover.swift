@@ -60,14 +60,7 @@ struct CoverStackLayout: Equatable {
     /// for one to read (the spec's 64pt cover).
     var ribbon: CGRect?
 
-    /// - Parameter frontAspect: the front card's width ÷ height, capped by the frame.
-    ///   A cover by default; Home's queue card passes a wider one for its landscape face.
-    init(
-        kind: CoverStackKind,
-        size: CGSize,
-        backCount: Int,
-        frontAspect: CGFloat = CoverStackLayout.coverAspect
-    ) {
+    init(kind: CoverStackKind, size: CGSize, backCount: Int) {
         let width = max(0, size.width)
         let height = max(0, size.height)
         let count = min(max(0, backCount), Self.maxBacks)
@@ -81,7 +74,7 @@ struct CoverStackLayout: Equatable {
             // (at least 4pt); capped at 10% so a tiny stack keeps most of its front.
             let peek = count > 0 ? min(max(4, height * 0.07), height * 0.1) : 0
             let frontHeight = height - peek * CGFloat(count)
-            let coverWidth = min(width, frontHeight * frontAspect)
+            let coverWidth = min(width, frontHeight * Self.coverAspect)
             let frontLeft = (width - coverWidth) / 2
             front = CGRect(x: frontLeft, y: peek * CGFloat(count), width: coverWidth, height: frontHeight)
             piled = (0..<count).map { index in
@@ -127,7 +120,7 @@ struct CoverStackLayout: Equatable {
             func reach(_ coverWidth: CGFloat) -> CGFloat {
                 pile(coverWidth).map(\.drawnBounds.maxX).reduce(coverWidth) { Swift.max($0, $1) }
             }
-            let widest = min(width, height * frontAspect)
+            let widest = min(width, height * Self.coverAspect)
             var coverWidth = widest
             if reach(widest) > width {
                 // `reach` grows with the front's width, so halve the gap to the
@@ -150,15 +143,13 @@ struct CoverStackLayout: Equatable {
         let bounds = CGRect(x: 0, y: 0, width: width, height: height).insetBy(dx: -0.01, dy: -0.01)
         self.front = front
         backs = Array(piled.prefix { bounds.contains($0.drawnBounds) })
-        // Spec: 9% of a cover's width, 4pt at least. The shorter side stands in for
-        // the width on a landscape face.
-        cornerRadius = max(4, 0.09 * min(front.width, front.height))
+        // Spec: 9% of a cover's width, 4pt at least.
+        cornerRadius = max(4, 0.09 * front.width)
         if hasTab {
             // Spec: 20% of the cover's width, 1.45 times as tall, 9% of the width in
             // from the trailing edge.
-            let cover = min(front.width, front.height * Self.coverAspect)
-            let tabWidth = cover * 0.2
-            ribbon = CGRect(x: front.width - cover * 0.09 - tabWidth, y: 0,
+            let tabWidth = front.width * 0.2
+            ribbon = CGRect(x: front.width - front.width * 0.09 - tabWidth, y: 0,
                             width: tabWidth, height: tabWidth * 1.45)
         } else {
             ribbon = nil
@@ -179,7 +170,6 @@ struct StackedWorkCover<Face: View>: View {
     let size: CGSize
     /// The works behind the front card, nearest first. Only the first two are drawn.
     let backs: [SavedWork]
-    let frontAspect: CGFloat
     /// The front card's content; the stack clips it, outlines it and puts the corner
     /// tab over it. Gets the layout so text can step around the tab.
     let face: (CoverStackLayout) -> Face
@@ -190,18 +180,16 @@ struct StackedWorkCover<Face: View>: View {
         kind: CoverStackKind,
         size: CGSize,
         backs: [SavedWork],
-        frontAspect: CGFloat = CoverStackLayout.coverAspect,
         @ViewBuilder face: @escaping (CoverStackLayout) -> Face
     ) {
         self.kind = kind
         self.size = size
         self.backs = backs
-        self.frontAspect = frontAspect
         self.face = face
     }
 
     var body: some View {
-        let layout = CoverStackLayout(kind: kind, size: size, backCount: backs.count, frontAspect: frontAspect)
+        let layout = CoverStackLayout(kind: kind, size: size, backCount: backs.count)
         let theme = themeManager.appTheme
         let shape = RoundedRectangle(cornerRadius: layout.cornerRadius, style: .continuous)
         let shadow = theme.carouselCardShadow
@@ -267,15 +255,17 @@ extension StackedWorkCover where Face == CoverStackNameFace {
     /// first letter of its name, in front.
     init(kind: CoverStackKind, name: String, hue: Double, pickedHex: String?, backs: [SavedWork], size: CGSize) {
         self.init(kind: kind, size: size, backs: backs) { layout in
-            CoverStackNameFace(name: name, hue: hue, pickedHex: pickedHex, coverWidth: layout.front.width)
+            CoverStackNameFace(
+                kind: kind, name: name, hue: hue, pickedHex: pickedHex, coverWidth: layout.front.width
+            )
         }
     }
 }
 
-/// A collection's or queue's own card: its colour (`carouselCollectionGradient`, the
-/// tile gradient collections already had) with its initial set large and faint in
+/// A collection's or queue's own card, with its initial set large and faint in
 /// New York across the bottom-leading corner, as the spec's generated covers do.
 struct CoverStackNameFace: View {
+    let kind: CoverStackKind
     let name: String
     let hue: Double
     let pickedHex: String?
@@ -284,9 +274,12 @@ struct CoverStackNameFace: View {
     @Environment(ThemeManager.self) private var themeManager
 
     var body: some View {
-        let gradient = themeManager.appTheme.carouselCollectionGradient(hue: hue, pickedHex: pickedHex)
         let initial = name.trimmingCharacters(in: .whitespacesAndNewlines).first.map { String($0).uppercased() }
-        LinearGradient(colors: [gradient.start, gradient.end], startPoint: .topLeading, endPoint: .bottomTrailing)
+        LinearGradient(
+            colors: gradientColors,
+            startPoint: UnitPoint(x: 0.2887, y: 0.0468),
+            endPoint: UnitPoint(x: 0.7113, y: 0.9532)
+        )
             .overlay(alignment: .bottomLeading) {
                 Text(initial ?? "")
                     .font(.system(size: coverWidth * 1.05, weight: .semibold, design: .serif))
@@ -297,6 +290,18 @@ struct CoverStackNameFace: View {
                     .offset(x: -coverWidth * 0.06, y: coverWidth * 0.11)
             }
             .accessibilityHidden(true)
+    }
+
+    private var gradientColors: [Color] {
+        switch kind {
+        case .collection:
+            let gradient = themeManager.appTheme.carouselCollectionGradient(hue: hue, pickedHex: pickedHex)
+            return [gradient.start, gradient.end]
+        case .queue:
+            let color = pickedHex.flatMap(Color.init(hex:))
+                ?? themeManager.appTheme.subjectPalette(hue: hue).accent
+            return [color.mix(with: .black, by: 0.38), color]
+        }
     }
 }
 

@@ -522,7 +522,8 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
             collapseKey: "home.readingQueues",
             hasItems: !customQueues.isEmpty,
             itemCount: customQueues.count,
-            cardWidth: CarouselCardMetrics.stackWidth,
+            cardSpacing: ReadingQueueCard.spacing,
+            cardWidth: ReadingQueueCard.width,
             onSeeAll: !customQueues.isEmpty
                 ? { path.append(AllReadingQueuesDestination(initialQueueID: nil)) }
                 : nil

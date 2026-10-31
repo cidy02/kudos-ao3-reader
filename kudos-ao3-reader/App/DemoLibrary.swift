@@ -476,7 +476,7 @@ enum DebugLaunchRoute {
 
     static func applyTab(_ router: AppRouter) {
         guard let value = pageRoute else { return }
-        if workRoutes.contains(where: value.hasPrefix) {
+        if value == "queues" || homePrefixRoutes.contains(where: value.hasPrefix) {
             router.selection = .home
         } else if libraryRoutes.contains(where: value.hasPrefix) {
             router.selection = .library
@@ -520,6 +520,8 @@ enum DebugLaunchRoute {
     /// Resolved against Home's works, so they need Home selected; the app
     /// otherwise restores whichever tab the last launch left.
     private static let workRoutes = ["work:", "mycopy:", "read:", "comments:", "compose:", "thread:"]
+    /// Queue routes resolve against Home's queues for the same reason.
+    private static let homePrefixRoutes = workRoutes + ["queue:", "queue-details:"]
 
     /// `acct:<screen>` on the Account tab (pair with `-KudosFixtureDir` and
     /// `-KudosDemoSignedIn YES`): dashboard, drafts, works, series, inbox,

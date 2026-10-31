@@ -5,6 +5,31 @@ import SwiftUI
 /// so each one can be handed fixtures: the progress strip's counts, the "Last
 /// read" row, and the kicker path.
 enum ReadingQueueFacts {
+    /// The design's queue rows estimate silent reading at 200 words per minute
+    /// and round to five minutes so the line stays useful rather than precise.
+    static func rowDetail(workCount: Int, totalWordCount: Int, offlineCount: Int) -> String {
+        guard workCount > 0 else { return "No works yet" }
+        var parts = ["\(workCount) work\(workCount == 1 ? "" : "s")"]
+        if totalWordCount > 0 {
+            let rawMinutes = Double(totalWordCount) / 200
+            let minutes = max(5, Int((rawMinutes / 5).rounded()) * 5)
+            let hours = minutes / 60
+            let remainder = minutes % 60
+            if hours > 0 {
+                parts.append("about \(hours) h" + (remainder > 0 ? " \(remainder) min" : ""))
+            } else {
+                parts.append("about \(minutes) min")
+            }
+        }
+        let offline = min(max(offlineCount, 0), workCount)
+        if offline == workCount {
+            parts.append("all offline")
+        } else if offline > 0 {
+            parts.append("\(offline) offline")
+        }
+        return parts.joined(separator: " · ")
+    }
+
     /// 1h's strip and its legend. Three buckets that always sum to the queue's
     /// size: a work with no copy on disk (`.freedHistory`) is neither finished nor
     /// being read, so it counts as unread rather than dropping out of the total.
@@ -26,14 +51,24 @@ enum ReadingQueueFacts {
         }
     }
 
+    /// One queue-bar segment follows its work, rather than grouping finished
+    /// and started works together. Unknown legacy progress keeps the old 45% cue.
+    static func segmentFill(state: SavedWork.ReadingState, progress: Double?) -> Double {
+        switch state {
+        case .finished: 1
+        case .inProgress: min(max(progress ?? 0.45, 0), 1)
+        case .unread, .freedHistory: 0
+        }
+    }
+
     /// Spec 1b's "next up 3": the 1-based place of the first work not yet
     /// finished, in queue order. Nil when every work is finished (or none).
     static func nextUpPosition(states: [SavedWork.ReadingState]) -> Int? {
         states.firstIndex { $0 != .finished }.map { $0 + 1 }
     }
 
-    /// The one "Up next" rule, for Home's queue card face and the queue page's
-    /// Up next row alike: the first work not yet finished, else the first (a
+    /// The one "Up next" rule for the queue page and the covers waiting behind
+    /// its identity card: the first work not yet finished, else the first (a
     /// fully read queue). `inLine` is everything else, in queue order.
     static func upNext(in works: [SavedWork]) -> (upNext: SavedWork?, inLine: [SavedWork]) {
         let states = works.map(\.readingState)
@@ -43,18 +78,7 @@ enum ReadingQueueFacts {
         return (inLine.remove(at: index), inLine)
     }
 
-    /// The face of a queue's card on Home: the work it shows, and whether it may name it.
-    /// A work Hide mode hides is passed over, as the queue's page passes over it. One
-    /// Blur mode blurs is still the next work, but nothing may name it until it is
-    /// revealed. The card used to name the next work whatever the setting said.
-    static func cardFace(
-        in works: [SavedWork], isHidden: (SavedWork) -> Bool, isBlurred: (SavedWork) -> Bool
-    ) -> (work: SavedWork?, blurred: Bool) {
-        let next = upNext(in: works.filter { !isHidden($0) }).upNext
-        return (next, next.map(isBlurred) ?? false)
-    }
-
-    /// The queue card's footer — spec 1b: "7 works · next up 3".
+    /// Compact queue footer used outside the redesigned row: "7 works · next up 3".
     static func cardFooter(states: [SavedWork.ReadingState]) -> String {
         let count = "\(states.count) work\(states.count == 1 ? "" : "s")"
         guard let position = nextUpPosition(states: states) else { return count }
@@ -129,28 +153,32 @@ enum QueueQuickFilter: String, CaseIterable, Identifiable {
     }
 }
 
-/// 1h's strip: one segment per work — finished filled, in progress half filled
-/// (as the artboard draws it), unread faint. A `Canvas` so a long queue is one
-/// view, not hundreds; past 40 works the gaps close and it reads as one bar.
+/// 1h's strip: one segment per work. Page summaries default to finished / 45%
+/// started / unread; queue rows pass each work's real progress. A `Canvas` keeps
+/// a long queue to one view; past 40 works the gaps close and it reads as one bar.
 struct QueueProgressStrip: View {
     let progress: ReadingQueueFacts.Progress
     let palette: SubjectPalette
+    /// Per-work fill in queue order. Nil keeps the page strip's bucket summary.
+    var fills: [Double]? = nil
     /// 1h's page strip; 1b's queue card draws a thinner one (3.5, 2.5 apart).
     var height: CGFloat = 5
     var gap: CGFloat = 3
 
     var body: some View {
         Canvas { context, size in
-            let count = progress.total
+            let segmentFills = fills ?? Array(repeating: 1.0, count: progress.finished)
+                + Array(repeating: 0.45, count: progress.inProgress)
+                + Array(repeating: 0.0, count: progress.unread)
+            let count = segmentFills.count
             guard count > 0 else { return }
             let spacing: CGFloat = count > 40 ? 0 : gap
             let width = (size.width - spacing * CGFloat(count - 1)) / CGFloat(count)
             let radius = spacing == 0 ? 0 : size.height / 2
             for index in 0 ..< count {
                 let rect = CGRect(x: CGFloat(index) * (width + spacing), y: 0, width: width, height: size.height)
-                context.fill(Path(roundedRect: rect, cornerRadius: radius), with: .color(palette.accent.opacity(0.22)))
-                let fill: CGFloat = index < progress.finished ? 1
-                    : index < progress.finished + progress.inProgress ? 0.45 : 0
+                context.fill(Path(roundedRect: rect, cornerRadius: radius), with: .color(palette.accent.opacity(0.20)))
+                let fill = CGFloat(min(max(segmentFills[index], 0), 1))
                 guard fill > 0 else { continue }
                 var filled = rect
                 filled.size.width *= fill
@@ -161,7 +189,7 @@ struct QueueProgressStrip: View {
         .clipShape(Capsule())
         .accessibilityElement()
         .accessibilityLabel(
-            "\(progress.finished) finished, \(progress.inProgress) in progress, \(progress.unread) unread"
+            "\(progress.finished) of \(progress.total) finished, \(progress.inProgress) in progress"
         )
     }
 }
