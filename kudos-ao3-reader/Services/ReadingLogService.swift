@@ -228,6 +228,16 @@ enum ReadingLogService {
         return all.filter { $0.workID == workID }.reduce(0) { $0 + $1.durationSeconds }
     }
 
+    /// Total duration including any in-flight, unpersisted session.
+    static func currentTotalDuration(of workID: UUID, in context: ModelContext, now: Date = Date()) -> Double {
+        var duration = totalDuration(of: workID, in: context)
+        if let open = openSessions[workID] {
+            let currentStretch = open.isPaused ? 0 : max(0, now.timeIntervalSince(open.lastResumedAt))
+            duration += open.accumulatedSeconds + currentStretch
+        }
+        return duration
+    }
+
     /// Reread count: finishing sessions for this work UUID, not the title.
     static func finishCount(of workID: UUID, in context: ModelContext) -> Int {
         let all = (try? context.fetch(FetchDescriptor<ReadingSession>())) ?? []

@@ -1078,15 +1078,12 @@ struct ReadiumReaderView: View {
         let speechActive = speech.isSessionActive
         let atEnd = book.isAtPublicationEnd
         VStack(spacing: 10) {
-            if chromeVisible {
-                if atEnd {
-                    endOfWorkCard
-                }
+            if atEnd {
+                endOfWorkCard
+            } else if chromeVisible {
                 highlightColorBar
                 // The end card takes this slot. The position card would cover it.
-                if !atEnd {
-                    positionCard(includeMiniPlayer: speechActive)
-                }
+                positionCard(includeMiniPlayer: speechActive)
             } else if speechActive {
                 // Decoupled: transport stays reachable while full chrome is hidden.
                 standaloneMiniPlayer
@@ -1094,17 +1091,21 @@ struct ReadiumReaderView: View {
         }
         .padding(.horizontal, Self.chromeInset)
         .padding(.bottom, book.pageBoxChromeSafeBottom + Self.chromeInset)
-        .allowsHitTesting(chromeVisible || speechActive)
+        .allowsHitTesting(atEnd || chromeVisible || speechActive)
     }
 
     private var endOfWorkCard: some View {
         ReaderEndCard(
             title: work.title,
+            isComplete: work.isComplete,
+            durationSeconds: ReadingLogService.currentTotalDuration(of: work.id, in: modelContext),
+            wordCount: work.wordCount,
             showsAO3Actions: ao3WorkID != nil,
             kudosGiven: work.hasGivenKudos,
             kudosEnabled: !kudosWorking && !work.hasGivenKudos,
             isBookmarked: bookmarkAtCurrentPosition != nil,
             bookmarkEnabled: currentReadingPosition != nil,
+            upNext: ReaderEndOfWorkFacts.findUpNext(for: work),
             onKudos: { if let ao3WorkID { giveKudos(workID: ao3WorkID) } },
             onComment: { showingComments = true },
             onBookmark: { toggleBookmarkAtCurrentPosition() }
