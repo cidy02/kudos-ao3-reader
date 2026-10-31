@@ -315,6 +315,9 @@ struct AuthorProfileOverviewSections: View {
     @Environment(AO3AuthService.self) private var auth
     @Environment(ThemeManager.self) private var theme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(PrivacyGate.self) private var gate
+    @AppStorage("hideMatureContent") private var hideMature = true
+    @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
 
     var body: some View {
         if let header = model.header {
@@ -386,15 +389,20 @@ struct AuthorProfileOverviewSections: View {
 
     private var latest: some View {
         Section {
-            SectionRuleHeader(title: "Latest")
-                .pageBodyRow(top: 18, gutter: 0)
             if let work = model.latestWork {
-                AuthorProfileLatestCard(work: work)
-                    .cardNavigation(to: work, accessibilityLabel: work.title)
-                    .pageBodyRow(top: 10, gutter: SubjectMetrics.accountGutter)
+                if !gate.isHidden(work, enabled: hideMature, mode: matureMode) {
+                    SectionRuleHeader(title: "Latest")
+                        .pageBodyRow(top: 18, gutter: 0)
+                    SensitiveAuthorProfileLatestCard(work: work)
+                        .pageBodyRow(top: 10, gutter: SubjectMetrics.accountGutter)
+                }
             } else if model.header?.recentWorks == nil {
+                SectionRuleHeader(title: "Latest")
+                    .pageBodyRow(top: 18, gutter: 0)
                 overviewMessage("Couldn't read the latest work. Open Works to try again.")
             } else {
+                SectionRuleHeader(title: "Latest")
+                    .pageBodyRow(top: 18, gutter: 0)
                 overviewMessage("No recent works visible on AO3.")
             }
         }
@@ -449,8 +457,12 @@ struct AuthorProfileOverviewSections: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(alignment: .top, spacing: 12) {
                 ForEach(works) { work in
-                    AO3WorkCoverCard(work: work)
-                        .cardNavigation(to: work, accessibilityLabel: work.title)
+                    if gate.isBlurred(work, enabled: hideMature, mode: matureMode) {
+                        SensitiveWorkCoverCard(work: work)
+                    } else if !gate.isHidden(work, enabled: hideMature, mode: matureMode) {
+                        SensitiveWorkCoverCard(work: work)
+                            .cardNavigation(to: work, accessibilityLabel: work.title)
+                    }
                 }
             }
         }
@@ -673,6 +685,36 @@ struct AuthorProfileLatestCard: View {
         if let kudos = work.kudos { parts.append("♥ \(kudos.compactCount)") }
         if let hits = work.hits { parts.append("\(hits.compactCount) hits") }
         return parts.joined(separator: " · ")
+    }
+}
+
+/// An adult-shielded wrapper around `AuthorProfileLatestCard` adhering to rule I-6:
+/// footprint is preserved under `.obscure` with a 6 pt blur and a single `MatureRevealCapsule()`.
+struct SensitiveAuthorProfileLatestCard: View {
+    let work: AO3WorkSummary
+
+    @Environment(PrivacyGate.self) private var gate
+    @AppStorage("hideMatureContent") private var hideMature = true
+    @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
+
+    var body: some View {
+        if gate.isBlurred(work, enabled: hideMature, mode: matureMode) {
+            AuthorProfileLatestCard(work: work)
+                .blur(radius: 6)
+                .overlay {
+                    MatureRevealCapsule()
+                }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    gate.reveal(work)
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Hidden mature work")
+                .accessibilityHint("Activate to reveal.")
+        } else if !gate.isHidden(work, enabled: hideMature, mode: matureMode) {
+            AuthorProfileLatestCard(work: work)
+                .cardNavigation(to: work, accessibilityLabel: work.title)
+        }
     }
 }
 

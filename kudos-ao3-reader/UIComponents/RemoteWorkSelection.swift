@@ -208,11 +208,12 @@ struct SelectableAO3WorkRow: View {
     var showsSeparator = true
 
     var body: some View {
-        let row = AO3WorkRow(
+        SensitiveWorkRow(
             work: work,
             expandAll: expandAll,
             isSelecting: controller.isSelecting,
             isSelected: controller.selection.contains(work.id),
+            onToggleSelection: { controller.toggle(work) },
             presentation: presentation,
             signal: signal,
             showsSummary: showsSummary,
@@ -220,17 +221,6 @@ struct SelectableAO3WorkRow: View {
             wide: wide,
             showsSeparator: showsSeparator
         )
-        if controller.isSelecting {
-            let isSelected = controller.selection.contains(work.id)
-            Button { controller.toggle(work) } label: { row }
-                .buttonStyle(.plain)
-                .accessibilityLabel(work.title)
-                .accessibilityValue(isSelected ? "Selected" : "Not selected")
-                .accessibilityHint("Double-tap to \(isSelected ? "deselect" : "select") this work.")
-                .accessibilityAddTraits(isSelected ? .isSelected : [])
-        } else {
-            row.cardNavigation(to: work, accessibilityLabel: work.title)
-        }
     }
 }
 

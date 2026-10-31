@@ -191,6 +191,17 @@ struct AO3AuthorWorkCard: View {
 
     @Environment(PrivacyGate.self) private var gate
     @AppStorage("hideMatureContent") private var hideMature = true
+    @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
+
+    private func isBlurred(_ entry: CanonicalWork) -> Bool {
+        if let local = entry.local {
+            return gate.isBlurred(local, enabled: hideMature, mode: matureMode)
+        }
+        if let remote = entry.remote {
+            return gate.isBlurred(remote, enabled: hideMature, mode: matureMode)
+        }
+        return false
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -204,13 +215,12 @@ struct AO3AuthorWorkCard: View {
                     showsSummary: usesLedger ? false : showsSummary,
                     showsSeparator: false
                 )
-                if showsPerformance, let blurb = entry.remote,
-                   !hideMature || !work.isAdult || gate.isRevealed(work) {
+                if showsPerformance, let blurb = entry.remote, !isBlurred(entry) {
                     AO3AuthorPerformanceStrip(work: blurb)
                         .padding(.horizontal, WorkRowMetrics.horizontalPadding)
                 }
             } else if let work = entry.remote {
-                AO3WorkRow(
+                SensitiveWorkRow(
                     work: work,
                     expandAll: expandAll,
                     presentation: usesLedger ? .searchLedger : .standard,
@@ -218,9 +228,8 @@ struct AO3AuthorWorkCard: View {
                     showsSummary: usesLedger ? false : showsSummary,
                     showsSeparator: false
                 )
-                .cardNavigation(to: work, accessibilityLabel: work.title)
             }
-            if let giftLine = entry.remote?.giftLine {
+            if let giftLine = entry.remote?.giftLine, !isBlurred(entry) {
                 WorkStateBadge(text: giftLine, symbol: "gift")
                     .font(.caption2)
                     .padding(.horizontal, WorkRowMetrics.horizontalPadding)

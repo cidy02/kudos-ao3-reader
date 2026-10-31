@@ -216,8 +216,7 @@ struct AO3SeriesDetailView: View {
                     SensitiveWorkRow(work: work, expandAll: expandAll, showsSummary: showSummaries)
                         .cardRow(chrome: .plain)
                 } else if let remote = entry.remote {
-                    AO3WorkRow(work: remote, expandAll: expandAll, showsSummary: showSummaries)
-                        .cardNavigation(to: remote, accessibilityLabel: remote.title)
+                    SensitiveWorkRow(work: remote, expandAll: expandAll, showsSummary: showSummaries)
                         .cardRow(chrome: .plain)
                 }
             }

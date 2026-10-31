@@ -1166,7 +1166,7 @@ struct EnrichingAO3WorkRow: View {
     private var displayed: AO3WorkSummary { enriched ?? work }
 
     var body: some View {
-        AO3WorkRow(
+        SensitiveWorkRow(
             work: displayed,
             expandAll: expandAll,
             presentation: presentation,
@@ -1176,16 +1176,15 @@ struct EnrichingAO3WorkRow: View {
             wide: wide,
             showsSeparator: showsSeparator
         )
-            .cardNavigation(to: displayed, accessibilityLabel: displayed.title)
-            .task(id: work.id) {
-                // `.task(id:)` so recycling this row onto a different work cancels
-                // the previous fetch instead of writing its result into the new row.
-                let result = await AO3SparseWorkEnricher.shared.enrich(work)
-                enriched = result
-                if let result {
-                    onEnriched?(result)
-                }
+        .task(id: work.id) {
+            // `.task(id:)` so recycling this row onto a different work cancels
+            // the previous fetch instead of writing its result into the new row.
+            let result = await AO3SparseWorkEnricher.shared.enrich(work)
+            enriched = result
+            if let result {
+                onEnriched?(result)
             }
+        }
     }
 }
 
