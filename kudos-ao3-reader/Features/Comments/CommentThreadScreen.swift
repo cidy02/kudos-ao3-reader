@@ -38,13 +38,8 @@ struct CommentThreadScreen: View {
     var body: some View {
         ScrollViewReader { proxy in
             List {
-                SubjectHeaderBlock(
-                    kicker: model.workContext.title,
-                    title: "Thread",
-                    subtitle: threadSubtitle,
-                    palette: palette
-                )
-                .pageBodyRow(top: 18, gutter: 0)
+                SubjectPageFact(threadFactLine)
+                    .pageBodyRow(top: 12, gutter: 0)
 
                 if let root {
                     ForEach(Self.rows(for: root)) { row in
@@ -93,11 +88,7 @@ struct CommentThreadScreen: View {
             // which resolves before a row can measure itself.
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
             .environment(\.commentsContentWidth, width)
-            #if os(macOS)
-            .navigationTitle("Thread")
-            #endif
-            .hidesFloatingTabBar()
-            .subjectScreenWash(palette: palette, role: .content)
+            .subjectScreenWash(title: "Thread", palette: palette, role: .content)
         }
     }
 
@@ -108,6 +99,13 @@ struct CommentThreadScreen: View {
                 title: model.workContext.title
             )
         )
+    }
+
+    private var threadFactLine: String? {
+        let parts = [model.workContext.title, threadSubtitle ?? ""]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     private var threadSubtitle: String? {

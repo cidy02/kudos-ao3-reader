@@ -82,11 +82,12 @@ struct SearchResultsHero: View {
     // MARK: - Artboard 1k
 
     private var subjectPageBody: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            SubjectHeaderBlock(
-                kicker: "Search results",
-                title: "\(summary.total.formatted()) \(summary.total == 1 ? "work" : "works")",
-                subtitle: summary.subject,
+        let countFact = "\(summary.total.formatted()) \(summary.total == 1 ? "work" : "works") on AO3"
+        let trimmedSubject = summary.subject?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return VStack(alignment: .leading, spacing: 16) {
+            SubjectPageHeading(
+                title: trimmedSubject.isEmpty ? countFact : trimmedSubject,
+                subtitle: trimmedSubject.isEmpty ? nil : countFact,
                 palette: palette
             ) {
                 sortControl

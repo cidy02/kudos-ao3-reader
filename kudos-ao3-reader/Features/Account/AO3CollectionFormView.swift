@@ -89,7 +89,7 @@ struct AO3CollectionFormView: View {
                 if form != nil { formBody } else { EmptyView() }
             }
         }
-        .subjectScreenWash(palette: palette)
+        .subjectScreenWash(title: isNew ? "New collection" : "Edit collection", palette: palette)
         .task { if phase == .idle { await loadForm() } }
         .onDisappear { nameCheckTask?.cancel() }
         // 1bl: the alert says what AO3 actually does — including to other
@@ -122,15 +122,16 @@ struct AO3CollectionFormView: View {
             set: { form = $0 }
         )
         List {
-            Section {
-                header.pageBodyRow(top: 20, gutter: 0)
-                if let saveMessage {
-                    noticeCard(saveMessage, isError: false)
-                        .pageBodyRow(top: 12, gutter: SubjectMetrics.accountGutter)
-                }
-                if let errors = form?.generalErrors, !errors.isEmpty {
-                    noticeCard(errors.joined(separator: "\n"), isError: true)
-                        .pageBodyRow(top: 12, gutter: SubjectMetrics.accountGutter)
+            if saveMessage != nil || !(form?.generalErrors.isEmpty ?? true) {
+                Section {
+                    if let saveMessage {
+                        noticeCard(saveMessage, isError: false)
+                            .pageBodyRow(top: 12, gutter: SubjectMetrics.accountGutter)
+                    }
+                    if let errors = form?.generalErrors, !errors.isEmpty {
+                        noticeCard(errors.joined(separator: "\n"), isError: true)
+                            .pageBodyRow(top: 12, gutter: SubjectMetrics.accountGutter)
+                    }
                 }
             }
 
@@ -221,18 +222,6 @@ struct AO3CollectionFormView: View {
         .cardList()
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
-    }
-
-    // MARK: Header
-
-    private var header: some View {
-        SubjectHeaderBlock(
-            kicker: "AO3 Account › Collections",
-            title: isNew ? "New collection" : "Edit collection",
-            subtitle: "Your changes are saved to AO3",
-            palette: palette,
-            gutter: SubjectMetrics.accountGutter
-        )
     }
 
     private var palette: SubjectPalette {

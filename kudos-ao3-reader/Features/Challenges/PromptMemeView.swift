@@ -134,8 +134,8 @@ struct PromptMemeView: View {
     private var promptRows: some View {
         List {
             Section {
-                header.pageBodyRow(top: 20, gutter: selfGuttered).id(Self.headerRowID)
-                filterSegment.pageBodyRow(top: 14, gutter: gutter)
+                header.pageBodyRow(top: 12, gutter: selfGuttered).id(Self.headerRowID)
+                filterSegment.pageBodyRow(top: 10, gutter: gutter)
             }
 
             if let actionErrorMessage {
@@ -178,10 +178,7 @@ struct PromptMemeView: View {
         .cardList()
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
-        #if os(macOS)
-        .navigationTitle("Prompts")
-        #endif
-        .subjectScreenWash(palette: palette)
+        .subjectScreenWash(title: "Prompts", palette: palette)
     }
 
     /// The spec's bottom-bar "New prompt": AO3's sign-up form for this meme.
@@ -213,17 +210,11 @@ struct PromptMemeView: View {
         if !closeDateText.isEmpty {
             line += " · \(closeDateText)"
         }
-        return line
+        return [effectiveTitle, line].filter { !$0.isEmpty }.joined(separator: " · ")
     }
 
     private var header: some View {
-        SubjectHeaderBlock(
-            kicker: effectiveTitle,
-            title: "Prompts",
-            subtitle: subtitleText,
-            palette: palette,
-            gutter: SubjectMetrics.accountGutter
-        )
+        SubjectPageFact(subtitleText, gutter: SubjectMetrics.accountGutter)
     }
 
     private var filterSegment: some View {

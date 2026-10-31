@@ -25,12 +25,11 @@ struct WritingChaptersView: View {
     var body: some View {
         List {
             Section {
-                SubjectHeaderBlock(
-                    kicker: "AO3 Account", title: "Chapters",
-                    subtitle: Self.subtitle(workTitle: workTitle, count: chapters?.count),
-                    palette: theme.scopePalette, gutter: gutter
+                SubjectPageFact(
+                    Self.subtitle(workTitle: workTitle, count: chapters?.count),
+                    gutter: gutter
                 )
-                .pageBodyRow(top: 20, gutter: 0)
+                .pageBodyRow(top: 12, gutter: 0)
             }
             if let chapters, loadedGeneration == auth.sessionGeneration {
                 Section { rows(chapters) }
@@ -50,10 +49,7 @@ struct WritingChaptersView: View {
         .cardList()
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
-        #if os(macOS)
-        .navigationTitle("Chapters")
-        #endif
-        .subjectScreenWash(palette: theme.scopePalette)
+        .subjectScreenWash(title: "Chapters", palette: theme.scopePalette)
         .task(id: "\(auth.sessionGeneration):\(reload)") { await load() }
     }
 

@@ -10,7 +10,7 @@ import SwiftUI
 ///
 ///   1. `SubjectPalette`      — hue → wash / accent / chip / border colours
 ///   2. `subjectWash()`       — the full-bleed gradient behind a subject's own page
-///   3. `SubjectHeaderBlock`  — kicker · rule · 32pt hero · tallies
+///   3. `SubjectPageHeading`  — own-heading subject title that shrinks into the bar on scroll
 ///   4. `SectionRuleHeader`   — Home/Library's kicker · count · hairline · chevron
 ///   5. `SubjectStatStrip`    — the four-cell divided figure strip
 ///   6. `WorkProgressRing`    — the 68pt read-progress ring
@@ -410,8 +410,8 @@ struct SubjectKicker: View {
     var ruleWidth: CGFloat = SubjectMetrics.kickerRuleWidth
     /// Space between the label and its rule (spec `6px` on cards).
     var ruleSpacing: CGFloat = 6
-    /// One line on a card, whose height is fixed. A page header has the room, and gives the
-    /// accessibility sizes more (see `SubjectHeaderBlock`).
+    /// One line on a card, whose height is fixed. A work header has the room, and gives the
+    /// accessibility sizes more (see `SubjectPageHeading`).
     var lineLimit = 1
 
     @ScaledMetric(relativeTo: .caption2) private var scale: CGFloat = 1
@@ -448,78 +448,91 @@ struct SubjectKicker: View {
 
 // MARK: - Page header
 
-/// The header every pushed, subject-scoped screen opens with: kicker, rule,
-/// a 32pt hero figure or name, and one line of tallies underneath. Sits
-/// directly on the wash — no card, per the spec.
-struct SubjectHeaderBlock<Trailing: View>: View {
-    let kicker: String
-    /// Further subjects the kicker is not naming, drawn as `SubjectKicker`'s
-    /// dimmed `+3`. A work in six fandoms is headed by its first, and this is
-    /// what stops the other five vanishing without trace.
-    var kickerTrailingCount: Int = 0
+/// In-page heading for a subject page (work, fandom, collection, queue, or
+/// challenge) that starts straight under the navigation bar and shrinks into
+/// the `.inline` bar on scroll (Rules › "Let iOS do it"; boards 04, 06, 15, 18,
+/// 19, 24, 45).
+///
+/// Only a work's page supplies `fandomKicker` (board 19, rule I-18: fandom label
+/// and short 16×2 rule in the fandom colour); all other caps-kicker header
+/// blocks are retired.
+struct SubjectPageHeading<Trailing: View>: View {
+    enum Size {
+        /// Large Title (34pt bold) when the heading stands alone.
+        case standalone
+        /// Title 1 (28pt bold) when artwork or an avatar sits beside it.
+        case besideArtwork
+
+        var font: Font {
+            switch self {
+            case .standalone: .largeTitle.bold()
+            case .besideArtwork: .title.bold()
+            }
+        }
+    }
+
+    var fandomKicker: String?
+    var fandomExtraCount: Int = 0
+    /// Plain secondary label above the title when a subject names its kind
+    /// without a caps-kicker rule (e.g. "Gift exchange" on board 45).
+    var overline: String?
     let title: String
     var subtitle: String?
-    let palette: SubjectPalette
-    /// The screen edge. The 2026-09 spec ran 26pt on a subject's own page and
-    /// 16pt on the account's lists; the Rules board made it 16 everywhere.
+    var palette: SubjectPalette?
+    var size: Size = .standalone
     var gutter: CGFloat = SubjectMetrics.gutter
-    /// Set by the initializers rather than inferred from `Trailing.self`:
-    /// comparing metatypes to spot `EmptyView` works but reads as a trick, and
-    /// this also lets a caller pass a conditional trailing view that is empty
-    /// at runtime without the separator dot appearing next to nothing.
     var hasTrailing = true
-    /// Drawn on the subtitle line, after a dot separator — the sort dropdown in
-    /// search results, the queue's tag rail elsewhere.
     @ViewBuilder var trailing: () -> Trailing
 
-    @ScaledMetric(relativeTo: .title) private var titleSize: CGFloat = 32
-    @ScaledMetric(relativeTo: .subheadline) private var subtitleSize: CGFloat = 15.5
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            SubjectKicker(
-                text: kicker,
-                palette: palette,
-                trailingCount: kickerTrailingCount,
-                ruleWidth: SubjectMetrics.pageRuleWidth,
-                ruleSpacing: 7,
-                // A collection's name over its page was cut to "WINTER EXCHAN…".
-                lineLimit: dynamicTypeSize.isAccessibilitySize ? 3 : 1
-            )
+        VStack(alignment: .leading, spacing: 6) {
+            if let fandomKicker, !fandomKicker.isEmpty, let palette {
+                SubjectKicker(
+                    text: fandomKicker,
+                    palette: palette,
+                    trailingCount: fandomExtraCount,
+                    size: 13,
+                    ruleWidth: 16,
+                    ruleSpacing: 6,
+                    lineLimit: dynamicTypeSize.isAccessibilitySize ? 3 : 2
+                )
+            } else if let overline, !overline.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text(overline)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
-            // A one-word title (a username) shrinks rather than splitting
-            // mid-word — "AO3_Reade / r" at accessibility sizes.
             let isOneWord = !title.contains(where: \.isWhitespace)
             Text(title)
-                .font(.system(size: titleSize, weight: .bold))
-                .tracking(-0.6)
+                .font(size.font)
                 .monospacedDigit()
-                .lineLimit(isOneWord ? 1 : (dynamicTypeSize.isAccessibilitySize ? nil : 2))
-                .minimumScaleFactor(isOneWord ? 0.5 : 0.7)
+                .lineLimit(isOneWord ? 1 : nil)
+                .minimumScaleFactor(isOneWord ? 0.6 : 1.0)
                 .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+                .subjectOwnHeadingScrollEffect()
 
-            if let subtitle, hasTrailing {
-                // One line with the dot when both fit; otherwise the control drops
-                // under the subtitle and the dot goes (a flow layout left it
-                // dangling at the end of the first line).
+            let trimmed = subtitle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if !trimmed.isEmpty, hasTrailing {
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 8) {
-                        subtitleText(subtitle).fixedSize()
+                        subtitleText(trimmed).fixedSize()
                         Circle()
                             .fill(Color.secondary.opacity(0.4))
                             .frame(width: 4, height: 4)
                         trailing()
                     }
                     VStack(alignment: .leading, spacing: 6) {
-                        // Its full height: without this the one that did not fit was cut
-                        // to a line ("Star Wars - All M…") instead of wrapping.
-                        subtitleText(subtitle).fixedSize(horizontal: false, vertical: true)
+                        subtitleText(trimmed).fixedSize(horizontal: false, vertical: true)
                         trailing()
                     }
                 }
-            } else if let subtitle {
-                subtitleText(subtitle)
+            } else if !trimmed.isEmpty {
+                subtitleText(trimmed)
+                    .fixedSize(horizontal: false, vertical: true)
             } else if hasTrailing {
                 trailing()
             }
@@ -528,28 +541,90 @@ struct SubjectHeaderBlock<Trailing: View>: View {
         .padding(.horizontal, gutter)
     }
 
-    private func subtitleText(_ subtitle: String) -> some View {
-        Text(subtitle)
-            .font(.system(size: subtitleSize))
+    private func subtitleText(_ text: String) -> some View {
+        Text(text)
+            .font(.subheadline)
             .foregroundStyle(.secondary)
     }
 }
 
-extension SubjectHeaderBlock where Trailing == EmptyView {
+extension SubjectPageHeading where Trailing == EmptyView {
     init(
-        kicker: String,
-        kickerTrailingCount: Int = 0,
+        fandomKicker: String? = nil,
+        fandomExtraCount: Int = 0,
+        overline: String? = nil,
         title: String,
         subtitle: String? = nil,
-        palette: SubjectPalette,
+        palette: SubjectPalette? = nil,
+        size: Size = .standalone,
         gutter: CGFloat = SubjectMetrics.gutter
     ) {
         self.init(
-            kicker: kicker,
-            kickerTrailingCount: kickerTrailingCount,
+            fandomKicker: fandomKicker,
+            fandomExtraCount: fandomExtraCount,
+            overline: overline,
             title: title,
             subtitle: subtitle,
             palette: palette,
+            size: size,
+            gutter: gutter,
+            hasTrailing: false,
+            trailing: { EmptyView() }
+        )
+    }
+}
+
+/// Secondary fact row at the top of a pushed page whose title lives in the
+/// system `.inline` navigation bar (boards 08, 38–41, 44). Renders nothing when
+/// both `text` and `trailing` are empty.
+struct SubjectPageFact<Trailing: View>: View {
+    let text: String?
+    var gutter: CGFloat = SubjectMetrics.gutter
+    var hasTrailing = true
+    @ViewBuilder var trailing: () -> Trailing
+
+    var body: some View {
+        let trimmed = text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !trimmed.isEmpty, hasTrailing {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    factText(trimmed).fixedSize()
+                    Spacer(minLength: 0)
+                    trailing()
+                }
+                VStack(alignment: .leading, spacing: 6) {
+                    factText(trimmed).fixedSize(horizontal: false, vertical: true)
+                    trailing()
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, gutter)
+        } else if !trimmed.isEmpty {
+            factText(trimmed)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, gutter)
+        } else if hasTrailing {
+            trailing()
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, gutter)
+        }
+    }
+
+    private func factText(_ value: String) -> some View {
+        Text(value)
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+    }
+}
+
+extension SubjectPageFact where Trailing == EmptyView {
+    init(
+        _ text: String?,
+        gutter: CGFloat = SubjectMetrics.gutter
+    ) {
+        self.init(
+            text: text,
             gutter: gutter,
             hasTrailing: false,
             trailing: { EmptyView() }
@@ -1127,8 +1202,7 @@ struct GlassCircleButton<Label: View>: View {
     var badge: String?
     /// Spoken name for the control. Carried as a parameter rather than left to
     /// the call site, because attaching `.accessibilityLabel` outside the button
-    /// changes its type, and the convenience initialisers that pin a concrete
-    /// chrome type (see `SubjectScreenScaffold`) constrain exactly that type.
+    /// changes its concrete view type.
     /// Named `accessibilityName` rather than `accessibilityLabel` so it never
     /// reads as a shadow of the view modifier of that name.
     var accessibilityName: String

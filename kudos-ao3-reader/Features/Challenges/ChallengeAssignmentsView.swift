@@ -87,8 +87,8 @@ struct ChallengeAssignmentsView: View {
     var body: some View {
         List {
             Section {
-                header.pageBodyRow(top: 20, gutter: selfGuttered)
-                segmentStrip.pageBodyRow(top: 14, gutter: gutter)
+                header.pageBodyRow(top: 12, gutter: selfGuttered)
+                segmentStrip.pageBodyRow(top: 10, gutter: gutter)
             }
 
             switch phase {
@@ -103,10 +103,7 @@ struct ChallengeAssignmentsView: View {
         .cardList()
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
-        #if os(macOS)
-        .navigationTitle("Assignments")
-        #endif
-        .subjectScreenWash(palette: palette)
+        .subjectScreenWash(title: "Assignments", palette: palette)
         .safeAreaBar(edge: .bottom, spacing: 0) {
             if auth.isLoggedIn, phase == .loaded,
                AO3CollectionOwnerControls.areVisible(viewerIsOwner: viewerIsOwner) {
@@ -146,17 +143,11 @@ struct ChallengeAssignmentsView: View {
     // MARK: - Header
 
     private var header: some View {
-        SubjectHeaderBlock(
-            kicker: effectiveTitle,
-            title: "Assignments",
-            subtitle: subtitleLine,
-            palette: palette,
-            gutter: SubjectMetrics.accountGutter
-        )
+        SubjectPageFact(subtitleLine, gutter: SubjectMetrics.accountGutter)
     }
 
     private var subtitleLine: String {
-        var parts: [String] = []
+        var parts: [String] = [effectiveTitle]
         if phase == .loaded {
             if loadErrors[.matched] == nil { parts.append("\(matched.count) matched") }
             if loadErrors[.unmatched] == nil { parts.append("\(unmatched.count) unmatched") }
@@ -164,7 +155,7 @@ struct ChallengeAssignmentsView: View {
         if let due = worksDueAt?.dateText {
             parts.append("works due \(due)")
         }
-        return parts.joined(separator: " · ")
+        return parts.filter { !$0.isEmpty }.joined(separator: " · ")
     }
 
     private var segmentStrip: some View {

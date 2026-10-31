@@ -280,6 +280,13 @@ struct FandomWorksView: View {
             }
         }
         .subjectScreenWash(palette: resultsPalette, role: .subjectWash)
+        .subjectOwnHeadingChrome(
+            title: fandom,
+            overrideInlineTitle: bulkSelection.isSelecting
+                ? WorkSelectionTitle.text(selectedCount: bulkSelection.selected(in: results).count)
+                : nil,
+            isActive: !(phase == .loading && results.isEmpty)
+        )
         .screenTint(resultsPalette)
             // Zooms out of the fandom row that pushed it.
             .workCardZoomDestination(BrowseZoomKey.fandom(zoomKey), in: zoomNamespace)
@@ -730,6 +737,13 @@ struct TagWorksView: View {
             }
         }
         .subjectScreenWash(palette: resultsPalette, role: .content)
+        .subjectOwnHeadingChrome(
+            title: request.title,
+            overrideInlineTitle: bulkSelection.isSelecting
+                ? WorkSelectionTitle.text(selectedCount: bulkSelection.selected(in: results).count)
+                : nil,
+            isActive: !(phase == .loading && results.isEmpty)
+        )
         .screenTint(resultsPalette)
             .toolbar { toolbarContent }
             .onChange(of: showingFilters) { _, showing in

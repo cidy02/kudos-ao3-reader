@@ -35,14 +35,8 @@ struct EditTagsView: View {
     var body: some View {
         List {
             Section {
-                SubjectHeaderBlock(
-                    kicker: "AO3 Account",
-                    title: "Edit tags",
-                    subtitle: subtitle,
-                    palette: accountPalette,
-                    gutter: gutter
-                )
-                .pageBodyRow(top: 20, gutter: selfGuttered)
+                SubjectPageFact(subtitle, gutter: gutter)
+                    .pageBodyRow(top: 12, gutter: selfGuttered)
             }
 
             // One `List` row per field, as segments of one card. The Tags card
@@ -112,10 +106,7 @@ struct EditTagsView: View {
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
         .environment(\.writingEditedWorkID, form.workID)
-        #if os(macOS)
-        .navigationTitle("Edit tags")
-        #endif
-        .subjectScreenWash(palette: accountPalette)
+        .subjectScreenWash(title: "Edit tags", palette: accountPalette)
         #if DEBUG
         .task { if DebugLaunchRoute.takePush("tagseditor") { addingKind = .fandom } }
         #endif

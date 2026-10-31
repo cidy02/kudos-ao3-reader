@@ -311,22 +311,14 @@ struct HomeSectionListView: View {
         .subjectScreenWash(palette: scopePalette, role: .content)
     }
 
-    /// The kicker / rule / 32pt hero, as the list's first row rather than as a
-    /// navigation title: spec 1ad scrolls it away under the floating chrome, and
-    /// a `navigationTitle` cannot do that.
     private var subjectHeader: some View {
-        SubjectHeaderBlock(
-            kicker: "Home",
-            title: kind.title,
-            subtitle: headerTallyLine,
-            palette: scopePalette
-        )
+        SubjectPageFact(headerTallyLine)
     }
 
     private var subjectHeaderSection: some View {
         Section {
             subjectHeader
-            .listRowInsets(EdgeInsets(top: 20, leading: 0, bottom: 4, trailing: 0))
+            .listRowInsets(EdgeInsets(top: 12, leading: 0, bottom: 4, trailing: 0))
             .listRowBackground(Color.clear)
             .listRowSeparator(.hidden)
 

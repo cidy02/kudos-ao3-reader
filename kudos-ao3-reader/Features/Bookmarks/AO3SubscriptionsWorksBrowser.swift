@@ -234,11 +234,11 @@ struct AO3SubscriptionsWorksBrowser: View {
         List {
             Section {
                 header
-                    .listRowInsets(EdgeInsets(top: 20, leading: 0, bottom: 4, trailing: 0))
+                    .listRowInsets(EdgeInsets(top: 12, leading: 0, bottom: 4, trailing: 0))
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
                 AO3SubscriptionsScopeRail(selection: $scope, palette: palette)
-                    .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 8, trailing: 0))
+                    .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 8, trailing: 0))
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
                 AO3SubscriptionsFilterRail(selection: $filter, palette: palette)
@@ -266,17 +266,14 @@ struct AO3SubscriptionsWorksBrowser: View {
     }
 
     private var header: some View {
-        SubjectHeaderBlock(
-            kicker: kicker,
-            title: "Subscriptions",
-            subtitle: AO3SubscriptionsCopy.subtitle(
+        SubjectPageFact(
+            AO3SubscriptionsCopy.subtitle(
                 shownCount: shownCount,
                 updatedCount: updatedCount,
                 filter: filter,
                 currentPage: currentPage,
                 totalPages: totalPages
             ),
-            palette: palette,
             gutter: SubjectMetrics.accountGutter
         )
     }

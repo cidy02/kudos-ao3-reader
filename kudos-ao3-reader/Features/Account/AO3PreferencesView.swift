@@ -77,8 +77,9 @@ struct AO3PreferencesView: View {
         // everything and leaves on its own." It used to be a row inside the list,
         // which is the one thing that board rules out.
         .overlay(alignment: .bottom) { toastOverlay }
-        #if os(macOS)
-        .navigationTitle("My Preferences")
+        .navigationTitle("AO3 Preferences")
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
         #endif
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
@@ -111,10 +112,6 @@ struct AO3PreferencesView: View {
     @ViewBuilder
     private func formContent(_ snapshot: AO3PreferencesSnapshot) -> some View {
         List {
-            Section {
-                header.pageBodyRow(top: 20, gutter: selfGuttered)
-            }
-
             accountLinksSection
 
             ForEach(Array(snapshot.sections.enumerated()), id: \.element.id) { sectionIndex, section in
@@ -649,22 +646,9 @@ extension AO3PreferencesView {
         }
     }
 
-    private var header: some View {
-        SubjectHeaderBlock(
-            kicker: "AO3 Account",
-            title: "AO3 Preferences",
-            subtitle: "Stored on AO3 · applies everywhere you read",
-            palette: accountPalette,
-            gutter: SubjectMetrics.accountGutter
-        )
-    }
-
     private var accountPalette: SubjectPalette {
         themeManager.scopePalette
     }
 
     private var gutter: CGFloat { SubjectMetrics.accountGutter }
-
-    /// For a block that pads itself — here the header block at its own gutter.
-    private var selfGuttered: CGFloat { 0 }
 }

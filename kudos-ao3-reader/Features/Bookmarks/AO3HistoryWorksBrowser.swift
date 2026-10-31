@@ -40,7 +40,7 @@ struct AO3HistoryWorksBrowser: View {
     private var compactBody: some View {
         ScrollView {
             VStack(spacing: 12) {
-                header.padding(.top, 20)
+                header.padding(.top, 12)
                 AO3HistoryFilterRail(selection: $filter, palette: palette)
                 if showPagination { paginationBar.padding(.horizontal, CardListMetrics.sideMargin) }
                 if entries.isEmpty {
@@ -62,11 +62,11 @@ struct AO3HistoryWorksBrowser: View {
         List {
             Section {
                 header
-                    .listRowInsets(EdgeInsets(top: 20, leading: 0, bottom: 4, trailing: 0))
+                    .listRowInsets(EdgeInsets(top: 12, leading: 0, bottom: 4, trailing: 0))
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
                 AO3HistoryFilterRail(selection: $filter, palette: palette)
-                    .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 8, trailing: 0))
+                    .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 8, trailing: 0))
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
             }
@@ -98,13 +98,7 @@ struct AO3HistoryWorksBrowser: View {
     }
 
     private var header: some View {
-        SubjectHeaderBlock(
-            kicker: kicker,
-            title: "History",
-            subtitle: subtitle,
-            palette: palette,
-            gutter: SubjectMetrics.accountGutter
-        )
+        SubjectPageFact(subtitle, gutter: SubjectMetrics.accountGutter)
     }
 
     private var paginationBar: some View {

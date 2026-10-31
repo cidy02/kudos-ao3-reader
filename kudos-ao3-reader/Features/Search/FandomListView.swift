@@ -331,20 +331,14 @@ struct FandomListView: View {
     }
 
     private var pageHeader: some View {
-        SubjectHeaderBlock(
-            kicker: "Browse",
-            title: category.name,
-            subtitle: headerTally,
-            palette: palette
-        )
-        .listRowInsets(EdgeInsets(top: 20, leading: 0, bottom: 4, trailing: 0))
-        .listRowBackground(Color.clear)
-        .listRowSeparator(.hidden)
+        SubjectPageFact(headerTally)
+            .listRowInsets(EdgeInsets(top: 12, leading: 0, bottom: 4, trailing: 0))
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
     }
 
     private func failureList(message: String, systemImage: String) -> some View {
         List {
-            Section { pageHeader }
             Section {
                 AO3ProfileMessageRow(
                     title: "Couldn't load fandoms",

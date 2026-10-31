@@ -192,13 +192,7 @@ struct CommentsView: View {
             // so a row can't measure itself in time. Measure once here.
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { commentsWidth = $0 }
             .environment(\.commentsContentWidth, commentsWidth)
-            // The screen states its own name in `header` now (spec 1f), so the bar
-            // is emptied rather than titled. macOS has no such bar to empty — its
-            // window still needs a title — hence the one platform fork.
-            #if os(macOS)
-            .navigationTitle("Comments")
-            #endif
-            .subjectScreenWash(palette: palette, role: .content)
+            .subjectScreenWash(title: "Comments", palette: palette, role: .content)
             .navigationDestination(item: $pushedThread) { route in
                 CommentThreadScreen(
                     rootID: route.commentID,
@@ -471,35 +465,46 @@ struct CommentsView: View {
     /// through to their profile, and — because this screen can be modal — so the
     /// tap still routes through `openAuthor`'s dismiss-then-push queue.
     private var header: some View {
-        SubjectHeaderBlock(
-            kicker: headerKicker,
-            title: model.workContext.title,
-            palette: palette,
-            gutter: gutter,
-            hasTrailing: hasByline
-        ) {
-            AO3AuthorBylineView(
-                names: model.workAuthors,
-                identities: model.workAuthorIdentities,
-                includesBy: false,
-                font: .system(size: 15.5),
-                expandsHitTarget: false,
-                onOpenRoute: openAuthor
-            )
+        VStack(alignment: .leading, spacing: 3) {
+            Text(model.workContext.title)
+                .font(.headline)
+                .fixedSize(horizontal: false, vertical: true)
+            if hasByline || selectedChapterFact != nil {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    if hasByline {
+                        AO3AuthorBylineView(
+                            names: model.workAuthors,
+                            identities: model.workAuthorIdentities,
+                            includesBy: false,
+                            font: .subheadline,
+                            expandsHitTarget: false,
+                            onOpenRoute: openAuthor
+                        )
+                    }
+                    if hasByline, selectedChapterFact != nil {
+                        Text("·")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    if let selectedChapterFact {
+                        Text(selectedChapterFact)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, gutter)
     }
 
     private var hasByline: Bool {
         !model.workAuthors.isEmpty || !model.workAuthorIdentities.isEmpty
     }
 
-    /// What this screen is scoped to: the chapter when the reader has picked
-    /// one, and the screen's own name when they are looking at the whole work.
-    private var headerKicker: String {
-        if model.scope == .byChapter, let chapter = model.selectedChapter {
-            return "Chapter \(chapter.position)"
-        }
-        return "Comments"
+    private var selectedChapterFact: String? {
+        guard model.scope == .byChapter, let chapter = model.selectedChapter else { return nil }
+        return "Chapter \(chapter.position)"
     }
 
     // MARK: Signal strip
@@ -1462,9 +1467,8 @@ struct CommentComposerSheet: View {
                 editorFocused = true
             }
         }
-        // `appScreenSurface`, not `subjectScreenWash`: the latter also empties
-        // the navigation bar and hides the tab bar, while Cancel and Post live
-        // in this sheet's bar. Applied under presentation modifiers so those stay outermost.
+        // Sheet surface, not `subjectScreenWash` (which hides the floating tab bar
+        // for pushed pages). Applied under the presentation modifiers so those stay outermost.
         .appScreenSurface(.grouped)
         // Two numbers, not two layouts (spec 1be): `.medium` is the artboard's
         // 462pt of sheet, and the system re-lays it out at the shorter height on

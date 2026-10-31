@@ -229,14 +229,8 @@ struct CollectionReorderSheet: View {
         NavigationStack {
             List {
                 Section {
-                    SubjectHeaderBlock(
-                        kicker: "Library › Collections",
-                        title: "Reorder",
-                        subtitle: collection.name,
-                        palette: palette,
-                        gutter: gutter
-                    )
-                    .pageBodyRow(top: 20, gutter: 0)
+                    SubjectPageFact(collection.name, gutter: gutter)
+                        .pageBodyRow(top: 12, gutter: 0)
                 }
 
                 Section {

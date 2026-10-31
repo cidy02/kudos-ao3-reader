@@ -155,6 +155,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
         .subjectScreenWash(palette: workPalette, role: .subjectWash)
+        .subjectOwnHeadingChrome(title: displayTitle)
         .refreshable { await refreshDetails() }
         // Same-touch author byline on a List card can also activate the row's work
         // NavigationLink. Dismiss async — in-transaction dismiss() is often ignored.
@@ -245,14 +246,6 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                     .accentFill()
             }
         }
-        // The title is the page's own 32pt heading now (spec 1a), so repeating
-        // it in the bar would be the same fact twice — `subjectScreenWash` empties
-        // the bar for exactly that reason, and also hides the floating tab bar
-        // this used to ask for separately. macOS has no such header treatment in
-        // its window chrome, so it keeps the real title.
-        #if os(macOS)
-            .navigationTitle(displayTitle)
-        #endif
             .ao3WorkActions(workActions, workID: ao3WorkID ?? 0, auth: auth)
             .toolbar { detailToolbar }
             .screenTint(workPalette)

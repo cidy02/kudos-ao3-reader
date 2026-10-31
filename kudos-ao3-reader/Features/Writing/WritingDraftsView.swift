@@ -37,19 +37,15 @@ struct WritingDraftsView: View {
     ///   easiest gesture in the app to fire by accident.
     var body: some View {
         List {
-            Section {
-                SubjectHeaderBlock(
-                    kicker: "AO3 Account",
-                    title: "Drafts",
-                    subtitle: draftsTally,
-                    palette: theme.scopePalette,
-                    gutter: gutter
-                )
-                .pageBodyRow(top: 20, gutter: 0)
+            if let draftsTally {
+                Section {
+                    SubjectPageFact(draftsTally, gutter: gutter)
+                        .pageBodyRow(top: 12, gutter: 0)
+                }
             }
 
             Section {
-                deletionNotice.pageBodyRow(top: 18, gutter: gutter)
+                deletionNotice.pageBodyRow(top: 14, gutter: gutter)
             }
 
             if isLoading {
@@ -113,8 +109,6 @@ struct WritingDraftsView: View {
         .cardList()
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
-        // The page states its own name in the header block above, per 1x.
-        .hidesNavigationBarChrome()
         // New Work in the top chrome, as on My Works — it was a row above the
         // list (owner, 2026-10-01: global actions live in the top-right chrome).
         .toolbar {
@@ -126,7 +120,7 @@ struct WritingDraftsView: View {
                 }
             }
         }
-        .subjectScreenWash(palette: theme.scopePalette)
+        .subjectScreenWash(title: "Drafts", palette: theme.scopePalette)
         .task(id: "\(auth.sessionGeneration):\(page):\(reload)") { await load() }
         .refreshable { reload += 1 }
         .onChange(of: scenePhase) { _, phase in if phase == .active { now = Date() } }
@@ -537,31 +531,22 @@ struct WritingLoaderPage: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                SubjectHeaderBlock(
-                    kicker: "AO3 Account",
-                    title: title,
-                    palette: theme.scopePalette,
-                    gutter: SubjectMetrics.accountGutter
-                )
-                .padding(.top, 20)
-                Group {
-                    if let message {
-                        ContentUnavailableView {
-                            Label("Couldn't load from AO3", systemImage: "exclamationmark.triangle")
-                        } description: {
-                            Text(message)
-                        } actions: {
-                            Button("Try Again", action: onRetry)
-                        }
-                    } else {
-                        ProgressView().controlSize(.large).accentFill()
+            Group {
+                if let message {
+                    ContentUnavailableView {
+                        Label("Couldn't load from AO3", systemImage: "exclamationmark.triangle")
+                    } description: {
+                        Text(message)
+                    } actions: {
+                        Button("Try Again", action: onRetry)
                     }
+                } else {
+                    ProgressView().controlSize(.large).accentFill()
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.top, 60)
             }
+            .frame(maxWidth: .infinity)
+            .padding(.top, 60)
         }
-        .subjectScreenWash(palette: theme.scopePalette)
+        .subjectScreenWash(title: title, palette: theme.scopePalette)
     }
 }

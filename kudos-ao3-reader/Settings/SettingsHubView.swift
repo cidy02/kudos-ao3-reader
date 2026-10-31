@@ -26,17 +26,14 @@ struct SettingsHubView: View {
     var body: some View {
         let inputs = self.inputs
         List {
-            Section {
-                SettingsHeaderBlock().pageBodyRow(top: 20, gutter: 0)
-            }
-            ForEach(SettingsRoute.hubGroups) { group in
+            ForEach(Array(SettingsRoute.hubGroups.enumerated()), id: \.element.id) { groupIndex, group in
                 Section {
-                    // Pads itself to `SubjectMetrics.gutter`, like the header.
+                    // Pads itself to `SubjectMetrics.gutter`.
                     // 1ab: 10 from the rule to its panel. The List's minimum
                     // row height used to supply the gap, and ~20 more with it.
                     SectionRuleHeader(title: group.title)
                         .padding(.bottom, 10)
-                        .pageBodyRow(top: 22, gutter: 0)
+                        .pageBodyRow(top: groupIndex == 0 ? 12 : 22, gutter: 0)
                     // One `List` row per link: in one row, a tap fires every link.
                     ForEach(Array(group.routes.enumerated()), id: \.element) { index, route in
                         let value = SettingsHubValue.row(route, inputs)
@@ -51,12 +48,9 @@ struct SettingsHubView: View {
         // 1ab's rows are 11×14 around a 15pt line (~41pt); the List's own
         // minimum row height held every row at ~52 (L3-B10-1).
         .environment(\.defaultMinListRowHeight, 0)
-        .subjectScreenWash(palette: themeManager.scopePalette)
-        #if os(macOS)
-            .navigationTitle("Settings")
-        #endif
-            // Sync can be connected or dropped on its page; re-read on the way back.
-            .onAppear { folderSyncStatus = FolderSyncService.snapshot() }
+        .subjectScreenWash(title: "Settings", palette: themeManager.scopePalette)
+        // Sync can be connected or dropped on its page; re-read on the way back.
+        .onAppear { folderSyncStatus = FolderSyncService.snapshot() }
     }
 
     private var inputs: SettingsHubInputs {
@@ -117,27 +111,12 @@ struct SettingsPageForm<Content: View>: View {
     let route: SettingsRoute
     @ViewBuilder var content: () -> Content
 
-    @Environment(ThemeManager.self) private var themeManager
-
     var body: some View {
         Form {
             // Group so .appThemedRows() (a .listRowBackground) reaches every section's
             // rows — it does NOT propagate from the Form container, only from a Group/
             // Section/ForEach around the rows.
             Group {
-                Section {
-                    // Reads "Settings › Appearance": the kicker is the page it
-                    // came from, the title the page itself.
-                    SubjectHeaderBlock(
-                        kicker: "Settings",
-                        title: route.title,
-                        palette: themeManager.scopePalette,
-                        gutter: SubjectMetrics.accountGutter
-                    )
-                    .listRowBackground(Color.clear)
-                    .listRowInsets(EdgeInsets())
-                    .listRowSeparator(.hidden)
-                }
                 content()
             }
             .appThemedRows()
@@ -145,11 +124,9 @@ struct SettingsPageForm<Content: View>: View {
         .formStyle(.grouped)
         .appThemedScroll()
         .hidesFloatingTabBar()
+        .navigationTitle(route.title)
         #if os(iOS)
-            // The header names the page; a bar title would say it twice.
-            .hidesNavigationBarChrome()
-        #else
-            .navigationTitle(route.title)
+            .navigationBarTitleDisplayMode(.inline)
         #endif
     }
 }

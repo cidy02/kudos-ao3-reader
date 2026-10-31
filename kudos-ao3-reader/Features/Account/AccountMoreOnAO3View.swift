@@ -63,9 +63,9 @@ enum AO3MoreOnAO3Route {
 
 /// Long-tail AO3 destinations that open in Browse, artboard **1aa**.
 ///
-/// Restyled onto the shared 1o account header (`SubjectHeaderBlock`) and the
-/// form family (`PrivacyDataView.swift`), keeping all existing creator and challenge
-/// destinations, and adding the site-wide "The archive" section for general AO3 pages.
+/// Restyled onto the form family (`PrivacyDataView.swift`), keeping all existing
+/// creator and challenge destinations, and adding the site-wide "The archive"
+/// section for general AO3 pages.
 struct AccountMoreOnAO3View: View {
     @Environment(ThemeManager.self) private var theme
     @ScaledMetric(relativeTo: .footnote) private var footnoteSize: CGFloat = 12.5
@@ -77,25 +77,11 @@ struct AccountMoreOnAO3View: View {
         theme.scopePalette
     }
 
-    private var header: some View {
-        SubjectHeaderBlock(
-            kicker: "AO3 Account",
-            title: "More on AO3",
-            subtitle: "Opens on AO3 in Browse",
-            palette: accountPalette,
-            gutter: SubjectMetrics.accountGutter
-        )
-    }
-
     var body: some View {
         List {
             Section {
-                header.pageBodyRow(top: 20, gutter: selfGuttered)
-            }
-
-            Section {
                 SectionRuleHeader(title: "Post and manage")
-                    .pageBodyRow(top: 18, gutter: selfGuttered)
+                    .pageBodyRow(top: 14, gutter: selfGuttered)
                 postAndManagePanel.pageBodyRow(top: 8, gutter: gutter)
                 creatorToolsFootnote.pageBodyRow(top: 8, gutter: gutter)
             }
@@ -120,10 +106,7 @@ struct AccountMoreOnAO3View: View {
             }
         }
         .cardList()
-        #if os(macOS)
-        .navigationTitle("More on AO3")
-        #endif
-        .subjectScreenWash(palette: accountPalette)
+        .subjectScreenWash(title: "More on AO3", palette: accountPalette)
     }
 
     // MARK: - Panels

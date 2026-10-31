@@ -73,9 +73,7 @@ struct RecentlyDeletedView: View {
                 list(entries)
             }
         }
-        // 1bg's grammar: the title bar takes the count while selecting. Inside the wash:
-        // its blank title is the outer one, and set after it the count never showed.
-        .navigationTitle(isSelecting ? "\(selection.count) selected" : "")
+        .navigationTitle(isSelecting ? "\(selection.count) selected" : "Recently Deleted")
         .subjectScreenWash(palette: palette)
         .toolbar { toolbarContent(entries) }
         #if os(iOS)
@@ -218,9 +216,9 @@ struct RecentlyDeletedView: View {
         let held = entries.filter(\.isHeldCopy)
         return List {
             Section {
-                header(count: entries.count).pageBodyRow(top: 20, gutter: 0)
+                header(count: entries.count).pageBodyRow(top: 12, gutter: 0)
                 reassurance(irreplaceableCount: Self.irreplaceableCount(in: entries))
-                    .pageBodyRow(top: 12, gutter: SubjectMetrics.accountGutter)
+                    .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
             }
 
             if !deleted.isEmpty {
@@ -289,11 +287,8 @@ struct RecentlyDeletedView: View {
     }
 
     private func header(count: Int) -> some View {
-        SubjectHeaderBlock(
-            kicker: "Library",
-            title: "Recently Deleted",
-            subtitle: "\(count) item\(count == 1 ? "" : "s")",
-            palette: palette,
+        SubjectPageFact(
+            "\(count) item\(count == 1 ? "" : "s")",
             gutter: SubjectMetrics.accountGutter
         )
     }

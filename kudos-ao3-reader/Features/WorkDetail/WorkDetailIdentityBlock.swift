@@ -16,13 +16,7 @@ import SwiftUI
 // as a carousel item lifted onto a page of its own.
 
 /// The page header for a work: its primary fandom as the kicker, the title at
-/// 32pt, and the author byline underneath.
-///
-/// The byline goes through `SubjectHeaderBlock`'s trailing slot rather than its
-/// plain-string `subtitle`, because it has to stay a real `AO3AuthorBylineView`
-/// — every co-author is individually tappable through to their AO3 profile here
-/// exactly as it is on every row and card in the app, and a `String` subtitle
-/// would quietly drop that.
+/// Large Title, and the tappable author byline underneath (board 19).
 struct WorkDetailIdentityHeader: View {
     let title: String
     let authors: [String]
@@ -39,18 +33,16 @@ struct WorkDetailIdentityHeader: View {
     }
 
     var body: some View {
-        SubjectHeaderBlock(
-            kicker: namedFandoms.first.map(FandomDisplayName.bareTitle) ?? "Work",
+        SubjectPageHeading(
+            fandomKicker: namedFandoms.first.map(FandomDisplayName.bareTitle),
             // The kicker names one fandom; this is the count of the ones it is
             // not naming. Every fandom is still listed in full under Tags —
             // this is the trace that says to go looking.
-            kickerTrailingCount: max(0, namedFandoms.count - 1),
+            fandomExtraCount: max(0, namedFandoms.count - 1),
             title: title,
             palette: palette,
             hasTrailing: !authors.isEmpty
         ) {
-            // 15.5pt to the spec, which is the same size the subtitle string
-            // would have taken — the slot changes, not the type.
             AO3AuthorBylineView(
                 names: authors,
                 identities: identities,
