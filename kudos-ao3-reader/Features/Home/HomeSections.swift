@@ -1,10 +1,9 @@
 import Foundation
 
 /// The local (library-backed) sections of the Home dashboard. `title` drives both
-/// the carousel header and the pushed "See all" page; `works(from:visible:)` is the
-/// single source of each section's filter + ordering, so the carousel and the
-/// full list never drift. (Network sections — Subscriptions, Recently Updated —
-/// are handled separately in `HomeView`.)
+/// the Home header and the pushed "See all" page; `works(from:visible:)` is the
+/// single source of each section's filter + ordering, so the preview and full
+/// list never drift. The network-backed Subscriptions section lives in `HomeView`.
 enum HomeSectionKind: String, Identifiable, Hashable, CaseIterable {
     case readingNow
     case recentlyUpdated
@@ -16,7 +15,7 @@ enum HomeSectionKind: String, Identifiable, Hashable, CaseIterable {
     var title: String {
         switch self {
         case .readingNow: "Reading Now"
-        case .recentlyUpdated: "Recently Updated"
+        case .recentlyUpdated: "New Chapters"
         }
     }
 
@@ -48,12 +47,12 @@ enum HomeSectionKind: String, Identifiable, Hashable, CaseIterable {
     /// The label over the rows themselves, which is the *state* they are in
     /// rather than the section's name — 1ad heads its list "IN PROGRESS" and 1ae
     /// heads its grid "NEW CHAPTERS", where the page title above already says
-    /// Reading Now / Recently Updated. Repeating the title inside the page said
+    /// Reading Now / New Chapters. Repeating the title inside the page said
     /// the same thing twice and named the shelf instead of the condition.
     var groupTitle: String {
         switch self {
         case .readingNow: "In progress"
-        case .recentlyUpdated: "New chapters"
+        case .recentlyUpdated: "New Chapters"
         }
     }
 
@@ -65,7 +64,7 @@ enum HomeSectionKind: String, Identifiable, Hashable, CaseIterable {
     }
 
     /// The works for this section — filtered + ordered, uncapped. `visible` is the
-    /// privacy predicate (callers pass `passesPrivacy`); carousels cap the result.
+    /// privacy predicate (callers pass `passesPrivacy`); Home caps the preview.
     func works(from works: [SavedWork], visible: (SavedWork) -> Bool) -> [SavedWork] {
         switch self {
         case .readingNow:

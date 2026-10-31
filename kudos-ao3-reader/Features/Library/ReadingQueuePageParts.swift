@@ -10,16 +10,8 @@ enum ReadingQueueFacts {
     static func rowDetail(workCount: Int, totalWordCount: Int, offlineCount: Int) -> String {
         guard workCount > 0 else { return "No works yet" }
         var parts = ["\(workCount) work\(workCount == 1 ? "" : "s")"]
-        if totalWordCount > 0 {
-            let rawMinutes = Double(totalWordCount) / 200
-            let minutes = max(5, Int((rawMinutes / 5).rounded()) * 5)
-            let hours = minutes / 60
-            let remainder = minutes % 60
-            if hours > 0 {
-                parts.append("about \(hours) h" + (remainder > 0 ? " \(remainder) min" : ""))
-            } else {
-                parts.append("about \(minutes) min")
-            }
+        if let estimate = readingTimeEstimate(wordCount: totalWordCount) {
+            parts.append(estimate)
         }
         let offline = min(max(offlineCount, 0), workCount)
         if offline == workCount {
@@ -28,6 +20,18 @@ enum ReadingQueueFacts {
             parts.append("\(offline) offline")
         }
         return parts.joined(separator: " · ")
+    }
+
+    static func readingTimeEstimate(wordCount: Int) -> String? {
+        guard wordCount > 0 else { return nil }
+        let rawMinutes = Double(wordCount) / 200
+        let minutes = max(5, Int((rawMinutes / 5).rounded()) * 5)
+        let hours = minutes / 60
+        let remainder = minutes % 60
+        if hours > 0 {
+            return "about \(hours) h" + (remainder > 0 ? " \(remainder) min" : "")
+        }
+        return "about \(minutes) min"
     }
 
     /// 1h's strip and its legend. Three buckets that always sum to the queue's

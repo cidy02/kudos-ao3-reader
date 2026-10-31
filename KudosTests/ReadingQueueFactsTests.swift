@@ -13,6 +13,8 @@ struct ReadingQueueFactsTests {
             == "8 works · about 9 h 40 min · 6 offline")
         #expect(ReadingQueueFacts.rowDetail(workCount: 5, totalWordCount: 49_000, offlineCount: 5)
             == "5 works · about 4 h 5 min · all offline")
+        #expect(ReadingQueueFacts.readingTimeEstimate(wordCount: 6_700) == "about 35 min")
+        #expect(ReadingQueueFacts.readingTimeEstimate(wordCount: 0) == nil)
     }
 
     @Test func segmentFillFollowsEachWorksOwnProgress() {
