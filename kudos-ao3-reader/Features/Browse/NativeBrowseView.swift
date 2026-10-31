@@ -312,7 +312,8 @@ struct FandomWorksView: View {
                     canReset: hasExtraFilters,
                     onApply: applyFilters,
                     onReset: resetFilters,
-                    ranking: $ranking.settings
+                    ranking: $ranking.settings,
+                    totalWorks: resultSummary?.total ?? (results.isEmpty ? nil : results.count)
                 )
                 .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
             }
@@ -802,7 +803,8 @@ struct TagWorksView: View {
                     canReset: hasExtraFilters,
                     onApply: applyFilters,
                     onReset: resetFilters,
-                    ranking: $ranking.settings
+                    ranking: $ranking.settings,
+                    totalWorks: resultSummary?.total ?? (results.isEmpty ? nil : results.count)
                 )
                 .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
             }

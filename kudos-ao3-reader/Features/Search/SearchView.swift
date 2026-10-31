@@ -742,7 +742,8 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                     router.panel = .none
                 }
             },
-            ranking: $ranking.settings
+            ranking: $ranking.settings,
+            totalWorks: resultSummary?.total ?? (results.isEmpty ? nil : results.count)
         )
     }
 
