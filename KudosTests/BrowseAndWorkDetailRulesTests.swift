@@ -77,6 +77,31 @@ struct BrowseAndWorkDetailRulesTests {
         #expect(picks.map(\.fandom) == ["Fandom B", "Fandom C", "Fandom A"])
     }
 
+    @Test func jumpBackInCarriesFavoriteAndVisitTime() {
+        let visitDate = Date(timeIntervalSince1970: 8_000)
+        let work = MediaBrowserView.LibraryWorkSnapshot(
+            fandomsLower: ["fav fandom"],
+            fandomsDisplay: ["Fav Fandom"],
+            hasBeenRead: true,
+            dateAdded: .distantPast,
+            lastReadDate: Date(timeIntervalSince1970: 5_000),
+            isOnDevice: true,
+            isFavorite: true
+        )
+        let picks = MediaBrowserView.jumpBackInFandoms(
+            works: [work],
+            visits: [.init(fandom: "Fav Fandom", at: visitDate)],
+            categoryFor: { _ in "Cat" },
+            workCountFor: { _ in 50 },
+            limit: 3
+        )
+        #expect(picks.count == 1)
+        #expect(picks.first?.fandom == "Fav Fandom")
+        #expect(picks.first?.isFavorite == true)
+        #expect(picks.first?.lastVisitedAt == visitDate)
+        #expect(picks.first?.workCount == 50)
+    }
+
     // MARK: Comment budget
 
     /// AO3 counts code points (Ruby `String#length`), not graphemes.
