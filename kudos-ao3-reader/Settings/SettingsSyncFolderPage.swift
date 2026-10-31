@@ -134,7 +134,10 @@ struct FolderSyncSettingsSection: View {
             LabeledContent {
                 Text(persistenceStatus.migrationState.title)
             } label: {
-                Label("Metadata", systemImage: "externaldrive")
+                HStack(spacing: 12) {
+                    SettingsIconTile(color: Color(hex: "#64D2FF") ?? .cyan, systemImage: "externaldrive")
+                    Text("Metadata")
+                }
             }
 
             if folderStatus.isConnected {
@@ -149,38 +152,59 @@ struct FolderSyncSettingsSection: View {
                         }
                     }
                 } label: {
-                    Label("Folder", systemImage: "folder")
+                    HStack(spacing: 12) {
+                        SettingsIconTile(color: Color(hex: "#007AFF") ?? .blue, systemImage: "folder")
+                        Text("Folder")
+                    }
                 }
 
                 Toggle(isOn: Binding(
                     get: { folderStatus.autoSyncEnabled },
                     set: onToggleAutoSync
                 )) {
-                    Label("Auto Sync", systemImage: "arrow.triangle.2.circlepath.circle")
+                    HStack(spacing: 12) {
+                        SettingsIconTile(color: Color(hex: "#007AFF") ?? .blue, systemImage: "arrow.triangle.2.circlepath.circle")
+                        Text("Auto Sync")
+                    }
                 }
                 .accentFill()
 
                 Button(action: onSyncNow) {
-                    Label("Sync Now", systemImage: "arrow.triangle.2.circlepath")
+                    HStack(spacing: 12) {
+                        SettingsIconTile(color: Color(hex: "#007AFF") ?? .blue, systemImage: "arrow.triangle.2.circlepath")
+                        Text("Sync Now")
+                    }
                 }
                 .disabled(isSyncing || isPreparing)
 
                 Button(action: onChooseFolder) {
-                    Label("Change Folder", systemImage: "folder.badge.gearshape")
+                    HStack(spacing: 12) {
+                        SettingsIconTile(color: Color(hex: "#007AFF") ?? .blue, systemImage: "folder.badge.gearshape")
+                        Text("Change Folder")
+                    }
                 }
                 .disabled(isSyncing || isPreparing)
 
                 Button(action: onShowSyncDetails) {
-                    Label("Sync Details", systemImage: "list.bullet.rectangle")
+                    HStack(spacing: 12) {
+                        SettingsIconTile(color: Color(hex: "#6C6C70") ?? .gray, systemImage: "list.bullet.rectangle")
+                        Text("Sync Details")
+                    }
                 }
 
                 Button(role: .destructive, action: onDisconnect) {
-                    Label("Disconnect", systemImage: "xmark.circle")
+                    HStack(spacing: 12) {
+                        SettingsIconTile(color: Color(hex: "#D70015") ?? .red, systemImage: "xmark.circle")
+                        Text("Disconnect")
+                    }
                 }
                 .disabled(isSyncing)
             } else {
                 Button(action: onChooseFolder) {
-                    Label("Choose Sync Folder", systemImage: "folder.badge.plus")
+                    HStack(spacing: 12) {
+                        SettingsIconTile(color: Color(hex: "#007AFF") ?? .blue, systemImage: "folder.badge.plus")
+                        Text("Choose Sync Folder")
+                    }
                 }
                 .disabled(isSyncing || isPreparing)
             }
@@ -194,10 +218,12 @@ struct FolderSyncSettingsSection: View {
             }
 
             Button(action: onRetryPreparation) {
-                Label(
-                    persistenceStatus.migrationState == .completed ? "Check Metadata" : "Retry Metadata Prep",
-                    systemImage: "arrow.clockwise"
-                )
+                HStack(spacing: 12) {
+                    SettingsIconTile(color: Color(hex: "#007AFF") ?? .blue, systemImage: "arrow.clockwise")
+                    Text(
+                        persistenceStatus.migrationState == .completed ? "Check Metadata" : "Retry Metadata Prep"
+                    )
+                }
             }
             .disabled(isPreparing || isSyncing)
 

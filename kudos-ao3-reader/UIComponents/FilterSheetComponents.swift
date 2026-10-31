@@ -8,6 +8,16 @@ struct SettingsIconTile: View {
     let color: Color
     let systemImage: String
 
+    init(color: Color, systemImage: String) {
+        self.color = color
+        self.systemImage = systemImage
+    }
+
+    init(hex: String, systemImage: String, fallback: Color = .gray) {
+        self.color = Color(hex: hex) ?? fallback
+        self.systemImage = systemImage
+    }
+
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 7, style: .continuous)

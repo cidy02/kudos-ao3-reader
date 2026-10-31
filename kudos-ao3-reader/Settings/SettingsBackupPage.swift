@@ -486,8 +486,9 @@ struct BackupSettingsSection: View {
     var body: some View {
         Section {
             Button(action: onExport) {
-                HStack {
-                    Label("Export Backup…", systemImage: "square.and.arrow.up")
+                HStack(spacing: 12) {
+                    SettingsIconTile(color: Color(hex: "#64D2FF") ?? .cyan, systemImage: "square.and.arrow.up")
+                    Text("Export Backup…")
                     if isPreparingExport {
                         Spacer()
                         ProgressView().accentFill()
@@ -496,8 +497,9 @@ struct BackupSettingsSection: View {
             }
             .disabled(isBusy)
             Button(action: onImport) {
-                HStack {
-                    Label("Import Backup…", systemImage: "square.and.arrow.down")
+                HStack(spacing: 12) {
+                    SettingsIconTile(color: Color(hex: "#AF52DE") ?? .purple, systemImage: "square.and.arrow.down")
+                    Text("Import Backup…")
                     if isImporting {
                         Spacer()
                         ProgressView().accentFill()
