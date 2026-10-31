@@ -283,7 +283,7 @@ struct RecentlyDeletedView: View {
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .pageBodyRow(top: 6, gutter: SubjectMetrics.accountGutter + 6)
+            .pageBodyRow(top: 6, gutter: SubjectMetrics.accountGutter)
     }
 
     private func header(count: Int) -> some View {

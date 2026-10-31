@@ -524,6 +524,8 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
             itemCount: customQueues.count,
             cardSpacing: ReadingQueueCard.spacing,
             cardWidth: ReadingQueueCard.width,
+            visibleCount: min(customQueues.count, 12),
+            actionTitle: "Organise",
             onSeeAll: !customQueues.isEmpty
                 ? { path.append(AllReadingQueuesDestination(initialQueueID: nil)) }
                 : nil
@@ -548,7 +550,8 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
             collapseKey: "home.\(kind.rawValue)",
             hasItems: !sectionWorks.isEmpty,
             itemCount: sectionWorks.isEmpty ? nil : sectionWorks.count,
-            onSeeAll: sectionWorks.count > 1 ? { path.append(kind) } : nil
+            visibleCount: min(sectionWorks.count, 12),
+            onSeeAll: !sectionWorks.isEmpty ? { path.append(kind) } : nil
         ) {
             ForEach(sectionWorks.prefix(12)) { work in
                 if isSelecting {
@@ -608,6 +611,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
             itemCount: showSkeleton
                 ? nil
                 : HomeSubscriptionsCount.itemCount(shown: merged.count, recorded: subscriptionsListCount),
+            visibleCount: min(merged.count, 12),
             onSeeAll: merged.isEmpty ? nil : { path.append(SubscriptionsRoute()) }
         ) {
             if showSkeleton {

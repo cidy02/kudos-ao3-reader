@@ -436,7 +436,7 @@ struct HomeSectionListView: View {
     /// `postedChapterCount > knownChapterCount`.
     private func updateFooter(for work: SavedWork) -> String? {
         guard kind == .recentlyUpdated else { return nil }
-        return "+\(work.postedChapterCount - work.knownChapterCount) CH"
+        return "+\(work.postedChapterCount - work.knownChapterCount) ch"
     }
 
 }

@@ -504,6 +504,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             hasItems: !sectionWorks.isEmpty,
             itemCount: sectionWorks.count,
             countText: countText,
+            visibleCount: min(sectionWorks.count, 12),
             onSeeAll: !sectionWorks.isEmpty
                 ? { path.append(LibrarySectionRoute(kind: kind, originKicker: "Library")) }
                 : nil
@@ -530,6 +531,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             itemCount: collections.count,
             cardSpacing: CarouselCardMetrics.coverStackSpacing,
             cardWidth: CarouselCardMetrics.stackWidth,
+            visibleCount: min(collections.count, 12),
             onSeeAll: !collections.isEmpty ? { path.append(AllCollectionsDestination()) } : nil
         ) {
             // The "New collection" card is the toolbar's "+" now (owner,
@@ -818,7 +820,9 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             itemCount: shelfQueues.count,
             cardSpacing: ReadingQueueCard.spacing,
             cardWidth: ReadingQueueCard.width,
-            onSeeAll: { path.append(AllReadingQueuesDestination(initialQueueID: nil)) }
+            visibleCount: min(shelfQueues.count, 12),
+            actionTitle: "Organise",
+            onSeeAll: !shelfQueues.isEmpty ? { path.append(AllReadingQueuesDestination(initialQueueID: nil)) } : nil
         ) {
             ForEach(shelfQueues.prefix(12)) { queue in
                 NavigationLink(value: AllReadingQueuesDestination(initialQueueID: queue.id)) {
