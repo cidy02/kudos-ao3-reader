@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 /// Pushable destinations owned by the Settings surface: the pages the hub
 /// (`SettingsHubView`, artboard 1ab) pushes, plus Privacy and local data (1ac).
@@ -38,6 +39,89 @@ enum SettingsRoute: Hashable, CaseIterable {
         case .privacySettings: "Privacy"
         case .about: "About"
         case .privacy: "Privacy and local data"
+        }
+    }
+
+    /// Coloured icon tile SF Symbol name (spec board 47, rule I-7).
+    var iconTileSystemImage: String {
+        switch self {
+        case .appearance: "circle.lefthalf.filled"
+        case .font: "textformat"
+        case .reader: "book"
+        case .listening: "speaker.wave.2.fill"
+        case .downloads: "arrow.down.to.line"
+        case .preservation: "shield"
+        case .readingQueues: "list.bullet"
+        case .library: "books.vertical"
+        case .backup: "arrow.up.to.line"
+        case .syncFolder: "arrow.triangle.2.circlepath"
+        case .importFiles: "square.and.arrow.down"
+        case .account: "person.crop.circle"
+        case .privacySettings: "hand.raised"
+        case .about: "info.circle"
+        case .privacy: "hand.raised"
+        }
+    }
+
+    /// Background colour hex for the 29 pt Settings tile (spec board 47).
+    var iconTileHex: String {
+        switch self {
+        case .appearance: "#5856D6"
+        case .font: "#8E8E93"
+        case .reader: "#FF9500"
+        case .listening: "#FF2D55"
+        case .downloads: "#821019"
+        case .preservation: "#30B0C7"
+        case .readingQueues: "#007AFF"
+        case .library: "#A2845E"
+        case .backup: "#64D2FF"
+        case .syncFolder: "#007AFF"
+        case .importFiles: "#AF52DE"
+        case .account: "#821019"
+        case .privacySettings: "#3A3A3C"
+        case .about: "#8E8E93"
+        case .privacy: "#3A3A3C"
+        }
+    }
+
+    /// Resolves the tile color, taking dynamic app red accent for account and downloads.
+    func iconTileColor(accent: Color? = nil) -> Color {
+        if (self == .downloads || self == .account), let accent {
+            return accent
+        }
+        return Color(hex: iconTileHex) ?? .gray
+    }
+
+    /// Checks if this route matches a search query against title, current value, or keywords.
+    func matches(query: String, currentValue: String) -> Bool {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return true }
+        if title.localizedCaseInsensitiveContains(trimmed) {
+            return true
+        }
+        if !currentValue.isEmpty && currentValue.localizedCaseInsensitiveContains(trimmed) {
+            return true
+        }
+        return searchKeywords.contains { $0.localizedCaseInsensitiveContains(trimmed) }
+    }
+
+    private var searchKeywords: [String] {
+        switch self {
+        case .appearance: ["theme", "dark", "light", "sepia", "oled", "accent", "color", "colour", "mode"]
+        case .font: ["typeface", "serif", "sans", "size", "custom font", "text"]
+        case .reader: ["paged", "scrolled", "spread", "awake", "page jump", "reading"]
+        case .listening: ["tts", "speech", "voice", "kokoro", "audio", "read aloud", "speed", "pitch", "pronunciation"]
+        case .downloads: ["offline", "storage", "keep", "subscribe", "space", "disk"]
+        case .preservation: ["availability", "archive", "check", "missing", "works"]
+        case .readingQueues: ["queue", "order", "auto-preserve", "series"]
+        case .library: ["delete", "confirm", "zero counts", "stats", "shelves"]
+        case .backup: ["export", "import", "archive", "kudosbackup", "restore"]
+        case .syncFolder: ["sync", "icloud", "folder", "devices", "tombstone", "pair"]
+        case .importFiles: ["epub", "files", "document", "html", "txt", "import"]
+        case .account: ["ao3", "login", "sign in", "username", "session", "password"]
+        case .privacySettings: ["mature", "explicit", "blur", "hide", "face id", "biometric", "lock"]
+        case .about: ["version", "kudos", "bug", "report", "license", "source", "github"]
+        case .privacy: ["local data", "clear cache", "history", "positions"]
         }
     }
 

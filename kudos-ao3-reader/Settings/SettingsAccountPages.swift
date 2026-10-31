@@ -38,7 +38,10 @@ struct SettingsPrivacyPage: View {
                     Toggle("Require Face ID to reveal", isOn: $requireBiometric).accentFill()
                 }
                 NavigationLink(value: SettingsRoute.privacy) {
-                    Label("Privacy & Local Data", systemImage: "hand.raised")
+                    HStack(spacing: 12) {
+                        SettingsIconTile(color: Color(hex: "#3A3A3C") ?? .gray, systemImage: "hand.raised")
+                        Text("Privacy & Local Data")
+                    }
                 }
             } footer: {
                 Text(hideMatureContent
@@ -94,20 +97,32 @@ private struct AboutSettingsSection: View {
             LabeledContent("Version", value: Changelog.currentVersion)
 
             NavigationLink(value: SettingsRoute.privacy) {
-                Label("Privacy and local data", systemImage: "hand.raised")
+                HStack(spacing: 12) {
+                    SettingsIconTile(color: Color(hex: "#3A3A3C") ?? .gray, systemImage: "hand.raised")
+                    Text("Privacy and local data")
+                }
             }
 
             Button(action: onShowAbout) {
-                Label("About Kudos", systemImage: "info.circle")
+                HStack(spacing: 12) {
+                    SettingsIconTile(color: Color(hex: "#8E8E93") ?? .gray, systemImage: "info.circle")
+                    Text("About Kudos")
+                }
             }
 
             Button(action: onReportBug) {
-                Label("Report a Bug", systemImage: "ladybug")
+                HStack(spacing: 12) {
+                    SettingsIconTile(color: Color(hex: "#FF3B30") ?? .red, systemImage: "ladybug")
+                    Text("Report a Bug")
+                }
             }
 
             if let url = URL(string: AppLinks.repository) {
                 Link(destination: url) {
-                    Label("Source on GitHub", systemImage: "chevron.left.forwardslash.chevron.right")
+                    HStack(spacing: 12) {
+                        SettingsIconTile(color: Color(hex: "#6C6C70") ?? .gray, systemImage: "chevron.left.forwardslash.chevron.right")
+                        Text("Source on GitHub")
+                    }
                 }
             }
         } footer: {
@@ -138,20 +153,28 @@ private struct AO3AccountSettingsSection: View {
                 LabeledContent {
                     Text(username)
                 } label: {
-                    Label("Signed In", systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
+                    HStack(spacing: 12) {
+                        SettingsIconTile(color: Color(hex: "#821019") ?? .red, systemImage: "person.crop.circle")
+                        Text("Signed In")
+                    }
                 }
 
                 Button(role: .destructive) {
                     confirmingLogOut = true
                 } label: {
-                    Label("Log Out", systemImage: "rectangle.portrait.and.arrow.right")
+                    HStack(spacing: 12) {
+                        SettingsIconTile(color: Color(hex: "#D70015") ?? .red, systemImage: "rectangle.portrait.and.arrow.right")
+                        Text("Log Out")
+                    }
                 }
                 .logOutConfirmation(isPresented: $confirmingLogOut) { Task { await auth.logout() } }
 
             case .signedOut, .signingIn, .usingFallback:
                 Button(action: onLogIn) {
-                    Label("Log In to AO3…", systemImage: "person.badge.key")
+                    HStack(spacing: 12) {
+                        SettingsIconTile(color: Color(hex: "#821019") ?? .red, systemImage: "person.badge.key")
+                        Text("Log In to AO3…")
+                    }
                 }
             }
         } footer: {
