@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -331,7 +332,14 @@ private fun StateCard(
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     if (primaryActionLabel != null && onPrimaryAction != null) {
-                        Button(onClick = onPrimaryAction) {
+                        val tokens = io.github.cidy02.kudos.ui.subject.LocalKudosTokens.current
+                        Button(
+                            onClick = onPrimaryAction,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = tokens.accent,
+                                contentColor = io.github.cidy02.kudos.ui.subject.SubjectPalette.label(tokens.accent)
+                            )
+                        ) {
                             Text(primaryActionLabel)
                         }
                     }

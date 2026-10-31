@@ -1,6 +1,8 @@
 package io.github.cidy02.kudos.reader
 
+import io.github.cidy02.kudos.ui.theme.ActiveAppAccent
 import io.github.cidy02.kudos.ui.theme.SheetSystemBars
+import io.github.cidy02.kudos.ui.theme.parseAccentColor
 import io.github.cidy02.kudos.settings.SettingsGroupLabel
 import androidx.compose.foundation.text.TextAutoSize
 import android.util.Base64
@@ -87,7 +89,7 @@ internal fun CustomizeThemeSheet(repository: SettingsRepository, customFontRepos
     onDismiss: () -> Unit) {
     val settings by repository.settings.collectAsState(initial = KudosSettings.Defaults)
     val theme = ReaderSettingsMapper().resolveTheme(settings.reader, settings.app)
-    val tokens = KudosTokens.of(ReaderTheme.valueOf(theme.name))
+    val tokens = customizeThemeTokens(theme, settings)
     ModalBottomSheet(onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         containerColor = tokens.background, contentColor = tokens.primaryInk) {
@@ -111,7 +113,7 @@ internal fun CustomizeThemeContent(
     val scope = rememberCoroutineScope()
     val reader = settings.reader
     val theme = ReaderSettingsMapper().resolveTheme(reader, settings.app)
-    val tokens = KudosTokens.of(ReaderTheme.valueOf(theme.name))
+    val tokens = customizeThemeTokens(theme, settings)
     var choosingFont by remember { mutableStateOf(false) }
     val selectedFont = fonts.firstOrNull { it.selectionId == reader.readerFontId }
     // Embed the selected local font; the preview has no file/content or network access.
@@ -276,4 +278,9 @@ private fun ThemeSlider(label: String, value: Double, range: ClosedFloatingPoint
     SubjectSliderRow(label, value.toFloat().coerceIn(range), range, steps = 0,
         formatValue = { "%.2f".format(it) }, onValueChangeFinished = {}, enabled = enabled,
         onValueChange = { onChange(it.toDouble()) })
+}
+
+internal fun customizeThemeTokens(theme: ReaderColorTheme, settings: KudosSettings): KudosTokens {
+    val userAccent = settings.app.chosenAccentColorHex?.let(::parseAccentColor) ?: ActiveAppAccent.value
+    return KudosTokens.of(ReaderTheme.valueOf(theme.name), userAccent)
 }

@@ -85,6 +85,17 @@ class SettingsA66ParityTest {
         compose.onNodeWithText("Choose a Colour").assertExists()
         compose.onNodeWithText("Keep AO3 Red").performClick()
         compose.onAllNodesWithText("Use a Custom Colour?").assertCountEquals(0)
+
+        compose.onNodeWithContentDescription("Custom colour").performClick()
+        compose.onNodeWithText("Choose a Colour").performClick()
+        compose.onNodeWithContentDescription("Saturation and brightness")
+            .assertExists()
+            .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.SetProgress) { it(0.6f) }
+        compose.onNodeWithContentDescription("Hue")
+            .assertExists()
+            .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.SetProgress) { it(0.5f) }
+        compose.onNodeWithText("Done").performClick()
+        compose.waitUntil(5_000) { runBlocking { repository.snapshot().app.accentColorHex != "#7B2D6B" } }
     }
 
     @Test fun downloadsUsesThePrivacyTotalIncludingCacheAndExcludingOtherFiles() = runBlocking<Unit> {

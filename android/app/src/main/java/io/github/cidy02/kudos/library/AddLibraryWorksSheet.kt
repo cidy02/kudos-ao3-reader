@@ -10,6 +10,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -210,9 +211,18 @@ internal fun AddLibraryWorksContent(
                 }
             }
         }
+        val tokens = io.github.cidy02.kudos.ui.subject.LocalKudosTokens.current
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("Cancel") }
-            Button(onClick = { onAdd(chosen) }, modifier = Modifier.weight(1f), enabled = chosen.isNotEmpty()) {
+            Button(
+                onClick = { onAdd(chosen) },
+                modifier = Modifier.weight(1f),
+                enabled = chosen.isNotEmpty(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = tokens.accent,
+                    contentColor = io.github.cidy02.kudos.ui.subject.SubjectPalette.label(tokens.accent)
+                )
+            ) {
                 Text(AddLibraryWorks.confirmationTitle(chosen.size))
             }
         }

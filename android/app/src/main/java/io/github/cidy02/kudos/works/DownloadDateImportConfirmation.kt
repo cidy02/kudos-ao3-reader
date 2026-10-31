@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -31,6 +32,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
+import io.github.cidy02.kudos.ui.subject.SubjectPalette
 import io.github.cidy02.kudos.ui.subject.subjectPanel
 import java.time.Instant
 import java.time.ZoneId
@@ -133,7 +135,11 @@ fun DownloadDateImportConfirmation(
                                 }
                             )
                         })
-                    }
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = tokens.accent,
+                        contentColor = SubjectPalette.label(tokens.accent)
+                    )
                 ) { Text("Import") }
             }
         }

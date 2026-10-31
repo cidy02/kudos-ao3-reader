@@ -117,4 +117,22 @@ class CustomizeThemeSheetTest {
         assertTrue(on.contains("0.5em 64.0px"))
         assertTrue(on.contains("text-align: justify"))
     }
+
+    @Test fun readerAndCustomizeThemeTokensUseChosenAccentExceptSepia() {
+        val plum = KudosSettings.Defaults.copy(
+            app = KudosSettings.Defaults.app.copy(accentColorHex = "#7B2D6B", storedAccentColorHex = "#7B2D6B")
+        )
+        val expectedFill = io.github.cidy02.kudos.ui.theme.AppAccents.Plum.fill
+        val expectedDarkInk = io.github.cidy02.kudos.ui.theme.AppAccents.Plum.darkInk
+        org.junit.Assert.assertEquals(expectedFill,
+            readerChromeTokens(io.github.cidy02.kudos.reader.settings.ReaderColorTheme.Light, plum).accent)
+        org.junit.Assert.assertEquals(expectedDarkInk,
+            readerChromeTokens(io.github.cidy02.kudos.reader.settings.ReaderColorTheme.Dark, plum).accentInk)
+        org.junit.Assert.assertEquals(expectedFill,
+            customizeThemeTokens(io.github.cidy02.kudos.reader.settings.ReaderColorTheme.Dark, plum).accent)
+        org.junit.Assert.assertEquals(expectedDarkInk,
+            customizeThemeTokens(io.github.cidy02.kudos.reader.settings.ReaderColorTheme.Dark, plum).accentInk)
+        org.junit.Assert.assertEquals(io.github.cidy02.kudos.ui.theme.SepiaTint,
+            customizeThemeTokens(io.github.cidy02.kudos.reader.settings.ReaderColorTheme.Sepia, plum).accent)
+    }
 }
