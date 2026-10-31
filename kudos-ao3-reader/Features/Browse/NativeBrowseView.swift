@@ -127,7 +127,9 @@ struct FandomWorksView: View {
     @State private var rankTop100Pages: [Int: AO3SearchPage] = [:]
     @State private var rankTop100Source: RankTop100URLSource?
     @State private var currentPage = 1
+    @State private var requestedPage: Int?
     @State private var totalPages = 1
+    @State private var lastAppendError: String?
     /// AO3's own result-count heading for these results, when it sent one.
     @State private var resultSummary: AO3ResultSummary?
     @State private var phase: Phase = .loading
@@ -221,12 +223,13 @@ struct FandomWorksView: View {
                                 currentPage: currentPage,
                                 totalPages: totalPages,
                                 sortSelection: sortSelection,
-                                sortOptions: AO3SearchFilters.Sort.allCases.filter { $0 != .relevance }
+                                sortOptions: AO3SearchFilters.Sort.allCases.filter { $0 != .relevance },
+                                showSummaries: $showSummaries,
+                                query: nil
                             )
                             .pageBodyRow(top: 8, gutter: 0)
                         }
                     }
-                    if showPagination { Section { paginationRow } }
                     if totalPages > 1 {
                         Section {
                             RankTop100ProgressCard(
@@ -263,18 +266,34 @@ struct FandomWorksView: View {
                                 loadedWorks: results.count,
                                 totalWorks: resultSummary?.total ?? results.count,
                                 isPageLoading: phase == .loading,
-                                loadNextPage: { Task { await load(page: currentPage + 1) } },
+                                loadNextPage: loadNextPage,
                                 start: startRankTop100
                             )
                             .bareListRow()
                         }
                     }
-                    if showPagination { Section { paginationRow } }
+                    Section {
+                        AO3ResultListEndFooter(
+                            loadedCount: results.count,
+                            totalCount: resultSummary?.total ?? results.count,
+                            currentPage: currentPage,
+                            totalPages: totalPages,
+                            isLoading: phase == .loading,
+                            targetPage: requestedPage,
+                            errorMessage: lastAppendError,
+                            loadNextPage: loadNextPage,
+                            retry: {
+                                lastAppendError = nil
+                                loadNextPage()
+                            }
+                        )
+                        .bareListRow()
+                    }
                 }
                 .cardList()
                 .refreshable {
                     await AO3Client.shared.invalidateCachedResponses()
-                    await load(page: currentPage)
+                    await load(page: 1)
                 }
                 .overlay { statusOverlay }
             }
@@ -322,23 +341,10 @@ struct FandomWorksView: View {
             }
     }
 
-    private var showPagination: Bool {
-        totalPages > 1 && !results.isEmpty
-    }
-
-    private var paginationRow: some View {
-        SearchPaginationBar(
-            currentPage: currentPage,
-            totalPages: totalPages,
-            isLoading: phase == .loading,
-            palette: resultsPalette
-        ) { page in
-            // A different page replaces `results` with different works entirely —
-            // a stale selection would otherwise reference IDs that no longer exist.
-            bulkSelection.selection.removeAll()
-            Task { await load(page: page) }
-        }
-        .bareListRow()
+    private func loadNextPage() {
+        guard phase != .loading, currentPage < totalPages else { return }
+        lastAppendError = nil
+        Task { await load(page: currentPage + 1) }
     }
 
     @ViewBuilder
@@ -422,12 +428,8 @@ struct FandomWorksView: View {
         rankTop100.cancel()
         let cacheScope = rankTop100Scope
         let authenticatedRequest = auth.authenticatedRequest()
-        // Always, not only on a first load: with results already on screen this
-        // is what tells the pagination bar a fetch is running. The list itself
-        // still shows the results (the skeleton branch is gated on `results`
-        // being empty), so nothing flashes — the pager just stops pretending
-        // the tap did nothing.
         phase = .loading
+        requestedPage = page
         if loadedFilters == nil { loadedFilters = filters }
         loadToken += 1
         let token = loadToken
@@ -441,12 +443,14 @@ struct FandomWorksView: View {
             let source: RankTop100URLSource
             if includedFandoms.count == 1 {
                 source = .fandom(includedFandoms[0], filters: filters)
-                result = try await AO3Client.shared.fandomWorksPage(
-                    fandom: includedFandoms[0],
-                    filters: filters,
-                    page: page,
-                    request: authenticatedRequest
-                )
+                result = try await AO3RequestCoordinator.shared.withSlot {
+                    try await AO3Client.shared.fandomWorksPage(
+                        fandom: includedFandoms[0],
+                        filters: filters,
+                        page: page,
+                        request: authenticatedRequest
+                    )
+                }
             } else if let clause = try await unionQueryClause() {
                 // `fandom` is cleared for this request: left in, AO3 would AND
                 // `fandom_names` against the union and hand back the
@@ -455,27 +459,38 @@ struct FandomWorksView: View {
                 unionFilters.fandom = ""
                 unionApplied = true
                 source = .search(filters: unionFilters, additionalQueryClause: clause)
-                result = try await AO3Client.shared.search(
-                    filters: unionFilters,
-                    page: page,
-                    request: authenticatedRequest,
-                    additionalQueryClause: clause
-                )
+                result = try await AO3RequestCoordinator.shared.withSlot {
+                    try await AO3Client.shared.search(
+                        filters: unionFilters,
+                        page: page,
+                        request: authenticatedRequest,
+                        additionalQueryClause: clause
+                    )
+                }
             } else {
                 source = .search(filters: filters, additionalQueryClause: nil)
-                result = try await AO3Client.shared.search(
-                    filters: filters,
-                    page: page,
-                    request: authenticatedRequest
-                )
+                result = try await AO3RequestCoordinator.shared.withSlot {
+                    try await AO3Client.shared.search(
+                        filters: filters,
+                        page: page,
+                        request: authenticatedRequest
+                    )
+                }
             }
             guard token == loadToken else { return }
-            results = ranking.noting(result.works)
+            let newWorks = ranking.noting(result.works)
+            if page == 1 {
+                results = newWorks
+            } else {
+                results = AO3ResultListPaging.appendUnique(newWorks: newWorks, to: results)
+            }
             rankTop100Pages[result.currentPage] = result
             rankTop100Source = source
             currentPage = result.currentPage
             totalPages = result.totalPages
             resultSummary = result.summary
+            requestedPage = nil
+            lastAppendError = nil
             if let url = source.url(page: result.currentPage) {
                 await RankTop100Store.shared.remember(
                     result,
@@ -503,10 +518,23 @@ struct FandomWorksView: View {
             }
         } catch let error as AO3Error {
             guard token == loadToken else { return }
-            phase = .failed(error.errorDescription ?? "Something went wrong.")
+            if page == 1 {
+                phase = .failed(error.errorDescription ?? "Something went wrong.")
+            } else {
+                phase = .loaded
+                lastAppendError = error.errorDescription ?? "Something went wrong."
+            }
+            requestedPage = nil
         } catch {
             guard token == loadToken else { return }
-            phase = .failed(UserFacingError.message(for: error))
+            let msg = UserFacingError.message(for: error)
+            if page == 1 {
+                phase = .failed(msg)
+            } else {
+                phase = .loaded
+                lastAppendError = msg
+            }
+            requestedPage = nil
         }
     }
 
@@ -518,6 +546,7 @@ struct FandomWorksView: View {
         rankTop100Pages = [:]
         rankTop100Source = nil
         loadedFilters = filters
+        lastAppendError = nil
         phase = .loading
         results = []
         currentPage = 1
@@ -619,7 +648,9 @@ struct TagWorksView: View {
     @State private var rankTop100 = RankTop100Controller()
     @State private var rankTop100Pages: [Int: AO3SearchPage] = [:]
     @State private var currentPage = 1
+    @State private var requestedPage: Int?
     @State private var totalPages = 1
+    @State private var lastAppendError: String?
     /// AO3's own result-count heading for these results, when it sent one.
     @State private var resultSummary: AO3ResultSummary?
     @State private var phase: Phase = .loading
@@ -678,12 +709,13 @@ struct TagWorksView: View {
                                 currentPage: currentPage,
                                 totalPages: totalPages,
                                 sortSelection: sortSelection,
-                                sortOptions: AO3SearchFilters.Sort.allCases.filter { $0 != .relevance }
+                                sortOptions: AO3SearchFilters.Sort.allCases.filter { $0 != .relevance },
+                                showSummaries: $showSummaries,
+                                query: nil
                             )
                             .pageBodyRow(top: 8, gutter: 0)
                         }
                     }
-                    if showPagination { Section { paginationRow } }
                     if totalPages > 1 {
                         Section {
                             RankTop100ProgressCard(
@@ -720,18 +752,34 @@ struct TagWorksView: View {
                                 loadedWorks: results.count,
                                 totalWorks: resultSummary?.total ?? results.count,
                                 isPageLoading: phase == .loading,
-                                loadNextPage: { Task { await load(page: currentPage + 1) } },
+                                loadNextPage: loadNextPage,
                                 start: startRankTop100
                             )
                             .bareListRow()
                         }
                     }
-                    if showPagination { Section { paginationRow } }
+                    Section {
+                        AO3ResultListEndFooter(
+                            loadedCount: results.count,
+                            totalCount: resultSummary?.total ?? results.count,
+                            currentPage: currentPage,
+                            totalPages: totalPages,
+                            isLoading: phase == .loading,
+                            targetPage: requestedPage,
+                            errorMessage: lastAppendError,
+                            loadNextPage: loadNextPage,
+                            retry: {
+                                lastAppendError = nil
+                                loadNextPage()
+                            }
+                        )
+                        .bareListRow()
+                    }
                 }
                 .cardList()
                 .refreshable {
                     await AO3Client.shared.invalidateCachedResponses()
-                    await load(page: currentPage)
+                    await load(page: 1)
                 }
                 .overlay { statusOverlay }
             }
@@ -801,23 +849,10 @@ struct TagWorksView: View {
         }
     }
 
-    private var showPagination: Bool {
-        totalPages > 1 && !results.isEmpty
-    }
-
-    private var paginationRow: some View {
-        SearchPaginationBar(
-            currentPage: currentPage,
-            totalPages: totalPages,
-            isLoading: phase == .loading,
-            palette: resultsPalette
-        ) { page in
-            // A different page replaces `results` with different works entirely —
-            // a stale selection would otherwise reference IDs that no longer exist.
-            bulkSelection.selection.removeAll()
-            Task { await load(page: page) }
-        }
-        .bareListRow()
+    private func loadNextPage() {
+        guard phase != .loading, currentPage < totalPages else { return }
+        lastAppendError = nil
+        Task { await load(page: currentPage + 1) }
     }
 
     @ViewBuilder
@@ -900,6 +935,7 @@ struct TagWorksView: View {
         rankTop100.cancel()
         rankTop100Pages = [:]
         loadedFilters = filters
+        lastAppendError = nil
         phase = .loading
         results = []
         currentPage = 1
@@ -913,25 +949,30 @@ struct TagWorksView: View {
         rankTop100.cancel()
         let cacheScope = rankTop100Scope
         let authenticatedRequest = auth.authenticatedRequest()
-        // Always, not only on a first load: with results already on screen this
-        // is what tells the pagination bar a fetch is running. The list itself
-        // still shows the results (the skeleton branch is gated on `results`
-        // being empty), so nothing flashes — the pager just stops pretending
-        // the tap did nothing.
         phase = .loading
+        requestedPage = page
         if loadedFilters == nil { loadedFilters = filters }
         loadToken += 1
         let token = loadToken
         do {
-            let result = try await AO3Client.shared.worksPage(
-                at: request.url, filters: filters, page: page, request: authenticatedRequest
-            )
+            let result = try await AO3RequestCoordinator.shared.withSlot {
+                try await AO3Client.shared.worksPage(
+                    at: request.url, filters: filters, page: page, request: authenticatedRequest
+                )
+            }
             guard token == loadToken else { return }
-            results = ranking.noting(result.works)
+            let newWorks = ranking.noting(result.works)
+            if page == 1 {
+                results = newWorks
+            } else {
+                results = AO3ResultListPaging.appendUnique(newWorks: newWorks, to: results)
+            }
             rankTop100Pages[result.currentPage] = result
             currentPage = result.currentPage
             totalPages = result.totalPages
             resultSummary = result.summary
+            requestedPage = nil
+            lastAppendError = nil
             let source = RankTop100URLSource.tag(request.url, filters: filters)
             if let url = source.url(page: result.currentPage) {
                 await RankTop100Store.shared.remember(
@@ -947,10 +988,23 @@ struct TagWorksView: View {
             phase = .loaded
         } catch let error as AO3Error {
             guard token == loadToken else { return }
-            phase = .failed(error.errorDescription ?? "Something went wrong.")
+            if page == 1 {
+                phase = .failed(error.errorDescription ?? "Something went wrong.")
+            } else {
+                phase = .loaded
+                lastAppendError = error.errorDescription ?? "Something went wrong."
+            }
+            requestedPage = nil
         } catch {
             guard token == loadToken else { return }
-            phase = .failed(UserFacingError.message(for: error))
+            let msg = UserFacingError.message(for: error)
+            if page == 1 {
+                phase = .failed(msg)
+            } else {
+                phase = .loaded
+                lastAppendError = msg
+            }
+            requestedPage = nil
         }
     }
 
