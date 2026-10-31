@@ -325,7 +325,7 @@ extension WorkDetailView {
     private func savedForLaterRow(for work: SavedWork) -> some View {
         let queued = work.isInSavedForLaterQueue
         return myCopyToggleRow(
-            "Saved for Later",
+            "Want to Read",
             isOn: queued,
             value: queued ? WorkDetailPresentation.preservationStatusLabel(work.epubPreservationStatus) : nil,
             busy: preservingStatusIsBusy,

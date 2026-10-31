@@ -231,8 +231,8 @@ enum WorkActionLabels {
     /// (permanent EPUB retention) uses the arrow.down.circle family.
     static func savedForLater(isQueued: Bool) -> (title: String, systemImage: String) {
         isQueued
-            ? ("Remove from Saved for Later", "clock.badge.xmark")
-            : ("Save for Later", "clock")
+            ? ("Remove from Want to Read", "clock.badge.xmark")
+            : ("Want to Read", "clock")
     }
 
     /// Filled clock for "this *is* Saved for Later" states (queue glyph, badges).

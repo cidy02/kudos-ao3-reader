@@ -28,7 +28,7 @@ enum LibrarySectionKind: String, Identifiable, Hashable, CaseIterable {
     var title: String {
         switch self {
         case .readingNow: "Reading Now"
-        case .savedForLater: "Saved for Later"
+        case .savedForLater: "Want to Read"
         case .finished: "Finished"
         case .collections: "Collections"
         case .downloaded: "Downloaded"
@@ -68,7 +68,7 @@ enum LibrarySectionKind: String, Identifiable, Hashable, CaseIterable {
         case .readingNow:
             "You aren't reading anything yet. Open a work from your Library or find one in Browse."
         case .savedForLater:
-            "You haven't saved any works for later. Add a work to Saved for Later to see it here."
+            "You haven't added any works to Want to Read. Add a work to Want to Read to see it here."
         case .finished:
             "Works you mark as finished will appear here."
         case .collections:
