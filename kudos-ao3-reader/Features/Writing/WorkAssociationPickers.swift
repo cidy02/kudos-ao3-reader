@@ -47,19 +47,13 @@ struct WorkCollectionsGiftsView: View {
     var body: some View {
         List {
             Section {
-                SubjectHeaderBlock(
-                    kicker: "Edit work",
-                    title: "Collections and gifts",
-                    subtitle: workTitle,
-                    palette: palette,
-                    gutter: gutter
-                )
-                .pageBodyRow(top: 20, gutter: 0)
+                SubjectPageFact(workTitle, gutter: gutter)
+                    .pageBodyRow(top: 12, gutter: 0)
             }
 
             Section {
                 SectionRuleHeader(title: "Your collections", count: collections.count)
-                    .pageBodyRow(top: 18, gutter: 0)
+                    .pageBodyRow(top: 14, gutter: 0)
                 collectionsPanel.pageBodyRow(top: 8, gutter: gutter)
                 footnote("A work submitted to a moderated collection waits for a maintainer's approval. "
                     + "A work in an unrevealed collection stays hidden until the reveal. AO3 shows "
@@ -91,10 +85,7 @@ struct WorkCollectionsGiftsView: View {
         .cardList()
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
-        .subjectScreenWash(palette: palette)
-        #if os(macOS)
-        .navigationTitle("Collections and gifts")
-        #endif
+        .subjectScreenWash(title: "Collections and gifts", palette: palette)
         .task(id: query) { await search() }
     }
 
@@ -362,19 +353,13 @@ struct WorkSeriesPickerView: View {
     var body: some View {
         List {
             Section {
-                SubjectHeaderBlock(
-                    kicker: "Edit work",
-                    title: "Series",
-                    subtitle: subtitle,
-                    palette: palette,
-                    gutter: gutter
-                )
-                .pageBodyRow(top: 20, gutter: 0)
+                SubjectPageFact(subtitle, gutter: gutter)
+                    .pageBodyRow(top: 12, gutter: 0)
             }
 
             Section {
                 SectionRuleHeader(title: "Your series", count: series.count)
-                    .pageBodyRow(top: 18, gutter: 0)
+                    .pageBodyRow(top: 14, gutter: 0)
                 seriesPanel.pageBodyRow(top: 8, gutter: gutter)
                 footnote("Each save adds this work to one series. Saving doesn't remove it from another "
                     + "series. To do that, use Remove works on the series' Edit screen.")
@@ -421,10 +406,7 @@ struct WorkSeriesPickerView: View {
         .cardList()
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
-        .subjectScreenWash(palette: palette)
-        #if os(macOS)
-        .navigationTitle("Series")
-        #endif
+        .subjectScreenWash(title: "Series", palette: palette)
     }
 
     private var seriesPanel: some View {
@@ -527,19 +509,13 @@ struct WorkCreatorsPickerView: View {
     var body: some View {
         List {
             Section {
-                SubjectHeaderBlock(
-                    kicker: "Edit work",
-                    title: "Co-creators",
-                    subtitle: workTitle,
-                    palette: palette,
-                    gutter: gutter
-                )
-                .pageBodyRow(top: 20, gutter: 0)
+                SubjectPageFact(workTitle, gutter: gutter)
+                    .pageBodyRow(top: 12, gutter: 0)
             }
 
             Section {
                 SectionRuleHeader(title: "Your pseuds", count: creators.availablePseuds.count)
-                    .pageBodyRow(top: 18, gutter: 0)
+                    .pageBodyRow(top: 14, gutter: 0)
                 pseudsPanel.pageBodyRow(top: 8, gutter: gutter)
             }
 
@@ -560,12 +536,7 @@ struct WorkCreatorsPickerView: View {
         .cardList()
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
-        // No iOS title: the header block names the page, and a title set before the wash
-        // outranked its blank one, so the bar named it a second time. macOS keeps its title.
-        .subjectScreenWash(palette: palette)
-        #if os(macOS)
-        .navigationTitle("Co-creators")
-        #endif
+        .subjectScreenWash(title: "Co-creators", palette: palette)
     }
 
     @ViewBuilder
@@ -643,21 +614,16 @@ struct WorkParentWorkPickerView: View {
     var body: some View {
         List {
             Section {
-                SubjectHeaderBlock(
-                    kicker: "Edit work",
-                    title: "Inspired by",
-                    subtitle: parentWork.url.isEmpty
-                        ? "No source work"
-                        : parentWork.url,
-                    palette: palette,
+                SubjectPageFact(
+                    parentWork.url.isEmpty ? "No source work" : parentWork.url,
                     gutter: gutter
                 )
-                .pageBodyRow(top: 20, gutter: 0)
+                .pageBodyRow(top: 12, gutter: 0)
             }
 
             Section {
                 SectionRuleHeader(title: "Source work")
-                    .pageBodyRow(top: 18, gutter: 0)
+                    .pageBodyRow(top: 14, gutter: 0)
                 sourcePanel.pageBodyRow(top: 8, gutter: gutter)
                 Text("For a work on AO3, enter its web address. For a work from elsewhere, enter its "
                     + "title and author, which will appear instead of a link.")
@@ -678,11 +644,7 @@ struct WorkParentWorkPickerView: View {
         .cardList()
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
-        // As above: the header block already says "Inspired by"; macOS keeps its title.
-        .subjectScreenWash(palette: palette)
-        #if os(macOS)
-        .navigationTitle("Inspired by")
-        #endif
+        .subjectScreenWash(title: "Inspired by", palette: palette)
     }
 
     private var sourcePanel: some View {

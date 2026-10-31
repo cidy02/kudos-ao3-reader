@@ -96,23 +96,20 @@ struct AO3NamedSubscriptionsList: View {
     var body: some View {
         List {
             Section {
-                SubjectHeaderBlock(
-                    kicker: kicker,
-                    title: "Subscriptions",
-                    subtitle: loaded.map {
+                if let loaded {
+                    SubjectPageFact(
                         AO3NamedSubscriptionsCopy.subtitle(
-                            scope: scope, count: $0.rows.count,
-                            currentPage: $0.currentPage, totalPages: $0.totalPages
-                        )
-                    } ?? "",
-                    palette: palette,
-                    gutter: SubjectMetrics.accountGutter
-                )
-                .listRowInsets(EdgeInsets(top: 20, leading: 0, bottom: 4, trailing: 0))
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
+                            scope: scope, count: loaded.rows.count,
+                            currentPage: loaded.currentPage, totalPages: loaded.totalPages
+                        ),
+                        gutter: SubjectMetrics.accountGutter
+                    )
+                    .listRowInsets(EdgeInsets(top: 12, leading: 0, bottom: 4, trailing: 0))
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                }
                 AO3SubscriptionsScopeRail(selection: $scope, palette: palette)
-                    .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 8, trailing: 0))
+                    .listRowInsets(EdgeInsets(top: loaded == nil ? 12 : 4, leading: 0, bottom: 8, trailing: 0))
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
             }

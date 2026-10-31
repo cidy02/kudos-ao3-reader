@@ -26,9 +26,8 @@ struct LibraryEntityGridView<Item: Identifiable, Destination: Hashable, Card: Vi
 
     var body: some View {
         ScrollView {
-            // The header every Library page opens with (pass2-17), not a bar title.
-            SubjectHeaderBlock(kicker: "Library", title: title, subtitle: tally, palette: themeManager.scopePalette)
-                .padding(.top, 20)
+            SubjectPageFact(tally)
+                .padding(.top, 12)
             // Collection piles side by side get `coverStackSpacing` (T-461).
             CarouselCardGrid(
                 uniformHeights: true,
@@ -43,14 +42,11 @@ struct LibraryEntityGridView<Item: Identifiable, Destination: Hashable, Card: Vi
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(16)
         }
-        .subjectScreenWash(palette: themeManager.scopePalette, role: .content)
+        .subjectScreenWash(title: title, palette: themeManager.scopePalette, role: .content)
         .toolbar {
             ActionToolbar(items: [
                 AnyView(ToolbarIconButton(title: "New Collection", systemImage: "plus", action: onNew))
             ])
         }
-        #if os(macOS)
-        .navigationTitle(title)
-        #endif
     }
 }

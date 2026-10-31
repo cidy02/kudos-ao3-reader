@@ -21,9 +21,9 @@ struct AO3AccountWorksList: View {
         var title: String {
             switch self {
             case .markedForLater: "Marked for Later"
-            case .bookmarks: "My AO3 Bookmarks"
-            case .history: "My AO3 History"
-            case .subscriptions: "My Subscriptions"
+            case .bookmarks: "Bookmarks"
+            case .history: "History"
+            case .subscriptions: "Subscriptions"
             case let .collection(_, title): title
             }
         }
@@ -275,12 +275,9 @@ struct AO3AccountWorksList: View {
                 signedOutPrompt
             }
         }
-        // The list states its own name in the header block now (spec 1o), so the
-        // bar would be saying it twice — `subjectScreenWash` empties it, and
-        // hides the floating tab bar this used to ask for separately. macOS has
-        // no such treatment in its window chrome and keeps the real title.
-        #if os(macOS)
-            .navigationTitle(kind.title)
+        .navigationTitle(kind.title)
+        #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
         #endif
             .toolbar {
                 // Gated as a whole, not just its inner pieces — an empty HStack still
@@ -633,7 +630,7 @@ struct AO3AccountWorksList: View {
             } else if arrangement == .grid {
                 ScrollView {
                     VStack(spacing: 12) {
-                        subjectHeader.padding(.top, 20)
+                        subjectHeader.padding(.top, 12)
                         if showPagination { paginationBar }
                         AccountWorksCompactGrid(entries: visibleEntries)
                         if showPagination { paginationBar }
@@ -819,24 +816,14 @@ struct AO3AccountWorksList: View {
         SubscriptionWatermarks.save(updated)
     }
 
-    /// Spec 1o: every pushed account list opens with the kicker, its rule, the
-    /// list's own 32pt name and one line of tallies — at a **16pt** gutter, ten
-    /// tighter than a subject's own page. These are lists *of* things rather
-    /// than pages *about* one, and the spec sets them accordingly.
     private var subjectHeader: some View {
-        SubjectHeaderBlock(
-            kicker: originKicker,
-            title: kind.title,
-            subtitle: headerTallyLine,
-            palette: accountPalette,
-            gutter: SubjectMetrics.accountGutter
-        )
+        SubjectPageFact(headerTallyLine, gutter: SubjectMetrics.accountGutter)
     }
 
     private var subjectHeaderSection: some View {
         Section {
             subjectHeader
-            .listRowInsets(EdgeInsets(top: 20, leading: 0, bottom: 4, trailing: 0))
+            .listRowInsets(EdgeInsets(top: 12, leading: 0, bottom: 4, trailing: 0))
             .listRowBackground(Color.clear)
             .listRowSeparator(.hidden)
         }
@@ -1203,14 +1190,11 @@ struct EnrichingAO3WorkRow: View {
 }
 
 extension AO3AccountWorksList {
-    /// An empty or failed list keeps the page it belongs to — kicker, title,
-    /// wash — so the screen does not turn into a bare black page (T-317).
+    /// An empty or failed list keeps its wash so the screen does not turn into a
+    /// bare page (T-317); the inline navigation bar already carries `kind.title`.
     private func headedState<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
         ScrollView {
-            VStack(spacing: 12) {
-                subjectHeader.padding(.top, 20)
-                content().padding(.top, 60)
-            }
+            content().padding(.top, 60)
         }
         .subjectScreenWash(palette: accountPalette, role: .content)
     }

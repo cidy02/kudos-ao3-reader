@@ -120,6 +120,7 @@ struct AO3CollectionDetailView: View {
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
         .subjectScreenWash(palette: palette, role: .content)
+        .subjectOwnHeadingChrome(title: show?.collection.title ?? title)
         #if DEBUG
         // A shot's manage screen opens from the page, not from its row: at the largest
         // text the row is below the fold, and a `List` never builds a row it hasn't shown.
@@ -175,8 +176,7 @@ struct AO3CollectionDetailView: View {
     // MARK: Header
 
     private var header: some View {
-        SubjectHeaderBlock(
-            kicker: "Collection",
+        SubjectPageHeading(
             title: show?.collection.title ?? title,
             subtitle: subtitleLine,
             palette: palette,

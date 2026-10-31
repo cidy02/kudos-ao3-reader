@@ -57,7 +57,7 @@ struct ReadingInsightsView: View {
     var body: some View {
         List {
             Section {
-                header.pageBodyRow(top: 20, gutter: 0)
+                header.pageBodyRow(top: 12, gutter: 0)
             }
 
             // The three session cards only when there is a log to draw them
@@ -102,7 +102,7 @@ struct ReadingInsightsView: View {
             Section { topFandomsSection }
         }
         .cardList()
-        .subjectScreenWash(palette: palette, role: .content)
+        .subjectScreenWash(title: "Reading Insights", palette: palette, role: .content)
         // 1bi: the period is a view choice, so it lives in "…" like the
         // layout picker elsewhere; the header is the title and tally alone.
         .toolbar {
@@ -129,13 +129,7 @@ struct ReadingInsightsView: View {
     // MARK: Header
 
     private var header: some View {
-        SubjectHeaderBlock(
-            kicker: "Library",
-            title: "Reading Insights",
-            subtitle: headerTallyLine,
-            palette: palette,
-            gutter: SubjectMetrics.accountGutter
-        )
+        SubjectPageFact(headerTallyLine, gutter: SubjectMetrics.accountGutter)
     }
 
     /// Spec 1bi: "18.4 hours in August · measured on this device". The second

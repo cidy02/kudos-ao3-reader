@@ -99,10 +99,17 @@ struct AuthorProfileView: View {
                 profileList
             }
         }
-        .navigationTitle(screenTitle)
-        #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-        #endif
+        .modifier(
+            AuthorScreenTitleChrome(
+                isOverview: isOverview,
+                overviewTitle: model.route.displayName,
+                pushedTitle: screenTitle,
+                selectionTitle: bulkSelection.isSelecting
+                    ? "\(bulkSelection.selected(in: model.works).count) selected"
+                    : nil,
+                isOverviewLoaded: model.headerPhase == .loaded
+            )
+        )
             .hidesFloatingTabBar()
             .toolbar { toolbarContent }
             .navigationDestination(item: $dashboardDestination) { destination in
@@ -412,19 +419,13 @@ private extension AuthorProfileView {
 
     private var accountHeader: some View {
         VStack(alignment: .leading, spacing: 8) {
-            SubjectHeaderBlock(
-                kicker: "AO3 Account",
-                title: showsDashboard ? model.route.displayName : model.selectedTab.rawValue,
-                subtitle: accountSubtitle,
-                palette: theme.scopePalette,
-                gutter: SubjectMetrics.accountGutter
-            )
+            SubjectPageFact(accountSubtitle, gutter: SubjectMetrics.accountGutter)
             if let header = model.header, !header.pseuds.isEmpty {
                 pseudSelector(header.pseuds)
                     .padding(.horizontal, SubjectMetrics.accountGutter)
             }
         }
-        .pageBodyRow(top: 16, gutter: 0)
+        .pageBodyRow(top: 12, gutter: 0)
     }
 
     private var accountSubtitle: String? {
@@ -875,15 +876,9 @@ private extension AuthorProfileView {
     private var failureHeader: some View {
         if usesAccountHeader {
             accountHeader
-        } else {
-            SubjectHeaderBlock(
-                kicker: "AO3 Author",
-                title: model.route.displayName,
-                subtitle: model.route.pseud.map { _ in "Pseud of \(model.route.username)" },
-                palette: theme.scopePalette,
-                gutter: SubjectMetrics.accountGutter
-            )
-            .pageBodyRow(top: 16, gutter: 0)
+        } else if let pseudFact = model.route.pseud.map({ _ in "Pseud of \(model.route.username)" }) {
+            SubjectPageFact(pseudFact, gutter: SubjectMetrics.accountGutter)
+                .pageBodyRow(top: 12, gutter: 0)
         }
     }
 
@@ -976,8 +971,12 @@ private extension AuthorProfileView {
     }
 
     private var screenTitle: String {
-        guard bulkSelection.isSelecting else { return navigationTitle }
-        return "\(bulkSelection.selected(in: model.works).count) selected"
+        if bulkSelection.isSelecting {
+            return "\(bulkSelection.selected(in: model.works).count) selected"
+        }
+        if showsDashboard { return model.route.displayName }
+        if isContentDestination, navigationTitle == "Author" { return model.selectedTab.rawValue }
+        return navigationTitle
     }
 
     /// 1u draws Select as its own glass button beside the overflow menu. Only
@@ -1090,4 +1089,28 @@ private extension AuthorProfileView {
         }
     }
 
+}
+
+private struct AuthorScreenTitleChrome: ViewModifier {
+    let isOverview: Bool
+    let overviewTitle: String
+    let pushedTitle: String
+    let selectionTitle: String?
+    let isOverviewLoaded: Bool
+
+    func body(content: Content) -> some View {
+        if isOverview {
+            content.subjectOwnHeadingChrome(
+                title: overviewTitle,
+                overrideInlineTitle: selectionTitle ?? (isOverviewLoaded ? nil : overviewTitle),
+                isActive: isOverviewLoaded
+            )
+        } else {
+            content
+                .navigationTitle(pushedTitle)
+                #if os(iOS)
+                .navigationBarTitleDisplayMode(.inline)
+                #endif
+        }
+    }
 }

@@ -33,16 +33,12 @@ struct AccountInboxScreen: View {
     var body: some View {
         List {
             Section {
-                SubjectHeaderBlock(
-                    kicker: "AO3 Account",
-                    title: "Inbox",
-                    subtitle: tally,
-                    palette: theme.scopePalette,
-                    gutter: SubjectMetrics.accountGutter
-                )
-                .listRowInsets(EdgeInsets(top: 20, leading: 0, bottom: 4, trailing: 0))
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
+                if let tally {
+                    SubjectPageFact(tally, gutter: SubjectMetrics.accountGutter)
+                        .listRowInsets(EdgeInsets(top: 12, leading: 0, bottom: 4, trailing: 0))
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                }
 
                 if !availablePills.isEmpty {
                     pillRail
@@ -101,8 +97,7 @@ struct AccountInboxScreen: View {
             }
         }
         .cardList()
-        .hidesNavigationBarChrome()
-        .subjectScreenWash(palette: theme.scopePalette)
+        .subjectScreenWash(title: "Inbox", palette: theme.scopePalette)
         .toolbar { toolbarContent }
         .sheet(isPresented: $showingFilters) {
             AccountInboxFilterSheet(model: model)

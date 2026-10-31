@@ -99,9 +99,10 @@ struct AuthorProfileOverviewHeader: View {
     private func pseudNameMenu(_ header: AO3AuthorHeader) -> some View {
         let showsChooser = header.pseuds.count > 1 || model.route.pseud != nil
         let name = Text(model.route.displayName)
-            .font(.title2.weight(.bold))
+            .font(.title.bold())
             .lineLimit(3)
             .minimumScaleFactor(0.75)
+            .subjectOwnHeadingScrollEffect()
         if showsChooser {
             Menu {
                 if let allPseuds = AO3AuthorRoute(username: model.route.username) {

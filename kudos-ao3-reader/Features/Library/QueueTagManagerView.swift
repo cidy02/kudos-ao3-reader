@@ -50,14 +50,8 @@ struct QueueTagManagerView: View {
             .sorted { $0.name < $1.name }
         return List {
             Section {
-                SubjectHeaderBlock(
-                    kicker: queue.displayName,
-                    title: "Tags",
-                    subtitle: tally,
-                    palette: palette,
-                    gutter: gutter
-                )
-                .pageBodyRow(top: 20, gutter: 0)
+                SubjectPageFact("\(queue.displayName) · \(tally)", gutter: gutter)
+                    .pageBodyRow(top: 12, gutter: 0)
             }
 
             if !used.isEmpty {
@@ -89,12 +83,7 @@ struct QueueTagManagerView: View {
         .cardList()
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
-        .subjectScreenWash(palette: palette)
-        // The wash's empty bar title is iOS-only; macOS's split view still
-        // needs a real one, as `ReadingQueueSettingsView` gives itself.
-        #if os(macOS)
-        .navigationTitle("Manage tags")
-        #endif
+        .subjectScreenWash(title: "Manage tags", palette: palette)
         #if DEBUG
         .task {
             if DebugLaunchRoute.takePush("queuetagedit") {

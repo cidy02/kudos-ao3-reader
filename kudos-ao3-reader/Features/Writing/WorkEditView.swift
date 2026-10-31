@@ -57,16 +57,10 @@ struct WorkEditView: View {
     var body: some View {
         List {
             Section {
-                SubjectHeaderBlock(
-                    kicker: "AO3 Account",
-                    title: screenTitle,
-                    // 1bs's "saved 2 minutes ago" is dropped: the form carries
-                    // no saved time, and a guessed one would be wrong.
-                    subtitle: Self.subtitle(for: form),
-                    palette: accountPalette,
-                    gutter: gutter
-                )
-                .pageBodyRow(top: 20, gutter: selfGuttered)
+                // 1bs's "saved 2 minutes ago" is dropped: the form carries
+                // no saved time, and a guessed one would be wrong.
+                SubjectPageFact(Self.subtitle(for: form), gutter: gutter)
+                    .pageBodyRow(top: 12, gutter: selfGuttered)
                 if form.isDraft {
                     footnote("This draft isn't public yet. Options that apply only after posting "
                         + "will appear once you post it.")
@@ -161,10 +155,7 @@ struct WorkEditView: View {
         .environment(\.writingEditedWorkID, form.workID)
         .disabled(isSaving || isPosting)
         .onAppear { if editingGeneration == nil { editingGeneration = auth.sessionGeneration } }
-        #if os(macOS)
-        .navigationTitle(screenTitle)
-        #endif
-        .subjectScreenWash(palette: accountPalette)
+        .subjectScreenWash(title: screenTitle, palette: accountPalette)
         .task(id: "\(needsPublicationRefresh):\(publicationRetry)") {
             guard needsPublicationRefresh, let workID = form.workID else { return }
             let generation = auth.sessionGeneration

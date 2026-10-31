@@ -234,15 +234,7 @@ struct AllReadingQueuesGridView: View {
     var body: some View {
         List {
             Section {
-                // 1i sets its header at 16, where the queue page (1h) uses 26.
-                SubjectHeaderBlock(
-                    kicker: "Home", title: "Queues", palette: organizerPalette,
-                    gutter: SubjectMetrics.accountGutter
-                )
-                    .pageBodyRow(top: 20, gutter: 0)
-                // 1i's tree puts the search between the title and the signal
-                // strip, in the content — not in the navigation bar, where a
-                // `.searchable` drawer would hide it until the list is scrolled.
+                // 1i's tree puts the search above the signal strip, in the content.
                 queueSearchField
                     .pageBodyRow(top: 12, gutter: SubjectMetrics.gutter)
                 statStrip
@@ -306,9 +298,7 @@ struct AllReadingQueuesGridView: View {
             }
         }
         .cardList()
-        // 1bg's grammar: the title bar takes the count while selecting. Inside the wash:
-        // its blank title is the outer one, and set after it the count never showed.
-        .navigationTitle(isSelecting ? "\(selection.count) selected" : "")
+        .navigationTitle(isSelecting ? "\(selection.count) selected" : "Reading Queues")
         .subjectScreenWash(palette: organizerPalette, role: .content)
         .toolbar { toolbarContent }
         #if os(iOS)

@@ -103,7 +103,7 @@ struct TagSetView: View {
     var body: some View {
         List {
             Section {
-                header.pageBodyRow(top: 20, gutter: selfGuttered)
+                header.pageBodyRow(top: 12, gutter: selfGuttered)
             }
 
             switch phase {
@@ -122,10 +122,7 @@ struct TagSetView: View {
         .cardList()
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
-        #if os(macOS)
-        .navigationTitle("Tag set")
-        #endif
-        .subjectScreenWash(palette: palette)
+        .subjectScreenWash(title: "Tag set", palette: palette)
         .task { await loadTagSetIfNeeded() }
         #if DEBUG
         .task { if DebugLaunchRoute.takePush("tagseteditor") { debugTagEditor = true } }
@@ -138,11 +135,9 @@ struct TagSetView: View {
     // MARK: - Header
 
     private var header: some View {
-        SubjectHeaderBlock(
-            kicker: isModerator ? "Tag set · moderator" : "Tag set · owner",
-            title: "Tag set",
-            subtitle: "\(effectiveTitle) · \(totalTagCount.compactCount) tags",
-            palette: palette,
+        let role = isModerator ? "moderator" : "owner"
+        return SubjectPageFact(
+            "\(effectiveTitle) · \(totalTagCount.compactCount) tags · \(role)",
             gutter: SubjectMetrics.accountGutter
         )
     }
@@ -238,20 +233,14 @@ struct TagSetView: View {
     private var tagEditorScreen: some View {
         List {
             Section {
-                SubjectHeaderBlock(
-                    kicker: "Tag set",
-                    title: "Add tags",
-                    subtitle: effectiveTitle,
-                    palette: palette,
-                    gutter: SubjectMetrics.accountGutter
-                )
-                .pageBodyRow(top: 20, gutter: selfGuttered)
+                SubjectPageFact(effectiveTitle, gutter: SubjectMetrics.accountGutter)
+                    .pageBodyRow(top: 12, gutter: selfGuttered)
 
                 tagFieldEditor(
                     title: "Fandom tags to add",
                     placeholder: "Comma-separated fandom names…",
                     text: $fandomTagnames
-                ).pageBodyRow(top: 18, gutter: gutter)
+                ).pageBodyRow(top: 14, gutter: gutter)
 
                 tagFieldEditor(
                     title: "Character tags to add",
@@ -278,10 +267,7 @@ struct TagSetView: View {
         }
         .cardList()
         .environment(\.defaultMinListRowHeight, 0)
-        #if os(macOS)
-        .navigationTitle("Add tags")
-        #endif
-        .subjectScreenWash(palette: palette)
+        .subjectScreenWash(title: "Add tags", palette: palette)
         .screenTint(palette)
     }
 

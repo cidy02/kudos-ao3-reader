@@ -329,22 +329,14 @@ struct LibrarySectionListView: View {
         )
     }
 
-    /// The kicker / rule / 32pt hero, as the list's first row rather than as a
-    /// navigation title — spec 1c scrolls it away under the chrome, which a
-    /// `navigationTitle` cannot do.
     private var subjectHeader: some View {
-        SubjectHeaderBlock(
-            kicker: originKicker,
-            title: kind.title,
-            subtitle: headerTallyLine,
-            palette: scopePalette
-        )
+        SubjectPageFact(headerTallyLine)
     }
 
     private var subjectHeaderSection: some View {
         Section {
             subjectHeader
-            .listRowInsets(EdgeInsets(top: 20, leading: 0, bottom: 4, trailing: 0))
+            .listRowInsets(EdgeInsets(top: 12, leading: 0, bottom: 4, trailing: 0))
             .listRowBackground(Color.clear)
             .listRowSeparator(.hidden)
 
@@ -619,14 +611,11 @@ struct LibrarySectionListView: View {
         }
     }
 
-    /// The same header block, tallying rows rather than works — on the Tags scope
-    /// "34 works" would be a count of something not on screen.
+    /// Tallies rows rather than works — on the Tags scope "34 works" would be a
+    /// count of something not on screen.
     private func affinityHeader(count: Int) -> some View {
-        SubjectHeaderBlock(
-            kicker: originKicker,
-            title: kind.title,
-            subtitle: "\(count) \(count == 1 ? favoriteScope.singularNoun : favoriteScope.title.lowercased())",
-            palette: scopePalette
+        SubjectPageFact(
+            "\(count) \(count == 1 ? favoriteScope.singularNoun : favoriteScope.title.lowercased())"
         )
     }
 

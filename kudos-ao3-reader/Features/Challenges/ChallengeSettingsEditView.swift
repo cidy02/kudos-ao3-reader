@@ -94,7 +94,7 @@ struct ChallengeSettingsEditView: View {
     var body: some View {
         List {
             Section {
-                header.pageBodyRow(top: 20, gutter: selfGuttered)
+                header.pageBodyRow(top: 12, gutter: selfGuttered)
             }
 
             if let saveNotice {
@@ -127,10 +127,7 @@ struct ChallengeSettingsEditView: View {
         .cardList()
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
-        #if os(macOS)
-        .navigationTitle("Challenge settings")
-        #endif
-        .subjectScreenWash(palette: palette)
+        .subjectScreenWash(title: "Challenge settings", palette: palette)
         .safeAreaBar(edge: .bottom, spacing: 0) { bottomActionBar }
         .task(id: auth.sessionGeneration) { await load() }
         .refreshable { await load() }
@@ -148,22 +145,10 @@ struct ChallengeSettingsEditView: View {
 
     // MARK: - Header
 
-    private var kicker: String {
-        switch settings.kind {
-        case .giftExchange: "Gift exchange · moderator"
-        case .promptMeme: "Prompt meme · moderator"
-        }
-    }
-
     private var header: some View {
-        SubjectHeaderBlock(
-            kicker: kicker,
-            title: "Challenge settings",
-            subtitle: signUpTotal.map { "\(effectiveTitle) · \(AO3ChallengeCountText.plural($0, "sign-up"))" }
-                ?? effectiveTitle,
-            palette: palette,
-            gutter: SubjectMetrics.accountGutter
-        )
+        let base = signUpTotal.map { "\(effectiveTitle) · \(AO3ChallengeCountText.plural($0, "sign-up"))" }
+            ?? effectiveTitle
+        return SubjectPageFact("\(base) · \(settings.kind.displayName)", gutter: SubjectMetrics.accountGutter)
     }
 
     // MARK: - Content Sections

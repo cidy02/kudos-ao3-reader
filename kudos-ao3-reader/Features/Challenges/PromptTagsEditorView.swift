@@ -8,7 +8,6 @@ struct PromptTagsEditorView: View {
     let index: Int
 
     @Environment(\.dismiss) private var dismiss
-    @Environment(ThemeManager.self) private var theme
 
     @ScaledMetric(relativeTo: .headline) private var doneButtonSize: CGFloat = 15
     @ScaledMetric(relativeTo: .subheadline) private var inputFontSize: CGFloat = 15
@@ -22,19 +21,8 @@ struct PromptTagsEditorView: View {
         NavigationStack {
             List {
                 Section {
-                    SubjectHeaderBlock(
-                        kicker: isOffer ? "Offer \(index + 1)" : "Request \(index + 1)",
-                        title: "Tags",
-                        subtitle: "Comma-separated tag names",
-                        palette: palette,
-                        gutter: SubjectMetrics.accountGutter
-                    )
-                    .pageBodyRow(top: 20, gutter: 0)
-                }
-
-                Section {
                     SectionRuleHeader(title: "Fandoms")
-                        .pageBodyRow(top: 18, gutter: 0)
+                        .pageBodyRow(top: 14, gutter: 0)
                     tagInputField("Good Omens, Supernatural", text: $fandomsText)
                         .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
                 }
@@ -62,10 +50,10 @@ struct PromptTagsEditorView: View {
             }
             .cardList()
             .environment(\.defaultMinListRowHeight, 0)
-            #if os(macOS)
-            .navigationTitle(isOffer ? "Offer Tags" : "Request Tags")
-            #endif
-            .subjectScreenWash(palette: palette)
+            .subjectScreenWash(
+                title: isOffer ? "Offer \(index + 1) Tags" : "Request \(index + 1) Tags",
+                palette: palette
+            )
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") {
@@ -73,7 +61,6 @@ struct PromptTagsEditorView: View {
                         dismiss()
                     }
                     .font(.system(size: doneButtonSize, weight: .semibold))
-                    .foregroundStyle(theme.accentInk)
                 }
             }
             .onAppear {

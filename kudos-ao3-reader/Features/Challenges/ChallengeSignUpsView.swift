@@ -97,8 +97,8 @@ struct ChallengeSignUpsView: View { // swiftlint:disable:this type_body_length
     var body: some View {
         List {
             Section {
-                header.pageBodyRow(top: 20, gutter: selfGuttered)
-                filterSegment.pageBodyRow(top: 14, gutter: gutter)
+                header.pageBodyRow(top: 12, gutter: selfGuttered)
+                filterSegment.pageBodyRow(top: 10, gutter: gutter)
             }
 
             switch phase {
@@ -117,10 +117,7 @@ struct ChallengeSignUpsView: View { // swiftlint:disable:this type_body_length
         .cardList()
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
-        #if os(macOS)
-        .navigationTitle("Sign-ups")
-        #endif
-        .subjectScreenWash(palette: palette)
+        .subjectScreenWash(title: "Sign-ups", palette: palette)
         .safeAreaBar(edge: .bottom, spacing: 0) { bottomActionBar }
         .task { await loadSignUpsIfNeeded() }
         #if DEBUG
@@ -146,24 +143,18 @@ struct ChallengeSignUpsView: View { // swiftlint:disable:this type_body_length
     // MARK: - Header & Filter
 
     private var subtitleText: String {
-        var parts: [String] = []
+        var parts: [String] = [effectiveTitle]
         if let signUpTotal {
             parts.append(AO3ChallengeCountText.plural(signUpTotal, "sign-up"))
         }
         if !closeDateText.isEmpty {
             parts.append(closeDateText)
         }
-        return parts.joined(separator: " · ")
+        return parts.filter { !$0.isEmpty }.joined(separator: " · ")
     }
 
     private var header: some View {
-        SubjectHeaderBlock(
-            kicker: effectiveTitle,
-            title: "Sign-ups",
-            subtitle: subtitleText,
-            palette: palette,
-            gutter: SubjectMetrics.accountGutter
-        )
+        SubjectPageFact(subtitleText, gutter: SubjectMetrics.accountGutter)
     }
 
     private var filterSegment: some View {
@@ -546,15 +537,15 @@ private struct ChallengeSignUpDetailView: View {
     var body: some View {
         List {
             Section {
-                SubjectHeaderBlock(
-                    kicker: collectionTitle,
-                    title: signUp.pseud,
-                    subtitle: AO3ChallengeCountText.plural(signUp.requests.count, "request")
-                        + " · " + AO3ChallengeCountText.plural(signUp.offers.count, "offer"),
-                    palette: palette,
+                SubjectPageFact(
+                    [
+                        collectionTitle,
+                        AO3ChallengeCountText.plural(signUp.requests.count, "request"),
+                        AO3ChallengeCountText.plural(signUp.offers.count, "offer")
+                    ].filter { !$0.isEmpty }.joined(separator: " · "),
                     gutter: gutter
                 )
-                .pageBodyRow(top: 20, gutter: 0)
+                .pageBodyRow(top: 12, gutter: 0)
             }
             promptSections(signUp.requests, noun: "Request")
             promptSections(signUp.offers, noun: "Offer")
@@ -562,10 +553,7 @@ private struct ChallengeSignUpDetailView: View {
         .cardList()
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
-        #if os(macOS)
-        .navigationTitle(signUp.pseud)
-        #endif
-        .subjectScreenWash(palette: palette)
+        .subjectScreenWash(title: signUp.pseud, palette: palette)
             .screenTint(palette)
     }
 

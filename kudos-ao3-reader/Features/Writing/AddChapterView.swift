@@ -51,14 +51,11 @@ struct AddChapterView: View {
     var body: some View {
         List {
             Section {
-                SubjectHeaderBlock(
-                    kicker: "AO3 Account",
-                    title: form.chapterID == nil ? "Add chapter" : "Edit chapter",
-                    subtitle: Self.subtitle(workTitle: workTitle, chapterTitle: form.title, position: form.position),
-                    palette: accountPalette,
+                SubjectPageFact(
+                    Self.subtitle(workTitle: workTitle, chapterTitle: form.title, position: form.position),
                     gutter: gutter
                 )
-                .pageBodyRow(top: 20, gutter: selfGuttered)
+                .pageBodyRow(top: 12, gutter: selfGuttered)
             }
 
             // One `List` row per field, as segments of one card. The Text card
@@ -121,10 +118,10 @@ struct AddChapterView: View {
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
         .onAppear { if editingGeneration == nil { editingGeneration = auth.sessionGeneration } }
-        #if os(macOS)
-        .navigationTitle(form.chapterID == nil ? "Add chapter" : "Edit chapter")
-        #endif
-        .subjectScreenWash(palette: accountPalette)
+        .subjectScreenWash(
+            title: form.chapterID == nil ? "Add chapter" : "Edit chapter",
+            palette: accountPalette
+        )
         .alert("AO3 could not save the chapter", isPresented: Binding(
             get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } }
         )) {
