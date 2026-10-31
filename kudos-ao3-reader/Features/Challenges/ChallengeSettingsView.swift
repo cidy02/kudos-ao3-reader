@@ -65,7 +65,7 @@ struct ChallengeSettingsView: View {
     var body: some View {
         List {
             Section {
-                header.pageBodyRow(top: 20, gutter: selfGuttered)
+                header.pageBodyRow(top: 12, gutter: selfGuttered)
                 introCard.pageBodyRow(top: 8, gutter: gutter)
             }
 
@@ -85,10 +85,7 @@ struct ChallengeSettingsView: View {
         .cardList()
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
-        #if os(macOS)
-        .navigationTitle("Challenge")
-        #endif
-        .subjectScreenWash(palette: palette)
+        .subjectScreenWash(title: "Challenge", palette: palette)
         .task { await loadSettingsIfNeeded() }
         #if DEBUG
         .task {
@@ -121,13 +118,7 @@ struct ChallengeSettingsView: View {
     // MARK: - Header & Intro
 
     private var header: some View {
-        SubjectHeaderBlock(
-            kicker: "AO3 Account",
-            title: "Challenge",
-            subtitle: "\(effectiveTitle) · \(settings.kind.displayName)",
-            palette: palette,
-            gutter: SubjectMetrics.accountGutter
-        )
+        SubjectPageFact("\(effectiveTitle) · \(settings.kind.displayName)", gutter: SubjectMetrics.accountGutter)
     }
 
     private var introCard: some View {

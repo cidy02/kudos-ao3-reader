@@ -81,6 +81,10 @@ struct AO3CollectionsList: View {
         Group {
             if auth.isLoggedIn { signedInContent } else { signedOutPrompt }
         }
+        .navigationTitle("Collections")
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
         .hidesFloatingTabBar()
         .toolbar {
             if auth.isLoggedIn {
@@ -219,8 +223,9 @@ struct AO3CollectionsList: View {
     private var collectionsList: some View {
         List {
             Section {
-                header.pageBodyRow(top: 20, gutter: 0)
-                scopeRail.pageBodyRow(top: 12, gutter: 0)
+                SubjectPageFact(tallyLine, gutter: SubjectMetrics.accountGutter)
+                    .pageBodyRow(top: 12, gutter: 0)
+                scopeRail.pageBodyRow(top: 10, gutter: 0)
                 if !filters.summaryLabels.isEmpty {
                     filterRail.pageBodyRow(top: 12, gutter: 0)
                 }
@@ -304,16 +309,6 @@ struct AO3CollectionsList: View {
 
     private func itemsDestination(for collection: AO3Collection) -> AO3CollectionItemsDestination {
         AO3CollectionItemsDestination(slug: collection.name, title: collection.title)
-    }
-
-    private var header: some View {
-        SubjectHeaderBlock(
-            kicker: "AO3 Account",
-            title: "Collections",
-            subtitle: tallyLine,
-            palette: palette,
-            gutter: SubjectMetrics.accountGutter
-        )
     }
 
     /// 1r's two scopes. "Collections" is this list. "Your items" is AO3's

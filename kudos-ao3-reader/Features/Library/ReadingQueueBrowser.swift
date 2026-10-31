@@ -202,8 +202,7 @@ struct ReadingQueueBrowserView: View {
     }
 
     private var subjectHeader: some View {
-        SubjectHeaderBlock(
-            kicker: ReadingQueueFacts.kicker(origin: originKicker),
+        SubjectPageHeading(
             title: selectedQueue?.displayName ?? "Reading Queues",
             subtitle: queueSubtitle,
             palette: subjectPalette
@@ -317,16 +316,17 @@ struct ReadingQueueBrowserView: View {
         .accessibilityValue(position.map { "Position \($0)" } ?? "")
     }
 
-    /// 1bg: "The title bar takes the count" while selecting. Otherwise empty on
-    /// iOS, where `.subjectScreenWash` hides the title and `SubjectHeaderBlock`
-    /// names the page; macOS has no wash and needs a real title for its window.
-    private var screenTitle: String {
-        if isSelecting { return "\(selectedWorks.count) selected" }
+    private var queueInlineTitle: String {
         #if os(macOS)
-        return horizontalSizeClass == .regular ? "Reading Queues" : (selectedQueue?.displayName ?? "Reading Queues")
-        #else
-        return ""
+        if horizontalSizeClass == .regular { return "Reading Queues" }
         #endif
+        return selectedQueue?.displayName ?? "Reading Queues"
+    }
+
+    private var queueOverrideInlineTitle: String? {
+        if isSelecting { return "\(selectedWorks.count) selected" }
+        if isReordering { return queueInlineTitle }
+        return nil
     }
 
     // MARK: - Body
@@ -340,7 +340,11 @@ struct ReadingQueueBrowserView: View {
             }
         }
         .background((themeManager.appTheme.appBaseBackground ?? Color.clear).ignoresSafeArea())
-        .navigationTitle(screenTitle)
+        .subjectOwnHeadingChrome(
+            title: queueInlineTitle,
+            overrideInlineTitle: queueOverrideInlineTitle,
+            isActive: !works.isEmpty && !isReordering
+        )
             .onAppear {
                 resolveInitialSelection()
                 #if DEBUG
@@ -467,10 +471,8 @@ struct ReadingQueueBrowserView: View {
 
             Divider()
 
-            // No separate plain-text title row here any more: `pageContent`'s own
-            // `SubjectHeaderBlock` (kicker, 32pt name, tallies) is the page's name
-            // now, on iPad/Mac exactly as on iPhone, so the split view doesn't show
-            // the queue's name twice.
+            // `pageContent`'s own heading names the selected queue, so the split
+            // view does not add a separate title row above it.
             pageContent
         }
         #if os(iOS)
@@ -860,17 +862,13 @@ extension ReadingQueueBrowserView {
         }
     }
 
-    /// 1h: "an accent-filled + for adding works" in the page's glass chrome.
+    /// Untinted toolbar '+' control matching the rest of the queue toolbar (board 04).
     private var addWorksButton: some View {
         Button {
             showingAddWorks = true
         } label: {
             Label("Add Works", systemImage: "plus")
         }
-        .buttonStyle(.glassProminent)
-        .accentFill()
-        .prominentLabel()
-        .tint(subjectPalette.tint)
         .help("Add works from your library")
     }
 

@@ -81,8 +81,7 @@ struct PrivacyDataView: View {
             // `SubjectMetrics.gutter`. Everything else takes the account gutter
             // from the row, so a panel cannot end up flush to the screen edge.
             Section {
-                header.pageBodyRow(top: 20, gutter: selfGuttered)
-                promisePanel.pageBodyRow(top: 14, gutter: gutter)
+                promisePanel.pageBodyRow(top: 12, gutter: gutter)
             }
 
             Section {
@@ -114,7 +113,7 @@ struct PrivacyDataView: View {
         .cardList()
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
-        .subjectScreenWash(palette: accountPalette)
+        .subjectScreenWash(title: "Privacy", palette: accountPalette)
         .task { await measureIfNeeded() }
         .refreshable { await measure() }
         .confirmationDialog(
@@ -175,21 +174,6 @@ struct PrivacyDataView: View {
             Text("Removes saved fandom and category lists. Your reading, saved works, and "
                 + "downloads stay untouched; Browse rebuilds the lists next time you open it.")
         }
-    }
-
-    // MARK: Header
-
-    /// Spec 1ac heads the page "AO3 Account › Settings" — a breadcrumb rather
-    /// than a scope name, because this is two pushes deep and the kicker is the
-    /// only thing on the page that says so once the navigation bar is gone.
-    private var header: some View {
-        SubjectHeaderBlock(
-            kicker: "AO3 Account › Settings",
-            title: "Privacy",
-            subtitle: "Your reading data stays on this device",
-            palette: accountPalette,
-            gutter: SubjectMetrics.accountGutter
-        )
     }
 
     /// The account's own hue, not a work's — every account surface is scoped to

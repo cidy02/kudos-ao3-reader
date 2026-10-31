@@ -130,8 +130,9 @@ struct AO3CollectionItemsView: View {
     var body: some View {
         List {
             Section {
-                header.pageBodyRow(top: 20, gutter: 0)
-                tabStrip.pageBodyRow(top: 14, gutter: SubjectMetrics.accountGutter)
+                SubjectPageFact(tallyLine, gutter: SubjectMetrics.accountGutter)
+                    .pageBodyRow(top: 12, gutter: 0)
+                tabStrip.pageBodyRow(top: 10, gutter: SubjectMetrics.accountGutter)
                 if sessionOwnsScreen, let submitError {
                     errorCard(submitError).pageBodyRow(top: 12, gutter: SubjectMetrics.accountGutter)
                 }
@@ -169,7 +170,7 @@ struct AO3CollectionItemsView: View {
             }
         }
         .cardList()
-        .subjectScreenWash(palette: palette, role: .content)
+        .subjectScreenWash(title: "Collection items", palette: palette, role: .content)
         .toolbar {
             if pendingCount > 0 {
                 ToolbarItem(placement: .primaryAction) {
@@ -235,16 +236,6 @@ struct AO3CollectionItemsView: View {
     }
 
     // MARK: Header
-
-    private var header: some View {
-        SubjectHeaderBlock(
-            kicker: "AO3 Account › Collections",
-            title: "Collection items",
-            subtitle: tallyLine,
-            palette: palette,
-            gutter: SubjectMetrics.accountGutter
-        )
-    }
 
     /// Spec 1s: "Your works in AO3 collections · 3 need a decision". The staged
     /// count lives in the toolbar, not in this line.

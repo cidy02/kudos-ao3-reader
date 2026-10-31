@@ -82,7 +82,7 @@ struct ChallengeSignUpView: View {
     var body: some View {
         List {
             Section {
-                header.pageBodyRow(top: 20, gutter: selfGuttered)
+                header.pageBodyRow(top: 12, gutter: selfGuttered)
             }
 
             if let notice = statusNotice {
@@ -115,10 +115,7 @@ struct ChallengeSignUpView: View {
         .cardList()
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
-        #if os(macOS)
-        .navigationTitle("Your sign-up")
-        #endif
-        .subjectScreenWash(palette: palette)
+        .subjectScreenWash(title: "Your sign-up", palette: palette)
         .safeAreaBar(edge: .bottom, spacing: 0) { bottomActionBar }
         .task { await loadSignUpIfNeeded() }
         #if DEBUG
@@ -176,11 +173,8 @@ struct ChallengeSignUpView: View {
     // MARK: - Header
 
     private var header: some View {
-        SubjectHeaderBlock(
-            kicker: effectiveTitle,
-            title: "Your sign-up",
-            subtitle: headerSubtitle,
-            palette: palette,
+        SubjectPageFact(
+            [effectiveTitle, headerSubtitle].filter { !$0.isEmpty }.joined(separator: " · "),
             gutter: SubjectMetrics.accountGutter
         )
     }

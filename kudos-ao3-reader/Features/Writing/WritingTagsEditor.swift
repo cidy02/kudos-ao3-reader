@@ -75,44 +75,30 @@ struct WritingTagsEditor: View {
                 // the picker beside it. It was a bare `Toggle` list on white
                 // rows under a system title.
                 Section {
-                    // "Choose", not 1bu's "Edit tags": this branch also serves
-                    // bulk edit's "Remove from collections", and collections are
-                    // not tags.
-                    SubjectHeaderBlock(
-                        kicker: "Choose",
-                        title: title,
-                        subtitle: values.isEmpty ? "None chosen" : "\(values.count) chosen",
-                        palette: palette,
+                    SubjectPageFact(
+                        values.isEmpty ? "None chosen" : "\(values.count) chosen",
                         gutter: gutter
                     )
-                    .pageBodyRow(top: 20, gutter: 0)
+                    .pageBodyRow(top: 12, gutter: 0)
                 }
                 Section {
-                    optionsPanel.pageBodyRow(top: 18, gutter: gutter)
+                    optionsPanel.pageBodyRow(top: 14, gutter: gutter)
                 }
             }
         }
         .cardList()
-        // Blank: both branches now state the field in a header block, and an
-        // inner `navigationTitle` outranks the empty one `subjectScreenWash`
-        // sets, so a title here would draw the name twice.
-        .navigationTitle("")
-        .subjectScreenWash(palette: palette)
+        .subjectScreenWash(title: title, palette: palette)
     }
 
     @ViewBuilder
     private func tagPicker(kind: AO3TagKind) -> some View {
         Section {
-            SubjectHeaderBlock(
-                kicker: "Edit tags",
-                title: title,
-                subtitle: subtitle,
-                palette: palette,
-                gutter: gutter
-            )
-            .pageBodyRow(top: 20, gutter: 0)
+            if !values.isEmpty {
+                SubjectPageFact("\(values.count) chosen", gutter: gutter)
+                    .pageBodyRow(top: 12, gutter: 0)
+            }
 
-            field.pageBodyRow(top: 18, gutter: gutter)
+            field.pageBodyRow(top: values.isEmpty ? 12 : 14, gutter: gutter)
 
             if !values.isEmpty {
                 chosenChips.pageBodyRow(top: 18, gutter: gutter)
@@ -149,14 +135,6 @@ struct WritingTagsEditor: View {
 
     private var hasSuggestionRows: Bool {
         freeTypedTerm != nil || !suggestions.isEmpty || errorMessage != nil
-    }
-
-    /// 1bu's subtitle: how many are chosen, that they can be dragged, and what
-    /// the list below is. The offer stays: autocomplete order is not a ranking.
-    private var subtitle: String {
-        let offer = "AO3 offers its canonical tags as you type"
-        guard !values.isEmpty else { return offer }
-        return "\(values.count) chosen · drag to reorder · \(offer)"
     }
 
     private var field: some View {

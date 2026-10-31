@@ -74,7 +74,7 @@ struct CollectionMaintainersView: View {
     var body: some View {
         List {
             Section {
-                header.pageBodyRow(top: 20, gutter: selfGuttered)
+                header.pageBodyRow(top: 12, gutter: selfGuttered)
             }
 
             switch phase {
@@ -93,10 +93,7 @@ struct CollectionMaintainersView: View {
         .cardList()
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
-        #if os(macOS)
-        .navigationTitle("Maintainers")
-        #endif
-        .subjectScreenWash(palette: palette)
+        .subjectScreenWash(title: "Maintainers", palette: palette)
         .task { await loadMaintainersIfNeeded() }
         .refreshable { await loadMaintainers() }
         .alert("Cannot Step Down", isPresented: $showLastOwnerAlert) {
@@ -134,13 +131,7 @@ struct CollectionMaintainersView: View {
     }
 
     private var header: some View {
-        SubjectHeaderBlock(
-            kicker: "AO3 Account",
-            title: "Maintainers",
-            subtitle: subtitleText,
-            palette: palette,
-            gutter: SubjectMetrics.accountGutter
-        )
+        SubjectPageFact(subtitleText, gutter: SubjectMetrics.accountGutter)
     }
 
     // MARK: - Content Sections

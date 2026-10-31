@@ -93,14 +93,8 @@ struct EditMultipleWorksView: View {
     private var list: some View {
         List {
             Section {
-                SubjectHeaderBlock(
-                    kicker: "AO3 Account",
-                    title: headerTitle,
-                    subtitle: form.workTitles.joined(separator: ", "),
-                    palette: accountPalette,
-                    gutter: gutter
-                )
-                .pageBodyRow(top: 20, gutter: selfGuttered)
+                SubjectPageFact(form.workTitles.joined(separator: ", "), gutter: gutter)
+                    .pageBodyRow(top: 12, gutter: selfGuttered)
 
                 Text("Your changes apply to every selected work. Use the separate Add and Remove groups "
                     + "for tags. Anything you leave alone stays unchanged.")
@@ -110,7 +104,7 @@ struct EditMultipleWorksView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 14)
-                    .pageBodyRow(top: 14, gutter: gutter)
+                    .pageBodyRow(top: 10, gutter: gutter)
             }
 
             // One `List` row per field, as segments of one card. Each card was
@@ -161,10 +155,7 @@ struct EditMultipleWorksView: View {
         .cardList()
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
-        #if os(macOS)
-        .navigationTitle(headerTitle)
-        #endif
-        .subjectScreenWash(palette: accountPalette)
+        .subjectScreenWash(title: headerTitle, palette: accountPalette)
         // The error was set and never shown, so a failed save only re-enabled
         // Save and looked like nothing had happened.
         .alert("AO3 could not save the change", isPresented: Binding(

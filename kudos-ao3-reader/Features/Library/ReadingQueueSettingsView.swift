@@ -120,13 +120,8 @@ struct ReadingQueueSettingsView: View {
     var body: some View {
         List {
             Section {
-                SubjectHeaderBlock(
-                    kicker: ReadingQueueFacts.kicker(origin: originKicker, isDetails: true),
-                    title: queue.displayName,
-                    subtitle: subtitle,
-                    palette: palette
-                )
-                .pageBodyRow(top: 20, gutter: 0)
+                SubjectPageFact(subtitle)
+                    .pageBodyRow(top: 12, gutter: 0)
                 if !works.isEmpty {
                     let progress = ReadingQueueFacts.progress(of: works.map(\.readingState))
                     // 1h.3 repeats the queue page's strip and its legend.
@@ -177,7 +172,7 @@ struct ReadingQueueSettingsView: View {
         .cardList()
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
-        .subjectScreenWash(palette: palette)
+        .subjectScreenWash(title: queue.displayName, palette: palette)
         .sheet(isPresented: $showingTags) { QueueTagSheet(queue: queue) }
         #if DEBUG
         .task {
@@ -191,9 +186,6 @@ struct ReadingQueueSettingsView: View {
         .sheet(isPresented: $debugManageTags) {
             NavigationStack { QueueTagManagerView(queue: queue, onShowOnlyTag: onShowOnlyTag) }
         }
-        #endif
-        #if os(macOS)
-        .navigationTitle(queue.displayName)
         #endif
         .screenTint(palette)
     }

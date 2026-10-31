@@ -1,118 +1,130 @@
 import SwiftUI
 
-/// The scaffold every pushed, subject-scoped screen in the redesign shares:
-/// a full-bleed wash, one row of floating glass chrome instead of a navigation
-/// bar, the kicker / rule / 32pt header block, an optional filter chip rail, and
-/// then the screen's own content.
-///
-/// Roughly forty of the spec's artboards are this shape — search results (1k),
-/// the inbox (1l), history (1t), works (1u), a queue (1h), the account
-/// subsections, the pushed Home and Library sections — which is why it is one
-/// component rather than forty near-identical headers.
-///
-/// **Why the navigation bar is hidden rather than restyled:** the spec floats
-/// 34pt glass circles directly over the wash, with the page's own 32pt title
-/// scrolling underneath them. A `UINavigationBar` cannot be persuaded into that
-/// arrangement without fighting its own title layout. Hiding it costs the system
-/// interactive pop gesture, so the scaffold reinstates a back swipe through
-/// `reinstatesBackSwipe`, which wraps `edgeSwipeToGoBack` — the same helper the
-/// reader already uses for exactly this reason.
-struct SubjectScreenScaffold<LeadingChrome: View, TrailingChrome: View, Content: View>: View {
-    let palette: SubjectPalette
-    /// The uppercase line above the title — where you came from ("HOME"), or
-    /// what kind of thing this is ("SEARCH RESULTS", "QUEUE DETAILS").
-    let kicker: String
+/// Pure scroll-collapse geometry for subject pages (work, fandom, collection,
+/// queue, author, or challenge) that open with their own heading straight under
+/// the navigation bar and shrink that heading into the `.inline` bar on scroll.
+enum SubjectHeadingScrollCollapse {
+    /// Scroll offset at which the inline navigation bar title becomes visible.
+    static let showInlineThreshold: CGFloat = 44
+    /// Scroll offset at or below which the inline navigation bar title hides again.
+    /// Separated from `showInlineThreshold` so resting near the boundary never flickers.
+    static let hideInlineThreshold: CGFloat = 28
+    /// Maximum scroll offset tracked for the heading shrink transform; beyond this
+    /// offset the heading has cleared the bar so scroll geometry stops updating `@State`.
+    static let maxTrackedOffset: CGFloat = 60
+
+    static func clampedOffset(_ rawOffset: CGFloat) -> CGFloat {
+        min(max(0, rawOffset), maxTrackedOffset).rounded(.toNearestOrEven)
+    }
+
+    static func showsInlineTitle(scrollOffset: CGFloat, previouslyVisible: Bool) -> Bool {
+        if scrollOffset >= showInlineThreshold { return true }
+        if scrollOffset <= hideInlineThreshold { return false }
+        return previouslyVisible
+    }
+
+    /// Smoothly shrinks the in-page heading from 1.0 → 0.92 as it enters the bar.
+    static func headingScale(scrollOffset: CGFloat) -> CGFloat {
+        let progress = min(max(scrollOffset / showInlineThreshold, 0), 1)
+        return 1.0 - (0.08 * progress)
+    }
+
+    /// Smoothly fades the in-page heading as the inline bar title takes over.
+    static func headingOpacity(scrollOffset: CGFloat) -> Double {
+        let start: CGFloat = 12
+        let end: CGFloat = showInlineThreshold + 6
+        let progress = min(max((scrollOffset - start) / (end - start), 0), 1)
+        return Double(1.0 - progress)
+    }
+}
+
+extension EnvironmentValues {
+    /// Clamped scroll offset published by `subjectOwnHeadingChrome` so an
+    /// own-heading page's title shrinks smoothly into the `.inline` bar.
+    @Entry var subjectHeadingScrollOffset: CGFloat = 0
+}
+
+private struct SubjectOwnHeadingScrollEffect: ViewModifier {
+    @Environment(\.subjectHeadingScrollOffset) private var scrollOffset
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        let scale = reduceMotion ? 1.0 : SubjectHeadingScrollCollapse.headingScale(scrollOffset: scrollOffset)
+        let opacity = SubjectHeadingScrollCollapse.headingOpacity(scrollOffset: scrollOffset)
+        content
+            .scaleEffect(scale, anchor: .topLeading)
+            .opacity(opacity)
+    }
+}
+
+private struct SubjectOwnHeadingChrome: ViewModifier {
     let title: String
-    /// One line of tallies under the title: "4 works · most recently read first".
-    var subtitle: String?
-    var role: SubjectScreenRole = .grouped
-    /// Chrome that replaces the default back button. Nil keeps the back button.
-    @ViewBuilder var leadingChrome: () -> LeadingChrome
-    @ViewBuilder var trailingChrome: () -> TrailingChrome
-    @ViewBuilder var content: () -> Content
+    let overrideInlineTitle: String?
+    let isActive: Bool
 
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                SubjectHeaderBlock(
-                    kicker: kicker,
-                    title: title,
-                    subtitle: subtitle,
-                    palette: palette
+    @State private var scrollOffset: CGFloat = 0
+    @State private var showsInlineTitle = false
+
+    func body(content: Content) -> some View {
+        #if os(iOS)
+        let barTitle = overrideInlineTitle ?? ((isActive && showsInlineTitle) ? title : "")
+        content
+            .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                SubjectHeadingScrollCollapse.clampedOffset(
+                    geometry.contentOffset.y + geometry.contentInsets.top
                 )
-                .padding(.top, 20)
-
-                content()
-                    .padding(.top, 16)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            // The floating tab bar overlaps the last rows otherwise; the spec
-            // reserves 96–130pt at the bottom of every one of these screens.
-            .padding(.bottom, 110)
-        }
-        .subjectScreenChrome(
-            palette: palette,
-            role: role,
-            leading: leadingChrome,
-            trailing: trailingChrome
-        )
-    }
-}
-
-/// The chrome half of the scaffold, separated from its container so a screen
-/// that must stay a `List` can have it too.
-///
-/// This matters more than it looks: `List` is what gives a row its swipe
-/// actions, and the spec puts swipe actions on rows in 1ah, 1ai, 1bg, 1bj and
-/// 1u. A `ScrollView` cannot offer them, so those screens keep their `List` and
-/// reach for this modifier, while the simpler ones use `SubjectScreenScaffold`
-/// and get a `ScrollView` for free.
-private struct SubjectScreenChrome<Leading: View, Trailing: View>: ViewModifier {
-    let palette: SubjectPalette
-    let role: SubjectScreenRole
-    @ViewBuilder var leading: () -> Leading
-    @ViewBuilder var trailing: () -> Trailing
-
-    @Environment(\.dismiss) private var dismiss
-
-    func body(content: Content) -> some View {
-        content
-            .safeAreaInset(edge: .top, spacing: 0) {
-                HStack(spacing: 9) {
-                    leading()
-                    Spacer(minLength: 8)
-                    trailing()
+            } action: { _, clamped in
+                guard isActive else { return }
+                scrollOffset = clamped
+                let nextVisible = SubjectHeadingScrollCollapse.showsInlineTitle(
+                    scrollOffset: clamped,
+                    previouslyVisible: showsInlineTitle
+                )
+                if nextVisible != showsInlineTitle {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        showsInlineTitle = nextVisible
+                    }
                 }
-                .padding(.horizontal, 14)
-                .frame(height: 44)
             }
-            .subjectScreenSurface(role, palette: palette)
-            .hidesFloatingTabBar()
-            .hidesSystemNavigationBar()
-            .reinstatesBackSwipe { dismiss() }
+            .onChange(of: isActive) { _, active in
+                if !active {
+                    scrollOffset = 0
+                    showsInlineTitle = false
+                }
+            }
+            .environment(\.subjectHeadingScrollOffset, isActive ? scrollOffset : 0)
+            .navigationTitle(barTitle)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(barTitle.isEmpty ? .hidden : .automatic, for: .navigationBar)
+        #else
+        content
+            .navigationTitle(overrideInlineTitle ?? title)
+        #endif
     }
 }
 
-/// The wash and header without the chrome swap: a transparent inline navigation
-/// bar is kept, so the screen's existing toolbar items (filter, overflow, Select
-/// All) stay exactly where they are and keep working.
-///
-/// This is the *staged* form of the redesign for a pushed screen. Spec 1ad and
-/// friends replace the navigation bar outright with floating glass circles, and
-/// `subjectScreenChrome` does that — but it also takes every `.toolbar` item on
-/// the screen with it, so a screen has to move its controls into the floating row
-/// in the same change. Screens adopt this first (wash, header block, ledger
-/// rows), and the chrome swap lands separately, where it can be checked on a
-/// device.
+/// Pushed-screen surface + inline system navigation bar chrome (Rules › "Let iOS do it").
 private struct SubjectScreenWash: ViewModifier {
+    let title: String?
     let palette: SubjectPalette
     let role: SubjectScreenRole
 
     func body(content: Content) -> some View {
+        if let title {
+            styled(content)
+                .navigationTitle(title)
+        } else {
+            styled(content)
+        }
+    }
+
+    private func styled(_ content: Content) -> some View {
         content
             .subjectScreenSurface(role, palette: palette)
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
             .hidesFloatingTabBar()
-            .hidesNavigationBarChrome()
     }
 }
 
@@ -129,18 +141,37 @@ extension View {
         }
     }
 
-    /// Wash plus a transparent, title-less navigation bar. Keeps the bar's own
-    /// items; see `SubjectScreenWash` for why that is worth a second modifier.
+    /// Surface, control tint, and small centred `.inline` system bar chrome for a pushed screen.
     func subjectScreenWash(
+        title: String? = nil,
         palette: SubjectPalette,
         role: SubjectScreenRole = .grouped
     ) -> some View {
-        modifier(SubjectScreenWash(palette: palette, role: role))
+        modifier(SubjectScreenWash(title: title, palette: palette, role: role))
     }
 
-    /// Empties the navigation bar's title and background so the wash shows
-    /// through it, without hiding the bar (and with it, the screen's toolbar).
-    /// The page states its own name in `SubjectHeaderBlock` underneath.
+    /// Shrinks an own-heading page's title (`SubjectPageHeading`, `AuthorProfileOverviewHeader`)
+    /// into the `.inline` navigation bar as the user scrolls past the heading.
+    func subjectOwnHeadingChrome(
+        title: String,
+        overrideInlineTitle: String? = nil,
+        isActive: Bool = true
+    ) -> some View {
+        modifier(
+            SubjectOwnHeadingChrome(
+                title: title,
+                overrideInlineTitle: overrideInlineTitle,
+                isActive: isActive
+            )
+        )
+    }
+
+    /// Visual shrink + fade applied to an own-heading page's title text as it scrolls under the bar.
+    func subjectOwnHeadingScrollEffect() -> some View {
+        modifier(SubjectOwnHeadingScrollEffect())
+    }
+
+    /// Empties the navigation bar's title and background without hiding the bar's toolbar.
     func hidesNavigationBarChrome() -> some View {
         #if os(iOS)
         navigationTitle("")
@@ -183,81 +214,6 @@ extension View {
         }
         #else
         navigationTitle(title)
-        #endif
-    }
-
-    /// Wash, floating glass chrome, no navigation bar, and a reinstated back
-    /// swipe — everything `SubjectScreenScaffold` does except owning the
-    /// scrolling container. Apply it to a `List` to get the redesign's chrome
-    /// without giving up swipe actions.
-    func subjectScreenChrome<Leading: View, Trailing: View>(
-        palette: SubjectPalette,
-        role: SubjectScreenRole = .grouped,
-        @ViewBuilder leading: @escaping () -> Leading,
-        @ViewBuilder trailing: @escaping () -> Trailing
-    ) -> some View {
-        modifier(
-            SubjectScreenChrome(
-                palette: palette,
-                role: role,
-                leading: leading,
-                trailing: trailing
-            )
-        )
-    }
-}
-
-extension SubjectScreenScaffold where LeadingChrome == GlassCircleButton<Image> {
-    /// The common case: a plain glass back button on the leading edge.
-    init(
-        palette: SubjectPalette,
-        kicker: String,
-        title: String,
-        subtitle: String? = nil,
-        role: SubjectScreenRole = .grouped,
-        onBack: @escaping () -> Void,
-        @ViewBuilder trailingChrome: @escaping () -> TrailingChrome,
-        @ViewBuilder content: @escaping () -> Content
-    ) {
-        self.init(
-            palette: palette,
-            kicker: kicker,
-            title: title,
-            subtitle: subtitle,
-            role: role,
-            leadingChrome: {
-                GlassCircleButton(accessibilityName: "Back", action: onBack) {
-                    Image(systemName: "chevron.left")
-                }
-            },
-            trailingChrome: trailingChrome,
-            content: content
-        )
-    }
-}
-
-extension View {
-    /// Hides the navigation bar itself, back button included. Split out because
-    /// neither `ToolbarPlacement.navigationBar` nor
-    /// `navigationBarBackButtonHidden` exists on macOS, where the app uses a
-    /// sidebar split and there is no bar to hide in the first place.
-    func hidesSystemNavigationBar() -> some View {
-        #if os(iOS)
-        navigationBarBackButtonHidden(true)
-            .toolbar(.hidden, for: .navigationBar)
-        #else
-        self
-        #endif
-    }
-
-    /// Puts back the interactive pop gesture that hiding the navigation bar
-    /// takes away. `edgeSwipeToGoBack` is itself iOS-only — macOS has no screen
-    /// edge to swipe from, and its sidebar navigation never lost anything.
-    func reinstatesBackSwipe(_ action: @escaping () -> Void) -> some View {
-        #if os(iOS)
-        edgeSwipeToGoBack(perform: action)
-        #else
-        self
         #endif
     }
 }

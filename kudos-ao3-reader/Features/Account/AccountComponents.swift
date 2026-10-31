@@ -55,7 +55,7 @@ struct AccountProfileCard: View {
     /// name, and the session line, on one row — then the pseud pill under it.
     ///
     /// The name is stated **here and nowhere else** on this screen. It used to be
-    /// drawn twice, once by `AccountView`'s `SubjectHeaderBlock` at 32pt and again
+    /// drawn twice, once in a page header block at 32pt and again
     /// inside this card, which is why the tab never resolved into 1m however
     /// closely the pieces below it matched.
     private func signedInCard(username: String) -> some View {

@@ -81,7 +81,7 @@ struct CollectionModerationView: View {
     var body: some View {
         List {
             Section {
-                header.pageBodyRow(top: 20, gutter: selfGuttered)
+                header.pageBodyRow(top: 12, gutter: selfGuttered)
             }
 
             switch phase {
@@ -100,10 +100,7 @@ struct CollectionModerationView: View {
         .cardList()
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
-        #if os(macOS)
-        .navigationTitle("Moderation")
-        #endif
-        .subjectScreenWash(palette: palette)
+        .subjectScreenWash(title: "Moderation", palette: palette)
         .navigationDestination(item: $commentsRoute) { route in
             CommentsView(
                 workID: route.workID,
@@ -177,11 +174,8 @@ struct CollectionModerationView: View {
     }
 
     private var header: some View {
-        SubjectHeaderBlock(
-            kicker: effectiveTitle,
-            title: "Moderation",
-            subtitle: subtitleText,
-            palette: palette,
+        SubjectPageFact(
+            [effectiveTitle, subtitleText].filter { !$0.isEmpty }.joined(separator: " · "),
             gutter: SubjectMetrics.accountGutter
         )
     }

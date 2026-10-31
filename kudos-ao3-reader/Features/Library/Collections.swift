@@ -303,8 +303,8 @@ struct CollectionDetailView: View {
     private var collectionGrid: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                SubjectHeaderBlock(
-                    kicker: "Library", title: collection.name, subtitle: tallyLine, palette: palette
+                SubjectPageHeading(
+                    title: collection.name, subtitle: tallyLine, palette: palette
                 )
                 .padding(.top, 20)
                 CarouselCardGrid {
@@ -354,8 +354,8 @@ struct CollectionDetailView: View {
             } else {
                 List {
                     Section {
-                        SubjectHeaderBlock(
-                            kicker: "Library", title: collection.name, subtitle: tallyLine, palette: palette
+                        SubjectPageHeading(
+                            title: collection.name, subtitle: tallyLine, palette: palette
                         )
                             .listRowInsets(EdgeInsets(top: 20, leading: 0, bottom: 4, trailing: 0))
                             .listRowBackground(Color.clear)
@@ -428,9 +428,14 @@ struct CollectionDetailView: View {
                 }
             }
         }
-        // Named by its header block, on its own colour — the queue page's
-        // language. macOS keeps a real window title (the wash empties it on iOS).
         .subjectScreenWash(palette: palette, role: .content)
+        .subjectOwnHeadingChrome(
+            title: collection.name,
+            overrideInlineTitle: isSelecting
+                ? WorkSelectionTitle.text(selectedCount: selectedWorks.count)
+                : nil,
+            isActive: !works.isEmpty
+        )
         .onAppear(perform: loadArrangement)
         .onChange(of: arrangement) { _, arrangement in
             UserDefaults.standard.set(
@@ -438,9 +443,6 @@ struct CollectionDetailView: View {
                 forKey: WorkListKeys.collectionArrangement(collection.id)
             )
         }
-        #if os(macOS)
-        .navigationTitle(collection.name)
-        #endif
             .filterPanelPresentation(isPresented: $showingFilters) {
                 LibraryFilterPanel(filters: $filters, works: listedWorks, userTagNames: allTags.map(\.name))
                     .inspectorColumnWidth(min: 280, ideal: 320, max: 380)

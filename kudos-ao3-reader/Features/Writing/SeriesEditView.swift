@@ -70,14 +70,8 @@ struct SeriesEditView: View {
         ScrollViewReader { proxy in
             List {
                 Section {
-                    SubjectHeaderBlock(
-                        kicker: "AO3 Account",
-                        title: "Edit series",
-                        subtitle: subtitle,
-                        palette: accountPalette,
-                        gutter: gutter
-                    )
-                    .pageBodyRow(top: 20, gutter: selfGuttered)
+                    SubjectPageFact(subtitle, gutter: gutter)
+                        .pageBodyRow(top: 12, gutter: selfGuttered)
                 }
 
                 // One `List` row per field, as AddChapterView does: summary and
@@ -143,10 +137,7 @@ struct SeriesEditView: View {
         }
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
-        .subjectScreenWash(palette: accountPalette)
-        #if os(macOS)
-        .navigationTitle("Edit series")
-        #endif
+        .subjectScreenWash(title: "Edit series", palette: accountPalette)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Save") { save() }
@@ -328,21 +319,15 @@ struct SeriesReorderView: View {
     var body: some View {
         List {
             Section {
-                SubjectHeaderBlock(
-                    kicker: "AO3 Account",
-                    title: "Reorder",
-                    subtitle: seriesTitle,
-                    palette: accountPalette,
-                    gutter: gutter
-                )
-                .pageBodyRow(top: 20, gutter: 0)
+                SubjectPageFact(seriesTitle, gutter: gutter)
+                    .pageBodyRow(top: 12, gutter: 0)
             }
 
             // 1br's tree draws a `.formGroup` label here, not a rule header,
             // and one card of rows rather than a full-bleed band.
             Section {
                 SubjectFieldLabel(text: "Reading order", style: .formGroup)
-                    .pageBodyRow(top: 18, gutter: gutter)
+                    .pageBodyRow(top: 14, gutter: gutter)
             }
 
             Section {
@@ -380,12 +365,9 @@ struct SeriesReorderView: View {
             }
         }
         .cardList()
-        .subjectScreenWash(palette: accountPalette)
+        .subjectScreenWash(title: "Reorder", palette: accountPalette)
         #if os(iOS)
         .environment(\.editMode, .constant(.active))
-        #endif
-        #if os(macOS)
-        .navigationTitle("Reorder")
         #endif
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
@@ -491,12 +473,11 @@ struct SeriesRemoveWorksView: View {
     var body: some View {
         List {
             Section {
-                SubjectHeaderBlock(
-                    kicker: "AO3 Account", title: "Remove works",
-                    subtitle: "\(seriesTitle) · \(rows.count) work\(rows.count == 1 ? "" : "s")",
-                    palette: palette, gutter: gutter
+                SubjectPageFact(
+                    "\(seriesTitle) · \(rows.count) work\(rows.count == 1 ? "" : "s")",
+                    gutter: gutter
                 )
-                .pageBodyRow(top: 20, gutter: 0)
+                .pageBodyRow(top: 12, gutter: 0)
             }
             Section {
                 ForEach(PanelSegment.keyed(rows, id: \.id), id: \.key) { segment in
@@ -527,10 +508,7 @@ struct SeriesRemoveWorksView: View {
         }
         .cardList()
         .disabled(isRemoving)
-        .subjectScreenWash(palette: palette)
-        #if os(macOS)
-        .navigationTitle("Remove works")
-        #endif
+        .subjectScreenWash(title: "Remove works", palette: palette)
         .onAppear { if openedGeneration == nil { openedGeneration = auth.sessionGeneration } }
         .alert(
             "Remove “\(Self.title(removing))” from \(seriesTitle)?",

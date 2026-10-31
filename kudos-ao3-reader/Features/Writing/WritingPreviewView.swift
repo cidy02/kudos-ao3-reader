@@ -29,11 +29,8 @@ struct WritingPreviewView: View {
     var body: some View {
         List {
             Section {
-                SubjectHeaderBlock(
-                    kicker: "AO3 Account", title: "Preview", subtitle: subtitle,
-                    palette: theme.scopePalette, gutter: gutter
-                )
-                .pageBodyRow(top: 20, gutter: 0)
+                SubjectPageFact(subtitle, gutter: gutter)
+                    .pageBodyRow(top: 12, gutter: 0)
                 if let notice = preview.notice { footnote(notice) }
             }
             // One row per paragraph, so a long chapter lays out lazily.
@@ -60,10 +57,7 @@ struct WritingPreviewView: View {
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
         .disabled(isPosting)
-        #if os(macOS)
-        .navigationTitle("Preview")
-        #endif
-        .subjectScreenWash(palette: theme.scopePalette)
+        .subjectScreenWash(title: "Preview", palette: theme.scopePalette)
         .alert("AO3 could not post this", isPresented: Binding(
             get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } }
         )) {
