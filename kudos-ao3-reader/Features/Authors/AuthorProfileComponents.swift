@@ -122,7 +122,7 @@ struct AO3AuthorHero: View {
 
     @ViewBuilder
     private func subscribeButton(_ form: AO3AuthorSubscriptionForm) -> some View {
-        // Explicit HStack (not Label): Label + .borderedProminent +
+        // Explicit HStack (not Label): Label + filled capsule button +
         // .small often misaligns the glyph vs title.
         let button = Button(action: onSubscription) {
             HStack(spacing: 5) {
@@ -136,20 +136,16 @@ struct AO3AuthorHero: View {
                 subscribeTitle(form)
             }
         }
-        .buttonStyle(.borderedProminent)
-        .accentFill()
-        .prominentLabel()
+        .buttonStyle(.kudosPrimary)
         if dynamicTypeSize.isAccessibilitySize {
             // A small capsule clipped the label and left the chrome. A rounded
             // rect has room for the wrapped words, across the column.
             button
-                .buttonBorderShape(.roundedRectangle(radius: SubjectMetrics.cornerRadius))
                 .disabled(actionsBusy)
                 .accessibilityHint(subscriptionHint)
                 .frame(maxWidth: .infinity, alignment: .leading)
         } else {
             button
-                .controlSize(.small)
                 .disabled(actionsBusy)
                 .accessibilityHint(subscriptionHint)
         }
@@ -185,10 +181,7 @@ struct AO3AuthorHero: View {
             Image(systemName: kind?.systemImage
                 ?? (webKind == .mute ? "speaker.slash" : "hand.raised"))
         }
-        .buttonStyle(.bordered)
-        .foregroundStyle(.accentInk)
-        .accentFill()
-        .moderationControlSize(accessibilitySize: dynamicTypeSize.isAccessibilitySize)
+        .buttonStyle(.kudosSecondaryCircle)
         .disabled(actionsBusy)
         .accessibilityLabel(action.label)
     }

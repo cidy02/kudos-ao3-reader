@@ -78,10 +78,7 @@ struct WelcomeView: View {
             Button(action: onContinue) {
                 actionTitle("Continue")
             }
-            .buttonStyle(.borderedProminent)
-            .accentFill()
-            .prominentLabel()
-            .controlSize(.large)
+            .buttonStyle(.kudosPrimaryConfirm)
             .onboardingWrapsButton(at: dynamicTypeSize.isAccessibilitySize)
         }
     }

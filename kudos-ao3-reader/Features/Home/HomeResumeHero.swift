@@ -888,14 +888,9 @@ extension WorkResumeCard {
                 }
                 Text(variant == .detail ? model.detailPrimaryTitle(fallback: primaryLabel) : primaryLabel)
             }
-            .font(.headline)
-            .foregroundStyle(accentFill)
             .frame(maxWidth: variant == .detail ? .infinity : nil)
-            .frame(minHeight: variant.primaryHeight)
-            .padding(.horizontal, variant == .detail ? 16 : 22)
-            .background(Color.white, in: Capsule())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.kudos(variant: .onGradient, size: variant == .detail ? .confirm : .regular))
         .disabled(!isInteractive || isBusy)
     }
 }

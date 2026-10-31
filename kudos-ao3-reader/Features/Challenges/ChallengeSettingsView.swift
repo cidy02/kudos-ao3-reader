@@ -515,10 +515,7 @@ private extension ChallengeSettingsView {
             Button("Try Again") {
                 Task { await loadSettings() }
             }
-            .buttonStyle(.bordered)
-            .foregroundStyle(.accentInk)
-            .accentFill()
-            .tint(palette.tint)
+            .buttonStyle(.kudosSecondary)
             .padding(.top, 4)
         }
         .frame(maxWidth: .infinity)

@@ -284,7 +284,7 @@ struct WritingView: View {
                 description: Text("Sign in to AO3 to continue drafts, read comments, and manage your works.")
             )
             Button("Log In") { showingLogin = true }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.kudosPrimaryConfirm)
                 .frame(maxWidth: .infinity)
                 .pageBodyRow(top: 12, gutter: SubjectMetrics.accountGutter)
         }

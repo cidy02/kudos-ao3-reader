@@ -170,9 +170,7 @@ struct AuthorProfileOverviewHeader: View {
             }
             .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.borderedProminent)
-        .accentFill()
-        .prominentLabel()
+        .buttonStyle(.kudosPrimary)
         .disabled(actionsBusy)
         .accessibilityHint(
             model.route.pseud != nil
@@ -201,9 +199,7 @@ struct AuthorProfileOverviewHeader: View {
             }
             .frame(maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : nil)
         }
-        .buttonStyle(.bordered)
-        .foregroundStyle(.accentInk)
-        .accentFill()
+        .buttonStyle(.kudosSecondary)
         .disabled(actionsBusy)
         .accessibilityLabel(action.label)
     }
@@ -302,8 +298,7 @@ private struct AuthorProfileOverviewFailure: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             Button("Retry") { model.retrySection(section, auth: auth) }
-                .buttonStyle(.bordered)
-                .accentFill()
+                .buttonStyle(.kudosSecondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)

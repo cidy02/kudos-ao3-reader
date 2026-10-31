@@ -464,12 +464,12 @@ struct RankTop100ProgressCard: View {
                 HStack(spacing: 12) {
                     progressDetails(progress)
                     Button("Cancel", action: controller.cancel)
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.kudosSecondary)
                 }
                 VStack(alignment: .leading, spacing: 10) {
                     progressDetails(progress)
                     Button("Cancel", action: controller.cancel)
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.kudosSecondary)
                 }
             }
             .padding(12)
@@ -534,12 +534,12 @@ struct RankTop100Controls: View {
     @ViewBuilder
     private var actionButtons: some View {
         Button("Load Page \(min(currentPage + 1, totalPages))", action: loadNextPage)
-            .buttonStyle(.bordered)
+            .buttonStyle(.kudosSecondary)
             .disabled(isPageLoading || currentPage >= totalPages)
         Button(action: start) {
             Label("Rank Top 100", systemImage: "arrow.up.arrow.down")
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(.kudosSecondary)
         .disabled(!controller.canStart || isPageLoading || totalPages < 2)
     }
 }

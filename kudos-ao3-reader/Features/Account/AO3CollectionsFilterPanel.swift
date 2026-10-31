@@ -161,9 +161,7 @@ struct AO3CollectionsFilterPanel: View {
 
     private var resetBar: some View {
         Button("Reset") { editor.reset() }
-            .buttonStyle(.bordered)
-            .foregroundStyle(.accentInk)
-            .accentFill()
+            .buttonStyle(.kudosSecondary)
             .frame(maxWidth: .infinity, alignment: .leading)
             .disabled(editor.draft == AO3CollectionsFilter())
         .padding(.horizontal, SubjectMetrics.gutter)

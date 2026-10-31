@@ -421,16 +421,12 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                         Button("Browse AO3") {
                             router.selection = .browse
                         }
-                        .buttonStyle(.borderedProminent)
-                        .accentFill()
-                        .prominentLabel()
+                        .buttonStyle(.kudosPrimary)
 
                         Button("Open Library") {
                             router.selection = .library
                         }
-                        .buttonStyle(.bordered)
-                        .foregroundStyle(.accentInk)
-                        .accentFill()
+                        .buttonStyle(.kudosSecondary)
                     }
                     .padding(.horizontal, 16)
                     .dashboardLeadingRegion()

@@ -423,10 +423,7 @@ struct ChallengeSignUpsView: View { // swiftlint:disable:this type_body_length
             Button("Try Again") {
                 Task { await loadSignUps(resetPage: true) }
             }
-            .buttonStyle(.bordered)
-            .foregroundStyle(.accentInk)
-            .accentFill()
-            .tint(palette.tint)
+            .buttonStyle(.kudosSecondary)
             .padding(.top, 4)
         }
         .frame(maxWidth: .infinity)

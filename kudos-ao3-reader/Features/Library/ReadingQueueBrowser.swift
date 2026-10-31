@@ -862,13 +862,16 @@ extension ReadingQueueBrowserView {
         }
     }
 
-    /// Untinted toolbar '+' control matching the rest of the queue toolbar (board 04).
+    /// Untinted toolbar '+' control matching the rest of the queue toolbar (board 04; keeps .glassProminent).
     private var addWorksButton: some View {
         Button {
             showingAddWorks = true
         } label: {
             Label("Add Works", systemImage: "plus")
         }
+        #if os(iOS)
+        .buttonStyle(.glassProminent)
+        #endif
         .help("Add works from your library")
     }
 

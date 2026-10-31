@@ -421,12 +421,7 @@ struct ChallengeAssignmentsView: View {
                     .font(.system(size: pillLabelSize, weight: .semibold))
             }
         }
-        .buttonStyle(.bordered)
-        .foregroundStyle(tint)
-        .buttonBorderShape(
-            dynamicTypeSize.isAccessibilitySize ? .roundedRectangle(radius: SubjectMetrics.cornerRadius) : .automatic
-        )
-        .tint(tint)
+        .buttonStyle(.kudosSecondary)
     }
 
     /// The spec's footnote also says the app can report a default and send a
@@ -577,10 +572,7 @@ extension ChallengeAssignmentsView {
             Button("Try Again") {
                 Task { await load() }
             }
-            .buttonStyle(.bordered)
-            .foregroundStyle(.accentInk)
-            .accentFill()
-            .tint(palette.tint)
+            .buttonStyle(.kudosSecondary)
             .padding(.top, 4)
         }
         .frame(maxWidth: .infinity)
