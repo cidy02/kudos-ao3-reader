@@ -22,10 +22,6 @@ struct SaveSearchSheet: View {
     @ScaledMetric(relativeTo: .caption) private var footnoteSize: CGFloat = 11.5
     @ScaledMetric(relativeTo: .footnote) private var emptySummarySize: CGFloat = 12.5
 
-    private var palette: SubjectPalette {
-        theme.appTheme.subjectPalette(hue: CoverArt.workHue(fandoms: [], title: name))
-    }
-
     private var trimmedName: String {
         name.trimmingCharacters(in: .whitespaces)
     }
@@ -82,14 +78,11 @@ struct SaveSearchSheet: View {
                 }
             }
             .cardList()
-            // Inside the wash, as New queue's sheet does: the wash empties the
-            // title for pages that name themselves in a header block, and the
-            // innermost title wins, so set after it this one never showed.
+            .appThemedScroll()
             .navigationTitle("Save Search")
             #if !os(macOS)
                 .navigationBarTitleDisplayMode(.inline)
             #endif
-            .subjectScreenWash(palette: palette)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
@@ -99,11 +92,12 @@ struct SaveSearchSheet: View {
                         onSave()
                         dismiss()
                     }
+                    .buttonStyle(.kudosPrimary)
                     .disabled(trimmedName.isEmpty)
                 }
             }
         }
-            .screenTint(palette)
+        .tint(theme.effectiveTint)
     }
 
     // MARK: What gets saved
