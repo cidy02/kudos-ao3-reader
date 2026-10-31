@@ -8,11 +8,12 @@ import androidx.compose.runtime.CompositionLocalProvider
 @Composable
 fun SubjectPaletteTheme(palette: SubjectPalette, content: @Composable () -> Unit) {
     val tokens = LocalKudosTokens.current
-    val fill = tokens.accent
+    val fill = palette.theme.appTint(tokens.accent)
     val ink = palette.theme.accentInk(fill)
+    val themedPalette = palette.withAppAccent(fill)
     CompositionLocalProvider(
-        LocalSubjectPalette provides palette,
-        LocalKudosTokens provides tokens.copy(accent = fill, accentInk = ink, scopePaletteOverride = palette)
+        LocalSubjectPalette provides themedPalette,
+        LocalKudosTokens provides tokens.copy(accent = fill, accentInk = ink, scopePaletteOverride = themedPalette)
     ) {
         MaterialTheme(colorScheme = MaterialTheme.colorScheme.copy(
             primary = ink,

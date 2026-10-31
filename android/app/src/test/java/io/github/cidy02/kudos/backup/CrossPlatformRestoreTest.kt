@@ -63,6 +63,7 @@ class CrossPlatformRestoreTest {
         }
 
         harness.repository.importV2ZipBytes(iosBytes)
+        assertEquals("#2468AC", harness.settings.snapshot().app.accentColorHex)
         val importedPack = BackupImporter.importV2Zip(iosBytes)
         importedPack.epubFilesByWorkId.forEach { (workId, bytes) ->
             assertArrayEquals(bytes, Files.readAllBytes(harness.workFiles.workEpubPath(workId)))
@@ -117,6 +118,22 @@ class CrossPlatformRestoreTest {
         } finally {
             roundTrip.close()
         }
+    }
+
+    @Test
+    fun goldenManifestRestoresChosenAccentThroughDecodeManifest() = runTest {
+        val manifestBytes = ZipInputStream(
+            ByteArrayInputStream(resourceBytes("cross-platform/ios-export.kudosbackup"))
+        ).use { zip ->
+            generateSequence { zip.nextEntry }
+                .first { it.name == BackupPaths.MANIFEST }
+            zip.readBytes()
+        }
+        val manifest = BackupValidator.decodeManifest(manifestBytes)
+        assertEquals("#2468AC", manifest.settings.accentColorHex)
+        val normalized = BackupValidator.normalizeSettings(manifest.settings, emptySet())
+        harness.settings.replaceAll(normalized.toCoreBackupSettings().toSettings())
+        assertEquals("#2468AC", harness.settings.snapshot().app.accentColorHex)
     }
 
     /**

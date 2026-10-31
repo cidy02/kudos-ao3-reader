@@ -596,14 +596,24 @@ class SettingsRepository(
             prefs[Keys.AppTheme] = settings.app.appTheme.storageValue
             prefs[Keys.ReaderTheme] = settings.reader.readerTheme.storageValue
             prefs[Keys.MatchAppReaderTheme] = settings.reader.matchAppReaderTheme
-            prefs.remove(Keys.AccentColorHex)
+            // Absent (or JSON null) leaves the local accent. #990000 in any case is the
+            // pre-2026-10-29 default, not a choice. Any other present value applies as stored.
+            val incomingAccent = settings.app.chosenAccentColorHex
+            if (incomingAccent != null && !io.github.cidy02.kudos.core.model.isLegacyUnchosenAccentColorHex(incomingAccent)) {
+                prefs[Keys.AccentColorHex] = incomingAccent
+            }
             prefs[Keys.AutoPreserveSmallSeries] = settings.app.autoPreserveSmallSeriesOnSaveForLater
             prefs[Keys.AutoPreserveSeriesThreshold] = settings.app.autoPreserveSeriesWorkThreshold
         }
     }
 
+    suspend fun updateAccentColor(hex: String) {
+        dataStore.edit { it[Keys.AccentColorHex] = hex }
+    }
+
     private fun settingsFromPreferences(preferences: Preferences): KudosSettings {
         val defaults = KudosSettings.Defaults
+        val rawAccent = preferences[Keys.AccentColorHex]
         return KudosSettings(
             reader = ReaderSettings(
                 readerFontId = preferences[Keys.ReaderFontId]
@@ -643,8 +653,9 @@ class SettingsRepository(
                 downloadOnSubscribe = preferences[Keys.DownloadOnSubscribe]
                     ?: defaults.app.downloadOnSubscribe,
                 appTheme = AppThemeSetting.fromStorage(preferences[Keys.AppTheme]),
-                // Older installs and backups may still carry this preference.
-                accentColorHex = defaults.app.accentColorHex,
+                // Map a stored legacy #990000 to AO3 Red #821019 on read without rewriting storage.
+                accentColorHex = io.github.cidy02.kudos.core.model.readingAccentColorHex(rawAccent),
+                storedAccentColorHex = rawAccent,
                 autoPreserveSmallSeriesOnSaveForLater = preferences[Keys.AutoPreserveSmallSeries]
                     ?: defaults.app.autoPreserveSmallSeriesOnSaveForLater,
                 autoPreserveSeriesWorkThreshold = preferences[Keys.AutoPreserveSeriesThreshold]

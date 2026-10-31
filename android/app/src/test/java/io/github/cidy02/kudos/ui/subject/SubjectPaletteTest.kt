@@ -3,10 +3,11 @@ package io.github.cidy02.kudos.ui.subject
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import io.github.cidy02.kudos.ui.theme.Ao3Red
-import io.github.cidy02.kudos.ui.theme.Ao3RedInkDark
+import io.github.cidy02.kudos.ui.theme.AppAccents
 import io.github.cidy02.kudos.ui.theme.SepiaTint
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -119,38 +120,39 @@ class SubjectPaletteTest {
     }
 
     @Test
-    fun controlsUseTheFixedAppColourAndSubjectsKeepTheirIdentity() {
-        val picked = Color(0xFF336699)
+    fun controlsUseTheChosenAppColourAndSubjectsKeepTheirIdentity() {
+        val subject = Color(0xFF336699)
+        val chosen = AppAccents.Plum.fill
         for (theme in ReaderTheme.entries) {
-            val expected = if (theme == ReaderTheme.Sepia) SepiaTint else Ao3Red
-            assertEquals(expected.toArgb(), SubjectPalette.controlColor(picked, theme).toArgb())
-            assertEquals(expected.toArgb(), SubjectPalette.fromColor(picked, theme).tint.toArgb())
+            val expected = if (theme == ReaderTheme.Sepia) SepiaTint else chosen
+            assertEquals(expected.toArgb(), SubjectPalette.controlColor(chosen, theme).toArgb())
+            assertEquals(expected.toArgb(), SubjectPalette.fromColor(subject, theme, appAccent = chosen).tint.toArgb())
         }
-        val dark = SubjectPalette.fromColor(picked, ReaderTheme.Dark)
+        val dark = SubjectPalette.fromColor(subject, ReaderTheme.Dark, appAccent = chosen)
         assertNotEquals(dark.accent.toArgb(), dark.tint.toArgb())
 
-        val sepiaScope = ReaderTheme.Sepia.scopePalette(picked)
+        val sepiaScope = ReaderTheme.Sepia.scopePalette(chosen)
         assertEquals(SepiaTint.toArgb(), sepiaScope.tint.toArgb())
-        val darkScope = ReaderTheme.Dark.scopePalette(picked)
-        assertEquals(Ao3Red.toArgb(), darkScope.tint.toArgb())
+        val darkScope = ReaderTheme.Dark.scopePalette(chosen)
+        assertEquals(chosen.toArgb(), darkScope.tint.toArgb())
 
-        val darkTokens = KudosTokens.of(ReaderTheme.Dark, picked)
-        assertEquals(Ao3Red.toArgb(), darkTokens.accent.toArgb())
-        assertEquals(Ao3Red.toArgb(), darkTokens.scopePalette.tint.toArgb())
-        val sepiaTokens = KudosTokens.of(ReaderTheme.Sepia, picked)
+        val darkTokens = KudosTokens.of(ReaderTheme.Dark, chosen)
+        assertEquals(chosen.toArgb(), darkTokens.accent.toArgb())
+        assertEquals(chosen.toArgb(), darkTokens.scopePalette.tint.toArgb())
+        val sepiaTokens = KudosTokens.of(ReaderTheme.Sepia, chosen)
         assertEquals(SepiaTint.toArgb(), sepiaTokens.accent.toArgb())
         assertEquals(SepiaTint.toArgb(), sepiaTokens.scopePalette.tint.toArgb())
 
-        assertEquals(Color.White, SubjectPalette.label(Color(0xFF990000)))
+        assertEquals(Color.White, SubjectPalette.label(Color(0xFF821019)))
         assertEquals(Color.Black, SubjectPalette.label(Color.White))
-        assertTrue(Color(0xFF990000).relativeLuminance() < 0.179)
+        assertTrue(Color(0xFF821019).relativeLuminance() < 0.179)
         assertEquals(1.0, Color.White.relativeLuminance(), 0.001)
         assertEquals(0.0, Color.Black.relativeLuminance(), 0.001)
     }
 
     @Test
     fun glassAndPageColoursFollowTheTheme() {
-        val dark = KudosTokens.of(ReaderTheme.Dark, Color(0xFF990000))
+        val dark = KudosTokens.of(ReaderTheme.Dark, Ao3Red)
         assertEquals(11f / 255f, dark.background.red, 0.001f)
         assertEquals(13f / 255f, dark.background.blue, 0.001f)
         assertEquals(0.09f, dark.panelFill.alpha, 0.001f)
@@ -159,7 +161,7 @@ class SubjectPaletteTest {
         assertEquals(0.16f, stroke.alpha, 0.001f)
         assertEquals(1f, stroke.red, 0.001f)
 
-        val light = KudosTokens.of(ReaderTheme.Light, Color(0xFF990000))
+        val light = KudosTokens.of(ReaderTheme.Light, Ao3Red)
         // Compose packs sRGB into 8 bits, so 0.16 * 0.55 lands one level off 0.088.
         assertEquals(0.16 * 0.55, light.glassStroke(0.16).alpha.toDouble(), 1.0 / 255.0)
         assertEquals(0f, light.glassFill().red, 0.001f)
@@ -185,21 +187,52 @@ class SubjectPaletteTest {
     }
 
     @Test
-    fun accentTextReadsOnDarkPagesAndFillsKeepTheExactAccent() {
-        // Owner Q19 (2026-10-20): AO3 red text was about 1.8 to 1 on Dark and OLED.
-        val red = Color(0xFF990000)
-        for (theme in listOf(ReaderTheme.Dark, ReaderTheme.Oled)) {
-            val tokens = KudosTokens.of(theme, red)
-            assertEquals(red, tokens.accent)
-            assertEquals(Ao3RedInkDark, tokens.accentInk)
+    fun namedAccentsMatchTheAccentOptionsBoardAndEveryInkHoldsFourPointFiveToOneOnDark() {
+        val expected = listOf(
+            Triple("AO3 Red", "#821019", "#EE8A93"),
+            Triple("Plum", "#7B2D6B", "#D88BC7"),
+            Triple("Ink Blue", "#24508F", "#7FA6E8"),
+            Triple("Deep Teal", "#11707A", "#5CC3CC"),
+            Triple("Forest", "#2F6B4F", "#7CC59E"),
+            Triple("Ochre", "#9A5B00", "#E7A84B")
+        )
+        assertEquals(expected, AppAccents.all.map { Triple(it.name, it.fillHex, it.darkInkHex) })
+        assertTrue(AppAccents.Ao3Red.isDefault)
+        assertTrue(AppAccents.all.drop(1).none { it.isDefault })
+
+        for (accent in AppAccents.all) {
+            for (theme in listOf(ReaderTheme.Dark, ReaderTheme.Oled)) {
+                val tokens = KudosTokens.of(theme, accent.fill)
+                assertEquals(accent.fill, tokens.accent)
+                assertEquals(accent.darkInk, tokens.accentInk)
+                val ratio = contrastRatio(tokens.accentInk, theme.cardBackdrop)
+                assertTrue(
+                    "${accent.name} on $theme contrast $ratio < 4.5",
+                    ratio >= 4.5
+                )
+            }
+            for (theme in listOf(ReaderTheme.Light, ReaderTheme.Sepia)) {
+                val tokens = KudosTokens.of(theme, accent.fill)
+                assertEquals(tokens.accent, tokens.accentInk)
+            }
         }
-        for (theme in listOf(ReaderTheme.Light, ReaderTheme.Sepia)) {
-            val tokens = KudosTokens.of(theme, red)
-            assertEquals(tokens.accent, tokens.accentInk)
+
+        // Custom colours lift via readableOn on Dark and OLED while fills stay exact.
+        for (custom in listOf(Color(0xFF001166), Color(0xFF2468AC), Color(0xFFFFD54F))) {
+            for (theme in listOf(ReaderTheme.Dark, ReaderTheme.Oled)) {
+                val tokens = KudosTokens.of(theme, custom)
+                assertEquals(custom, tokens.accent)
+                assertEquals(custom.readableOn(theme.cardBackdrop), tokens.accentInk)
+                assertTrue(contrastRatio(tokens.accentInk, theme.cardBackdrop) >= 4.5)
+            }
         }
-        // A passed colour is not applied. Dark text stays the one lightened app ink.
-        val ignored = Color(0xFFFFD54F)
-        assertEquals(Ao3RedInkDark, KudosTokens.of(ReaderTheme.Dark, ignored).accentInk)
-        assertEquals(Ao3Red, KudosTokens.of(ReaderTheme.Dark, ignored).accent)
+
+        assertEquals("#821019", AppAccents.pickerHex(null))
+        assertEquals("#821019", AppAccents.pickerHex(""))
+        assertEquals("#821019", AppAccents.pickerHex("#990000"))
+        assertEquals("#821019", AppAccents.pickerHex("not-a-hex"))
+        assertEquals("#2468ac", AppAccents.pickerHex(" #2468ac "))
+        assertNull(AppAccents.named("#990000"))
+        assertEquals(AppAccents.Plum, AppAccents.named(" #7b2d6b "))
     }
 }

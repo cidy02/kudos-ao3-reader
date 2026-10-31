@@ -338,7 +338,7 @@ internal fun EditorPreview(state: WritingBufferPreview.State?) {
             verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(Icons.Outlined.WarningAmber, contentDescription = null, tint = tokens.secondaryInk, modifier = Modifier.size(48.dp))
             Text("Couldn't render this HTML", fontSize = 20.sp, lineHeight = 27.sp, color = tokens.primaryInk)
-            Text("Your text is unchanged. Tap Edit to go back to it.", lineHeight = 22.sp, color = tokens.secondaryInk)
+            Text("Your text is unchanged.", lineHeight = 22.sp, color = tokens.secondaryInk)
         }
         // Lazy: a full-length chapter is over a thousand paragraphs.
         is WritingBufferPreview.State.Rendered -> LazyColumn(

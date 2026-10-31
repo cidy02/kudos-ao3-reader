@@ -222,9 +222,7 @@ internal fun ReaderSearchContent(
                     }
                 )
                 when (state.phase) {
-                    ReaderSearchPhase.Idle -> SearchEmptyState(
-                        "Find in Work", "Search the text of this work. Tap a result to jump to that passage."
-                    )
+                    ReaderSearchPhase.Idle -> SearchEmptyState("Find in Work", "")
                     ReaderSearchPhase.Searching -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator(color = tokens.accentInk)
                     }

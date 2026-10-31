@@ -307,7 +307,8 @@ fun QueueLedgerCard(
                         warnings = work.workWarnings,
                         isComplete = work.knownCompletion,
                         arrangement = HomeStatusArrangement.Grid,
-                        tileSize = tile
+                        tileSize = tile,
+                        announces = true
                     )
                     if (selecting) SelectionBubble(selected)
                 }

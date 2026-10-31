@@ -196,6 +196,6 @@ class WritingTextEditorScreenTest {
     @Test fun failedPreviewSaysTheTextIsUnchanged() {
         compose.setContent { KudosTheme(KudosThemeMode.Light) { EditorPreview(WritingBufferPreview.State.Failed) } }
         compose.onNodeWithText("Couldn't render this HTML").assertExists()
-        compose.onNodeWithText("Your text is unchanged. Tap Edit to go back to it.").assertExists()
+        compose.onNodeWithText("Your text is unchanged.").assertExists()
     }
 }

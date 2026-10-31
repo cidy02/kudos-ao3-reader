@@ -194,13 +194,10 @@ fun BrowseScreen(
                                 )
                             }
                             item(key = "open-website") {
-                                OpenAo3WebsiteRow(
-                                    modifier = Modifier.padding(bottom = 18.dp)
-                                ) {
+                                OpenAo3WebsiteRow {
                                     onOpenWebFallback(AO3BrowseUrls.mediaIndexUrl())
                                 }
                             }
-                            item(key = "instructions") { BrowseInstructions() }
                         }
                     }
                 }

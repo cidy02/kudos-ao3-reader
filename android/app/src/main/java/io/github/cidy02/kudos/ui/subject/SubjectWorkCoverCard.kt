@@ -191,6 +191,7 @@ fun SubjectWorkCoverCard(
                         isComplete = work.knownCompletion,
                         arrangement = HomeStatusArrangement.Strip,
                         tileSize = 24.dp,
+                        announces = true,
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -263,6 +264,7 @@ fun SubjectRemoteCoverCard(
                     isComplete = summary.isComplete,
                     arrangement = HomeStatusArrangement.Strip,
                     tileSize = 24.dp,
+                    announces = true,
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -321,16 +323,25 @@ internal fun CoverSurface(
     }
 }
 
-/** iOS `WorkStatusIconGrid`: four solid AO3 required-tag tiles, with no tray behind them. */
+/**
+ * iOS `WorkStatusIconGrid`: four solid AO3 required-tag tiles.
+ *
+ * The full 2×2 sits on one rounded backing (T-479b / A-479b). A strip does not,
+ * and a card that already paints a dark tray passes `backed = false`.
+ * Purely decorative unless [announces] is true, so standard work rows do not
+ * announce both the grid and the text chips below the summary.
+ */
 @Composable
 fun HomeStatusTray(
     rating: String,
     categories: List<String>,
     warnings: List<String>,
     isComplete: Boolean?,
-    arrangement: HomeStatusArrangement,
-    tileSize: Dp,
-    modifier: Modifier = Modifier
+    arrangement: HomeStatusArrangement = HomeStatusArrangement.Grid,
+    tileSize: Dp = 24.dp,
+    modifier: Modifier = Modifier,
+    announces: Boolean = false,
+    backed: Boolean = true
 ) {
     val tokens = LocalKudosTokens.current
     val fontScale = LocalDensity.current.fontScale.coerceAtMost(1.8f)
@@ -342,16 +353,34 @@ fun HomeStatusTray(
         io.github.cidy02.kudos.ui.components.WorkSymbolTile.completion(isComplete, tokens.theme.isDarkFamily)
     )
     val gap = scaledTileSize * io.github.cidy02.kudos.ui.components.WorkSymbolGeometry.GapRatio
-    val spoken = buildList {
-        add(rating.ifBlank { "Not rated" })
-        add(if (categories.isEmpty()) "No category" else "Categories: ${categories.joinToString(", ")}")
-        add(statusChips("", emptyList(), warnings, isComplete).drop(1).first().accessibilityLabel.orEmpty())
-        add(if (isComplete == true) "Status: complete" else if (isComplete == false) "Status: work in progress" else "Status: unknown")
-    }.joinToString(", ")
-    val accessibleModifier = modifier.clearAndSetSemantics { contentDescription = spoken }
+    val accessibleModifier = if (announces) {
+        val spoken = buildList {
+            add(rating.ifBlank { "Not rated" })
+            add(if (categories.isEmpty()) "No category" else "Categories: ${categories.joinToString(", ")}")
+            add(statusChips("", emptyList(), warnings, isComplete).drop(1).first().accessibilityLabel.orEmpty())
+            add(if (isComplete == true) "Status: complete" else if (isComplete == false) "Status: work in progress" else "Status: unknown")
+        }.joinToString(", ")
+        modifier.clearAndSetSemantics { contentDescription = spoken }
+    } else {
+        modifier.clearAndSetSemantics {}
+    }
+    val showBacking = io.github.cidy02.kudos.ui.components.WorkSymbolGeometry.drawsBacking(arrangement, backed)
+    val framedModifier = if (showBacking) {
+        val side = scaledTileSize.value
+        val pad = io.github.cidy02.kudos.ui.components.WorkSymbolGeometry.backingPadding(side).dp
+        val radius = io.github.cidy02.kudos.ui.components.WorkSymbolGeometry.backingCornerRadius(side).dp
+        accessibleModifier
+            .background(
+                io.github.cidy02.kudos.ui.components.WorkSymbolGeometry.backingFill(tokens.theme),
+                RoundedCornerShape(radius)
+            )
+            .padding(pad)
+    } else {
+        accessibleModifier
+    }
     if (arrangement == HomeStatusArrangement.Grid) {
         Column(
-            accessibleModifier,
+            framedModifier,
             verticalArrangement = Arrangement.spacedBy(gap)
         ) {
             tiles.chunked(2).forEach { pair ->
@@ -364,7 +393,7 @@ fun HomeStatusTray(
         }
     } else {
         Row(
-            accessibleModifier,
+            framedModifier,
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {

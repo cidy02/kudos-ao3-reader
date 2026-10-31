@@ -30,6 +30,14 @@ enum class FilterSelectionState {
             INCLUDED -> EXCLUDED
             EXCLUDED -> CLEAR
         }
+
+    /** What the next tap does, for a cycling row's TalkBack click label. */
+    val nextActionLabel: String
+        get() = when (next) {
+            INCLUDED -> "Include"
+            EXCLUDED -> "Exclude"
+            CLEAR -> "Clear"
+        }
 }
 
 fun warningSelection(

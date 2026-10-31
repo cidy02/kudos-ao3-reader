@@ -1,13 +1,32 @@
 package io.github.cidy02.kudos.ui.components
 
+import android.app.Application
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
+import io.github.cidy02.kudos.ui.subject.HomeStatusArrangement
+import io.github.cidy02.kudos.ui.subject.HomeStatusTray
+import io.github.cidy02.kudos.ui.subject.ReaderTheme
+import io.github.cidy02.kudos.ui.theme.KudosTheme
+import io.github.cidy02.kudos.ui.theme.KudosThemeMode
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 import kotlin.math.abs
 import kotlin.math.pow
 
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [35], application = Application::class)
 class WorkSymbolTileTest {
+    @get:Rule val compose = createComposeRule()
     @Test fun ratingsUseTheBoardPaletteAndTeenContrast() {
         assertEquals(
             WorkSymbolTile(WorkSymbolMark.Shield("G"), Color(0xFF2F8F3A), Color.White),
@@ -103,6 +122,80 @@ class WorkSymbolTileTest {
         assertEquals(0.12f, WorkSymbolGeometry.GapRatio, 0f)
         assertEquals(0.24f, WorkSymbolGeometry.CornerRadiusRatio, 0f)
         assertTrue(abs(WorkSymbolGeometry.gridExtent(24f) - 50.88f) < 0.001f)
+    }
+
+    @Test fun backingPaddingAndRadiusRoundTheTileFraction() {
+        val cases = listOf(
+            Triple(22f, 6f, 13f),
+            Triple(24f, 6f, 14f),
+            Triple(26f, 7f, 15f)
+        )
+        for ((tile, pad, radius) in cases) {
+            assertEquals(pad, WorkSymbolGeometry.backingPadding(tile), 0f)
+            assertEquals(radius, WorkSymbolGeometry.backingCornerRadius(tile), 0f)
+        }
+    }
+
+    @Test fun backingFollowsTheVariantAndPlainDefaultGridIsBackedAndSilent() {
+        assertTrue(WorkSymbolGeometry.drawsBacking(HomeStatusArrangement.Grid, backed = true))
+        assertFalse(WorkSymbolGeometry.drawsBacking(HomeStatusArrangement.Grid, backed = false))
+        assertFalse(WorkSymbolGeometry.drawsBacking(HomeStatusArrangement.Strip, backed = true))
+        assertFalse(WorkSymbolGeometry.drawsBacking(HomeStatusArrangement.Strip, backed = false))
+        assertTrue(abs(WorkSymbolGeometry.outerSide(24f) - 62.88f) < 0.001f)
+        assertTrue(abs(WorkSymbolGeometry.outerSide(24f, backed = false) - 50.88f) < 0.001f)
+
+        compose.setContent {
+            KudosTheme(KudosThemeMode.Light) {
+                androidx.compose.foundation.layout.Column {
+                    HomeStatusTray(
+                        rating = "General Audiences",
+                        categories = listOf("Gen"),
+                        warnings = emptyList(),
+                        isComplete = true,
+                        modifier = Modifier.testTag("defaultGrid")
+                    )
+                    HomeStatusTray(
+                        rating = "General Audiences",
+                        categories = listOf("Gen"),
+                        warnings = emptyList(),
+                        isComplete = true,
+                        backed = false,
+                        announces = true,
+                        modifier = Modifier.testTag("unbackedAnnouncingGrid")
+                    )
+                }
+            }
+        }
+        val defaultNode = compose.onNodeWithTag("defaultGrid", useUnmergedTree = true).fetchSemanticsNode()
+        val unbackedNode = compose.onNodeWithTag("unbackedAnnouncingGrid", useUnmergedTree = true).fetchSemanticsNode()
+        val defaultWidthDp = with(compose.density) { defaultNode.size.width.toDp().value }
+        val unbackedWidthDp = with(compose.density) { unbackedNode.size.width.toDp().value }
+        assertEquals(62.88f, defaultWidthDp, 1.0f)
+        assertEquals(50.88f, unbackedWidthDp, 1.0f)
+        assertFalse(defaultNode.config.contains(SemanticsProperties.ContentDescription))
+        assertTrue(unbackedNode.config.contains(SemanticsProperties.ContentDescription))
+    }
+
+    @Test fun backingColoursMatchTheBoard() {
+        val sepia = WorkSymbolBackingColor.board(ReaderTheme.Sepia)
+        assertEquals(120f / 255f, sepia.red, 0.0001f)
+        assertEquals(92f / 255f, sepia.green, 0.0001f)
+        assertEquals(56f / 255f, sepia.blue, 0.0001f)
+        assertEquals(0.12f, sepia.alpha, 0.0001f)
+
+        val light = WorkSymbolBackingColor.board(ReaderTheme.Light)
+        assertEquals(118f / 255f, light.red, 0.0001f)
+        assertEquals(118f / 255f, light.green, 0.0001f)
+        assertEquals(128f / 255f, light.blue, 0.0001f)
+        assertEquals(0.12f, light.alpha, 0.0001f)
+
+        for (theme in listOf(ReaderTheme.Dark, ReaderTheme.Oled)) {
+            val fill = WorkSymbolBackingColor.board(theme)
+            assertEquals(light.red, fill.red, 0.0001f)
+            assertEquals(light.green, fill.green, 0.0001f)
+            assertEquals(light.blue, fill.blue, 0.0001f)
+            assertEquals(0.24f, fill.alpha, 0.0001f)
+        }
     }
 
     @Test fun warningAndCompletionMarksMatchIos() {

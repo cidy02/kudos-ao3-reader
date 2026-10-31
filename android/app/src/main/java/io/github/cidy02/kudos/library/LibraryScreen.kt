@@ -2511,7 +2511,15 @@ private fun SelectableWorkRow(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Checkbox(checked = selected, onCheckedChange = { onToggle() })
+            val accent = io.github.cidy02.kudos.ui.subject.LocalKudosTokens.current.accent
+            Checkbox(
+                checked = selected,
+                onCheckedChange = { onToggle() },
+                colors = androidx.compose.material3.CheckboxDefaults.colors(
+                    checkedColor = accent,
+                    checkmarkColor = io.github.cidy02.kudos.ui.subject.SubjectPalette.label(accent)
+                )
+            )
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     title,

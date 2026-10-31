@@ -255,18 +255,11 @@ fun WorkDetailTagSections(
                             text = tag,
                             style = if (cluster.isTinted) SubjectChipStyle.Tinted else SubjectChipStyle.Neutral,
                             palette = palette,
-                            modifier = Modifier.clickable { searchTag(cluster.field, tag) }
+                            modifier = Modifier.clickable(onClickLabel = "search AO3 for works with this tag") {
+                                searchTag(cluster.field, tag)
+                            }
                         )
                     }
-                }
-
-                if (index == clusters.lastIndex) {
-                    Text(
-                        text = "Tags come from AO3. Tap one to find other AO3 works with that tag.",
-                        fontSize = 12.sp,
-                        color = tokens.secondaryInk,
-                        modifier = Modifier.padding(top = 8.dp)
-                    )
                 }
             }
         }
@@ -274,7 +267,7 @@ fun WorkDetailTagSections(
 }
 
 internal fun noWorkTagsMessage(hasAo3WorkId: Boolean): String = if (hasAo3WorkId) {
-    "AO3 hasn't provided tags for this work yet. Pull down to get the latest details from AO3."
+    "AO3 hasn't provided tags for this work yet."
 } else {
     "This imported work isn't linked to AO3, so you won't see AO3 tags here."
 }

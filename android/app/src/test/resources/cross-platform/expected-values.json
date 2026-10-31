@@ -323,7 +323,7 @@
     }
   ],
   "settings" : {
-    "accentColorHex" : "#990000",
+    "accentColorHex" : "#2468AC",
     "appTheme" : "dark",
     "autoPreserveSeriesWorkThreshold" : 9,
     "autoPreserveSmallSeriesOnSaveForLater" : true,

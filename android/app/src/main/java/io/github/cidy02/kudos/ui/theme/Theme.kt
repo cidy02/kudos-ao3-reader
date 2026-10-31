@@ -55,36 +55,43 @@ private fun lightScheme(accent: Color) = lightColorScheme(
     onSurfaceVariant = InkMuted
 )
 
-private fun darkScheme(accent: Color) = darkColorScheme(
-    error = ReaderTheme.Dark.destructive,
-    onError = SubjectPalette.label(ReaderTheme.Dark.destructive),
-    // Material's primary is the filled-control role. Text and links use KudosTokens.accentInk.
-    primary = accent,
-    onPrimary = SubjectPalette.label(accent),
-    secondary = AccentBlue,
-    onSecondary = Paper,
-    background = SurfaceDark,
-    onBackground = Paper,
-    surface = SurfaceDark,
-    onSurface = Paper,
-    surfaceVariant = SurfaceDarkElevated,
-    onSurfaceVariant = PaperWarm
-)
+private fun darkScheme(accent: Color): androidx.compose.material3.ColorScheme {
+    val ink = ReaderTheme.Dark.accentInk(accent)
+    return darkColorScheme(
+        error = ReaderTheme.Dark.destructive,
+        onError = SubjectPalette.label(ReaderTheme.Dark.destructive),
+        // 3hk: Material primary on Dark/OLED is the readable text step so TextButtons,
+        // links and AlertDialog actions stay legible; filled controls draw tokens.accent.
+        primary = ink,
+        onPrimary = SubjectPalette.label(ink),
+        secondary = AccentBlue,
+        onSecondary = Paper,
+        background = SurfaceDark,
+        onBackground = Paper,
+        surface = SurfaceDark,
+        onSurface = Paper,
+        surfaceVariant = SurfaceDarkElevated,
+        onSurfaceVariant = PaperWarm
+    )
+}
 
-private fun oledScheme(accent: Color) = darkColorScheme(
-    error = ReaderTheme.Oled.destructive,
-    onError = SubjectPalette.label(ReaderTheme.Oled.destructive),
-    primary = accent,
-    onPrimary = SubjectPalette.label(accent),
-    secondary = AccentBlue,
-    onSecondary = Paper,
-    background = SurfaceOled,
-    onBackground = Paper,
-    surface = SurfaceOled,
-    onSurface = Paper,
-    surfaceVariant = SurfaceOledElevated,
-    onSurfaceVariant = PaperWarm
-)
+private fun oledScheme(accent: Color): androidx.compose.material3.ColorScheme {
+    val ink = ReaderTheme.Oled.accentInk(accent)
+    return darkColorScheme(
+        error = ReaderTheme.Oled.destructive,
+        onError = SubjectPalette.label(ReaderTheme.Oled.destructive),
+        primary = ink,
+        onPrimary = SubjectPalette.label(ink),
+        secondary = AccentBlue,
+        onSecondary = Paper,
+        background = SurfaceOled,
+        onBackground = Paper,
+        surface = SurfaceOled,
+        onSurface = Paper,
+        surfaceVariant = SurfaceOledElevated,
+        onSurfaceVariant = PaperWarm
+    )
+}
 
 private val SepiaScheme = lightColorScheme(
     error = ReaderTheme.Sepia.destructive,
@@ -131,6 +138,8 @@ internal fun SheetSystemBars(tokens: KudosTokens) {
     }
 }
 
+internal val ActiveAppAccent = androidx.compose.runtime.mutableStateOf(Ao3Red)
+
 @Composable
 fun KudosTheme(
     themeMode: KudosThemeMode,
@@ -139,6 +148,13 @@ fun KudosTheme(
 ) {
     val systemDark = isSystemInDarkTheme()
     val accent = remember(accentColorHex) { parseAccentColor(accentColorHex) }
+    val previousAccent = remember { ActiveAppAccent.value }
+    if (ActiveAppAccent.value != accent) {
+        ActiveAppAccent.value = accent
+    }
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        onDispose { ActiveAppAccent.value = previousAccent }
+    }
     val colorScheme = when (themeMode) {
         KudosThemeMode.System -> if (systemDark) darkScheme(accent) else lightScheme(accent)
         KudosThemeMode.Light -> lightScheme(accent)
@@ -184,16 +200,21 @@ fun KudosTheme(
 const val DefaultAccentHex = "#821019"
 const val LegacyDefaultAccentHex = "#990000"
 
+fun isLegacyUnchosenAccentHex(hex: String?): Boolean =
+    hex != null && hex.trim().equals(LegacyDefaultAccentHex, ignoreCase = true)
+
 /** Read compatibility only: old default and malformed strings paint AO3 Red without rewriting storage. */
-fun resolvedAccentHex(stored: String?): String = when {
-    stored == null || stored.equals(LegacyDefaultAccentHex, ignoreCase = true) -> DefaultAccentHex
-    runCatching { android.graphics.Color.parseColor(stored) }.isSuccess -> stored
-    else -> DefaultAccentHex
+fun resolvedAccentHex(stored: String?): String {
+    val trimmed = stored?.trim()
+    return when {
+        trimmed.isNullOrEmpty() || isLegacyUnchosenAccentHex(trimmed) -> DefaultAccentHex
+        parseHexColorOrNull(trimmed) != null -> trimmed
+        else -> DefaultAccentHex
+    }
 }
 
-fun parseAccentColor(hex: String): Color = runCatching {
-    Color(android.graphics.Color.parseColor(resolvedAccentHex(hex)))
-}.getOrDefault(Ao3Red)
+fun parseAccentColor(hex: String): Color =
+    parseHexColorOrNull(resolvedAccentHex(hex)) ?: Ao3Red
 
 private object ColorTokens {
     val SepiaSurface = androidx.compose.ui.graphics.Color(0xFFFFF6E8)

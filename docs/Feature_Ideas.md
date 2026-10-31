@@ -136,9 +136,10 @@ the status here in sync with the board.
 
 ### Theming & Customization
 
-- **[FI-6] AO3 Red as default accent + color picker** — *Status: Superseded by T-459 (2026-10-28) · Board: T-16*
-  T-16 originally added a configurable accent. T-459 removed the picker and fixed
-  app controls to AO3 red (`#990000`); Sepia keeps its warm tint.
+- **[FI-6] AO3 Red as default accent + color picker** — *Status: Restored (T-459c, 2026-10-30) · Board: Accent-Options*
+  T-16 added a configurable accent. T-459 removed the picker and fixed controls
+  to `#990000`. T-459c brought the Appearance picker back: six named accents,
+  default AO3 Red `#821019`, plus a custom colour. Sepia keeps its warm tint.
 
 ### Library
 

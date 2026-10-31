@@ -145,10 +145,10 @@ class ActionParityFormsTest {
             compose.setContent { KudosTheme(io.github.cidy02.kudos.ui.theme.KudosThemeMode.Dark) {
                 QueueEditorSheet(queues, queue, {}, {})
             } }
-            assertSwitchFill("Keep works offline", Color(0xFF990000))
+            assertSwitchFill("Keep works offline", Color(0xFF821019))
             val layouts = mutableListOf<TextLayoutResult>()
             compose.onNodeWithText("Cancel").performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
-            assertEquals(ReaderTheme.Dark.accentInk(Color(0xFF990000)), layouts.single().layoutInput.style.color)
+            assertEquals(ReaderTheme.Dark.accentInk(Color(0xFF821019)), layouts.single().layoutInput.style.color)
         } finally { isDebugInspectorInfoEnabled = oldInspector }
     }
 
@@ -161,8 +161,8 @@ class ActionParityFormsTest {
             compose.setContent { KudosTheme(io.github.cidy02.kudos.ui.theme.KudosThemeMode.Oled) {
                 CollectionEditorSheet(works, collection, {}, {})
             } }
-            assertSwitchFill("Keep downloads", Color(0xFF990000))
-            assertSwitchFill("Show on Home", Color(0xFF990000))
+            assertSwitchFill("Keep downloads", Color(0xFF821019))
+            assertSwitchFill("Show on Home", Color(0xFF821019))
         } finally { isDebugInspectorInfoEnabled = oldInspector }
     }
 

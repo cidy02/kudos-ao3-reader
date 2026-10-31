@@ -177,6 +177,10 @@ fun WorkLedgerRow(
                 androidx.compose.material3.Checkbox(
                     checked = selected,
                     onCheckedChange = { onClick() },
+                    colors = androidx.compose.material3.CheckboxDefaults.colors(
+                        checkedColor = tokens.accent,
+                        checkmarkColor = SubjectPalette.label(tokens.accent)
+                    ),
                     modifier = Modifier.padding(start = 14.dp)
                 )
             }
@@ -207,7 +211,7 @@ fun WorkLedgerRow(
                             if (favorite) Text("★", color = Color(0xFFFFC107), fontSize = 13.sp)
                         }
                         Text(metadata, color = tokens.secondaryInk, fontSize = 11.5.sp)
-                        HomeStatusTray(rating, categories, warnings, isComplete, HomeStatusArrangement.Grid, tileSize = 24.dp)
+                        HomeStatusTray(rating, categories, warnings, isComplete, HomeStatusArrangement.Grid, tileSize = 24.dp, announces = true)
                     }
                 } else Row(
                     Modifier
@@ -245,7 +249,7 @@ fun WorkLedgerRow(
                             overflow = TextOverflow.Ellipsis
                         )
                     }
-                    HomeStatusTray(rating, categories, warnings, isComplete, HomeStatusArrangement.Grid, tileSize = 24.dp)
+                    HomeStatusTray(rating, categories, warnings, isComplete, HomeStatusArrangement.Grid, tileSize = 24.dp, announces = true)
                 }
             }
         }

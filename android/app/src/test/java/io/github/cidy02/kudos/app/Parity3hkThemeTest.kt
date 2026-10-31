@@ -14,27 +14,41 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/** 3hk: Material primary is the filled app colour. Dark and OLED text uses accentInk instead. */
+/** 3hk: Material primary on Dark and OLED is the accent's readable text step (accentInk). */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], application = Application::class)
 class Parity3hkThemeTest {
     @get:Rule val compose = createComposeRule()
 
-    @Test fun darkAndOledMaterialPrimaryIsTheFilledAppColour() {
+    @Test fun darkAndOledMaterialPrimaryUsesReadableAccentInk() {
         var mode by mutableStateOf(KudosThemeMode.Dark)
+        var accentHex by mutableStateOf(DefaultAccentHex)
         var primary = Color.Unspecified
         lateinit var tokens: KudosTokens
-        compose.setContent { KudosTheme(mode) {
+        compose.setContent { KudosTheme(mode, accentColorHex = accentHex) {
             tokens = LocalKudosTokens.current
             primary = MaterialTheme.colorScheme.primary
         } }
-        for (theme in listOf(KudosThemeMode.Dark, KudosThemeMode.Oled)) {
-            compose.runOnIdle { mode = theme }
-            compose.waitForIdle()
-            assertEquals("Material primary in $theme", tokens.accent, primary)
-            assertEquals("Text ink in $theme", Ao3RedInkDark, tokens.accentInk)
-            // The old cream primary was (244,232,215): nearly as green as red. The ink is clearly red.
-            assertTrue("Primary in $theme is red, not cream: $primary", primary.red - primary.green > 0.2f)
+        for (hex in listOf(DefaultAccentHex, "#7B2D6B", "#2468AC")) {
+            for (theme in listOf(KudosThemeMode.Dark, KudosThemeMode.Oled)) {
+                compose.runOnIdle {
+                    accentHex = hex
+                    mode = theme
+                }
+                compose.waitForIdle()
+                assertEquals("Material primary in $theme ($hex)", tokens.accentInk, primary)
+                assertTrue(
+                    "Contrast in $theme ($hex): ${contrastRatio(primary, tokens.background)}",
+                    contrastRatio(primary, tokens.background) >= 4.5
+                )
+            }
         }
+        compose.runOnIdle {
+            accentHex = DefaultAccentHex
+            mode = KudosThemeMode.Dark
+        }
+        compose.waitForIdle()
+        assertEquals(AppAccents.Ao3Red.darkInk, primary)
+        assertTrue("Primary in Dark is red, not cream: $primary", primary.red - primary.green > 0.2f)
     }
 }

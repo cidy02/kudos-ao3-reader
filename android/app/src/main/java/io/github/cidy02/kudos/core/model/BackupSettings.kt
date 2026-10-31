@@ -19,7 +19,7 @@ data class BackupSettings(
     val appTheme: String = AppThemeSetting.Light.storageValue,
     val readerTheme: String = ReaderThemeSetting.Light.storageValue,
     val matchAppReaderTheme: Boolean = true,
-    val accentColorHex: String = "#990000",
+    val accentColorHex: String? = null,
     val autoPreserveSmallSeriesOnSaveForLater: Boolean = false,
     val autoPreserveSeriesWorkThreshold: Int = 5
 ) {
@@ -43,8 +43,8 @@ data class BackupSettings(
             app = AppSettings(
                 confirmBeforeDelete = confirmBeforeDelete,
                 appTheme = AppThemeSetting.fromStorage(appTheme),
-                // Decode the legacy field, but never apply a stored non-red accent.
-                accentColorHex = KudosSettings.Defaults.app.accentColorHex,
+                accentColorHex = readingAccentColorHex(accentColorHex),
+                storedAccentColorHex = accentColorHex,
                 autoPreserveSmallSeriesOnSaveForLater = autoPreserveSmallSeriesOnSaveForLater,
                 autoPreserveSeriesWorkThreshold = autoPreserveSeriesWorkThreshold
             ),
@@ -77,8 +77,8 @@ data class BackupSettings(
                 appTheme = settings.app.appTheme.storageValue,
                 readerTheme = settings.reader.readerTheme.storageValue,
                 matchAppReaderTheme = settings.reader.matchAppReaderTheme,
-                // The key remains in the cross-platform contract for older clients.
-                accentColorHex = KudosSettings.Defaults.app.accentColorHex,
+                // Omit when the device has no stored accent, matching KudosBackup.swift.
+                accentColorHex = settings.app.chosenAccentColorHex,
                 autoPreserveSmallSeriesOnSaveForLater =
                     settings.app.autoPreserveSmallSeriesOnSaveForLater,
                 autoPreserveSeriesWorkThreshold = settings.app.autoPreserveSeriesWorkThreshold

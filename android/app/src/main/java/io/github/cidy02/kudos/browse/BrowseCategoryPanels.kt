@@ -399,15 +399,3 @@ private fun Modifier.dashedRoundedBorder(color: androidx.compose.ui.graphics.Col
         cornerRadius = CornerRadius(12.dp.toPx())
     )
 }
-
-@Composable
-fun BrowseInstructions() {
-    Text(
-        text = "Browse fandoms from AO3. Tap a category to see its fandoms.",
-        color = LocalKudosTokens.current.secondaryInk,
-        fontSize = 13.sp,
-        modifier = Modifier
-            .padding(horizontal = 16.dp)
-            .fillMaxWidth()
-    )
-}

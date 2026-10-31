@@ -184,7 +184,15 @@ internal fun AddLibraryWorksContent(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            Checkbox(checked = selected, onCheckedChange = null)
+                            val accent = io.github.cidy02.kudos.ui.subject.LocalKudosTokens.current.accent
+                            Checkbox(
+                                checked = selected,
+                                onCheckedChange = null,
+                                colors = androidx.compose.material3.CheckboxDefaults.colors(
+                                    checkedColor = accent,
+                                    checkmarkColor = io.github.cidy02.kudos.ui.subject.SubjectPalette.label(accent)
+                                )
+                            )
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(work.title.ifBlank { "Untitled work" }, style = MaterialTheme.typography.bodyLarge,
                                     maxLines = 2, overflow = TextOverflow.Ellipsis)

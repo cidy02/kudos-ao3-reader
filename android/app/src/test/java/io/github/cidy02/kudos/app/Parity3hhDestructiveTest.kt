@@ -124,7 +124,7 @@ class Parity3hhDestructiveTest {
             compose.runOnIdle { mode = theme; logout = false }
             compose.waitForIdle()
             assertEquals(expected(theme), textColor("Delete"))
-            assertEquals(palette.accent, textColor("Cancel"))
+            assertEquals(palette.controlInk, textColor("Cancel"))
             compose.runOnIdle { logout = true }
             compose.waitForIdle()
             assertEquals(expected(theme), textColor("Log Out"))
