@@ -156,7 +156,7 @@ struct AO3BookmarksWorksBrowser: View {
             }
             .padding(.vertical, 8)
         }
-        .subjectScreenWash(palette: palette)
+        .subjectScreenWash(palette: palette, role: .content)
     }
 
     private var detailedBody: some View {
@@ -190,7 +190,7 @@ struct AO3BookmarksWorksBrowser: View {
         }
         .cardList()
         .libraryWorkRemovalConfirmations(pendingDelete: $pendingLocalDelete, pendingRemoval: $pendingLocalRemoval)
-        .subjectScreenWash(palette: palette)
+        .subjectScreenWash(palette: palette, role: .content)
     }
 
     private var header: some View {

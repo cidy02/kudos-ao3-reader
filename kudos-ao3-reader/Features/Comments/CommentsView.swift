@@ -1462,9 +1462,9 @@ struct CommentComposerSheet: View {
                 editorFocused = true
             }
         }
-        // `subjectWash`, not `subjectScreenWash`: the latter also empties the
-        // navigation bar, which is where Cancel and Post live on this sheet.
-        // Applied under the presentation modifiers so those stay outermost.
+        // `appScreenSurface`, not `subjectScreenWash`: the latter also empties
+        // the navigation bar and hides the tab bar, while Cancel and Post live
+        // in this sheet's bar. Applied under presentation modifiers so those stay outermost.
         .appScreenSurface(.grouped)
         // Two numbers, not two layouts (spec 1be): `.medium` is the artboard's
         // 462pt of sheet, and the system re-lays it out at the shorter height on

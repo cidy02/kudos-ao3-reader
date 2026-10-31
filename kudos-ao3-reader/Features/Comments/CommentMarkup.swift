@@ -397,7 +397,7 @@ struct CommentFormattingTray: View {
                 .padding(.horizontal, SubjectMetrics.accountGutter)
                 .padding(.vertical, 14)
             }
-            // No `.appThemedScroll()`: its opaque ground hid the wash below the header (A102).
+            // No `.appThemedScroll()`: `appScreenSurface(.grouped)` below already paints the sheet's ground.
         }
         .appScreenSurface(.grouped)
     }

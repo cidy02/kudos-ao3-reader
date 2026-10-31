@@ -114,6 +114,7 @@ struct SearchLocalResultsList: View {
             }
         }
         .cardList()
+        .appScreenSurface(.content)
         .libraryWorkRemovalConfirmations(pendingDelete: $pendingDelete, pendingRemoval: $pendingRemoval)
     }
 

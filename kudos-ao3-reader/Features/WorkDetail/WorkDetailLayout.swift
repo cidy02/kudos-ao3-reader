@@ -62,12 +62,14 @@ extension WorkDetailView {
                         .accessibilityElement(children: .contain)
                         .accessibilitySortPriority(1)
                     detailList(WorkDetailPresentation.trailingBlocks)
+                        .environment(\.subjectWashScroll, nil)
                         .accessibilityElement(children: .contain)
                         .accessibilitySortPriority(0)
                 } else if panes.count == 1 {
                     detailList(WorkDetailPresentation.singleColumnBlocks, singleColumn: true)
                 }
             }
+            .modifier(WashPaneCountReset(paneCount: panes.count))
             .frame(width: regions.viewport.width, height: regions.viewport.height)
             .position(x: regions.viewport.midX, y: regions.viewport.midY)
         }
@@ -95,6 +97,15 @@ extension WorkDetailView {
         }
         .cardList()
         .clipped()
+    }
+}
+
+private struct WashPaneCountReset: ViewModifier {
+    let paneCount: Int
+    @Environment(\.subjectWashScroll) private var subjectWashScroll
+
+    func body(content: Content) -> some View {
+        content.onChange(of: paneCount) { subjectWashScroll?(0) }
     }
 }
 #endif

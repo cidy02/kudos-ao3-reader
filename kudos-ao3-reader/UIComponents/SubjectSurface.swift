@@ -1184,6 +1184,28 @@ enum SubjectWashGeometry {
     static let height: CGFloat = 380
     static let opacities: [Double] = [0.20, 0.12, 0.05, 0]
     static let locations: [Double] = [0, 0.35, 0.65, 1]
+
+    struct ScrollSample: Equatable {
+        let offset: CGFloat
+        let hasTopInset: Bool
+    }
+
+    static func scrollSample(from geometry: ScrollGeometry) -> ScrollSample? {
+        guard geometry.contentSize.width <= geometry.containerSize.width + 1 else {
+            return nil
+        }
+        return ScrollSample(
+            offset: max(0, geometry.contentOffset.y + geometry.contentInsets.top),
+            hasTopInset: geometry.contentInsets.top > 0
+        )
+    }
+
+    static func resolvedOffset(from old: ScrollSample?, to new: ScrollSample?) -> CGFloat? {
+        guard let new else { return nil }
+        let movedVertically = if let old { old.offset != new.offset } else { false }
+        guard movedVertically || new.offset > 0 || new.hasTopInset else { return nil }
+        return new.offset
+    }
 }
 
 private struct SubjectWashedScreenKey: EnvironmentKey {
@@ -1215,6 +1237,11 @@ extension EnvironmentValues {
         get { self[ScreenTintKey.self] }
         set { self[ScreenTintKey.self] = newValue }
     }
+
+    /// Reports vertical scroll distance from top to the enclosing `SubjectWash`.
+    /// Cleared on secondary panes and inside `CardList` so only the primary
+    /// vertical scroll container drives the wash.
+    @Entry var subjectWashScroll: ((CGFloat) -> Void)?
 }
 
 /// Paints the one subject wash behind a screen's content, full-bleed under the
@@ -1227,11 +1254,6 @@ private struct SubjectWash: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .onScrollGeometryChange(for: CGFloat.self) { geometry in
-                geometry.contentOffset.y + geometry.contentInsets.top
-            } action: { _, offset in
-                scrolled = max(0, offset)
-            }
             .background(alignment: .top) {
                 palette.wash
                     .frame(height: SubjectWashGeometry.height)
@@ -1245,6 +1267,7 @@ private struct SubjectWash: ViewModifier {
             // in front of everything here. Reaching it needs the environment —
             // a modifier cannot look at what it has already been applied to.
             .environment(\.isOnSubjectWash, true)
+            .environment(\.subjectWashScroll) { scrolled = max(0, $0) }
             .screenTint(palette)
     }
 }

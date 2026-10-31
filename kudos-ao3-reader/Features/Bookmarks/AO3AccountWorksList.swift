@@ -642,7 +642,7 @@ struct AO3AccountWorksList: View {
                 }
                 // The wash, not the flat backdrop: the grid is a different
                 // arrangement of this list, not a different screen.
-                .subjectScreenWash(palette: accountPalette)
+                .subjectScreenWash(palette: accountPalette, role: .content)
             } else {
                 List {
                     subjectHeaderSection
@@ -690,7 +690,7 @@ struct AO3AccountWorksList: View {
                     }
                 }
                 .cardList()
-                .subjectScreenWash(palette: accountPalette)
+                .subjectScreenWash(palette: accountPalette, role: .content)
             }
         }
         .overlay {
@@ -1212,7 +1212,7 @@ extension AO3AccountWorksList {
                 content().padding(.top, 60)
             }
         }
-        .subjectScreenWash(palette: accountPalette)
+        .subjectScreenWash(palette: accountPalette, role: .content)
     }
 }
 

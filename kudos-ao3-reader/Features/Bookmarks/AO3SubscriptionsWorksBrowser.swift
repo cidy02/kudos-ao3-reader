@@ -262,7 +262,7 @@ struct AO3SubscriptionsWorksBrowser: View {
             }
         }
         .cardList()
-        .subjectScreenWash(palette: palette)
+        .subjectScreenWash(palette: palette, role: .content)
     }
 
     private var header: some View {

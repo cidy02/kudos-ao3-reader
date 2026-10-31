@@ -146,8 +146,7 @@ struct LibraryCatalogueListView: View {
             }
         }
         .cardList()
-        .appThemedScroll()
-        .subjectScreenWash(palette: themeManager.scopePalette)
+        .subjectScreenWash(palette: themeManager.scopePalette, role: .content)
     }
 
     private var grid: some View {
@@ -184,8 +183,7 @@ struct LibraryCatalogueListView: View {
                 .padding(.horizontal, 16)
             }
         }
-        .appThemedScroll()
-        .subjectScreenWash(palette: themeManager.scopePalette)
+        .subjectScreenWash(palette: themeManager.scopePalette, role: .content)
     }
 
     private func passesPrivacy(_ work: SavedWork) -> Bool {

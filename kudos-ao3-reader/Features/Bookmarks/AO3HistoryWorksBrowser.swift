@@ -55,7 +55,7 @@ struct AO3HistoryWorksBrowser: View {
             }
             .padding(.vertical, 8)
         }
-        .subjectScreenWash(palette: palette)
+        .subjectScreenWash(palette: palette, role: .content)
     }
 
     private var detailedBody: some View {
@@ -94,7 +94,7 @@ struct AO3HistoryWorksBrowser: View {
             }
         }
         .cardList()
-        .subjectScreenWash(palette: palette)
+        .subjectScreenWash(palette: palette, role: .content)
     }
 
     private var header: some View {

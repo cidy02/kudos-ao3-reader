@@ -118,10 +118,11 @@ struct CardShadow {
 /// thread cards) build on the SAME surfaces instead of inventing near-misses that
 /// drift from the Library baseline.
 extension ReaderTheme {
-    /// The plain ground for content screens. Light intentionally uses white,
-    /// while the other themes retain their existing app surface.
+    /// The plain ground for content screens. Light uses white while Dark, OLED
+    /// and Sepia keep `cardBackdrop` so plain-vs-grouped introduces no second
+    /// dark or paper surface.
     var contentBackdrop: Color {
-        if let appBaseBackground { return appBaseBackground }
+        if self != .light { return cardBackdrop }
         #if os(iOS)
         return Color(uiColor: .systemBackground)
         #else
@@ -260,20 +261,34 @@ private struct CardList: ViewModifier {
     @Environment(ThemeManager.self) private var theme
     @Environment(\.isOnSubjectWash) private var isOnSubjectWash
     @Environment(\.subjectScreenRole) private var screenRole
+    @Environment(\.subjectWashScroll) private var subjectWashScroll
 
+    @ViewBuilder
     func body(content: Content) -> some View {
         let backdrop = isOnSubjectWash
             ? Color.clear
             : screenRole.baseSurface == .content
                 ? theme.appTheme.contentBackdrop
                 : theme.appTheme.cardBackdrop
-        content
+        let list = content
+            .environment(\.subjectWashScroll, nil)
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
             // A washed screen has already declared what its backdrop is, and it
             // is painted behind this modifier. Filling it flat here would hide
             // the wash completely — see `EnvironmentValues.isOnSubjectWash`.
             .background(backdrop.ignoresSafeArea())
+        if let subjectWashScroll {
+            list.onScrollGeometryChange(for: SubjectWashGeometry.ScrollSample?.self) { geometry in
+                SubjectWashGeometry.scrollSample(from: geometry)
+            } action: { old, new in
+                if let offset = SubjectWashGeometry.resolvedOffset(from: old, to: new) {
+                    subjectWashScroll(offset)
+                }
+            }
+        } else {
+            list
+        }
     }
 }
 

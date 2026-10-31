@@ -1078,6 +1078,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             }
         }
         .cardList()
+        .appScreenSurface(.content)
         .refreshable {
             let task = Task { await refreshSelectableWorks() }
             refreshTask = task
