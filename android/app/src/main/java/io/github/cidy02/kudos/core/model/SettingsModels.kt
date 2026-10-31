@@ -68,6 +68,22 @@ data class ReaderSettings(
     val keepScreenAwake: Boolean = false
 )
 
+const val DefaultAccentColorHex = "#821019"
+const val LegacyUnchosenAccentColorHex = "#990000"
+
+fun isLegacyUnchosenAccentColorHex(hex: String?): Boolean =
+    hex != null && hex.trim().equals(LegacyUnchosenAccentColorHex, ignoreCase = true)
+
+/** Maps null, empty, and the pre-2026-10-29 #990000 default to AO3 Red #821019 on read. */
+fun readingAccentColorHex(stored: String?): String {
+    val trimmed = stored?.trim()
+    return if (trimmed.isNullOrEmpty() || isLegacyUnchosenAccentColorHex(trimmed)) {
+        DefaultAccentColorHex
+    } else {
+        trimmed
+    }
+}
+
 data class AppSettings(
     val confirmBeforeDelete: Boolean = true,
     val showsZeroStats: Boolean = true,
@@ -75,11 +91,18 @@ data class AppSettings(
     /** iOS "downloadOnSubscribe": subscribing to a Library work without a copy downloads it. */
     val downloadOnSubscribe: Boolean = false,
     val appTheme: AppThemeSetting = AppThemeSetting.Light,
-    val accentColorHex: String = "#990000",
+    val accentColorHex: String = DefaultAccentColorHex,
+    /** Raw stored preference (or decoded backup key) so unchosen devices omit accentColorHex on export. */
+    val storedAccentColorHex: String? = null,
     /** Shared Reading queues setting; Work Detail uses it after Save for Later. */
     val autoPreserveSmallSeriesOnSaveForLater: Boolean = false,
     val autoPreserveSeriesWorkThreshold: Int = 5
-)
+) {
+    val chosenAccentColorHex: String?
+        get() = storedAccentColorHex ?: accentColorHex.takeIf {
+            !it.equals(DefaultAccentColorHex, ignoreCase = true)
+        }
+}
 
 data class PrivacySettings(
     val hideMatureContent: Boolean = true,

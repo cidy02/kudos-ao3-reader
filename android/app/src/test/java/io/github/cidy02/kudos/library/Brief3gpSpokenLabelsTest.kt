@@ -57,10 +57,13 @@ class Brief3gpSpokenLabelsTest {
         }
         val facet = compose.onNodeWithText("Warning")
         assertNull(facet.fetchSemanticsNode().config.getOrNull(SemanticsProperties.StateDescription))
+        assertEquals("include", facet.fetchSemanticsNode().config[SemanticsActions.OnClick].label)
         facet.performClick()
         facet.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Included"))
+        assertEquals("exclude", facet.fetchSemanticsNode().config[SemanticsActions.OnClick].label)
         facet.performClick()
         facet.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Excluded"))
+        assertEquals("clear", facet.fetchSemanticsNode().config[SemanticsActions.OnClick].label)
         facet.performClick()
         assertNull(facet.fetchSemanticsNode().config.getOrNull(SemanticsProperties.StateDescription))
     }

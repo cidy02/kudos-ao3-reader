@@ -1,16 +1,28 @@
 package io.github.cidy02.kudos.settings
 
 import io.github.cidy02.kudos.app.DebugShotEffect
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -20,20 +32,32 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.core.model.KudosSettings
 import io.github.cidy02.kudos.core.model.ReaderMode
 import io.github.cidy02.kudos.core.model.ReaderThemeSetting
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
+import io.github.cidy02.kudos.ui.subject.HsvColorDialog
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SubjectFormRow
 import io.github.cidy02.kudos.ui.subject.SubjectRowSeparator
 import io.github.cidy02.kudos.ui.subject.SubjectSegmentedControl
 import io.github.cidy02.kudos.ui.subject.SubjectToggle
+import io.github.cidy02.kudos.ui.subject.toStoredHex
+import io.github.cidy02.kudos.ui.theme.AppAccents
+import io.github.cidy02.kudos.ui.theme.DefaultAccentHex
+import io.github.cidy02.kudos.ui.theme.parseAccentColor
 import kotlinx.coroutines.launch
 
 @Composable
@@ -44,16 +68,19 @@ fun SettingsAppearancePage(
     val scope = rememberCoroutineScope()
     val tokens = LocalKudosTokens.current
     var showCustomizeTheme by remember { mutableStateOf(false) }
+    var showCustomWarning by remember { mutableStateOf(false) }
+    var showCustomPicker by remember { mutableStateOf(false) }
     DebugShotEffect("appearance") { showCustomizeTheme = true }
 
     val matched = settings.reader.matchAppReaderTheme
-    val themeFootnote = (if (matched) {
+    val themeFootnote = if (matched) {
         "Choose Light, Sepia, Dark, or OLED for Kudos and the reader."
     } else {
         "You can choose different themes for Kudos and the reader."
-    }) + " Controls use AO3 red; Sepia keeps its warm tint."
+    }
     val appOption = ThemeChipOption.entries.firstOrNull { it.setting == settings.app.appTheme }
         ?: ThemeChipOption.Light
+    val shownHex = AppAccents.pickerHex(settings.app.accentColorHex)
     SettingsPage(title = "Appearance") {
         item {
             SettingsSection(label = "Theme", footnote = themeFootnote) {
@@ -110,12 +137,211 @@ fun SettingsAppearancePage(
                 )
             }
         }
+        item {
+            SettingsSection(
+                label = "Accent colour",
+                footnote = "Delete and other destructive actions stay system red with every colour. " +
+                    "Sepia keeps its warm tint."
+            ) {
+                AccentColourPicker(
+                    accentHex = settings.app.accentColorHex,
+                    onSelectNamed = { hex -> scope.launch { repository.updateAccentColor(hex) } },
+                    onCustom = { showCustomWarning = true }
+                )
+            }
+        }
+    }
+    if (showCustomWarning) {
+        AlertDialog(
+            onDismissRequest = { showCustomWarning = false },
+            title = { Text("Use a Custom Colour?") },
+            text = {
+                Text(
+                    "Kudos is designed around its six accent colours. They keep text readable in Light, " +
+                        "Sepia, Dark and OLED, and stay clear of the red used for Delete. A custom colour " +
+                        "may make some buttons and links harder to read."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showCustomWarning = false
+                        showCustomPicker = true
+                    }
+                ) { Text("Choose a Colour") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCustomWarning = false }) { Text("Keep AO3 Red") }
+            }
+        )
+    }
+    if (showCustomPicker) {
+        HsvColorDialog(
+            initial = parseAccentColor(shownHex),
+            onDismiss = { showCustomPicker = false },
+            onConfirm = { color ->
+                showCustomPicker = false
+                val picked = color.toStoredHex()
+                if (!picked.equals(settings.app.accentColorHex, ignoreCase = true)) {
+                    scope.launch { repository.updateAccentColor(picked) }
+                }
+            }
+        )
     }
     if (showCustomizeTheme) {
         io.github.cidy02.kudos.reader.CustomizeThemeSheet(repository, customFontRepository,
             onDismiss = { showCustomizeTheme = false })
     }
 
+}
+
+@Composable
+private fun AccentColourPicker(
+    accentHex: String,
+    onSelectNamed: (String) -> Unit,
+    onCustom: () -> Unit
+) {
+    val tokens = LocalKudosTokens.current
+    val shownHex = AppAccents.pickerHex(accentHex)
+    val named = AppAccents.named(shownHex)
+    val selectedFill = named?.fillHex
+    val customHex = if (named == null) shownHex else null
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 13.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clearAndSetSemantics {},
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = named?.name ?: "Custom",
+                color = tokens.primaryInk,
+                fontSize = 16.sp
+            )
+            Spacer(Modifier.weight(1f))
+            if (shownHex.equals(DefaultAccentHex, ignoreCase = true)) {
+                Text(
+                    text = "Default",
+                    color = Color(0xFF8E8E93),
+                    fontSize = 14.sp
+                )
+            }
+        }
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            AppAccents.all.forEach { accent ->
+                val isSelected = selectedFill == accent.fillHex
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 44.dp)
+                        .semantics(mergeDescendants = true) {
+                            contentDescription = accent.name
+                            role = Role.Button
+                            selected = isSelected
+                        }
+                        .clickable { onSelectNamed(accent.fillHex) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    AccentSwatch(fill = accent.fill, isSelected = isSelected)
+                }
+            }
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 44.dp)
+                    .semantics(mergeDescendants = true) {
+                        contentDescription = "Custom colour"
+                        role = Role.Button
+                        selected = customHex != null
+                    }
+                    .clickable(onClick = onCustom),
+                contentAlignment = Alignment.Center
+            ) {
+                AccentCustomWell(selectedHex = customHex)
+            }
+        }
+    }
+}
+
+@Composable
+private fun AccentSwatch(fill: Color, isSelected: Boolean) {
+    val gap = LocalKudosTokens.current.theme.cardSurface
+    Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+        if (isSelected) {
+            Box(
+                Modifier
+                    .size(40.dp)
+                    .border(2.dp, fill, CircleShape)
+            )
+            Box(
+                Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(gap)
+            )
+        }
+        Box(
+            Modifier
+                .size(32.dp)
+                .clip(CircleShape)
+                .background(fill)
+        )
+    }
+}
+
+private val AccentCustomWheel = listOf(
+    Color(0xFFF5C400),
+    Color(0xFF5FBF5F),
+    Color(0xFF5A9BE0),
+    Color(0xFFA57BD8),
+    Color(0xFFE86AA0),
+    Color(0xFFE5484D),
+    Color(0xFFF5C400)
+)
+
+@Composable
+private fun AccentCustomWell(selectedHex: String?) {
+    val theme = LocalKudosTokens.current.theme
+    val gap = theme.cardSurface
+    Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+        if (selectedHex != null) {
+            val ringColor = parseAccentColor(selectedHex)
+            Box(
+                Modifier
+                    .size(40.dp)
+                    .border(2.dp, ringColor, CircleShape)
+            )
+            Box(
+                Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(gap)
+            )
+        }
+        Box(
+            Modifier
+                .size(32.dp)
+                .clip(CircleShape)
+                .background(Brush.sweepGradient(AccentCustomWheel))
+        )
+        Box(
+            Modifier
+                .size(24.dp)
+                .clip(CircleShape)
+                .background(gap)
+        )
+        Icon(
+            imageVector = Icons.Filled.Add,
+            contentDescription = null,
+            tint = if (theme.isDarkFamily) Color.White else Color(0xFF1C1C1E),
+            modifier = Modifier.size(14.dp)
+        )
+    }
 }
 
 @Composable

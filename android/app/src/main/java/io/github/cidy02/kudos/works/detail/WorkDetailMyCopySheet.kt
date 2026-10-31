@@ -678,7 +678,7 @@ private fun RemoteEmptyNotice(tokens: KudosTokens) {
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Text(
-            text = "This work isn't in your Library yet. Save, queue, or start reading it to see its download, progress, and tags here.",
+            text = "This work isn't in your Library yet.",
             fontSize = 14.sp,
             color = tokens.secondaryInk
         )

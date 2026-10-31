@@ -58,7 +58,7 @@ fun DestructiveConfirmation(
                 },
                 dismissButton = {
                     TextButton(onClick = onDismissRequest) {
-                        Text(dismissText, color = palette?.accent ?: MaterialTheme.colorScheme.primary)
+                        Text(dismissText, color = palette?.controlInk ?: MaterialTheme.colorScheme.primary)
                     }
                 }
             )

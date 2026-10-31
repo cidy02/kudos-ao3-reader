@@ -165,7 +165,15 @@ fun NewQueueDialog(
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = keepOffline, onCheckedChange = { keepOffline = it })
+                    val accent = io.github.cidy02.kudos.ui.subject.LocalKudosTokens.current.accent
+                    Checkbox(
+                        checked = keepOffline,
+                        onCheckedChange = { keepOffline = it },
+                        colors = androidx.compose.material3.CheckboxDefaults.colors(
+                            checkedColor = accent,
+                            checkmarkColor = io.github.cidy02.kudos.ui.subject.SubjectPalette.label(accent)
+                        )
+                    )
                     Text("Keep works offline", fontSize = 14.sp)
                 }
             }

@@ -43,10 +43,9 @@ class SettingsA66ParityTest {
         compose.setContent {
             KudosTheme(KudosThemeMode.Light) { SettingsAppearancePage(repository, KudosSettings.Defaults) }
         }
-        for (label in listOf("Match App & Reader Theme", "Customize Theme…")) {
+        for (label in listOf("Match App & Reader Theme", "Customize Theme…", "Accent colour")) {
             compose.onNodeWithText(label).assertExists()
         }
-        compose.onAllNodesWithText("Accent Color").assertCountEquals(0)
         compose.onAllNodesWithText("Reset to AO3 Red").assertCountEquals(0)
         compose.onNodeWithContentDescription("Text size, 18 pt").assertExists()
         for (label in listOf("Line height", "Letter spacing", "Word spacing", "Margin")) {
@@ -58,6 +57,34 @@ class SettingsA66ParityTest {
             compose.onNodeWithText(label).assertExists()
         }
         assertFalse(runBlocking { repository.snapshot().reader.readerCustomize })
+    }
+
+    @Test fun appearanceShowsSixNamedAccentsAndWarnsBeforeCustomPicker() {
+        compose.setContent {
+            val current = androidx.compose.runtime.produceState(KudosSettings.Defaults) {
+                repository.settings.collect { value = it }
+            }.value
+            KudosTheme(KudosThemeMode.Light, accentColorHex = current.app.accentColorHex) {
+                SettingsAppearancePage(repository, current)
+            }
+        }
+        compose.onNodeWithText("Accent colour").performScrollTo()
+        compose.onNodeWithContentDescription("AO3 Red").assertExists().assertIsSelected()
+        for (name in listOf("Plum", "Ink Blue", "Deep Teal", "Forest", "Ochre")) {
+            compose.onNodeWithContentDescription(name).assertExists().assertIsNotSelected()
+        }
+        compose.onNodeWithContentDescription("Custom colour").assertExists().assertIsNotSelected()
+
+        compose.onNodeWithContentDescription("Plum").performClick()
+        compose.waitUntil(5_000) { runBlocking { repository.snapshot().app.accentColorHex == "#7B2D6B" } }
+        compose.onNodeWithContentDescription("Plum").assertIsSelected()
+        compose.onNodeWithContentDescription("AO3 Red").assertIsNotSelected()
+
+        compose.onNodeWithContentDescription("Custom colour").performClick()
+        compose.onNodeWithText("Use a Custom Colour?").assertExists()
+        compose.onNodeWithText("Choose a Colour").assertExists()
+        compose.onNodeWithText("Keep AO3 Red").performClick()
+        compose.onAllNodesWithText("Use a Custom Colour?").assertCountEquals(0)
     }
 
     @Test fun downloadsUsesThePrivacyTotalIncludingCacheAndExcludingOtherFiles() = runBlocking<Unit> {

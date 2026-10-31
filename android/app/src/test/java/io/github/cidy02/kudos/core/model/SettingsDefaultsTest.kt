@@ -1,9 +1,14 @@
 package io.github.cidy02.kudos.core.model
 
+import io.github.cidy02.kudos.backup.BackupJson
 import io.github.cidy02.kudos.backup.BackupSettingsPayload
 import io.github.cidy02.kudos.backup.BackupValidator
 import io.github.cidy02.kudos.backup.toBackupSettingsPayload
+import kotlinx.serialization.encodeToString
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SettingsDefaultsTest {
@@ -29,7 +34,9 @@ class SettingsDefaultsTest {
         assertEquals(AppThemeSetting.Light, defaults.app.appTheme)
         assertEquals(ReaderThemeSetting.Light, defaults.reader.readerTheme)
         assertEquals(true, defaults.reader.matchAppReaderTheme)
-        assertEquals("#990000", defaults.app.accentColorHex)
+        assertEquals("#821019", defaults.app.accentColorHex)
+        assertNull(defaults.app.storedAccentColorHex)
+        assertNull(defaults.app.chosenAccentColorHex)
     }
 
     @Test
@@ -72,30 +79,49 @@ class SettingsDefaultsTest {
         assertEquals("paged", backup.readerMode)
         assertEquals("sepia", backup.readerTheme)
         assertEquals("hide", backup.matureContentMode)
+        assertNull(backup.accentColorHex)
         assertEquals(settings, backup.toSettings())
     }
 
     @Test
-    fun backupsDecodeLegacyAccentButExportAndApplyAo3Red() {
-        val custom = KudosSettings.Defaults.copy(
-            app = KudosSettings.Defaults.app.copy(accentColorHex = "#0B57D0")
-        )
+    fun backupCaptureOmitsUnchosenAccentAndPreservesChosenAccent() {
+        val unchosenPayload = BackupSettings.fromSettings(KudosSettings.Defaults).toBackupSettingsPayload()
+        assertNull(unchosenPayload.accentColorHex)
+        val unchosenJson = BackupJson.encodeToString(unchosenPayload)
+        assertFalse(unchosenJson.contains("accentColorHex"))
 
-        assertEquals("#990000", BackupSettings.fromSettings(custom).accentColorHex)
-        assertEquals(
-            "#990000",
-            BackupSettings(accentColorHex = "#0B57D0").toSettings().app.accentColorHex
+        val chosen = KudosSettings.Defaults.copy(
+            app = KudosSettings.Defaults.app.copy(
+                accentColorHex = "#2468AC",
+                storedAccentColorHex = "#2468AC"
+            )
         )
-        // The decoded model still holds the legacy hex. Normalize and re-export do not.
-        assertEquals("#0B57D0", BackupSettings(accentColorHex = "#0B57D0").accentColorHex)
-        assertEquals(
-            "#990000",
-            BackupSettings(accentColorHex = "#2468AC").toBackupSettingsPayload().accentColorHex
-        )
-        assertEquals(
-            "#990000",
+        val chosenPayload = BackupSettings.fromSettings(chosen).toBackupSettingsPayload()
+        assertEquals("#2468AC", chosenPayload.accentColorHex)
+        val chosenJson = BackupJson.encodeToString(chosenPayload)
+        assertTrue(chosenJson.contains("\"accentColorHex\":\"#2468AC\"") || chosenJson.contains("\"accentColorHex\": \"#2468AC\""))
+
+        // Legacy #990000 maps to #821019 in memory while preserving raw storedAccentColorHex for restore skip.
+        val legacySettings = BackupSettings(accentColorHex = "#990000").toSettings()
+        assertEquals("#821019", legacySettings.app.accentColorHex)
+        assertEquals("#990000", legacySettings.app.storedAccentColorHex)
+
+        assertNull(
             BackupValidator.normalizeSettings(
-                BackupSettingsPayload(accentColorHex = "#0B57D0"),
+                BackupSettingsPayload(accentColorHex = null),
+                availableFontFileNames = emptySet()
+            ).accentColorHex
+        )
+        assertNull(
+            BackupValidator.normalizeSettings(
+                BackupSettingsPayload(accentColorHex = "not-a-hex"),
+                availableFontFileNames = emptySet()
+            ).accentColorHex
+        )
+        assertEquals(
+            "#2468AC",
+            BackupValidator.normalizeSettings(
+                BackupSettingsPayload(accentColorHex = "#2468AC"),
                 availableFontFileNames = emptySet()
             ).accentColorHex
         )

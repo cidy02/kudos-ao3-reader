@@ -198,15 +198,60 @@ fun WorkSymbolMarkView(
     }
 }
 
+data class WorkSymbolBackingColor(
+    val red: Float,
+    val green: Float,
+    val blue: Float,
+    val alpha: Float
+) {
+    val color: Color get() = Color(red = red, green = green, blue = blue, alpha = alpha)
+
+    companion object {
+        fun board(theme: io.github.cidy02.kudos.ui.subject.ReaderTheme): WorkSymbolBackingColor = when (theme) {
+            io.github.cidy02.kudos.ui.subject.ReaderTheme.Sepia ->
+                WorkSymbolBackingColor(120f / 255f, 92f / 255f, 56f / 255f, 0.12f)
+            io.github.cidy02.kudos.ui.subject.ReaderTheme.Light ->
+                WorkSymbolBackingColor(118f / 255f, 118f / 255f, 128f / 255f, 0.12f)
+            io.github.cidy02.kudos.ui.subject.ReaderTheme.Dark,
+            io.github.cidy02.kudos.ui.subject.ReaderTheme.Oled ->
+                WorkSymbolBackingColor(118f / 255f, 118f / 255f, 128f / 255f, 0.24f)
+        }
+    }
+}
+
 internal object WorkSymbolGeometry {
     const val CornerRadiusRatio = 0.24f
     const val GapRatio = 0.12f
+    const val BackingPaddingRatio = 0.27f
+    const val BackingRadiusRatio = 0.58f
     const val GlyphBoxRatio = 0.68f
     const val ShieldBoxRatio = 0.84f
     const val ShieldBodyOffsetRatio = (11.56f - 12f) / 24f
 
     /** Two tiles and the gap between them. iOS `WorkStatusIconGrid.gridHeight`. */
     fun gridExtent(tileSize: Float): Float = tileSize * (2f + GapRatio)
+
+    /** Symbols board: `round(tile × 0.27)`. */
+    fun backingPadding(tileSize: Float): Float = kotlin.math.round(tileSize * BackingPaddingRatio)
+
+    /** Symbols board: `round(tile × 0.58)`. */
+    fun backingCornerRadius(tileSize: Float): Float = kotlin.math.round(tileSize * BackingRadiusRatio)
+
+    /** Full 2×2 only. A strip stays bare even when `backed` is left on. */
+    fun drawsBacking(
+        arrangement: io.github.cidy02.kudos.ui.subject.HomeStatusArrangement,
+        backed: Boolean
+    ): Boolean = arrangement == io.github.cidy02.kudos.ui.subject.HomeStatusArrangement.Grid && backed
+
+    /** Edge of the square a row lays out, including backing padding on both sides when backed. */
+    fun outerSide(tileSize: Float, backed: Boolean = true): Float {
+        val tiles = gridExtent(tileSize)
+        if (!drawsBacking(io.github.cidy02.kudos.ui.subject.HomeStatusArrangement.Grid, backed)) return tiles
+        return tiles + 2f * backingPadding(tileSize)
+    }
+
+    fun backingFill(theme: io.github.cidy02.kudos.ui.subject.ReaderTheme): Color =
+        WorkSymbolBackingColor.board(theme).color
 
     /**
      * Translation, in the 24-unit drawing grid, that puts the mark's centreline

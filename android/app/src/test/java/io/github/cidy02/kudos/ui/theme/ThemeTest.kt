@@ -26,29 +26,35 @@ class ThemeTest {
     }
 
     @Test
-    fun theAppColourIsOneFixedAo3RedExceptSepiasBrown() {
-        assertEquals(0xFF990000.toInt(), Ao3Red.toArgb())
-        assertEquals(0xFFFF7A70.toInt(), Ao3RedInkDark.toArgb())
-        assertEquals("#990000", DefaultAccentHex)
+    fun defaultAccentIsAo3Red821019AndLegacy990000MapsToIt() {
+        assertEquals(0xFF821019.toInt(), Ao3Red.toArgb())
+        assertEquals(0xFFEE8A93.toInt(), AppAccents.Ao3Red.darkInk.toArgb())
+        assertEquals("#821019", DefaultAccentHex)
+        assertEquals("#821019", resolvedAccentHex(null))
+        assertEquals("#821019", resolvedAccentHex(""))
+        assertEquals("#821019", resolvedAccentHex("#990000"))
+        assertEquals("#821019", resolvedAccentHex(" #990000 "))
+        assertEquals("#7B2D6B", resolvedAccentHex("#7B2D6B"))
         for (theme in ReaderTheme.entries) {
             val expected = if (theme == ReaderTheme.Sepia) SepiaTint else Ao3Red
-            assertEquals(expected, theme.appTint)
+            assertEquals(expected, theme.appTint(Ao3Red))
             assertEquals(expected, KudosTokens.of(theme).accent)
             assertEquals(expected, theme.scopePalette().tint)
         }
     }
 
     @Test
-    fun darkAndOledTextTakesTheLighterRedStepWhileFillsKeepAo3Red() {
-        for (theme in listOf(ReaderTheme.Dark, ReaderTheme.Oled)) {
-            val tokens = KudosTokens.of(theme)
-            assertEquals(Ao3Red, tokens.accent)
-            assertEquals(Ao3RedInkDark, tokens.accentInk)
-            assertEquals(Ao3RedInkDark, theme.scopePalette().controlInk)
-            assertEquals(Ao3Red, theme.scopePalette().tint)
-        }
-        for (theme in listOf(ReaderTheme.Light, ReaderTheme.Sepia)) {
-            assertEquals(theme.appTint, theme.scopePalette().controlInk)
+    fun darkAndOledTextTakesNamedOrReadableStepWhileFillsKeepChosenAccent() {
+        for (accent in AppAccents.all) {
+            for (theme in listOf(ReaderTheme.Dark, ReaderTheme.Oled)) {
+                val tokens = KudosTokens.of(theme, accent.fill)
+                assertEquals(accent.fill, tokens.accent)
+                assertEquals(accent.darkInk, tokens.accentInk)
+                assertEquals(accent.darkInk, theme.scopePalette(accent.fill).controlInk)
+                assertEquals(accent.fill, theme.scopePalette(accent.fill).tint)
+            }
+            assertEquals(accent.fill, ReaderTheme.Light.scopePalette(accent.fill).controlInk)
+            assertEquals(SepiaTint, ReaderTheme.Sepia.scopePalette(accent.fill).controlInk)
         }
     }
 }

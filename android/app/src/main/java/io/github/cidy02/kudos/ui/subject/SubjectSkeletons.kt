@@ -178,7 +178,7 @@ internal fun SubjectCoverSkeletonContent() {
         SubjectSkeletonBlock(15, 132)
         SubjectSkeletonBlock(15, 84)
         Spacer(Modifier.weight(1f))
-        Box(Modifier.align(Alignment.CenterHorizontally)) { StatusSkeleton() }
+        Box(Modifier.align(Alignment.CenterHorizontally)) { StatusSkeleton(backed = false) }
         Spacer(Modifier.weight(1f))
         SubjectSkeletonBlock(12, 92)
         SubjectSkeletonBlock(10, 118)
@@ -188,11 +188,30 @@ internal fun SubjectCoverSkeletonContent() {
 }
 
 @Composable
-private fun StatusSkeleton() {
-    Column(verticalArrangement = Arrangement.spacedBy(4.5.dp)) {
+private fun StatusSkeleton(backed: Boolean = true) {
+    val gap = (24f * io.github.cidy02.kudos.ui.components.WorkSymbolGeometry.GapRatio).dp
+    val modifier = if (backed) {
+        val pad = io.github.cidy02.kudos.ui.components.WorkSymbolGeometry.backingPadding(24f).dp
+        val radius = io.github.cidy02.kudos.ui.components.WorkSymbolGeometry.backingCornerRadius(24f).dp
+        Modifier
+            .background(LocalKudosTokens.current.primaryInk.copy(alpha = 0.08f), RoundedCornerShape(radius))
+            .padding(pad)
+    } else {
+        Modifier
+    }
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(gap)) {
         repeat(2) {
-            Row(horizontalArrangement = Arrangement.spacedBy(4.5.dp)) {
-                repeat(2) { Box(Modifier.size(27.dp)) { SubjectSkeletonBlock(27, 27) } }
+            Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
+                repeat(2) {
+                    Box(
+                        Modifier
+                            .size(24.dp)
+                            .background(
+                                LocalKudosTokens.current.primaryInk.copy(alpha = 0.12f),
+                                RoundedCornerShape((24f * io.github.cidy02.kudos.ui.components.WorkSymbolGeometry.CornerRadiusRatio).dp)
+                            )
+                    )
+                }
             }
         }
     }

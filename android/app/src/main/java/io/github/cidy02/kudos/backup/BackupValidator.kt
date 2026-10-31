@@ -217,6 +217,7 @@ object BackupValidator {
 
     private val BACKUP_INSTANT_FORMAT: java.time.format.DateTimeFormatter =
         java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(java.time.ZoneOffset.UTC)
+    private val accentPattern = Regex("^#[0-9A-Fa-f]{6}$")
 
     fun normalizeSettings(
         settings: BackupSettingsPayload,
@@ -238,9 +239,7 @@ object BackupValidator {
                 ?: defaults.matureContentMode,
             appTheme = settings.appTheme.takeIf { it in appThemes } ?: defaults.appTheme,
             readerTheme = settings.readerTheme.takeIf { it in readerThemes } ?: defaults.readerTheme,
-            // Older files still decode. A valid legacy hex is accepted and then
-            // discarded: every archive this app writes carries the one app colour.
-            accentColorHex = defaults.accentColorHex
+            accentColorHex = settings.accentColorHex?.trim()?.takeIf { accentPattern.matches(it) }
         )
     }
 

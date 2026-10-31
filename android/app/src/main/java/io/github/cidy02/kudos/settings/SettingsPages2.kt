@@ -310,7 +310,7 @@ fun SettingsAboutPage(
         item {
             SettingsSection(
                 footnote = "These settings only change Kudos. Change anything AO3 stores about your " +
-                    "account in AO3 Preferences. Controls use Kudos' AO3-red app colour."
+                    "account in AO3 Preferences."
             ) {
                 SubjectFormRow("Version", value = BuildConfig.VERSION_NAME)
                 SubjectRowSeparator()

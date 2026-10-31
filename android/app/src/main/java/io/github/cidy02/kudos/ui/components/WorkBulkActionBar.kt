@@ -358,7 +358,16 @@ internal fun AddSelectionToCollectionDialog(
                         }
                     }, verticalAlignment = Alignment.CenterVertically) {
                         Text(collection.name, Modifier.weight(1f))
-                        Checkbox(checked = member, onCheckedChange = null, enabled = !working)
+                        val accent = io.github.cidy02.kudos.ui.subject.LocalKudosTokens.current.accent
+                        Checkbox(
+                            checked = member,
+                            onCheckedChange = null,
+                            enabled = !working,
+                            colors = androidx.compose.material3.CheckboxDefaults.colors(
+                                checkedColor = accent,
+                                checkmarkColor = io.github.cidy02.kudos.ui.subject.SubjectPalette.label(accent)
+                            )
+                        )
                     }
                 }
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }

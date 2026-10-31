@@ -464,8 +464,7 @@ fun CoreBackupSettings.toBackupSettingsPayload(): BackupSettingsPayload {
         appTheme = appTheme,
         readerTheme = readerTheme,
         matchAppReaderTheme = matchAppReaderTheme,
-        // Decode keeps a legacy hex on the model. Writing always emits AO3 red.
-        accentColorHex = io.github.cidy02.kudos.core.model.KudosSettings.Defaults.app.accentColorHex,
+        accentColorHex = accentColorHex,
         autoPreserveSmallSeriesOnSaveForLater = autoPreserveSmallSeriesOnSaveForLater,
         autoPreserveSeriesWorkThreshold = autoPreserveSeriesWorkThreshold
     )

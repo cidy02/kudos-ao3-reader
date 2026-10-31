@@ -244,19 +244,48 @@ class SettingsRepositoryTest {
         assertEquals(MatureContentMode.Hide, settings.privacy.matureContentMode)
         assertTrue(settings.privacy.requireBiometricToReveal)
         assertFalse(settings.app.confirmBeforeDelete)
-        assertEquals("#990000", settings.app.accentColorHex)
+        assertEquals("#821019", settings.app.accentColorHex)
         assertTrue(settings.app.keepsWorksYouRead)
     }
 
     @Test
-    fun restoredCustomAccentIsIgnored() = runBlocking {
-        repository.replaceAll(
-            KudosSettings.Defaults.copy(
-                app = KudosSettings.Defaults.app.copy(accentColorHex = "#0B57D0")
-            )
+    fun accentCaptureApplyAndLegacyReadFollowT459cContract() = runBlocking {
+        val accentKey = stringPreferencesKey("accentColorHex")
+        // Unchosen device: in-memory default is #821019, nothing stored, capture omits accentColorHex.
+        assertEquals(null, dataStore.data.first()[accentKey])
+        assertEquals("#821019", repository.snapshot().app.accentColorHex)
+        val unchosenJson = BackupJson.encodeToString(
+            BackupSettings.fromSettings(repository.snapshot()).toBackupSettingsPayload()
         )
+        assertFalse(unchosenJson.contains("accentColorHex"))
 
-        assertEquals("#990000", repository.snapshot().app.accentColorHex)
+        // Stored legacy #990000 maps to #821019 on read without rewriting DataStore.
+        dataStore.edit { it[accentKey] = "#990000" }
+        assertEquals("#821019", repository.snapshot().app.accentColorHex)
+        assertEquals("#990000", dataStore.data.first()[accentKey])
+
+        // Choosing a named accent writes under the existing preference key and exports it.
+        repository.updateAccentColor("#7B2D6B")
+        assertEquals("#7B2D6B", repository.snapshot().app.accentColorHex)
+        assertEquals("#7B2D6B", dataStore.data.first()[accentKey])
+        val chosenJson = BackupJson.encodeToString(
+            BackupSettings.fromSettings(repository.snapshot()).toBackupSettingsPayload()
+        )
+        assertTrue(chosenJson.contains("#7B2D6B"))
+
+        // Restore with absent key leaves local accent untouched.
+        repository.replaceAll(BackupSettings(accentColorHex = null).toSettings())
+        assertEquals("#7B2D6B", repository.snapshot().app.accentColorHex)
+
+        // Restore with legacy #990000 leaves local accent untouched.
+        repository.replaceAll(BackupSettings(accentColorHex = "#990000").toSettings())
+        assertEquals("#7B2D6B", repository.snapshot().app.accentColorHex)
+        repository.replaceAll(BackupSettings(accentColorHex = " #990000 ").toSettings())
+        assertEquals("#7B2D6B", repository.snapshot().app.accentColorHex)
+
+        // Restore with any other valid hex applies it as stored.
+        repository.replaceAll(BackupSettings(accentColorHex = "#2468AC").toSettings())
+        assertEquals("#2468AC", repository.snapshot().app.accentColorHex)
     }
 
     @Test

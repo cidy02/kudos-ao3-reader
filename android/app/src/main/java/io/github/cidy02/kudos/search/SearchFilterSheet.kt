@@ -248,7 +248,7 @@ fun SearchFilterSheet(
                     }
                 }
                 item {
-                    FilterGroup("Tags", TAG_NOTE) {
+                    FilterGroup("Tags") {
                         if (showFandomPicker) {
                             FilterTagRow("Fandoms", "fandom", filters.fandom, filters.excludedFandoms,
                                 localTagSuggestions.fandoms, autocompleteRepository,
@@ -398,8 +398,6 @@ private const val CROSSOVER_NOTE =
 private const val DATE_NOTE =
     "The Updated, After, and Before choices all use the work's update date. " +
         "A work appears only if it matches every date choice."
-private const val TAG_NOTE =
-    "Tap a tag once to include it, twice to exclude it, and a third time to clear it."
 private const val RANGE_NOTE =
     "Leave either end of the slider at its starting position if you don't want a minimum " +
         "or maximum. AO3 treats one-sided ranges as “more than” or “fewer than”."

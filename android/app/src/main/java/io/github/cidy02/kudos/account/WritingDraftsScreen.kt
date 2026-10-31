@@ -298,7 +298,7 @@ private fun DraftExpiryBadge(days: Int) {
         if (tone == DraftExpiry.Tone.Red) tokens.destructive else SubjectPalette.fromHue(tone.hue, tokens.theme).accent)
 }
 
-/** The same trayless 24 dp required-tag grid used by every other work surface. */
+/** The shared 24 dp required-tag grid used by every work surface. */
 @Composable
 private fun DraftStatusGrid(work: AO3WorkSummary) {
     HomeStatusTray(
@@ -307,6 +307,7 @@ private fun DraftStatusGrid(work: AO3WorkSummary) {
         warnings = work.warnings,
         isComplete = work.isComplete,
         arrangement = HomeStatusArrangement.Grid,
-        tileSize = 24.dp
+        tileSize = 24.dp,
+        announces = true
     )
 }

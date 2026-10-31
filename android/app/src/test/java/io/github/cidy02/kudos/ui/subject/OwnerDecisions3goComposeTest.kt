@@ -17,6 +17,9 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.ui.components.SensitiveWorkRow
+import io.github.cidy02.kudos.ui.theme.Ao3Red
+import io.github.cidy02.kudos.ui.theme.AppAccents
+import io.github.cidy02.kudos.ui.theme.DefaultAccentHex
 import io.github.cidy02.kudos.ui.theme.KudosTheme
 import io.github.cidy02.kudos.ui.theme.KudosThemeMode
 import io.github.cidy02.kudos.works.detail.WorkDetailResumeCard
@@ -52,12 +55,12 @@ class OwnerDecisions3goComposeTest {
 
     @Test fun glyphUsesReadableInkForTheSuppliedAccentButTheSquareKeepsItsExactFillOnDarkAndOled() {
         var mode by mutableStateOf(KudosThemeMode.Dark)
-        var accent by mutableStateOf(Color(0xFF990000))
+        var accent by mutableStateOf(Color(0xFF821019))
         compose.setContent { KudosTheme(mode) {
             AccentIconSquare(Icons.Default.Settings, "Glyph", Modifier.testTag("square"), accent)
         } }
         for ((theme, selectedMode) in listOf(ReaderTheme.Dark to KudosThemeMode.Dark, ReaderTheme.Oled to KudosThemeMode.Oled)) {
-            for (picked in listOf(Color(0xFF990000), Color(0xFF001166), Color(0xFFFFD54F))) {
+            for (picked in listOf(Color(0xFF821019), Color(0xFF001166), Color(0xFFFFD54F))) {
                 compose.runOnIdle { mode = selectedMode; accent = picked }
                 val ink = theme.accentInk(picked)
                 assertTrue(contrastRatio(ink, theme.cardBackdrop) >= 4.5)
@@ -69,14 +72,15 @@ class OwnerDecisions3goComposeTest {
         }
     }
 
-    @Test fun aSheetPaletteKeepsIdentityButControlsUseTheFixedAppColour() {
+    @Test fun aSheetPaletteKeepsIdentityButControlsUseTheChosenAppColourAndReadablePrimary() {
         val picked = Color(0xFF193B97)
         var mode by mutableStateOf(KudosThemeMode.Light)
         var theme by mutableStateOf(ReaderTheme.Light)
+        var accentHex by mutableStateOf(DefaultAccentHex)
         var primary = Color.Unspecified
         var tokenFill = Color.Unspecified
         var tokenInk = Color.Unspecified
-        compose.setContent { KudosTheme(mode) {
+        compose.setContent { KudosTheme(mode, accentColorHex = accentHex) {
             val palette = SubjectPalette.fromColor(picked, theme)
             SubjectPaletteTheme(palette) {
                 primary = MaterialTheme.colorScheme.primary
@@ -85,16 +89,19 @@ class OwnerDecisions3goComposeTest {
                 SubjectToggle(true, {}, accent = palette.tint, contentDescription = "Keep")
             }
         } }
-        for ((nextTheme, nextMode) in listOf(ReaderTheme.Light to KudosThemeMode.Light,
-            ReaderTheme.Dark to KudosThemeMode.Dark, ReaderTheme.Oled to KudosThemeMode.Oled, ReaderTheme.Sepia to KudosThemeMode.Sepia)) {
-            compose.runOnIdle { theme = nextTheme; mode = nextMode }
-            compose.runOnIdle {
-                assertEquals(nextTheme.appTint, tokenFill)
-                assertEquals(nextTheme.accentInk(nextTheme.appTint), tokenInk)
-                assertEquals(tokenFill, primary)
+        for ((chosenHex, chosenFill) in listOf(DefaultAccentHex to Ao3Red, "#7B2D6B" to AppAccents.Plum.fill)) {
+            for ((nextTheme, nextMode) in listOf(ReaderTheme.Light to KudosThemeMode.Light,
+                ReaderTheme.Dark to KudosThemeMode.Dark, ReaderTheme.Oled to KudosThemeMode.Oled, ReaderTheme.Sepia to KudosThemeMode.Sepia)) {
+                compose.runOnIdle { accentHex = chosenHex; theme = nextTheme; mode = nextMode }
+                val expectedFill = nextTheme.appTint(chosenFill)
+                compose.runOnIdle {
+                    assertEquals(expectedFill, tokenFill)
+                    assertEquals(nextTheme.accentInk(expectedFill), tokenInk)
+                    assertEquals(tokenInk, primary)
+                }
+                assertTrue(properties(compose.onNodeWithContentDescription("Keep"))
+                    .contains("color" to expectedFill))
             }
-            assertTrue(properties(compose.onNodeWithContentDescription("Keep"))
-                .contains("color" to nextTheme.appTint))
         }
     }
 
@@ -133,7 +140,7 @@ class OwnerDecisions3goComposeTest {
             WorkDetailTagSections(emptyList(), emptyList(), emptyList(), emptyList(), tags,
                 LocalKudosTokens.current.scopePalette, hasAo3WorkId = ao3)
         } }
-        val remote = "AO3 hasn't provided tags for this work yet. Pull down to get the latest details from AO3."
+        val remote = "AO3 hasn't provided tags for this work yet."
         val imported = "This imported work isn't linked to AO3, so you won't see AO3 tags here."
         compose.onNodeWithText(remote).assertExists()
         compose.runOnIdle { ao3 = false }

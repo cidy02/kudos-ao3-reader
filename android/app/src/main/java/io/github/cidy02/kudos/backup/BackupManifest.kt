@@ -285,7 +285,7 @@ data class BackupSettingsPayload(
     val appTheme: String = "light",
     val readerTheme: String = "light",
     val matchAppReaderTheme: Boolean = true,
-    val accentColorHex: String = "#990000",
+    val accentColorHex: String? = null,
     val autoPreserveSmallSeriesOnSaveForLater: Boolean = false,
     val autoPreserveSeriesWorkThreshold: Int = 5
 )

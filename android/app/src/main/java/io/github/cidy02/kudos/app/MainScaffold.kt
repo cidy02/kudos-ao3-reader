@@ -281,10 +281,10 @@ fun MainScaffold(
     val pagePalette = io.github.cidy02.kudos.ui.subject.LocalShellWashes.current.page?.palette
     val appScheme = MaterialTheme.colorScheme
     CompositionLocalProvider(
-        LocalKudosTokens provides (pagePalette?.let { tokens.copy(accent = it.tint) } ?: tokens),
+        LocalKudosTokens provides tokens,
         io.github.cidy02.kudos.ui.subject.LocalSubjectPalette provides (pagePalette ?: scopePalette)
     ) {
-    MaterialTheme(colorScheme = pagePalette?.let { appScheme.copy(primary = it.tint) } ?: appScheme) {
+    MaterialTheme(colorScheme = appScheme) {
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -328,10 +328,10 @@ fun MainScaffold(
                         )
                         navController.navigateShellRoot(Routes.Search)
                     },
-                    LocalKudosTokens provides (heroPalette?.let { tokens.copy(accent = it.tint) } ?: tokens),
+                    LocalKudosTokens provides tokens,
                     io.github.cidy02.kudos.ui.subject.LocalSubjectPalette provides (heroPalette ?: scopePalette)
                 ) {
-                    MaterialTheme(colorScheme = heroPalette?.let { scheme.copy(primary = it.tint) } ?: scheme) {
+                    MaterialTheme(colorScheme = scheme) {
                         AppNavHost(
                             container = container,
                             navController = navController,

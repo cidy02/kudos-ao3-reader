@@ -250,6 +250,10 @@ fun SensitiveWorkRow(
                         Checkbox(
                             checked = selected,
                             onCheckedChange = { onSelect?.invoke() },
+                            colors = androidx.compose.material3.CheckboxDefaults.colors(
+                                checkedColor = tokens.accent,
+                                checkmarkColor = SubjectPalette.label(tokens.accent)
+                            ),
                             modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 12.dp)
                         )
                     }
@@ -602,7 +606,8 @@ private fun LedgerBody(
             warnings = warnings,
             isComplete = isComplete,
             arrangement = HomeStatusArrangement.Grid,
-            tileSize = 24.dp
+            tileSize = 24.dp,
+            announces = true
         )
     }
     if (accessibility) {

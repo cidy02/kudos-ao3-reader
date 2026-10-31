@@ -205,7 +205,7 @@ internal fun FilterFacetRow(title: String, state: FilterSelectionState, onClick:
     Row(
         Modifier.fillMaxWidth()
             .background(if (state == FilterSelectionState.INCLUDED) color.copy(alpha = 0.10f) else Color.Transparent)
-            .clickable(role = Role.Button, onClick = onClick)
+            .clickable(role = Role.Button, onClickLabel = state.nextActionLabel.lowercase(), onClick = onClick)
             // The title is the label (kept as text); the state is iOS's "Included" / "Excluded",
             // none when clear. The visible status word below is not spoken a second time.
             .semantics(mergeDescendants = true) {
@@ -237,7 +237,7 @@ private fun FilterTagCapsule(tag: String, state: FilterSelectionState, onClick: 
             .clickable(role = Role.Button, onClick = onClick)
             .semantics(mergeDescendants = true) {
                 contentDescription = "${if (state == FilterSelectionState.EXCLUDED) "Excluded" else "Included"}: $tag"
-                stateDescription = "Tap to ${state.next.status.lowercase()} this tag"
+                stateDescription = "Tap to ${state.nextActionLabel.lowercase()} this tag"
                 customActions = listOf(CustomAccessibilityAction("Cycle tag") { onClick(); true })
             }.padding(horizontal = 9.dp, vertical = 5.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),

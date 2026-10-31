@@ -150,10 +150,15 @@ internal fun AddToCollectionContent(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        val accent = io.github.cidy02.kudos.ui.subject.LocalKudosTokens.current.accent
                         Checkbox(
                             checked = isMember,
                             onCheckedChange = null,
-                            enabled = membershipLoaded
+                            enabled = membershipLoaded,
+                            colors = androidx.compose.material3.CheckboxDefaults.colors(
+                                checkedColor = accent,
+                                checkmarkColor = io.github.cidy02.kudos.ui.subject.SubjectPalette.label(accent)
+                            )
                         )
                         Text(
                             text = collection.name,

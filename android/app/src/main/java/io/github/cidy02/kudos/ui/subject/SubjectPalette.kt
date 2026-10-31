@@ -2,6 +2,7 @@ package io.github.cidy02.kudos.ui.subject
 
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import io.github.cidy02.kudos.ui.theme.ActiveAppAccent
 
 /** One stop of a subject wash. Locations match the spec: 0, 0.26, 0.52, 0.74, 1. */
 data class WashStop(val color: Color, val location: Float)
@@ -17,7 +18,7 @@ class SubjectPalette private constructor(
     val hue: Double,
     val theme: ReaderTheme,
     private val picked: Color?,
-    private val appAccent: Color
+    private val appAccent: Color?
 ) {
     // Value equality: screens build the same palette afresh on every pass.
     override fun equals(other: Any?): Boolean =
@@ -25,11 +26,13 @@ class SubjectPalette private constructor(
             picked == other.picked && appAccent == other.appAccent
 
     override fun hashCode(): Int = 31 * (31 * (31 * hue.hashCode() + theme.hashCode()) +
-        (picked?.hashCode() ?: 0)) + appAccent.hashCode()
+        (picked?.hashCode() ?: 0)) + (appAccent?.hashCode() ?: 0)
+
+    fun withAppAccent(accent: Color): SubjectPalette = SubjectPalette(hue, theme, picked, accent)
 
     /** App-control tint. Subject colours stay in washes, artwork and identity labels. */
     val tint: Color
-        get() = theme.appTint(appAccent)
+        get() = theme.appTint(appAccent ?: ActiveAppAccent.value)
 
     /** Text, icons, links, spinners and text-button labels on a control: the app colour's readable ink. */
     val controlInk: Color
@@ -193,14 +196,13 @@ class SubjectPalette private constructor(
         WashStop(hsb(hue, saturation, brightness), location)
 
     companion object {
-        fun fromHue(hue: Double, theme: ReaderTheme, appAccent: Color = Ao3Red) =
+        fun fromHue(hue: Double, theme: ReaderTheme, appAccent: Color? = null) =
             SubjectPalette(hue, theme, null, appAccent)
 
-        fun fromColor(color: Color, theme: ReaderTheme, appAccent: Color = Ao3Red) =
+        fun fromColor(color: Color, theme: ReaderTheme, appAccent: Color? = null) =
             SubjectPalette(color.hueComponent(), theme, color, appAccent)
 
-        /** Legacy seam retained for callers; app controls no longer accept a subject colour. */
-        @Suppress("UNUSED_PARAMETER")
+        /** Controls take the chosen control colour, except Sepia's warm brown. */
         fun controlColor(color: Color, theme: ReaderTheme): Color = theme.appTint(color)
 
         /** Black or white, whichever clears WCAG's 0.179 luminance crossover. */

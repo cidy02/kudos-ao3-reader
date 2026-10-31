@@ -34,12 +34,20 @@ class WritingBulkEditScreenTest {
                 { changes = it(changes) }, {})
         } }
         compose.onNodeWithText("Unchanged").assertDoesNotExist()
+        compose.onNodeWithText("Tap an option once", substring = true).assertDoesNotExist()
+        val rowNode = compose.onNodeWithText("No warnings")
         compose.onNode(hasText("No warnings") and SemanticsMatcher.expectValue(
             androidx.compose.ui.semantics.SemanticsProperties.StateDescription, "Unchanged")).assertExists()
-        compose.onNodeWithText("No warnings").performClick()
+        assertEquals("add it to every selected work",
+            rowNode.fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsActions.OnClick].label)
+        rowNode.performClick()
         compose.onNodeWithText("Add").assertExists()
-        compose.onNodeWithText("No warnings").performClick()
+        assertEquals("remove it from every selected work",
+            rowNode.fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsActions.OnClick].label)
+        rowNode.performClick()
         compose.onNodeWithText("Remove").assertExists()
+        assertEquals("leave it unchanged",
+            rowNode.fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsActions.OnClick].label)
         val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
         compose.onNodeWithText("No warnings", useUnmergedTree = true).performSemanticsAction(
             androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(layouts) }
