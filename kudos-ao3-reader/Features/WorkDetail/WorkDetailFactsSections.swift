@@ -183,14 +183,15 @@ extension WorkDetailView {
         Section {
             HStack(spacing: 10) {
                 let finished = localWork?.isFinished ?? false
-                WorkDetailOutlineButton(
-                    title: WorkActionLabels.finished(isFinished: finished).title,
-                    action: toggleFinished
-                )
-                .disabled(working)
+                Button(WorkActionLabels.finished(isFinished: finished).title, action: toggleFinished)
+                    .buttonStyle(.kudosSecondary)
+                    .frame(maxWidth: .infinity)
+                    .disabled(working)
 
                 if let url = ao3URL {
-                    WorkDetailOutlineButton(title: "Open on AO3") { router.open(url) }
+                    Button("Open on AO3") { router.open(url) }
+                        .buttonStyle(.kudosSecondary)
+                        .frame(maxWidth: .infinity)
                 }
             }
             .pageBodyRow(top: 22)
@@ -221,30 +222,15 @@ extension WorkDetailView {
     }
 }
 
-/// One of the page's two outline buttons.
+/// One of the page's two buttons (deprecated in favor of `KudosButtonStyle.kudosSecondary`).
 struct WorkDetailOutlineButton: View {
     let title: String
     let action: () -> Void
 
-    @ScaledMetric(relativeTo: .subheadline) private var buttonLabelSize: CGFloat = 15
-    @Environment(ThemeManager.self) private var themeManager
-
     var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: buttonLabelSize, weight: .medium))
-                .foregroundStyle(.primary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 13)
-                .background(
-                    Capsule()
-                        .strokeBorder(themeManager.appTheme.glassStroke(0.18), lineWidth: 1)
-                )
-                .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
+        Button(title, action: action)
+            .buttonStyle(.kudosSecondary)
+            .frame(maxWidth: .infinity)
     }
 }
 

@@ -100,10 +100,7 @@ struct SyncFolderOnboardingView: View {
                     chooseFolderTitle
                 }
             }
-            .buttonStyle(.borderedProminent)
-            .accentFill()
-            .prominentLabel()
-            .controlSize(.large)
+            .buttonStyle(.kudosPrimaryConfirm)
             .onboardingWrapsButton(at: dynamicTypeSize.isAccessibilitySize)
             .disabled(isConnecting)
 

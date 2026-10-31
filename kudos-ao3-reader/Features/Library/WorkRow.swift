@@ -427,11 +427,7 @@ struct WorkRowExpandButton: View {
             Image(systemName: expanded ? "chevron.up" : "chevron.down")
                 .font(.caption.weight(.semibold))
         }
-        .buttonStyle(.bordered)
-        .foregroundStyle(.accentInk)
-        .accentFill()
-        .buttonBorderShape(.circle)
-        .controlSize(.small)
+        .buttonStyle(.kudosSecondaryCircle)
         .minimumHitTarget()
         .accessibilityLabel(expanded ? "Show less" : "Show more")
     }

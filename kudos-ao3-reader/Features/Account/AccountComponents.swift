@@ -318,11 +318,7 @@ struct AccountProfileCard: View {
                 }
                 .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
-            .accentFill()
-            .prominentLabel()
-            .buttonBorderShape(.capsule)
-            .controlSize(.large)
+            .buttonStyle(.kudosPrimaryConfirm)
             .disabled(auth.status == .signingIn)
 
             AO3InvitationRequestLink {
@@ -706,11 +702,7 @@ struct AccountWorksInlineSection: View {
                     .font(.footnote)
                     .labelStyle(.titleAndIcon)
             }
-            .buttonStyle(.bordered)
-            .foregroundStyle(.accentInk)
-            .accentFill()
-            .buttonBorderShape(.capsule)
-            .controlSize(.small)
+            .buttonStyle(.kudosSecondary)
         }
     }
 

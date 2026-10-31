@@ -454,10 +454,7 @@ private extension PromptMemeView {
             Button("Try Again") {
                 Task { await loadPrompts(page: currentPage) }
             }
-            .buttonStyle(.bordered)
-            .foregroundStyle(.accentInk)
-            .accentFill()
-            .tint(palette.tint)
+            .buttonStyle(.kudosSecondary)
             .padding(.top, 4)
         }
         .frame(maxWidth: .infinity)

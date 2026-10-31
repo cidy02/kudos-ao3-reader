@@ -503,18 +503,14 @@ struct AccountView: View {
                         .fixedSize(horizontal: !dynamicTypeSize.isAccessibilitySize, vertical: false)
                         .frame(maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : nil)
                 }
-                .buttonStyle(.borderedProminent)
-                .accentFill()
-                .prominentLabel()
+                .buttonStyle(.kudosPrimary)
 
                 ShareLink(item: model.route.dashboardURL) {
                     Label("Share", systemImage: "square.and.arrow.up")
                         .lineLimit(1)
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
-                .foregroundStyle(.accentInk)
-                .accentFill()
+                .buttonStyle(.kudosSecondary)
 
                 Button {
                     if let url = profileEditURL { router.open(url) }
@@ -523,9 +519,7 @@ struct AccountView: View {
                         .lineLimit(1)
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
-                .foregroundStyle(.accentInk)
-                .accentFill()
+                .buttonStyle(.kudosSecondary)
                 .disabled(profileEditURL == nil)
             }
             // Board 35: 15 pt semibold labels, so the three fit one row.

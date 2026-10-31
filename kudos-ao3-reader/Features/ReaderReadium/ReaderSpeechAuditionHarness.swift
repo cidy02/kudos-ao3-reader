@@ -104,8 +104,7 @@ struct ReaderSpeechAuditionHarness: View {
                     Button("Stop", role: .destructive) {
                         controller.stop()
                     }
-                    .buttonStyle(.borderedProminent)
-                    .accentFill()
+                    .buttonStyle(.kudosPrimary)
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.top, 4)
                 }

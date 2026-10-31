@@ -105,8 +105,7 @@ struct DownloadDateImportConfirmation: View {
                         dismiss()
                         onImport(selected)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .accentFill()
+                    .buttonStyle(.kudosPrimaryConfirm)
                 }
             }
         }

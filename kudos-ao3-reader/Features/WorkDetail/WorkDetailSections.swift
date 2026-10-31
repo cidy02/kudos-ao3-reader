@@ -594,8 +594,7 @@ struct DownloadedDateEditor: View {
                         context.saveBestEffort(reason: "Saving downloaded date failed")
                         dismiss()
                     }
-                    .buttonStyle(.borderedProminent)
-                    .accentFill()
+                    .buttonStyle(.kudosPrimary)
                 }
             }
         }

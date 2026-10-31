@@ -248,14 +248,14 @@ struct SubjectPalette {
     /// `cardBorder` this one is drawn on every theme.
     var rowBorder: Color { accent.opacity(theme.isDarkFamily ? 0.22 : 0.18) }
 
-    /// The single filled, high-contrast control on a washed card — spec 1b's
-    /// Resume pill. White on the dark themes, with the card wash's own deep end
-    /// as the label so the button reads as cut out of the card rather than
-    /// dropped on top of it.
+    /// Superseded by `KudosButtonStyle` (T-485, rule I-9).
+    @available(*, deprecated, message: "Use KudosButtonStyle")
     var solidButtonFill: Color {
         theme.isDarkFamily ? .white : accent
     }
 
+    /// Superseded by `KudosButtonStyle` (T-485, rule I-9).
+    @available(*, deprecated, message: "Use KudosButtonStyle")
     var solidButtonLabel: Color {
         theme.isDarkFamily ? Color(hue: hue, saturation: 0.52, brightness: 0.155) : .white
     }

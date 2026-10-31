@@ -726,9 +726,7 @@ struct CommentsView: View {
                             await applyInitialFocusIfNeeded(proxy: scrollProxy)
                         }
                     }
-                        .buttonStyle(.borderedProminent)
-                        .accentFill()
-                        .prominentLabel()
+                    .buttonStyle(.kudosPrimary)
                 }
             }
             .cardRow()
@@ -952,17 +950,9 @@ struct CommentsView: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
                 }
-                .foregroundStyle(theme.onEffectiveTint)
-                .padding(.horizontal, 20)
-                .frame(minHeight: 44)
-                .background(Capsule().fill(theme.effectiveTint))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.kudosPrimary)
             .disabled(model.isOffline)
-            // `.plain` draws no disabled state of its own, unlike the
-            // `.borderedProminent` this replaced — so the offline dimming is drawn
-            // here rather than quietly lost with the button style.
-            .opacity(model.isOffline ? 0.45 : 1)
             // Match the theme's card-shadow language: Dark/OLED are shadow-free
             // (the accent capsule already pops there, and a shadow can't read
             // against a near-black or true-black backdrop anyway); Light/Sepia get
@@ -1651,9 +1641,7 @@ struct CommentComposerSheet: View {
                     Label("Check Again", systemImage: "arrow.clockwise")
                         .font(.footnote.weight(.medium))
                 }
-                .buttonStyle(.bordered)
-                .foregroundStyle(.accentInk)
-                .accentFill()
+                .buttonStyle(.kudosSecondary)
             }
         case let .failed(message):
             Label(message, systemImage: "exclamationmark.triangle")

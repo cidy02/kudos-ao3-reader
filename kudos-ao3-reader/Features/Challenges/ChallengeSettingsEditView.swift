@@ -628,10 +628,7 @@ struct ChallengeSettingsEditView: View {
             Button("Try Again") {
                 Task { await load() }
             }
-            .buttonStyle(.bordered)
-            .foregroundStyle(.accentInk)
-            .accentFill()
-            .tint(palette.tint)
+            .buttonStyle(.kudosSecondary)
             .padding(.top, 4)
         }
         .frame(maxWidth: .infinity)

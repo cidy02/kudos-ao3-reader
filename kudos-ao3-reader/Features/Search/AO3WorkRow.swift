@@ -437,11 +437,7 @@ struct AO3WorkRow: View {
                 .accessibilityLabel(expanded ? "Show less" : "Show more")
         } else {
             button
-                .buttonStyle(.bordered)
-                .foregroundStyle(.accentInk)
-                .accentFill()
-                .buttonBorderShape(.circle)
-                .controlSize(.small)
+                .buttonStyle(.kudosSecondaryCircle)
                 .minimumHitTarget()
                 .accessibilityLabel(expanded ? "Show less" : "Show more")
         }

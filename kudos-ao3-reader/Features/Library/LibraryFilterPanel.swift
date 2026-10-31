@@ -54,9 +54,7 @@ struct LibraryFilterPanel: View {
             Button { dismiss() } label: {
                 Image(systemName: "checkmark")
             }
-            .buttonStyle(.borderedProminent)
-            .accentFill()
-            .prominentLabel()
+            .buttonStyle(.kudosPrimary)
             .accessibilityLabel("Done")
         }
     }

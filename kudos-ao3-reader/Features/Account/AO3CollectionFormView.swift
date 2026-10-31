@@ -392,9 +392,7 @@ struct AO3CollectionFormView: View {
             Text(isNew ? "Create Collection" : "Save Changes")
                 .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.borderedProminent)
-        .accentFill()
-        .prominentLabel()
+        .buttonStyle(.kudosPrimaryConfirm)
         .disabled(phase == .saving || !canSave)
     }
 
