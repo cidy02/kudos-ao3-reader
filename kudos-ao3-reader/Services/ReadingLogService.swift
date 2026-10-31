@@ -12,7 +12,7 @@ enum ReadingLogService {
     /// Accidental opens (tap-and-back) are not history.
     static let minimumPersistableDuration: TimeInterval = 15
     /// 1ai default: mid-way and untouched for this long, and no manual override.
-    static let defaultAbandonedThreshold: TimeInterval = 21 * 24 * 3600
+    nonisolated static let defaultAbandonedThreshold: TimeInterval = 21 * 24 * 3600
 
     private struct OpenSession {
         /// The `ReadingSession.id` this visit writes to. Fixed when the session
@@ -303,7 +303,9 @@ enum ReadingLogService {
                 // Rows written before the count was recorded fall back to the
                 // work's count now, which is the best the log can do for them.
                 chapterCount: session.chapterCountAtVisit > 0
-                    ? session.chapterCountAtVisit : work?.postedChapterCount ?? 0
+                    ? session.chapterCountAtVisit : work?.postedChapterCount ?? 0,
+                modeRaw: session.modeRaw,
+                playbackRate: session.playbackRate
             )
         }
     }
@@ -386,7 +388,7 @@ enum ReadingLogService {
 
     /// Derived Abandoned (1ai): in-progress, progress in (0.05, 0.95), last
     /// read older than `threshold`, and no manual keep-in-progress override.
-    static func isAbandoned(
+    nonisolated static func isAbandoned(
         work: SavedWork,
         now: Date = Date(),
         threshold: TimeInterval = defaultAbandonedThreshold
