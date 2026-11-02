@@ -98,6 +98,8 @@ struct WorkCoverCard: View {
     /// A hidden mature work must not draw its initial: the letter stays
     /// recognisable under the 6 pt blur.
     var showsInitial: Bool = true
+    var isMatureObscured: Bool = false
+    var showsMatureRevealCapsule: Bool = true
 
     @Environment(DownloadQueue.self) private var downloads
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -111,26 +113,35 @@ struct WorkCoverCard: View {
             title: work.title,
             author: work.author,
             fandom: primaryFandom,
-            showsInitial: showsInitial
+            showsInitial: showsInitial,
+            isMatureObscured: isMatureObscured,
+            showsMatureRevealCapsule: showsMatureRevealCapsule
         ) {
-            if downloads.liveDownloadFraction(for: work, at: .now) != nil {
-                TimelineView(.animation) { context in
+            if isMatureObscured {
+                Text("Hidden mature work")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            } else {
+                if downloads.liveDownloadFraction(for: work, at: .now) != nil {
+                    TimelineView(.animation) { context in
+                        CoverProgressBar(
+                            progress: downloads.liveDownloadFraction(for: work, at: context.date) ?? 1,
+                            accessibilityLabel: "Download progress"
+                        )
+                    }
+                } else if let progressValue {
                     CoverProgressBar(
-                        progress: downloads.liveDownloadFraction(for: work, at: context.date) ?? 1,
-                        accessibilityLabel: "Download progress"
+                        progress: progressValue,
+                        accessibilityLabel: "Reading progress"
                     )
                 }
-            } else if let progressValue {
-                CoverProgressBar(
-                    progress: progressValue,
-                    accessibilityLabel: "Reading progress"
-                )
-            }
-            cardStats
-            coverMeta
-            if let preservation = work.preservationState.badgeLabel {
-                WorkStateBadge(text: preservation, symbol: work.preservationState.badgeSymbol)
-                    .font(.caption2)
+                cardStats
+                coverMeta
+                if let preservation = work.preservationState.badgeLabel {
+                    WorkStateBadge(text: preservation, symbol: work.preservationState.badgeSymbol)
+                        .font(.caption2)
+                }
             }
         }
         .downloadDimmed(work)
@@ -405,6 +416,8 @@ private struct WorkSummaryCardSurface<Content: View>: View {
     let author: String
     let fandom: String?
     var showsInitial: Bool = true
+    var isMatureObscured: Bool = false
+    var showsMatureRevealCapsule: Bool = true
     @ViewBuilder var content: () -> Content
 
     /// Scales width and height together so the card grows proportionally at
@@ -426,6 +439,12 @@ private struct WorkSummaryCardSurface<Content: View>: View {
                 showsInitial: showsInitial
             )
             .frame(width: cardSize.width, height: cardSize.width * 1.42)
+            .blur(radius: isMatureObscured ? 6 : 0)
+            .overlay {
+                if isMatureObscured && showsMatureRevealCapsule {
+                    MatureRevealCapsule()
+                }
+            }
 
             VStack(alignment: .leading, spacing: 6) { content() }
                 .frame(width: cardSize.width, alignment: .leading)
