@@ -574,10 +574,8 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                         }
                     }
 
-                    if localWork != nil {
-                        Section("Library") {
-                            localWorkMenuItems
-                        }
+                    Section("Library") {
+                        localWorkMenuItems
                     }
 
                     if let id = ao3WorkID {

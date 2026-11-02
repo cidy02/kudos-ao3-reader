@@ -68,7 +68,7 @@ struct ReaderFanMenu: View {
                 if let readAloud = roundActions.first(where: { $0.id == "readAloud" }) {
                     Button(action: readAloud.action) {
                         Label(
-                            "Read Aloud",
+                            readAloud.isEmphasized ? "Stop Read Aloud" : "Read Aloud",
                             systemImage: MenuTopRowRules.readAloudSymbol(
                                 isActive: readAloud.isEmphasized
                             )
@@ -106,7 +106,9 @@ struct ReaderFanMenu: View {
                 .accessibilityAddTraits(action.isEmphasized ? [.isSelected] : [])
             }
 
-            if let settings = roundActions.first(where: { $0.id == "readAloud" })?.settingsAction {
+            if let readAloud = roundActions.first(where: { $0.id == "readAloud" }),
+               readAloud.isEnabled,
+               let settings = readAloud.settingsAction {
                 Button(action: settings) {
                     Label("Read Aloud Settings", systemImage: "gearshape")
                 }

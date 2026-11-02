@@ -312,6 +312,12 @@ struct ReadiumReaderView: View {
                 .preferredColorScheme(readerPageColors.colorScheme)
                 .presentationDragIndicator(.visible)
             }
+            .onChange(of: work.isPendingDeletion) { _, isPendingDeletion in
+                if isPendingDeletion {
+                    showingWorkDetail = false
+                    dismissReader()
+                }
+            }
             // Highlights made in an earlier session have to be drawn when the
             // book opens, not only when one is created.
             .onChange(of: book.phase) { _, phase in

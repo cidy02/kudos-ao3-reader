@@ -82,37 +82,46 @@ struct AO3WorkActionsTopRow: View {
                     onSuccess: onKudosSuccess
                 )
             } label: {
-                Label("Kudos", systemImage: MenuTopRowRules.kudosSymbol(isGiven: isGiven))
+                Label(
+                    isGiven ? "Kudos Given" : "Kudos",
+                    systemImage: MenuTopRowRules.kudosSymbol(isGiven: isGiven)
+                )
             }
             .disabled(actions.isWorking || isGiven)
             .tint(isGiven ? accentFill : Color.primary)
             .accessibilityLabel(isGiven ? "Kudos given" : "Give Kudos")
             .accessibilityAddTraits(isGiven ? [.isSelected] : [])
 
+            let isBookmarked = actions.workPageStates?.existingBookmark != nil
             Button { actions.startBookmark() } label: {
-                let isBookmarked = actions.workPageStates?.existingBookmark != nil
-                Label("Bookmark", systemImage: MenuTopRowRules.bookmarkSymbol(isBookmarked: isBookmarked))
+                Label(
+                    isBookmarked ? "Edit Bookmark" : "Bookmark",
+                    systemImage: MenuTopRowRules.bookmarkSymbol(isBookmarked: isBookmarked)
+                )
             }
-            .tint(actions.workPageStates?.existingBookmark != nil ? accentFill : Color.primary)
+            .tint(isBookmarked ? accentFill : Color.primary)
             .accessibilityLabel(
-                actions.workPageStates?.existingBookmark != nil
+                isBookmarked
                     ? "Edit Bookmark on AO3" : "Bookmark on AO3"
             )
             .accessibilityAddTraits(
-                actions.workPageStates?.existingBookmark != nil ? [.isSelected] : []
+                isBookmarked ? [.isSelected] : []
             )
 
+            let isSubscribed = actions.workPageStates?.isSubscribed == true
             Button {
                 actions.subscribe(workID: workID, auth: auth, onSubscribed: onSubscribeSuccess)
             } label: {
-                let isSubscribed = actions.workPageStates?.isSubscribed == true
-                Label("Subscribe", systemImage: MenuTopRowRules.subscribeSymbol(isSubscribed: isSubscribed))
+                Label(
+                    isSubscribed ? "Unsubscribe" : "Subscribe",
+                    systemImage: MenuTopRowRules.subscribeSymbol(isSubscribed: isSubscribed)
+                )
             }
             .disabled(actions.isWorking)
-            .tint(actions.workPageStates?.isSubscribed == true ? accentFill : Color.primary)
-            .accessibilityLabel(actions.workPageStates?.isSubscribed == true ? "Unsubscribe" : "Subscribe")
+            .tint(isSubscribed ? accentFill : Color.primary)
+            .accessibilityLabel(isSubscribed ? "Unsubscribe" : "Subscribe")
             .accessibilityAddTraits(
-                actions.workPageStates?.isSubscribed == true ? [.isSelected] : []
+                isSubscribed ? [.isSelected] : []
             )
 
             ShareLink(item: shareURL ?? AO3AuthService.workURL(workID)) {
