@@ -22,27 +22,63 @@ struct SettingsHubView: View {
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
 
     @State private var folderSyncStatus = FolderSyncService.snapshot()
+    @State private var searchText = ""
+
+    static let hubFooterText = "Changes here affect Kudos, not your AO3 account"
+    static let hubFooterAccessibilityValue = "These settings are stored on this device only and are never sent to AO3."
+
+    private var filteredGroups: [SettingsHubGroup] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if query.isEmpty {
+            return SettingsRoute.hubGroups
+        }
+        let currentInputs = inputs
+        return SettingsRoute.hubGroups.compactMap { group in
+            let matching = group.routes.filter { route in
+                route.matches(query: query, currentValue: SettingsHubValue.row(route, currentInputs))
+            }
+            return matching.isEmpty ? nil : SettingsHubGroup(title: group.title, routes: matching)
+        }
+    }
 
     var body: some View {
         let inputs = self.inputs
         List {
-            ForEach(Array(SettingsRoute.hubGroups.enumerated()), id: \.element.id) { _, group in
-                Section(group.title) {
-                    // One `List` row per link: in one row, a tap fires every link.
-                    ForEach(Array(group.routes.enumerated()), id: \.element) { index, route in
+            ForEach(filteredGroups) { group in
+                Section {
+                    ForEach(group.routes, id: \.self) { route in
                         let value = SettingsHubValue.row(route, inputs)
-                        SubjectFormRow(label: route.title, value: value, showsDisclosure: true)
-                            .subjectRowNavigation(to: route, accessibilityLabel: route.title)
-                            .panelSegment(index, of: group.routes.count, gutter: SubjectMetrics.accountGutter)
+                        NavigationLink(value: route) {
+                            SettingsHubRow(route: route, value: value)
+                        }
+                    }
+                } header: {
+                    Text(group.title)
+                } footer: {
+                    if group.id == SettingsRoute.hubGroups.first?.id {
+                        Text(Self.hubFooterText)
+                            .accessibilityLabel(Self.hubFooterText)
+                            .accessibilityValue(Self.hubFooterAccessibilityValue)
                     }
                 }
             }
+            .appThemedRows()
         }
-        .cardList()
-        // 1ab's rows are 11×14 around a 15pt line (~41pt); the List's own
-        // minimum row height held every row at ~52 (L3-B10-1).
-        .environment(\.defaultMinListRowHeight, 0)
-        .subjectScreenWash(title: "Settings", palette: themeManager.scopePalette)
+        #if os(iOS)
+        .listStyle(.insetGrouped)
+        .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search")
+        .navigationBarTitleDisplayMode(.inline)
+        #else
+        .searchable(text: $searchText, prompt: "Search")
+        #endif
+        .navigationTitle("Settings")
+        .appThemedScroll()
+        .overlay {
+            let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+            if filteredGroups.isEmpty && !query.isEmpty {
+                ContentUnavailableView.search(text: query)
+            }
+        }
         // Sync can be connected or dropped on its page; re-read on the way back.
         .onAppear { folderSyncStatus = FolderSyncService.snapshot() }
     }
@@ -63,6 +99,59 @@ struct SettingsHubView: View {
             folderSync: folderSyncStatus,
             auth: auth.status
         )
+    }
+}
+
+/// A grouped Settings hub row with a 29 pt coloured icon tile and value label.
+struct SettingsHubRow: View {
+    let route: SettingsRoute
+    let value: String
+
+    @Environment(ThemeManager.self) private var themeManager
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            HStack(alignment: .top, spacing: 12) {
+                SettingsIconTile(
+                    color: route.iconTileColor(accent: themeManager.effectiveTint),
+                    systemImage: route.iconTileSystemImage
+                )
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(route.title)
+                        .font(.body)
+                        .foregroundStyle(.primary)
+                    if !value.isEmpty {
+                        Text(value)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(route.title)
+            .accessibilityValue(value)
+        } else {
+            HStack(spacing: 12) {
+                SettingsIconTile(
+                    color: route.iconTileColor(accent: themeManager.effectiveTint),
+                    systemImage: route.iconTileSystemImage
+                )
+                Text(route.title)
+                    .font(.body)
+                    .foregroundStyle(.primary)
+                Spacer()
+                if !value.isEmpty {
+                    Text(value)
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(route.title)
+            .accessibilityValue(value)
+        }
     }
 }
 

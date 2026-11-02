@@ -156,7 +156,10 @@ struct EPUBImportSettingsSection: View {
     var body: some View {
         Section {
             Button(action: onImport) {
-                Label("Import Files", systemImage: "doc.badge.plus")
+                HStack(spacing: 12) {
+                    SettingsIconTile(color: Color(hex: "#AF52DE") ?? .purple, systemImage: "doc.badge.plus")
+                    Text("Import Files")
+                }
             }
             .disabled(isImporting)
             .accessibilityLabel("Import files")
