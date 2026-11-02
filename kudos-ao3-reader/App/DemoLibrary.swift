@@ -350,7 +350,7 @@ struct DebugPresented: Hashable, Identifiable {
 
 /// Simulator-only: `-KudosDebugRoute <route>` opens a screen at launch for
 /// design review. `library`, `browse`, `account`, `search`,
-/// `section:<LibrarySectionKind>`, and on Home's stack `queues`,
+/// `section:<LibrarySectionKind>`, and on Home `home:<section>` or its stack `queues`,
 /// `queue:<name>`, `queue-details:<name>`. `shot:<name>` is an A82 screen:
 /// the same page route, plus the sheet or child page named in `DebugShots`.
 @MainActor
@@ -387,6 +387,12 @@ enum DebugLaunchRoute {
     /// The page an existing helper should open. A shot uses its mapped route;
     /// every other launch is unchanged.
     static var pageRoute: String? { shot?.route ?? value }
+
+    /// Scrolls Home to a named section for design-review screenshots.
+    static var homeAnchor: String? {
+        guard let pageRoute, pageRoute.hasPrefix("home:") else { return nil }
+        return String(pageRoute.dropFirst("home:".count))
+    }
 
     /// `-KudosDebugManageRow <label>`, or the row a shot names.
     static var manageRow: String? {
@@ -476,7 +482,7 @@ enum DebugLaunchRoute {
 
     static func applyTab(_ router: AppRouter) {
         guard let value = pageRoute else { return }
-        if value == "queues" || homePrefixRoutes.contains(where: value.hasPrefix) {
+        if value == "queues" || value.hasPrefix("home:") || homePrefixRoutes.contains(where: value.hasPrefix) {
             router.selection = .home
         } else if libraryRoutes.contains(where: value.hasPrefix) {
             router.selection = .library

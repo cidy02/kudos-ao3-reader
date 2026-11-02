@@ -8,13 +8,10 @@ import UIKit
 import AppKit
 #endif
 
-/// The Home tab: a personal, Books-style dashboard. Every section is a collapsible
-/// horizontal card carousel with a `>` chevron that opens its full vertical list.
-/// Tapping a local card opens the reader; long-press opens management actions,
-/// including Work Details. Remote cards still tap through to Work Details.
-/// Sections, in order: Resume (hero+strip), Reading Queues, a shelf per
-/// collection flagged Show on Home (`HomeCollectionShelves`), Recently Updated,
-/// Subscriptions.
+/// The Home tab: a personal launchpad. Tapping a local work opens the reader;
+/// long-press opens its management actions, including Work Details.
+/// Sections, in order: weekly stats, Resume, Reading Now, New Chapters, Reading
+/// Queues, collections flagged Show on Home, then Subscriptions.
 struct HomeView: View { // swiftlint:disable:this type_body_length
     @Environment(\.modelContext) private var context
     @Environment(AppRouter.self) private var router
@@ -22,20 +19,18 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
     @Environment(AO3InboxModel.self) private var inboxModel
     @Environment(PrivacyGate.self) private var gate
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(\.scenePhase) private var scenePhase
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
-    /// Same key `WorkCarouselSection` used to persist this strip's collapse
-    /// state, kept unchanged — only the toggle affordance moved (onto
-    /// "Continue Reading"), not the state itself.
-    @AppStorage("section.collapsed.home.readingNow.strip") private var stripCollapsed = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
     @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }, sort: \SavedWork.dateAdded, order: .reverse)
     private var works: [SavedWork]
     @Query(filter: #Predicate<ReadingQueue> { !$0.isPendingDeletion }, sort: \ReadingQueue.sortOrder)
     private var readingQueues: [ReadingQueue]
     @Query(filter: #Predicate<WorkCollection> { $0.showsOnHome && !$0.isPendingDeletion })
     private var homeCollections: [WorkCollection]
+    @Query(sort: \ReadingSession.startedAt, order: .reverse)
+    private var readingSessions: [ReadingSession]
+    @State private var readingStats = HomeReadingStats()
     @State private var path = NavigationPath()
     @Namespace private var cardZoomNamespace
     @State private var subscriptions: [AO3WorkSummary] = []
@@ -56,7 +51,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
     @State private var newQueueHue: Double?
 
     // Multi-select / bulk actions, mirroring LibraryView's carousel selection.
-    // Scoped to local works (Resume hero+strip + Recently Updated) — Subscriptions
+    // Scoped to local works (Resume, Reading Now and New Chapters) — Subscriptions
     // merges in remote entries via CanonicalWorkCoverCard, a different card type
     // not wired for selection here.
     @State private var isSelecting = false
@@ -151,35 +146,69 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
         hasSectionCache = true
     }
 
+    private var statisticsWorks: [SavedWork] {
+        HomeReadingStats.insightsWorks(from: works, gate: gate, hideMature: hideMature)
+    }
+
+    private var homeStatsRevision: String {
+        let newest = readingSessions.map(\.lastModifiedAt).max()?.timeIntervalSince1970 ?? 0
+        return HomeReadingStats.revisionKey(
+            sessionCount: readingSessions.count,
+            newestModified: newest,
+            now: Date(),
+            calendar: .current
+        )
+    }
+
+    private func updateReadingStats() {
+        let facts = ReadingLogService.facts(from: readingSessions, works: works)
+        readingStats = HomeReadingStats.calculate(facts: facts)
+    }
+
     var body: some View {
         NavigationStack(path: $path) {
             Group {
                 if hasSectionCache {
                     DashboardRegionHost {
-                        ScrollView {
-                            // 26pt between sections (Rules; 1b drew 22).
-                            VStack(alignment: .leading, spacing: SubjectMetrics.sectionSpacing) {
-                                resumeSection
-                                readingQueuesCarousel
-                                ForEach(HomeCollectionShelves.shelves(homeCollections)) { collection in
-                                    HomeCollectionShelf(
-                                        collection: collection,
-                                        works: HomeCollectionShelves.works(in: collection, visible: passesPrivacy),
-                                        onSeeAll: { path.append(collection) }
-                                    )
+                        ScrollViewReader { proxy in
+                            ScrollView {
+                                // 26pt between sections (Rules; 1b drew 22).
+                                VStack(alignment: .leading, spacing: SubjectMetrics.sectionSpacing) {
+                                    statsLine
+                                    resumeSection
+                                    newChaptersSection
+                                        .id("chapters")
+                                    readingQueuesSection
+                                        .id("queues")
+                                    let shelves = HomeCollectionShelves.shelves(homeCollections)
+                                    ForEach(Array(shelves.enumerated()), id: \.element.id) { index, collection in
+                                        HomeCollectionShelf(
+                                            collection: collection,
+                                            works: HomeCollectionShelves.works(in: collection, visible: passesPrivacy),
+                                            onSeeAll: { path.append(collection) }
+                                        )
+                                        .id(index == 0 ? "collections" : "collection:\(collection.id)")
+                                    }
+                                    subscriptionsSection
+                                        .id("subscriptions")
                                 }
-                                localSection(.recentlyUpdated, works: recentlyUpdated)
-                                subscriptionsSection
+                                .padding(.vertical, 12)
                             }
-                            .padding(.vertical, 12)
+                            .refreshable { await refreshHome() }
+                            .scrollAwayTopChrome()
+                            #if DEBUG
+                            .task {
+                                guard let anchor = DebugLaunchRoute.homeAnchor else { return }
+                                try? await Task.sleep(for: .seconds(1.5))
+                                proxy.scrollTo(anchor, anchor: .top)
+                            }
+                            #endif
                         }
-                        .refreshable { await refreshHome() }
-                        .scrollAwayTopChrome()
                     }
                 } else {
                     TabDashboardShell(
                         sectionTitles: [
-                            "Reading Now", "Reading Queues", "Recently Updated",
+                            "Reading Now", "New Chapters", "Reading Queues",
                             "Subscriptions"
                         ],
                         showsResumeHero: true
@@ -192,10 +221,13 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                 .toolbarTitleDisplayMode(.inlineLarge)
             #endif
                 .navigationDestination(for: SavedWork.self) { HomeWorkDestination(work: $0) }
+                .navigationDestination(for: ReadingInsightsDestination.self) { _ in
+                    ReadingInsightsView(works: statisticsWorks)
+                }
                 .navigationDestination(for: LocalWorkDestination.self) { destination in
                     LocalWorkDestinationView(destination: destination, onReaderOpen: markUpdateSeen)
                 }
-                // Still live for Recently Updated (`localSection` → path.append(kind)).
+                // Still live for New Chapters (`newChaptersSection` → path.append(kind)).
                 // Resume "See all" intentionally does NOT use this: it deep-links into
                 // Library via `router.showLibrarySection(.readingNow)` so the full list
                 // lives on Library's stack (Phase A contract). `.readingNow` remains a
@@ -240,6 +272,15 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                 .task(id: homeSectionsRevision) {
                     await Task.yield()
                     rebuildHomeSectionCache()
+                    updateReadingStats()
+                }
+                .task(id: homeStatsRevision) {
+                    updateReadingStats()
+                }
+                .onChange(of: scenePhase) { _, newPhase in
+                    if newPhase == .active {
+                        updateReadingStats()
+                    }
                 }
                 .task(id: auth.isLoggedIn) {
                     await Task.yield()
@@ -397,15 +438,40 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
 
     // MARK: Sections
 
+    private var statsLine: some View {
+        NavigationLink(value: ReadingInsightsDestination()) {
+            HStack(spacing: 4) {
+                (
+                    Text(readingStats.formattedDuration).fontWeight(.semibold).foregroundStyle(.primary)
+                    + Text(" this week · ").foregroundStyle(.secondary)
+                    + Text("\(readingStats.finishedCount)").fontWeight(.semibold).foregroundStyle(.primary)
+                    + Text(" finished · ").foregroundStyle(.secondary)
+                    + Text(readingStats.formattedStreak).fontWeight(.semibold).foregroundStyle(.primary)
+                    + Text(" streak").foregroundStyle(.secondary)
+                )
+                .font(.subheadline)
+                .fixedSize(horizontal: false, vertical: true)
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .dashboardLeadingRegion()
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(readingStats.accessibilityLabel)
+            .accessibilityHint("Opens reading insights")
+        }
+        .buttonStyle(.plain)
+    }
+
     private var resumeSection: some View {
         Group {
             if readingNow.isEmpty {
                 // Strong empty state (Synthesis v2): section chrome + CTAs, not a
                 // dead hero-shaped hole. Same header weight as other Home rows.
                 VStack(alignment: .leading, spacing: 11) {
-                    // "Continue Reading" — matches the title used above the hero
-                    // in the non-empty branch below, so the section doesn't
-                    // appear to rename itself depending on whether it has content.
                     SectionRuleHeader(title: "Continue Reading")
                         .dashboardLeadingRegion()
 
@@ -432,70 +498,54 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                     .dashboardLeadingRegion()
                 }
             } else {
-                // Hero = most recent; strip = next up to 4 (5 visible total).
-                // "See all" only when a 6th+ work exists beyond that window.
                 let heroWork = readingNow[0]
-                let stripWorks = Array(readingNow.dropFirst().prefix(4))
-
-                // 1b: 11pt from the header to the hero.
-                VStack(alignment: .leading, spacing: 11) {
-                    SectionRuleHeader(
-                        title: "Continue Reading",
-                        count: readingNow.count,
-                        isCollapsed: stripCollapsed,
-                        // The caret collapses the strip of next-up covers, not
-                        // the hero: the hero is the point of the section, and a
-                        // section that can hide its own subject is a section
-                        // with nothing left to show.
-                        onToggleCollapse: stripWorks.isEmpty ? nil : {
-                            withAnimationUnlessReduced(.snappy(duration: 0.22), reduceMotion: reduceMotion) {
-                                stripCollapsed.toggle()
-                            }
-                        },
-                        // Only once a sixth work exists beyond the five on
-                        // screen — otherwise "see all" leads to what you are
-                        // already looking at.
-                        onSeeAll: readingNow.count > 5
-                            ? { router.showLibrarySection(.readingNow, from: "Home") }
-                            : nil
+                let carouselWorks = Array(readingNow.dropFirst().prefix(3))
+                HomeResumeComposition(
+                    hasNext: !carouselWorks.isEmpty,
+                    nextSectionTitle: "Reading Now",
+                    nextSectionCount: readingNow.count,
+                    nextSectionVisibleCount: min(readingNow.count, 4),
+                    onSeeAll: { router.showLibrarySection(.readingNow, from: "Home") }
+                ) {
+                    HomeResumeHero(
+                        work: heroWork,
+                        isSelecting: isSelecting,
+                        isSelected: selection.contains(heroWork.id),
+                        onToggleSelection: { toggleSelection(heroWork) },
+                        onSelect: selectAction(for: heroWork),
+                        onPrimary: { path.append(LocalWorkDestination.reader(heroWork)) },
+                        // T-458: no entry starts speech, and macOS has no TTS.
+                        onReadAloud: { path.append(LocalWorkDestination.reader(heroWork)) }
                     )
-                    .dashboardLeadingRegion()
-
-                    HomeResumeComposition(hasNext: !stripWorks.isEmpty && !stripCollapsed) {
-                        HomeResumeHero(
-                            work: heroWork,
-                            isSelecting: isSelecting,
-                            isSelected: selection.contains(heroWork.id),
-                            onToggleSelection: { toggleSelection(heroWork) },
-                            onSelect: selectAction(for: heroWork),
-                            onPrimary: { path.append(LocalWorkDestination.reader(heroWork)) },
-                            // T-458: no entry starts speech, and macOS has no TTS.
-                            onReadAloud: { path.append(LocalWorkDestination.reader(heroWork)) }
-                        )
-                        .downloadDimmed(heroWork)
-                    } next: {
-                        ForEach(stripWorks) { work in
-                            if isSelecting {
+                    .downloadDimmed(heroWork)
+                } next: {
+                    ForEach(carouselWorks) { work in
+                        if isSelecting {
+                            SensitiveWorkCoverCard(
+                                work: work,
+                                footer: footer(.readingNow, work),
+                                progress: progress(.readingNow, work),
+                                isSelecting: true,
+                                isSelected: selection.contains(work.id),
+                                onToggleSelection: { toggleSelection(work) }
+                            )
+                            .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
+                        } else if gate.isBlurred(work, enabled: hideMature, mode: matureMode) {
+                            SensitiveWorkCoverCard(
+                                work: work,
+                                footer: footer(.readingNow, work),
+                                progress: progress(.readingNow, work)
+                            )
+                        } else {
+                            NavigationLink(value: LocalWorkDestination.reader(work)) {
                                 SensitiveWorkCoverCard(
                                     work: work,
                                     footer: footer(.readingNow, work),
-                                    progress: progress(.readingNow, work),
-                                    isSelecting: true,
-                                    isSelected: selection.contains(work.id),
-                                    onToggleSelection: { toggleSelection(work) }
+                                    progress: progress(.readingNow, work)
                                 )
-                                .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
-                            } else {
-                                NavigationLink(value: LocalWorkDestination.reader(work)) {
-                                    SensitiveWorkCoverCard(
-                                        work: work,
-                                        footer: footer(.readingNow, work),
-                                        progress: progress(.readingNow, work)
-                                    )
-                                }
-                                .buttonStyle(.plain)
-                                .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
                             }
+                            .buttonStyle(.plain)
+                            .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
                         }
                     }
                 }
@@ -503,128 +553,191 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
         }
     }
 
-    /// Moved here from the Library dashboard — Reading Queues sits right under
-    /// Continue Reading rather than several sections down Library, since a queue
-    /// is itself a reading plan (what to read next), the same territory as the
-    /// hero above it.
-    private var readingQueuesCarousel: some View {
-        let customQueues = readingQueues
-            .filter { $0.kind == .custom }
-            .sorted { $0.sortOrder < $1.sortOrder }
-        // The "New queue" card that led this shelf is the toolbar's "+" now
-        // (owner, 2026-10-01: global actions live in the top-right chrome).
-        return WorkCarouselSection(
-            title: "Reading Queues",
-            collapseKey: "home.readingQueues",
-            hasItems: !customQueues.isEmpty,
-            itemCount: customQueues.count,
-            cardSpacing: ReadingQueueCard.spacing,
-            cardWidth: ReadingQueueCard.width,
-            visibleCount: min(customQueues.count, 12),
-            actionTitle: "Organise",
-            onSeeAll: !customQueues.isEmpty
-                ? { path.append(AllReadingQueuesDestination(initialQueueID: nil)) }
-                : nil
-        ) {
-            ForEach(customQueues.prefix(12)) { queue in
-                NavigationLink(value: AllReadingQueuesDestination(initialQueueID: queue.id)) {
-                    ReadingQueueCard(queue: queue)
+    private var newChaptersSection: some View {
+        let sectionWorks = recentlyUpdated
+        let visibleWorks = Array(sectionWorks.prefix(3))
+        return VStack(alignment: .leading, spacing: 6) {
+            SectionRuleHeader(
+                title: "New Chapters",
+                count: sectionWorks.count,
+                actionTitle: sectionWorks.count > 3 ? "See All" : nil,
+                onSeeAll: sectionWorks.isEmpty ? nil : { path.append(HomeSectionKind.recentlyUpdated) }
+            )
+            .dashboardLeadingRegion()
+
+            if sectionWorks.isEmpty {
+                SectionEmptyState(
+                    message: HomeSectionKind.recentlyUpdated.emptyMessage,
+                    systemImage: HomeSectionKind.recentlyUpdated.emptyIcon
+                )
+                .padding(.horizontal, 16)
+                .dashboardLeadingRegion()
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(Array(visibleWorks.enumerated()), id: \.element.id) { index, work in
+                        if index > 0 {
+                            Divider()
+                                .padding(.leading, 79)
+                        }
+                        HomeNewChapterRow(
+                            work: work,
+                            isSelecting: isSelecting,
+                            isSelected: selection.contains(work.id),
+                            onToggleSelection: { toggleSelection(work) },
+                            onSelect: selectAction(for: work)
+                        )
+                    }
+
+                    if sectionWorks.count > 3 {
+                        Divider()
+                            .padding(.leading, 79)
+                        ListMoreRow(
+                            count: sectionWorks.count - 3,
+                            sectionTitle: "New Chapters",
+                            leadingInset: 79,
+                            action: { path.append(HomeSectionKind.recentlyUpdated) }
+                        )
+                    }
                 }
-                .buttonStyle(.plain)
-                .modifier(QueueCardMenu(queue: queue))
+                .dashboardLeadingRegion()
             }
-        } emptyState: {
-            Text("Use + above to make a reading queue and plan what you want to read next.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
         }
     }
 
-    private func localSection(_ kind: HomeSectionKind, works sectionWorks: [SavedWork]) -> some View {
-        WorkCarouselSection(
-            title: kind.title,
-            collapseKey: "home.\(kind.rawValue)",
-            hasItems: !sectionWorks.isEmpty,
-            itemCount: sectionWorks.isEmpty ? nil : sectionWorks.count,
-            visibleCount: min(sectionWorks.count, 12),
-            onSeeAll: !sectionWorks.isEmpty ? { path.append(kind) } : nil
-        ) {
-            ForEach(sectionWorks.prefix(12)) { work in
-                if isSelecting {
-                    SensitiveWorkCoverCard(
-                        work: work,
-                        footer: footer(kind, work),
-                        progress: progress(kind, work),
-                        isSelecting: true,
-                        isSelected: selection.contains(work.id),
-                        onToggleSelection: { toggleSelection(work) }
-                    )
-                    .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
-                } else if gate.isBlurred(work, enabled: hideMature, mode: matureMode) {
-                    // A blurred cover is its own button, and its tap reveals. Inside a link to
-                    // the reader the same tap could open the work it was hiding.
-                    SensitiveWorkCoverCard(
-                        work: work,
-                        footer: footer(kind, work),
-                        progress: progress(kind, work)
-                    )
-                } else {
-                    NavigationLink(value: LocalWorkDestination.reader(work)) {
-                        SensitiveWorkCoverCard(
-                            work: work,
-                            footer: footer(kind, work),
-                            progress: progress(kind, work)
+    private var readingQueuesSection: some View {
+        let customQueues = readingQueues
+            .filter { $0.kind == .custom }
+            .sorted { $0.sortOrder < $1.sortOrder }
+        let visibleQueues = Array(customQueues.prefix(3))
+
+        return VStack(alignment: .leading, spacing: 6) {
+            SectionRuleHeader(
+                title: "Reading Queues",
+                count: customQueues.count,
+                actionTitle: customQueues.count > 3 ? "See All" : "Organise",
+                onSeeAll: !customQueues.isEmpty
+                    ? { path.append(AllReadingQueuesDestination(initialQueueID: nil)) }
+                    : nil
+            )
+            .dashboardLeadingRegion()
+
+            if customQueues.isEmpty {
+                SectionEmptyState(message: "No reading queues yet.", systemImage: "rectangle.stack")
+                    .padding(.horizontal, 16)
+                    .dashboardLeadingRegion()
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(Array(visibleQueues.enumerated()), id: \.element.id) { index, queue in
+                        if index > 0 {
+                            Divider()
+                                .padding(.leading, 80)
+                        }
+                        HomeQueueRow(
+                            queue: queue,
+                            onOpenQueue: { path.append(AllReadingQueuesDestination(initialQueueID: queue.id)) },
+                            onStartWork: { path.append(LocalWorkDestination.reader($0)) }
                         )
                     }
-                    .buttonStyle(.plain)
-                    .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
+
+                    if customQueues.count > 3 {
+                        Divider()
+                            .padding(.leading, 80)
+                        ListMoreRow(
+                            count: customQueues.count - 3,
+                            sectionTitle: "Reading Queues",
+                            leadingInset: 80,
+                            action: { path.append(AllReadingQueuesDestination(initialQueueID: nil)) }
+                        )
+                    }
                 }
+                .dashboardLeadingRegion()
             }
-        } emptyState: {
-            SectionEmptyState(message: kind.emptyMessage, systemImage: kind.emptyIcon)
         }
     }
 
     private var subscriptionsSection: some View {
-        // Show cover skeletons only while the request is in flight and we have nothing
-        // yet; once it finishes (empty or not) the real cards / empty state take over.
         let showSkeleton = isLoadingSubscriptions && subscriptions.isEmpty
-        // A subscribed work that's also saved locally renders once, as its richer
-        // local card, in AO3's own subscription order. Matching only against
-        // privacy-visible works so a hidden Mature work isn't leaked via its
-        // local card here.
         let merged = CanonicalWorkMerge.remoteLed(
             remote: subscriptions,
             localLibrary: works.filter(passesPrivacy)
         )
-        return WorkCarouselSection(
-            title: "Subscriptions",
-            collapseKey: "home.subscriptions",
-            hasItems: !merged.isEmpty || showSkeleton,
-            // Suppressed while the skeletons are up: a count printed beside a
-            // loading shelf would be the previous fetch's, not this one's.
-            // Only when page 1 was the whole list: see `HomeSubscriptionsCount`.
-            itemCount: showSkeleton
-                ? nil
-                : HomeSubscriptionsCount.itemCount(shown: merged.count, recorded: subscriptionsListCount),
-            visibleCount: min(merged.count, 12),
-            onSeeAll: merged.isEmpty ? nil : { path.append(SubscriptionsRoute()) }
-        ) {
-            if showSkeleton {
-                ForEach(0 ..< 6, id: \.self) { _ in WorkCoverCardSkeleton() }
-            } else {
-                ForEach(merged.prefix(12)) { entry in
-                    CanonicalWorkCoverCard(entry: entry)
-                }
-            }
-        } emptyState: {
-            SectionEmptyState(
-                message: HomeSubscriptionsCopy.emptyMessage(
-                    isLoggedIn: auth.isLoggedIn,
-                    loadFailed: subscriptionsLoadFailed
-                ),
-                systemImage: "bell"
+        let totalCount = showSkeleton
+            ? nil
+            : HomeSubscriptionsCount.itemCount(shown: merged.count, recorded: subscriptionsListCount)
+        let visibleRows = Array(merged.prefix(2))
+
+        return VStack(alignment: .leading, spacing: 6) {
+            SectionRuleHeader(
+                title: "Subscriptions",
+                count: totalCount,
+                actionTitle: merged.count > 2 ? "See All" : nil,
+                onSeeAll: merged.isEmpty ? nil : { path.append(SubscriptionsRoute()) }
             )
+            .dashboardLeadingRegion()
+
+            if showSkeleton {
+                VStack(spacing: 8) {
+                    ForEach(0 ..< 2, id: \.self) { _ in
+                        AO3WorkRowSkeleton()
+                            .padding(.horizontal, 16)
+                    }
+                }
+                .dashboardLeadingRegion()
+            } else if merged.isEmpty {
+                SectionEmptyState(
+                    message: HomeSubscriptionsCopy.emptyMessage(
+                        isLoggedIn: auth.isLoggedIn,
+                        loadFailed: subscriptionsLoadFailed
+                    ),
+                    systemImage: "bell"
+                )
+                .padding(.horizontal, 16)
+                .dashboardLeadingRegion()
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(Array(visibleRows.enumerated()), id: \.element.id) { index, entry in
+                        if index > 0 {
+                            Divider()
+                                .padding(.leading, 16)
+                        }
+                        subscriptionRow(entry)
+                    }
+
+                    if merged.count > 2 {
+                        Divider()
+                            .padding(.leading, 16)
+                        ListMoreRow(
+                            count: merged.count - 2,
+                            sectionTitle: "Subscriptions",
+                            leadingInset: 16,
+                            action: { path.append(SubscriptionsRoute()) }
+                        )
+                    }
+                }
+                .dashboardLeadingRegion()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func subscriptionRow(_ entry: CanonicalWork) -> some View {
+        if let work = entry.local {
+            SensitiveWorkRow(
+                work: work,
+                openMode: .reader,
+                presentation: .ledger,
+                showsSeparator: false,
+                usesInlineNavigation: true,
+                contentInsets: EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16)
+            )
+        } else if let remote = entry.remote {
+            EnrichingAO3WorkRow(
+                work: remote,
+                presentation: .searchLedger,
+                showsSeparator: false
+            )
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
         }
     }
 
@@ -679,8 +792,8 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
 
     private var visibleHomeWorks: [SavedWork] {
         unique(
-            Array(readingNow.prefix(12))
-                + Array(recentlyUpdated.prefix(12))
+            Array(readingNow.prefix(4))
+                + Array(recentlyUpdated.prefix(3))
         )
     }
 
@@ -786,6 +899,344 @@ private struct HomeProfileAvatar: View {
             Image(systemName: "person.crop.circle")
                 .font(.system(size: 27, weight: .regular))
                 .foregroundStyle(.primary)
+        }
+    }
+}
+
+private struct HomeNewChapterRow: View {
+    let work: SavedWork
+    var isSelecting: Bool = false
+    var isSelected: Bool = false
+    var onToggleSelection: (() -> Void)?
+    var onSelect: (() -> Void)?
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(PrivacyGate.self) private var gate
+    @AppStorage("hideMatureContent") private var hideMature = true
+    @AppStorage("matureContentMode") private var mode: MaturePrivacyMode = .obscure
+
+    private var blurred: Bool {
+        gate.isBlurred(work, enabled: hideMature, mode: mode)
+    }
+
+    private var newCount: Int {
+        max(0, work.postedChapterCount - work.knownChapterCount)
+    }
+
+    private var metaText: String {
+        let author = work.author.trimmingCharacters(in: .whitespacesAndNewlines)
+        let fandom = work.workFandoms.first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .map(FandomDisplayName.bareTitle)
+        let storedDate = work.dateUpdated.trimmingCharacters(in: .whitespacesAndNewlines)
+        let when = storedDate.isEmpty ? nil : WorkStat.displayDate(storedDate)
+        return [author.isEmpty ? nil : author, fandom, when]
+            .compactMap { $0 }
+            .joined(separator: " · ")
+    }
+
+    private var chapterBarItems: [ChapterBarItem] {
+        ChapterBarModel.items(
+            chapters: work.chapters,
+            progress: work.readingProgress,
+            isFinished: work.isFinished,
+            weights: nil,
+            newChapterCount: newCount
+        )
+    }
+
+    var body: some View {
+        Group {
+            if blurred {
+                let content = rowContent
+                    .blur(radius: 6)
+                    .overlay {
+                        if !isSelecting { MatureRevealCapsule() }
+                    }
+                    .contentShape(Rectangle())
+                if isSelecting {
+                    Button { onToggleSelection?() } label: {
+                        content.overlay(alignment: .leading) {
+                            WorkSelectionBubble(isSelected: isSelected)
+                                .padding(.leading, 16)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Hidden mature work")
+                    .accessibilityValue(isSelected ? "Selected" : "Not selected")
+                    .accessibilityHint("Double-tap to \(isSelected ? "deselect" : "select") this work.")
+                } else {
+                    Button { gate.reveal(work) } label: { content }
+                        .buttonStyle(.plain)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("Hidden mature work")
+                        .accessibilityHint("Activate to reveal.")
+                }
+            } else if isSelecting {
+                Button { onToggleSelection?() } label: { rowContent }
+                    .buttonStyle(.plain)
+                    .localWorkContextMenu(work: work, onSelect: onSelect)
+                    .accessibilityLabel(work.title)
+                    .accessibilityValue(isSelected ? "Selected" : "Not selected")
+                    .accessibilityHint("Double-tap to \(isSelected ? "deselect" : "select") this work.")
+                    .accessibilityAddTraits(isSelected ? .isSelected : [])
+            } else {
+                NavigationLink(value: LocalWorkDestination.reader(work)) {
+                    rowContent
+                }
+                .buttonStyle(.plain)
+                .localWorkContextMenu(work: work, onSelect: onSelect)
+            }
+        }
+        .downloadDimmed(work)
+    }
+
+    private var rowContent: some View {
+        HStack(alignment: .center, spacing: 12) {
+            if isSelecting {
+                WorkSelectionBubble(isSelected: isSelected)
+                    .opacity(blurred ? 0 : 1)
+            }
+
+            WorkStatusIconGrid(
+                rating: work.rating.isEmpty ? nil : work.rating,
+                categories: work.workCategories,
+                warnings: work.workWarnings,
+                completion: work.completionStatus,
+                tileSize: 24,
+                announcesToVoiceOver: true,
+                arrangement: .grid,
+                backed: true
+            )
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(work.title)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+
+                ChapterBars(
+                    items: chapterBarItems,
+                    scale: .row,
+                    height: 16
+                )
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                Text(metaText)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+
+                if let preservation = work.preservationState.badgeLabel {
+                    WorkStateBadge(text: preservation, symbol: work.preservationState.badgeSymbol)
+                        .font(.caption2)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if newCount > 0 {
+                Text("+\(newCount)")
+                    .font(.caption2.monospacedDigit().weight(.bold))
+                    .foregroundStyle(.white)
+                    .frame(minHeight: 16)
+                    .padding(.horizontal, 6)
+                    .background(.accentFill, in: Capsule())
+                    .accessibilityLabel("\(newCount) new chapter\(newCount == 1 ? "" : "s")")
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+    }
+}
+
+private struct HomeQueueRow: View {
+    let queue: ReadingQueue
+    let onOpenQueue: () -> Void
+    let onStartWork: (SavedWork) -> Void
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(PrivacyGate.self) private var gate
+    @Environment(ThemeManager.self) private var themeManager
+    @AppStorage("hideMatureContent") private var hideMature = true
+
+    private var queuedWorks: [SavedWork] {
+        ReadingQueueService.orderedWorks(in: queue)
+    }
+
+    private var visibleQueuedWorks: [SavedWork] {
+        queuedWorks.filter { !gate.isConcealed($0, enabled: hideMature) }
+    }
+
+    private var upNextWork: SavedWork? {
+        ReadingQueueFacts.upNext(in: visibleQueuedWorks).upNext
+    }
+
+    private var worksBehind: [SavedWork] {
+        let split = ReadingQueueFacts.upNext(in: visibleQueuedWorks)
+        var ordered = split.inLine
+        if let upNext = split.upNext { ordered.insert(upNext, at: 0) }
+        return Array(ordered.prefix(CoverStackLayout.maxBacks))
+    }
+
+    private var leftCount: Int {
+        queuedWorks.filter { !$0.isFinished }.count
+    }
+
+    private var isResume: Bool {
+        guard let upNextWork else { return false }
+        return (upNextWork.readingProgress ?? 0) > 0 || upNextWork.readingState == .inProgress
+    }
+
+    private var actionTitle: String {
+        isResume ? "Resume" : "Start"
+    }
+
+    private var metaLine: String {
+        guard let work = upNextWork else { return "No works" }
+        var parts: [String] = []
+        let author = work.author.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !author.isEmpty { parts.append(author) }
+        if isResume {
+            if let progress = work.readingProgress, progress > 0 {
+                parts.append(WorkCoverMetadata.reading(chapters: work.chapters, progress: progress))
+            } else if !work.chapters.isEmpty {
+                parts.append("Ch \(work.chapters)")
+            }
+        } else {
+            if work.wordCount > 0 {
+                parts.append("\(work.wordCount.formatted()) words")
+                if let estimate = ReadingQueueFacts.readingTimeEstimate(wordCount: work.wordCount) {
+                    parts.append(estimate)
+                }
+            }
+            if !work.hasEPUB {
+                parts.append("not downloaded")
+            }
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private var palette: SubjectPalette {
+        themeManager.appTheme.subjectPalette(hue: queue.displayHue, pickedHex: queue.colorHex)
+    }
+
+    private var queueProgress: ReadingQueueFacts.Progress {
+        ReadingQueueFacts.progress(of: queuedWorks.map(\.readingState))
+    }
+
+    private var queueFills: [Double] {
+        queuedWorks.map {
+            ReadingQueueFacts.segmentFill(state: $0.readingState, progress: $0.readingProgress)
+        }
+    }
+
+    var body: some View {
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .top, spacing: 12) {
+                        coverButton
+                        detailsButton
+                    }
+                    if upNextWork != nil {
+                        HStack {
+                            Spacer(minLength: 0)
+                            startButton
+                        }
+                    }
+                }
+            } else {
+                HStack(alignment: .center, spacing: 12) {
+                    coverButton
+                    detailsButton
+                    startButton
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .modifier(QueueCardMenu(queue: queue))
+    }
+
+    private var coverButton: some View {
+        Button(action: onOpenQueue) {
+            StackedWorkCover(
+                kind: .queue,
+                name: queue.displayName,
+                hue: queue.displayHue,
+                pickedHex: queue.colorHex,
+                backs: worksBehind,
+                size: CGSize(width: 52, height: 52)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityHidden(true)
+    }
+
+    private var detailsButton: some View {
+        Button(action: onOpenQueue) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(queue.displayName)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(palette.accent)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+
+                Text(ReadingQueueFacts.planFacts(for: queuedWorks))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+
+                if let work = upNextWork {
+                    Text(work.title)
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+
+                    HStack(spacing: 8) {
+                        QueueProgressStrip(
+                            progress: queueProgress,
+                            palette: palette,
+                            fills: queueFills,
+                            height: 4,
+                            gap: 3
+                        )
+                        .frame(maxWidth: .infinity)
+
+                        Text("\(leftCount) to go")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    .padding(.vertical, 2)
+
+                    Text(metaLine)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                } else {
+                    Text(queuedWorks.isEmpty ? "Empty queue" : "Works hidden")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private var startButton: some View {
+        if let work = upNextWork {
+            Button(action: { onStartWork(work) }) {
+                Text(actionTitle)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.accentColor)
+                    .padding(.horizontal, 14)
+                    .frame(minHeight: 34)
+                    .background(Color.accentColor.opacity(0.10), in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("\(actionTitle) \(work.title)")
         }
     }
 }

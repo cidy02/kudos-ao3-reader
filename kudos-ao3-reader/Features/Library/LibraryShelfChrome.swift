@@ -175,12 +175,8 @@ struct LibraryCollapsingShelf<Content: View>: View {
     var onSeeAll: (() -> Void)?
     @ViewBuilder var content: () -> Content
 
-    @AppStorage private var collapsed: Bool
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
     init(
         title: String,
-        collapseKey: String,
         count: Int,
         countText: String? = nil,
         onSeeAll: (() -> Void)? = nil,
@@ -191,7 +187,6 @@ struct LibraryCollapsingShelf<Content: View>: View {
         self.countText = countText
         self.onSeeAll = onSeeAll
         self.content = content
-        _collapsed = AppStorage(wrappedValue: false, "section.collapsed.\(collapseKey)")
     }
 
     var body: some View {
@@ -200,17 +195,9 @@ struct LibraryCollapsingShelf<Content: View>: View {
                 title: title,
                 count: count,
                 countText: countText,
-                isCollapsed: collapsed,
-                onToggleCollapse: {
-                    withAnimationUnlessReduced(.snappy(duration: 0.22), reduceMotion: reduceMotion) {
-                        collapsed.toggle()
-                    }
-                },
                 onSeeAll: onSeeAll
             )
-            if !collapsed {
-                content()
-            }
+            content()
         }
     }
 }

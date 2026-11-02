@@ -500,7 +500,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         let sectionWorks = cachedWorks(for: kind)
         return WorkCarouselSection(
             title: title,
-            collapseKey: "library.\(kind.rawValue)",
             hasItems: !sectionWorks.isEmpty,
             itemCount: sectionWorks.count,
             countText: countText,
@@ -526,7 +525,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         let kind = LibrarySectionKind.collections
         return WorkCarouselSection(
             title: kind.title,
-            collapseKey: "library.\(kind.rawValue)",
             hasItems: !collections.isEmpty,
             itemCount: collections.count,
             cardSpacing: CarouselCardMetrics.coverStackSpacing,
@@ -695,7 +693,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         let sectionWorks = cachedWorks(for: kind)
         return LibraryCollapsingShelf(
             title: shelf.title,
-            collapseKey: "library.\(kind.rawValue)",
             count: sectionWorks.count,
             countText: downloadedCountText(for: shelf),
             onSeeAll: sectionWorks.isEmpty
@@ -720,7 +717,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         let sectionWorks = importedCache
         return LibraryCollapsingShelf(
             title: LibraryShelfID.imported.title,
-            collapseKey: "library.imported",
             count: sectionWorks.count,
             onSeeAll: sectionWorks.isEmpty
                 ? nil
@@ -779,7 +775,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     private var collectionsList: some View {
         LibraryCollapsingShelf(
             title: LibraryShelfID.collections.title,
-            collapseKey: "library.\(LibrarySectionKind.collections.rawValue)",
             count: collections.count,
             onSeeAll: collections.isEmpty ? nil : { path.append(AllCollectionsDestination()) }
         ) {
@@ -815,7 +810,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     private var queuesCarousel: some View {
         WorkCarouselSection(
             title: LibraryShelfID.queues.title,
-            collapseKey: "library.queues",
             hasItems: !shelfQueues.isEmpty,
             itemCount: shelfQueues.count,
             cardSpacing: ReadingQueueCard.spacing,
@@ -847,7 +841,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     private var queuesList: some View {
         LibraryCollapsingShelf(
             title: LibraryShelfID.queues.title,
-            collapseKey: "library.queues",
             count: shelfQueues.count,
             onSeeAll: { path.append(AllReadingQueuesDestination(initialQueueID: nil)) }
         ) {

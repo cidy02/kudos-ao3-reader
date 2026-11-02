@@ -650,8 +650,7 @@ struct SectionRuleHeader: View {
     /// Custom link title when everything fits or a specific action is provided, e.g. "Organise", "Edit".
     /// When nil and `onSeeAll` is non-nil, defaults to "See All".
     var actionTitle: String?
-    var isCollapsed: Bool = false
-    var onToggleCollapse: (() -> Void)?
+    var isPinned: Bool = false
     var onSeeAll: (() -> Void)?
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -698,6 +697,13 @@ struct SectionRuleHeader: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+            }
+
+            if isPinned {
+                Image(systemName: "pin.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("Pinned to Home")
             }
 
             if let note {

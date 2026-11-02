@@ -13,6 +13,38 @@ struct ReadingQueueFactsTests {
             == "8 works · about 9 h 40 min · 6 offline")
         #expect(ReadingQueueFacts.rowDetail(workCount: 5, totalWordCount: 49_000, offlineCount: 5)
             == "5 works · about 4 h 5 min · all offline")
+        #expect(ReadingQueueFacts.readingTimeEstimate(wordCount: 6_700) == "about 35 min")
+        #expect(ReadingQueueFacts.readingTimeEstimate(wordCount: 0) == nil)
+    }
+
+    @Test func planFactsComputesWorkCountTotalWordsAndOfflineFromSavedWorks() {
+        // 0 works
+        #expect(ReadingQueueFacts.planFacts(for: []) == "No works yet")
+
+        // 8 works, total 116,000 words, 6 offline
+        let works: [SavedWork] = (1 ... 8).map { i in
+            let work = SavedWork(title: "Work \(i)", author: "Author")
+            work.wordCount = 14_500 // 8 * 14_500 = 116_000
+            work.hasEPUB = i <= 6
+            return work
+        }
+        let detail = ReadingQueueFacts.planFacts(for: works, fileExists: { _ in true })
+        #expect(detail == "8 works · about 9 h 40 min · 6 offline")
+
+        // 5 works, total 49,000 words, all 5 offline
+        let allOfflineWorks: [SavedWork] = (1 ... 5).map { i in
+            let work = SavedWork(title: "Work \(i)", author: "Author")
+            work.wordCount = 9_800 // 5 * 9_800 = 49_000
+            work.hasEPUB = true
+            return work
+        }
+        let allOfflineDetail = ReadingQueueFacts.planFacts(for: allOfflineWorks, fileExists: { _ in true })
+        #expect(allOfflineDetail == "5 works · about 4 h 5 min · all offline")
+
+        // If one work has missing word count (0), estimate is withheld
+        works[0].wordCount = 0
+        let withoutEstimate = ReadingQueueFacts.planFacts(for: works, fileExists: { _ in true })
+        #expect(withoutEstimate == "8 works · 6 offline")
     }
 
     @Test func segmentFillFollowsEachWorksOwnProgress() {
