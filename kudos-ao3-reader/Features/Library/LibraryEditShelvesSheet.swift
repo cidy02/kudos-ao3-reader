@@ -44,7 +44,7 @@ struct LibraryEditShelvesSheet: View {
 
                 Section {
                     HStack(alignment: .center, spacing: 12) {
-                        allWorksGlyph
+                        LibraryShelfGlyph.allWorks()
                         VStack(alignment: .leading, spacing: 2) {
                             Text("All Works")
                                 .fixedSize(horizontal: false, vertical: true)
@@ -152,18 +152,5 @@ struct LibraryEditShelvesSheet: View {
 
     private func moveButtons(from offsets: IndexSet, to destination: Int) {
         arrangement = arrangement.movingButtons(from: offsets, to: destination)
-    }
-
-    /// All Works uses the same grey grid glyph the board gives it. It is not a
-    /// shelf, so it has no add or remove.
-    private var allWorksGlyph: some View {
-        Image(systemName: "square.grid.2x2.fill")
-            .font(.system(size: 14, weight: .semibold))
-            .foregroundStyle(.white)
-            .frame(width: 30, height: 30)
-            .background {
-                Circle().fill(Color(hex: "#6C6C70") ?? Color.gray)
-            }
-            .accessibilityHidden(true)
     }
 }

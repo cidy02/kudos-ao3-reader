@@ -143,6 +143,69 @@ struct LibraryPageArrangementTests {
         #expect(LibraryPageArrangement.stored(in: destination) == custom)
     }
 
+    @Test func shelfIdentitiesMatchRemindersSpec() {
+        // T-498: Want to Read blue bookmark, Reading Now orange book,
+        // Finished green check, Downloaded indigo arrow, Favourites yellow star,
+        // Queues purple bars; History, All Works and Imported grey.
+        #expect(LibraryShelfID.wantToRead.systemImage == "bookmark.fill")
+        #expect(LibraryShelfID.wantToRead.identityHex == "#1E63C8")
+
+        #expect(LibraryShelfID.readingNow.systemImage == "book.fill")
+        #expect(LibraryShelfID.readingNow.identityHex == "#E07000")
+
+        #expect(LibraryShelfID.finished.systemImage == "checkmark")
+        #expect(LibraryShelfID.finished.identityHex == "#2F8F3A")
+
+        #expect(LibraryShelfID.downloaded.systemImage == "arrow.down")
+        #expect(LibraryShelfID.downloaded.identityHex == "#5856D6")
+
+        #expect(LibraryShelfID.favourites.systemImage == "star.fill")
+        #expect(LibraryShelfID.favourites.identityHex == "#E0A100")
+
+        #expect(LibraryShelfID.queues.systemImage == "line.3.horizontal")
+        #expect(LibraryShelfID.queues.identityHex == "#7B3FA0")
+
+        #expect(LibraryShelfID.history.systemImage == "clock.fill")
+        #expect(LibraryShelfID.history.identityHex == "#6C6C70")
+
+        #expect(LibraryShelfID.imported.systemImage == "doc.fill")
+        #expect(LibraryShelfID.imported.identityHex == "#6C6C70")
+
+        #expect(LibraryShelfID.collections.systemImage == "rectangle.stack.fill")
+        #expect(LibraryShelfID.collections.identityHex == "#9C2F6B")
+
+        #expect(LibraryShelfID.allWorksTitle == "All Works")
+        #expect(LibraryShelfID.allWorksSystemImage == "square.grid.2x2.fill")
+        #expect(LibraryShelfID.allWorksIdentityHex == "#6C6C70")
+    }
+
+    @Test func libraryShelfIDRawValuesAndCodableStability() throws {
+        // LibraryShelfID is Codable and saved/backed up: never change its cases or raw values.
+        #expect(LibraryShelfID.favourites.rawValue == "favourites")
+        #expect(LibraryShelfID.collections.rawValue == "collections")
+        #expect(LibraryShelfID.downloaded.rawValue == "downloaded")
+        #expect(LibraryShelfID.wantToRead.rawValue == "wantToRead")
+        #expect(LibraryShelfID.readingNow.rawValue == "readingNow")
+        #expect(LibraryShelfID.finished.rawValue == "finished")
+        #expect(LibraryShelfID.queues.rawValue == "queues")
+        #expect(LibraryShelfID.history.rawValue == "history")
+        #expect(LibraryShelfID.imported.rawValue == "imported")
+
+        let encoded = try JSONEncoder().encode(LibraryShelfID.allCases)
+        let decoded = try JSONDecoder().decode([LibraryShelfID].self, from: encoded)
+        #expect(decoded == LibraryShelfID.allCases)
+    }
+
+    @Test func shelfTileColumnCountAdaptsToDisplayAndAccessibility() {
+        // Compact iPhone: 2 columns
+        #expect(LibraryShelfButtonGrid.columnCount(isAccessibilitySize: false, isRegularWidth: false) == 2)
+        // Accessibility (AX1-AX5): 1 column
+        #expect(LibraryShelfButtonGrid.columnCount(isAccessibilitySize: true, isRegularWidth: false) == 1)
+        #expect(LibraryShelfButtonGrid.columnCount(isAccessibilitySize: true, isRegularWidth: true) == 1)
+        // Regular width (Duo 669 inner display / iPad / macOS): 3 columns
+        #expect(LibraryShelfButtonGrid.columnCount(isAccessibilitySize: false, isRegularWidth: true) == 3)
+    }
+
     private func expectPartition(_ arrangement: LibraryPageArrangement) {
         let sectionIDs = arrangement.sections.map(\.id)
         #expect(Set(sectionIDs).count == sectionIDs.count)

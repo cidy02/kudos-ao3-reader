@@ -42,7 +42,7 @@ nonisolated enum LibraryShelfID: String, Codable, CaseIterable, Identifiable, Se
         case .wantToRead: "bookmark.fill"
         case .readingNow: "book.fill"
         case .finished: "checkmark"
-        case .queues: "list.bullet"
+        case .queues: "line.3.horizontal"
         case .history: "clock.fill"
         case .imported: "doc.fill"
         }
@@ -63,6 +63,11 @@ nonisolated enum LibraryShelfID: String, Codable, CaseIterable, Identifiable, Se
         case .imported: "#6C6C70"
         }
     }
+
+    /// Constants for "All Works", which stays pinned to the Library header.
+    static let allWorksTitle = "All Works"
+    static let allWorksSystemImage = "square.grid.2x2.fill"
+    static let allWorksIdentityHex = "#6C6C70"
 
     /// A work belongs on Imported when it did not come from AO3 and it is not
     /// only a queue entry. Other sites and files with no source URL count.
