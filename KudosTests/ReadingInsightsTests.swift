@@ -178,4 +178,198 @@ struct ReadingInsightsTests {
         #expect(ReadingInsights.durationLabel(72 * 60) == "1h 12m")
         #expect(ReadingInsights.durationLabel(120 * 60) == "2h")
     }
+
+    // MARK: Redesign Figures (T-497)
+
+    @Test func novelsWorthCalculationRoundsToHalfAndHidesUnder35k() {
+        // Spec rule: Words read ÷ 70,000 to nearest half; hidden under 35,000 words.
+        #expect(ReadingInsights.novelsWorth(words: 30_000) == nil)
+        #expect(ReadingInsights.novelsWorth(words: 35_000) == 0.5)
+        #expect(ReadingInsights.novelsWorth(words: 70_000) == 1.0)
+        #expect(ReadingInsights.novelsWorth(words: 100_000) == 1.5)
+        #expect(ReadingInsights.novelsWorth(words: 212_600) == 3.0)
+
+        #expect(
+            ReadingInsights.novelsWorthLabel(words: 212_600) ==
+                "About 3 novels’ worth, at 70,000 words a novel"
+        )
+        #expect(ReadingInsights.novelsWorthLabel(words: 25_000) == nil)
+    }
+
+    @Test func lengthMixCategorizesWordCountsCorrectly() {
+        let words = [2_500, 15_000, 45_000, 60_000, 250_000]
+        let mix = ReadingInsights.lengthMix(words: words)
+
+        #expect(mix.under5k == 1)
+        #expect(mix.from5kTo50k == 2)
+        #expect(mix.from50kTo150k == 1)
+        #expect(mix.over150k == 1)
+        #expect(mix.totalWorks == 5)
+    }
+
+    @Test func romanticVsPlatonicRelationshipDetection() {
+        #expect(ReadingInsights.isRomanticRelationship("Anne Elliot/Frederick Wentworth") == true)
+        #expect(ReadingInsights.relationshipGlyph(for: "Anne Elliot/Frederick Wentworth") == "/")
+
+        #expect(ReadingInsights.isRomanticRelationship("Sherlock Holmes & John Watson") == false)
+        #expect(ReadingInsights.relationshipGlyph(for: "Sherlock Holmes & John Watson") == "&")
+    }
+
+    @Test func shipConcentrationCalculatesPercentageOnTopRelationship() {
+        let ships = [
+            RelationshipShare(
+                name: "A/B",
+                isRomantic: true,
+                fandom: "Persuasion",
+                worksCount: 4,
+                words: 80_000
+            ),
+            RelationshipShare(
+                name: "A&C",
+                isRomantic: false,
+                fandom: "Persuasion",
+                worksCount: 1,
+                words: 20_000
+            )
+        ]
+        let conc = ReadingInsights.shipConcentrations(relationships: ships)
+        #expect(conc.count == 1)
+        #expect(conc.first?.percentage == 80)
+        #expect(conc.first?.fandom == "Persuasion")
+    }
+
+    @Test func sittingBucketsDistributeCorrectlyByDuration() {
+        let facts = [
+            fact(on: 1, minutes: 5),    // < 10 m
+            fact(on: 2, minutes: 20),   // 10–30 m
+            fact(on: 3, minutes: 45),   // 30–60 m
+            fact(on: 4, minutes: 90),   // 1–2 h
+            fact(on: 5, minutes: 150)   // 2 h +
+        ]
+        let buckets = ReadingInsights.sittingBuckets(from: facts)
+        #expect(buckets.map(\.count) == [1, 1, 1, 1, 1])
+    }
+
+    @Test func lateNightDurationOnlyCountsSessionsBetween1And5AM() {
+        let facts = [
+            fact(on: 1, hour: 3, minutes: 30),  // late night
+            fact(on: 2, hour: 14, minutes: 60)  // afternoon
+        ]
+        #expect(ReadingInsights.lateNightDuration(from: facts, calendar: calendar) == 30 * 60)
+    }
+
+    // MARK: Library insights are honest
+
+    private func libraryInsights(
+        words: Int, works: [SavedWork], months: Double
+    ) -> ReadingLibraryInsights {
+        let interval = DateInterval(start: day(1), end: day(28))
+        let facts = words == 0 ? [] : [
+            ReadingSessionFacts(
+                workID: UUID(), startedAt: day(2), durationSeconds: 3600,
+                wordCount: words, didFinish: false, wordsRead: words
+            )
+        ]
+        return ReadingLibraryInsights.make(
+            works: works, facts: facts, periodInterval: interval,
+            periodMonths: months, calendar: calendar
+        )
+    }
+
+    @Test func monthsToClearIsNilWhenThePeriodHasNoReading() {
+        let unread = SavedWork(title: "Unread", author: "A")
+        unread.wordCount = 100_000
+        #expect(libraryInsights(words: 0, works: [unread], months: 1).monthsToClear == nil)
+    }
+
+    @Test func monthsToClearUsesAPerMonthPaceInYearMode() {
+        let unread = SavedWork(title: "Unread", author: "A")
+        unread.wordCount = 120_000
+        // 60k words read in a month is 60k/month; across a year it is 5k/month.
+        #expect(libraryInsights(words: 60_000, works: [unread], months: 1).monthsToClear == 2)
+        #expect(libraryInsights(words: 60_000, works: [unread], months: 12).monthsToClear == 24)
+    }
+
+    @Test func libraryInsightsInventNothingWithNoFinishedWorks() {
+        let insights = libraryInsights(words: 0, works: [SavedWork(title: "T", author: "A")], months: 1)
+        #expect(insights.kudosLeftPercent == nil)
+        #expect(insights.bookmarkedPercent == nil)
+    }
+
+    @Test func rereadsExcludesWorksNotPresentInVisibleWorks() {
+        let visibleWork = SavedWork(title: "Allowed Fic", author: "Author")
+        let facts = [
+            ReadingSessionFacts(
+                workID: visibleWork.id,
+                startedAt: day(1),
+                durationSeconds: 1800,
+                wordCount: 10000,
+                didFinish: true,
+                fandom: "Persuasion",
+                wordsRead: 10000,
+                title: "Allowed Fic"
+            ),
+            ReadingSessionFacts(
+                workID: visibleWork.id,
+                startedAt: day(2),
+                durationSeconds: 1800,
+                wordCount: 10000,
+                didFinish: true,
+                fandom: "Persuasion",
+                wordsRead: 10000,
+                title: "Allowed Fic"
+            ),
+            ReadingSessionFacts(
+                workID: UUID(), // Concealed or unknown work
+                startedAt: day(3),
+                durationSeconds: 1800,
+                wordCount: 20000,
+                didFinish: true,
+                fandom: "Secret Fandom",
+                wordsRead: 20000,
+                title: "Secret Fic"
+            ),
+            ReadingSessionFacts(
+                workID: UUID(), // Same concealed or unknown work finished again
+                startedAt: day(4),
+                durationSeconds: 1800,
+                wordCount: 20000,
+                didFinish: true,
+                fandom: "Secret Fandom",
+                wordsRead: 20000,
+                title: "Secret Fic"
+            )
+        ]
+
+        let habits = ReadingHabitsInsights.make(
+            works: [visibleWork],
+            facts: facts,
+            allFacts: facts,
+            calendar: calendar
+        )
+
+        // Only the visible work is listed in rereads; concealed/unlisted work is excluded
+        #expect(habits.rereads.count == 1)
+        #expect(habits.rereads.first?.title == "Allowed Fic")
+        #expect(habits.rereads.first?.finishCount == 2)
+    }
+
+    @Test func habitsMediansComeFromTheDataNotConstants() {
+        // Nothing read, nothing stopped: every median is nil. A hard-coded 6, 3 or 0.31 fails here.
+        let empty = ReadingHabitsInsights.make(works: [], facts: [], allFacts: [], calendar: calendar)
+        #expect(empty.savedToOpenedMedianDays == nil)
+        #expect(empty.openedToFinishedMedianDays == nil)
+        #expect(empty.stoppedMedianProgress == nil)
+
+        // Saved 10 days before the first sitting, finished 4 days after it.
+        let work = SavedWork(title: "W", author: "A")
+        work.dateAdded = day(1)
+        let facts = [
+            ReadingSessionFacts(workID: work.id, startedAt: day(11), durationSeconds: 600, wordCount: 1000, didFinish: false),
+            ReadingSessionFacts(workID: work.id, startedAt: day(15), durationSeconds: 600, wordCount: 1000, didFinish: true)
+        ]
+        let habits = ReadingHabitsInsights.make(works: [work], facts: facts, allFacts: facts, calendar: calendar)
+        #expect(habits.savedToOpenedMedianDays == 10)
+        #expect(habits.openedToFinishedMedianDays == 4)
+    }
 }

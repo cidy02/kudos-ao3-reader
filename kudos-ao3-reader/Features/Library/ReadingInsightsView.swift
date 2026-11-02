@@ -1,48 +1,73 @@
 import SwiftData
 import SwiftUI
 
-/// Artboard **1bi** — Reading Insights, reached from Library.
+/// Artboard **07** / `Insights.dc.html` — Reading Insights Redesign (T-497).
 ///
-/// Three cards on the Library scope's own hue: the month's hours with a delta
-/// and a seven-week bar chart, where those hours went by fandom, and four
-/// figures of pace and follow-through. Every number comes from `ReadingSession`
-/// rows written by `ReadingLogService`; the rules that turn them into figures
-/// live in `ReadingInsights`, where they can be tested against fixtures.
-///
-/// **Nothing here is sent anywhere.** The header says so, because a page of
-/// statistics about someone's reading is exactly the page where that question
-/// occurs to them.
-/// Reading Insights pushed by value, like every other Library destination.
+/// Features four tabs: Overview, Taste, Habits, and Library, with a shared
+/// `InsightsTop` header controlling the period (Month/Year, ‹, ›) and ••• options.
+/// Local-only calculation on `ReadingSession` and `SavedWork`.
 struct ReadingInsightsDestination: Hashable {}
 
 struct ReadingInsightsView: View {
     @Environment(\.modelContext) private var context
     @Environment(ThemeManager.self) private var theme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.dismiss) private var dismiss
+    @Environment(PrivacyGate.self) private var gate
+    @AppStorage("hideMature") private var hideMature: Bool = false
 
-    /// The Library's own visible set — queue-only works excluded, and adult works
-    /// excluded while the mature gate hides them. Passed in rather than queried
-    /// here on purpose: a work the reader has hidden must not have its fandom
-    /// named on this page. Its *hours* still count, because the session rows are
-    /// read from the store unfiltered and a session with no matching work simply
-    /// has no fandom to attribute — it lands in `Everything else`, which is the
-    /// right answer rather than a leak or a lost hour.
     let works: [SavedWork]
 
-    @State private var insights = ReadingInsights()
-    @State private var period = Period.month
+    private var effectiveWorks: [SavedWork] {
+        HomeReadingStats.insightsWorks(from: works, gate: gate, hideMature: hideMature)
+    }
 
-    /// The window the screen is showing. The spec draws the month, but the
-    /// seven-week chart it draws with it spans more than a month, so the chart's
-    /// span and the headline figure's span are deliberately separate: the
-    /// headline answers "this month" and the bars give it somewhere to sit.
-    enum Period: String, CaseIterable, Hashable {
-        case month
-        case year
+    @State private var selectedTab: Tab = .overview
+    @State private var range: RangeMode = .month
+    @State private var referenceDate: Date = Date()
+
+    @State private var insights = ReadingInsights()
+    @State private var tasteInsights: ReadingTasteInsights?
+    @State private var habitsInsights: ReadingHabitsInsights?
+    @State private var libraryInsights: ReadingLibraryInsights?
+    @State private var libraryStats: ReadingStatistics?
+
+    @State private var rankTasteByWorks: Bool = false
+    @State private var showingOptionsSheet: Bool = false
+    @State private var showingHowCountedSheet: Bool = false
+    @State private var finishedWorksInPeriod: [SavedWork] = []
+
+    @AppStorage("kudos.insights.discreetMode") private var discreetMode: Bool = false
+    @AppStorage("kudos.insights.hideReadingTime") private var hideReadingTime: Bool = false
+
+    enum Tab: String, CaseIterable, Identifiable {
+        case overview
+        case taste
+        case habits
+        case library
+
+        var id: String { rawValue }
 
         var title: String {
             switch self {
-            case .month: "This month"
-            case .year: "This year"
+            case .overview: "Overview"
+            case .taste: "Taste"
+            case .habits: "Habits"
+            case .library: "Library"
+            }
+        }
+    }
+
+    enum RangeMode: String, CaseIterable, Identifiable {
+        case month
+        case year
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .month: "Month"
+            case .year: "Year"
             }
         }
 
@@ -55,585 +80,581 @@ struct ReadingInsightsView: View {
     }
 
     var body: some View {
-        List {
-            Section {
-                header.pageBodyRow(top: 12, gutter: 0)
+        VStack(spacing: 0) {
+            // Pinned header with tabs and period controls
+            headerView
+
+            // Main scrollable content
+            ScrollView {
+                VStack(spacing: 14) {
+                    switch selectedTab {
+                    case .overview:
+                        overviewContent
+                    case .taste:
+                        tasteContent
+                    case .habits:
+                        habitsContent
+                    case .library:
+                        libraryContent
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+                .padding(.bottom, 32)
             }
-
-            // The three session cards only when there is a log to draw them
-            // from. An hours card reading 0.0 over seven empty bars is not a
-            // truthful nothing, it is a broken-looking something.
-            if hasSessions {
-                Section {
-                    SectionRuleHeader(
-                        title: period.title, count: insights.weeklySeconds.count
-                    )
-                    .pageBodyRow(top: 14, gutter: 0)
-                    hoursCard.pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
-                }
-
-                Section {
-                    SectionRuleHeader(
-                        title: "Where the hours went", count: insights.byFandom.count
-                    )
-                    .pageBodyRow(top: 18, gutter: 0)
-                    fandomCard.pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
-                }
-
-                Section {
-                    SectionRuleHeader(title: "Pace and follow-through")
-                        .pageBodyRow(top: 18, gutter: 0)
-                    paceCard.pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
-                }
-            } else {
-                Section {
-                    noSessionsNote.pageBodyRow(
-                        top: 14, gutter: SubjectMetrics.accountGutter
-                    )
-                }
-            }
-
-            Section {
-                SectionRuleHeader(title: "Your library", count: works.count)
-                    .pageBodyRow(top: 18, gutter: 0)
-                libraryCard.pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
-            }
-
-            Section { topFandomsSection }
+            .appThemedScroll()
         }
-        .cardList()
-        .subjectScreenWash(title: "Reading Insights", palette: palette, role: .content)
-        // 1bi: the period is a view choice, so it lives in "…" like the
-        // layout picker elsewhere; the header is the title and tally alone.
+        .background(theme.appTheme.cardBackdrop.ignoresSafeArea())
+        .navigationTitle("Reading Insights")
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                WorkListMoreMenu {
-                    Picker("Period", selection: $period) {
-                        ForEach(Period.allCases, id: \.self) { Text($0.title).tag($0) }
+                Menu {
+                    Button {
+                        showingOptionsSheet = true
+                    } label: {
+                        Label("Insights Options…", systemImage: "gearshape")
                     }
+
+                    Button {
+                        showingHowCountedSheet = true
+                    } label: {
+                        Label("How Reading Insights Are Counted", systemImage: "info.circle")
+                    }
+
+                    ShareLink(
+                        item: exportHistoryText(),
+                        subject: Text("Reading Insights Export"),
+                        message: Text("Export of Reading Insights from Kudos")
+                    ) {
+                        Label("Export Reading History…", systemImage: "square.and.arrow.up")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .frame(width: 34, height: 34)
+                        .background(Circle().fill(Color.primary.opacity(0.08)))
                 }
+                .accessibilityLabel("More: options, export, how this is counted")
             }
         }
-        .task(id: period) { reload() }
-        .refreshable { reload() }
-        .overlay {
-            // Only when there is nothing at all to show. A reader with no
-            // session log but a full shelf still has the library card, and
-            // covering it with an empty state would hide real content.
-            if !hasSessions, works.isEmpty {
-                emptyState
-            }
+        .task(id: "\(range.rawValue)-\(referenceDate.timeIntervalSince1970)-\(hideMature)-\(gate.revealAll)-\(gate.revealedIDs.count)") {
+            reload()
         }
-    }
-
-    // MARK: Header
-
-    private var header: some View {
-        SubjectPageFact(headerTallyLine, gutter: SubjectMetrics.accountGutter)
-    }
-
-    /// Spec 1bi: "18.4 hours in August · measured on this device". The second
-    /// half is not decoration — it is the answer to the question a statistics
-    /// page raises, and it belongs where the figure is rather than in a footer.
-    private var headerTallyLine: String {
-        guard hasSessions else { return "Your reading activity stays on this device" }
-        let hours = ReadingInsights.hoursLabel(insights.totalSeconds)
-        return "\(hours) hours in \(periodName) · stays on this device"
-    }
-
-    /// Whether the log has anything in this period. `totalSeconds` rather than a
-    /// row count: rows below the log's minimum never reach the store, so a zero
-    /// total and an empty log are the same state here.
-    private var hasSessions: Bool { insights.totalSeconds > 0 }
-
-    /// The Library scope's hue, matching every other Library surface.
-    private var palette: SubjectPalette {
-        theme.scopePalette
-    }
-
-    // MARK: The hours card
-
-    private var hoursCard: some View {
-        VStack(alignment: .leading, spacing: 13) {
-            HStack(alignment: .bottom, spacing: 14) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(ReadingInsights.hoursLabel(insights.totalSeconds))
-                        .font(.system(size: heroSize, weight: .bold))
-                        .monospacedDigit()
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.6)
-                    Text("hours in \(periodName)")
-                        .font(.system(size: periodLabelSize))
-                        .foregroundStyle(.secondary)
-                }
-                Spacer(minLength: 8)
-                deltaPill
-            }
-
-            Divider().overlay(Color.primary.opacity(0.12))
-
-            weeklyChart
+        .refreshable {
+            reload()
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 18)
-        .padding(.vertical, 16)
-        .subjectCard(palette: palette)
-    }
-
-    /// Spec 1bi's `↑ +3.1 vs Jul`. Absent when there is no earlier period to
-    /// compare against, rather than showing `+18.4` against a month that does
-    /// not exist.
-    @ViewBuilder
-    private var deltaPill: some View {
-        if let previous = insights.previousPeriodSeconds {
-            let delta = insights.totalSeconds - previous
-            HStack(spacing: 6) {
-                Image(systemName: delta < 0 ? "arrow.down.right" : "arrow.up.right")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(delta < 0 ? Color.secondary : Color.green)
-                Text(ReadingInsights.signedHoursLabel(delta))
-                    .font(.system(size: deltaSize, weight: .medium))
-                    .monospacedDigit()
-                Text("vs \(previousPeriodName)")
-                    .font(.system(size: deltaPeriodSize, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 7)
-            .background(
-                Capsule().fill(theme.appTheme.glassFill(0.08))
-                    .overlay(Capsule().strokeBorder(theme.appTheme.glassStroke(0.12),
-                                                    lineWidth: 0.5))
-            )
-            .combinedAccessibilityRow(
-                "\(ReadingInsights.signedHoursLabel(delta)) hours versus \(previousPeriodName)"
+        .sheet(isPresented: $showingOptionsSheet) {
+            InsightsOptionsSheet(
+                exportText: exportHistoryText(),
+                onShowHowCounted: {
+                    showingOptionsSheet = false
+                    showingHowCountedSheet = true
+                },
+                onReset: reload
             )
         }
+        .sheet(isPresented: $showingHowCountedSheet) {
+            HowInsightsAreCountedSheet()
+        }
     }
 
-    /// The spec's bars: value above, 72pt column, week label below, the most
-    /// recent week in the accent.
-    ///
-    /// Heights are a share of the tallest bar rather than of a fixed ceiling, so
-    /// a quiet month still reads as a shape instead of seven stubs. A week with
-    /// no reading keeps a 2pt sliver so the row stays legible as seven weeks.
-    private var weeklyChart: some View {
-        let peak = insights.weeklySeconds.map(\.seconds).max() ?? 0
-        return HStack(alignment: .bottom, spacing: 7) {
-            ForEach(Array(insights.weeklySeconds.enumerated()), id: \.offset) { index, bucket in
-                let isLatest = index == insights.weeklySeconds.count - 1
-                VStack(spacing: 6) {
-                    Text(ReadingInsights.hoursLabel(bucket.seconds))
-                        .font(.system(size: barValueSize, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(isLatest ? palette.accent : Color.secondary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                    GeometryReader { proxy in
-                        VStack(spacing: 0) {
-                            Spacer(minLength: 0)
-                            UnevenRoundedRectangle(
-                                topLeadingRadius: 5,
-                                bottomLeadingRadius: 2,
-                                bottomTrailingRadius: 2,
-                                topTrailingRadius: 5,
-                                style: .continuous
+    // MARK: - Header View (`InsightsTop`)
+
+    private var headerView: some View {
+        VStack(spacing: 10) {
+            // Tab segment pill (Overview / Taste / Habits / Library)
+            HStack(spacing: 0) {
+                ForEach(Tab.allCases) { tab in
+                    let isSelected = selectedTab == tab
+                    Button {
+                        selectedTab = tab
+                    } label: {
+                        Text(tab.title)
+                            .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
+                            .foregroundStyle(isSelected ? Color.primary : Color.secondary)
+                            .frame(maxWidth: .infinity)
+                            .frame(minHeight: 28)
+                            .background(
+                                isSelected ? theme.appTheme.cardSurface : Color.clear
                             )
-                            .fill(palette.accent.opacity(isLatest ? 0.72 : 0.34))
-                            .frame(height: max(2, proxy.size.height * share(bucket.seconds,
-                                                                           of: peak)))
+                            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            .shadow(
+                                color: isSelected ? Color.black.opacity(0.08) : Color.clear,
+                                radius: 4,
+                                y: 1
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(tab.title) tab")
+                    .accessibilityAddTraits(isSelected ? .isSelected : [])
+                }
+            }
+            .padding(2)
+            .background(Color.primary.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .padding(.horizontal, 16)
+            .padding(.top, 4)
+
+            // Period selector strip (Period title, subtitle, Range picker, ‹, ›)
+            HStack(alignment: .center, spacing: 8) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(periodTitle)
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+
+                    Text(periodSubtitle)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                // Range picker (Month / Year)
+                Menu {
+                    Picker("Range", selection: $range) {
+                        ForEach(RangeMode.allCases) { mode in
+                            Text(mode.title).tag(mode)
                         }
                     }
-                    .frame(height: chartHeight)
-                    Text(weekLabel(bucket.weekStart))
-                        .font(.system(size: barLabelSize))
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(range.title)
+                            .font(.system(size: 14, weight: .medium))
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 10, weight: .semibold))
+                    }
+                    .padding(.horizontal, 10)
+                    .frame(minHeight: 32)
+                    .background(Color.primary.opacity(0.08))
+                    .foregroundStyle(.primary)
+                    .clipShape(Capsule())
                 }
+
+                // Previous period button ‹
+                Button {
+                    previousPeriod()
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .frame(width: 32, height: 32)
+                        .background(Color.primary.opacity(0.08))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Previous period")
+
+                // Next period button ›
+                Button {
+                    nextPeriod()
+                } label: {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(canGoNext ? Color.primary : Color.secondary.opacity(0.3))
+                        .frame(width: 32, height: 32)
+                        .background(canGoNext ? Color.primary.opacity(0.08) : Color.primary.opacity(0.04))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .disabled(!canGoNext)
+                .accessibilityLabel("Next period")
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 6)
+        }
+        .background(theme.appTheme.cardBackdrop)
+    }
+
+    // MARK: - Overview Tab Content
+
+    @ViewBuilder
+    private var overviewContent: some View {
+        WordsReadHeroCard(
+            insights: insights,
+            periodName: periodTitle,
+            previousPeriodName: previousPeriodShortName,
+            hideReadingTime: hideReadingTime,
+            totalDaysElapsed: totalDaysElapsedInPeriod,
+            palette: theme.scopePalette
+        )
+
+        WordsPerDayCard(
+            days: insights.dailyWords,
+            totalDays: totalDaysElapsedInPeriod
+        )
+
+        WhereTheWordsWentCard(
+            fandoms: insights.fandomWordsShares,
+            discreetMode: discreetMode
+        )
+
+        ReadingAndListeningCard(
+            readingSeconds: insights.readingSeconds,
+            hideReadingTime: hideReadingTime
+        )
+
+        RecordsGridCard(
+            streakDays: insights.longestStreakDays,
+            biggestDayWords: insights.biggestDay?.words ?? 0,
+            medianSessionSeconds: insights.medianSessionSeconds,
+            wordsPerHour: insights.wordsPerHour,
+            hideReadingTime: hideReadingTime
+        )
+
+        LengthOfWhatYouReadCard(mix: insights.lengthMix)
+
+        if !finishedWorksInPeriod.isEmpty {
+            FinishedInPeriodSection(
+                works: finishedWorksInPeriod,
+                discreetMode: discreetMode
+            )
+        }
+
+        // How Reading Insights Are Counted button
+        Button {
+            showingHowCountedSheet = true
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "info.circle")
+                    .font(.system(size: 18))
+                    .foregroundStyle(.secondary)
+
+                Text("How Reading Insights Are Counted")
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(14)
+            .background(theme.appTheme.cardSurface)
+            .clipShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
+                    .strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Taste Tab Content
+
+    @ViewBuilder
+    private var tasteContent: some View {
+        if let taste = tasteInsights {
+            YourUsualFicCard(taste: taste, discreetMode: discreetMode)
+
+            TasteFandomsCard(
+                fandoms: taste.fandoms,
+                rankByWorks: rankTasteByWorks,
+                onToggleRank: { rankTasteByWorks.toggle() },
+                discreetMode: discreetMode
+            )
+
+            TasteRelationshipsCard(
+                relationships: taste.relationships,
+                shipConcentrations: taste.shipConcentrations,
+                discreetMode: discreetMode
+            )
+
+            if !taste.characters.isEmpty {
+                TasteCharactersCard(
+                    characters: taste.characters,
+                    discreetMode: discreetMode
+                )
+            }
+
+            if !taste.tags.isEmpty {
+                TasteTagsCard(
+                    tags: taste.tags,
+                    oftenTogether: taste.oftenTogether,
+                    discreetMode: discreetMode
+                )
+            }
+
+            TasteRatingsCategoriesWarningsCard(
+                ratings: taste.ratings,
+                categories: taste.categories,
+                warnings: taste.warnings
+            )
+
+            if !taste.yearCounts.isEmpty {
+                TasteWhenPostedCard(
+                    yearCounts: taste.yearCounts,
+                    medianYear: taste.medianYear
+                )
+            }
+
+            TasteCrossoversLanguagesGrid(
+                crossoverCount: taste.crossoverCount,
+                totalWorks: taste.totalWorksCount,
+                languages: taste.languages
+            )
+        } else {
+            Text("Nothing read in \(periodTitle) yet, so there is no taste to show.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity)
-                .combinedAccessibilityRow(
-                    "Week of \(weekLabel(bucket.weekStart)): "
-                        + "\(ReadingInsights.hoursLabel(bucket.seconds)) hours"
+                .padding(.vertical, 24)
+        }
+    }
+
+    // MARK: - Habits Tab Content
+
+    @ViewBuilder
+    private var habitsContent: some View {
+        if let habits = habitsInsights {
+            HabitsTimeOfDayCard(
+                hourly: habits.hourlyDuration,
+                lateNightDuration: habits.lateNightDuration,
+                lateNightSharePercent: habits.lateNightSharePercent
+            )
+
+            HabitsCalendarCard(
+                days: habits.calendarDays,
+                longestStreak: habits.longestStreak
+            )
+
+            HabitsSittingsCard(
+                sittings: habits.sittingBuckets,
+                typicalSeconds: habits.typicalSittingSeconds
+            )
+
+            if habits.savedToOpenedMedianDays != nil || habits.openedToFinishedMedianDays != nil {
+                HabitsSavedToFinishedCard(
+                    savedToOpenedDays: habits.savedToOpenedMedianDays,
+                    openedToFinishedDays: habits.openedToFinishedMedianDays
+                )
+            }
+
+            HabitsRereadsCard(rereads: habits.rereads, discreetMode: discreetMode)
+
+            if !habits.fandomTimeline.isEmpty {
+                HabitsFandomTimelineCard(lanes: habits.fandomTimeline, discreetMode: discreetMode)
+            }
+
+            if habits.stoppedCount > 0 {
+                HabitsStoppedCard(
+                    stoppedCount: habits.stoppedCount,
+                    medianProgress: habits.stoppedMedianProgress,
+                    commonTags: habits.commonStopTags,
+                    discreetMode: discreetMode
                 )
             }
         }
     }
 
-    // MARK: Where the hours went
+    // MARK: - Library Tab Content
 
-    private var fandomCard: some View {
-        let peak = insights.byFandom.map(\.seconds).max() ?? 0
-        return VStack(alignment: .leading, spacing: 13) {
-            ForEach(Array(insights.byFandom.enumerated()), id: \.offset) { index, share in
-                fandomRow(share, rank: index, peak: peak)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 18)
-        .padding(.vertical, 16)
-        .subjectCard(palette: palette)
-    }
-
-    private func fandomRow(
-        _ entry: ReadingInsights.FandomShare,
-        rank: Int,
-        peak: Double,
-        valueLabel: String? = nil
-    ) -> some View {
-        let width = share(entry.seconds, of: peak)
-        let tint = barTint(rank: rank, isRemainder: entry.isRemainder)
-        let value = valueLabel ?? "\(ReadingInsights.hoursLabel(entry.seconds)) h"
-        return VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(entry.name)
-                    .font(.system(size: fandomNameSize, weight: .medium))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Text(value)
-                    .font(.system(size: fandomValueSize, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(tint)
-            }
-            Capsule()
-                .fill(Color.primary.opacity(0.09))
-                .frame(height: 5)
-                .overlay(alignment: .leading) {
-                    GeometryReader { proxy in
-                        Capsule()
-                            .fill(tint)
-                            .frame(width: proxy.size.width * width)
-                    }
-                }
-        }
-        .combinedAccessibilityRow("\(entry.name): \(value)")
-    }
-
-    /// The spec gives the three named fandoms three distinct tints and the
-    /// remainder a neutral one. Derived by rotating the subject hue rather than
-    /// hard-coding `#8FE0C4`/`#A8D69B`/`#8FB4E0`, so the card still separates its
-    /// rows when the app accent is anything other than the spec's green.
-    private func barTint(rank: Int, isRemainder: Bool) -> Color {
-        guard !isRemainder else { return Color.secondary.opacity(0.55) }
-        let rotated = (palette.hue + Double(rank) * 0.06).truncatingRemainder(dividingBy: 1)
-        return theme.appTheme.subjectPalette(hue: rotated).accent
-    }
-
-    // MARK: Pace and follow-through
-
-    private var paceCard: some View {
-        VStack(alignment: .leading, spacing: 13) {
-            paceGrid
-            Divider().overlay(Color.primary.opacity(0.12))
-            Text(paceFootnote)
-                .font(.system(size: footnoteSize))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 18)
-        .padding(.vertical, 16)
-        .subjectCard(palette: palette)
-    }
-
-    private var paceGrid: some View {
-        // A two-column grid that collapses to one at accessibility sizes: the
-        // spec's `22pt` figures beside an eleven-point caption do not survive
-        // being halved in width.
-        let columns = [
-            GridItem(.flexible(), spacing: 12, alignment: .leading),
-            GridItem(.flexible(), spacing: 12, alignment: .leading)
-        ]
-        return LazyVGrid(
-            columns: dynamicTypeSize.isAccessibilitySize ? [columns[0]] : columns,
-            alignment: .leading,
-            spacing: 15
-        ) {
-            paceCell(ReadingInsights.durationLabel(insights.medianSessionSeconds),
-                     "median session")
-            paceCell(wordsPerHourLabel, "words per hour")
-            paceCell(finishRateLabel, "of started works finished")
-            paceCell(streakLabel, "longest streak")
-        }
-    }
-
-    private func paceCell(_ figure: String, _ caption: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(figure)
-                .font(.system(size: figureSize, weight: .bold))
-                .monospacedDigit()
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-            Text(caption)
-                .font(.system(size: paceCaptionSize))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .combinedAccessibilityRow("\(figure) \(caption)")
-    }
-
-    private var wordsPerHourLabel: String {
-        let rate = Int(insights.wordsPerHour.rounded())
-        guard rate > 0 else { return "—" }
-        return rate.formatted(.number.grouping(.automatic))
-    }
-
-    /// `nil` finish rate is "no works started", which is not 0%.
-    private var finishRateLabel: String {
-        guard let rate = insights.finishRate else { return "—" }
-        return "\(Int((rate * 100).rounded()))%"
-    }
-
-    private var streakLabel: String {
-        let days = insights.longestStreakDays
-        return "\(days) day\(days == 1 ? "" : "s")"
-    }
-
-    /// The spec's footnote says "shorter than a minute". The log's actual
-    /// threshold is `ReadingLogService.minimumPersistableDuration`, so the
-    /// sentence is built from it: a footnote that states a rule the code does
-    /// not follow is worse than no footnote, and the two would drift the first
-    /// time anyone tuned the constant.
-    private var paceFootnote: String {
-        let seconds = Int(ReadingLogService.minimumPersistableDuration.rounded())
-        return "Reading time under \(seconds) seconds isn't counted."
-    }
-
-    private var noSessionsNote: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("No reading logged this \(period == .month ? "month" : "year")")
-                .font(.system(size: noteTitleSize, weight: .semibold))
-            Text("Kudos counts reading time only on this device, while a work is open in the reader. "
-                + "Your Library totals still appear below.")
-                .font(.system(size: noteBodySize))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 18)
-        .padding(.vertical, 16)
-        .subjectCard(palette: palette)
-    }
-
-    // MARK: Your library
-
-    /// Artboard 1bi draws three cards and stops. This is a fourth, and it is
-    /// here because the screen it replaces showed these figures and `AGENTS.md`
-    /// counts a cleaner screen that drops metadata as a regression.
-    ///
-    /// They are also a different *kind* of fact from the three cards above.
-    /// Those measure reading — time, pace, follow-through, all of it from the
-    /// session log. These describe the shelf: how much is on it, how much has
-    /// been opened, when it was last touched. A reader with an empty log still
-    /// has a library, and this card is what that reader sees.
-    private var libraryCard: some View {
-        VStack(alignment: .leading, spacing: 13) {
-            libraryGrid
-            Divider().overlay(Color.primary.opacity(0.12))
-            Text("Words read includes finished works when AO3 provides a word count. Recent activity counts each "
-                + "work you opened once. Finished includes works you completed before Kudos began recording time.")
-                .font(.system(size: footnoteSize))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 18)
-        .padding(.vertical, 16)
-        .subjectCard(palette: palette)
-    }
-
-    /// Most-read fandoms by **number of works**, all time — the figure the
-    /// retired screen showed.
-    ///
-    /// Deliberately kept alongside the spec's hours card rather than replaced by
-    /// it, because the two answer different questions and only this one answers
-    /// anything for a reader whose session log is empty. `topFandoms` counts
-    /// works started; `byFandom` measures hours spent in a period.
-    ///
-    /// Header and card are one builder so the ranking is computed once:
-    /// `ReadingStatistics.init` walks every work, and a heading that needed its
-    /// own count would walk them twice per render.
     @ViewBuilder
-    private var topFandomsSection: some View {
-        let ranked = Array(library.topFandoms.prefix(6))
-        if !ranked.isEmpty {
-            let peak = ranked.first?.count ?? 0
-            SectionRuleHeader(title: "Most-read fandoms", count: ranked.count)
-                .pageBodyRow(top: 18, gutter: 0)
-            VStack(alignment: .leading, spacing: 13) {
-                ForEach(Array(ranked.enumerated()), id: \.element.id) { index, fandom in
-                    fandomRow(
-                        ReadingInsights.FandomShare(
-                            name: fandom.name, seconds: Double(fandom.count)
-                        ),
-                        rank: index,
-                        peak: Double(peak),
-                        valueLabel: fandom.count.formatted()
-                    )
-                }
+    private var libraryContent: some View {
+        if let lib = libraryInsights, let stats = libraryStats {
+            LibraryUnreadCard(
+                unreadWords: lib.unreadWords,
+                unreadCount: lib.unreadWorksCount,
+                monthsToClear: lib.monthsToClear,
+                addedWords: lib.addedWordsInPeriod,
+                readWords: lib.readWordsInPeriod
+            )
+
+            LibraryWhereEverythingStandsCard(partition: lib.statuses)
+
+            if let candidate = lib.stillReadingCandidate {
+                LibraryStillReadingCard(
+                    candidate: candidate,
+                    discreetMode: discreetMode,
+                    onStillReading: {
+                        WorkLifecycle.keepInProgress(candidate.work, in: context)
+                        reload()
+                    }
+                )
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 18)
-            .padding(.vertical, 16)
-            .subjectCard(palette: palette)
-            .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
+
+            LibraryWIPFreshnessCard(freshness: lib.wipFreshness)
+
+            if lib.noLongerOnAO3Count > 0 {
+                LibraryNoLongerOnAO3Card(
+                    count: lib.noLongerOnAO3Count,
+                    words: lib.noLongerOnAO3Words,
+                    lastCopies: lib.noLongerOnAO3LastCopies
+                )
+            }
+
+            if let kudos = lib.kudosLeftPercent, let bookmarked = lib.bookmarkedPercent {
+                LibraryFeedbackCard(kudosLeftPercent: kudos, bookmarkedPercent: bookmarked)
+            }
+
+            LibraryPreservedStatsCard(stats: stats, discreetMode: discreetMode)
         }
     }
 
-    private var libraryGrid: some View {
-        // Bound once. `ReadingStatistics.init` walks every work, and reading it
-        // through a computed property six times in this builder would walk the
-        // library six times per render.
-        let stats = library
-        let columns = [
-            GridItem(.flexible(), spacing: 12, alignment: .leading),
-            GridItem(.flexible(), spacing: 12, alignment: .leading)
-        ]
-        return LazyVGrid(
-            columns: dynamicTypeSize.isAccessibilitySize ? [columns[0]] : columns,
-            alignment: .leading,
-            spacing: 15
-        ) {
-            paceCell(stats.startedWorks.formatted(), "works opened")
-            paceCell(
-                stats.wordsRead.formatted(.number.notation(.compactName)), "words read"
-            )
-            paceCell(stats.inProgressWorks.formatted(), "still in progress")
-            paceCell(
-                stats.finishedWorks.formatted(),
-                "finished (\(completionPercent(stats)))"
-            )
-            paceCell(stats.openedLast7Days.formatted(), "opened in 7 days")
-            paceCell(stats.openedLast30Days.formatted(), "opened in 30 days")
-            paceCell(lastReadLabel(stats.latestReadDate), "last read")
-        }
-    }
-
-    private var library: ReadingStatistics {
-        ReadingStatistics(works: works)
-    }
-
-    private func lastReadLabel(_ date: Date?) -> String {
-        guard let date else { return "Not yet" }
-        return date.formatted(.relative(presentation: .named))
-    }
-
-    private func completionPercent(_ stats: ReadingStatistics) -> String {
-        stats.completionRate.formatted(.percent.precision(.fractionLength(0)))
-    }
-
-    // MARK: Empty
-
-    private var emptyState: some View {
-        ContentUnavailableView {
-            Label("No reading logged yet", systemImage: "chart.bar.xaxis")
-        } description: {
-            Text("Open a work and read for at least "
-                + "\(Int(ReadingLogService.minimumPersistableDuration.rounded())) seconds. "
-                + "Your reading activity stays on this device and isn't sent anywhere.")
-        }
-    }
-
-    // MARK: Shared bits
-
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @ScaledMetric(relativeTo: .largeTitle) private var heroSize: CGFloat = 44
-    @ScaledMetric(relativeTo: .title2) private var figureSize: CGFloat = 22
-    @ScaledMetric(relativeTo: .caption) private var chartHeight: CGFloat = 72
-    @ScaledMetric(relativeTo: .footnote) private var periodLabelSize: CGFloat = 12.5
-    @ScaledMetric(relativeTo: .footnote) private var deltaSize: CGFloat = 13
-    @ScaledMetric(relativeTo: .caption) private var deltaPeriodSize: CGFloat = 11
-    @ScaledMetric(relativeTo: .caption) private var barValueSize: CGFloat = 9.5
-    @ScaledMetric(relativeTo: .caption) private var barLabelSize: CGFloat = 8.5
-    @ScaledMetric(relativeTo: .footnote) private var fandomNameSize: CGFloat = 14
-    @ScaledMetric(relativeTo: .caption) private var fandomValueSize: CGFloat = 11
-    @ScaledMetric(relativeTo: .caption) private var footnoteSize: CGFloat = 12
-    @ScaledMetric(relativeTo: .caption) private var paceCaptionSize: CGFloat = 11.5
-    @ScaledMetric(relativeTo: .headline) private var noteTitleSize: CGFloat = 15
-    @ScaledMetric(relativeTo: .footnote) private var noteBodySize: CGFloat = 12.5
+    // MARK: - Period Calculation & Navigation
 
     private var calendar: Calendar { .current }
 
-    private var periodName: String {
-        switch period {
-        case .month: monthFormatter.string(from: Date())
-        case .year: yearFormatter.string(from: Date())
+    private var periodTitle: String {
+        switch range {
+        case .month:
+            return Self.monthYearFormatter.string(from: referenceDate)
+        case .year:
+            return Self.yearFormatter.string(from: referenceDate)
         }
     }
 
-    private var previousPeriodName: String {
-        let earlier = calendar.date(
-            byAdding: period.component, value: -1, to: Date()
-        ) ?? Date()
-        switch period {
-        case .month: return shortMonthFormatter.string(from: earlier)
-        case .year: return yearFormatter.string(from: earlier)
+    private var periodSubtitle: String {
+        switch range {
+        case .month:
+            let isCurrentMonth = calendar.isDate(referenceDate, equalTo: Date(), toGranularity: .month)
+            let endDay = isCurrentMonth
+                ? calendar.component(.day, from: Date())
+                : (calendar.range(of: .day, in: .month, for: referenceDate)?.count ?? 30)
+            let monthName = Self.shortMonthFormatter.string(from: referenceDate)
+            let prevDate = calendar.date(byAdding: .month, value: -1, to: referenceDate) ?? referenceDate
+            let prevMonthName = Self.shortMonthFormatter.string(from: prevDate)
+            return "1–\(endDay) \(monthName) · vs \(prevMonthName)"
+        case .year:
+            let yr = Self.yearFormatter.string(from: referenceDate)
+            let prevDate = calendar.date(byAdding: .year, value: -1, to: referenceDate) ?? referenceDate
+            let prevYr = Self.yearFormatter.string(from: prevDate)
+            return "\(yr) · vs \(prevYr)"
         }
     }
 
-    // Held rather than rebuilt: `weekLabel` runs once per bar per render, and a
-    // DateFormatter is not cheap to construct. Templates rather than literal
-    // formats so the order and separators follow the reader's locale.
-    private static let monthFormatter = formatter("LLLL")
-    private static let shortMonthFormatter = formatter("LLL")
-    private static let yearFormatter = formatter("y")
-    private static let weekFormatter = formatter("MMMd")
-
-    private var monthFormatter: DateFormatter { Self.monthFormatter }
-    private var shortMonthFormatter: DateFormatter { Self.shortMonthFormatter }
-    private var yearFormatter: DateFormatter { Self.yearFormatter }
-
-    private static func formatter(_ template: String) -> DateFormatter {
-        let formatter = DateFormatter()
-        formatter.setLocalizedDateFormatFromTemplate(template)
-        return formatter
+    private var previousPeriodShortName: String {
+        let prevDate = calendar.date(byAdding: range.component, value: -1, to: referenceDate) ?? referenceDate
+        switch range {
+        case .month:
+            return Self.shortMonthFormatter.string(from: prevDate)
+        case .year:
+            return Self.yearFormatter.string(from: prevDate)
+        }
     }
 
-    private func weekLabel(_ weekStart: Date) -> String {
-        Self.weekFormatter.string(from: weekStart)
+    private var totalDaysElapsedInPeriod: Int {
+        switch range {
+        case .month:
+            let isCurrentMonth = calendar.isDate(referenceDate, equalTo: Date(), toGranularity: .month)
+            return isCurrentMonth
+                ? calendar.component(.day, from: Date())
+                : (calendar.range(of: .day, in: .month, for: referenceDate)?.count ?? 30)
+        case .year:
+            let isCurrentYear = calendar.isDate(referenceDate, equalTo: Date(), toGranularity: .year)
+            return isCurrentYear
+                ? calendar.ordinality(of: .day, in: .year, for: Date()) ?? 365
+                : (calendar.range(of: .day, in: .year, for: referenceDate)?.count ?? 365)
+        }
     }
 
-    /// A bar's share of the tallest, guarding the empty case so a month with no
-    /// reading does not divide by zero.
-    private func share(_ value: Double, of peak: Double) -> Double {
-        guard peak > 0 else { return 0 }
-        return min(1, max(0, value / peak))
+    private var canGoNext: Bool {
+        let component = range.component
+        let refStart = calendar.dateInterval(of: component, for: referenceDate)?.start ?? referenceDate
+        let nowStart = calendar.dateInterval(of: component, for: Date())?.start ?? Date()
+        return refStart < nowStart
     }
 
-    // MARK: Loading
+    private func previousPeriod() {
+        referenceDate = calendar.date(byAdding: range.component, value: -1, to: referenceDate) ?? referenceDate
+    }
 
-    /// The seven-week chart spans more than the headline period on purpose (see
-    /// `Period`), so the chart window and the figure window are computed
-    /// separately and the chart's is the wider of the two.
+    private func nextPeriod() {
+        guard canGoNext else { return }
+        referenceDate = calendar.date(byAdding: range.component, value: 1, to: referenceDate) ?? referenceDate
+    }
+
+    // MARK: - Reload Data
+
     private func reload() {
-        let now = Date()
-        guard let current = calendar.dateInterval(of: period.component, for: now),
-              let earlier = calendar.date(byAdding: period.component, value: -1, to: now),
-              let previous = calendar.dateInterval(of: period.component, for: earlier)
+        let component = range.component
+        guard let currentInterval = calendar.dateInterval(of: component, for: referenceDate),
+              let earlierDate = calendar.date(byAdding: component, value: -1, to: referenceDate),
+              let previousInterval = calendar.dateInterval(of: component, for: earlierDate)
         else { return }
 
         let figures = ReadingLogService.insights(
-            for: current,
-            previousPeriod: previous,
-            works: works,
+            for: currentInterval,
+            previousPeriod: previousInterval,
+            works: effectiveWorks,
             calendar: calendar,
             context: context
         )
 
-        // The bars come from a wider window than the headline: spec 1bi draws
-        // seven weeks under a month's total.
-        let chartStart = calendar.date(byAdding: .weekOfYear, value: -6, to: now) ?? current.start
-        let chartWindow = DateInterval(
-            start: min(chartStart, current.start), end: max(now, current.end)
-        )
-        let chartFacts = ReadingLogService.facts(
-            from: ReadingLogService.sessions(in: context, interval: chartWindow), works: works
+        insights = figures
+
+        let allHistory = (try? context.fetch(FetchDescriptor<ReadingSession>())) ?? []
+        let allFacts = ReadingLogService.facts(from: allHistory, works: effectiveWorks, history: allHistory)
+        let periodFacts = allFacts.filter { currentInterval.contains($0.startedAt) }
+
+        let readWorkIDs = Set(periodFacts.map(\.workID))
+        let worksInPeriod = effectiveWorks.filter { readWorkIDs.contains($0.id) }
+
+        // An empty period has no taste; the Taste tab shows its empty state
+        // rather than all-time rankings under the period title.
+        tasteInsights = worksInPeriod.isEmpty ? nil : ReadingTasteInsights.make(
+            works: worksInPeriod,
+            facts: periodFacts
         )
 
-        var combined = figures
-        combined.weeklySeconds = ReadingInsights.weeklyBuckets(
-            from: chartFacts, calendar: calendar
+        habitsInsights = ReadingHabitsInsights.make(
+            works: effectiveWorks,
+            facts: periodFacts,
+            allFacts: allFacts,
+            calendar: calendar
         )
-        insights = combined
+
+        libraryInsights = ReadingLibraryInsights.make(
+            works: effectiveWorks,
+            facts: periodFacts,
+            periodInterval: currentInterval,
+            periodMonths: range == .year ? 12 : 1,
+            calendar: calendar
+        )
+
+        libraryStats = ReadingStatistics(works: effectiveWorks, now: Date(), calendar: calendar)
+
+        finishedWorksInPeriod = effectiveWorks.filter { w in
+            w.isFinished && periodFacts.contains { $0.workID == w.id && $0.didFinish }
+        }
     }
+
+    // MARK: - Actions
+
+    /// The period's aggregate lines; no work is named.
+    private func exportHistoryText() -> String {
+        """
+        Kudos Reading Insights Export
+        Period: \(periodTitle) (\(periodSubtitle))
+        Words read: \(insights.totalWordsRead)
+        Hours read: \(ReadingInsights.hoursLabel(insights.totalSeconds))
+        Works finished: \(insights.finishedWorksCount)
+        Reading days: \(insights.readingDaysCount)
+        """
+    }
+
+    // MARK: - Date Formatters
+
+    private static let monthYearFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.setLocalizedDateFormatFromTemplate("LLLL y")
+        return f
+    }()
+
+    private static let shortMonthFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.setLocalizedDateFormatFromTemplate("LLL")
+        return f
+    }()
+
+    private static let yearFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.setLocalizedDateFormatFromTemplate("y")
+        return f
+    }()
 }
