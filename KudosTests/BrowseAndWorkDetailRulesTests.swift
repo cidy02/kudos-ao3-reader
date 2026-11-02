@@ -141,8 +141,8 @@ struct BrowseAndWorkDetailRulesTests {
     @Test func wideDetailGroupsKeepEveryBlockOnceAndInOrder() {
         let leading = WorkDetailPresentation.leadingBlocks
         let trailing = WorkDetailPresentation.trailingBlocks
-        #expect(leading == [.identity, .status, .ao3Actions, .archiveStats, .pageActions])
-        #expect(trailing == [.summary, .tags, .facts, .comments, .series, .myCopy])
+        #expect(leading == [.identity, .status, .stats])
+        #expect(trailing == [.summary, .tags, .series, .myCopy, .comments])
         let all = leading + trailing
         #expect(Set(all).count == all.count)
         #expect(Set(all) == Set(WorkDetailPresentation.singleColumnBlocks))
@@ -150,8 +150,7 @@ struct BrowseAndWorkDetailRulesTests {
 
     @Test func narrowDetailKeepsTheExistingContinuousPageOrder() {
         #expect(WorkDetailPresentation.singleColumnBlocks == [
-            .identity, .status, .summary, .ao3Actions, .tags, .facts, .archiveStats,
-            .comments, .pageActions, .series, .myCopy
+            .identity, .status, .stats, .summary, .tags, .series, .myCopy, .comments
         ])
     }
     #endif

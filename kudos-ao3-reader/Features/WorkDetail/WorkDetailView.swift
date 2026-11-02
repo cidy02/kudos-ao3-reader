@@ -58,7 +58,6 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     @Query(sort: \Tag.name) var allTags: [Tag]
     @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }) private var allWorks: [SavedWork]
 
-    @ScaledMetric(relativeTo: .subheadline) var summarySize: CGFloat = 16
     @ScaledMetric(relativeTo: .subheadline) var myCopyRowTitleSize: CGFloat = 14.5
     @ScaledMetric(relativeTo: .footnote) var myCopyValueSize: CGFloat = 13
     @ScaledMetric(relativeTo: .footnote) var myCopyActionSize: CGFloat = 14
@@ -80,6 +79,11 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     /// work, behind the My copy row at the foot of the page.
     @State var showingMyCopy = false
     @State var showingDownloadedDateEditor = false
+    /// The same editor, opened from the page's My copy card. A separate flag from
+    /// the sheet's own: both presenters would otherwise answer to one value.
+    @State var showingPageDateEditor = false
+    /// The My copy card's "Your tags · Add".
+    @State var showingAddTag = false
     /// Long summaries start collapsed; this is the Show More toggle.
     @State var summaryExpanded = false
 
@@ -226,6 +230,16 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             }
         }
         .sheet(isPresented: $showingMyCopy) { myCopySheet }
+        .sheet(isPresented: $showingPageDateEditor) {
+            if let work = localWork { DownloadedDateEditor(work: work) }
+        }
+        .alert("Add a tag", isPresented: $showingAddTag) {
+            TextField("Tag name", text: $newTagName)
+            Button("Add") { addTypedTag() }
+            Button("Cancel", role: .cancel) { newTagName = "" }
+        } message: {
+            Text("Tags are private to this device.")
+        }
         .confirmationDialog(
             "Rebuild this work?",
             isPresented: $confirmingRedundantRebuild,
@@ -300,9 +314,9 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         )
     }
 
-    /// Artboard 1a's identity block: header, figure strip, resume card. Each is
-    /// its own row on the wash rather than one card, at the spec's own gutters
-    /// (26pt for the header, 22pt for the two panels under it).
+    /// Board 19's identity block: header, the four symbols inline, resume card.
+    /// Each is its own row on the wash rather than one card, at the page's
+    /// 16pt edge.
     var heroSection: some View {
         Section {
             WorkDetailIdentityHeader(
@@ -314,15 +328,18 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             )
             .pageBodyRow(top: 20, gutter: 0)
 
-            WorkDetailFigureStrip(
+            // Rating, category, warnings and status, each named beside its tile
+            // at 20pt (the Symbols board's `inline` variant).
+            WorkStatusIconGrid(
                 rating: displayRating,
-                warnings: displayWarnings,
                 categories: displayCategories,
-                chapters: displayChapters,
+                warnings: displayWarnings,
                 completion: displayCompletionStatus,
-                palette: workPalette
+                tileSize: 20,
+                announcesToVoiceOver: true,
+                arrangement: .inline
             )
-            .pageBodyRow(top: 16)
+            .pageBodyRow(top: 14)
 
             resumeCardRow
         }
@@ -406,27 +423,19 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         return work.readingProgress ?? 0
     }
 
-    /// Artboard 1a is one continuous page, so this is the whole of it below the
-    /// identity block. Two `Group`s because a `ViewBuilder` takes ten children
-    /// and the page has eleven blocks — the split is arbitrary and the order is
-    /// the artboard's.
+    /// Board 19 is one continuous page; this is the whole of it below the
+    /// identity block, in the board's order. (iOS assembles the same blocks in
+    /// `WorkDetailLayout`; this is macOS's single list.)
     @ViewBuilder
     private var pageSections: some View {
-        Group {
-            summarySection
-            ao3ActionsSection
-            tagSections
-            factsCardSection
-        }
-        Group {
-            archiveStatsSection
-            commentsSection
-            pageActionsSection
-            seriesSection
-            // Provenance moved into the My copy sheet: 1a keeps the page to the
-            // work itself and puts the local half behind one button.
-            myCopySection
-        }
+        statsSection
+        summarySection
+        tagSections
+        seriesSection
+        // Provenance lives in the My copy sheet: the page keeps the work itself
+        // and the rows of this device's copy that fit on a line.
+        myCopySection
+        commentsSection
     }
 
     /// Primary-action feedback follows Read/Resume. In two regions, a series
@@ -1396,19 +1405,28 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
 
     func apply(named name: String) {
         withLocalWork { work in
-            let tag = tag(named: name)
-            if !work.tags.contains(where: { $0.name == tag.name }) {
-                work.tags.append(tag)
-                // User tags are part of the derived search text (index v2).
-                WorkSearchIndex.reindex(work)
+            if Self.assign(tag(named: name), to: work) {
                 context.saveBestEffort(reason: "Saving tag assignment failed")
             }
         }
     }
 
+    /// Adds the tag unless the work has it. Stamps the work modified so folder sync
+    /// uploads it, and reindexes: user tags are part of the derived search text (v2).
+    /// Returns whether anything changed.
+    @discardableResult
+    static func assign(_ tag: Tag, to work: SavedWork) -> Bool {
+        guard !work.tags.contains(where: { $0.name == tag.name }) else { return false }
+        work.tags.append(tag)
+        work.markModified()
+        WorkSearchIndex.reindex(work)
+        return true
+    }
+
     func removeTag(_ tag: Tag) {
         guard let work = localWork else { return }
         work.tags.removeAll { $0.name == tag.name }
+        work.markModified()
         WorkSearchIndex.reindex(work)
         context.saveBestEffort(reason: "Saving tag removal failed")
     }

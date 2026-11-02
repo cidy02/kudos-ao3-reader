@@ -12,8 +12,9 @@ struct AO3WorkActionsMenu: View {
     /// When shown from a reader, the AO3 story chapter to open comments on so the
     /// user lands on the chapter they're reading. nil (Work Detail) → All comments.
     var commentsInitialChapterPosition: Int?
-    /// See `WorkAO3ActionChips.onSubscribeSuccess` — same rule, same reason
-    /// the two carry it independently rather than sharing one call site.
+    /// Fired only when this subscribe call actually subscribed (not on the
+    /// unsubscribe half of the same toggle). nil at call sites with nothing to
+    /// hook, such as the reader.
     var onSubscribeSuccess: (() -> Void)? = nil
     var onKudosSuccess: (() -> Void)? = nil
     var shareURL: URL? = nil

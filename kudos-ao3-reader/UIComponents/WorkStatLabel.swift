@@ -211,8 +211,8 @@ struct WorkTagLineView: View {
 /// own longer secondary-facts row below) and `HomeResumeHero` (paired with a
 /// shorter Language/Words/Chapters row instead) — both need this exact same row
 /// of chips, just different company underneath. The work-detail page states the
-/// same four fields as `WorkDetailFigureStrip` instead: it has the width to
-/// spell them out, which a row of chips is there to avoid needing.
+/// same four fields as `WorkStatusIconGrid`'s `.inline` run instead: it has the
+/// width to name them beside their tiles, which a row of chips is there to avoid needing.
 struct WorkTopStatsRow: View {
     var rating: String?
     var categories: [String] = []
@@ -436,6 +436,10 @@ struct WorkStatusIconGrid: View {
         case grid
         /// One row of four, the spare width going between the tiles.
         case strip
+        /// Each tile followed by its name ("Teen", "F/M", "No warnings", "WIP"),
+        /// the four wrapping as one run — the Symbols board's `inline` variant,
+        /// Work Detail's line under the author (board 19). Bare, like a strip.
+        case inline
     }
 
     /// The board's backing colours. Light is rgba(118, 118, 128, 0.12),
@@ -497,7 +501,7 @@ struct WorkStatusIconGrid: View {
         (tileSize * backingRadiusRatio).rounded()
     }
 
-    /// Full 2×2 only. A strip stays bare even when `backed` is left on.
+    /// Full 2×2 only. A strip or an inline run stays bare even when `backed` is left on.
     /// Single tiles and labelled chips are not this view.
     static func drawsBacking(arrangement: Arrangement, backed: Bool) -> Bool {
         arrangement == .grid && backed
@@ -524,7 +528,7 @@ struct WorkStatusIconGrid: View {
     }
 
     var body: some View {
-        WorkStatusIconGridContent(
+        WorkStatusIconGridLabelScale(
             rating: rating,
             categories: categories,
             warnings: warnings,
@@ -534,7 +538,6 @@ struct WorkStatusIconGrid: View {
             arrangement: arrangement,
             backed: backed
         )
-        .dynamicTypeSize(.xSmall ... .accessibility2)
     }
 
     /// The drawn height of the 2×2 grid — two tiles and the gap between them.
@@ -542,6 +545,25 @@ struct WorkStatusIconGrid: View {
     /// instead of hard-coding a number that drifts the next time a tile changes.
     static func gridHeight(tileSize: CGFloat) -> CGFloat {
         tileSize * (2 + gapRatio)
+    }
+
+    /// The four names `.inline` prints beside the tiles, in tile order (rating,
+    /// category, warnings, status). Sentence case, as the Symbols board writes
+    /// them. Several categories are listed rather than folded into "Multi": the
+    /// tile folds them, and this line is where a work's page names each one.
+    static func inlineLabels(
+        rating: String?, categories: [String], warnings: [String], completion: WorkCompletionStatus
+    ) -> [String] {
+        let ratingLabel: String = rating.flatMap { WorkStat.ratingName($0) } ?? "Not rated"
+        let recognized = categories.filter { WorkStat.categoryColor($0) != nil }
+        let categoryLabel: String = recognized.isEmpty ? "No category" : recognized.joined(separator: ", ")
+        let warningLabel: String
+        switch WorkWarningStatus(rawWarnings: warnings) {
+        case .none: warningLabel = "No warnings"
+        case .undisclosed: warningLabel = "Not disclosed"
+        case .present(let count): warningLabel = count == 1 ? "1 warning" : "\(count) warnings"
+        }
+        return [ratingLabel, categoryLabel, warningLabel, completion.shortText]
     }
 }
 
@@ -567,6 +589,37 @@ struct WorkStatusGridMatched<Content: View>: View {
     }
 }
 
+/// Reads the uncapped Dynamic Type scale for the inline names, then draws the
+/// grid under the `.accessibility2` cap, which belongs to the symbol geometry
+/// only: the names are fixed-size text sized from the uncapped scale.
+private struct WorkStatusIconGridLabelScale: View {
+    var rating: String?
+    var categories: [String]
+    var warnings: [String]
+    var completion: WorkCompletionStatus
+    var tileSize: CGFloat
+    var announcesToVoiceOver: Bool
+    var arrangement: WorkStatusIconGrid.Arrangement
+    var backed: Bool
+
+    @ScaledMetric(relativeTo: .caption2) private var labelScale: CGFloat = 1
+
+    var body: some View {
+        WorkStatusIconGridContent(
+            rating: rating,
+            categories: categories,
+            warnings: warnings,
+            completion: completion,
+            tileSize: tileSize,
+            announcesToVoiceOver: announcesToVoiceOver,
+            arrangement: arrangement,
+            backed: backed,
+            labelScale: labelScale
+        )
+        .dynamicTypeSize(.xSmall ... .accessibility2)
+    }
+}
+
 private struct WorkStatusIconGridContent: View {
     var rating: String?
     var categories: [String]
@@ -576,6 +629,8 @@ private struct WorkStatusIconGridContent: View {
     var announcesToVoiceOver: Bool
     var arrangement: WorkStatusIconGrid.Arrangement
     var backed: Bool
+    /// The uncapped scale, for the inline names only.
+    var labelScale: CGFloat
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(ThemeManager.self) private var theme
@@ -600,10 +655,10 @@ private struct WorkStatusIconGridContent: View {
         let content = backedLayout
         if announcesToVoiceOver {
             // The text chips' own labels, so the grid says what they would.
-            let items = WorkTopStatsRow(
+            let names = WorkStatusIconGrid.inlineLabels(
                 rating: rating, categories: categories, warnings: warnings, completion: completion
-            ).topItems
-            content.combinedAccessibilityRow(items.map(\.accessibilityLabel).joined(separator: ", "))
+            )
+            content.combinedAccessibilityRow(names.joined(separator: ", "))
         } else {
             content.accessibilityHidden(true)
         }
@@ -651,6 +706,24 @@ private struct WorkStatusIconGridContent: View {
                 }
             }
             .frame(maxWidth: .infinity)
+        case .inline:
+            let names = WorkStatusIconGrid.inlineLabels(
+                rating: rating, categories: categories, warnings: warnings, completion: completion
+            )
+            // Wraps rather than clips when the names outgrow the line.
+            FlowLayout(spacing: side * 0.5, rowSpacing: side * 0.3) {
+                ForEach(resolved.indices, id: \.self) { index in
+                    HStack(spacing: side * 0.25) {
+                        tile(resolved[index])
+                        Text(names[index])
+                            .font(.system(size: max(12, tileSize * labelScale * 0.62), weight: .medium))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                            .fixedSize()
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 

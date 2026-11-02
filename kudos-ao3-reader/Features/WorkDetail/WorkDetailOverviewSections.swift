@@ -1,45 +1,30 @@
 import SwiftUI
 
-// Blocks of artboard 1a's page: the serif summary, the ON AO3 chips, the
-// state-aware quick-action grid, and the series card. Pure presentation over
-// WorkDetailView's existing display values and actions — no new data flow.
+// Blocks of board 19's page: the Summary and the Series card, plus the Library
+// rows of the ••• menu. Pure presentation over WorkDetailView's existing display
+// values and actions — no new data flow.
 //
-// The four page blocks here are deliberately not `private`. `WorkDetailView`
-// assembles the page in `pageSections`, and 1a's eleven blocks are spread over
-// four files — `private` is file-scoped in Swift, so anything the assembly
+// The page blocks here are deliberately not `private`: `WorkDetailView` assembles
+// the page (`pageSections`, `WorkDetailLayout`), and its blocks are spread over
+// several files — `private` is file-scoped in Swift, so anything the assembly
 // names has to be at least internal. The helpers each block uses stay private,
 // which is the line worth keeping: a block is part of the page's contract, a
 // helper is not.
 
 extension WorkDetailView {
-    // MARK: - Overview section
-
-    @ViewBuilder
-    var overviewSections: some View {
-        summarySection
-        ao3ActionsSection
-        // Artboard 1a's own order from here: the grouped facts, the archive
-        // tallies, the page's two actions, then everything local behind one row.
-        factsCardSection
-        archiveStatsSection
-        pageActionsSection
-        seriesSection
-        // Origin and conversion live in My copy (1a); the page ends at the row.
-        myCopySection
-    }
-
     // MARK: Summary
 
-    /// Spec 1a sets the summary in a serif face at 16pt over the page wash, with
-    /// no card and no "Summary" heading — it is the first prose after the resume
-    /// card and nothing else on the page could be mistaken for it. The serif is
-    /// doing real work rather than decoration: this is the only run of the
-    /// author's own writing on the screen, and setting it apart from the app's
-    /// own labels is the point.
+    /// Board 19's Summary: a Title 3 header, the author's text in the body face,
+    /// and a Notes link. The old serif face is gone with the board's own sans.
     ///
-    /// Show More survives the restyle. The artboard's example summary is one
-    /// sentence; real ones run for paragraphs, and an uncollapsed wall of them
+    /// Show More survives the restyle. The board's example summary is two
+    /// sentences; real ones run for paragraphs, and an uncollapsed wall of them
     /// would push every fact on the page below the fold.
+    ///
+    /// Notes: the app holds the summary but not the author's notes (AO3 prints
+    /// them on the work page, and the EPUB carries them in the reader), so the
+    /// link opens the work on AO3, where they are, rather than pretending to
+    /// show something this screen does not have.
     @ViewBuilder
     var summarySection: some View {
         // Bound once per render: a local work's summary strips HTML on read.
@@ -47,50 +32,33 @@ extension WorkDetailView {
         if !summary.isEmpty {
             let collapses = WorkDetailPresentation.summaryCollapses(summary)
             Section {
-                VStack(alignment: .leading, spacing: 10) {
+                SectionRuleHeader(title: "Summary")
+                    .accessibilityAddTraits(.isHeader)
+                    .pageBodyRow(top: 24, gutter: 0)
+
+                VStack(alignment: .leading, spacing: 8) {
                     Text(summary)
-                        .font(.system(size: summarySize, design: .serif))
-                        // CSS line-height 1.6 on 16px is 25.6pt of line box; a
-                        // 16pt line is about 20 of that on its own, so the rest
-                        // is added here.
-                        .lineSpacing(5.5)
-                        .foregroundStyle(Color.primary.opacity(0.82))
+                        .font(.body)
                         .fixedSize(horizontal: false, vertical: true)
                         .lineLimit(collapses && !summaryExpanded ? 8 : nil)
-                    if collapses {
-                        Button(summaryExpanded ? "Show Less" : "Show More") {
-                            withAnimationUnlessReduced(reduceMotion: reduceMotion) { summaryExpanded.toggle() }
+                    HStack(spacing: 16) {
+                        if collapses {
+                            Button(summaryExpanded ? "Show Less" : "Show More") {
+                                withAnimationUnlessReduced(reduceMotion: reduceMotion) { summaryExpanded.toggle() }
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityHint("Expands or collapses the work summary")
                         }
-                        .font(.subheadline.weight(.medium))
-                        .buttonStyle(.borderless)
-                        .accessibilityHint("Expands or collapses the work summary")
+                        if let id = ao3WorkID {
+                            Button("Notes") { router.open(AO3Client.workURL(workID: id)) }
+                                .buttonStyle(.plain)
+                                .accessibilityHint("Opens this work on AO3, where the author's notes are")
+                        }
                     }
+                    .font(.body)
+                    .foregroundStyle(.accentInk)
                 }
-                .pageBodyRow(top: 20)
-            }
-        }
-    }
-
-    // MARK: On AO3
-
-    /// Artboard 1a's ON AO3 chips. Shown only to a signed-in reader with an AO3
-    /// work to act on: every one of these four is a write that fails with
-    /// `AO3WriteError.notSignedIn` otherwise, and four chips that cannot work is
-    /// worse than the overflow menu they also live in. Nothing is lost signed
-    /// out — the toolbar still carries them, and the work's kudos and comment
-    /// tallies are facts the figure strip states regardless.
-    @ViewBuilder
-    var ao3ActionsSection: some View {
-        if let id = ao3WorkID, auth.isLoggedIn {
-            Section {
-                WorkAO3ActionChips(
-                    workID: id,
-                    kudosCount: displayKudos,
-                    actions: workActions,
-                    palette: workPalette,
-                    onSubscribeSuccess: downloadIfSubscribedWithoutEPUB
-                )
-                .pageBodyRow(top: 24)
+                .pageBodyRow(top: 6)
             }
         }
     }
@@ -150,85 +118,207 @@ extension WorkDetailView {
         .disabled(working || download?.isInformational == true)
     }
 
+    // MARK: Series
+
+    /// One line of the Series card.
+    private enum SeriesRow: Identifiable {
+        case header
+        case entry(SeriesEntry)
+        case download
+        case openOnAO3
+
+        var id: String {
+            switch self {
+            case .header: "header"
+            case let .entry(entry): entry.id
+            case .download: "download"
+            case .openOnAO3: "open"
+            }
+        }
+    }
+
+    /// A numbered work in the series: the ones downloaded here and this work.
+    private struct SeriesEntry: Identifiable {
+        let id: String
+        let position: Int
+        let title: String
+        let work: SavedWork?
+    }
+
+    /// The works of this series this device knows — the downloaded others, and
+    /// this work at its own position — in series order. A position of 0 means
+    /// "unknown" and sorts last, in the order the works were found.
+    private var seriesEntries: [SeriesEntry] {
+        var entries: [SeriesEntry] = seriesWorks.map {
+            SeriesEntry(id: $0.id.uuidString, position: $0.seriesPosition, title: $0.title, work: $0)
+        }
+        entries.append(SeriesEntry(id: "current", position: displaySeriesPosition, title: displayTitle, work: nil))
+        return entries.enumerated()
+            .sorted { lhs, rhs in
+                let left = lhs.element.position > 0 ? lhs.element.position : Int.max
+                let right = rhs.element.position > 0 ? rhs.element.position : Int.max
+                return left == right ? lhs.offset < rhs.offset : left < right
+            }
+            .map(\.element)
+    }
+
+    /// The card's lines in order. Downloading a whole series needs a local anchor
+    /// record, so that line is offered once the work itself is in the library.
+    private var seriesRows: [SeriesRow] {
+        var rows: [SeriesRow] = [.header]
+        rows += seriesEntries.map { SeriesRow.entry($0) }
+        let hasSeriesURL = !displaySeriesURL.isEmpty
+        if hasSeriesURL, localWork != nil { rows.append(.download) }
+        if hasSeriesURL { rows.append(.openOnAO3) }
+        return rows
+    }
+
     @ViewBuilder
     var seriesSection: some View {
         if !displaySeriesTitle.isEmpty {
+            let rows = seriesRows
             Section {
-                Group {
-                    VStack(alignment: .leading, spacing: 10) {
-                        LabeledContent("Series", value: displaySeriesTitle)
-                        if displaySeriesPosition > 0 {
-                            LabeledContent("Part", value: "\(displaySeriesPosition)")
-                        }
-                    }
+                SectionRuleHeader(title: "Series")
+                    .accessibilityAddTraits(.isHeader)
+                    .pageBodyRow(top: 24, gutter: 0)
 
-                    ForEach(seriesWorks) { other in
-                        if gate.isBlurred(other, enabled: hideMature, mode: matureMode) {
-                            // Blur mode: unnamed until revealed, and the tap reveals. This
-                            // row gave the title and opened the work's page with no reveal.
-                            Button {
-                                gate.reveal(other)
-                            } label: {
-                                HStack {
-                                    if other.seriesPosition > 0 {
-                                        Text("\(other.seriesPosition).")
-                                            .foregroundStyle(.secondary)
-                                            .monospacedDigit()
-                                    }
-                                    Text("Hidden mature work").foregroundStyle(.secondary)
-                                }
-                            }
-                            .accessibilityLabel("Hidden mature work. Activate to reveal.")
-                        } else {
-                            NavigationLink {
-                                WorkDetailView(work: other)
-                            } label: {
-                                HStack {
-                                    if other.seriesPosition > 0 {
-                                        Text("\(other.seriesPosition).")
-                                            .foregroundStyle(.secondary)
-                                            .monospacedDigit()
-                                    }
-                                    Text(other.title).lineLimit(1)
-                                }
-                            }
-                        }
-                    }
-
-                    if !displaySeriesURL.isEmpty {
-                        // Downloading a whole series needs a local anchor record;
-                        // offered once the work itself is in the library.
-                        if localWork != nil {
-                            Button {
-                                Task { await downloadSeries() }
-                            } label: {
-                                HStack {
-                                    Label(
-                                        queuingSeries ? "Fetching series…" : "Download Whole Series",
-                                        systemImage: "arrow.down.circle"
-                                    )
-                                    Spacer()
-                                    if queuingSeries { ProgressView().accentFill() }
-                                }
-                            }
-                            .disabled(queuingSeries)
-                        }
-
-                        Button {
-                            if let url = URL(string: displaySeriesURL) { router.open(url) }
-                        } label: {
-                            Label("View Full Series on AO3", systemImage: "safari")
-                        }
-                    }
+                ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+                    seriesRowView(row)
+                        .panelSegment(index, of: rows.count, gutter: SubjectMetrics.gutter)
                 }
-                .cardRow()
-            } header: {
-                Text("Series")
-            } footer: {
+
                 if localWork != nil, seriesWorks.isEmpty {
                     Text("When you download more works from this series, they will appear here.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .pageBodyRow(top: 8)
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private func seriesRowView(_ row: SeriesRow) -> some View {
+        switch row {
+        case .header:
+            // A row that states the series and, when AO3 gave its address, opens it.
+            if let url = URL(string: displaySeriesURL) {
+                Button { router.open(url) } label: { seriesHeaderLine(opens: true) }
+                    .buttonStyle(.plain)
+            } else {
+                seriesHeaderLine(opens: false)
+            }
+        case let .entry(entry):
+            seriesEntryRow(entry)
+        case .download:
+            Button {
+                Task { await downloadSeries() }
+            } label: {
+                HStack(spacing: 10) {
+                    Label(
+                        queuingSeries ? "Fetching series…" : "Download Whole Series",
+                        systemImage: "arrow.down.circle"
+                    )
+                    .foregroundStyle(.accentInk)
+                    Spacer(minLength: 0)
+                    if queuingSeries { ProgressView().accentFill() }
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(queuingSeries)
+        case .openOnAO3:
+            Button {
+                if let url = URL(string: displaySeriesURL) { router.open(url) }
+            } label: {
+                Label("View Full Series on AO3", systemImage: "safari")
+                    .foregroundStyle(.accentInk)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private func seriesHeaderLine(opens: Bool) -> some View {
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 0) {
+                Text(displaySeriesTitle).font(.body)
+                if displaySeriesPosition > 0 {
+                    Text("Part \(displaySeriesPosition)")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            if opens { seriesChevron }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .contentShape(Rectangle())
+    }
+
+    private var seriesChevron: some View {
+        Image(systemName: "chevron.right")
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(Color.secondary.opacity(0.7))
+            .accessibilityHidden(true)
+    }
+
+    /// A numbered line: "2." then the title, "This work" for the open one, a
+    /// chevron for the others. A mature work under Blur is unnamed until revealed,
+    /// and the tap reveals (it used to give the title and open the page unrevealed).
+    @ViewBuilder
+    private func seriesEntryRow(_ entry: SeriesEntry) -> some View {
+        let number = entry.position > 0 ? "\(entry.position)." : ""
+        if let other = entry.work {
+            if gate.isBlurred(other, enabled: hideMature, mode: matureMode) {
+                Button {
+                    gate.reveal(other)
+                } label: {
+                    seriesEntryLine(number: number, title: "Hidden mature work", isCurrent: false, dimmed: true)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Hidden mature work. Activate to reveal.")
+            } else {
+                seriesEntryLine(number: number, title: other.title, isCurrent: false, dimmed: false)
+                    .subjectRowNavigation(accessibilityLabel: other.title) {
+                        WorkDetailView(work: other)
+                    }
+            }
+        } else {
+            seriesEntryLine(number: number, title: entry.title, isCurrent: true, dimmed: false)
+                .accessibilityElement(children: .combine)
+                .accessibilityAddTraits(.isSelected)
+        }
+    }
+
+    private func seriesEntryLine(number: String, title: String, isCurrent: Bool, dimmed: Bool) -> some View {
+        HStack(spacing: 10) {
+            Text(number)
+                .font(.subheadline)
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+                .frame(minWidth: 22, alignment: .leading)
+            Text(title)
+                .font(.body.weight(isCurrent ? .semibold : .regular))
+                .foregroundStyle(dimmed ? .secondary : .primary)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if isCurrent {
+                Text("This work")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else if !dimmed {
+                seriesChevron
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+        .contentShape(Rectangle())
     }
 }
