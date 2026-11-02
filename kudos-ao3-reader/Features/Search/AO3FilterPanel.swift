@@ -49,6 +49,8 @@ struct AO3FilterPanel: View {
     var onApplyWorksSort: ((AO3WorksSort) -> Void)?
     var ranking: Binding<LoadedWorksRanking>?
     var totalWorks: Int?
+    /// The filters the loaded results were fetched with; the count only describes those.
+    @State private var openedFilters: AO3SearchFilters
 
     @State var sortPresentation: WorksSortPresentation
     #if DEBUG
@@ -88,6 +90,7 @@ struct AO3FilterPanel: View {
         self.onApplyWorksSort = onApplyWorksSort
         self.ranking = ranking
         self.totalWorks = totalWorks
+        _openedFilters = State(initialValue: filters.wrappedValue)
         _sortPresentation = State(initialValue: WorksSortPresentation(applied: worksSort))
     }
 
@@ -96,12 +99,18 @@ struct AO3FilterPanel: View {
     @Environment(\.colorScheme) private var colorScheme
     var isDark: Bool { colorScheme == .dark }
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    /// Two card columns, one at accessibility sizes so long warning titles don't truncate.
+    private var cardColumns: [GridItem] {
+        dynamicTypeSize.isAccessibilitySize ? [GridItem(.flexible())] : [GridItem(.flexible()), GridItem(.flexible())]
+    }
+
     private var resultsButtonTitle: String {
         if mode == .refine {
             let matching = refineMatchCount ?? filters.apply(to: refineSource).count
             return "Show \(matching.formatted()) \(matching == 1 ? "Work" : "Works")"
         }
-        if let total = totalWorks {
+        if let total = totalWorks, filters == openedFilters {
             return "Show \(total.formatted()) \(total == 1 ? "Work" : "Works")"
         }
         return "Show Works"
@@ -340,7 +349,7 @@ extension AO3FilterPanel {
 
     private var categoriesSection: some View {
         Section {
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+            LazyVGrid(columns: cardColumns, spacing: 8) {
                 ForEach(AO3SearchFilters.Category.allCases) { category in
                     FilterSymbolChipCard(
                         title: category.title,
@@ -367,7 +376,7 @@ extension AO3FilterPanel {
                         .textCase(.uppercase)
                         .padding(.horizontal, 4)
 
-                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                    LazyVGrid(columns: cardColumns, spacing: 8) {
                         warningCard(.noWarnings, title: "No Warnings Apply")
                         warningCard(.chooseNotTo, title: "Creator Chose Not To Use")
                     }
@@ -380,7 +389,7 @@ extension AO3FilterPanel {
                         .textCase(.uppercase)
                         .padding(.horizontal, 4)
 
-                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                    LazyVGrid(columns: cardColumns, spacing: 8) {
                         warningCard(.violence, title: "Graphic Violence")
                         warningCard(.death, title: "Major Character Death")
                         warningCard(.nonCon, title: "Rape/Non-Con")
