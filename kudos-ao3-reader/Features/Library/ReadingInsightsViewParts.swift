@@ -255,7 +255,7 @@ struct WhereTheWordsWentCard: View {
                             .monospacedDigit()
                             .frame(width: 36, alignment: .trailing)
                     }
-                    .frame(height: 34)
+                    .frame(minHeight: 34)
                 }
             }
         }
@@ -329,7 +329,7 @@ struct ReadingAndListeningCard: View {
                         .font(.subheadline.weight(.semibold))
                         .monospacedDigit()
                 }
-                .frame(height: 30)
+                .frame(minHeight: 30)
 
                 Divider()
                     .overlay(theme.appTheme.cardBorder)
@@ -354,7 +354,7 @@ struct ReadingAndListeningCard: View {
                         .font(.subheadline.weight(.semibold))
                         .monospacedDigit()
                 }
-                .frame(height: 30)
+                .frame(minHeight: 30)
             }
         }
         .padding(16)
@@ -533,38 +533,41 @@ struct FinishedInPeriodSection: View {
                             .overlay(theme.appTheme.cardBorder)
                     }
 
-                    HStack(spacing: 12) {
-                        VStack(alignment: .leading, spacing: 3) {
-                            if let fandom = work.workFandoms.first, !fandom.isEmpty {
-                                HStack(spacing: 6) {
-                                    Circle()
-                                        .fill(fandomColor(for: fandom))
-                                        .frame(width: 8, height: 8)
-                                    let displayName = discreetMode ? "Fandom" : fandom
-                                    Text(displayName)
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
+                    NavigationLink(value: work) {
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                if let fandom = work.workFandoms.first, !fandom.isEmpty {
+                                    HStack(spacing: 6) {
+                                        Circle()
+                                            .fill(fandomColor(for: fandom))
+                                            .frame(width: 8, height: 8)
+                                        let displayName = discreetMode ? "Fandom" : fandom
+                                        Text(displayName)
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                    }
                                 }
+
+                                Text(work.title)
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(.primary)
+                                    .lineLimit(1)
+
+                                let wordStr = work.wordCount > 0 ? "\(work.wordCount.formatted()) words" : ""
+                                Text(wordStr)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
                             }
+                            .frame(maxWidth: .infinity, alignment: .leading)
 
-                            Text(work.title)
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(.primary)
-                                .lineLimit(1)
-
-                            let wordStr = work.wordCount > 0 ? "\(work.wordCount.formatted()) words" : ""
-                            Text(wordStr)
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(.tertiary)
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(.tertiary)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
+                    .buttonStyle(.plain)
                 }
 
                 if works.count > 3 {
@@ -1890,7 +1893,7 @@ struct LibraryStillReadingCard: View {
                     Text("Still Reading")
                         .font(.subheadline.weight(.semibold))
                         .frame(maxWidth: .infinity)
-                        .frame(height: 38)
+                        .frame(minHeight: 38)
                         .background(Color.primary.opacity(0.08))
                         .foregroundStyle(.primary)
                         .clipShape(Capsule())
@@ -1903,7 +1906,7 @@ struct LibraryStillReadingCard: View {
                     Text("Stopped…")
                         .font(.subheadline.weight(.semibold))
                         .frame(maxWidth: .infinity)
-                        .frame(height: 38)
+                        .frame(minHeight: 38)
                         .background(Color.primary.opacity(0.08))
                         .foregroundStyle(theme.effectiveTint)
                         .clipShape(Capsule())
