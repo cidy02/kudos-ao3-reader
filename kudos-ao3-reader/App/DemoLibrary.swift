@@ -335,6 +335,9 @@ enum DebugShots {
         ("revokedevice", DebugShot(route: "acct:settings:syncFolder", sheets: ["revokedevice"])),
         ("backupimport", DebugShot(route: "acct:settings:backup", sheets: ["backupimport"])),
         ("aboutkudos", DebugShot(route: "acct:settings:about", sheets: ["aboutkudos"])),
+        ("libfilter", DebugShot(route: "library", sheets: ["libfilter"])),
+        ("libselect", DebugShot(route: "library", sheets: ["libselect"])),
+        ("searchfilters", DebugShot(route: "search", sheets: ["searchfilters"])),
     ]
 
     static var names: [String] { ordered.map(\.name) }
@@ -405,11 +408,17 @@ enum DebugLaunchRoute {
     private static var taken: Set<String> = []
 
     static func wantsSheet(_ id: String) -> Bool {
-        shot?.sheets.contains(id) == true && !taken.contains("s:\(id)")
+        if id == "libpicker" && shot?.sheets.contains("libfilter") == true {
+            return !taken.contains("s:libfilter")
+        }
+        if id == "bulktag" && shot?.sheets.contains("libselect") == true {
+            return !taken.contains("s:libselect")
+        }
+        return shot?.sheets.contains(id) == true && !taken.contains("s:\(id)")
     }
 
     static func takeSheet(_ id: String) -> Bool {
-        guard wantsSheet(id) else { return false }
+        guard shot?.sheets.contains(id) == true, wantsSheet(id) else { return false }
         taken.insert("s:\(id)")
         return true
     }
@@ -440,7 +449,7 @@ enum DebugLaunchRoute {
     static var opensSearchFilters: Bool { opensFilters || wantsSearchFilters }
 
     static var wantsSearchFilters: Bool {
-        wantsSheet("savesearch") || wantsSheet("tagpicker") || wantsPush("languagepicker")
+        wantsSheet("savesearch") || wantsSheet("tagpicker") || wantsPush("languagepicker") || wantsSheet("searchfilters")
     }
 
     /// A recovery copy for the notes field of work 1001, only for `shot:recovery`.
