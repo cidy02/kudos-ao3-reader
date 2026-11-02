@@ -200,65 +200,22 @@ struct CategoryCardSkeleton: View {
         // so the icon ends up inset from the card's edge by exactly the one
         // outer padding, not that padding plus a second one of its own.
         VStack(alignment: .leading, spacing: 10) {
-            // Two lines, not one: category.name is almost always long enough to
-            // wrap onto 2 lines at .headline weight (every card in the actual
-            // screenshot did) — a single 16pt line under-represented the title's
-            // real height by roughly a full line.
-            VStack(alignment: .leading, spacing: 6) {
-                SkeletonTextLine(height: 19, width: 160)
-                SkeletonTextLine(height: 19, width: 96)
+            VStack(alignment: .leading, spacing: 4) {
+                SkeletonTextLine(height: 17, width: 120)
+                SkeletonTextLine(height: 12, width: 80)
             }
-            .padding(.trailing, 32)
-            HStack(spacing: 16) {
-                SkeletonBlock(height: 13, width: 96)
-                SkeletonBlock(height: 13, width: 78)
-            }
-
-            // Matches categoryCard's own recentlyRead block: a label line plus a
-            // wrapping row of chip-shaped placeholders (FlowLayout, same as the
-            // real chips — a plain HStack would overflow the card's width past
-            // 2-3 placeholders instead of wrapping), only when chipCount > 0.
-            // Chip height 28 to match TagChip's own real padded size (.caption
-            // text + 5pt vertical padding on each side). A real chip's fandom
-            // name is truncated (TagChip's own .lineLimit(1)) to whatever fits,
-            // never wider than the card — 150pt didn't respect that ceiling: on
-            // the narrowest supported device a 2-column masonry card's own
-            // content width is ~133pt, so that chip was wider than its own
-            // card and (SkeletonBlock now sizing to an exact width rather than
-            // silently collapsing) visibly spilled into the next column.
-            // 116/82 stay safely under that on every supported width.
             if chipCount > 0 {
-                SkeletonBlock(height: 11, width: 92, cornerRadius: 3)
-                    .padding(.top, 2)
-                FlowLayout(spacing: 6, rowSpacing: 6) {
-                    ForEach(0 ..< chipCount, id: \.self) { index in
-                        SkeletonBlock(
-                            height: 28,
-                            width: index.isMultiple(of: 2) ? 116 : 82,
-                            cornerRadius: SubjectMetrics.capsuleRadius
-                        )
+                VStack(spacing: 6) {
+                    ForEach(0 ..< min(chipCount, 3), id: \.self) { _ in
+                        SkeletonBlock(height: 30, width: nil, cornerRadius: 15)
                     }
                 }
             }
+            SkeletonBlock(height: 14, width: 70, cornerRadius: 4)
         }
+        .padding(12)
         .frame(maxWidth: .infinity, alignment: .topLeading)
-        .overlay(alignment: .topTrailing) {
-            SkeletonBlock(height: 26, width: 26, cornerRadius: 7)
-        }
-        .padding(CardListMetrics.innerHorizontal)
-        .frame(maxWidth: .infinity, alignment: .topLeading)
-        // Clips the *content* to the card's own bounds before the background/
-        // shadow below is added, so an oversized child (a chip wider than the
-        // card, say) is cut off at this card's edge instead of visibly
-        // spilling into the neighboring masonry column — confirmed on device.
-        // Applied before .background, not after, so the shadow (drawn as part
-        // of that background layer) keeps its own soft edge instead of also
-        // getting clipped.
         .clipShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
-        // Same card chrome as the real grid cell (theme.appTheme.cardSurface/
-        // cardBorder/cardShadow) — this renders inside a plain masonry column,
-        // not a List row, so it needs its own background the way .cardRow()
-        // used to supply for free.
         .background(
             RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
                 .fill(themeManager.appTheme.cardSurface)
@@ -507,32 +464,28 @@ struct CategoryCardSkeletonList: View {
     /// Higher counts than the masonry version this replaced: those chips were
     /// the handful of "recently read" fandoms, where these are the panel's
     /// cluster of up to twelve (see `MediaBrowserView.clusterFandomLimit`).
-    private static let chipCountPattern = [8, 12, 5, 10, 3, 12, 7, 9]
+    private static let chipCountPattern = [3, 2, 1, 3, 2, 3, 1, 2]
+    #if os(iOS)
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    #endif
 
     var body: some View {
         #if os(iOS)
-        // Matches MediaBrowserView.categoryGrid's own structure: one full-width
-        // panel per category down a ScrollView. It followed that view off the
-        // masonry grid — a placeholder in a shape the real screen no longer
-        // takes is worse than no placeholder, because the layout visibly
-        // rearranges the moment the content lands.
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
+            let columns = dynamicTypeSize.isAccessibilitySize ? 1 : 2
+            MasonryLayout(columns: columns, spacing: 10, rowSpacing: 10) {
                 ForEach(0 ..< count, id: \.self) { index in
                     CategoryCardSkeleton(chipCount: Self.chipCountPattern[index % Self.chipCountPattern.count])
-                        .padding(.horizontal, CardListMetrics.sideMargin)
                 }
             }
+            .padding(.horizontal, 16)
             .padding(.vertical, 12)
         }
         #else
-        // macOS keeps categoryListMac's single-column List/DisclosureGroup shape.
         List {
             Section {
                 ForEach(0 ..< count, id: \.self) { _ in CategoryCardSkeleton() }
                     .cardRow()
-            } header: {
-                Text("Browse by fandom")
             }
         }
         .cardList()

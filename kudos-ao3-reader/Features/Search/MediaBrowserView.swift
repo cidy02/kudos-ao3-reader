@@ -2,30 +2,26 @@ import OSLog
 import SwiftData
 import SwiftUI
 
-/// Fills the Search tab's idle state with a live browse of AO3's media categories
-/// (scraped from `/media`). On iOS, tapping a category pushes a dedicated fandom
+/// Fills the Search tab's idle state and Browse root with a two-column masonry of
+/// solid colour cards (Board 13). On iOS, tapping a category pushes a dedicated fandom
 /// list; on macOS it expands inline to the featured fandoms.
 ///
 /// Each category card is enriched with real fandom/work counts (from the same
 /// per-category fandom index the detail page uses, cached in `FandomCatalog`),
-/// the user's saved-work count in that category, and recently-read fandom chips.
+/// the user's saved-work count in that category, and top fandom chips.
 struct MediaBrowserView: View {
     @Environment(AppRouter.self) private var router
     /// Every raw tag to include, and the name to title the page with. A chip
     /// is a family, so it can name several tags; everything else names one.
     var onSelectFandom: (_ names: [String], _ title: String) -> Void
 
-    /// Deliberately not inside the iOS section below. The category card body is
-    /// shared by both platforms and reads the palette, and `ThemeManager` is put
-    /// into the environment on both — `ContentView` injects it in its macOS
-    /// branch as well as its iOS one. Guarding this declaration is what left
-    /// `categoryPalette` undefined on macOS and broke that build.
     @Environment(ThemeManager.self) private var themeManager
     #if os(iOS)
     /// Set by BrowseView on the stack; pairs a category card with the fandom list
     /// it pushes. Absent elsewhere (Search's idle state), where the helper no-ops.
     @Environment(\.workCardTransitionNamespace) private var zoomNamespace
     #endif
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
     @Environment(PrivacyGate.self) private var gate
@@ -46,14 +42,16 @@ struct MediaBrowserView: View {
     /// Per-category derived stats, recomputed off the render/main path (see
     /// `recomputeStats`); the cards read this rather than deriving inline.
     @State private var statsByCategory: [String: CategoryStats] = [:]
-    /// 1g's "Jump Back In", from the same off-actor pass — see `jumpBackInFandoms`.
+    /// Jump Back In picks from the off-actor pass — see `jumpBackInFandoms`.
     @State private var jumpBackInPicks: [JumpBackInPick] = []
-    /// About a third of a phone's width, so a fourth card peeks at the edge.
-    @ScaledMetric(relativeTo: .subheadline) private var jumpBackInCardWidth: CGFloat = 112
+    @ScaledMetric(relativeTo: .subheadline) private var categoryNameSize: CGFloat = 17
+    @ScaledMetric(relativeTo: .caption) private var categoryStatSize: CGFloat = 12
+    @ScaledMetric(relativeTo: .subheadline) private var chipTitleSize: CGFloat = 13
+    @ScaledMetric(relativeTo: .caption2) private var chipCountSize: CGFloat = 11
+    @ScaledMetric(relativeTo: .subheadline) private var moreLinkSize: CGFloat = 13
+    @ScaledMetric(relativeTo: .subheadline) private var jumpBackInTitleSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .footnote) private var jumpBackInDetailSize: CGFloat = 13
     @ScaledMetric(relativeTo: .footnote) private var openWebsiteSize: CGFloat = 13.5
-    @ScaledMetric(relativeTo: .subheadline) private var categoryNameSize: CGFloat = 15
-    @ScaledMetric(relativeTo: .footnote) private var jumpBackInTitleSize: CGFloat = 14
-    @ScaledMetric(relativeTo: .caption) private var jumpBackInCountSize: CGFloat = 10.5
     /// Set once `cardsReady` has waited as long as it is willing to for counts
     /// (a warm cache beats it; a cold one does not) — see `load`.
     @State private var countsSettled = false
@@ -70,9 +68,6 @@ struct MediaBrowserView: View {
     /// Whether the cards can be drawn complete — every category's counts are in,
     /// or `load`'s grace period has expired and we show what we have (names plus
     /// a count placeholder) rather than keep the reader on a skeleton.
-    /// `fandomCount` is the right thing to check: it and `savedCount` /
-    /// `recentFandoms` all come out of the same `recomputeStats` pass, so a
-    /// category with its count has its downloaded count and chips too.
     private var cardsReady: Bool {
         guard !categories.isEmpty else { return false }
         return countsSettled
@@ -98,14 +93,22 @@ struct MediaBrowserView: View {
                 loadFailure(message, systemImage: systemImage)
                 #endif
             case .loaded:
-                // The names arrive a whole round of requests before the counts
-                // do, so revealing here would show every card with its title
-                // and an empty stat line that pops a beat later. Keep the
-                // skeleton up until the cards can be drawn complete.
                 if cardsReady { categoryList } else { CategoryCardSkeletonList() }
             }
         }
         .appScreenSurface(.content)
+        #if os(iOS)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    router.openWebsite()
+                } label: {
+                    Image(systemName: "globe")
+                }
+                .accessibilityLabel("AO3 website")
+            }
+        }
+        #endif
         .task { if categories.isEmpty { await load() } }
         // Derive per-category stats off the main render path, refired (and debounced)
         // whenever a fandom list lands or the library changes.
@@ -122,8 +125,6 @@ struct MediaBrowserView: View {
         }
     }
 
-    /// Used by the iOS panels *and* by the card body further down, which is
-    /// shared with macOS — so it cannot live inside the iOS-only section.
     private func categoryPalette(_ category: AO3MediaCategory) -> SubjectPalette {
         themeManager.appTheme.subjectPalette(hue: CoverArt.hue(for: category.name))
     }
@@ -137,51 +138,187 @@ struct MediaBrowserView: View {
     }
 
     #if os(iOS)
-    /// Artboard 1g: one full-width panel per category rather than a masonry grid
-    /// of cards.
-    ///
-    /// The masonry layout went with the grid. It existed to keep two columns of
-    /// variable-height cards level — a real problem, solved properly — but a
-    /// single column of full-width panels has no columns to balance, so keeping
-    /// it would have meant paying for a custom `Layout` pass to do nothing.
-    ///
-    /// The panels are wide because the chip cluster needs the width: 1g drops the
-    /// horizontal carousel specifically so no fandom hides off the right edge,
-    /// and a two-column card cannot hold a dozen wrapped chips.
+    /// Board 13: Jump Back In followed by a two-column masonry of solid colour cards.
     private var categoryGrid: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 26) {
                 jumpBackInSection
 
-                ForEach(categories) { category in
-                    NavigationLink(value: category) {
-                        categoryPanel(category)
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Categories")
+                        .font(.title3.weight(.bold))
+                        .foregroundStyle(.primary)
+                        .padding(.horizontal, 16)
+                        .accessibilityAddTraits(.isHeader)
+
+                    let columns = dynamicTypeSize.isAccessibilitySize ? 1 : 2
+                    MasonryLayout(columns: columns, spacing: 10, rowSpacing: 10) {
+                        ForEach(categories) { category in
+                            categoryCardView(category)
+                                .onAppear { visibleCategoryIDs.insert(category.id) }
+                                .onDisappear { visibleCategoryIDs.remove(category.id) }
+                        }
                     }
-                    .buttonStyle(.plain)
-                    // On the NavigationLink itself, not on the panel inside its
-                    // label: the system pairs the transition with the link that
-                    // performs the push, and marking a nested subview instead
-                    // leaves the pair unmatched — which degrades silently to an
-                    // ordinary push (verified on device before this moved).
-                    .workCardZoomSource(BrowseZoomKey.category(category.id), in: zoomNamespace)
-                    .onAppear { visibleCategoryIDs.insert(category.id) }
-                    .onDisappear { visibleCategoryIDs.remove(category.id) }
+                    .padding(.horizontal, 16)
                 }
 
                 openWebsiteRow
             }
             .padding(.vertical, 12)
         }
-        // `/media` is `max-age=600, public`, so without the invalidation the
-        // gesture re-renders the same bytes for ten minutes.
         .refreshable {
             await AO3Client.shared.invalidateCachedResponses()
             await refresh()
         }
     }
 
-    /// 1g's last row: the rest of AO3, a dashed row rather than a card — it
-    /// leaves the native screens.
+    /// Board 13 solid colour card: takes its colour from the category name, shows its icon
+    /// large behind it at 15% white, category name at the top, fandom and work counts,
+    /// download capsule top-right, and top fandoms as 18%-white capsules.
+    private func categoryCardView(_ category: AO3MediaCategory) -> some View {
+        let stats = statsByCategory[category.id]
+        let chips = stats?.clusterFandoms ?? []
+
+        return VStack(alignment: .leading, spacing: 10) {
+            NavigationLink(value: category) {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(wrapSafeName(category.name))
+                            .font(.system(size: categoryNameSize, weight: .bold))
+                            .foregroundStyle(Color.white)
+                            .lineLimit(nil)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        if let fandomCount = stats?.familyCount ?? stats?.fandomCount {
+                            let fandomText = "\(compact(fandomCount)) fandoms"
+                            let worksText: String = {
+                                if let works = stats?.workCount {
+                                    let figure = compact(works)
+                                    return (stats?.isApproximateWorkCount == true) ? "· ~\(figure) works" : "· \(figure) works"
+                                }
+                                return ""
+                            }()
+                            Text("\(fandomText) \(worksText)")
+                                .font(.system(size: categoryStatSize))
+                                .foregroundStyle(Color.white.opacity(0.8))
+                                .lineLimit(2)
+                        } else {
+                            SkeletonBlock(height: 12, width: 80, cornerRadius: 3)
+                                .opacity(0.4)
+                        }
+                    }
+
+                    Spacer(minLength: 4)
+
+                    if let saved = stats?.savedCount, saved > 0 {
+                        HStack(spacing: 3) {
+                            Image(systemName: "arrow.down.to.line")
+                                .font(.system(size: 10, weight: .bold))
+                            Text("\(saved)")
+                                .font(.system(size: 12, weight: .semibold))
+                                .monospacedDigit()
+                        }
+                        .foregroundStyle(Color.white)
+                        .padding(.horizontal, 8)
+                        .frame(height: 22)
+                        .background(Color.white.opacity(0.22), in: Capsule())
+                        .accessibilityLabel("\(saved) downloaded")
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(categoryHeaderAccessibilityLabel(category, stats: stats))
+
+            VStack(spacing: 6) {
+                ForEach(chips) { chip in
+                    Button {
+                        onSelectFandom(chip.names, chip.title)
+                    } label: {
+                        HStack(spacing: 6) {
+                            if chip.isFamiliar {
+                                Circle()
+                                    .fill(Color.white)
+                                    .frame(width: 6, height: 6)
+                                    .accessibilityHidden(true)
+                            }
+                            Text(chip.title)
+                                .font(.system(size: chipTitleSize, weight: .semibold))
+                                .foregroundStyle(Color.white)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                            Spacer(minLength: 4)
+                            Text((chip.isApproximate ? "~" : "") + compact(chip.workCount))
+                                .font(.system(size: chipCountSize))
+                                .foregroundStyle(Color.white.opacity(0.8))
+                                .lineLimit(1)
+                                .layoutPriority(1)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .frame(minHeight: 30)
+                        .background(Color.white.opacity(0.18), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(chip.title), \(compact(chip.workCount)) works" + (chip.isFamiliar ? ", you have read from this fandom" : ""))
+                }
+
+                NavigationLink(value: category) {
+                    HStack(spacing: 4) {
+                        if let count = stats?.familyCount ?? stats?.fandomCount {
+                            Text("\(compact(count)) fandoms")
+                                .font(.system(size: moreLinkSize, weight: .semibold))
+                        } else {
+                            Text("All fandoms")
+                                .font(.system(size: moreLinkSize, weight: .semibold))
+                        }
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 10, weight: .semibold))
+                            .accessibilityHidden(true)
+                    }
+                    .foregroundStyle(Color.white)
+                    .frame(minHeight: 24)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 2)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("All \(stats?.familyCount ?? stats?.fandomCount ?? 0) fandoms in \(category.name)")
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(
+            RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
+                .fill(CoverArt.workGradient(fandoms: [category.name], title: ""))
+        )
+        .overlay(alignment: .topTrailing) {
+            Image(systemName: category.symbol)
+                .font(.system(size: 110, weight: .regular))
+                .foregroundStyle(Color.white.opacity(0.15))
+                .offset(x: 20, y: -10)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
+        .workCardZoomSource(BrowseZoomKey.category(category.id), in: zoomNamespace)
+    }
+
+    private func categoryHeaderAccessibilityLabel(_ category: AO3MediaCategory, stats: CategoryStats?) -> String {
+        var parts = [category.name]
+        if let fandomCount = stats?.familyCount ?? stats?.fandomCount {
+            parts.append("\(compact(fandomCount)) fandoms")
+        }
+        if let works = stats?.workCount {
+            let label = (stats?.isApproximateWorkCount == true) ? "about \(compact(works)) works" : "\(compact(works)) works"
+            parts.append(label)
+        }
+        if let saved = stats?.savedCount, saved > 0 {
+            parts.append("\(saved) downloaded")
+        }
+        return parts.joined(separator: ", ")
+    }
+    #endif
+
+    /// The rest of AO3, a dashed row rather than a card.
     private var openWebsiteRow: some View {
         Button {
             router.openWebsite()
@@ -205,82 +342,33 @@ struct MediaBrowserView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .padding(.horizontal, CardListMetrics.sideMargin)
+        .padding(.horizontal, 16)
         .padding(.top, 2)
+        .accessibilityLabel("Open AO3 Website")
     }
 
-    private func categoryPanel(_ category: AO3MediaCategory) -> some View {
-        let stats = statsByCategory[category.id]
-        let palette = categoryPalette(category)
-        // Lowercased once per panel rather than once per chip: the cluster is up
-        // to twelve chips and it is re-read on every render.
-        let familiarNames = Set((stats?.recentFandoms ?? []).map { $0.lowercased() })
-
-        return SubjectPanel(palette: palette, leadingSymbol: category.symbol) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(wrapSafeName(category.name))
-                    .font(.system(size: categoryNameSize))
-                    .foregroundStyle(.primary)
-                    .fixedSize(horizontal: false, vertical: true)
-                statsLine(stats, palette: palette)
-            }
-        } content: {
-            if let stats, !stats.clusterFandoms.isEmpty {
-                fandomCluster(stats, palette: palette, familiarNames: familiarNames)
-            }
-        }
-        .padding(.horizontal, CardListMetrics.sideMargin)
-    }
-
-    /// The chips, wrapping rather than scrolling, with the real remainder pinned
-    /// at the end. Spec 1g is explicit that nothing here scrolls sideways — a
-    /// carousel hides fandoms off the right edge, which is the reason this
-    /// replaced one — and draws two rows, so the cluster stops at two.
-    private func fandomCluster(
-        _ stats: CategoryStats,
-        palette: SubjectPalette,
-        familiarNames: Set<String>
-    ) -> some View {
-        FandomChipCluster(
-            fandoms: stats.clusterFandoms,
-            total: stats.familyCount ?? stats.clusterFandoms.count,
-            palette: palette,
-            familiarNames: familiarNames,
-            onSelect: { onSelectFandom($0.names, $0.title) }
-        )
-    }
-
-    /// Spec 1g's "Jump Back In": the fandoms you were most recently reading, as
-    /// compact cards carrying their category, name and size.
-    ///
-    /// Ranked across every category by when you last read, in the stats pass
-    /// (`jumpBackInFandoms`). It used to flatten each category's `recentFandoms`
-    /// in category order, so three read fandoms in Anime & Manga hid the TV
-    /// fandom read last night — and those were ordered by date added.
+    /// Board 13: Jump Back In — compact grey chips with a fandom swatch.
     @ViewBuilder
     private var jumpBackInSection: some View {
         let recent = jumpBackInEntries
         if !recent.isEmpty {
-            VStack(alignment: .leading, spacing: 11) {
-                SectionRuleHeader(title: "Jump Back In", count: recent.count)
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Jump Back In")
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(.primary)
+                    .padding(.horizontal, 16)
+                    .accessibilityAddTraits(.isHeader)
 
-                // A carousel of up to ten (owner, 2026-10-01), so each card keeps
-                // a fixed width instead of sharing the row three ways.
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(alignment: .top, spacing: 11) {
+                    HStack(spacing: 8) {
                         ForEach(recent, id: \.fandom) { entry in
-                            Button { onSelectFandom([entry.fandom], entry.fandom) } label: {
-                                jumpBackInCard(entry).frame(width: jumpBackInCardWidth)
-                            }
-                            .buttonStyle(.plain)
+                            jumpBackInCard(entry)
                         }
                     }
-                    // One height for the row: a two-line name made its card the odd one out.
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, CardListMetrics.sideMargin)
-                    .padding(.vertical, 6)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 4)
                 }
-                .horizontalScrollViewport(preservesShadows: true, cardGutter: CardListMetrics.sideMargin)
+                .horizontalScrollViewport(preservesShadows: true, cardGutter: 16)
             }
         }
     }
@@ -289,6 +377,8 @@ struct MediaBrowserView: View {
         let fandom: String
         let category: AO3MediaCategory
         let workCount: Int?
+        let isFavorite: Bool
+        let lastVisitedAt: Date?
     }
 
     /// At most ten (`jumpBackInLimit`), one per fandom, most recently visited or
@@ -296,51 +386,111 @@ struct MediaBrowserView: View {
     private var jumpBackInEntries: [JumpBackInEntry] {
         jumpBackInPicks.compactMap { pick in
             guard let category = categories.first(where: { $0.id == pick.categoryID }) else { return nil }
-            return JumpBackInEntry(fandom: pick.fandom, category: category, workCount: pick.workCount)
+            return JumpBackInEntry(
+                fandom: pick.fandom,
+                category: category,
+                workCount: pick.workCount,
+                isFavorite: pick.isFavorite,
+                lastVisitedAt: pick.lastVisitedAt
+            )
         }
+    }
+
+    private var jumpBackInChipBackground: Color {
+        #if os(iOS)
+        themeManager.appTheme.appElevatedBackground ?? Color(uiColor: .secondarySystemBackground)
+        #else
+        themeManager.appTheme.appElevatedBackground ?? Color(nsColor: .controlBackgroundColor)
+        #endif
+    }
+
+    private var jumpBackInMaxWidth: CGFloat? {
+        dynamicTypeSize.isAccessibilitySize ? nil : 260
     }
 
     private func jumpBackInCard(_ entry: JumpBackInEntry) -> some View {
-        let palette = categoryPalette(entry.category)
-        return VStack(alignment: .leading, spacing: 8) {
-            SubjectKicker(
-                text: entry.category.name,
-                palette: palette,
-                size: 8.5,
-                ruleWidth: 18,
-                ruleSpacing: 6
-            )
+        Button {
+            onSelectFandom([entry.fandom], entry.fandom)
+        } label: {
+            HStack(spacing: 10) {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(CoverArt.workGradient(fandoms: [entry.fandom], title: ""))
+                    .frame(width: 28, height: 40)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5)
+                    )
+                    .accessibilityHidden(true)
 
-            Text(FandomDisplayName.bareTitle(entry.fandom, among: jumpBackInPicks.map(\.fandom)))
-                .font(.system(size: jumpBackInTitleSize, weight: .semibold))
-                .foregroundStyle(.primary)
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(FandomDisplayName.bareTitle(entry.fandom, among: jumpBackInPicks.map(\.fandom)))
+                        .font(.system(size: jumpBackInTitleSize, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
 
-            if let workCount = entry.workCount {
-                Text("\(compact(workCount)) works")
-                    .font(.system(size: jumpBackInCountSize))
-                    .monospacedDigit()
+                    HStack(spacing: 3) {
+                        Text(entry.category.name)
+                        if entry.isFavorite {
+                            Text("·")
+                            Image(systemName: "star.fill")
+                                .font(.system(size: 9))
+                                .foregroundStyle(Color.subjectFavoriteGold)
+                            Text("favorite")
+                        } else if let visited = entry.lastVisitedAt, Calendar.current.isDateInToday(visited) {
+                            Text("· visited today")
+                        } else if let count = entry.workCount, count > 0 {
+                            Text("· \(compact(count)) works")
+                        }
+                    }
+                    .font(.system(size: jumpBackInDetailSize))
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                }
             }
+            .padding(.leading, 8)
+            .padding(.trailing, 14)
+            .padding(.vertical, 8)
+            .frame(minHeight: 56)
+            .frame(maxWidth: jumpBackInMaxWidth, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(jumpBackInChipBackground)
+            )
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .padding(12)
-        .background(
-            RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
-                .fill(themeManager.appTheme.carouselCardSurface)
-                .overlay(
-                    RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
-                        .fill(palette.cardWash)
-                )
-                .shadow(color: themeManager.appTheme.carouselCardShadow.color,
-                        radius: themeManager.appTheme.carouselCardShadow.radius,
-                        x: 0, y: themeManager.appTheme.carouselCardShadow.y)
-        )
+        .buttonStyle(.plain)
+        .accessibilityLabel(jumpBackInAccessibilityLabel(entry))
     }
-    #else
+
+    private func jumpBackInAccessibilityLabel(_ entry: JumpBackInEntry) -> String {
+        var parts = [entry.fandom, entry.category.name]
+        if entry.isFavorite {
+            parts.append("favorite")
+        } else if let visited = entry.lastVisitedAt, Calendar.current.isDateInToday(visited) {
+            parts.append("visited today")
+        } else if let count = entry.workCount, count > 0 {
+            parts.append("\(compact(count)) works")
+        }
+        return parts.joined(separator: ", ")
+    }
+
+    #if os(macOS)
     private var categoryListMac: some View {
         List {
+            if !jumpBackInEntries.isEmpty {
+                Section {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(jumpBackInEntries, id: \.fandom) { entry in
+                                jumpBackInCard(entry)
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
+                } header: {
+                    Text("Jump Back In")
+                }
+            }
+
             Section {
                 ForEach(categories) { category in
                     DisclosureGroup(isExpanded: expansionBinding(for: category.id)) {
@@ -361,56 +511,23 @@ struct MediaBrowserView: View {
                     .onAppear { visibleCategoryIDs.insert(category.id) }
                     .onDisappear { visibleCategoryIDs.remove(category.id) }
                 }
-                .cardRow() // cards only on the category rows
-            } header: {
-                Text("Browse by fandom")
+                .cardRow()
             }
         }
         .cardList()
-        // `/media` is `max-age=600, public`, so without the invalidation the
-        // gesture re-renders the same bytes for ten minutes.
         .refreshable {
             await AO3Client.shared.invalidateCachedResponses()
             await refresh()
         }
     }
-    #endif
 
-    // MARK: - Card
-
-    /// A non-breaking space before "&", so a wrapped title always breaks *after*
-    /// the ampersand ("Category &" stays on the first line, the next word moves
-    /// down) instead of sometimes breaking before it. Plain wrapping picked
-    /// whichever space ran out of width first — "Anime & Manga" wrapped as
-    /// "Anime" / "& Manga" while every other card ("Books &" / "Literature")
-    /// wrapped the other way; this makes all of them consistent.
-    private func wrapSafeName(_ name: String) -> String {
-        name.replacingOccurrences(of: " &", with: "\u{00A0}&")
-    }
-
-    /// The enriched category card: an emphasized icon + regular-weight name, a stats
-    /// line, and (when present) recently-read chips.
-    ///
-    /// **macOS only now.** iOS draws `categoryPanel` instead (artboard 1g), where
-    /// the same facts sit on a tinted full-width panel with a fandom chip
-    /// cluster. The two platforms genuinely diverge here: macOS keeps a
-    /// `DisclosureGroup` list, which wants a compact row label, not a panel. Reads precomputed
-    /// stats (`statsByCategory`) instead of computing them inline — the derivation
-    /// scans the category's full fandom list (tens of thousands for the big media
-    /// categories) plus the whole library, which must never run per-card during a
-    /// render (see `recomputeStats`).
     private func categoryCard(_ category: AO3MediaCategory) -> some View {
         let stats = statsByCategory[category.id]
         return VStack(alignment: .leading, spacing: 8) {
             Text(wrapSafeName(category.name))
-                .font(.headline.weight(.regular)) // regular weight (was bold)
+                .font(.headline.weight(.regular))
                 .foregroundStyle(.primary)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                // Room for the icon overlay below so the title never renders
-                // under it, and .fixedSize/.lineLimit(nil) so a long name always
-                // wraps onto more lines instead of truncating — one card
-                // ("Anime & Manga") was truncating to "Anime & Ma…" while every
-                // sibling card with an equally long name wrapped fine.
                 .padding(.trailing, 28)
                 .fixedSize(horizontal: false, vertical: true)
                 .lineLimit(nil)
@@ -418,28 +535,28 @@ struct MediaBrowserView: View {
             statsLine(stats, palette: categoryPalette(category))
 
             if let stats, !stats.recentFandoms.isEmpty {
-                // Space, not a rule: the card's own edge is already the boundary in
-                // view here, and a hairline inside it drew a second one a few points
-                // away. "Recently read" is its own labelled block — it does not need
-                // a line to say it starts.
                 Spacer(minLength: 0).frame(height: 2)
                 recentlyRead(stats.recentFandoms)
             }
         }
         .padding(.vertical, 2)
         .frame(maxWidth: .infinity, alignment: .leading)
-        // Icon decoupled from the title row, into the card's own top-right
-        // corner — a badge rather than a leading glyph.
         .overlay(alignment: .topTrailing) {
             Image(systemName: category.symbol)
                 .font(.headline)
                 .foregroundStyle(categoryPalette(category).accent)
         }
     }
+    #endif
+
+    // MARK: - Card helpers
+
+    private func wrapSafeName(_ name: String) -> String {
+        name.replacingOccurrences(of: " &", with: "\u{00A0}&")
+    }
 
     @ViewBuilder
     private func statsLine(_ stats: CategoryStats?, palette: SubjectPalette? = nil) -> some View {
-        // Families, when known: the chips below count fandoms the same way.
         if let count = stats?.familyCount ?? stats?.fandomCount {
             FlowLayout(spacing: 16, rowSpacing: 4) {
                 statItem("books.vertical", "\(compact(count)) fandoms", palette: palette)
@@ -461,20 +578,6 @@ struct MediaBrowserView: View {
         }
     }
 
-    /// Placeholder for a card still waiting on its counts — the cold-cache path
-    /// `cardsReady` deliberately lets through (see `load`).
-    ///
-    /// Shaped like what is actually coming, rather than the single bar this used
-    /// to be: three stat lines, because three separate numbers are loading
-    /// (fandoms, works, downloaded) and at a masonry column's width they wrap
-    /// one per line; then the "Recently read" label and a chip under it. Same
-    /// block metrics as `CategoryCardSkeleton` so the full skeleton and this one
-    /// speak the same placeholder language.
-    ///
-    /// The recently-read rows are reserved for every card, but only categories
-    /// the reader has actually read from will fill them — the rest collapse by
-    /// two rows when their counts land. Reserving is still the better trade:
-    /// under-reserving made every card grow instead.
     private var loadingStats: some View {
         VStack(alignment: .leading, spacing: 4) {
             SkeletonBlock(height: 13, width: 96, cornerRadius: 4)
@@ -490,10 +593,6 @@ struct MediaBrowserView: View {
     }
 
     private func statItem(_ symbol: String, _ text: String, palette: SubjectPalette? = nil) -> some View {
-        // Icon hugs its label and is bold + tinted — matches the Search/Library
-        // result-card stats for visual consistency. On a category card the tint
-        // is that card's own accent, so a pink category does not carry the app's
-        // purple glyphs; `.tint` remains the fallback where there is no card.
         HStack(spacing: 3) {
             Image(systemName: symbol)
                 .font(.caption2.weight(.bold))
@@ -503,8 +602,6 @@ struct MediaBrowserView: View {
         .fixedSize()
     }
 
-    /// Recently-read fandom chips — clearly secondary to the stats. Tapping a chip
-    /// runs a search filtered to that fandom.
     private func recentlyRead(_ fandoms: [String]) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             Text("Recently read")
@@ -512,8 +609,6 @@ struct MediaBrowserView: View {
                 .foregroundStyle(.tertiary)
             FlowLayout(spacing: 6, rowSpacing: 6) {
                 ForEach(fandoms, id: \.self) { fandom in
-                    // Borderless so the chip's tap runs the fandom search instead of
-                    // following the card's navigation link.
                     Button { onSelectFandom([fandom], fandom) } label: {
                         TagChip(text: fandom)
                     }
@@ -527,47 +622,38 @@ struct MediaBrowserView: View {
     // MARK: - Stats
 
     fileprivate struct CategoryStats: Sendable {
-        /// nil while the category's fandom list is still loading.
         var fandomCount: Int?
-        /// Fandoms once disambiguations are merged — what the chips count in.
         var familyCount: Int?
         var workCount: Int?
-        /// True when `workCount` is a sum of per-tag counts and therefore
-        /// double-counts a work tagged with two fandoms in the category.
         var isApproximateWorkCount: Bool = false
         var savedCount: Int
         var recentFandoms: [String]
-        /// One cluster chip: the raw tag for identity and the split name for
-        /// display. Split in `computeStats`, which already runs off the main actor
-        /// — `FandomDisplayName.split` walks a rule list, and doing it per render
-        /// for every chip on every category panel would be that work on every
-        /// scroll.
-        ///
-        /// One chip is a `FandomFamily`: the tags that share a title once their
-        /// disambiguation is dropped ("Naruto", not "Naruto (Anime & Manga)"),
-        /// with their counts summed. 1g draws the bare name.
+
         struct ClusterFandom: Identifiable, Hashable, Sendable {
-            /// The family's id — a join of its members' raw tags.
             let id: String
-            /// AO3's own spellings. What a tap searches on; never rebuilt from
-            /// the split, which is lossy.
             let names: [String]
             let title: String
             let workCount: Int
-            /// Summed across sibling tags, so a work tagged with two counts twice.
             let isApproximate: Bool
+            var isFamiliar: Bool = false
+
+            init(
+                id: String,
+                names: [String],
+                title: String,
+                workCount: Int,
+                isApproximate: Bool,
+                isFamiliar: Bool = false
+            ) {
+                self.id = id
+                self.names = names
+                self.title = title
+                self.workCount = workCount
+                self.isApproximate = isApproximate
+                self.isFamiliar = isFamiliar
+            }
         }
 
-        /// The chips artboard 1g clusters under each category, biggest first.
-        ///
-        /// The spec calls these the category's *featured* fandoms, and its build
-        /// note says AO3's featured subset is not in the current parse — true,
-        /// and it turns out not to matter. AO3's `/media` picks each category's
-        /// five most-used canonical fandoms, ranked by count (otwarchive's
-        /// `MediaController#index`), and the app already caches the whole
-        /// per-category list with a work count on each. So the cluster applies
-        /// AO3's own rule — most used first — at twelve instead of five, with no
-        /// new request.
         var clusterFandoms: [ClusterFandom] = []
     }
 
@@ -576,8 +662,6 @@ struct MediaBrowserView: View {
     private struct CategoryStatsInput: Sendable {
         let id: String
         let fandoms: [AO3Fandom]
-        /// True when `fandoms` is the full fetched list (so counts are meaningful),
-        /// false while only the small featured set is available.
         let hasFullList: Bool
     }
 
@@ -591,9 +675,26 @@ struct MediaBrowserView: View {
         let dateAdded: Date
         let lastReadDate: Date?
         var isOnDevice = true
+        var isFavorite: Bool = false
 
-        /// When it was last read, or added if it never records a read — the
-        /// same fallback the Library's own recency ordering uses.
+        init(
+            fandomsLower: [String],
+            fandomsDisplay: [String],
+            hasBeenRead: Bool,
+            dateAdded: Date,
+            lastReadDate: Date?,
+            isOnDevice: Bool = true,
+            isFavorite: Bool = false
+        ) {
+            self.fandomsLower = fandomsLower
+            self.fandomsDisplay = fandomsDisplay
+            self.hasBeenRead = hasBeenRead
+            self.dateAdded = dateAdded
+            self.lastReadDate = lastReadDate
+            self.isOnDevice = isOnDevice
+            self.isFavorite = isFavorite
+        }
+
         var recency: Date {
             lastReadDate ?? dateAdded
         }
@@ -605,6 +706,22 @@ struct MediaBrowserView: View {
         let fandom: String
         let categoryID: String
         let workCount: Int?
+        var isFavorite: Bool = false
+        var lastVisitedAt: Date? = nil
+
+        init(
+            fandom: String,
+            categoryID: String,
+            workCount: Int?,
+            isFavorite: Bool = false,
+            lastVisitedAt: Date? = nil
+        ) {
+            self.fandom = fandom
+            self.categoryID = categoryID
+            self.workCount = workCount
+            self.isFavorite = isFavorite
+            self.lastVisitedAt = lastVisitedAt
+        }
     }
 
     /// Cheap signature of everything `recomputeStats` depends on: which categories
@@ -617,16 +734,7 @@ struct MediaBrowserView: View {
         for category in categories {
             parts.append("\(category.id):\(catalog.fandoms(for: category)?.count ?? -1)")
         }
-        // A same-size catalog refresh moves only `revision`.
         parts.append("rev:\(catalog.revision)")
-        // Every read, finish/unfinish and metadata refresh stamps `lastModifiedAt`
-        // (`markModified`/`markProgressModified`), so the max moves whenever Jump
-        // Back In or the chips could; `count` catches soft-deletes leaving the query.
-        // A synced read keeps its own older stamps (`PersistenceSync.applyProgress`),
-        // so it can be the newest read without being the newest change: hence the
-        // `lastReadDate` max as well.
-        // ponytail: a synced read older than both maxima won't retrigger; fingerprint
-        // the works if that ever shows up.
         let changed = library.map(\.lastModifiedAt).max()?.timeIntervalSince1970 ?? 0
         let lastRead = library.compactMap(\.lastReadDate).max()?.timeIntervalSince1970 ?? 0
         parts.append("lib:\(library.count):\(changed):\(lastRead)")
@@ -645,7 +753,6 @@ struct MediaBrowserView: View {
         try? await Task.sleep(for: .milliseconds(150))
         guard !Task.isCancelled else { return }
 
-        // Snapshot on the main actor (SavedWork can't cross actors).
         let works = library.map { work in
             LibraryWorkSnapshot(
                 fandomsLower: work.workFandoms.map { $0.lowercased() },
@@ -653,8 +760,8 @@ struct MediaBrowserView: View {
                 hasBeenRead: work.hasBeenRead,
                 dateAdded: work.dateAdded,
                 lastReadDate: work.lastReadDate,
-                // "N downloaded" counts kept copies, not ones fetched to read.
-                isOnDevice: work.isDownloaded
+                isOnDevice: work.isDownloaded,
+                isFavorite: work.isFavorite
             )
         }
         let inputs = categories.map { category -> CategoryStatsInput in
@@ -717,11 +824,8 @@ struct MediaBrowserView: View {
         )
     }
 
-    /// How many fandoms a category's chip cluster shows before the rest collapse
-    /// into the "+N more" chip. Twelve fills roughly three wrapped rows at phone
-    /// width, which is what 1g draws; the remainder is stated exactly rather than
-    /// rounded, since "+9,400 more" is the fact that makes a category feel big.
-    private static let clusterFandomLimit = 12
+    /// Board 13: each category card shows up to 3 top fandom chips.
+    private static let clusterFandomLimit = 3
 
     /// Pure, off-actor derivation: builds each category's lowercased name set ONCE
     /// (the expensive part for big categories) and scans the library against it.
@@ -729,8 +833,6 @@ struct MediaBrowserView: View {
         inputs: [CategoryStatsInput],
         works: [LibraryWorkSnapshot]
     ) -> [String: CategoryStats] {
-        // Most recently read first, like Jump Back In: these are the category
-        // card's "recently read" chips, and date added said nothing about that.
         let readWorks = works
             .filter(\.hasBeenRead)
             .sorted { $0.recency > $1.recency }
@@ -741,7 +843,6 @@ struct MediaBrowserView: View {
             let nameSet = Set(input.fandoms.map { $0.name.lowercased() })
 
             var savedCount = 0
-            // "N downloaded" is the EPUBs on this device (owner, 2026-09-28).
             for work in works where work.isOnDevice && work.fandomsLower.contains(where: nameSet.contains) {
                 savedCount += 1
             }
@@ -757,22 +858,41 @@ struct MediaBrowserView: View {
                 if recent.count >= recentFandomsLimit { break }
             }
 
-            // Sorted here, in the off-actor pass, not in the view: a category can
-            // hold nine thousand fandoms, and sorting that on every render is the
-            // kind of work this whole `computeStats` split exists to avoid.
             let families = input.hasFullList ? FandomFamily.grouped(fandoms: input.fandoms) : []
-            let cluster: [CategoryStats.ClusterFandom] = families
-                .sorted { $0.summedWorkCount > $1.summedWorkCount }
-                .prefix(clusterFandomLimit)
-                .map { family in
-                    CategoryStats.ClusterFandom(
-                        id: family.id,
-                        names: family.includedFilterNames,
-                        title: family.parsedTitle,
-                        workCount: family.summedWorkCount,
-                        isApproximate: family.showsApproximateCount
-                    )
+            let familiarSet = Set(recent.map { $0.lowercased() })
+            var pickedFamilies: [FandomFamily] = []
+            var pickedIDs = Set<String>()
+
+            // 1. Familiar families in this category first
+            for family in families where family.includedFilterNames.contains(where: { familiarSet.contains($0.lowercased()) }) {
+                if pickedIDs.insert(family.id).inserted {
+                    pickedFamilies.append(family)
+                    if pickedFamilies.count >= clusterFandomLimit { break }
                 }
+            }
+
+            // 2. Fill remaining slots with largest fandoms by work count
+            if pickedFamilies.count < clusterFandomLimit {
+                let sortedByCount = families.sorted { $0.summedWorkCount > $1.summedWorkCount }
+                for family in sortedByCount {
+                    if pickedIDs.insert(family.id).inserted {
+                        pickedFamilies.append(family)
+                        if pickedFamilies.count >= clusterFandomLimit { break }
+                    }
+                }
+            }
+
+            let cluster: [CategoryStats.ClusterFandom] = pickedFamilies.map { family in
+                let isFamiliar = family.includedFilterNames.contains { familiarSet.contains($0.lowercased()) }
+                return CategoryStats.ClusterFandom(
+                    id: family.id,
+                    names: family.includedFilterNames,
+                    title: family.parsedTitle,
+                    workCount: family.summedWorkCount,
+                    isApproximate: family.showsApproximateCount,
+                    isFamiliar: isFamiliar
+                )
+            }
 
             let summed = input.hasFullList ? CategoryWorkTotal.summedTagCounts(input.fandoms) : nil
             result[input.id] = CategoryStats(
@@ -873,55 +993,6 @@ private extension SavedWork {
     }
 }
 
-/// 1g's chip cluster, two rows at most. The layout reports how many chips fit;
-/// the rest are hidden, and the dashed chip carries the real remainder.
-private struct FandomChipCluster: View {
-    let fandoms: [MediaBrowserView.CategoryStats.ClusterFandom]
-    let total: Int
-    let palette: SubjectPalette
-    let familiarNames: Set<String>
-    let onSelect: (MediaBrowserView.CategoryStats.ClusterFandom) -> Void
-
-    /// Until the first layout pass, everything counts as shown.
-    @State private var fitCount: Int?
-
-    private var shown: Int { min(fitCount ?? fandoms.count, fandoms.count) }
-
-    var body: some View {
-        let remainder = max(0, total - shown)
-        CappedFlowLayout(spacing: 7, rowSpacing: 7, maxRows: 2, onFit: { count in
-            guard count != fitCount else { return }
-            DispatchQueue.main.async { fitCount = count }
-        }) {
-            ForEach(Array(fandoms.enumerated()), id: \.element.id) { index, fandom in
-                // Borderless so a chip tap opens that fandom instead of following
-                // the panel's own navigation link.
-                Button { onSelect(fandom) } label: {
-                    FandomClusterChip(
-                        title: fandom.title,
-                        workCount: fandom.workCount,
-                        isApproximateCount: fandom.isApproximate,
-                        isFamiliar: fandom.names.contains { familiarNames.contains($0.lowercased()) },
-                        palette: palette
-                    )
-                }
-                .buttonStyle(.borderless)
-                .opacity(index < shown ? 1 : 0)
-                .accessibilityHidden(index >= shown)
-            }
-            // Always the last subview — the layout keeps room for it. Not a
-            // button: the panel it sits in already pushes the full list, and a
-            // second target for that destination would race it for the touch.
-            if remainder > 0 {
-                SubjectChip(text: "+\(remainder.formatted(.number.notation(.compactName))) more", style: .dashed)
-                    .accessibilityLabel("\(remainder.formatted()) more fandoms")
-            } else {
-                Color.clear.frame(width: 0, height: 0)
-            }
-        }
-    }
-}
-
 /// `FlowLayout` stopped at `maxRows`. The last subview is a trailing chip that
 /// always gets a place, after as many of the others as fit; the rest get no
 /// room. `onFit` hears how many fitted, so the caller can hide them and count
@@ -933,7 +1004,6 @@ struct CappedFlowLayout: Layout {
     var onFit: (Int) -> Void = { _ in }
 
     struct Arrangement: Equatable {
-        /// One per chip but the trailing one; nil for a chip that did not fit.
         var origins: [CGPoint?]
         var trailing: CGPoint?
         var fitCount: Int
@@ -976,8 +1046,6 @@ struct CappedFlowLayout: Layout {
         return ideal.width <= maxWidth ? ideal : subview.sizeThatFits(ProposedViewSize(width: maxWidth, height: nil))
     }
 
-    /// Greedy rows over the chips, stopping at `maxRows`; chips come off the
-    /// end until the trailing one fits after them.
     func arrange(sizes: [CGSize], trailing: CGSize, width: CGFloat) -> Arrangement {
         for fitCount in stride(from: sizes.count, through: 0, by: -1) {
             let placed = place(Array(sizes.prefix(fitCount)) + [trailing], width: width)
@@ -991,7 +1059,6 @@ struct CappedFlowLayout: Layout {
         )
     }
 
-    /// Nil when these sizes need more than `maxRows`.
     private func place(_ sizes: [CGSize], width: CGFloat) -> (origins: [CGPoint], size: CGSize)? {
         var origins: [CGPoint] = []
         var x: CGFloat = 0, y: CGFloat = 0, rowHeight: CGFloat = 0, rows = 1, widest: CGFloat = 0

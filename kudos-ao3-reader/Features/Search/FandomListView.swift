@@ -280,8 +280,8 @@ struct FandomListView: View {
             VStack(spacing: 0) {
                 ForEach(Self.indexLetters, id: \.self) { letter in
                     Text(letter)
-                        .font(.system(size: indexFontSize, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: indexFontSize, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(available.contains(letter) ? themeManager.accentInk : .secondary)
                         .opacity(available.contains(letter) ? 1 : 0.28)
                         .frame(maxHeight: .infinity)
                 }
