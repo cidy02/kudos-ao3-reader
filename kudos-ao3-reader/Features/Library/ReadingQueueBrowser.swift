@@ -329,7 +329,7 @@ struct ReadingQueueBrowserView: View {
 
     private var queueOverrideInlineTitle: String? {
         if isSelecting { return "\(selectedWorks.count) selected" }
-        if isReordering { return queueInlineTitle }
+        if isReordering || works.isEmpty { return queueInlineTitle }
         return nil
     }
 
@@ -652,7 +652,7 @@ extension ReadingQueueBrowserView {
     private var compactGrid: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                if !isSelecting {
+                if !isReordering && !isSelecting {
                     if let selectedQueue {
                         QueuePageHeader(
                             queue: selectedQueue,
@@ -670,7 +670,7 @@ extension ReadingQueueBrowserView {
                         .padding(.top, 16)
                         .padding(.bottom, 8)
                     }
-                } else {
+                } else if isSelecting {
                     selectionStatusRow
                         .padding(.horizontal, SubjectMetrics.gutter)
                         .padding(.top, 12)
@@ -863,16 +863,13 @@ extension ReadingQueueBrowserView {
         }
     }
 
-    /// Untinted toolbar '+' control matching the rest of the queue toolbar (board 04; keeps .glassProminent).
+    /// Untinted toolbar '+' control matching the rest of the queue toolbar (board 04).
     private var addWorksButton: some View {
         Button {
             showingAddWorks = true
         } label: {
             Label("Add Works", systemImage: "plus")
         }
-        #if os(iOS)
-        .buttonStyle(.glassProminent)
-        #endif
         .help("Add works from your library")
     }
 
