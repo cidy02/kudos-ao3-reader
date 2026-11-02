@@ -213,11 +213,12 @@ struct AO3SeriesDetailView: View {
                     // internally (MatureContent.swift) for its non-blurred, non-selecting
                     // branch — re-wrapping it stacks a second, unhidden, real-titled
                     // NavigationLink behind the blurred branch's reveal gate.
-                    SensitiveWorkRow(work: work, expandAll: expandAll, showsSummary: showSummaries)
+                    SensitiveWorkRow(
+                        work: work, expandAll: expandAll, showsSummary: showSummaries, twin: entry.remote
+                    )
                         .cardRow(chrome: .plain)
                 } else if let remote = entry.remote {
-                    AO3WorkRow(work: remote, expandAll: expandAll, showsSummary: showSummaries)
-                        .cardNavigation(to: remote, accessibilityLabel: remote.title)
+                    SensitiveWorkRow(work: remote, expandAll: expandAll, showsSummary: showSummaries)
                         .cardRow(chrome: .plain)
                 }
             }
@@ -235,10 +236,8 @@ struct AO3SeriesDetailView: View {
     private var workEntries: [CanonicalWork] {
         CanonicalWorkMerge.remoteLed(
             remote: works,
-            localLibrary: localWorks.filter {
-                !gate.isHidden($0, enabled: hideMature, mode: matureMode)
-            }
-        )
+            localLibrary: localWorks
+        ).filter { !gate.isHidden($0, enabled: hideMature, mode: matureMode) }
     }
 
     private var authenticationScope: String {

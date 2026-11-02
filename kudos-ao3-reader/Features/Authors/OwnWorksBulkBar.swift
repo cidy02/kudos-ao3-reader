@@ -23,19 +23,32 @@ struct OwnWorksBulkBar: View {
         .disabled(selectedCount < 1 || isBusy)
     }
 
+    /// The title an alert may print: a concealed mature work names nothing.
+    static func displayTitle(_ work: AO3WorkSummary, isConcealed: Bool) -> String {
+        isConcealed ? "Hidden mature work" : work.title
+    }
+
     /// 1bo's alert shape: "Delete “Title”?" for one, "Delete 3 works?" for more.
-    static func deleteTitle(_ works: [AO3WorkSummary]) -> String {
-        works.count == 1 ? "Delete “\(works[0].title)”?" : "Delete \(works.count) works?"
+    static func deleteTitle(
+        _ works: [AO3WorkSummary],
+        isConcealed: (AO3WorkSummary) -> Bool = { _ in false }
+    ) -> String {
+        works.count == 1
+            ? "Delete “\(displayTitle(works[0], isConcealed: isConcealed(works[0])))”?"
+            : "Delete \(works.count) works?"
     }
 
     /// Names every work: a bulk delete is the one place a list is the point.
     /// The single swipe's wording (`AuthorProfileView`), made plural.
-    static func deleteMessage(_ works: [AO3WorkSummary]) -> String {
+    static func deleteMessage(
+        _ works: [AO3WorkSummary],
+        isConcealed: (AO3WorkSummary) -> Bool = { _ in false }
+    ) -> String {
         guard works.count > 1 else {
             return "This permanently removes the work and its chapters, kudos, comments and bookmarks "
                 + "from AO3 for everyone."
         }
-        let titles = ListFormatter.localizedString(byJoining: works.map { "“\($0.title)”" })
+        let titles = ListFormatter.localizedString(byJoining: works.map { "“\(displayTitle($0, isConcealed: isConcealed($0)))”" })
         return "This permanently removes \(titles) and their chapters, kudos, comments and bookmarks "
             + "from AO3 for everyone."
     }
@@ -46,6 +59,8 @@ struct OwnWorksBulkBar: View {
 /// session they were selected under, which the write is fenced to.
 struct OwnWorksBulkDelete: ViewModifier {
     @Environment(AO3AuthService.self) private var auth
+    @Environment(PrivacyGate.self) private var gate
+    @AppStorage("hideMatureContent") private var hideMature = true
     @Binding var pending: (works: [AO3WorkSummary], generation: Int)?
     @Binding var isDeleting: Bool
     @Binding var errorMessage: String?
@@ -53,14 +68,18 @@ struct OwnWorksBulkDelete: ViewModifier {
 
     func body(content: Content) -> some View {
         content.alert(
-            OwnWorksBulkBar.deleteTitle(pending?.works ?? []),
+            OwnWorksBulkBar.deleteTitle(pending?.works ?? [], isConcealed: isConcealed),
             isPresented: Binding(get: { pending != nil }, set: { if !$0 { pending = nil } })
         ) {
             Button("Delete on AO3", role: .destructive) { confirm() }
             Button("Cancel", role: .cancel) { pending = nil }
         } message: {
-            Text(OwnWorksBulkBar.deleteMessage(pending?.works ?? []))
+            Text(OwnWorksBulkBar.deleteMessage(pending?.works ?? [], isConcealed: isConcealed))
         }
+    }
+
+    private func isConcealed(_ work: AO3WorkSummary) -> Bool {
+        gate.isConcealed(work, enabled: hideMature)
     }
 
     private func confirm() {

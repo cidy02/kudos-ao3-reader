@@ -24,6 +24,13 @@ extension SavedWork {
     }
 }
 
+extension AO3WorkSummary {
+    /// AO3-rated Mature or Explicit — the works the privacy feature shields.
+    var isAdult: Bool {
+        rating == "Mature" || rating == "Explicit"
+    }
+}
+
 /// One reveal affordance everywhere a mature item keeps its blurred footprint.
 struct MatureRevealCapsule: View {
     var body: some View {
@@ -43,18 +50,45 @@ struct MatureRevealCapsule: View {
 @Observable
 final class PrivacyGate {
     private(set) var revealedIDs: Set<UUID> = []
+    private(set) var revealedRemoteIDs: Set<Int> = []
     /// When true, every sensitive work is shown until toggled back off.
     private(set) var revealAll = false
 
     func isRevealed(_ work: SavedWork) -> Bool {
-        revealAll || revealedIDs.contains(work.id)
+        let remoteID = work.ao3WorkID ?? WorkTags.ao3WorkID(from: work.sourceURL)
+        return revealAll || revealedIDs.contains(work.id)
+            || (remoteID.map { revealedRemoteIDs.contains($0) } ?? false)
+    }
+
+    func isRevealed(_ work: AO3WorkSummary) -> Bool {
+        revealAll || revealedRemoteIDs.contains(work.id)
+    }
+
+    func isRevealed(remoteID: Int) -> Bool {
+        revealAll || revealedRemoteIDs.contains(remoteID)
     }
 
     /// Reveals a single work (a Blur-mode tap), authenticating first if required.
-    func reveal(_ work: SavedWork) {
+    /// `alsoRemoteID` is the canonical remote twin's id, revealed in the same (single) authentication.
+    func reveal(_ work: SavedWork, alsoRemoteID: Int? = nil) {
         authenticate {
             self.revealedIDs.insert(work.id)
+            if let ao3ID = work.ao3WorkID ?? WorkTags.ao3WorkID(from: work.sourceURL) {
+                self.revealedRemoteIDs.insert(ao3ID)
+            }
+            if let alsoRemoteID { self.revealedRemoteIDs.insert(alsoRemoteID) }
             Log.privacy.info("Revealed a mature work for this session")
+        }
+    }
+
+    func reveal(_ work: AO3WorkSummary) {
+        reveal(remoteID: work.id)
+    }
+
+    func reveal(remoteID: Int) {
+        authenticate {
+            self.revealedRemoteIDs.insert(remoteID)
+            Log.privacy.info("Revealed a mature remote work for this session")
         }
     }
 
@@ -63,6 +97,7 @@ final class PrivacyGate {
         if revealAll {
             revealAll = false
             revealedIDs.removeAll()
+            revealedRemoteIDs.removeAll()
             Log.privacy.info("Re-hid all mature works")
         } else {
             authenticate {
@@ -77,10 +112,21 @@ final class PrivacyGate {
         enabled && work.isAdult && mode == .hide && !isRevealed(work)
     }
 
+    func isHidden(_ work: AO3WorkSummary, enabled: Bool, mode: MaturePrivacyMode) -> Bool {
+        enabled && work.isAdult && mode == .hide && !isRevealed(work)
+    }
+
     /// Whether this work is drawn blurred right now (Blur mode only): until it is revealed,
     /// nothing may open it or name it.
     func isBlurred(_ work: SavedWork, enabled: Bool, mode: MaturePrivacyMode) -> Bool {
         enabled && work.isAdult && mode == .obscure && !isRevealed(work)
+    }
+
+    /// An unknown rating is drawn blurred in either mode (we do not know it is safe), and
+    /// stays revealable by its id; once enrichment supplies a rating the normal rules apply.
+    func isBlurred(_ work: AO3WorkSummary, enabled: Bool, mode: MaturePrivacyMode) -> Bool {
+        (enabled && work.isAdult && mode == .obscure && !isRevealed(work))
+            || isPrivacyUndetermined(work, enabled: enabled)
     }
 
     /// Whether a place that shows a work's title or author must leave this one out right
@@ -88,6 +134,49 @@ final class PrivacyGate {
     /// For anything that cannot draw the blurred card (a picker row, a tile's small cover).
     func isConcealed(_ work: SavedWork, enabled: Bool) -> Bool {
         enabled && work.isAdult && !isRevealed(work)
+    }
+
+    func isConcealed(_ work: AO3WorkSummary, enabled: Bool) -> Bool {
+        (enabled && work.isAdult && !isRevealed(work)) || isPrivacyUndetermined(work, enabled: enabled)
+    }
+
+    /// A sparse AO3 listing has not supplied the rating yet. Keep it anonymous
+    /// while privacy is on rather than briefly exposing a possibly-adult work.
+    func isPrivacyUndetermined(_ work: AO3WorkSummary, enabled: Bool) -> Bool {
+        enabled
+            && work.rating.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !isRevealed(work)
+    }
+
+    func isHidden(_ work: CanonicalWork, enabled: Bool, mode: MaturePrivacyMode) -> Bool {
+        (work.local.map { isHidden($0, enabled: enabled, mode: mode) } ?? false)
+            || (work.remote.map { isHidden($0, enabled: enabled, mode: mode) } ?? false)
+    }
+
+    /// A sparse remote with no rating defers to a rated local twin instead of blurring it.
+    private func remoteDefersToLocal(_ work: CanonicalWork) -> Bool {
+        guard let local = work.local, let remote = work.remote else { return false }
+        return !local.rating.isEmpty
+            && remote.rating.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    func isBlurred(_ work: CanonicalWork, enabled: Bool, mode: MaturePrivacyMode) -> Bool {
+        (work.local.map { isBlurred($0, enabled: enabled, mode: mode) } ?? false)
+            || (!remoteDefersToLocal(work)
+                && (work.remote.map { isBlurred($0, enabled: enabled, mode: mode) } ?? false))
+    }
+
+    func isConcealed(_ work: CanonicalWork, enabled: Bool) -> Bool {
+        (work.local.map { isConcealed($0, enabled: enabled) } ?? false)
+            || (!remoteDefersToLocal(work)
+                && (work.remote.map { isConcealed($0, enabled: enabled) } ?? false))
+    }
+
+    /// A series-edit row carries only its blurb's rating and id: concealed (title masked) once
+    /// it is Mature/Explicit and unrevealed, in Blur and Hide alike (the row cannot be omitted
+    /// without breaking the reorder it belongs to).
+    func isConcealed(_ row: AO3SeriesWorkRow, enabled: Bool) -> Bool {
+        enabled && row.isAdult && !(row.sourceWorkID.map { isRevealed(remoteID: $0) } ?? false)
     }
 
     private func authenticate(_ onSuccess: @escaping () -> Void) {
@@ -112,76 +201,165 @@ final class PrivacyGate {
 
 /// A work row that respects content privacy. When the work is Mature/Explicit and
 /// Blur mode is on, it blurs the row and reveals on tap; in Hide mode the list
-/// filters the work out before it reaches this view. Otherwise it's a normal
-/// navigation row. The caller still attaches its own `.swipeActions`.
+/// filters the work out before it reaches this view (or this view renders EmptyView).
+/// Otherwise it's a normal navigation row. The caller still attaches its own `.swipeActions`.
 struct SensitiveWorkRow: View {
-    let work: SavedWork
-    /// Forwarded to the underlying `WorkRow` so a list's expand/collapse-all toggle
-    /// reaches local cards too.
+    private enum Target {
+        case saved(SavedWork)
+        case remote(AO3WorkSummary)
+    }
+
+    private let target: Target
     var expandAll: Bool = false
     var openMode: LocalWorkRowOpenMode = .detail
     var onSelect: (() -> Void)?
-    /// When true, taps toggle selection instead of navigating/revealing, and the
-    /// row shows a selection bubble (mirrors the carousel's `SelectableWorkCoverCard`).
     var isSelecting: Bool = false
     var isSelected: Bool = false
     var onToggleSelection: (() -> Void)?
-    /// Forwarded to `WorkRow` so a screen that has moved to the redesign's
-    /// compact ledger row gets it here too, blurred or not.
-    var presentation: WorkRow.Presentation = .standard
-    /// Forwarded to `WorkRow` for 1aj's Favorites star.
+    var savedPresentation: WorkRow.Presentation = .standard
+    var remotePresentation: AO3WorkRow.Presentation = .standard
     var showsFavoriteStar = false
-    /// Forwarded to `WorkRow`. Ledger lists that replaced a detailed card pass true.
     var showsFullLedgerStats = false
-    /// Forwarded to `WorkRow`. Off hides the summary on a standard row; a ledger
-    /// row still shows its two-line summary. Tags still expand.
+    var showsPerformance = false
+    var bookmark: AO3AuthorBookmark?
+    var signal: String?
     var showsSummary = true
-    /// New chapters. Forwarded to the "+N" badge and the chapter bars.
     var badgeCount = 0
-    /// Search and fandom results. Forwarded to `WorkRow`.
     var wide = false
-    /// False when this row shares its list cell with a footnote that draws the separator.
     var showsSeparator = true
-    /// Lists use their row-activation link; ScrollView dashboards need a real
-    /// link inside the privacy boundary. Insets belong inside that same boundary
-    /// so tapping the card's padding reveals/selects exactly like its content.
     var usesInlineNavigation: Bool = false
     var contentInsets = EdgeInsets()
-    /// Queue rows only. Passed through to the one context menu this row owns.
     var scopedRemoval: ScopedRemoval?
     var queueMenu: QueueItemMenuActions?
+    /// The canonical remote twin of a saved work: if it is Mature/Explicit the row is
+    /// concealed even when the local copy's rating is empty or stale.
+    private var twin: AO3WorkSummary?
+
     @Environment(PrivacyGate.self) private var gate
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var mode: MaturePrivacyMode = .obscure
-    /// Drives the blurred row's own expand toggle — WorkRow's internal state isn't
-    /// reachable since its expand button is suppressed (`showsExpandButton: false`)
-    /// in favor of the unblurred external copy below.
     @State private var blurredExpanded = false
 
+    init(
+        work: SavedWork,
+        expandAll: Bool = false,
+        openMode: LocalWorkRowOpenMode = .detail,
+        onSelect: (() -> Void)? = nil,
+        isSelecting: Bool = false,
+        isSelected: Bool = false,
+        onToggleSelection: (() -> Void)? = nil,
+        presentation: WorkRow.Presentation = .standard,
+        showsFavoriteStar: Bool = false,
+        showsFullLedgerStats: Bool = false,
+        showsSummary: Bool = true,
+        badgeCount: Int = 0,
+        wide: Bool = false,
+        showsSeparator: Bool = true,
+        usesInlineNavigation: Bool = false,
+        contentInsets: EdgeInsets = EdgeInsets(),
+        scopedRemoval: ScopedRemoval? = nil,
+        queueMenu: QueueItemMenuActions? = nil,
+        twin: AO3WorkSummary? = nil
+    ) {
+        self.target = .saved(work)
+        self.twin = twin
+        self.expandAll = expandAll
+        self.openMode = openMode
+        self.onSelect = onSelect
+        self.isSelecting = isSelecting
+        self.isSelected = isSelected
+        self.onToggleSelection = onToggleSelection
+        self.savedPresentation = presentation
+        self.showsFavoriteStar = showsFavoriteStar
+        self.showsFullLedgerStats = showsFullLedgerStats
+        self.showsSummary = showsSummary
+        self.badgeCount = badgeCount
+        self.wide = wide
+        self.showsSeparator = showsSeparator
+        self.usesInlineNavigation = usesInlineNavigation
+        self.contentInsets = contentInsets
+        self.scopedRemoval = scopedRemoval
+        self.queueMenu = queueMenu
+    }
+
+    init(
+        work: AO3WorkSummary,
+        expandAll: Bool = false,
+        onSelect: (() -> Void)? = nil,
+        isSelecting: Bool = false,
+        isSelected: Bool = false,
+        onToggleSelection: (() -> Void)? = nil,
+        presentation: AO3WorkRow.Presentation = .standard,
+        showsPerformance: Bool = false,
+        bookmark: AO3AuthorBookmark? = nil,
+        signal: String? = nil,
+        showsSummary: Bool = true,
+        badgeCount: Int = 0,
+        wide: Bool = false,
+        showsSeparator: Bool = true,
+        usesInlineNavigation: Bool = false,
+        contentInsets: EdgeInsets = EdgeInsets()
+    ) {
+        self.target = .remote(work)
+        self.expandAll = expandAll
+        self.onSelect = onSelect
+        self.isSelecting = isSelecting
+        self.isSelected = isSelected
+        self.onToggleSelection = onToggleSelection
+        self.remotePresentation = presentation
+        self.showsPerformance = showsPerformance
+        self.bookmark = bookmark
+        self.signal = signal
+        self.showsSummary = showsSummary
+        self.badgeCount = badgeCount
+        self.wide = wide
+        self.showsSeparator = showsSeparator
+        self.usesInlineNavigation = usesInlineNavigation
+        self.contentInsets = contentInsets
+    }
+
+    private var isHidden: Bool {
+        switch target {
+        case .saved(let work):
+            gate.isHidden(work, enabled: hideMature, mode: mode)
+                || (twin.map { gate.isHidden($0, enabled: hideMature, mode: mode) } ?? false)
+        case .remote(let work):
+            gate.isHidden(work, enabled: hideMature, mode: mode)
+        }
+    }
+
     private var blurred: Bool {
-        hideMature && work.isAdult && mode == .obscure && !gate.isRevealed(work)
+        switch target {
+        case .saved(let work):
+            gate.isBlurred(work, enabled: hideMature, mode: mode)
+                || (twin.map { gate.isBlurred($0, enabled: hideMature, mode: mode) } ?? false)
+        case .remote(let work):
+            gate.isBlurred(work, enabled: hideMature, mode: mode)
+        }
     }
 
     var body: some View {
-        if blurred {
-            // isSelecting/isSelected are deliberately NOT passed to WorkRow here —
-            // its own inline selection bubble would otherwise be blurred into
-            // illegibility along with the rest of the row. showsExpandButton: false
-            // suppresses WorkRow's own expand control for the same reason; an
-            // unblurred copy is overlaid below instead, bound to the same expanded
-            // state via `externalExpanded` so it still expands the blurred content.
-            // The card's selection outline comes from the enclosing `.cardRow(isSelected:)`
-            // at the card's true edge, not from an overlay here (matches WorkRow).
-            // Ledger rows do not expand at all (see WorkRow), so a blurred one
-            // must not sprout the control the unblurred row no longer has.
-            let isExpandableWork = presentation == .standard
+        if isHidden {
+            EmptyView()
+        } else if blurred {
+            blurredBody
+        } else {
+            visibleBody
+        }
+    }
+
+    @ViewBuilder
+    private var blurredBody: some View {
+        switch target {
+        case .saved(let work):
+            let isExpandableWork = savedPresentation == .standard
                 && WorkRow.isExpandable(for: work, showsSummary: showsSummary)
             let content = WorkRow(
                 work: work,
                 expandAll: expandAll,
                 showsExpandButton: false,
                 externalExpanded: $blurredExpanded,
-                presentation: presentation,
+                presentation: savedPresentation,
                 showsFavoriteStar: showsFavoriteStar,
                 showsFullLedgerStats: showsFullLedgerStats,
                 showsSummary: showsSummary,
@@ -189,139 +367,291 @@ struct SensitiveWorkRow: View {
                 wide: wide,
                 showsSeparator: showsSeparator
             )
-                .padding(contentInsets)
-                .environment(\.ao3AuthorNavigationEnabled, false)
-                .blur(radius: 6)
-                .overlay {
-                    // Only while a tap would actually reveal — in select mode a tap
-                    // toggles selection instead (use the toolbar's "Show mature" to
-                    // reveal while selecting), so the control shouldn't promise otherwise.
-                    // I-6: the real row stays, blurred, under one icon capsule.
-                    if !isSelecting {
-                        MatureRevealCapsule()
-                    }
+            .padding(contentInsets)
+            .environment(\.ao3AuthorNavigationEnabled, false)
+            .blur(radius: 6)
+            .overlay {
+                if !isSelecting {
+                    MatureRevealCapsule()
                 }
-                .contentShape(Rectangle())
-                .overlay(alignment: .topTrailing) {
-                    // Rendered outside the blur so it stays legible and tappable —
-                    // mirrors WorkRow's own top-trailing [expand][bubble] cluster.
-                    HStack(spacing: 6) {
-                        if isExpandableWork {
-                            WorkRowExpandButton(expanded: $blurredExpanded)
-                        }
-                        if isSelecting {
-                            WorkSelectionBubble(isSelected: isSelected)
-                        }
-                    }
-                    .padding(8)
-                }
-            if isSelecting {
-                // A real Button (not `.onTapGesture`) so the nested expand button
-                // above reliably captures its own taps first — the same nesting
-                // pattern `visibleRow`'s selecting branch already relies on.
-                Button {
-                    onToggleSelection?()
-                } label: {
-                    content
-                }
-                .buttonStyle(.plain)
-                .accessibilityElement(children: .ignore)
-                // Still blurred, so still unnamed (audit A19-8).
-                .accessibilityLabel("Hidden mature work")
-                .accessibilityValue(isSelected ? "Selected" : "Not selected")
-                .accessibilityHint("Double-tap to \(isSelected ? "deselect" : "select") this work.")
-            } else {
-                Button {
-                    gate.reveal(work)
-                } label: {
-                    content
-                }
-                .buttonStyle(.plain)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Hidden mature work")
-                .accessibilityHint("Activate to reveal.")
             }
-        } else {
-            visibleRow
+            .contentShape(Rectangle())
+            .overlay(alignment: .topTrailing) {
+                HStack(spacing: 6) {
+                    if isExpandableWork {
+                        WorkRowExpandButton(expanded: $blurredExpanded)
+                    }
+                    if isSelecting {
+                        WorkSelectionBubble(isSelected: isSelected)
+                    }
+                }
+                .padding(8)
+            }
+            sensitiveActionContainer(for: content)
+
+        case .remote(let work):
+            let isExpandableWork = remotePresentation == .standard
+                && AO3WorkRow.isExpandable(for: work, bookmark: bookmark, showsSummary: showsSummary)
+            let content = AO3WorkRow(
+                work: work,
+                expandAll: expandAll,
+                presentation: remotePresentation,
+                showsPerformance: showsPerformance,
+                bookmark: bookmark,
+                signal: signal,
+                showsSummary: showsSummary,
+                badgeCount: badgeCount,
+                wide: wide,
+                showsSeparator: showsSeparator,
+                showsExpandButton: false,
+                externalExpanded: $blurredExpanded,
+                showsContextMenu: false
+            )
+            .padding(contentInsets)
+            .environment(\.ao3AuthorNavigationEnabled, false)
+            .blur(radius: 6)
+            .overlay {
+                if !isSelecting {
+                    MatureRevealCapsule()
+                }
+            }
+            .contentShape(Rectangle())
+            .overlay(alignment: .topTrailing) {
+                HStack(spacing: 6) {
+                    if isExpandableWork {
+                        WorkRowExpandButton(expanded: $blurredExpanded)
+                    }
+                    if isSelecting {
+                        WorkSelectionBubble(isSelected: isSelected)
+                    }
+                }
+                .padding(8)
+            }
+            sensitiveActionContainer(for: content)
         }
     }
 
     @ViewBuilder
-    private var visibleRow: some View {
-        let row = WorkRow(
-            work: work,
-            expandAll: expandAll,
-            isSelecting: isSelecting,
-            isSelected: isSelected,
-            presentation: presentation,
-            showsFavoriteStar: showsFavoriteStar,
-            showsFullLedgerStats: showsFullLedgerStats,
-            showsSummary: showsSummary,
-            badgeCount: badgeCount,
-            wide: wide,
-            showsSeparator: showsSeparator
-        )
-        .padding(contentInsets)
-        .contentShape(Rectangle())
-        .localWorkContextMenu(
-            work: work, onSelect: onSelect, scopedRemoval: scopedRemoval, queueMenu: queueMenu
-        )
+    private func sensitiveActionContainer(for content: some View) -> some View {
         if isSelecting {
-            // A tap while selecting must always toggle selection, never open an
-            // author profile — matches the blurred branch's own
-            // ao3AuthorNavigationEnabled override above.
+            Button {
+                onToggleSelection?()
+            } label: {
+                content
+            }
+            .buttonStyle(.plain)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Hidden mature work")
+            .accessibilityValue(isSelected ? "Selected" : "Not selected")
+            .accessibilityHint("Double-tap to \(isSelected ? "deselect" : "select") this work.")
+        } else {
+            Button {
+                revealTarget()
+            } label: {
+                content
+            }
+            .buttonStyle(.plain)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Hidden mature work")
+            .accessibilityHint("Activate to reveal.")
+        }
+    }
+
+    private func revealTarget() {
+        switch target {
+        case .saved(let work):
+            gate.reveal(work, alsoRemoteID: twin?.id)
+        case .remote(let work):
+            gate.reveal(work)
+        }
+    }
+
+    @ViewBuilder
+    private var visibleBody: some View {
+        switch target {
+        case .saved(let work):
+            let row = WorkRow(
+                work: work,
+                expandAll: expandAll,
+                isSelecting: isSelecting,
+                isSelected: isSelected,
+                presentation: savedPresentation,
+                showsFavoriteStar: showsFavoriteStar,
+                showsFullLedgerStats: showsFullLedgerStats,
+                showsSummary: showsSummary,
+                badgeCount: badgeCount,
+                wide: wide,
+                showsSeparator: showsSeparator
+            )
+            .padding(contentInsets)
+            .contentShape(Rectangle())
+            .localWorkContextMenu(
+                work: work, onSelect: onSelect, scopedRemoval: scopedRemoval, queueMenu: queueMenu
+            )
+            selectingOrNavigating(for: row, title: work.title) {
+                if usesInlineNavigation {
+                    switch openMode {
+                    case .detail:
+                        NavigationLink(value: work) { row }.buttonStyle(.plain)
+                    case .reader:
+                        NavigationLink(value: LocalWorkDestination.reader(work)) { row }.buttonStyle(.plain)
+                    }
+                } else {
+                    switch openMode {
+                    case .detail:
+                        row.cardNavigation(to: work, accessibilityLabel: work.title)
+                    case .reader:
+                        row.cardNavigation(to: LocalWorkDestination.reader(work), accessibilityLabel: work.title)
+                    }
+                }
+            }
+
+        case .remote(let work):
+            let row = AO3WorkRow(
+                work: work,
+                expandAll: expandAll,
+                isSelecting: isSelecting,
+                isSelected: isSelected,
+                presentation: remotePresentation,
+                showsPerformance: showsPerformance,
+                bookmark: bookmark,
+                signal: signal,
+                showsSummary: showsSummary,
+                badgeCount: badgeCount,
+                wide: wide,
+                showsSeparator: showsSeparator,
+                showsContextMenu: true
+            )
+            .padding(contentInsets)
+            .contentShape(Rectangle())
+            selectingOrNavigating(for: row, title: work.title) {
+                if usesInlineNavigation {
+                    NavigationLink(value: work) { row }.buttonStyle(.plain)
+                } else {
+                    row.cardNavigation(to: work, accessibilityLabel: work.title)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func selectingOrNavigating(
+        for row: some View,
+        title: String,
+        @ViewBuilder content: () -> some View
+    ) -> some View {
+        if isSelecting {
             Button {
                 onToggleSelection?()
             } label: {
                 row.environment(\.ao3AuthorNavigationEnabled, false)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(work.title)
+            .accessibilityLabel(title)
             .accessibilityValue(isSelected ? "Selected" : "Not selected")
             .accessibilityHint("Double-tap to \(isSelected ? "deselect" : "select") this work.")
             .accessibilityAddTraits(isSelected ? .isSelected : [])
-        } else if usesInlineNavigation {
-            switch openMode {
-            case .detail:
-                NavigationLink(value: work) { row }.buttonStyle(.plain)
-            case .reader:
-                NavigationLink(value: LocalWorkDestination.reader(work)) { row }.buttonStyle(.plain)
-            }
         } else {
-            switch openMode {
-            case .detail:
-                row.cardNavigation(to: work, accessibilityLabel: work.title)
-            case .reader:
-                row.cardNavigation(to: LocalWorkDestination.reader(work), accessibilityLabel: work.title)
-            }
+            content()
         }
     }
 }
 
 /// A carousel card that respects content privacy, mirroring `SensitiveWorkRow` for
-/// `WorkCoverCard`. When the work is Mature/Explicit and Blur mode is on, it blurs
-/// the card and reveals on tap; in Hide mode the carousel filters the work out
-/// before it reaches this view. Also covers the selection-mode carousel case
-/// (`SelectableWorkCoverCard`), so a single component is the drop-in replacement
-/// for both of `LibraryView`'s carousel-card branches.
+/// `WorkCoverCard` and `AO3WorkCoverCard`. When the work is Mature/Explicit and Blur mode is on, it blurs
+/// the card and reveals on tap; in Hide mode the carousel filters the work out (or this view renders EmptyView).
 struct SensitiveWorkCoverCard: View {
-    let work: SavedWork
+    private enum Target {
+        case saved(SavedWork)
+        case remote(AO3WorkSummary)
+    }
+
+    private let target: Target
     var footer: String?
     var progress: Double?
     var metadataStyle: WorkCoverMetadataStyle = .standard
+    var showsProvenanceBadge: Bool = false
     var isSelecting: Bool = false
     var isSelected: Bool = false
     var onToggleSelection: (() -> Void)?
+    /// The canonical remote twin of a saved work (see `SensitiveWorkRow.twin`).
+    private var twin: AO3WorkSummary?
     @Environment(PrivacyGate.self) private var gate
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var mode: MaturePrivacyMode = .obscure
 
+    init(
+        work: SavedWork,
+        footer: String? = nil,
+        progress: Double? = nil,
+        metadataStyle: WorkCoverMetadataStyle = .standard,
+        isSelecting: Bool = false,
+        isSelected: Bool = false,
+        onToggleSelection: (() -> Void)? = nil,
+        twin: AO3WorkSummary? = nil
+    ) {
+        self.target = .saved(work)
+        self.twin = twin
+        self.footer = footer
+        self.progress = progress
+        self.metadataStyle = metadataStyle
+        self.showsProvenanceBadge = false
+        self.isSelecting = isSelecting
+        self.isSelected = isSelected
+        self.onToggleSelection = onToggleSelection
+    }
+
+    init(
+        work: AO3WorkSummary,
+        showsProvenanceBadge: Bool = false,
+        isSelecting: Bool = false,
+        isSelected: Bool = false,
+        onToggleSelection: (() -> Void)? = nil
+    ) {
+        self.target = .remote(work)
+        self.footer = nil
+        self.progress = nil
+        self.metadataStyle = .standard
+        self.showsProvenanceBadge = showsProvenanceBadge
+        self.isSelecting = isSelecting
+        self.isSelected = isSelected
+        self.onToggleSelection = onToggleSelection
+    }
+
+    private var isHidden: Bool {
+        switch target {
+        case .saved(let work):
+            gate.isHidden(work, enabled: hideMature, mode: mode)
+                || (twin.map { gate.isHidden($0, enabled: hideMature, mode: mode) } ?? false)
+        case .remote(let work):
+            gate.isHidden(work, enabled: hideMature, mode: mode)
+        }
+    }
+
     private var blurred: Bool {
-        hideMature && work.isAdult && mode == .obscure && !gate.isRevealed(work)
+        switch target {
+        case .saved(let work):
+            gate.isBlurred(work, enabled: hideMature, mode: mode)
+                || (twin.map { gate.isBlurred($0, enabled: hideMature, mode: mode) } ?? false)
+        case .remote(let work):
+            gate.isBlurred(work, enabled: hideMature, mode: mode)
+        }
     }
 
     var body: some View {
-        if blurred {
+        if isHidden {
+            EmptyView()
+        } else if blurred {
+            blurredCard
+        } else {
+            visibleCard
+        }
+    }
+
+    @ViewBuilder
+    private var blurredCard: some View {
+        switch target {
+        case .saved(let work):
             let card = WorkCoverCard(
                 work: work,
                 footer: footer,
@@ -333,64 +663,166 @@ struct SensitiveWorkCoverCard: View {
             )
             .environment(\.ao3AuthorNavigationEnabled, false)
             .contentShape(Rectangle())
+            sensitiveCoverContainer(for: card)
+
+        case .remote(let work):
+            let card = AO3WorkCoverCard(
+                work: work,
+                showsProvenanceBadge: showsProvenanceBadge,
+                showsInitial: false,
+                isMatureObscured: true,
+                showsMatureRevealCapsule: !isSelecting,
+                showsContextMenu: false
+            )
+            .environment(\.ao3AuthorNavigationEnabled, false)
+            .contentShape(Rectangle())
+            sensitiveCoverContainer(for: card)
+        }
+    }
+
+    @ViewBuilder
+    private func sensitiveCoverContainer(for card: some View) -> some View {
+        if isSelecting {
+            card
+                .overlay(alignment: .topTrailing) {
+                    WorkSelectionBubble(isSelected: isSelected)
+                        .padding(8)
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
+                        .strokeBorder(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(Color.clear), lineWidth: 2)
+                        .allowsHitTesting(false)
+                }
+                .onTapGesture { onToggleSelection?() }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Hidden mature work")
+                .accessibilityValue(isSelected ? "Selected" : "Not selected")
+                .accessibilityHint("Double-tap to \(isSelected ? "deselect" : "select") this work.")
+        } else {
+            card
+                .onTapGesture { revealTarget() }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Hidden mature work")
+                .accessibilityHint("Activate to reveal.")
+        }
+    }
+
+    private func revealTarget() {
+        switch target {
+        case .saved(let work):
+            gate.reveal(work, alsoRemoteID: twin?.id)
+        case .remote(let work):
+            gate.reveal(work)
+        }
+    }
+
+    @ViewBuilder
+    private var visibleCard: some View {
+        switch target {
+        case .saved(let work):
             if isSelecting {
-                card
+                Button {
+                    onToggleSelection?()
+                } label: {
+                    SelectableWorkCoverCard(
+                        work: work,
+                        footer: footer,
+                        progress: progress,
+                        metadataStyle: metadataStyle,
+                        isSelected: isSelected
+                    )
+                    .environment(\.ao3AuthorNavigationEnabled, false)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(work.title)
+                .accessibilityValue(isSelected ? "Selected" : "Not selected")
+                .accessibilityHint("Double-tap to \(isSelected ? "deselect" : "select") this work.")
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
+            } else {
+                WorkCoverCard(
+                    work: work,
+                    footer: footer,
+                    progress: progress,
+                    metadataStyle: metadataStyle
+                )
+            }
+
+        case .remote(let work):
+            if isSelecting {
+                Button {
+                    onToggleSelection?()
+                } label: {
+                    AO3WorkCoverCard(
+                        work: work,
+                        showsProvenanceBadge: showsProvenanceBadge,
+                        showsInitial: true,
+                        showsContextMenu: false
+                    )
                     .overlay(alignment: .topTrailing) {
                         WorkSelectionBubble(isSelected: isSelected)
                             .padding(8)
                     }
-                    // Matches SelectableWorkCoverCard's whole-card outline — without
-                    // it, a blurred selected card only shows the small corner bubble,
-                    // not the same selected-state ring unblurred cards get.
-                    // allowsHitTesting(false): purely decorative — a stroked Shape
-                    // overlay is still hit-testable across its full bounds by
-                    // default, which would otherwise swallow the onTapGesture below.
                     .overlay {
                         RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
                             .strokeBorder(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(Color.clear), lineWidth: 2)
                             .allowsHitTesting(false)
                     }
-                    .onTapGesture { onToggleSelection?() }
-                    .accessibilityElement(children: .ignore)
-                    // Still blurred, so still unnamed (audit A19-8).
-                    .accessibilityLabel("Hidden mature work")
-                    .accessibilityValue(isSelected ? "Selected" : "Not selected")
-                    .accessibilityHint("Double-tap to \(isSelected ? "deselect" : "select") this work.")
-            } else {
-                card
-                    .onTapGesture { gate.reveal(work) }
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("Hidden mature work")
-                    .accessibilityHint("Activate to reveal.")
-            }
-        } else if isSelecting {
-            // A tap while selecting must always toggle selection, never open an
-            // author profile — matches the blurred branch's own
-            // ao3AuthorNavigationEnabled override above.
-            Button {
-                onToggleSelection?()
-            } label: {
-                SelectableWorkCoverCard(
-                    work: work,
-                    footer: footer,
-                    progress: progress,
-                    metadataStyle: metadataStyle,
-                    isSelected: isSelected
-                )
                     .environment(\.ao3AuthorNavigationEnabled, false)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(work.title)
+                .accessibilityValue(isSelected ? "Selected" : "Not selected")
+                .accessibilityHint("Double-tap to \(isSelected ? "deselect" : "select") this work.")
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
+            } else {
+                AO3WorkCoverCard(
+                    work: work,
+                    showsProvenanceBadge: showsProvenanceBadge,
+                    showsInitial: true,
+                    showsContextMenu: true
+                )
+            }
+        }
+    }
+}
+
+/// Privacy wrapper for remote work cards with a surface-specific layout.
+/// It keeps the real card in place under Blur and owns navigation after reveal.
+struct SensitiveRemoteWorkCard<Content: View>: View {
+    let work: AO3WorkSummary
+    let content: Content
+    /// False for a surface that owns its own destination (an own draft opens the editor).
+    var opensWork = true
+
+    @Environment(PrivacyGate.self) private var gate
+    @AppStorage("hideMatureContent") private var hideMature = true
+    @AppStorage("matureContentMode") private var mode: MaturePrivacyMode = .obscure
+
+    init(work: AO3WorkSummary, opensWork: Bool = true, @ViewBuilder content: () -> Content) {
+        self.work = work
+        self.opensWork = opensWork
+        self.content = content()
+    }
+
+    var body: some View {
+        if gate.isHidden(work, enabled: hideMature, mode: mode) {
+            EmptyView()
+        } else if gate.isBlurred(work, enabled: hideMature, mode: mode) {
+            Button { gate.reveal(work) } label: {
+                content
+                    .environment(\.ao3AuthorNavigationEnabled, false)
+                    .blur(radius: 6)
+                    .overlay { MatureRevealCapsule() }
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(work.title)
-            .accessibilityValue(isSelected ? "Selected" : "Not selected")
-            .accessibilityHint("Double-tap to \(isSelected ? "deselect" : "select") this work.")
-            .accessibilityAddTraits(isSelected ? .isSelected : [])
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Hidden mature work")
+            .accessibilityHint("Activate to reveal.")
+        } else if opensWork {
+            content.cardNavigation(to: work, accessibilityLabel: work.title)
         } else {
-            WorkCoverCard(
-                work: work,
-                footer: footer,
-                progress: progress,
-                metadataStyle: metadataStyle
-            )
+            content
         }
     }
 }

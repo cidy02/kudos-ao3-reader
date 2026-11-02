@@ -74,7 +74,8 @@ All paths relative to `kudos-ao3-reader/` unless noted. Confirmed as of 2026-07-
 - `Features/Privacy/MatureContent.swift`: `SavedWork.isAdult` (rating == Mature/Explicit), `PrivacyGate` (@Observable; reveal state; `isHidden` = Hide-mode only), `SensitiveWorkRow` (List rows), `SensitiveWorkCoverCard` (carousel cards), `MatureRevealToggle` (the Privacy button), `PrivacyGate.hasVisibleMatureWorks(in:hideMature:)` (the single button-visibility rule).
 - Modes: `MaturePrivacyMode.obscure` (blur, tap-to-reveal) / `.hide` (filtered out pre-render). Prefs: `@AppStorage("hideMatureContent")`, `("matureContentMode")`.
 - Invariant: the Privacy button gates on the **currently visible, filtered** set of the surface, via the shared rule — never the raw `@Query`.
-- `CanonicalWorkMerge` pairing matches only privacy-visible local works (Hide-mode works keep plain remote rows).
+- Remote-led lists pair against the full local library before applying privacy, so a hidden local work's sparse
+  AO3 twin cannot expose its title. The shared gate then omits Hide-mode entries or blurs their row/card.
 
 ## Themes / UI kit
 

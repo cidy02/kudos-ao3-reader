@@ -55,25 +55,6 @@ enum AO3BookmarksFilter: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
-/// Whether the bookmark footnote has to stay off the card.
-///
-/// `SensitiveWorkRow` blurs only its own body. The note, the bookmark tags,
-/// the date, and the private or rec mark are drawn beside that row, so they
-/// need the same predicate. A private note under "Tap to reveal" is the leak.
-/// A remote-only row has no local work. The view returns before calling
-/// this, and the footnote stays. That is the list's existing rule for
-/// remote rows.
-enum AO3BookmarksMatureBlur {
-    static func isBlurred(
-        isAdult: Bool,
-        hideMature: Bool,
-        mode: MaturePrivacyMode,
-        isRevealed: Bool
-    ) -> Bool {
-        hideMature && isAdult && mode == .obscure && !isRevealed
-    }
-}
-
 enum AO3BookmarksCopy {
     /// What this list is. Page numbers are the pagination bar's, clamped the
     /// way `AO3MarkedForLaterCopy.footer` clamps them.
@@ -281,7 +262,8 @@ struct AO3BookmarksWorksBrowser: View {
                 showsFavoriteStar: fullLedgerStats,
                 showsFullLedgerStats: fullLedgerStats,
                 showsSummary: false,
-                showsSeparator: false
+                showsSeparator: false,
+                twin: entry.remote
             )
         } else if let remote = entry.remote {
             // The remote ledger row already prints the full AO3 stat line.
@@ -296,16 +278,8 @@ struct AO3BookmarksWorksBrowser: View {
         }
     }
 
-    /// Remote rows are not blurred on this screen. Only a saved local work
-    /// can be behind `SensitiveWorkRow`'s own gate.
     private func isBlurred(_ entry: CanonicalWork) -> Bool {
-        guard let work = entry.local else { return false }
-        return AO3BookmarksMatureBlur.isBlurred(
-            isAdult: work.isAdult,
-            hideMature: hideMature,
-            mode: matureMode,
-            isRevealed: gate.isRevealed(work)
-        )
+        gate.isBlurred(entry, enabled: hideMature, mode: matureMode)
     }
 
     private func bookmark(for entry: CanonicalWork) -> AO3AuthorBookmark? {

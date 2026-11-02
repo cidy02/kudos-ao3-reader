@@ -233,7 +233,7 @@ struct AO3AccountWorksList: View {
             works: works,
             enriched: enrichedSubscriptionSummaries,
             filters: filters
-        )
+        ).map { enrichedSubscriptionSummaries[$0.id] ?? $0 }
     }
 
     /// Subscriptions rows shown but not yet judged by the facets; 0 elsewhere.
@@ -256,15 +256,13 @@ struct AO3AccountWorksList: View {
         }
     }
 
-    /// The visible page with locally-saved matches paired in, so each renders as
-    /// the richer local row. Matching only against privacy-visible works keeps a
-    /// Hide-mode Mature work on its plain remote row instead of surfacing local
-    /// state for it; in Blur mode the paired local row blurs itself.
+    /// Pair before applying privacy so a sparse subscription cannot replace its
+    /// hidden local twin and briefly expose the title.
     private var visibleEntries: [CanonicalWork] {
         CanonicalWorkMerge.remoteLed(
             remote: visibleWorks,
-            localLibrary: localWorks.filter { !gate.isHidden($0, enabled: hideMature, mode: matureMode) }
-        )
+            localLibrary: localWorks
+        ).filter { !gate.isHidden($0, enabled: hideMature, mode: matureMode) }
     }
 
     var body: some View {
@@ -661,7 +659,8 @@ struct AO3AccountWorksList: View {
                                         showsFavoriteStar: true,
                                         showsFullLedgerStats: true,
                                         showsSummary: false,
-                                        badgeCount: newChapterCount(for: entry)
+                                        badgeCount: newChapterCount(for: entry),
+                                        twin: entry.remote
                                     )
                                 }
                                     .cardRow(chrome: .plain)
@@ -1166,7 +1165,7 @@ struct EnrichingAO3WorkRow: View {
     private var displayed: AO3WorkSummary { enriched ?? work }
 
     var body: some View {
-        AO3WorkRow(
+        SensitiveWorkRow(
             work: displayed,
             expandAll: expandAll,
             presentation: presentation,
@@ -1176,16 +1175,15 @@ struct EnrichingAO3WorkRow: View {
             wide: wide,
             showsSeparator: showsSeparator
         )
-            .cardNavigation(to: displayed, accessibilityLabel: displayed.title)
-            .task(id: work.id) {
-                // `.task(id:)` so recycling this row onto a different work cancels
-                // the previous fetch instead of writing its result into the new row.
-                let result = await AO3SparseWorkEnricher.shared.enrich(work)
-                enriched = result
-                if let result {
-                    onEnriched?(result)
-                }
+        .task(id: work.id) {
+            // `.task(id:)` so recycling this row onto a different work cancels
+            // the previous fetch instead of writing its result into the new row.
+            let result = await AO3SparseWorkEnricher.shared.enrich(work)
+            enriched = result
+            if let result {
+                onEnriched?(result)
             }
+        }
     }
 }
 

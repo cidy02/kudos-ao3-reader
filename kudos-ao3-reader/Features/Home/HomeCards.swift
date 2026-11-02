@@ -268,6 +268,14 @@ struct AO3WorkCoverCard: View {
     let work: AO3WorkSummary
     /// Draws `AO3ProvenanceBadge`. Only where remote and local cards share a row.
     var showsProvenanceBadge = false
+    /// A hidden mature work must not draw its initial: the letter stays
+    /// recognisable under the 6 pt blur.
+    var showsInitial: Bool = true
+    var isMatureObscured: Bool = false
+    var showsMatureRevealCapsule: Bool = true
+    /// False suppresses the card's context menu — used when blurred so long-pressing
+    /// a concealed mature work does not pop up a menu detailing it.
+    var showsContextMenu: Bool = true
 
     /// See `WorkCoverCard.zoomNamespace`.
     @Environment(\.workCardTransitionNamespace) private var zoomNamespace
@@ -282,27 +290,42 @@ struct AO3WorkCoverCard: View {
     /// reading progress, so the centre slot takes its update date (the local
     /// card's "+N new" slot), and there is no preservation state to report.
     var body: some View {
-        WorkSummaryCardSurface(
+        let surface = WorkSummaryCardSurface(
             art: CoverArt.workArt(fandoms: work.fandoms, title: work.title),
             title: work.title,
             author: work.authorText,
-            fandom: primaryFandom
+            fandom: primaryFandom,
+            showsInitial: showsInitial,
+            isMatureObscured: isMatureObscured,
+            showsMatureRevealCapsule: showsMatureRevealCapsule
         ) {
-            cardStats
-            Text(remoteMeta ?? "")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            if isMatureObscured {
+                Text("Hidden mature work")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            } else {
+                cardStats
+                Text(remoteMeta ?? "")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
         .overlay(alignment: .topTrailing) {
-            if showsProvenanceBadge {
+            if showsProvenanceBadge && !isMatureObscured {
                 AO3ProvenanceBadge()
                     .padding(AO3ProvenanceBadge.edgeInset)
             }
         }
         .workCardZoomSource(work.zoomKey, in: zoomNamespace)
-        .remoteWorkContextMenu(work: work)
+
+        if showsContextMenu && !isMatureObscured {
+            surface.remoteWorkContextMenu(work: work)
+        } else {
+            surface
+        }
     }
 
     private var cardStats: some View {

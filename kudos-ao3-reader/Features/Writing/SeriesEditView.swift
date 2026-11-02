@@ -285,6 +285,8 @@ struct SeriesReorderView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(ThemeManager.self) private var theme
     @Environment(AO3AuthService.self) private var auth
+    @Environment(PrivacyGate.self) private var gate
+    @AppStorage("hideMatureContent") private var hideMature = true
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @ScaledMetric(relativeTo: .subheadline) private var workTitleSize: CGFloat = 14.5
@@ -384,13 +386,14 @@ struct SeriesReorderView: View {
         // reorder row: beside it the title was cut ("A Lamp at the Crossi…").
         let layout = dynamicTypeSize.isAccessibilitySize
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: 3)) : AnyLayout(HStackLayout(spacing: 12))
+        let concealed = gate.isConcealed(row, enabled: hideMature)
         return layout {
             Text("\(index)")
                 .font(.system(size: positionNumberSize, weight: .semibold, design: .monospaced))
                 .foregroundStyle(accountPalette.accent)
                 .frame(minWidth: 26, alignment: .trailing)
             VStack(alignment: .leading, spacing: 3) {
-                Text(row.title.isEmpty ? "Untitled work" : row.title)
+                Text(SeriesRemoveWorksView.title(row, concealed: concealed))
                     .font(.system(size: workTitleSize, weight: .medium))
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                 if let metadata = row.metadataText {
@@ -398,6 +401,11 @@ struct SeriesReorderView: View {
                 }
             }
             Spacer(minLength: 0)
+            if concealed, let id = row.sourceWorkID {
+                Button { gate.reveal(remoteID: id) } label: { MatureRevealCapsule() }
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("Reveal hidden mature work")
+            }
             if row.isDraft {
                 SubjectChip(text: "Draft", style: .neutral, palette: accountPalette)
             }
@@ -405,7 +413,7 @@ struct SeriesReorderView: View {
         .accessibilityElement(children: .combine)
         // Reads what the row shows: "Untitled work" for an empty title, and
         // the Draft chip, which was drawn but never spoken.
-        .accessibilityLabel("\(index). \(row.title.isEmpty ? "Untitled work" : row.title)"
+        .accessibilityLabel("\(index). \(SeriesRemoveWorksView.title(row, concealed: concealed))"
             + (row.isDraft ? ", Draft" : "") + (row.metadataText.map { ", \($0)" } ?? ""))
     }
 
@@ -444,6 +452,8 @@ struct SeriesRemoveWorksView: View {
 
     @Environment(ThemeManager.self) private var theme
     @Environment(AO3AuthService.self) private var auth
+    @Environment(PrivacyGate.self) private var gate
+    @AppStorage("hideMatureContent") private var hideMature = true
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @ScaledMetric(relativeTo: .subheadline) private var workTitleSize: CGFloat = 14.5
@@ -511,7 +521,7 @@ struct SeriesRemoveWorksView: View {
         .subjectScreenWash(title: "Remove works", palette: palette)
         .onAppear { if openedGeneration == nil { openedGeneration = auth.sessionGeneration } }
         .alert(
-            "Remove “\(Self.title(removing))” from \(seriesTitle)?",
+            "Remove “\(Self.title(removing, concealed: isConcealed(removing)))” from \(seriesTitle)?",
             isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })
         ) {
             Button("Remove from series", role: .destructive) {
@@ -527,27 +537,38 @@ struct SeriesRemoveWorksView: View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
                 // Whole at the accessibility sizes, as Android's.
-                Text(Self.title(row)).font(.system(size: workTitleSize, weight: .medium))
+                Text(Self.title(row, concealed: isConcealed(row)))
+                    .font(.system(size: workTitleSize, weight: .medium))
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                 if let metadata = row.metadataText {
                     Text(metadata).font(.system(size: footnoteSize)).foregroundStyle(.secondary)
                 }
             }
             Spacer(minLength: 0)
+            if isConcealed(row), let id = row.sourceWorkID {
+                Button { gate.reveal(remoteID: id) } label: { MatureRevealCapsule() }
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("Reveal hidden mature work")
+            }
             if row.isDraft { SubjectChip(text: "Draft", style: .neutral, palette: palette) }
             if rows.count > 1 {
                 Button { removing = row } label: {
                     Image(systemName: "minus.circle.fill").foregroundStyle(.red)
                 }
                 .buttonStyle(.borderless)
-                .accessibilityLabel("Remove \(Self.title(row)) from the series")
+                .accessibilityLabel("Remove \(Self.title(row, concealed: isConcealed(row))) from the series")
             }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 11)
     }
 
-    static func title(_ row: AO3SeriesWorkRow?) -> String {
+    private func isConcealed(_ row: AO3SeriesWorkRow?) -> Bool {
+        row.map { gate.isConcealed($0, enabled: hideMature) } ?? false
+    }
+
+    static func title(_ row: AO3SeriesWorkRow?, concealed: Bool = false) -> String {
+        if concealed { return "Hidden mature work" }
         guard let title = row?.title, !title.isEmpty else { return "Untitled work" }
         return title
     }
@@ -571,7 +592,7 @@ struct SeriesRemoveWorksView: View {
                 // "Was not removed" is untrue of a removal AO3 may have carried out.
                 errorMessage = UserFacingError.message(for: AO3WorkWriteError.unconfirmed)
             } catch {
-                errorMessage = "\(Self.title(row)) was not removed. " + UserFacingError.message(for: error)
+                errorMessage = "\(Self.title(row, concealed: isConcealed(row))) was not removed. " + UserFacingError.message(for: error)
             }
             isRemoving = false
         }
@@ -584,6 +605,8 @@ struct SeriesRemoveWorksView: View {
             var row = row
             row.words = known.words
             row.dateText = known.dateText
+            row.rating = known.rating
+            row.sourceWorkID = known.sourceWorkID
             return row
         }
     }

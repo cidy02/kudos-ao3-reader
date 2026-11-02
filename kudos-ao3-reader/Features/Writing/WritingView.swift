@@ -235,12 +235,11 @@ struct WritingView: View {
                 }
             } else {
                 ForEach(recentWorks) { work in
-                    AO3WorkRow(
+                    SensitiveWorkRow(
                         work: work,
                         presentation: .searchLedger,
                         showsPerformance: true
                     )
-                    .cardNavigation(to: work, accessibilityLabel: work.title)
                     .cardRow(chrome: .plain)
                 }
             }
