@@ -15,6 +15,7 @@ struct AO3WorkActionsMenu: View {
     /// See `WorkAO3ActionChips.onSubscribeSuccess` — same rule, same reason
     /// the two carry it independently rather than sharing one call site.
     var onSubscribeSuccess: (() -> Void)? = nil
+    var onKudosSuccess: (() -> Void)? = nil
     var shareURL: URL? = nil
     var hasGivenKudos: Bool = false
     var showsTopRow: Bool = true
@@ -24,7 +25,14 @@ struct AO3WorkActionsMenu: View {
 
     var body: some View {
         if showsTopRow {
-            topRow
+            AO3WorkActionsTopRow(
+                workID: workID,
+                actions: actions,
+                onSubscribeSuccess: onSubscribeSuccess,
+                onKudosSuccess: onKudosSuccess,
+                shareURL: shareURL,
+                hasGivenKudos: hasGivenKudos
+            )
         }
         Section("On AO3") {
             Button {
@@ -44,28 +52,55 @@ struct AO3WorkActionsMenu: View {
                 Label("Open on AO3", systemImage: "safari")
             }
         }
-        // Menu content builds when the menu opens — fetch the subscribed/
-        // bookmarked state then (never on plain work-detail views), so the
-        // labels above reflect AO3 instead of always reading "Subscribe" /
-        // "Bookmark on AO3".
-        .onAppear { actions.refreshWorkPageStates(workID: workID, auth: auth) }
     }
 
-    @ViewBuilder
-    var topRow: some View {
+    private func openWeb(_ path: String) {
+        if let url = URL(string: "https://archiveofourown.org\(path)") {
+            router.open(url)
+        }
+    }
+}
+
+struct AO3WorkActionsTopRow: View {
+    let workID: Int
+    @Bindable var actions: AO3WorkActionsModel
+    var onSubscribeSuccess: (() -> Void)?
+    var onKudosSuccess: (() -> Void)?
+    var shareURL: URL?
+    var hasGivenKudos: Bool
+
+    @Environment(AO3AuthService.self) private var auth
+    @Environment(\.accentFill) private var accentFill
+
+    var body: some View {
         MenuTopRow {
-            Button { actions.giveKudos(workID: workID, auth: auth) } label: {
-                let isGiven = hasGivenKudos
+            let isGiven = hasGivenKudos || actions.kudosGivenWorkID == workID
+            Button {
+                actions.giveKudos(
+                    workID: workID,
+                    auth: auth,
+                    onSuccess: onKudosSuccess
+                )
+            } label: {
                 Label("Kudos", systemImage: MenuTopRowRules.kudosSymbol(isGiven: isGiven))
             }
-            .disabled(actions.isWorking || hasGivenKudos)
-            .accessibilityLabel(hasGivenKudos ? "Kudos given" : "Give Kudos")
+            .disabled(actions.isWorking || isGiven)
+            .tint(isGiven ? accentFill : Color.primary)
+            .accessibilityLabel(isGiven ? "Kudos given" : "Give Kudos")
+            .accessibilityAddTraits(isGiven ? [.isSelected] : [])
 
             Button { actions.startBookmark() } label: {
                 let isBookmarked = actions.workPageStates?.existingBookmark != nil
                 Label("Bookmark", systemImage: MenuTopRowRules.bookmarkSymbol(isBookmarked: isBookmarked))
             }
-            .accessibilityLabel(actions.workPageStates?.existingBookmark != nil ? "Edit Bookmark on AO3" : "Bookmark on AO3")
+            .tint(actions.workPageStates?.existingBookmark != nil ? accentFill : Color.primary)
+            .accessibilityLabel(
+                actions.workPageStates?.existingBookmark != nil
+                    ? "Edit Bookmark on AO3" : "Bookmark on AO3"
+            )
+            .accessibilityAddTraits(
+                actions.workPageStates?.existingBookmark != nil ? [.isSelected] : []
+            )
 
             Button {
                 actions.subscribe(workID: workID, auth: auth, onSubscribed: onSubscribeSuccess)
@@ -74,17 +109,17 @@ struct AO3WorkActionsMenu: View {
                 Label("Subscribe", systemImage: MenuTopRowRules.subscribeSymbol(isSubscribed: isSubscribed))
             }
             .disabled(actions.isWorking)
+            .tint(actions.workPageStates?.isSubscribed == true ? accentFill : Color.primary)
             .accessibilityLabel(actions.workPageStates?.isSubscribed == true ? "Unsubscribe" : "Subscribe")
+            .accessibilityAddTraits(
+                actions.workPageStates?.isSubscribed == true ? [.isSelected] : []
+            )
 
             ShareLink(item: shareURL ?? AO3AuthService.workURL(workID)) {
                 Label("Share", systemImage: "square.and.arrow.up")
             }
         }
-    }
-
-    private func openWeb(_ path: String) {
-        if let url = URL(string: "https://archiveofourown.org\(path)") {
-            router.open(url)
-        }
+        // Menu content builds when the menu opens, so this fetch is user-driven.
+        .onAppear { actions.refreshWorkPageStates(workID: workID, auth: auth) }
     }
 }

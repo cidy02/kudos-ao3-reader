@@ -436,9 +436,11 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
                             Button(action: queueMenu.moveToTop) {
                                 Label("To Top", systemImage: "arrow.up.to.line")
                             }
+                            .accessibilityLabel("Move to Top")
                             Button(action: queueMenu.moveToBottom) {
                                 Label("To Bottom", systemImage: "arrow.down.to.line")
                             }
+                            .accessibilityLabel("Move to Bottom")
                             if let shareURL = queueMenu.shareURL {
                                 ShareLink(item: shareURL) {
                                     Label("Share", systemImage: "square.and.arrow.up")

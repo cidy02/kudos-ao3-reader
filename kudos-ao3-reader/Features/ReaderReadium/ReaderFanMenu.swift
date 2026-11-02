@@ -14,29 +14,22 @@ struct ReaderFanMenuPill: Identifiable {
     let action: () -> Void
 }
 
-/// One round action button in the fan's bottom row (share, kudos, read aloud,
-/// bookmark).
+/// One of the reader's existing quick actions, retained when the old fan is
+/// presented as a native menu.
 struct ReaderFanRoundAction: Identifiable {
     let id: String
     let systemImage: String
-    let tint: Color
     let accessibilityLabel: String
     var isEnabled = true
-    /// When true, the capsule is filled with `tint` and the glyph uses a
-    /// contrasting colour so on/off is obvious at a glance (rotation lock).
-    /// Outline-vs-fill alone is too subtle for some symbols.
+    /// When true, the symbol is filled and uses the app colour.
     var isEmphasized = false
     let action: () -> Void
-    /// Optional long-press. Used by Read Aloud to reach its settings without
-    /// first starting playback — the mini-player's waveform is the other way
-    /// in, and that only exists once something is already being read.
-    var longPressAction: (() -> Void)?
+    /// Optional companion command. Read Aloud uses it for settings.
+    var settingsAction: (() -> Void)?
 
-    /// Attach a long press without repeating the whole initialiser at the call
-    /// site, which is already long enough to obscure what it configures.
-    func withLongPress(_ handler: @escaping () -> Void) -> ReaderFanRoundAction {
+    func withSettingsAction(_ handler: @escaping () -> Void) -> ReaderFanRoundAction {
         var copy = self
-        copy.longPressAction = handler
+        copy.settingsAction = handler
         return copy
     }
 }
@@ -46,25 +39,23 @@ struct ReaderFanRoundAction: Identifiable {
 /// Bookmarks & Highlights, Themes & Settings, etc.
 /// (Spec board 27 and component `Menu top row`).
 struct ReaderFanMenu: View {
-    @Binding var isOpen: Bool
     let pills: [ReaderFanMenuPill]
     /// The work's AO3 URL, shared via a native `ShareLink`. nil for works with no AO3 origin (imported EPUBs).
     let shareURL: URL?
     let roundActions: [ReaderFanRoundAction]
-    /// The reader theme's own control colour (`ThemeManager.effectiveTint`), so an
-    /// active toggle and any system-tinted chrome inside the menu read as the
-    /// current theme — Sepia's warm brown rather than the raw AO3 red.
+    /// The app control colour (`ThemeManager.effectiveTint`), kept independent
+    /// of the work, fandom, queue, and reader paper colours.
     let accentColor: Color
-    let reduceMotion: Bool
 
     var body: some View {
         Menu {
             MenuTopRow {
                 if let find = pills.first(where: { $0.id == "find" }) {
                     Button(action: find.action) {
-                        Label(find.title, systemImage: find.systemImage)
+                        Label("Find", systemImage: find.systemImage)
                     }
                     .disabled(!find.isEnabled)
+                    .accessibilityLabel(find.title)
                 }
 
                 if let comments = pills.first(where: { $0.id == "comments" }) {
@@ -76,9 +67,17 @@ struct ReaderFanMenu: View {
 
                 if let readAloud = roundActions.first(where: { $0.id == "readAloud" }) {
                     Button(action: readAloud.action) {
-                        Label("Read Aloud", systemImage: MenuTopRowRules.readAloudSymbol(isActive: readAloud.isEmphasized))
+                        Label(
+                            "Read Aloud",
+                            systemImage: MenuTopRowRules.readAloudSymbol(
+                                isActive: readAloud.isEmphasized
+                            )
+                        )
                     }
                     .disabled(!readAloud.isEnabled)
+                    .tint(readAloud.isEmphasized ? accentColor : Color.primary)
+                    .accessibilityLabel(readAloud.accessibilityLabel)
+                    .accessibilityAddTraits(readAloud.isEmphasized ? [.isSelected] : [])
                 }
 
                 if let shareURL {
@@ -88,7 +87,9 @@ struct ReaderFanMenu: View {
                 }
             }
 
-            ForEach(pills.filter { $0.id != "find" && $0.id != "comments" }) { pill in
+            ForEach(pills.filter {
+                $0.id != "find" && $0.id != "comments" && $0.id != "rebuild"
+            }) { pill in
                 Button(action: pill.action) {
                     Label(pill.title, systemImage: pill.systemImage)
                 }
@@ -97,9 +98,26 @@ struct ReaderFanMenu: View {
 
             ForEach(roundActions.filter { $0.id != "readAloud" }) { action in
                 Button(action: action.action) {
-                    Label(action.accessibilityLabel.isEmpty ? action.id : action.accessibilityLabel, systemImage: action.systemImage)
+                    Label(rowTitle(for: action), systemImage: action.systemImage)
                 }
                 .disabled(!action.isEnabled)
+                .tint(action.isEmphasized ? accentColor : Color.primary)
+                .accessibilityLabel(action.accessibilityLabel)
+                .accessibilityAddTraits(action.isEmphasized ? [.isSelected] : [])
+            }
+
+            if let settings = roundActions.first(where: { $0.id == "readAloud" })?.settingsAction {
+                Button(action: settings) {
+                    Label("Read Aloud Settings", systemImage: "gearshape")
+                }
+            }
+
+            if let rebuild = pills.first(where: { $0.id == "rebuild" }) {
+                Divider()
+                Button(action: rebuild.action) {
+                    Label(rebuild.title, systemImage: rebuild.systemImage)
+                }
+                .disabled(!rebuild.isEnabled)
             }
         } label: {
             Image(systemName: "ellipsis")
@@ -111,15 +129,17 @@ struct ReaderFanMenu: View {
         .buttonStyle(.plain)
         .glassEffect(.regular, in: Circle())
         .accessibilityLabel("More actions")
-        .tint(accentColor)
+        .tint(Color.primary)
     }
-}
 
-extension ReaderFanMenu {
-    /// Reader menus don't dim the page (TASKS.md, Board 27). Native Menu handles dismissal on tap-outside.
-    @ViewBuilder
-    static func dismissBackdrop(isOpen: Binding<Bool>, reduceMotion: Bool) -> some View {
-        EmptyView()
+    private func rowTitle(for action: ReaderFanRoundAction) -> String {
+        switch action.id {
+        case "kudos": return "Kudos"
+        case "original": return "Original File"
+        case "rotationLock": return "Rotation Lock"
+        case "bookmark": return "Bookmark"
+        default: return action.accessibilityLabel
+        }
     }
 }
 #endif

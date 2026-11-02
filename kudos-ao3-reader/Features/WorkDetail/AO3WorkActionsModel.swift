@@ -10,6 +10,9 @@ final class AO3WorkActionsModel {
     var isWorking = false
     /// A short result/info message shown as a host alert.
     var banner: String?
+    /// Set only after AO3 accepts kudos, so a menu opened again in this screen
+    /// immediately shows the filled, disabled state even for an unsaved work.
+    private(set) var kudosGivenWorkID: Int?
 
     /// Drives the bookmark composer sheet.
     var showingBookmark = false
@@ -66,8 +69,17 @@ final class AO3WorkActionsModel {
         showingCommentsScreen = true
     }
 
-    func giveKudos(workID: Int, auth: AO3AuthService) {
-        run { try await auth.giveKudos(workID: workID) }
+    func giveKudos(
+        workID: Int,
+        auth: AO3AuthService,
+        onSuccess: (() -> Void)? = nil
+    ) {
+        run {
+            let message = try await auth.giveKudos(workID: workID)
+            self.kudosGivenWorkID = workID
+            onSuccess?()
+            return message
+        }
     }
 
     func subscribe(workID: Int, auth: AO3AuthService, onSubscribed: (() -> Void)? = nil) {
