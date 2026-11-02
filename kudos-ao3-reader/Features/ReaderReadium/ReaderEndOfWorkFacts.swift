@@ -61,23 +61,17 @@ enum ReaderEndOfWorkFacts {
     static func nextWorkInQueue(
         orderedWorks: [SavedWork],
         currentWorkID: UUID,
-        isEligible: @escaping (SavedWork) -> Bool = { _ in true }
+        isEligible: (SavedWork) -> Bool = { _ in true }
     ) -> SavedWork? {
         guard let currentIndex = orderedWorks.firstIndex(where: { $0.id == currentWorkID }) else {
             return nil
         }
-        let candidate: (SavedWork) -> Bool = {
-            $0.id != currentWorkID && !$0.isPendingDeletion && isEligible($0)
+        // Unfinished works after the current one first, then wrap to the earlier ones.
+        let wrapped = orderedWorks[(currentIndex + 1)...] + orderedWorks[..<currentIndex]
+        return wrapped.first { candidate in
+            candidate.id != currentWorkID && !candidate.isPendingDeletion
+                && !candidate.isFinished && isEligible(candidate)
         }
-        let after = orderedWorks.suffix(from: currentIndex + 1)
-        if let nextUnfinished = after.first(where: { candidate($0) && !$0.isFinished }) {
-            return nextUnfinished
-        }
-        let before = orderedWorks.prefix(upTo: currentIndex)
-        if let prevUnfinished = before.first(where: { candidate($0) && !$0.isFinished }) {
-            return prevUnfinished
-        }
-        return nil
     }
 
     /// Finds candidate next work from the active queues containing `work`.
