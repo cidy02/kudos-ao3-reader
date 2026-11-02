@@ -83,7 +83,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
 
     /// Keeps privacy-hidden works out of aggregate counts and fandom labels.
     private var statisticsWorks: [SavedWork] {
-        works.filter { !$0.isQueueOnlyWork && (!hideMature || !$0.isAdult || gate.isRevealed($0)) }
+        HomeReadingStats.insightsWorks(from: works, gate: gate, hideMature: hideMature)
     }
 
     /// The dashboard's currently-visible/filtered works (mirrors `dashboardWorks(for:)`

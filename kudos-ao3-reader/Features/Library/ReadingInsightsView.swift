@@ -13,8 +13,14 @@ struct ReadingInsightsView: View {
     @Environment(ThemeManager.self) private var theme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.dismiss) private var dismiss
+    @Environment(PrivacyGate.self) private var gate
+    @AppStorage("hideMature") private var hideMature: Bool = false
 
     let works: [SavedWork]
+
+    private var effectiveWorks: [SavedWork] {
+        HomeReadingStats.insightsWorks(from: works, gate: gate, hideMature: hideMature)
+    }
 
     @State private var selectedTab: Tab = .overview
     @State private var range: RangeMode = .month
@@ -140,7 +146,7 @@ struct ReadingInsightsView: View {
                 .accessibilityLabel("More: options, export, how this is counted")
             }
         }
-        .task(id: "\(range.rawValue)-\(referenceDate.timeIntervalSince1970)") {
+        .task(id: "\(range.rawValue)-\(referenceDate.timeIntervalSince1970)-\(hideMature)-\(gate.revealAll)-\(gate.revealedIDs.count)") {
             reload()
         }
         .refreshable {
@@ -188,7 +194,7 @@ struct ReadingInsightsView: View {
                             .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
                             .foregroundStyle(isSelected ? Color.primary : Color.secondary)
                             .frame(maxWidth: .infinity)
-                            .frame(height: 28)
+                            .frame(minHeight: 28)
                             .background(
                                 isSelected ? theme.appTheme.cardSurface : Color.clear
                             )
@@ -240,7 +246,7 @@ struct ReadingInsightsView: View {
                             .font(.system(size: 10, weight: .semibold))
                     }
                     .padding(.horizontal, 10)
-                    .frame(height: 32)
+                    .frame(minHeight: 32)
                     .background(Color.primary.opacity(0.08))
                     .foregroundStyle(.primary)
                     .clipShape(Capsule())
@@ -595,7 +601,7 @@ struct ReadingInsightsView: View {
         let figures = ReadingLogService.insights(
             for: currentInterval,
             previousPeriod: previousInterval,
-            works: works,
+            works: effectiveWorks,
             calendar: calendar,
             context: context
         )
@@ -603,34 +609,34 @@ struct ReadingInsightsView: View {
         insights = figures
 
         let allHistory = (try? context.fetch(FetchDescriptor<ReadingSession>())) ?? []
-        let allFacts = ReadingLogService.facts(from: allHistory, works: works, history: allHistory)
+        let allFacts = ReadingLogService.facts(from: allHistory, works: effectiveWorks, history: allHistory)
         let periodFacts = allFacts.filter { currentInterval.contains($0.startedAt) }
 
         let readWorkIDs = Set(periodFacts.map(\.workID))
-        let worksInPeriod = works.filter { readWorkIDs.contains($0.id) }
+        let worksInPeriod = effectiveWorks.filter { readWorkIDs.contains($0.id) }
 
         tasteInsights = ReadingTasteInsights.make(
-            works: worksInPeriod.isEmpty ? works : worksInPeriod,
+            works: worksInPeriod.isEmpty ? effectiveWorks : worksInPeriod,
             facts: periodFacts
         )
 
         habitsInsights = ReadingHabitsInsights.make(
-            works: works,
+            works: effectiveWorks,
             facts: periodFacts,
             allFacts: allFacts,
             calendar: calendar
         )
 
         libraryInsights = ReadingLibraryInsights.make(
-            works: works,
+            works: effectiveWorks,
             facts: periodFacts,
             periodInterval: currentInterval,
             calendar: calendar
         )
 
-        libraryStats = ReadingStatistics(works: works, now: Date(), calendar: calendar)
+        libraryStats = ReadingStatistics(works: effectiveWorks, now: Date(), calendar: calendar)
 
-        finishedWorksInPeriod = works.filter { w in
+        finishedWorksInPeriod = effectiveWorks.filter { w in
             w.isFinished && periodFacts.contains { $0.workID == w.id && $0.didFinish }
         }
     }

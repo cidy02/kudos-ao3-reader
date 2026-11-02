@@ -1018,10 +1018,10 @@ nonisolated struct ReadingHabitsInsights: Equatable, Sendable {
 
         var finishCountsByWork: [UUID: (title: String, fandom: String, words: Int, count: Int)] = [:]
         for fact in allFacts where fact.didFinish {
-            let work = works.first { $0.id == fact.workID }
+            guard let work = works.first(where: { $0.id == fact.workID }) else { continue }
             let cur = finishCountsByWork[fact.workID] ?? (
-                title: fact.title.isEmpty ? work?.title ?? "" : fact.title,
-                fandom: fact.fandom.isEmpty ? work?.workFandoms.first ?? "" : fact.fandom,
+                title: work.title,
+                fandom: work.workFandoms.first ?? "",
                 words: 0,
                 count: 0
             )

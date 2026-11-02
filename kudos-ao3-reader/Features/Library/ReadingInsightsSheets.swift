@@ -193,9 +193,8 @@ struct InsightsOptionsSheet: View {
         let descriptor = FetchDescriptor<ReadingSession>()
         if let sessions = try? modelContext.fetch(descriptor) {
             for session in sessions {
-                modelContext.delete(session)
+                ReadingLogService.delete(session, in: modelContext)
             }
-            try? modelContext.save()
         }
     }
 }

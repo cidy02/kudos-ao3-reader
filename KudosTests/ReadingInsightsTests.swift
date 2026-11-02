@@ -257,4 +257,92 @@ struct ReadingInsightsTests {
         ]
         #expect(ReadingInsights.lateNightDuration(from: facts, calendar: calendar) == 30 * 60)
     }
+
+    @Test func readingSessionStoredPropertiesAreUnchanged() {
+        let session = ReadingSession(
+            workID: UUID(),
+            startedAt: Date(),
+            endedAt: Date(),
+            durationSeconds: 60
+        )
+        let mirror = Mirror(reflecting: session)
+        let propertyNames = Set(mirror.children.compactMap(\.label))
+        // Verify only original 11 persisted properties exist, with no new stored properties
+        #expect(propertyNames.contains("id"))
+        #expect(propertyNames.contains("workID"))
+        #expect(propertyNames.contains("workTitle"))
+        #expect(propertyNames.contains("startedAt"))
+        #expect(propertyNames.contains("endedAt"))
+        #expect(propertyNames.contains("durationSeconds"))
+        #expect(propertyNames.contains("lastSpineIndex"))
+        #expect(propertyNames.contains("chapterTitle"))
+        #expect(propertyNames.contains("endingProgress"))
+        #expect(propertyNames.contains("wordCount"))
+        #expect(propertyNames.contains("chapterCountAtVisit"))
+        #expect(propertyNames.contains("didFinish"))
+        #expect(propertyNames.contains("lastModifiedAt"))
+        // modeRaw and playbackRate are computed properties and must not be in stored mirror children
+        #expect(!propertyNames.contains("modeRaw"))
+        #expect(!propertyNames.contains("playbackRate"))
+        #expect(session.modeRaw == "read")
+        #expect(session.playbackRate == 1.0)
+    }
+
+    @Test func rereadsExcludesWorksNotPresentInVisibleWorks() {
+        let visibleWork = SavedWork(title: "Allowed Fic", author: "Author")
+        let facts = [
+            ReadingSessionFacts(
+                workID: visibleWork.id,
+                startedAt: day(1),
+                durationSeconds: 1800,
+                wordCount: 10000,
+                didFinish: true,
+                fandom: "Persuasion",
+                wordsRead: 10000,
+                title: "Allowed Fic"
+            ),
+            ReadingSessionFacts(
+                workID: visibleWork.id,
+                startedAt: day(2),
+                durationSeconds: 1800,
+                wordCount: 10000,
+                didFinish: true,
+                fandom: "Persuasion",
+                wordsRead: 10000,
+                title: "Allowed Fic"
+            ),
+            ReadingSessionFacts(
+                workID: UUID(), // Concealed or unknown work
+                startedAt: day(3),
+                durationSeconds: 1800,
+                wordCount: 20000,
+                didFinish: true,
+                fandom: "Secret Fandom",
+                wordsRead: 20000,
+                title: "Secret Fic"
+            ),
+            ReadingSessionFacts(
+                workID: UUID(), // Same concealed or unknown work finished again
+                startedAt: day(4),
+                durationSeconds: 1800,
+                wordCount: 20000,
+                didFinish: true,
+                fandom: "Secret Fandom",
+                wordsRead: 20000,
+                title: "Secret Fic"
+            )
+        ]
+
+        let habits = ReadingHabitsInsights.make(
+            works: [visibleWork],
+            facts: facts,
+            allFacts: facts,
+            calendar: calendar
+        )
+
+        // Only the visible work is listed in rereads; concealed/unlisted work is excluded
+        #expect(habits.rereads.count == 1)
+        #expect(habits.rereads.first?.title == "Allowed Fic")
+        #expect(habits.rereads.first?.finishCount == 2)
+    }
 }
