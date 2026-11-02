@@ -30,6 +30,43 @@ import UIKit
 /// Center / Dynamic Island can control transport. Lifetime is **reader-scoped**:
 /// leaving the work stops speech and clears Now Playing. Backgrounding the app
 /// with the reader still open keeps speech (requires `UIBackgroundModes=audio`).
+/// Anything that can be told to stop speaking (the controller; a stub in tests).
+@MainActor
+protocol SpeechStoppable: AnyObject { func stop() }
+
+/// Process-wide single speech owner: Now Playing / remote commands are global,
+/// so a second reader (iPad window) starting speech stops the first.
+@MainActor
+final class SpeechOwnerRegistry {
+    static let shared = SpeechOwnerRegistry()
+    private(set) weak var owner: (any SpeechStoppable)?
+
+    func claim(_ new: any SpeechStoppable) {
+        let previous = owner
+        owner = new
+        if let previous, previous !== new { previous.stop() }
+    }
+
+    /// No-op unless `old` is the current owner.
+    func release(_ old: any SpeechStoppable) {
+        if owner === old { owner = nil }
+    }
+}
+
+/// One-shot "start read aloud once the first location has settled" gate.
+struct ReadAloudAutoStart {
+    private(set) var fired = false
+
+    /// True exactly once: requested, reader ready, and a location has settled.
+    mutating func shouldStart(requested: Bool, isReady: Bool, settledCount: Int) -> Bool {
+        guard requested, !fired, isReady, settledCount > 0 else { return false }
+        fired = true
+        return true
+    }
+}
+
+extension ReaderSpeechController: SpeechStoppable {}
+
 @MainActor
 @Observable
 final class ReaderSpeechController {
@@ -451,6 +488,7 @@ final class ReaderSpeechController {
     /// of the publication — so a long work does not stall the first tap.
     private func startSpeech(from locator: Locator?) {
         guard let publication else { return }
+        SpeechOwnerRegistry.shared.claim(self)
         let startLoc = locator ?? resumeLocator
         ensureEngineForPlayback()
         applyPreferences()
@@ -528,6 +566,7 @@ final class ReaderSpeechController {
     }
 
     func stop() {
+        SpeechOwnerRegistry.shared.release(self)
         pendingPauseAfterReanchor = false
         pendingAutoContinue = false
         stoppedManually = true
@@ -582,6 +621,7 @@ final class ReaderSpeechController {
     /// Prefer this over `stop()` when the reader view goes away so Lock Screen /
     /// Island transport does not keep targeting a dead session.
     func tearDown() {
+        SpeechOwnerRegistry.shared.release(self)
         pendingPauseAfterReanchor = false
         pendingAutoContinue = false
         stoppedManually = true

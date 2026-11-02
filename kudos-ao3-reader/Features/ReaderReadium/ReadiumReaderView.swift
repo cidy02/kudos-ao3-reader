@@ -203,8 +203,9 @@ struct ReadiumReaderView: View {
     /// `.sheet(isPresented: $showingWorkDetail)` below for why — not a push).
     @State private var showingWorkDetail = false
     @State private var speech = ReaderSpeechController()
-    /// `startsReadAloud` fires once per open, not on every later `.ready`.
-    @State private var didStartReadAloud = false
+    /// `startsReadAloud` fires once per open, on the first settled location
+    /// after `.ready` (not at `.ready`, where `currentLocator` is only the seed).
+    @State private var autoStart = ReadAloudAutoStart()
     /// Which tab the Contents sheet opens on — the fan's "Contents" and
     /// "Bookmarks & Highlights" pills both route here, differing only in this.
     @State private var contentsSegment: ReaderContentsSegment = .chapters
@@ -372,12 +373,19 @@ struct ReadiumReaderView: View {
                 // Lock Screen / Island previous-next track = chapter skip (mini player).
                 speech.onSkipPrevious = { handleSpeechSkipBack() }
                 speech.onSkipNext = { handleSpeechSkipForward() }
-                // Same call the fan menu's Read Aloud makes. `toggle` is a no-op
-                // when the engine is unavailable, so the reader just stays open.
-                if startsReadAloud, !didStartReadAloud {
-                    didStartReadAloud = true
-                    if !speech.isSessionActive { speech.toggle(from: book.currentLocator) }
-                }
+            }
+            // Home's Resume "Read Aloud": start from the navigator-resolved
+            // location, never the seeded one. Same call the fan menu makes;
+            // `toggle` is a no-op when the engine is unavailable. Never moves
+            // or saves the reading position.
+            .onChange(of: book.settledLocationCount) { _, count in
+                guard autoStart.shouldStart(
+                    requested: startsReadAloud,
+                    isReady: book.phase == .ready,
+                    settledCount: count
+                ),
+                      let locator = book.currentLocator else { return }
+                if !speech.isSessionActive { speech.toggle(from: locator) }
             }
             // Voice changes from the Display sheet apply on the next utterance.
             .onChange(of: speechVoiceID) { _, _ in speech.applyPreferences() }
