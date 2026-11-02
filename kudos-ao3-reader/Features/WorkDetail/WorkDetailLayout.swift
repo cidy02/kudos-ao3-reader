@@ -3,17 +3,18 @@ import SwiftUI
 #if os(iOS)
 extension WorkDetailPresentation {
     enum PageBlock: Hashable {
-        case identity, status, summary, ao3Actions, tags, facts, archiveStats
-        case comments, pageActions, series, myCopy
+        case identity, status, stats, summary, tags, series, myCopy, comments
     }
 
+    /// Board 19's order, top to bottom.
     static let singleColumnBlocks: [PageBlock] = [
-        .identity, .status, .summary, .ao3Actions, .tags, .facts, .archiveStats,
-        .comments, .pageActions, .series, .myCopy
+        .identity, .status, .stats, .summary, .tags, .series, .myCopy, .comments
     ]
 
-    static let leadingBlocks: [PageBlock] = [.identity, .status, .ao3Actions, .archiveStats, .pageActions]
-    static let trailingBlocks: [PageBlock] = [.summary, .tags, .facts, .comments, .series, .myCopy]
+    /// T-455's two regions: identity, Resume and the stats card lead; the
+    /// summary, tags, series, My copy and Comments trail.
+    static let leadingBlocks: [PageBlock] = [.identity, .status, .stats]
+    static let trailingBlocks: [PageBlock] = [.summary, .tags, .series, .myCopy, .comments]
 
     /// Minima include the existing row gutters; larger type gets a single
     /// readable region rather than squeezing two columns of enlarged controls.
@@ -81,16 +82,13 @@ extension WorkDetailView {
                 switch block {
                 case .identity: heroSection
                 case .status: statusSection(error: singleColumn ? loadError ?? seriesLoadError : loadError)
+                case .stats: statsSection
                 case .summary: summarySection
-                case .ao3Actions: ao3ActionsSection
                 case .tags: tagSections
-                case .facts: factsCardSection
-                case .archiveStats: archiveStatsSection
-                case .comments: commentsSection
-                case .pageActions: pageActionsSection
                 case .series:
                     seriesSection
                     if !singleColumn { statusSection(error: seriesLoadError, includesQueueStatus: false) }
+                case .comments: commentsSection
                 case .myCopy: myCopySection
                 }
             }

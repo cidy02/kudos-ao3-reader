@@ -160,6 +160,64 @@ enum WorkDetailPresentation {
         return segments.joined(separator: " · ")
     }
 
+    /// One row of the page's My copy card (board 19): what this device holds about
+    /// the work, with the one action that changes it where there is one.
+    struct MyCopyRow: Equatable, Identifiable {
+        enum Kind: Hashable { case progress, downloaded, tags, collections, queues, file }
+
+        enum Action: Equatable {
+            case edit, add
+
+            var title: String {
+                switch self {
+                case .edit: "Edit"
+                case .add: "Add"
+                }
+            }
+        }
+
+        let kind: Kind
+        let label: String
+        let value: String
+        let action: Action?
+
+        var id: Kind { kind }
+    }
+
+    /// The card's six rows in the board's order. Names are listed as given
+    /// (callers sort them); an empty list says "None" rather than leaving the
+    /// value blank, since the Add beside it needs something to answer.
+    static func myCopyRows(
+        progress: Double?, chapterTitle: String?, downloadedAt: Date?,
+        tags: [String], collections: [String], queues: [String],
+        hasFile: Bool, fileSize: String?
+    ) -> [MyCopyRow] {
+        var progressValue = "Not started"
+        if let percent = WorkReadingPosition.cardProgressLabel(progress: progress) {
+            progressValue = chapterTitle.map { $0 + " · " + percent } ?? percent
+        }
+        var fileValue = "Not on this device"
+        if hasFile {
+            fileValue = fileSize.map { "EPUB · " + $0 } ?? "EPUB"
+        }
+        return [
+            MyCopyRow(kind: .progress, label: "Progress", value: progressValue, action: nil),
+            MyCopyRow(
+                kind: .downloaded, label: "Downloaded",
+                value: downloadedAt?.formatted(date: .abbreviated, time: .omitted) ?? "Not recorded",
+                action: .edit
+            ),
+            MyCopyRow(kind: .tags, label: "Your tags", value: listed(tags), action: .add),
+            MyCopyRow(kind: .collections, label: "Collections", value: listed(collections), action: .add),
+            MyCopyRow(kind: .queues, label: "Queues", value: listed(queues), action: .add),
+            MyCopyRow(kind: .file, label: "File", value: fileValue, action: nil)
+        ]
+    }
+
+    private static func listed(_ names: [String]) -> String {
+        names.isEmpty ? "None" : names.joined(separator: ", ")
+    }
+
     private static func pluralised(_ count: Int, _ noun: String) -> String {
         if count == 1 {
             return "1 " + noun
