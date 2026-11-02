@@ -548,8 +548,8 @@ enum DebugLaunchRoute {
         // syncFolder, about, …), for side-by-side screenshots with Android.
         if let value = pageRoute, value.hasPrefix("acct:settings:") {
             let name = String(value.dropFirst("acct:settings:".count))
+            path.append(AccountView.Route.settings)
             if let page = SettingsRoute.allCases.first(where: { "\($0)" == name }) {
-                path.append(AccountView.Route.settings)
                 path.append(page)
             }
             return
