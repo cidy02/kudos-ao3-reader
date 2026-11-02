@@ -3,6 +3,8 @@ import SwiftUI
 
 enum LocalWorkDestination: Hashable {
     case reader(SavedWork)
+    /// The reader, then Read Aloud from its current position once the book is ready.
+    case readerReadAloud(SavedWork)
     case detail(SavedWork)
 }
 
@@ -28,7 +30,7 @@ struct LocalWorkDestinationView: View {
     /// source, since a remote card only ever knows the AO3 id.
     private var zoomKey: WorkZoomKey {
         switch destination {
-        case let .reader(work), let .detail(work): work.zoomKey
+        case let .reader(work), let .readerReadAloud(work), let .detail(work): work.zoomKey
         }
     }
 
@@ -37,6 +39,8 @@ struct LocalWorkDestinationView: View {
             switch destination {
             case let .reader(work):
                 LocalWorkReaderDestination(work: work, onOpen: onReaderOpen)
+            case let .readerReadAloud(work):
+                LocalWorkReaderDestination(work: work, startsReadAloud: true, onOpen: onReaderOpen)
             case let .detail(work):
                 WorkDetailView(work: work)
             }
@@ -79,6 +83,7 @@ struct LocalWorkDestinationView: View {
 
 private struct LocalWorkReaderDestination: View {
     let work: SavedWork
+    var startsReadAloud = false
     let onOpen: (SavedWork) -> Void
 
     @Environment(\.modelContext) private var context
@@ -94,7 +99,7 @@ private struct LocalWorkReaderDestination: View {
     var body: some View {
         Group {
             if WorkReaderPreparation.hasReadableEPUB(for: work) {
-                BookReaderView(work: work)
+                BookReaderView(work: work, startsReadAloud: startsReadAloud)
                     .onAppear { onOpen(work) }
             } else {
                 restorationView

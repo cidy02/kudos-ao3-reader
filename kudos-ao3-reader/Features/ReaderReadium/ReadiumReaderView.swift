@@ -16,6 +16,8 @@ import WebKit
 /// made in one place.
 struct BookReaderView: View {
     let work: SavedWork
+    /// Home's speaker button: start Read Aloud once the book is ready (iOS only).
+    var startsReadAloud = false
     @Environment(ThemeManager.self) private var theme
 
     var body: some View {
@@ -25,7 +27,7 @@ struct BookReaderView: View {
 
     @ViewBuilder private var reader: some View {
         #if os(iOS)
-        ReadiumReaderView(work: work)
+        ReadiumReaderView(work: work, startsReadAloud: startsReadAloud)
         #else
         ReaderView(work: work)
         #endif
@@ -73,6 +75,7 @@ private struct ReaderPageSkeletonFill: View {
 /// the app's existing reader settings + `ThemeManager`.
 struct ReadiumReaderView: View {
     @Bindable var work: SavedWork
+    var startsReadAloud = false
 
     @Environment(\.layoutDirection) private var layoutDirection
     @Environment(AppRouter.self) private var router
@@ -200,6 +203,8 @@ struct ReadiumReaderView: View {
     /// `.sheet(isPresented: $showingWorkDetail)` below for why — not a push).
     @State private var showingWorkDetail = false
     @State private var speech = ReaderSpeechController()
+    /// `startsReadAloud` fires once per open, not on every later `.ready`.
+    @State private var didStartReadAloud = false
     /// Which tab the Contents sheet opens on — the fan's "Contents" and
     /// "Bookmarks & Highlights" pills both route here, differing only in this.
     @State private var contentsSegment: ReaderContentsSegment = .chapters
@@ -367,6 +372,12 @@ struct ReadiumReaderView: View {
                 // Lock Screen / Island previous-next track = chapter skip (mini player).
                 speech.onSkipPrevious = { handleSpeechSkipBack() }
                 speech.onSkipNext = { handleSpeechSkipForward() }
+                // Same call the fan menu's Read Aloud makes. `toggle` is a no-op
+                // when the engine is unavailable, so the reader just stays open.
+                if startsReadAloud, !didStartReadAloud {
+                    didStartReadAloud = true
+                    if !speech.isSessionActive { speech.toggle(from: book.currentLocator) }
+                }
             }
             // Voice changes from the Display sheet apply on the next utterance.
             .onChange(of: speechVoiceID) { _, _ in speech.applyPreferences() }
