@@ -324,9 +324,6 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                         #endif
                     } else {
                         let hasMature = hideMature
-                        ToolbarItem(placement: .primaryAction) {
-                            profileButton
-                        }
                         // Gated as a whole, not just its inner pieces — an empty HStack
                         // still reserves an (empty-looking) toolbar slot, which is
                         // exactly what showed a blank button when the Library was empty.
@@ -355,6 +352,10 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                                 })
                                 : nil
                         ].compactMap { $0 })
+                        // The Account button is the right-most control (owner, 2026-11-02).
+                        ToolbarItem(placement: .primaryAction) {
+                            profileButton
+                        }
                     }
                 }
                 // Sheet for the toolbar's New Queue (it was the carousel's card).
@@ -515,8 +516,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                         onToggleSelection: { toggleSelection(heroWork) },
                         onSelect: selectAction(for: heroWork),
                         onPrimary: { path.append(LocalWorkDestination.reader(heroWork)) },
-                        // T-458: no entry starts speech, and macOS has no TTS.
-                        onReadAloud: { path.append(LocalWorkDestination.reader(heroWork)) }
+                        onReadAloud: { path.append(LocalWorkDestination.readerReadAloud(heroWork)) }
                     )
                     .downloadDimmed(heroWork)
                 } next: {

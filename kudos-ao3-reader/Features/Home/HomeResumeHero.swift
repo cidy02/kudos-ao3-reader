@@ -778,8 +778,12 @@ extension WorkResumeCard {
                 announcesToVoiceOver: true,
                 arrangement: .strip
             )
+            // Tight tiles as the boards draw them, not spread over the free width.
+            .fixedSize(horizontal: true, vertical: false)
             Spacer(minLength: 0)
-            // T-458: the circle stays hidden until Read Aloud can start speech.
+            #if os(iOS)
+            readAloudCircle
+            #endif
             primaryButton
         }
     }
@@ -877,6 +881,25 @@ extension WorkResumeCard {
         .accessibilityLabel("Update download")
         .accessibilityValue(percent.map { "Downloading, \($0) percent" } ?? chapterValue)
     }
+
+    #if os(iOS)
+    /// Opens the work and starts Read Aloud (the caller routes to
+    /// `LocalWorkDestination.readerReadAloud`). Same size and fill as the update circle.
+    private var readAloudCircle: some View {
+        Button { if isInteractive { onReadAloud() } } label: {
+            ZStack {
+                Circle().fill(Color.white.opacity(0.18))
+                Image(systemName: "speaker.wave.2.fill")
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(.white)
+            }
+            .frame(width: updateCircleSide, height: updateCircleSide)
+        }
+        .buttonStyle(.plain)
+        .disabled(!isInteractive)
+        .accessibilityLabel("Read Aloud")
+    }
+    #endif
 
     private var primaryButton: some View {
         Button { if isInteractive { onPrimary() } } label: {

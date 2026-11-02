@@ -267,8 +267,7 @@ struct ReadingQueueBrowserView: View {
             isSelected: selection.contains(work.id),
             onToggleSelection: { toggleSelection(work) },
             onPrimary: { readerDestination = .reader(work) },
-            // T-458: no entry starts speech, and macOS has no TTS.
-            onReadAloud: { readerDestination = .reader(work) },
+            onReadAloud: { readerDestination = .readerReadAloud(work) },
             scopedRemoval: ScopedRemoval(title: "Remove from Queue") {
                 pendingRemoval = work
             },
