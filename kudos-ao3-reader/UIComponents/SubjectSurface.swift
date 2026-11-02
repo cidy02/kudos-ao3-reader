@@ -681,7 +681,9 @@ struct SectionRuleHeader: View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(title)
                 .font(.title3.weight(.bold))
-                .foregroundStyle(.primary)
+                // Color.primary, not `.primary`: the hierarchical style resolves against the inherited
+                // foreground, which a List section header sets to grey (Writing's headers rendered grey).
+                .foregroundStyle(Color.primary)
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                 .fixedSize(horizontal: false, vertical: true)
                 .layoutPriority(1)
@@ -689,19 +691,19 @@ struct SectionRuleHeader: View {
             if let countText {
                 Text(countText)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondary)
                     .lineLimit(1)
             } else if let count {
                 Text(count.formatted())
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondary)
                     .lineLimit(1)
             }
 
             if let note {
                 Text("· " + note)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondary)
                     .lineLimit(1)
             }
         }
