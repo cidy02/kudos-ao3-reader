@@ -38,7 +38,7 @@ struct WorkSymbolTileView: View {
             }
         }
         .frame(width: side, height: side)
-        .clipShape(RoundedRectangle(cornerRadius: side * 0.22, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: side * WorkStatusIconGrid.cornerRadiusRatio, style: .continuous))
     }
 
     @ViewBuilder
@@ -87,6 +87,7 @@ struct WorkSymbolTileView: View {
 /// Two-column symbol chip card cycling Include → Exclude → not set (boards 03, 12, rule I-11).
 struct FilterSymbolChipCard: View {
     let title: String
+    var fullTitle: String?
     let symbol: WorkSymbolTile
     let state: FilterSelectionState
     let onCycle: () -> Void
@@ -104,9 +105,8 @@ struct FilterSymbolChipCard: View {
                     .opacity(state == .excluded ? 0.4 : 1.0)
 
                 Text(title)
-                    .font(.system(size: 14, weight: .semibold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(2)
                     .foregroundStyle(foreground)
                     .strikethrough(state == .excluded, color: strokeColor)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -124,7 +124,7 @@ struct FilterSymbolChipCard: View {
             )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(title), \(state.accessibilityStatus ?? "not set")")
+        .accessibilityLabel("\(fullTitle ?? title), \(state.accessibilityStatus ?? "not set")")
         .accessibilityAddTraits(state == .included ? [.isSelected] : [])
         .accessibilityHint("Tap to \(state.nextActionLabel.lowercased())")
     }
@@ -138,14 +138,14 @@ struct FilterSymbolChipCard: View {
                     .frame(width: 18, height: 18)
             case .included:
                 Circle()
-                    .fill(Color(red: 0x24 / 255.0, green: 0x8A / 255.0, blue: 0x3D / 255.0))
+                    .fill(theme.appTheme.includeColor)
                     .frame(width: 18, height: 18)
                 Image(systemName: "checkmark")
                     .font(.system(size: 10, weight: .bold))
                     .foregroundStyle(.white)
             case .excluded:
                 Circle()
-                    .fill(Color(red: 0xD7 / 255.0, green: 0x00 / 255.0, blue: 0x15 / 255.0))
+                    .fill(theme.appTheme.excludeColor)
                     .frame(width: 18, height: 18)
                 Image(systemName: "minus")
                     .font(.system(size: 10, weight: .bold))
@@ -160,24 +160,20 @@ struct FilterSymbolChipCard: View {
         case .clear:
             return .primary
         case .included:
-            return Color(red: 0x1E / 255.0, green: 0x6B / 255.0, blue: 0x34 / 255.0)
+            return theme.appTheme.includeColor
         case .excluded:
-            return Color(red: 0xD7 / 255.0, green: 0x00 / 255.0, blue: 0x15 / 255.0)
+            return theme.appTheme.excludeColor
         }
     }
 
     private var cardBackground: Color {
         switch state {
         case .clear:
-            if isDark {
-                return Color(white: 0.18)
-            } else {
-                return Color(white: 0.95)
-            }
+            return theme.appTheme.cardBackdrop
         case .included:
-            return Color(red: 0x24 / 255.0, green: 0x8A / 255.0, blue: 0x3D / 255.0).opacity(0.12)
+            return theme.appTheme.includeColor.opacity(0.12)
         case .excluded:
-            return Color(red: 0xD7 / 255.0, green: 0x00 / 255.0, blue: 0x15 / 255.0).opacity(0.08)
+            return theme.appTheme.excludeColor.opacity(0.08)
         }
     }
 
@@ -186,9 +182,9 @@ struct FilterSymbolChipCard: View {
         case .clear:
             return .clear
         case .included:
-            return Color(red: 0x24 / 255.0, green: 0x8A / 255.0, blue: 0x3D / 255.0)
+            return theme.appTheme.includeColor
         case .excluded:
-            return Color(red: 0xD7 / 255.0, green: 0x00 / 255.0, blue: 0x15 / 255.0)
+            return theme.appTheme.excludeColor
         }
     }
 }
@@ -237,25 +233,27 @@ struct ActiveFilterChipView: View {
                 }
 
                 Text(item.label)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.subheadline.weight(.semibold))
                     .strikethrough(item.kind == .excluded, color: foreground)
             }
             .padding(.horizontal, 10)
-            .frame(height: 30)
+            .padding(.vertical, 5)
+            .frame(minHeight: 30)
             .background(background)
             .foregroundStyle(foreground)
             .clipShape(Capsule())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(item.label)\(accessibilitySuffix). Double tap to remove.")
+        .accessibilityLabel("\(item.label)\(accessibilitySuffix)")
+        .accessibilityHint("Removes this filter")
     }
 
     private var foreground: Color {
         switch item.kind {
         case .included:
-            return Color(red: 0x1E / 255.0, green: 0x6B / 255.0, blue: 0x34 / 255.0)
+            return theme.appTheme.includeColor
         case .excluded:
-            return Color(red: 0xD7 / 255.0, green: 0x00 / 255.0, blue: 0x15 / 255.0)
+            return theme.appTheme.excludeColor
         case .facetValue:
             return .primary
         }
@@ -264,14 +262,14 @@ struct ActiveFilterChipView: View {
     private var background: Color {
         switch item.kind {
         case .included:
-            return Color(red: 0x24 / 255.0, green: 0x8A / 255.0, blue: 0x3D / 255.0).opacity(0.12)
+            return theme.appTheme.includeColor.opacity(0.12)
         case .excluded:
-            return Color(red: 0xD7 / 255.0, green: 0x00 / 255.0, blue: 0x15 / 255.0).opacity(0.08)
+            return theme.appTheme.excludeColor.opacity(0.08)
         case .facetValue:
             if isDark {
                 return Color(white: 0.22)
             } else {
-                return Color(white: 0.94)
+                return theme.appTheme.cardBackdrop
             }
         }
     }
@@ -311,7 +309,7 @@ struct ActiveFiltersBlock: View {
 
                     Button("Clear All", action: onClearAll)
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(Color(red: 0xD7 / 255.0, green: 0x00 / 255.0, blue: 0x15 / 255.0))
+                        .foregroundStyle(theme.appTheme.errorColor)
                 }
                 .padding(.horizontal, 4)
 
@@ -322,7 +320,7 @@ struct ActiveFiltersBlock: View {
                 }
             }
             .padding(12)
-            .background(theme.appTheme.appElevatedBackground ?? Color.appGroupedCellBackground)
+            .background(theme.appTheme.cardSurface)
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
             .listRowBackground(Color.clear)
@@ -401,7 +399,7 @@ struct FilterLengthSection: View {
     }
 
     private var unselectedPresetFill: Color {
-        theme.appTheme.appElevatedBackground ?? Color.appGroupedCellBackground
+        theme.appTheme.cardSurface
     }
 
     var body: some View {
@@ -415,7 +413,8 @@ struct FilterLengthSection: View {
                         Text(preset.rawValue)
                             .font(.system(size: 14, weight: isSelected ? .semibold : .regular))
                             .frame(maxWidth: .infinity)
-                            .frame(height: 32)
+                            .frame(minHeight: 32)
+                            .padding(.vertical, 4)
                             .background(isSelected ? effectiveAccent : unselectedPresetFill)
                             .foregroundStyle(isSelected ? Color.white : Color.primary)
                             .clipShape(Capsule())
@@ -433,6 +432,7 @@ struct FilterLengthSection: View {
                         .foregroundStyle(.secondary)
                     TextField("", text: $wordsFrom, prompt: Text("from"))
                         .multilineTextAlignment(.trailing)
+                        .accessibilityLabel("Word count from")
                         #if !os(macOS)
                         .keyboardType(.numberPad)
                         #endif
@@ -448,6 +448,7 @@ struct FilterLengthSection: View {
                         .foregroundStyle(.secondary)
                     TextField("", text: $wordsTo, prompt: Text("to"))
                         .multilineTextAlignment(.trailing)
+                        .accessibilityLabel("Word count to")
                         #if !os(macOS)
                         .keyboardType(.numberPad)
                         #endif
@@ -455,7 +456,7 @@ struct FilterLengthSection: View {
                 .padding(.horizontal, 16)
             }
             .frame(minHeight: 48)
-            .background(theme.appTheme.appElevatedBackground ?? Color.appGroupedCellBackground)
+            .background(theme.appTheme.cardSurface)
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         }
         .padding(.vertical, 4)
@@ -479,7 +480,7 @@ struct FilterResultsBar: View {
     }
 
     private var backdropColor: Color {
-        theme.appTheme.appBaseBackground ?? (isDark ? Color.black : Color(white: 0.95))
+        theme.appTheme.cardBackdrop
     }
 
     var body: some View {
@@ -505,7 +506,8 @@ struct FilterResultsBar: View {
                                 .font(.system(size: 16, weight: .semibold))
                         }
                         .padding(.horizontal, 18)
-                        .frame(height: 52)
+                        .padding(.vertical, 14)
+                        .frame(minHeight: 52)
                         .background(isDark ? Color(white: 0.22) : Color.white)
                         .foregroundStyle(theme.effectiveTint)
                         .clipShape(Capsule())
@@ -524,7 +526,8 @@ struct FilterResultsBar: View {
                         .font(.headline)
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 52)
+                        .padding(.vertical, 14)
+                        .frame(minHeight: 52)
                         .background(theme.effectiveTint)
                         .clipShape(Capsule())
                 }
@@ -536,17 +539,5 @@ struct FilterResultsBar: View {
             .padding(.bottom, 16)
             .background(backdropColor.opacity(0.96))
         }
-    }
-}
-
-// MARK: - Color Extension for Grouped Background
-
-extension Color {
-    static var appGroupedCellBackground: Color {
-        #if os(iOS)
-        Color(uiColor: .secondarySystemGroupedBackground)
-        #else
-        Color(nsColor: .controlBackgroundColor)
-        #endif
     }
 }

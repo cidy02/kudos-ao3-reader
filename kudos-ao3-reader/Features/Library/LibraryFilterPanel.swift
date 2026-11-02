@@ -78,8 +78,14 @@ struct LibraryFilterPanel: View {
 
     private var form: some View {
         Form {
-            ActiveFiltersBlock(items: activeFilterItems) {
-                filters = LibraryFilters()
+            if !activeFilterItems.isEmpty {
+                Section {
+                    ActiveFiltersBlock(items: activeFilterItems) {
+                        filters = LibraryFilters()
+                    }
+                }
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
             }
 
             Group {
@@ -236,7 +242,7 @@ struct LibraryFilterPanel: View {
                             Text("Reset all filters")
                                 .foregroundStyle(
                                     filters.hasActiveFilters
-                                        ? Color(red: 0xD7 / 255.0, green: 0x00 / 255.0, blue: 0x15 / 255.0)
+                                        ? theme.appTheme.errorColor
                                         : Color.secondary
                                 )
                             Spacer()
@@ -264,6 +270,7 @@ struct LibraryFilterPanel: View {
         }
         return FilterSymbolChipCard(
             title: title,
+            fullTitle: warning.title,
             symbol: symbol,
             state: warningState(warning)
         ) {

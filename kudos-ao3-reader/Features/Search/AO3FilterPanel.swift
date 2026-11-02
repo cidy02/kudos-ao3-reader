@@ -200,8 +200,14 @@ struct AO3FilterPanel: View {
 
     private var form: some View {
         Form {
-            ActiveFiltersBlock(items: activeFilterItems) {
-                onReset()
+            if !activeFilterItems.isEmpty {
+                Section {
+                    ActiveFiltersBlock(items: activeFilterItems) {
+                        onReset()
+                    }
+                }
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
             }
 
             Group {
@@ -314,9 +320,15 @@ extension AO3FilterPanel {
             }
 
             if filters.rating != .any {
-                Picker("Match", selection: $filters.ratingMatch) {
-                    ForEach(AO3SearchFilters.RatingMatch.allCases) {
-                        Text($0.title).tag($0)
+                HStack(spacing: 12) {
+                    SettingsIconTile(
+                        color: Color(red: 0xE0 / 255.0, green: 0xA1 / 255.0, blue: 0x00 / 255.0),
+                        systemImage: "slider.horizontal.2"
+                    )
+                    Picker("Match", selection: $filters.ratingMatch) {
+                        ForEach(AO3SearchFilters.RatingMatch.allCases) {
+                            Text($0.title).tag($0)
+                        }
                     }
                 }
             }
@@ -582,7 +594,7 @@ extension AO3FilterPanel {
                     Text("Reset all filters")
                         .foregroundStyle(
                             canReset
-                                ? Color(red: 0xD7 / 255.0, green: 0x00 / 255.0, blue: 0x15 / 255.0)
+                                ? theme.appTheme.errorColor
                                 : Color.secondary
                         )
                     Spacer()
@@ -618,10 +630,14 @@ extension AO3FilterPanel {
         }
     }
 
-    private var selectedFandoms: [String] {
-        filters.fandom.split(separator: ",")
+    private static func commaSeparatedValues(_ field: String) -> [String] {
+        field.split(separator: ",")
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
+    }
+
+    private var selectedFandoms: [String] {
+        Self.commaSeparatedValues(filters.fandom)
     }
 
     private func warningCard(_ warning: AO3SearchFilters.Warning, title: String) -> some View {
@@ -635,6 +651,7 @@ extension AO3FilterPanel {
         }
         return FilterSymbolChipCard(
             title: title,
+            fullTitle: warning.title,
             symbol: symbol,
             state: warningState(warning)
         ) {
@@ -768,7 +785,7 @@ extension AO3FilterPanel {
             }
         }
 
-        for fandom in AO3SearchFilters.commaSeparatedValues(filters.fandom) {
+        for fandom in commaSeparatedValues(filters.fandom) {
             items.append(ActiveFilterItem(
                 id: "fandom-\(fandom)",
                 label: fandom,
@@ -776,7 +793,7 @@ extension AO3FilterPanel {
                 onRemove: { removeTag(fandom, from: &filters.fandom) }
             ))
         }
-        for fandom in AO3SearchFilters.commaSeparatedValues(filters.excludedFandoms) {
+        for fandom in commaSeparatedValues(filters.excludedFandoms) {
             items.append(ActiveFilterItem(
                 id: "fandom-ex-\(fandom)",
                 label: fandom,
@@ -785,7 +802,7 @@ extension AO3FilterPanel {
             ))
         }
 
-        for character in AO3SearchFilters.commaSeparatedValues(filters.characters) {
+        for character in commaSeparatedValues(filters.characters) {
             items.append(ActiveFilterItem(
                 id: "char-\(character)",
                 label: character,
@@ -793,7 +810,7 @@ extension AO3FilterPanel {
                 onRemove: { removeTag(character, from: &filters.characters) }
             ))
         }
-        for character in AO3SearchFilters.commaSeparatedValues(filters.excludedCharacters) {
+        for character in commaSeparatedValues(filters.excludedCharacters) {
             items.append(ActiveFilterItem(
                 id: "char-ex-\(character)",
                 label: character,
@@ -802,7 +819,7 @@ extension AO3FilterPanel {
             ))
         }
 
-        for relationship in AO3SearchFilters.commaSeparatedValues(filters.relationships) {
+        for relationship in commaSeparatedValues(filters.relationships) {
             items.append(ActiveFilterItem(
                 id: "rel-\(relationship)",
                 label: relationship,
@@ -810,7 +827,7 @@ extension AO3FilterPanel {
                 onRemove: { removeTag(relationship, from: &filters.relationships) }
             ))
         }
-        for relationship in AO3SearchFilters.commaSeparatedValues(filters.excludedRelationships) {
+        for relationship in commaSeparatedValues(filters.excludedRelationships) {
             items.append(ActiveFilterItem(
                 id: "rel-ex-\(relationship)",
                 label: relationship,
@@ -819,7 +836,7 @@ extension AO3FilterPanel {
             ))
         }
 
-        for tag in AO3SearchFilters.commaSeparatedValues(filters.additionalTags) {
+        for tag in commaSeparatedValues(filters.additionalTags) {
             items.append(ActiveFilterItem(
                 id: "tag-\(tag)",
                 label: tag,
@@ -827,7 +844,7 @@ extension AO3FilterPanel {
                 onRemove: { removeTag(tag, from: &filters.additionalTags) }
             ))
         }
-        for tag in AO3SearchFilters.commaSeparatedValues(filters.excludedAdditionalTags) {
+        for tag in commaSeparatedValues(filters.excludedAdditionalTags) {
             items.append(ActiveFilterItem(
                 id: "tag-ex-\(tag)",
                 label: tag,
@@ -978,7 +995,7 @@ extension AO3FilterPanel {
     }
 
     private func removeTag(_ tag: String, from commaSeparated: inout String) {
-        var tags = AO3SearchFilters.commaSeparatedValues(commaSeparated)
+        var tags = commaSeparatedValues(commaSeparated)
         tags.removeAll { $0.caseInsensitiveCompare(tag) == .orderedSame }
         commaSeparated = tags.joined(separator: ", ")
     }

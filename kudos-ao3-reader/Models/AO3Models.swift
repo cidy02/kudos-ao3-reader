@@ -706,7 +706,7 @@ nonisolated struct AO3SearchFilters: Equatable, Codable, Sendable {
         }
     }
 
-    nonisolated static func commaSeparatedValues(_ field: String) -> [String] {
+    private nonisolated static func commaSeparatedValues(_ field: String) -> [String] {
         field.split(separator: ",")
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }

@@ -123,4 +123,17 @@ struct FilterRegroupedTests {
         var f3 = LibraryFilters()
         #expect(f1.revisionKey != f3.revisionKey)
     }
+
+    @Test func boardWordCountExamplesMatchCustomPreset() {
+        // Board 03: 10,000 to 150,000 words
+        #expect(FilterLengthPreset.matching(from: "10,000", to: "150,000") == .custom)
+        // Board 12: 10,000 to 60,000 words
+        #expect(FilterLengthPreset.matching(from: "10,000", to: "60,000") == .custom)
+    }
+
+    @Test func filterSelectionStateCycleProgression() {
+        #expect(FilterSelectionState.clear.next == .included)
+        #expect(FilterSelectionState.included.next == .excluded)
+        #expect(FilterSelectionState.excluded.next == .clear)
+    }
 }
