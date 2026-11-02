@@ -428,21 +428,28 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
                 // A blurred work offers nothing until it is revealed: Read and Work Details
                 // here opened it, past the blur and past a required Face ID (audit A19-6).
                 if !isBlurred {
-                    NavigationLink(value: LocalWorkDestination.reader(work)) {
-                        Label("Read", systemImage: "book")
-                    }
-
                     if let queueMenu {
-                        Button(action: queueMenu.moveToTop) {
-                            Label("To Top", systemImage: "arrow.up.to.line")
-                        }
-                        Button(action: queueMenu.moveToBottom) {
-                            Label("To Bottom", systemImage: "arrow.down.to.line")
-                        }
-                        if let shareURL = queueMenu.shareURL {
-                            ShareLink(item: shareURL) {
-                                Label("Share", systemImage: "square.and.arrow.up")
+                        MenuTopRow {
+                            NavigationLink(value: LocalWorkDestination.reader(work)) {
+                                Label("Read", systemImage: "book")
                             }
+                            Button(action: queueMenu.moveToTop) {
+                                Label("To Top", systemImage: "arrow.up.to.line")
+                            }
+                            .accessibilityLabel("Move to Top")
+                            Button(action: queueMenu.moveToBottom) {
+                                Label("To Bottom", systemImage: "arrow.down.to.line")
+                            }
+                            .accessibilityLabel("Move to Bottom")
+                            if let shareURL = queueMenu.shareURL {
+                                ShareLink(item: shareURL) {
+                                    Label("Share", systemImage: "square.and.arrow.up")
+                                }
+                            }
+                        }
+                    } else {
+                        NavigationLink(value: LocalWorkDestination.reader(work)) {
+                            Label("Read", systemImage: "book")
                         }
                     }
 

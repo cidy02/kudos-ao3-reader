@@ -170,20 +170,18 @@ struct ReadiumReaderView: View {
     /// One inset for every floating chrome layer. The back button, the fan
     /// button, and the position card all sit exactly this far from the screen
     /// edge — previously the top bar double-padded (layer + its own internal
-    /// padding), so the back button sat twice as far in as the fan button.
+    /// padding), so the back button sat twice as far in as the menu button.
     /// The card uses it on all three of its free edges, so its bottom gap
     /// matches its sides.
     private static let chromeInset: CGFloat = 12
 
-    @State private var fanMenuOpen = false
     @State private var searchModel = ReaderSearchModel()
     /// The highlight whose note is being written, if the editor is open.
     @State private var editingNote: ReadingAnnotation?
     /// The word the reader picked "Fix Pronunciation" on. Wrapped because
     /// `String` is not `Identifiable` and `.sheet(item:)` needs identity.
     @State private var correctingPronunciation: PronunciationTarget?
-    /// Read Aloud settings, reachable by long-pressing the fan button before
-    /// playback has started.
+    /// Read Aloud settings, reachable from the reader menu before playback starts.
     @State private var showingSpeechSettings = false
     /// Note editor queued from inside the Contents sheet, opened only once that
     /// sheet has finished dismissing (see the `onDismiss` on the panel sheet).
@@ -314,6 +312,12 @@ struct ReadiumReaderView: View {
                 .preferredColorScheme(readerPageColors.colorScheme)
                 .presentationDragIndicator(.visible)
             }
+            .onChange(of: work.isPendingDeletion) { _, isPendingDeletion in
+                if isPendingDeletion {
+                    showingWorkDetail = false
+                    dismissReader()
+                }
+            }
             // Highlights made in an earlier session have to be drawn when the
             // book opens, not only when one is created.
             .onChange(of: book.phase) { _, phase in
@@ -353,7 +357,6 @@ struct ReadiumReaderView: View {
             .onChange(of: speechVoiceID) { _, _ in speech.applyPreferences() }
             .onChange(of: chromeVisible) { _, visible in
                 if !visible {
-                    fanMenuOpen = false
                     colorBarAnnotationID = nil
                 }
             }
@@ -987,7 +990,6 @@ struct ReadiumReaderView: View {
                 .overlay(alignment: .top) { topBarLayer }
                 // Bottom stack: colour bar + position card / decoupled mini player.
                 .overlay(alignment: .bottom) { bottomChromeLayer }
-                .overlay { fanDismissBackdropLayer }
                 .overlay(alignment: .topTrailing) { fanMenuLayer }
                 // Inset text, loading skeleton, and every chrome layer together.
                 // The fill stays full-bleed; paged Readium ignores side insets.
@@ -1010,7 +1012,7 @@ struct ReadiumReaderView: View {
     private var topBarLayer: some View {
         ReaderChromeTopBar(
             title: work.title, author: work.author,
-            titleHidden: fanMenuOpen,
+            titleHidden: false,
             onClose: dismissReader,
             onOpenDetails: { showingWorkDetail = true }
         )
@@ -1022,19 +1024,13 @@ struct ReadiumReaderView: View {
         .opacity(chromeVisible ? 1 : 0)
     }
 
-    /// Present only while the fan is open — otherwise a screen-sized tap target
-    /// would swallow every tap meant for the page's own chrome toggle.
-    @ViewBuilder
-    private var fanDismissBackdropLayer: some View {
-        if fanMenuOpen, chromeVisible {
-            ReaderFanMenu.dismissBackdrop(isOpen: $fanMenuOpen, reduceMotion: reduceMotion)
-        }
-    }
-
     private var fanMenuLayer: some View {
-        ReaderFanMenu(isOpen: $fanMenuOpen, pills: fanPills, shareURL: shareURL,
-                      roundActions: fanRoundActions,
-                      accentColor: themeManager.effectiveTint, reduceMotion: reduceMotion)
+        ReaderFanMenu(
+            pills: fanPills,
+            shareURL: shareURL,
+            roundActions: fanRoundActions,
+            accentColor: themeManager.effectiveTint
+        )
             .padding(.trailing, ReaderChromeTopBar.edgeInset)
             .padding(.top, book.pageBoxChromeSafeTop)
             .allowsHitTesting(chromeVisible)
@@ -1259,21 +1255,13 @@ struct ReadiumReaderView: View {
         return ReaderChapterScrub.page(sliderValue: sliderValue, pageCount: pageCount)
     }
 
-    /// The fan's round action row (after the native `ShareLink` slot): kudos is
-    /// wired to the existing native write action; read aloud and in-book
-    /// bookmarking are shown per the layout but disabled until their capabilities
-    /// land (TASKS.md) rather than faked.
+    /// Existing reader quick actions retained by the native menu.
     private var fanRoundActions: [ReaderFanRoundAction] {
         var actions: [ReaderFanRoundAction] = []
-        // Icons are neutral unless isEmphasized — active/inactive is the theme
-        // capsule fill (isEmphasized), matching rotation lock and read-aloud, not
-        // an always-tinted glyph with only the outline-vs-filled symbol changing.
-        let tint = themeManager.effectiveTint
         if let ao3WorkID {
             actions.append(ReaderFanRoundAction(
                 id: "kudos",
                 systemImage: work.hasGivenKudos ? "heart.fill" : "heart",
-                tint: tint,
                 accessibilityLabel: work.hasGivenKudos ? "Kudos given" : "Give kudos",
                 isEnabled: !kudosWorking && !work.hasGivenKudos,
                 isEmphasized: work.hasGivenKudos
@@ -1293,7 +1281,6 @@ struct ReadiumReaderView: View {
             actions.append(ReaderFanRoundAction(
                 id: "original",
                 systemImage: "doc.text.magnifyingglass",
-                tint: tint,
                 accessibilityLabel: "View the original file this work was converted from"
             ) {
                 previewingOriginal = original
@@ -1309,10 +1296,8 @@ struct ReadiumReaderView: View {
         let speechActive = speech.isSessionActive
         actions.append(ReaderFanRoundAction(
             id: "readAloud",
-            // Active: filled waveform + theme capsule fill (same emphasized
-            // treatment as rotation lock) so "speaking" is obvious at a glance.
+            // Active: a filled waveform in the app colour.
             systemImage: speechActive ? "waveform.circle.fill" : "waveform",
-            tint: tint,
             accessibilityLabel: speechActive ? "Stop reading aloud" : "Read aloud",
             // Needs extractable content; a publication Readium can't tokenise
             // gets a disabled control rather than silent no-op playback.
@@ -1324,11 +1309,9 @@ struct ReadiumReaderView: View {
                 toggleReadingAloud()
             }
         }
-        // Long press reaches Read Aloud settings without starting playback.
-        // The mini-player's waveform is the other way in, and that only exists
-        // once something is already being read — so before this, the settings
-        // were unreachable in the state where you most want to change them.
-        .withLongPress { showingSpeechSettings = true })
+        // Keep settings reachable before playback; the mini-player's waveform
+        // only exists after a session starts.
+        .withSettingsAction { showingSpeechSettings = true })
         let rotationLocked = orientationLock.isLocked
         actions.append(ReaderFanRoundAction(
             id: "rotationLock",
@@ -1340,7 +1323,6 @@ struct ReadiumReaderView: View {
             // Locked also fills the capsule with theme tint + a white glyph so
             // the state is obvious (outline vs closed lock alone is too subtle).
             systemImage: rotationLocked ? "lock.rotation" : "lock.open.rotation",
-            tint: tint,
             accessibilityLabel: rotationLocked ? "Unlock rotation" : "Lock rotation",
             isEmphasized: rotationLocked
         ) {
@@ -1353,7 +1335,6 @@ struct ReadiumReaderView: View {
         actions.append(ReaderFanRoundAction(
             id: "bookmark",
             systemImage: isBookmarked ? "bookmark.fill" : "bookmark",
-            tint: tint,
             accessibilityLabel: isBookmarked ? "Remove bookmark" : "Add bookmark",
             // Needs a locator to anchor to; disabled until the navigator reports one.
             isEnabled: currentReadingPosition != nil,
@@ -1493,11 +1474,10 @@ extension ReadiumReaderView {
     }
 
     /// Collapses colour-bar dismiss triggers into one `onChange` dependency so
-    /// `body` stays type-checkable. Any change clears the bar (chrome-hide is
-    /// handled separately so it can also close the fan).
+    /// `body` stays type-checkable. Chrome hiding is handled separately.
     private var colorBarDismissToken: String {
         let position = book.currentLocator?.locations.position.map(String.init) ?? "-"
-        return "\(fanMenuOpen)|\(router.panel)|\(showingComments)|\(showingWorkDetail)|\(position)"
+        return "\(router.panel)|\(showingComments)|\(showingWorkDetail)|\(position)"
     }
 
     /// The reader's effective theme (app theme while linked).
@@ -1971,10 +1951,8 @@ extension ReadiumReaderView {
 /// state (Swift allows that for same-file extensions), which means no visibility
 /// had to widen. Pure code movement.
 extension ReadiumReaderView {
-    /// The fan's labelled menu pills: Contents, Bookmarks & Highlights, Find in Work,
-    /// Comments (AO3-backed works only — not in the reference design's four, but
-    /// dropping it would lose an existing feature, which the brief forbids), and
-    /// Themes & Settings.
+    /// The reader menu rows plus Find and Comments, which move into the shared
+    /// top row when available. Comments is omitted for non-AO3 works.
     private var fanPills: [ReaderFanMenuPill] {
         var pills: [ReaderFanMenuPill] = [
             ReaderFanMenuPill(id: "contents", title: contentsPillTitle, systemImage: "list.bullet") {
