@@ -78,6 +78,7 @@ struct ReadiumReaderView: View {
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var themeManager
     @Environment(AO3AuthService.self) private var auth
+    @Environment(PrivacyGate.self) private var privacyGate
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -93,6 +94,7 @@ struct ReadiumReaderView: View {
     @AppStorage("readerMode") private var readingMode: ReadingMode = .scroll
     @AppStorage("readerTwoPage") private var twoPageEnabled = false
     @AppStorage("readerFontID") private var fontID: String = "system"
+    @AppStorage("hideMatureContent") private var hideMature = true
     // Apple Books–style typography; layout options are gated by `customizeEnabled`
     // (mirrored from the legacy reader via `ReaderTextStyle.resolved`).
     @AppStorage("readerCustomize") private var customizeEnabled = false
@@ -163,6 +165,11 @@ struct ReadiumReaderView: View {
     }
     /// UIKit peel surface — interactive samples never touch SwiftUI state.
     @State private var dismissSurface = ReaderDismissDragSurface()
+    /// Logged reading time for the end card, read once on arrival at the end
+    /// (never fetched while the card renders).
+    @State private var endCardDuration: Double = 0
+    /// The next queued work, opened from the end card's Start.
+    @State private var nextWorkDestination: LocalWorkDestination?
     @State private var isDismissingByDrag = false
 
     // MARK: Chrome state
@@ -311,6 +318,14 @@ struct ReadiumReaderView: View {
                 }
                 .preferredColorScheme(readerPageColors.colorScheme)
                 .presentationDragIndicator(.visible)
+            }
+            .onChange(of: book.isAtPublicationEnd) { _, atEnd in
+                if atEnd {
+                    endCardDuration = ReadingLogService.currentTotalDuration(of: work.id, in: modelContext)
+                }
+            }
+            .navigationDestination(item: $nextWorkDestination) { destination in
+                LocalWorkDestinationView(destination: destination)
             }
             .onChange(of: work.isPendingDeletion) { _, isPendingDeletion in
                 if isPendingDeletion {
@@ -1065,11 +1080,12 @@ struct ReadiumReaderView: View {
 
     /// Bottom chrome stack:
     /// - **Chrome up, at the end of the work:** the end card, in place of the position card
+    ///   (with the mini player above it while speech is active)
     /// - **Chrome up + speech:** colour bar (optional) + position card with mini player inside
     /// - **Chrome down + speech:** mini player alone (decoupled; seek card hidden)
     /// - **Chrome up, no speech:** position card only
-    /// - **Chrome down, no speech:** empty (the end card hides with the chrome so
-    ///   it cannot cover the last lines in paged mode, or stack over the mini player)
+    /// - **Chrome down, no speech:** empty (the end card hides with the chrome, so a
+    ///   tap on the text never leaves it covering the closing lines)
     ///
     /// Colour bar lives in this VStack (not a magic `+ 88` offset) so it always
     /// clears the card cleanly.
@@ -1078,15 +1094,12 @@ struct ReadiumReaderView: View {
         let speechActive = speech.isSessionActive
         let atEnd = book.isAtPublicationEnd
         VStack(spacing: 10) {
-            if chromeVisible {
-                if atEnd {
-                    endOfWorkCard
-                }
+            if chromeVisible, atEnd {
+                if speechActive { standaloneMiniPlayer }
+                endOfWorkCard
+            } else if chromeVisible {
                 highlightColorBar
-                // The end card takes this slot. The position card would cover it.
-                if !atEnd {
-                    positionCard(includeMiniPlayer: speechActive)
-                }
+                positionCard(includeMiniPlayer: speechActive)
             } else if speechActive {
                 // Decoupled: transport stays reachable while full chrome is hidden.
                 standaloneMiniPlayer
@@ -1100,14 +1113,22 @@ struct ReadiumReaderView: View {
     private var endOfWorkCard: some View {
         ReaderEndCard(
             title: work.title,
+            isComplete: work.isComplete,
+            durationSeconds: endCardDuration,
+            isFinished: work.isFinished,
             showsAO3Actions: ao3WorkID != nil,
             kudosGiven: work.hasGivenKudos,
             kudosEnabled: !kudosWorking && !work.hasGivenKudos,
             isBookmarked: bookmarkAtCurrentPosition != nil,
             bookmarkEnabled: currentReadingPosition != nil,
+            upNext: ReaderEndOfWorkFacts.findUpNext(
+                for: work,
+                isEligible: { !privacyGate.isConcealed($0, enabled: hideMature) }
+            ),
             onKudos: { if let ao3WorkID { giveKudos(workID: ao3WorkID) } },
             onComment: { showingComments = true },
-            onBookmark: { toggleBookmarkAtCurrentPosition() }
+            onBookmark: { toggleBookmarkAtCurrentPosition() },
+            onStartNextWork: { nextWorkDestination = .reader($0) }
         )
     }
 
