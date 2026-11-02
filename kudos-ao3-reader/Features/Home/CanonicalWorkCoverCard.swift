@@ -13,14 +13,14 @@ struct CanonicalWorkCoverCard: View {
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
 
     var body: some View {
-        if let work = entry.local, gate.isBlurred(work, enabled: hideMature, mode: matureMode) {
+        if let work = entry.local, gate.isBlurred(entry, enabled: hideMature, mode: matureMode) {
             // A blurred cover is its own button: its tap reveals, and it sits in no link.
-            SensitiveWorkCoverCard(work: work, progress: work.readingProgress)
+            SensitiveWorkCoverCard(work: work, progress: work.readingProgress, twin: entry.remote)
         } else if let work = entry.local {
             NavigationLink(value: LocalWorkDestination.reader(work)) {
                 // readingProgress is nil until there's something meaningful to show,
                 // so a freshly-saved work keeps the clean cover.
-                SensitiveWorkCoverCard(work: work, progress: work.readingProgress)
+                SensitiveWorkCoverCard(work: work, progress: work.readingProgress, twin: entry.remote)
             }
             .buttonStyle(.plain)
             .localWorkContextMenu(work: work)
@@ -49,15 +49,26 @@ struct EnrichingAO3WorkCoverCard: View {
     /// Passed through to `AO3WorkCoverCard`.
     var showsProvenanceBadge = false
 
+    @Environment(PrivacyGate.self) private var gate
+    @AppStorage("hideMatureContent") private var hideMature = true
+    @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
+
     @State private var enriched: AO3WorkSummary?
 
     private var displayed: AO3WorkSummary { enriched ?? work }
 
     var body: some View {
-        NavigationLink(value: WorkCardTap.destination(for: displayed)) {
-            AO3WorkCoverCard(work: displayed, showsProvenanceBadge: showsProvenanceBadge)
+        Group {
+            if gate.isBlurred(displayed, enabled: hideMature, mode: matureMode) {
+                // A blurred cover is its own button: its tap reveals, and it sits in no link.
+                SensitiveWorkCoverCard(work: displayed, showsProvenanceBadge: showsProvenanceBadge)
+            } else if !gate.isHidden(displayed, enabled: hideMature, mode: matureMode) {
+                NavigationLink(value: WorkCardTap.destination(for: displayed)) {
+                    SensitiveWorkCoverCard(work: displayed, showsProvenanceBadge: showsProvenanceBadge)
+                }
+                .buttonStyle(.plain)
+            }
         }
-        .buttonStyle(.plain)
         .task(id: work.id) {
             enriched = await AO3SparseWorkEnricher.shared.enrich(work)
         }

@@ -660,19 +660,22 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
         let showSkeleton = isLoadingSubscriptions && subscriptions.isEmpty
         let merged = CanonicalWorkMerge.remoteLed(
             remote: subscriptions,
-            localLibrary: works.filter(passesPrivacy)
+            localLibrary: works
         )
+        let visibleEntries = merged.filter {
+            !gate.isHidden($0, enabled: hideMature, mode: matureMode)
+        }
         let totalCount = showSkeleton
             ? nil
-            : HomeSubscriptionsCount.itemCount(shown: merged.count, recorded: subscriptionsListCount)
-        let visibleRows = Array(merged.prefix(2))
+            : HomeSubscriptionsCount.itemCount(shown: visibleEntries.count, recorded: subscriptionsListCount)
+        let visibleRows = Array(visibleEntries.prefix(2))
 
         return VStack(alignment: .leading, spacing: 6) {
             SectionRuleHeader(
                 title: "Subscriptions",
                 count: totalCount,
-                actionTitle: merged.count > 2 ? "See All" : nil,
-                onSeeAll: merged.isEmpty ? nil : { path.append(SubscriptionsRoute()) }
+                actionTitle: visibleEntries.count > 2 ? "See All" : nil,
+                onSeeAll: visibleEntries.isEmpty ? nil : { path.append(SubscriptionsRoute()) }
             )
             .dashboardLeadingRegion()
 
@@ -684,7 +687,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                     }
                 }
                 .dashboardLeadingRegion()
-            } else if merged.isEmpty {
+            } else if visibleEntries.isEmpty {
                 SectionEmptyState(
                     message: HomeSubscriptionsCopy.emptyMessage(
                         isLoggedIn: auth.isLoggedIn,
@@ -704,11 +707,11 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                         subscriptionRow(entry)
                     }
 
-                    if merged.count > 2 {
+                    if visibleEntries.count > 2 {
                         Divider()
                             .padding(.leading, 79)
                         ListMoreRow(
-                            count: merged.count - 2,
+                            count: visibleEntries.count - 2,
                             sectionTitle: "Subscriptions",
                             leadingInset: 79,
                             action: { path.append(SubscriptionsRoute()) }
@@ -731,9 +734,13 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                 onSelect: selectAction(for: work)
             )
         } else if let remote = entry.remote {
-            // T-490: Route remote row through remote blur privacy wrapper once landed
-            HomeNewChapterRow(remote: remote)
+            HomeNewChapterRow(remote: remote, onEnriched: noteEnrichedSubscription)
         }
+    }
+
+    private func noteEnrichedSubscription(_ enriched: AO3WorkSummary) {
+        guard let index = subscriptions.firstIndex(where: { $0.id == enriched.id }) else { return }
+        subscriptions[index] = enriched
     }
 
     private func loadSubscriptions() async {
@@ -905,6 +912,7 @@ private struct HomeNewChapterRow: View {
     var isSelected: Bool = false
     var onToggleSelection: (() -> Void)?
     var onSelect: (() -> Void)?
+    var onEnriched: ((AO3WorkSummary) -> Void)?
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(PrivacyGate.self) private var gate
@@ -926,11 +934,13 @@ private struct HomeNewChapterRow: View {
         self.isSelected = isSelected
         self.onToggleSelection = onToggleSelection
         self.onSelect = onSelect
+        self.onEnriched = nil
     }
 
     init(
         remote: AO3WorkSummary,
-        onSelect: (() -> Void)? = nil
+        onSelect: (() -> Void)? = nil,
+        onEnriched: ((AO3WorkSummary) -> Void)? = nil
     ) {
         self.work = nil
         self.remote = remote
@@ -938,6 +948,7 @@ private struct HomeNewChapterRow: View {
         self.isSelected = false
         self.onToggleSelection = nil
         self.onSelect = onSelect
+        self.onEnriched = onEnriched
     }
 
     private var displayedRemote: AO3WorkSummary? {
@@ -948,8 +959,14 @@ private struct HomeNewChapterRow: View {
         if let work {
             return gate.isBlurred(work, enabled: hideMature, mode: mode)
         }
-        // T-490: Route remote row through remote blur privacy wrapper once landed
-        return false
+        return displayedRemote.map { gate.isBlurred($0, enabled: hideMature, mode: mode) } ?? false
+    }
+
+    private var isHidden: Bool {
+        if let work {
+            return gate.isHidden(work, enabled: hideMature, mode: mode)
+        }
+        return displayedRemote.map { gate.isHidden($0, enabled: hideMature, mode: mode) } ?? false
     }
 
     private var newCount: Int {
@@ -1039,7 +1056,9 @@ private struct HomeNewChapterRow: View {
 
     var body: some View {
         Group {
-            if let work {
+            if isHidden {
+                EmptyView()
+            } else if let work {
                 localBody(work: work)
             } else if let remote = displayedRemote {
                 remoteBody(remote: remote)
@@ -1047,7 +1066,9 @@ private struct HomeNewChapterRow: View {
         }
         .task(id: remote?.id) {
             if let remote {
-                enrichedRemote = await AO3SparseWorkEnricher.shared.enrich(remote)
+                let result = await AO3SparseWorkEnricher.shared.enrich(remote)
+                enrichedRemote = result
+                if let result { onEnriched?(result) }
             }
         }
     }
@@ -1056,31 +1077,7 @@ private struct HomeNewChapterRow: View {
     private func localBody(work: SavedWork) -> some View {
         Group {
             if blurred {
-                let content = rowContent
-                    .blur(radius: 6)
-                    .overlay {
-                        if !isSelecting { MatureRevealCapsule() }
-                    }
-                    .contentShape(Rectangle())
-                if isSelecting {
-                    Button { onToggleSelection?() } label: {
-                        content.overlay(alignment: .leading) {
-                            WorkSelectionBubble(isSelected: isSelected)
-                                .padding(.leading, 16)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("Hidden mature work")
-                    .accessibilityValue(isSelected ? "Selected" : "Not selected")
-                    .accessibilityHint("Double-tap to \(isSelected ? "deselect" : "select") this work.")
-                } else {
-                    Button { gate.reveal(work) } label: { content }
-                        .buttonStyle(.plain)
-                        .accessibilityElement(children: .ignore)
-                        .accessibilityLabel("Hidden mature work")
-                        .accessibilityHint("Activate to reveal.")
-                }
+                obscuredBody { gate.reveal(work) }
             } else if isSelecting {
                 Button { onToggleSelection?() } label: { rowContent }
                     .buttonStyle(.plain)
@@ -1102,12 +1099,44 @@ private struct HomeNewChapterRow: View {
 
     @ViewBuilder
     private func remoteBody(remote: AO3WorkSummary) -> some View {
-        // T-490: Route remote row through remote blur privacy wrapper once landed
-        NavigationLink(value: remote) {
-            rowContent
+        if blurred {
+            obscuredBody { gate.reveal(remote) }
+        } else {
+            NavigationLink(value: remote) {
+                rowContent
+            }
+            .buttonStyle(.plain)
+            .remoteWorkContextMenu(work: remote)
         }
-        .buttonStyle(.plain)
-        .remoteWorkContextMenu(work: remote)
+    }
+
+    @ViewBuilder
+    private func obscuredBody(reveal: @escaping () -> Void) -> some View {
+        let content = rowContent
+            .blur(radius: 6)
+            .overlay {
+                if !isSelecting { MatureRevealCapsule() }
+            }
+            .contentShape(Rectangle())
+        if isSelecting {
+            Button { onToggleSelection?() } label: {
+                content.overlay(alignment: .leading) {
+                    WorkSelectionBubble(isSelected: isSelected)
+                        .padding(.leading, 16)
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Hidden mature work")
+            .accessibilityValue(isSelected ? "Selected" : "Not selected")
+            .accessibilityHint("Double-tap to \(isSelected ? "deselect" : "select") this work.")
+        } else {
+            Button(action: reveal) { content }
+                .buttonStyle(.plain)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Hidden mature work")
+                .accessibilityHint("Activate to reveal.")
+        }
     }
 
     private var rowContent: some View {

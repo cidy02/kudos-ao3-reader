@@ -38,6 +38,8 @@ struct AccountView: View {
     @AppStorage(AccountShortcutStore.key) private var shortcutsRaw = ""
     @State private var editingShortcuts = false
     @AppStorage("hideMatureContent") private var hideMature = true
+    @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
+    @Environment(PrivacyGate.self) private var gate
     @State private var postingPseudName: String?
     @State private var confirmingLogOut = false
 
@@ -560,13 +562,18 @@ struct AccountView: View {
 
     private var accountLatestSection: some View {
         Section {
-            SectionRuleHeader(title: "Your Latest")
-                .pageBodyRow(top: 18, gutter: 0)
             if let work = profileModel?.latestWork {
-                AuthorProfileLatestCard(work: work)
-                    .cardNavigation(to: work, accessibilityLabel: work.title)
+                if !gate.isHidden(work, enabled: hideMature, mode: matureMode) {
+                    SectionRuleHeader(title: "Your Latest")
+                        .pageBodyRow(top: 18, gutter: 0)
+                    SensitiveRemoteWorkCard(work: work) {
+                        AuthorProfileLatestCard(work: work)
+                    }
                     .pageBodyRow(top: 10, gutter: SubjectMetrics.accountGutter)
+                }
             } else {
+                SectionRuleHeader(title: "Your Latest")
+                    .pageBodyRow(top: 18, gutter: 0)
                 Text(profileModel?.header?.recentWorks == nil
                     ? "Couldn't read your latest work. Open Works to try again."
                     : "No recent works visible on AO3.")

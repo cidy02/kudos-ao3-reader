@@ -377,7 +377,8 @@ struct AO3SubscriptionsWorksBrowser: View {
     private func rowBody(_ entry: CanonicalWork) -> some View {
         if let work = entry.local {
             SensitiveWorkRow(
-                work: work, expandAll: expandAll, presentation: .ledger, showsSeparator: false
+                work: work, expandAll: expandAll, presentation: .ledger, showsSeparator: false,
+                twin: entry.remote
             )
         } else if let remote = entry.remote {
             EnrichingAO3WorkRow(

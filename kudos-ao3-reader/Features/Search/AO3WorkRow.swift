@@ -38,23 +38,52 @@ struct AO3WorkRow: View {
     var wide = false
     /// False when a footnote under this row draws the separator for the whole block.
     var showsSeparator = true
+    /// False suppresses the row's own expand/collapse button — used when a caller
+    /// (SensitiveWorkRow's blurred branch) renders its own copy externally instead,
+    /// so the two don't compete for the same top-trailing corner.
+    var showsExpandButton = true
+    /// Lets a caller drive (and observe) this row's expanded state from outside —
+    /// used by SensitiveWorkRow's blurred branch, which renders its own unblurred
+    /// expand button but still needs it to expand the blurred content underneath.
+    /// Falls back to purely-internal state when nil.
+    var externalExpanded: Binding<Bool>?
+    /// False suppresses the row's own context menu — used when blurred so long-pressing
+    /// a concealed mature work does not pop up a menu detailing it.
+    var showsContextMenu = true
 
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var themeManager
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @AppStorage("showsZeroStats") private var showsZeroStats = true
     @ScaledMetric(relativeTo: .title3) private var bookmarkTitleSize: CGFloat = 19
-    @State private var expanded = false
+    @State private var internalExpanded = false
+
+    private var expandedBinding: Binding<Bool> {
+        externalExpanded ?? $internalExpanded
+    }
+
+    private var expanded: Bool {
+        get { expandedBinding.wrappedValue }
+        nonmutating set { expandedBinding.wrappedValue = newValue }
+    }
 
     /// Worth an expand toggle only when there's more to show than the clamped view:
     /// a long summary, any categorized tags — or fandoms the collapsed card folds
-    /// into "+N others". Without that last clause a crossover with a short summary
-    /// and no tags would hide its extra fandoms behind no control at all.
-    private var isExpandable: Bool {
+    /// into "+N others". Exposed statically so SensitiveWorkRow can decide whether to
+    /// render an external expand button without building a row.
+    static func isExpandable(
+        for work: AO3WorkSummary,
+        bookmark: AO3AuthorBookmark? = nil,
+        showsSummary: Bool = true
+    ) -> Bool {
         if bookmark != nil { return work.fandoms.count > 1 }
         let summaryWarrants = showsSummary && work.summary.count > 120
-        return summaryWarrants || work.fandoms.count > 1 || !additionalTags.isEmpty
+        return summaryWarrants || work.fandoms.count > 1 || !additionalTags(for: work).isEmpty
             || !work.relationships.isEmpty || !work.characters.isEmpty || !work.warnings.isEmpty
+    }
+
+    private var isExpandable: Bool {
+        Self.isExpandable(for: work, bookmark: bookmark, showsSummary: showsSummary)
     }
 
     /// Collapsed, a card names the work's main fandom and counts the rest. AO3
@@ -70,7 +99,7 @@ struct AO3WorkRow: View {
 
     var body: some View {
         Group {
-            if isSelecting {
+            if isSelecting || !showsContextMenu {
                 presentedCard
             } else {
                 presentedCard.remoteWorkContextMenu(work: work)
@@ -78,7 +107,7 @@ struct AO3WorkRow: View {
         }
         // Follow the global expand/collapse-all toggle (also applies on first
         // appearance so cards scrolled into view match the current state).
-        .onChange(of: expandAll, initial: true) { _, value in expanded = value }
+        .onChange(of: expandAll, initial: true) { _, value in expandedBinding.wrappedValue = value }
     }
 
     @ViewBuilder
@@ -206,7 +235,7 @@ struct AO3WorkRow: View {
                 if !work.dateUpdated.isEmpty {
                     WorkUpdatedDateBadge(dateUpdated: work.dateUpdated)
                 }
-                if isExpandable { expandButton }
+                if isExpandable && showsExpandButton { expandButton }
                 if isSelecting { WorkSelectionBubble(isSelected: isSelected) }
             }
             authorAndFandoms
@@ -419,7 +448,7 @@ struct AO3WorkRow: View {
             // element — title, byline, fandom, stats — ghosts over the expanded
             // summary and chips for the duration. Toggling instantly relayouts
             // in one frame with nothing to cross-fade.
-            expanded.toggle()
+            expandedBinding.wrappedValue.toggle()
         } label: {
             Image(systemName: expanded ? "chevron.up" : "chevron.down")
                 .font(.caption.weight(.semibold))
@@ -446,6 +475,10 @@ struct AO3WorkRow: View {
     /// AO3's freeform/additional tags, defensively filtered against the categorized
     /// groups before display so expanded cards never repeat a tag across sections.
     private var additionalTags: [String] {
+        Self.additionalTags(for: work)
+    }
+
+    private static func additionalTags(for work: AO3WorkSummary) -> [String] {
         let categorized = Set((work.fandoms + work.warnings + work.relationships + work.characters)
             .map(normalizedTag))
         var seen = Set<String>()
@@ -456,7 +489,7 @@ struct AO3WorkRow: View {
         }
     }
 
-    private func normalizedTag(_ tag: String) -> String {
+    private static func normalizedTag(_ tag: String) -> String {
         tag.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 
@@ -504,7 +537,7 @@ extension AO3WorkRow {
                                 if bookmark?.isRecommendation == true {
                                     SubjectStateBadge(title: "Rec", color: .secondary)
                                 }
-                                if isExpandable {
+                                if isExpandable && showsExpandButton {
                                     expandButton
                                 }
                             }
@@ -526,7 +559,7 @@ extension AO3WorkRow {
                                 SubjectStateBadge(title: "Rec", color: .secondary)
                             }
                         }
-                        if isExpandable {
+                        if isExpandable && showsExpandButton {
                             expandButton
                         }
                     }

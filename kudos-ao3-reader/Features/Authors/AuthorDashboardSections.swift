@@ -68,7 +68,10 @@ struct AO3DashboardSections: View {
             heading("Recent works", tab: .works)
             if let works = header.recentWorks {
                 if works.isEmpty { message("No recent works visible on AO3.") }
-                ForEach(CanonicalWorkMerge.remoteLed(remote: works, localLibrary: visibleLocalWorks)) { entry in
+                ForEach(
+                    CanonicalWorkMerge.remoteLed(remote: works, localLibrary: localWorks)
+                        .filter { !gate.isHidden($0, enabled: hideMature, mode: matureMode) }
+                ) { entry in
                     AO3AuthorWorkCard(
                         entry: entry,
                         expandAll: expandAll,
@@ -111,27 +114,24 @@ struct AO3DashboardSections: View {
             if let bookmarks = header.recentBookmarks {
                 if bookmarks.isEmpty { message("No recent bookmarks visible on AO3.") }
                 ForEach(bookmarks) { bookmark in
-                    AO3DashboardCompactCard(
-                        fandoms: bookmark.work.fandoms,
-                        title: bookmark.work.title,
-                        meta: ([bookmark.work.authors.joined(separator: ", ")] + [bookmark.date])
-                            .filter { !$0.isEmpty }
-                            .joined(separator: " · ")
-                    )
-                        .cardNavigation(to: bookmark.work, accessibilityLabel: bookmark.work.title)
-                        .cardRow(tintHue: CoverArt.workHue(
-                            fandoms: bookmark.work.fandoms, title: bookmark.work.title
-                        ))
+                    SensitiveRemoteWorkCard(work: bookmark.work) {
+                        AO3DashboardCompactCard(
+                            fandoms: bookmark.work.fandoms,
+                            title: bookmark.work.title,
+                            meta: ([bookmark.work.authors.joined(separator: ", ")] + [bookmark.date])
+                                .filter { !$0.isEmpty }
+                                .joined(separator: " · ")
+                        )
+                    }
+                    .cardRow(tintHue: CoverArt.workHue(
+                        fandoms: bookmark.work.fandoms, title: bookmark.work.title
+                    ))
                 }
             } else {
                 message("Couldn't read recent bookmarks. Open the full list to try again.")
             }
             seeAll(.bookmarks)
         }
-    }
-
-    private var visibleLocalWorks: [SavedWork] {
-        localWorks.filter { !gate.isHidden($0, enabled: hideMature, mode: matureMode) }
     }
 
     private func heading(_ title: String, tab: AO3AuthorProfileTab) -> some View {
@@ -191,43 +191,47 @@ struct AO3AuthorWorkCard: View {
 
     @Environment(PrivacyGate.self) private var gate
     @AppStorage("hideMatureContent") private var hideMature = true
+    @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if let work = entry.local {
-                // SensitiveWorkRow owns its link inside the privacy boundary.
-                SensitiveWorkRow(
-                    work: work,
-                    expandAll: expandAll,
-                    presentation: usesLedger ? .ledger : .standard,
-                    showsFullLedgerStats: showsFullLedgerStats,
-                    showsSummary: usesLedger ? false : showsSummary,
-                    showsSeparator: false
-                )
-                if showsPerformance, let blurb = entry.remote,
-                   !hideMature || !work.isAdult || gate.isRevealed(work) {
-                    AO3AuthorPerformanceStrip(work: blurb)
+        if !gate.isHidden(entry, enabled: hideMature, mode: matureMode) {
+            VStack(alignment: .leading, spacing: 8) {
+                if let work = entry.local {
+                    // SensitiveWorkRow owns its link inside the privacy boundary.
+                    SensitiveWorkRow(
+                        work: work,
+                        expandAll: expandAll,
+                        presentation: usesLedger ? .ledger : .standard,
+                        showsFullLedgerStats: showsFullLedgerStats,
+                        showsSummary: usesLedger ? false : showsSummary,
+                        showsSeparator: false,
+                        twin: entry.remote
+                    )
+                    if showsPerformance, let blurb = entry.remote,
+                       !gate.isConcealed(entry, enabled: hideMature) {
+                        AO3AuthorPerformanceStrip(work: blurb)
+                            .padding(.horizontal, WorkRowMetrics.horizontalPadding)
+                    }
+                } else if let work = entry.remote {
+                    SensitiveWorkRow(
+                        work: work,
+                        expandAll: expandAll,
+                        presentation: usesLedger ? .searchLedger : .standard,
+                        showsPerformance: showsPerformance,
+                        showsSummary: usesLedger ? false : showsSummary,
+                        showsSeparator: false
+                    )
+                }
+                if let giftLine = entry.remote?.giftLine,
+                   !gate.isConcealed(entry, enabled: hideMature) {
+                    WorkStateBadge(text: giftLine, symbol: "gift")
+                        .font(.caption2)
                         .padding(.horizontal, WorkRowMetrics.horizontalPadding)
                 }
-            } else if let work = entry.remote {
-                AO3WorkRow(
-                    work: work,
-                    expandAll: expandAll,
-                    presentation: usesLedger ? .searchLedger : .standard,
-                    showsPerformance: showsPerformance,
-                    showsSummary: usesLedger ? false : showsSummary,
-                    showsSeparator: false
-                )
-                .cardNavigation(to: work, accessibilityLabel: work.title)
+                WorkRowSeparator()
             }
-            if let giftLine = entry.remote?.giftLine {
-                WorkStateBadge(text: giftLine, symbol: "gift")
-                    .font(.caption2)
-                    .padding(.horizontal, WorkRowMetrics.horizontalPadding)
-            }
-            WorkRowSeparator()
+            .cardRow(chrome: .plain)
         }
-        .cardRow(chrome: .plain)
     }
 }
 

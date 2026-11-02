@@ -381,11 +381,8 @@ struct AO3AuthorWorksSection: View {
     }
 
     private var workEntries: [CanonicalWork] {
-        canonicalEntries(
-            localLibrary: localWorks.filter {
-                !gate.isHidden($0, enabled: hideMature, mode: matureMode)
-            }
-        )
+        canonicalEntries(localLibrary: localWorks)
+            .filter { !gate.isHidden($0, enabled: hideMature, mode: matureMode) }
     }
 
     private func canonicalEntries(localLibrary: [SavedWork]) -> [CanonicalWork] {
@@ -405,7 +402,8 @@ struct AO3AuthorWorksSection: View {
     /// no trailing swipe at all.
     @ViewBuilder
     private func ownWorkSwipeActions(_ entry: CanonicalWork) -> some View {
-        if let onOwnWorkAction, let remote = entry.remote {
+        if let onOwnWorkAction, let remote = entry.remote,
+           !gate.isConcealed(entry, enabled: hideMature) {
             Button(role: .destructive) {
                 onOwnWorkAction(.delete(workID: remote.id, title: remote.title))
             } label: {
@@ -438,27 +436,15 @@ struct AO3AuthorWorksSection: View {
     }
 
     private func selectableWorkRow(_ work: AO3WorkSummary) -> some View {
-        let isSelected = selection.contains(work.id)
-        return Button { onToggleSelection(work) } label: {
-            AO3WorkRow(
-                work: work,
-                expandAll: expandAll,
-                isSelecting: true,
-                isSelected: isSelected,
-                presentation: arrangement == nil ? .standard : .searchLedger,
-                showsSummary: arrangement == nil && showsSummary
-            )
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(work.title)
-        .accessibilityValue(isSelected ? "Selected" : "Not selected")
-        // Matches `SelectableAO3WorkRow` (`RemoteWorkSelection.swift`) exactly —
-        // this row is a deliberately separate component (its own doc comment:
-        // "AuthorProfileView keeps its own rows"), not a stale duplicate, so
-        // the fix is these two modifiers here rather than a controller-based
-        // consolidation (HIG audit UI-2/UI-3).
-        .accessibilityHint("Double-tap to \(isSelected ? "deselect" : "select") this work.")
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        SensitiveWorkRow(
+            work: work,
+            expandAll: expandAll,
+            isSelecting: true,
+            isSelected: selection.contains(work.id),
+            onToggleSelection: { onToggleSelection(work) },
+            presentation: arrangement == nil ? .standard : .searchLedger,
+            showsSummary: arrangement == nil && showsSummary
+        )
     }
 }
 
@@ -684,7 +670,6 @@ struct AO3AuthorBookmarksSection: View {
                 }
                 ForEach(model.bookmarks) { bookmark in
                     AO3AuthorBookmarkRow(bookmark: bookmark, expandAll: expandAll)
-                        .cardNavigation(to: bookmark.work, accessibilityLabel: bookmark.work.title)
                         .cardRow()
                 }
                 AO3AuthorPaginationRows(model: model, auth: auth)

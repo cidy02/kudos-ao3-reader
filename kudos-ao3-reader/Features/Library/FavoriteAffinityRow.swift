@@ -22,6 +22,9 @@ struct FavoriteAffinityRow: View {
     var isNewestWorkUnread = false
 
     @Environment(AppRouter.self) private var router
+    @Environment(PrivacyGate.self) private var gate
+    @AppStorage("hideMatureContent") private var hideMature = true
+    @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
 
     @ScaledMetric(relativeTo: .headline) private var rowTitleSize: CGFloat = 16
     @ScaledMetric(relativeTo: .footnote) private var unreadCountSize: CGFloat = 14
@@ -70,6 +73,15 @@ struct FavoriteAffinityRow: View {
         }
     }
 
+    /// Hide mode omits a hidden mature newest work entirely, like any other list row.
+    private var shownNewestWork: AO3WorkSummary? {
+        newestWork.flatMap { gate.isHidden($0, enabled: hideMature, mode: matureMode) ? nil : $0 }
+    }
+
+    private var newestWorkIsBlurred: Bool {
+        shownNewestWork.map { gate.isBlurred($0, enabled: hideMature, mode: matureMode) } ?? false
+    }
+
     private var card: some View {
         VStack(alignment: .leading, spacing: 10) {
             identityLine
@@ -79,9 +91,13 @@ struct FavoriteAffinityRow: View {
                 SubjectRowSeparator(inset: 0)
                 libraryBlock
             }
-            if let newestWork {
+            if let work = shownNewestWork {
                 SubjectRowSeparator(inset: 0)
-                newestWorkBlock(newestWork)
+                if newestWorkIsBlurred {
+                    concealedNewestWorkBlock(work)
+                } else {
+                    newestWorkBlock(work)
+                }
             }
         }
         .padding(.horizontal, 14)
@@ -93,6 +109,9 @@ struct FavoriteAffinityRow: View {
         .accessibilityActions {
             if let authorRoute {
                 Button("Open author page") { router.openAuthorProfile(authorRoute) }
+            }
+            if let work = shownNewestWork, newestWorkIsBlurred {
+                Button("Reveal newest work") { gate.reveal(work) }
             }
         }
     }
@@ -178,6 +197,29 @@ struct FavoriteAffinityRow: View {
         row.unreadInLibrary > 0 ? libraryExtras : "Everything tagged this way has been opened"
     }
 
+    /// Blur mode: the newest-work block names nothing until a tap reveals it.
+    private func concealedNewestWorkBlock(_ work: AO3WorkSummary) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text("Newest work")
+                .font(.system(size: 8.5, weight: .bold))
+                .kerning(0.85)
+                .textCase(.uppercase)
+                .foregroundStyle(.secondary)
+            Button {
+                gate.reveal(work)
+            } label: {
+                HStack(spacing: 9) {
+                    Text("Hidden mature work")
+                        .font(.system(size: workTitleSize, weight: .semibold))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    MatureRevealCapsule()
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.borderless)
+        }
+    }
+
     /// 1ak's second half: what this author posted most recently, and whether you
     /// have opened it.
     private func newestWorkBlock(_ work: AO3WorkSummary) -> some View {
@@ -249,9 +291,13 @@ struct FavoriteAffinityRow: View {
 
     private var accessibilityText: String {
         var text = "\(row.name). \(logLine)."
-        if let newestWork {
-            text += " Newest work: \(newestWork.title), \(newestWorkMetadata(newestWork))."
-            if isNewestWorkUnread { text += " Unread." }
+        if let newestWork = shownNewestWork {
+            if newestWorkIsBlurred {
+                text += " Newest work: hidden mature work."
+            } else {
+                text += " Newest work: \(newestWork.title), \(newestWorkMetadata(newestWork))."
+                if isNewestWorkUnread { text += " Unread." }
+            }
         } else {
             text += " \(libraryText)"
         }
