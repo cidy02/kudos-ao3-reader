@@ -37,7 +37,6 @@ struct HomeCollectionShelf: View {
             hasItems: !works.isEmpty,
             itemCount: works.isEmpty ? nil : works.count,
             visibleCount: min(works.count, 12),
-            isPinned: true,
             onSeeAll: onSeeAll
         ) {
             ForEach(works.prefix(12)) { work in
