@@ -4,18 +4,93 @@ import SwiftUI
 /// The shelf's own glyph. The colour is identity, the same way a queue's colour
 /// is, and never the colour of a control.
 struct LibraryShelfGlyph: View {
-    var shelf: LibraryShelfID
-    var diameter: CGFloat = 30
+    var systemImage: String
+    var identityHex: String
+    var diameter: CGFloat
+
+    init(shelf: LibraryShelfID, diameter: CGFloat = 30) {
+        self.systemImage = shelf.systemImage
+        self.identityHex = shelf.identityHex
+        self.diameter = diameter
+    }
+
+    init(systemImage: String, identityHex: String, diameter: CGFloat = 30) {
+        self.systemImage = systemImage
+        self.identityHex = identityHex
+        self.diameter = diameter
+    }
+
+    static func allWorks(diameter: CGFloat = 30) -> LibraryShelfGlyph {
+        LibraryShelfGlyph(
+            systemImage: LibraryShelfID.allWorksSystemImage,
+            identityHex: LibraryShelfID.allWorksIdentityHex,
+            diameter: diameter
+        )
+    }
 
     var body: some View {
-        Image(systemName: shelf.systemImage)
-            .font(.system(size: diameter * 0.46, weight: .semibold))
+        Image(systemName: systemImage)
+            .font(.system(size: diameter * 0.52, weight: .semibold))
             .foregroundStyle(.white)
             .frame(width: diameter, height: diameter)
             .background {
-                Circle().fill(Color(hex: shelf.identityHex) ?? Color.gray)
+                Circle().fill(Color(hex: identityHex) ?? Color.gray)
             }
             .accessibilityHidden(true)
+    }
+}
+
+extension ReaderTheme {
+    /// The grey 16 pt tile surface for Library shelf buttons (T-498).
+    /// Grey (#F2F2F7) on Light's white content ground; elevated card surface in Sepia/Dark/OLED.
+    var shelfTileSurface: Color {
+        switch self {
+        case .light:
+            #if os(iOS)
+            Color(uiColor: .systemGroupedBackground)
+            #else
+            Color(nsColor: .underPageBackgroundColor)
+            #endif
+        case .sepia, .dark, .oled:
+            cardSurface
+        }
+    }
+}
+
+/// One 16 pt grey shelf tile on the Library dashboard (T-498).
+///
+/// Reminders-style layout: a 30 pt coloured circle with a solid white glyph,
+/// tabular-figured count top-right, and the shelf label below.
+struct LibraryShelfTile: View {
+    var shelf: LibraryShelfID
+    var count: Int
+
+    @Environment(ThemeManager.self) private var themeManager
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .center) {
+                LibraryShelfGlyph(shelf: shelf)
+                Spacer(minLength: 8)
+                Text(count.compactCount)
+                    .font(.title3.weight(.bold))
+                    .monospacedDigit()
+                    .foregroundStyle(.primary)
+            }
+            Spacer(minLength: 2)
+            Text(shelf.title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .frame(maxWidth: .infinity, minHeight: 62, alignment: .topLeading)
+        .background {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(themeManager.appTheme.shelfTileSurface)
+        }
     }
 }
 
@@ -29,69 +104,53 @@ struct LibraryShelfButtonGrid: View {
     var onOpen: (LibraryShelfID) -> Void
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @Environment(ThemeManager.self) private var themeManager
-    @ScaledMetric(relativeTo: .caption2) private var labelSize: CGFloat = 11
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #endif
+
+    /// Pure layout logic for responsive column count across compact (2 columns),
+    /// accessibility size (1 column), and regular width / Duo 669 display (3 columns).
+    static func columnCount(isAccessibilitySize: Bool, isRegularWidth: Bool) -> Int {
+        if isAccessibilitySize { return 1 }
+        return isRegularWidth ? 3 : 2
+    }
 
     private var columns: [GridItem] {
-        if dynamicTypeSize.isAccessibilitySize {
-            [GridItem(.flexible())]
-        } else {
-            [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
-        }
+        let isRegular: Bool
+        #if os(iOS)
+        isRegular = horizontalSizeClass == .regular
+        #else
+        isRegular = true
+        #endif
+        let count = Self.columnCount(
+            isAccessibilitySize: dynamicTypeSize.isAccessibilitySize,
+            isRegularWidth: isRegular
+        )
+        return (0..<count).map { _ in GridItem(.flexible(), spacing: 10) }
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text("SHELVES")
-                    .font(.system(size: min(labelSize, 22), weight: .bold))
-                    .tracking(min(labelSize, 22) * 0.127)
-                    .foregroundStyle(.secondary)
-                    .accessibilityAddTraits(.isHeader)
-                Spacer(minLength: 8)
-                Button("Edit", action: onEdit)
-                    .font(.body)
-                    .foregroundStyle(.accentFill)
-                    .accessibilityHint("Choose which shelves are sections, and carousel or list")
-            }
-            .padding(.horizontal, SubjectMetrics.gutter)
+            SectionRuleHeader(
+                title: "Shelves",
+                actionTitle: "Edit",
+                onSeeAll: onEdit
+            )
 
             LazyVGrid(columns: columns, spacing: 10) {
                 ForEach(buttons) { shelf in
                     Button {
                         onOpen(shelf)
                     } label: {
-                        tile(shelf)
+                        LibraryShelfTile(shelf: shelf, count: counts[shelf] ?? 0)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityElement(children: .ignore)
                     .accessibilityLabel("\(shelf.title), \(counts[shelf] ?? 0)")
+                    .accessibilityHint("Opens the \(shelf.title) shelf")
                 }
             }
             .padding(.horizontal, SubjectMetrics.gutter)
-        }
-    }
-
-    private func tile(_ shelf: LibraryShelfID) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline) {
-                LibraryShelfGlyph(shelf: shelf)
-                Spacer(minLength: 8)
-                Text((counts[shelf] ?? 0).compactCount)
-                    .font(.title2.weight(.bold))
-                    .monospacedDigit()
-                    .foregroundStyle(.primary)
-            }
-            Text(shelf.title)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.primary)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity, minHeight: 62, alignment: .topLeading)
-        .background {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(themeManager.appTheme.cardSurface)
         }
     }
 }
