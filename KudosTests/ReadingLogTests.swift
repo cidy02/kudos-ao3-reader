@@ -62,6 +62,24 @@ struct ReadingLogTests {
         #expect(!session.didFinish)
     }
 
+    @Test func currentTotalDurationDoesNotCountAPausedSessionTwice() throws {
+        // `pauseSession` persists the open row and keeps the session open, so the
+        // sum must not add that row plus `accumulatedSeconds`. Revert the
+        // `recordID` exclusion in `currentTotalDuration` and this reads 1200.
+        ReadingLogService.resetOpenSessionsForTests()
+        let context = try context()
+        let work = SavedWork(title: "Session Work", author: "A")
+        context.insert(work)
+        try context.save()
+
+        let t0 = Date(timeIntervalSince1970: 1_000)
+        ReadingLogService.startSession(for: work, now: t0)
+        ReadingLogService.pauseSession(for: work, now: t0.addingTimeInterval(600))
+        #expect(try context.fetch(FetchDescriptor<ReadingSession>()).count == 1)
+        #expect(ReadingLogService.currentTotalDuration(
+            of: work.id, in: context, now: t0.addingTimeInterval(600)) == 600)
+    }
+
     // MARK: Surviving a backgrounded app that iOS never lets back in
 
     @Test func pauseWritesTheRowSoAReclaimedAppKeepsTheSession() throws {

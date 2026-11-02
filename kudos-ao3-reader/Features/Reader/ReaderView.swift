@@ -16,11 +16,13 @@ struct ReaderView: View {
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var themeManager
     @Environment(AO3AuthService.self) private var auth
+    @Environment(PrivacyGate.self) private var privacyGate
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \CustomFont.dateAdded) private var customFonts: [CustomFont]
     @AppStorage("readerFontID") private var fontID: String = "system"
     @AppStorage("readerMode") private var readingMode: ReadingMode = .scroll
     @AppStorage("readerTwoPage") private var twoPageEnabled = false
+    @AppStorage("hideMatureContent") private var hideMature = true
 
     // Apple Books–style custom typography. `customizeEnabled` gates the layout
     // options; bold/font always apply. See `ReaderTextStyle`.
@@ -48,6 +50,13 @@ struct ReaderView: View {
     @State private var isLoading = true
     @State private var landNextChapterOnLastPage = false
     @State private var availableWidth: CGFloat = 0
+    @State private var isAtEnd = false
+    /// The scroll fraction when the end was reached; scrolling back above it clears the card.
+    @State private var endFraction: Double = 1
+    /// Logged reading time for the end card, read once on arrival at the end.
+    @State private var endCardDuration: Double = 0
+    /// The next queued work, opened from the end card's Start.
+    @State private var nextWorkDestination: LocalWorkDestination?
     /// Snapshot at session start so a reopen of an already-finished work does
     /// not count as another finishing session.
     @State private var workActions = AO3WorkActionsModel()
@@ -237,8 +246,14 @@ struct ReaderView: View {
                 for: NSApplication.didBecomeActiveNotification)) { _ in
                 ReadingLogService.resumeSession(for: work, now: Date())
             }
-            .onChange(of: currentIndex) { _, _ in
+            .onChange(of: currentIndex) { _, newIndex in
+                if newIndex < chapterCount - 1 {
+                    isAtEnd = false
+                }
                 if !isLoading { loadCurrentChapter() }
+            }
+            .navigationDestination(item: $nextWorkDestination) { destination in
+                LocalWorkDestinationView(destination: destination)
             }
             .onChange(of: renderToken) { _, _ in
                 // Mode/style/theme reflow: persist the position first; the layout
@@ -247,6 +262,12 @@ struct ReaderView: View {
                 flushProgress()
                 configureController()
             }
+    }
+
+    private func reachEnd() {
+        isAtEnd = true
+        endFraction = progressBridge.currentFraction
+        endCardDuration = ReadingLogService.currentTotalDuration(of: work.id, in: modelContext)
     }
 
     private func markKudosGiven() {
@@ -327,8 +348,51 @@ struct ReaderView: View {
 
     /// The bottom chapter controls; this legacy reader's chrome stays docked
     /// (macOS-only — no immersive tap-to-hide mode here).
+    @ViewBuilder
     private var bottomControls: some View {
-        chapterControls
+        if isAtEnd {
+            endOfWorkCard
+                .padding(.horizontal, 16)
+                .padding(.bottom, 16)
+        } else {
+            chapterControls
+        }
+    }
+
+    private var endOfWorkCard: some View {
+        let ao3ID = WorkTags.ao3WorkID(from: work.sourceURL)
+        return ReaderEndCard(
+            title: work.title,
+            isComplete: work.isComplete,
+            durationSeconds: endCardDuration,
+            isFinished: work.isFinished,
+            showsAO3Actions: ao3ID != nil,
+            kudosGiven: work.hasGivenKudos,
+            kudosEnabled: !workActions.isWorking && !work.hasGivenKudos,
+            isBookmarked: workActions.workPageStates?.existingBookmark != nil,
+            bookmarkEnabled: !workActions.isWorking,
+            upNext: ReaderEndOfWorkFacts.findUpNext(
+                for: work,
+                isEligible: { !privacyGate.isConcealed($0, enabled: hideMature) }
+            ),
+            onKudos: {
+                if let ao3ID {
+                    workActions.giveKudos(workID: ao3ID, auth: auth, onSuccess: markKudosGiven)
+                }
+            },
+            onComment: {
+                workActions.startViewingComments(
+                    context: .init(savedWork: work),
+                    initialChapterPosition: currentAO3Chapter
+                )
+            },
+            onBookmark: {
+                if ao3ID != nil {
+                    workActions.startBookmark()
+                }
+            },
+            onStartNextWork: { nextWorkDestination = .reader($0) }
+        )
     }
 
     private var chapterControls: some View {
@@ -366,6 +430,7 @@ struct ReaderView: View {
     }
 
     private func goPrevious() {
+        isAtEnd = false
         if readingMode == .paged {
             controller.prevPage()
         } else if currentIndex > 0 {
@@ -420,6 +485,7 @@ struct ReaderView: View {
     }
 
     private func jump(to index: Int) {
+        isAtEnd = false
         landNextChapterOnLastPage = false
         if index == currentIndex {
             // Same chapter: an explicit re-pick means "back to the start", so
@@ -447,6 +513,7 @@ struct ReaderView: View {
                 landNextChapterOnLastPage = false
                 currentIndex += 1
             } else {
+                reachEnd()
                 autoFinishIfComplete() // paged: past the last page of the last chapter
             }
         }
@@ -458,6 +525,7 @@ struct ReaderView: View {
         }
         controller.onReachedScrollBottom = {
             if currentIndex == chapterCount - 1 {
+                reachEnd()
                 autoFinishIfComplete() // scrolled: bottom of the last chapter
             }
         }
@@ -470,6 +538,13 @@ struct ReaderView: View {
         // track it in memory on every report, write it through only on the
         // bridge's debounce so scrolling doesn't hammer SwiftData.
         controller.onProgressFraction = { fraction in
+            if currentIndex < chapterCount - 1 || (readingMode == .paged && controller.page < controller.pageTotal) {
+                isAtEnd = false
+            } else if isAtEnd && fraction < endFraction - 0.02 {
+                // Scrolled back up from where the end was reached: the chapter controls return.
+                // (The fraction is the content above the viewport, so it stays below 1 at the bottom.)
+                isAtEnd = false
+            }
             progressBridge.recordProgress(fraction)
             persistProgressIfDue()
         }
