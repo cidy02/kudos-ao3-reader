@@ -325,9 +325,9 @@ private struct CardRow: ViewModifier {
     var leadingNumber: Int?
     var chrome: ListRowChrome
 
-    /// 1h.1: a 17pt number column, then 9pt, then the card.
-    static let numberWidth: CGFloat = 17
-    static let numberGap: CGFloat = 9
+    /// 1h.1: a 24pt number column, then 6pt, then the card.
+    static let numberWidth: CGFloat = 24
+    static let numberGap: CGFloat = 6
     private var gutter: CGFloat { leadingNumber == nil ? 0 : Self.numberWidth + Self.numberGap }
 
     func body(content: Content) -> some View {
@@ -345,12 +345,13 @@ private struct CardRow: ViewModifier {
             .listRowSeparator(.hidden)
             .listRowInsets(insets)
             .listRowBackground(
-                ZStack(alignment: .leading) {
+                ZStack(alignment: .topLeading) {
                     Color.clear
                     if isSelected {
                         accentFill.opacity(0.08)
                     }
                     positionNumber
+                        .padding(.top, 14)
                 }
             )
     }
@@ -375,9 +376,8 @@ private struct CardRow: ViewModifier {
     private var positionNumber: some View {
         if let leadingNumber {
             Text("\(leadingNumber)")
-                .font(.system(size: 12, weight: .medium, design: .monospaced))
-                .monospacedDigit()
-                .foregroundStyle(.tertiary)
+                .font(.system(size: 15, weight: .semibold).monospacedDigit())
+                .foregroundStyle(.secondary)
                 .frame(width: Self.numberWidth, alignment: .trailing)
                 .padding(.leading, CardListMetrics.sideMargin)
         }
