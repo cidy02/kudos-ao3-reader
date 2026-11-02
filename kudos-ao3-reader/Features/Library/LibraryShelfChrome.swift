@@ -85,7 +85,7 @@ struct LibraryShelfTile: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.vertical, 9)
         .frame(maxWidth: .infinity, minHeight: 62, alignment: .topLeading)
         .background {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -131,18 +131,11 @@ struct LibraryShelfButtonGrid: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text("Shelves")
-                    .font(.title3.weight(.bold))
-                    .foregroundStyle(.primary)
-                    .accessibilityAddTraits(.isHeader)
-                Spacer(minLength: 8)
-                Button("Edit", action: onEdit)
-                    .font(.body)
-                    .foregroundStyle(.accentFill)
-                    .accessibilityHint("Choose which shelves are sections, and carousel or list")
-            }
-            .padding(.horizontal, SubjectMetrics.gutter)
+            SectionRuleHeader(
+                title: "Shelves",
+                actionTitle: "Edit",
+                onSeeAll: onEdit
+            )
 
             LazyVGrid(columns: columns, spacing: 10) {
                 ForEach(buttons) { shelf in

@@ -179,6 +179,23 @@ struct LibraryPageArrangementTests {
         #expect(LibraryShelfID.allWorksIdentityHex == "#6C6C70")
     }
 
+    @Test func libraryShelfIDRawValuesAndCodableStability() throws {
+        // LibraryShelfID is Codable and saved/backed up: never change its cases or raw values.
+        #expect(LibraryShelfID.favourites.rawValue == "favourites")
+        #expect(LibraryShelfID.collections.rawValue == "collections")
+        #expect(LibraryShelfID.downloaded.rawValue == "downloaded")
+        #expect(LibraryShelfID.wantToRead.rawValue == "wantToRead")
+        #expect(LibraryShelfID.readingNow.rawValue == "readingNow")
+        #expect(LibraryShelfID.finished.rawValue == "finished")
+        #expect(LibraryShelfID.queues.rawValue == "queues")
+        #expect(LibraryShelfID.history.rawValue == "history")
+        #expect(LibraryShelfID.imported.rawValue == "imported")
+
+        let encoded = try JSONEncoder().encode(LibraryShelfID.allCases)
+        let decoded = try JSONDecoder().decode([LibraryShelfID].self, from: encoded)
+        #expect(decoded == LibraryShelfID.allCases)
+    }
+
     @Test func shelfTileColumnCountAdaptsToDisplayAndAccessibility() {
         // Compact iPhone: 2 columns
         #expect(LibraryShelfButtonGrid.columnCount(isAccessibilitySize: false, isRegularWidth: false) == 2)
