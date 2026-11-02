@@ -19,6 +19,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
     @Environment(AO3InboxModel.self) private var inboxModel
     @Environment(PrivacyGate.self) private var gate
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(\.scenePhase) private var scenePhase
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
     @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }, sort: \SavedWork.dateAdded, order: .reverse)
@@ -146,12 +147,17 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
     }
 
     private var statisticsWorks: [SavedWork] {
-        works.filter { !$0.isQueueOnlyWork && passesPrivacy($0) }
+        HomeReadingStats.insightsWorks(from: works, gate: gate, hideMature: hideMature)
     }
 
     private var homeStatsRevision: String {
         let newest = readingSessions.map(\.lastModifiedAt).max()?.timeIntervalSince1970 ?? 0
-        return "\(readingSessions.count)|\(newest)"
+        return HomeReadingStats.revisionKey(
+            sessionCount: readingSessions.count,
+            newestModified: newest,
+            now: Date(),
+            calendar: .current
+        )
     }
 
     private func updateReadingStats() {
@@ -174,13 +180,14 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                                         .id("chapters")
                                     readingQueuesSection
                                         .id("queues")
-                                    ForEach(HomeCollectionShelves.shelves(homeCollections)) { collection in
+                                    let shelves = HomeCollectionShelves.shelves(homeCollections)
+                                    ForEach(Array(shelves.enumerated()), id: \.element.id) { index, collection in
                                         HomeCollectionShelf(
                                             collection: collection,
                                             works: HomeCollectionShelves.works(in: collection, visible: passesPrivacy),
                                             onSeeAll: { path.append(collection) }
                                         )
-                                        .id("collections")
+                                        .id(index == 0 ? "collections" : "collection:\(collection.id)")
                                     }
                                     subscriptionsSection
                                         .id("subscriptions")
@@ -269,6 +276,11 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                 }
                 .task(id: homeStatsRevision) {
                     updateReadingStats()
+                }
+                .onChange(of: scenePhase) { _, newPhase in
+                    if newPhase == .active {
+                        updateReadingStats()
+                    }
                 }
                 .task(id: auth.isLoggedIn) {
                     await Task.yield()
@@ -493,7 +505,6 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                     nextSectionTitle: "Reading Now",
                     nextSectionCount: readingNow.count,
                     nextSectionVisibleCount: min(readingNow.count, 4),
-                    nextSectionCollapseKey: "home.readingNow",
                     onSeeAll: { router.showLibrarySection(.readingNow, from: "Home") }
                 ) {
                     HomeResumeHero(
@@ -917,8 +928,7 @@ private struct HomeNewChapterRow: View {
         let fandom = work.workFandoms.first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
             .map(FandomDisplayName.bareTitle)
         let storedDate = work.dateUpdated.trimmingCharacters(in: .whitespacesAndNewlines)
-        let when = work.lastUpdateCheck?.formatted(.relative(presentation: .numeric, unitsStyle: .narrow))
-            ?? (storedDate.isEmpty ? nil : storedDate)
+        let when = storedDate.isEmpty ? nil : WorkStat.displayDate(storedDate)
         return [author.isEmpty ? nil : author, fandom, when]
             .compactMap { $0 }
             .joined(separator: " · ")
@@ -1016,6 +1026,11 @@ private struct HomeNewChapterRow: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+
+                if let preservation = work.preservationState.badgeLabel {
+                    WorkStateBadge(text: preservation, symbol: work.preservationState.badgeSymbol)
+                        .font(.caption2)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -1023,7 +1038,7 @@ private struct HomeNewChapterRow: View {
                 Text("+\(newCount)")
                     .font(.caption2.monospacedDigit().weight(.bold))
                     .foregroundStyle(.white)
-                    .frame(height: 16)
+                    .frame(minHeight: 16)
                     .padding(.horizontal, 6)
                     .background(.accentFill, in: Capsule())
                     .accessibilityLabel("\(newCount) new chapter\(newCount == 1 ? "" : "s")")
@@ -1164,6 +1179,11 @@ private struct HomeQueueRow: View {
                 Text(queue.displayName)
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(palette.accent)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+
+                Text(ReadingQueueFacts.planFacts(for: queuedWorks))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
 
                 if let work = upNextWork {

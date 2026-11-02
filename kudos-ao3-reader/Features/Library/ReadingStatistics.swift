@@ -174,4 +174,26 @@ struct HomeReadingStats: Equatable, Sendable {
             streakDays: streakDays
         )
     }
+
+    /// Library and Home Reading Insights visible work filter.
+    /// Excludes queue-only works and concealed mature works (whether in Hide or Blur mode).
+    static func insightsWorks(
+        from works: [SavedWork],
+        gate: PrivacyGate,
+        hideMature: Bool
+    ) -> [SavedWork] {
+        works.filter { !$0.isQueueOnlyWork && !gate.isConcealed($0, enabled: hideMature) }
+    }
+
+    /// Revision key for Home weekly reading stats. Incorporates the start of today
+    /// so the stats recalculate across the midnight boundary.
+    static func revisionKey(
+        sessionCount: Int,
+        newestModified: TimeInterval,
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> String {
+        let day = calendar.startOfDay(for: now).timeIntervalSince1970
+        return "\(sessionCount)|\(newestModified)|\(day)"
+    }
 }

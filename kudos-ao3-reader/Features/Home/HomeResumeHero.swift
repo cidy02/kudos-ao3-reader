@@ -903,7 +903,6 @@ struct HomeResumeComposition<Hero: View, Next: View>: View {
     var nextSectionTitle: String? = nil
     var nextSectionCount: Int? = nil
     var nextSectionVisibleCount: Int? = nil
-    var nextSectionCollapseKey = "home.readingNow"
     var onSeeAll: (() -> Void)? = nil
     @ViewBuilder var hero: () -> Hero
     @ViewBuilder var next: () -> Next
@@ -921,22 +920,32 @@ struct HomeResumeComposition<Hero: View, Next: View>: View {
             DashboardRegionRow(panes: panes, width: regions.viewport.width) {
                 hero().padding(.horizontal, 16)
                 if hasNext, panes.count > 1 {
-                    DashboardCardShelf(groupsInSinglePane: true) {
-                        next()
-                        if let decision = nextSectionDecision,
-                           decision.showsCarouselMoreTile,
-                           let title = nextSectionTitle,
-                           let onSeeAll {
-                            CarouselMoreTile(
-                                count: decision.hiddenCount,
-                                sectionTitle: title,
-                                action: onSeeAll
+                    VStack(alignment: .leading, spacing: 5) {
+                        if let title = nextSectionTitle, let count = nextSectionCount {
+                            SectionRuleHeader(
+                                title: title,
+                                count: count,
+                                actionTitle: nextSectionDecision?.headerLinkLabel,
+                                onSeeAll: nextSectionDecision?.headerLinkLabel != nil ? onSeeAll : nil
                             )
                         }
+                        DashboardCardShelf(groupsInSinglePane: true) {
+                            next()
+                            if let decision = nextSectionDecision,
+                               decision.showsCarouselMoreTile,
+                               let title = nextSectionTitle,
+                               let onSeeAll {
+                                CarouselMoreTile(
+                                    count: decision.hiddenCount,
+                                    sectionTitle: title,
+                                    action: onSeeAll
+                                )
+                            }
+                        }
                     }
-                        .environment(\.dashboardContentRegions, AdaptiveContentRegions(
-                            bounds: CGRect(origin: .zero, size: panes[1].size)
-                        ))
+                    .environment(\.dashboardContentRegions, AdaptiveContentRegions(
+                        bounds: CGRect(origin: .zero, size: panes[1].size)
+                    ))
                 }
             }
         } else {
@@ -965,7 +974,6 @@ struct HomeResumeComposition<Hero: View, Next: View>: View {
                 if let title = nextSectionTitle, let count = nextSectionCount {
                     WorkCarouselSection(
                         title: title,
-                        collapseKey: nextSectionCollapseKey,
                         hasItems: true,
                         itemCount: count,
                         visibleCount: nextSectionVisibleCount,

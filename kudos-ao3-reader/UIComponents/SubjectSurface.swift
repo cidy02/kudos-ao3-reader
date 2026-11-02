@@ -650,9 +650,7 @@ struct SectionRuleHeader: View {
     /// Custom link title when everything fits or a specific action is provided, e.g. "Organise", "Edit".
     /// When nil and `onSeeAll` is non-nil, defaults to "See All".
     var actionTitle: String?
-    var isCollapsed: Bool = false
     var isPinned: Bool = false
-    var onToggleCollapse: (() -> Void)?
     var onSeeAll: (() -> Void)?
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize

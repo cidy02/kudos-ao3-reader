@@ -22,6 +22,25 @@ enum ReadingQueueFacts {
         return parts.joined(separator: " · ")
     }
 
+    /// Computes the queue plan facts line ("8 works · about 9 h 40 min · 6 offline")
+    /// from a list of saved works, matching the queue organizer and shelf cards.
+    static func planFacts(
+        for works: [SavedWork],
+        fileExists: (URL) -> Bool = { FileManager.default.fileExists(atPath: $0.path) }
+    ) -> String {
+        let offlineCount = works.filter {
+            $0.hasEPUB && fileExists($0.fileURL)
+        }.count
+        let totalWordCount = works.allSatisfy { $0.wordCount > 0 }
+            ? works.reduce(0) { $0 + $1.wordCount }
+            : 0
+        return rowDetail(
+            workCount: works.count,
+            totalWordCount: totalWordCount,
+            offlineCount: offlineCount
+        )
+    }
+
     static func readingTimeEstimate(wordCount: Int) -> String? {
         guard wordCount > 0 else { return nil }
         let rawMinutes = Double(wordCount) / 200

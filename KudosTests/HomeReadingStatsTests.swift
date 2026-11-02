@@ -116,4 +116,88 @@ struct HomeReadingStatsTests {
         #expect(stats.streakDays == 2)
         #expect(stats.formattedStreak == "2-day")
     }
+
+    @Test func insightsFilterExcludesUnrevealedAdultWorkAndIncludesRevealed() {
+        let adultWork = SavedWork(title: "Dark Romance", author: "Author")
+        adultWork.rating = "Explicit"
+
+        let generalWork = SavedWork(title: "Fluff Fic", author: "Author")
+        generalWork.rating = "General Audiences"
+
+        let queueOnlyWork = SavedWork(title: "Queued Only", author: "Author")
+        queueOnlyWork.rating = "General Audiences"
+        queueOnlyWork.isQueuedForLater = true
+        queueOnlyWork.isSaved = false
+        queueOnlyWork.isFavorite = false
+
+        let works = [adultWork, generalWork, queueOnlyWork]
+        let gate = PrivacyGate()
+
+        // Hide mature is enabled, unrevealed: adult work excluded, queue-only excluded
+        let concealedWorks = HomeReadingStats.insightsWorks(from: works, gate: gate, hideMature: true)
+        #expect(concealedWorks.map(\.title) == ["Fluff Fic"])
+
+        // When the mature work is revealed, it is now included
+        gate.reveal(adultWork)
+        let revealedWorks = HomeReadingStats.insightsWorks(from: works, gate: gate, hideMature: true)
+        #expect(revealedWorks.map(\.title) == ["Dark Romance", "Fluff Fic"])
+
+        // When hide mature is off, all non-queue-only works are included
+        let gateUnused = PrivacyGate()
+        let allWorks = HomeReadingStats.insightsWorks(from: works, gate: gateUnused, hideMature: false)
+        #expect(allWorks.map(\.title) == ["Dark Romance", "Fluff Fic"])
+    }
+
+    @Test func statsRevisionKeyChangesAcrossDayBoundary() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+
+        var lateNightComponents = DateComponents()
+        lateNightComponents.year = 2026
+        lateNightComponents.month = 10
+        lateNightComponents.day = 31
+        lateNightComponents.hour = 23
+        lateNightComponents.minute = 59
+        lateNightComponents.second = 50
+        let lateNight = calendar.date(from: lateNightComponents)!
+
+        var midnightComponents = DateComponents()
+        midnightComponents.year = 2026
+        midnightComponents.month = 11
+        midnightComponents.day = 1
+        midnightComponents.hour = 0
+        midnightComponents.minute = 0
+        midnightComponents.second = 10
+        let justAfterMidnight = calendar.date(from: midnightComponents)!
+
+        let sameDayEarlier = calendar.date(byAdding: .minute, value: -10, to: lateNight)!
+
+        let sessionCount = 5
+        let newestModified: TimeInterval = 1730419190
+
+        let lateNightKey = HomeReadingStats.revisionKey(
+            sessionCount: sessionCount,
+            newestModified: newestModified,
+            now: lateNight,
+            calendar: calendar
+        )
+        let midnightKey = HomeReadingStats.revisionKey(
+            sessionCount: sessionCount,
+            newestModified: newestModified,
+            now: justAfterMidnight,
+            calendar: calendar
+        )
+        let sameDayKey = HomeReadingStats.revisionKey(
+            sessionCount: sessionCount,
+            newestModified: newestModified,
+            now: sameDayEarlier,
+            calendar: calendar
+        )
+
+        // Day boundary must change the key so stats don't go stale at midnight
+        #expect(lateNightKey != midnightKey)
+
+        // Within the same day with same sessions, key remains stable
+        #expect(lateNightKey == sameDayKey)
+    }
 }
