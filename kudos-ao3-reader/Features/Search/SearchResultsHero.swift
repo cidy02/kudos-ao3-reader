@@ -1,5 +1,55 @@
 import SwiftUI
 
+/// Pure logic for AO3 result lists (search results, fandom works, tag works).
+/// Covers header copy, loading footer status, and unique work appending.
+enum AO3ResultListPaging {
+    static func title(subject: String?, query: String?) -> String {
+        let subject = subject?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let query = query?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let subject, !subject.isEmpty {
+            if let query, !query.isEmpty, subject == query {
+                return "“\(query)”"
+            }
+            return subject
+        }
+        if let query, !query.isEmpty {
+            return "“\(query)”"
+        }
+        return "Search Results"
+    }
+
+    static func subtitle(total: Int) -> String {
+        let count = total.formatted()
+        return "\(count) \(total == 1 ? "work" : "works") on AO3"
+    }
+
+    static func footerLoadingText(loaded: Int, total: Int, page: Int) -> String {
+        "\(loaded.formatted()) of \(total.formatted()) · loading page \(page)"
+    }
+
+    static func footerLoadedText(loaded: Int, total: Int) -> String {
+        if total > 0 {
+            return "\(loaded.formatted()) of \(total.formatted()) works"
+        }
+        return "\(loaded.formatted()) \(loaded == 1 ? "work" : "works")"
+    }
+
+    static func appendUnique(newWorks: [AO3WorkSummary], to existingWorks: [AO3WorkSummary]) -> [AO3WorkSummary] {
+        var seen = Set(existingWorks.map(\.id))
+        var combined = existingWorks
+        for work in newWorks {
+            if seen.insert(work.id).inserted {
+                combined.append(work)
+            }
+        }
+        return combined
+    }
+
+    static func furthestLoadedPage(currentPage: Int, loadedPages: [Int]) -> Int {
+        max(currentPage, loadedPages.max() ?? currentPage)
+    }
+}
+
 /// AO3's own result-count line plus the filters producing it:
 ///
 ///     Naruto (Anime & Manga)                    1–20
@@ -20,13 +70,10 @@ struct SearchResultsHero: View {
     /// `.card` is the established one: a tappable card sitting in the list, with
     /// the count, the subject and the filter chips stacked inside it.
     ///
-    /// `.subjectPage` is artboard 1k — the same facts, but as the page's own
-    /// header on the subject's wash: kicker, rule, the total at 32pt, the
-    /// subject with a sort dropdown beside it, a four-cell figure strip, and the
-    /// filters as a chip rail (1k's dashed Filter at its end is gone — the
-    /// toolbar Filter is the one way in, owner 2026-10-01). Not a
-    /// restyle of the card but a different arrangement of the same content, so
-    /// both live here rather than drifting apart in two files.
+    /// `.subjectPage` is the redesign header (T-492, boards 15 and 18):
+    /// the query or fandom as a Large Title, with "N works on AO3",
+    /// Sort (T-473), Filters (filled with a count when active) and layout capsules,
+    /// followed by active-filter chips.
     enum Presentation: Equatable {
         case card
         case subjectPage
@@ -43,10 +90,6 @@ struct SearchResultsHero: View {
     var subjectField: AO3TagSearch.Field?
     var onEditFilters: (() -> Void)?
     var presentation: Presentation = .card
-    /// Page numbers for the figure strip. `.card` ignores them — it sits above a
-    /// pagination bar that already states them.
-    var currentPage: Int = 1
-    var totalPages: Int = 1
     /// The sort control 1k puts beside the subject. Nil draws the sort as plain
     /// text instead, which is what a caller with no binding to offer should get
     /// rather than a menu that cannot change anything.
@@ -54,8 +97,12 @@ struct SearchResultsHero: View {
     /// The orders the menu offers. A tag listing has no relevance order, so
     /// Browse's pages leave Best Match out.
     var sortOptions: [AO3SearchFilters.Sort] = AO3SearchFilters.Sort.allCases
-
+    /// Toggles summaries in wide ledger rows (T-492).
+    var showSummaries: Binding<Bool>?
+    /// Query string for search results title display.
+    var query: String?
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     /// Beyond this the chips would crowd out the works. The overflow is *counted*
     /// rather than silently dropped, so the card never implies it listed everything.
@@ -79,37 +126,68 @@ struct SearchResultsHero: View {
         }
     }
 
-    // MARK: - Artboard 1k
+    // MARK: - Redesigned result list header (T-492, boards 15 and 18)
 
     private var subjectPageBody: some View {
-        let countFact = "\(summary.total.formatted()) \(summary.total == 1 ? "work" : "works") on AO3"
-        let trimmedSubject = summary.subject?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return VStack(alignment: .leading, spacing: 16) {
-            SubjectPageHeading(
-                title: trimmedSubject.isEmpty ? countFact : trimmedSubject,
-                subtitle: trimmedSubject.isEmpty ? nil : countFact,
-                palette: palette
-            ) {
-                sortControl
+        let displayTitle = AO3ResultListPaging.title(subject: summary.subject, query: query)
+        let countFact = AO3ResultListPaging.subtitle(total: summary.total)
+        let filterCount = nonSortFilterLabels.count
+
+        return VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(displayTitle)
+                    .font(.largeTitle.weight(.bold))
+                    .foregroundStyle(Color.primary)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                    .minimumScaleFactor(0.85)
+                    .accessibilityAddTraits(.isHeader)
+
+                Text(countFact)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
             }
 
-            SubjectStatStrip(cells: statStripCells, palette: palette)
-                .padding(.horizontal, SubjectMetrics.gutter)
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    sortControl
+                    filterControl(count: filterCount)
+                    Spacer(minLength: 0)
+                    layoutControl
+                }
+                FlowLayout(spacing: 8, rowSpacing: 8) {
+                    sortControl
+                    filterControl(count: filterCount)
+                    layoutControl
+                }
+            }
 
-            // The active filters only: the toolbar Filter opens the panel.
             if !nonSortFilterLabels.isEmpty {
-                SubjectFilterRail {
+                FlowLayout(spacing: 6, rowSpacing: 6) {
                     ForEach(nonSortFilterLabels, id: \.self) { label in
-                        SubjectChip(
-                            text: label.text,
-                            style: .tinted,
-                            systemImage: label.symbol,
-                            palette: palette
-                        )
+                        Button {
+                            onEditFilters?()
+                        } label: {
+                            HStack(spacing: 4) {
+                                if let symbol = label.symbol {
+                                    Image(systemName: symbol)
+                                        .font(.caption2)
+                                }
+                                Text(label.text)
+                                    .font(.footnote.weight(.semibold))
+                            }
+                            .padding(.horizontal, 10)
+                            .frame(height: 30)
+                            .background(themeManager.appTheme.glassFill(0.12))
+                            .foregroundStyle(Color.primary)
+                            .clipShape(SubjectMetrics.controlShape(dynamicTypeSize))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("\(label.text), opens Filters")
                     }
                 }
             }
         }
+        .padding(.horizontal, SubjectMetrics.gutter)
     }
 
     /// Sort is pulled out of the chip rail and given its own control beside the
@@ -136,25 +214,73 @@ struct SearchResultsHero: View {
                     }
                 }
             } label: {
-                SubjectChip(text: sortLabelText, style: .neutral, trailingImage: "chevron.down")
+                HStack(spacing: 4) {
+                    Text(sortLabelText)
+                        .font(.subheadline)
+                        .lineLimit(1)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 12)
+                .frame(height: 32)
+                .background(themeManager.appTheme.glassFill(0.12))
+                .foregroundStyle(Color.primary)
+                .clipShape(Capsule())
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Sort by: \(sortLabelText)")
         } else if !sortLabelText.isEmpty {
-            SubjectChip(text: sortLabelText, style: .neutral)
+            HStack(spacing: 4) {
+                Text(sortLabelText)
+                    .font(.subheadline)
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 32)
+            .background(themeManager.appTheme.glassFill(0.12))
+            .foregroundStyle(Color.primary)
+            .clipShape(Capsule())
         }
     }
 
-    /// Works, active filters, pages, and which page you are on — the four figures
-    /// 1k puts under the header. The live page is the highlighted cell, because
-    /// it is the only one of the four that answers "where am I" rather than
-    /// "how big is this".
-    private var statStripCells: [SubjectStatStrip.Cell] {
-        [
-            SubjectStatStrip.Cell(value: summary.total.formatted(), label: "Works"),
-            SubjectStatStrip.Cell(value: "\(nonSortFilterLabels.count)", label: "Filters"),
-            SubjectStatStrip.Cell(value: totalPages.formatted(), label: "Pages"),
-            SubjectStatStrip.Cell(value: currentPage.formatted(), label: "Page", isHighlighted: true),
-        ]
+    private func filterControl(count: Int) -> some View {
+        Button {
+            onEditFilters?()
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "line.3.horizontal.decrease")
+                    .font(.caption.weight(.semibold))
+                Text(count > 0 ? "Filters · \(count)" : "Filters")
+                    .font(.subheadline.weight(count > 0 ? .semibold : .regular))
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 32)
+            .background(count > 0 ? themeManager.effectiveTint : themeManager.appTheme.glassFill(0.12))
+            .foregroundStyle(count > 0 ? ThemeManager.label(on: themeManager.effectiveTint) : Color.primary)
+            .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(count > 0 ? "Filters, \(count) active" : "Filters")
+    }
+
+    @ViewBuilder
+    private var layoutControl: some View {
+        if let showSummaries {
+            Button {
+                showSummaries.wrappedValue.toggle()
+            } label: {
+                Image(systemName: showSummaries.wrappedValue ? "text.alignleft" : "rectangle.grid.1x2")
+                    .font(.subheadline)
+                    .frame(width: 32, height: 32)
+                    .background(themeManager.appTheme.glassFill(0.12))
+                    .foregroundStyle(Color.primary)
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(showSummaries.wrappedValue ? "Layout: rows with summaries" : "Layout: compact rows")
+            .accessibilityHint("Toggles summaries in search results")
+        }
     }
 
     // MARK: - Established card
@@ -315,11 +441,66 @@ struct SearchResultsHero: View {
 }
 
 /// How many filters the Search toolbar's Filter button counts: what the hero's
-/// "Filters" cell counts for the same search — every summary label except the
+/// Filters capsule counts for the same search — every summary label except the
 /// subject, which the heading already names, and the sort, which is always in
 /// effect and has its own control. One function so the two cannot disagree.
 enum SearchFilterBadge {
     static func count(for filters: AO3SearchFilters) -> Int {
         filters.summaryLabels(excluding: filters.searchSubject.text, includesSort: false).count
+    }
+}
+
+/// Redesigned loading footer at the end of AO3 search and fandom result lists (T-492).
+/// Replaces the old SearchPaginationBar with an explicit next-page action.
+struct AO3ResultListEndFooter: View {
+    let loadedCount: Int
+    let totalCount: Int
+    let currentPage: Int
+    let totalPages: Int
+    let isLoading: Bool
+    var targetPage: Int?
+    var errorMessage: String?
+    let loadNextPage: () -> Void
+
+    var body: some View {
+        VStack(spacing: 8) {
+            if isLoading {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text(AO3ResultListPaging.footerLoadingText(
+                        loaded: loadedCount,
+                        total: totalCount,
+                        page: targetPage ?? (currentPage + 1)
+                    ))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Loading page \(targetPage ?? (currentPage + 1)), \(loadedCount) of \(totalCount) works loaded so far")
+            } else if let errorMessage {
+                VStack(spacing: 6) {
+                    Text(errorMessage)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                    Button("Try Again", action: loadNextPage)
+                        .buttonStyle(.kudosSecondary)
+                }
+            } else if currentPage < totalPages {
+                Text(AO3ResultListPaging.footerLoadedText(loaded: loadedCount, total: totalCount))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                Button("Load Page \(currentPage + 1)", action: loadNextPage)
+                    .buttonStyle(.kudosSecondary)
+            } else {
+                Text(AO3ResultListPaging.footerLoadedText(loaded: loadedCount, total: totalCount))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
+        .padding(.vertical, 12)
+        .padding(.horizontal, SubjectMetrics.gutter)
     }
 }

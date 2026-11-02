@@ -223,6 +223,7 @@ struct SensitiveWorkRow: View {
     var showsPerformance = false
     var bookmark: AO3AuthorBookmark?
     var signal: String?
+    var remoteBadgeTitle: String?
     var showsSummary = true
     var badgeCount = 0
     var wide = false
@@ -293,6 +294,7 @@ struct SensitiveWorkRow: View {
         showsPerformance: Bool = false,
         bookmark: AO3AuthorBookmark? = nil,
         signal: String? = nil,
+        badgeTitle: String? = nil,
         showsSummary: Bool = true,
         badgeCount: Int = 0,
         wide: Bool = false,
@@ -310,6 +312,7 @@ struct SensitiveWorkRow: View {
         self.showsPerformance = showsPerformance
         self.bookmark = bookmark
         self.signal = signal
+        self.remoteBadgeTitle = badgeTitle
         self.showsSummary = showsSummary
         self.badgeCount = badgeCount
         self.wide = wide
@@ -390,7 +393,7 @@ struct SensitiveWorkRow: View {
             sensitiveActionContainer(for: content)
 
         case .remote(let work):
-            let isExpandableWork = remotePresentation == .standard
+            let isExpandableWork = remotePresentation != .searchLedger
                 && AO3WorkRow.isExpandable(for: work, bookmark: bookmark, showsSummary: showsSummary)
             let content = AO3WorkRow(
                 work: work,
@@ -399,6 +402,7 @@ struct SensitiveWorkRow: View {
                 showsPerformance: showsPerformance,
                 bookmark: bookmark,
                 signal: signal,
+                badgeTitle: remoteBadgeTitle,
                 showsSummary: showsSummary,
                 badgeCount: badgeCount,
                 wide: wide,
@@ -516,6 +520,7 @@ struct SensitiveWorkRow: View {
                 showsPerformance: showsPerformance,
                 bookmark: bookmark,
                 signal: signal,
+                badgeTitle: remoteBadgeTitle,
                 showsSummary: showsSummary,
                 badgeCount: badgeCount,
                 wide: wide,

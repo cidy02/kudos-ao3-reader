@@ -3,8 +3,8 @@ import SwiftUI
 
 // Lint: this existing screen coordinates local and remote search state.
 /// Native AO3 work search. A search field with an adjacent filter button, results
-/// paged like AO3 (numbered pages + first/prev/next/last), and a filter sidebar
-/// for fandom, rating, sort, and completion.
+/// appended one page at a time on explicit request, and a filter sidebar for
+/// fandom, rating, sort, and completion.
 struct SearchView: View { // swiftlint:disable:this type_body_length
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
@@ -32,13 +32,14 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     @State private var ranking = SearchRankingSession()
     /// Name-entry alert for saving the current search.
     @State private var showingSaveDialog = false
+    @State private var showingResultsSaveDialog = false
     @State private var saveName = ""
     @State private var results: [AO3WorkSummary] = []
     @State private var rankTop100 = RankTop100Controller()
     @State private var rankTop100Pages: [Int: AO3SearchPage] = [:]
     @State private var currentPage = 1
     /// The page the latest load asked for, until it lands — so Try Again after a
-    /// failed page tap retries that page (1k.7) instead of `runSearch`'s page 1.
+    /// failed next-page request retries that page instead of `runSearch`'s page 1.
     @State private var requestedPage: Int?
     /// The filters the results on screen were loaded with; nil while a new
     /// search has none yet. The panel edits the live `filters` before Apply, so
@@ -52,6 +53,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     /// AO3's own result-count heading for the current results, when it sent one.
     @State private var resultSummary: AO3ResultSummary?
     @State private var phase: Phase = .idle
+    @State private var lastAppendError: String?
     @State private var path = NavigationPath()
     /// Drives the toolbar "expand/collapse all" toggle for the result cards.
     @State private var expandAllCards = false
@@ -228,11 +230,18 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                         }
                         #endif
                         ToolbarItem(placement: .principal) { searchField }
-                        // Filter sits directly visible, right after the search field —
+                        // Save and Filter sit directly visible after the search field —
                         // everything else (Select, Expand/Collapse) lives behind "...".
                         ActionToolbar(items: [
+                            (phase == .loaded && !results.isEmpty)
+                                ? AnyView(ToolbarIconButton(
+                                    title: "Save Search",
+                                    systemImage: "bookmark.badge.plus",
+                                    action: presentResultsSaveDialog
+                                ))
+                                : nil,
                             // 1k: "an accent filter button with its count" — the same
-                            // number as the hero's Filters cell (`SearchFilterBadge`).
+                            // number as the hero's Filters capsule (`SearchFilterBadge`).
                             AnyView(FilterButton(filtersActive: filters.hasActiveFilters,
                                                   showingFilters: router.isShowing(.searchFilters),
                                                   onClearFilters: clearAllFilters,
@@ -271,7 +280,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 .onChange(of: router.panel == .searchFilters) { _, showing in
                     // Closed without Apply while results are on screen: the panel's edits are
                     // dropped (the typed search text is not the panel's, and stays). The next
-                    // page tap used to run them as a new search (audit A20-3). Whatever the
+                    // next-page load used to run them as a new search (audit A20-3). Whatever the
                     // phase: during a page load or after a failed one the edits were kept
                     // (A27-10), and during the first search there was nothing to restore
                     // (A30-8). Apply clears `loadedFilters` and sends its own request first,
@@ -310,6 +319,11 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                             .presentationDragIndicator(.visible)
                         }
                 }
+                .sheet(isPresented: $showingResultsSaveDialog, onDismiss: { saveName = "" }) {
+                    SaveSearchSheet(filters: filters, name: $saveName, onSave: commitSavedSearch)
+                        .presentationDetents([.medium, .large])
+                        .presentationDragIndicator(.visible)
+                }
                 .remoteWorkSelectionChrome(bulkSelection)
                 .onChange(of: router.selection) { _, selection in
                     if selection != .search { rankTop100.cancel() }
@@ -341,10 +355,9 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
             // First load of an AO3 search: show the shape of the incoming results.
             AO3WorkRowSkeletonList(count: 7)
         } else {
-            ScrollViewReader { proxy in
+            let libraryIDs = localAO3WorkIDs
                 List {
-                    // Above the pagination row: it answers "how big is this search",
-                    // which is context for the whole list rather than for a page.
+                    // The total is context for the whole list rather than one loaded page.
                     if let heroSummary {
                         Section {
                             SearchResultsHero(
@@ -365,8 +378,6 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                                 // it the same way that button does.
                                 onEditFilters: { router.panel = .searchFilters },
                                 presentation: .subjectPage,
-                                currentPage: currentPage,
-                                totalPages: totalPages,
                                 // This menu applies immediately; the filter panel
                                 // keeps its separate Apply action.
                                 sortSelection: Binding(
@@ -377,16 +388,14 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                                         bulkSelection.selection.removeAll()
                                         runSearch()
                                     }
-                                )
+                                ),
+                                showSummaries: $showSummaries,
+                                query: filters.query
                             )
                             // Its own gutters, like every page header: bareListRow's
                             // card insets on top of them pushed it 26pt right of the cards.
                             .pageBodyRow(top: 8, gutter: 0)
                         }
-                    }
-
-                    if showPagination {
-                        Section { paginationRow.id(paginationTopID) }
                     }
 
                     if totalPages > 1 {
@@ -408,6 +417,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                                 controller: bulkSelection,
                                 presentation: .searchLedger,
                                 signal: ranking.signal(for: entry),
+                                badgeTitle: libraryIDs.contains(entry.id) ? "In Library" : nil,
                                 showsSummary: showSummaries,
                                 wide: true
                             )
@@ -422,20 +432,28 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                         Section {
                             RankTop100Controls(
                                 controller: rankTop100,
-                                currentPage: currentPage,
                                 totalPages: totalPages,
                                 loadedWorks: results.count,
                                 totalWorks: resultSummary?.total ?? results.count,
                                 isPageLoading: phase == .loading,
-                                loadNextPage: { loadPage(currentPage + 1) },
                                 start: startRankTop100
                             )
                             .bareListRow()
                         }
                     }
 
-                    if showPagination {
-                        Section { paginationRow }
+                    Section {
+                        AO3ResultListEndFooter(
+                            loadedCount: results.count,
+                            totalCount: resultSummary?.total ?? results.count,
+                            currentPage: currentPage,
+                            totalPages: totalPages,
+                            isLoading: phase == .loading,
+                            targetPage: requestedPage,
+                            errorMessage: lastAppendError,
+                            loadNextPage: loadNextPage
+                        )
+                        .bareListRow()
                     }
                 }
                 // Card-based list: each result is a fully-rounded card with ~12pt
@@ -450,12 +468,6 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 // this is the likeliest way a refresh gets abandoned.
                 .cancelRefreshOnTabChange($loadTask)
                 .overlay { statusOverlay }
-                .onChange(of: currentPage) { _, _ in
-                    withAnimation {
-                        proxy.scrollTo(paginationTopID, anchor: .top)
-                    }
-                }
-            }
         }
     }
 
@@ -631,24 +643,6 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     private func exitLocalSelect() {
         isSelectingLocal = false
         localSelection = []
-    }
-
-    private var showPagination: Bool {
-        totalPages > 1 && !results.isEmpty
-    }
-
-    private let paginationTopID = "pagination-top"
-
-    private var paginationRow: some View {
-        SearchPaginationBar(
-            currentPage: currentPage,
-            totalPages: totalPages,
-            isLoading: phase == .loading,
-            palette: resultsPalette
-        ) { page in
-            loadPage(page)
-        }
-        .bareListRow()
     }
 
     // MARK: Search bar + filter button
@@ -829,6 +823,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         phase = .loading
         results = []
         loadedFilters = nil
+        lastAppendError = nil
         currentPage = 1
         totalPages = 1
         resultSummary = nil
@@ -896,6 +891,11 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         showingSaveDialog = true
     }
 
+    private func presentResultsSaveDialog() {
+        saveName = Self.defaultSavedSearchName(for: filters)
+        showingResultsSaveDialog = true
+    }
+
     /// A default name for a search: its subject, the same name the results
     /// heading shows (1ax: "seeded from the search subject", which the sheet's
     /// own caption promises). That is the one tag when exactly one tag field holds
@@ -932,32 +932,21 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         try? context.save()
     }
 
-    /// Navigates to a specific page, replacing the visible results (AO3-style
-    /// paging rather than infinite scroll). Keeps the old page on screen while
-    /// the new one loads so the pagination bar doesn't flicker away.
-    private func loadPage(_ page: Int) {
-        guard page >= 1, page <= totalPages, page != currentPage else { return }
-        // A different page replaces `results` with different works entirely — a
-        // stale selection would otherwise reference IDs that no longer exist.
-        bulkSelection.selection.removeAll()
-        load(page: page)
+    private func loadNextPage() {
+        guard phase != .loading, currentPage < totalPages else { return }
+        lastAppendError = nil
+        load(page: currentPage + 1)
     }
 
     private func load(page: Int) {
         rankTop100.cancel()
-        // A page tap, a refresh or Try Again after an un-applied filter edit
+        // A next-page load, refresh or Try Again after an un-applied filter edit
         // would otherwise ask for page N of a query whose page 1 never loaded.
         // Here, so all three callers get it: the edited query starts at page 1.
         if page != 1, filters != loadedFilters {
             runSearch()
             return
         }
-        // Here rather than in the callers: `runSearch` and `refreshCurrentResults`
-        // each set it themselves, but a page tap goes straight to `load` — so the
-        // Search tab's pager had no spinner and kept both arrows live while a
-        // fetch ran, which is the very thing Browse's copy of this was fixed for.
-        // The skeleton branch is gated on `results` being empty, so paging still
-        // keeps the current page on screen.
         phase = .loading
         requestedPage = page
         loadToken += 1
@@ -969,22 +958,30 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         loadTask?.cancel()
         loadTask = Task {
             do {
-                let result = try await AO3Client.shared.search(
-                    filters: current, page: page, request: authenticatedRequest
-                )
+                let result = try await AO3RequestCoordinator.shared.withSlot {
+                    try await AO3Client.shared.search(
+                        filters: current, page: page, request: authenticatedRequest
+                    )
+                }
                 // Backed out to Browse (or a newer search started) while this was in
                 // flight — drop the result so it can't yank the user back to results.
                 // Cancellation is cooperative, so this token check still matters as a
                 // second line of defence when a cancel loses the race.
                 guard token == loadToken else { return }
                 // Noted in Momentum's record on the way in (T-473).
-                results = ranking.noting(result.works)
+                let newWorks = ranking.noting(result.works)
+                if page == 1 {
+                    results = newWorks
+                } else {
+                    results = AO3ResultListPaging.appendUnique(newWorks: newWorks, to: results)
+                }
                 rankTop100Pages[result.currentPage] = result
                 currentPage = result.currentPage
                 totalPages = result.totalPages
                 resultSummary = result.summary
                 loadedFilters = current
                 requestedPage = nil
+                lastAppendError = nil
                 if let url = RankTop100URLSource.search(
                     filters: current,
                     additionalQueryClause: nil
@@ -1005,10 +1002,23 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 return
             } catch let error as AO3Error {
                 guard token == loadToken else { return }
-                phase = .failed(error.errorDescription ?? "Something went wrong.")
+                if page == 1 {
+                    phase = .failed(error.errorDescription ?? "Something went wrong.")
+                } else {
+                    phase = .loaded
+                    lastAppendError = error.errorDescription ?? "Something went wrong."
+                }
+                requestedPage = nil
             } catch {
                 guard token == loadToken else { return }
-                phase = .failed(UserFacingError.message(for: error))
+                let msg = UserFacingError.message(for: error)
+                if page == 1 {
+                    phase = .failed(msg)
+                } else {
+                    phase = .loaded
+                    lastAppendError = msg
+                }
+                requestedPage = nil
             }
         }
     }
@@ -1042,6 +1052,10 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
             onPages: { pages in
                 rankTop100Pages = pages
                 results = ranking.noting(RankTop100Pages.works(in: pages))
+                currentPage = AO3ResultListPaging.furthestLoadedPage(
+                    currentPage: currentPage,
+                    loadedPages: Array(pages.keys)
+                )
             }
         )
     }
@@ -1068,23 +1082,22 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         )
     }
 
+    private var localAO3WorkIDs: Set<Int> {
+        Set(savedWorks.compactMap { $0.ao3WorkID ?? WorkTags.ao3WorkID(from: $0.sourceURL) })
+    }
+
     private func refreshCurrentResults() async {
         guard filters.isSearchable, phase != .idle else { return }
         // AO3 serves search results `max-age=600, public`, so without this the
         // pull would re-render the cached page and visibly do nothing.
         await AO3Client.shared.invalidateCachedResponses()
-        // Always, not only on a first load: with results already on screen this
-        // is what tells the pagination bar a fetch is running. The list itself
-        // still shows the results (the skeleton branch is gated on `results`
-        // being empty), so nothing flashes — the pager just stops pretending
-        // the tap did nothing.
         phase = .loading
         // Reuses `load(page:)` rather than repeating it: that keeps the refresh in
-        // the *same* `loadTask` slot, so tapping a page mid-refresh cancels the
+        // the *same* `loadTask` slot, so tapping Load Page mid-refresh cancels the
         // refresh instead of leaving it to finish and spend a paced request slot
         // ahead of the page the user is actually waiting for. Awaiting the task
         // holds the pull-to-refresh spinner until the load it started is done.
-        load(page: currentPage)
+        load(page: 1)
         // `loadTask` is unstructured, so awaiting it plainly would drop the
         // cancellation edge this function used to get for free when it awaited the
         // AO3 request directly: SwiftUI cancels the `.refreshable` task when the
@@ -1105,7 +1118,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
 }
 
 /// Which page Try Again reloads after a failed search load. With results on
-/// screen the failure was a page tap or a refresh, so the page asked for (or,
+/// screen the failure was a next-page load or refresh, so the page asked for (or,
 /// failing that, the one showing) is retried; `runSearch` would drop the reader
 /// back on page 1. With nothing on screen the first load failed, and nil tells
 /// the caller to run the search again from the top.
