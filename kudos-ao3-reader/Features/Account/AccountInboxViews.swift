@@ -611,6 +611,13 @@ struct AccountInboxItemRow: View {
 
 /// AO3's replied state, visually distinct from neutral work-state chips.
 private struct InboxRepliedBadge: View {
+    @Environment(ThemeManager.self) private var themeManager
+
+    /// Sepia's themed success green keeps contrast on tan; other themes keep the system green.
+    private var green: Color {
+        themeManager.appTheme == .sepia ? themeManager.appTheme.statusSuccessColor : Color.green
+    }
+
     var body: some View {
         // 1l's badge is the word alone; on the byline the checkmark only
         // pushed the commenter's name into truncation.
@@ -618,10 +625,10 @@ private struct InboxRepliedBadge: View {
         .font(.caption2.weight(.semibold))
         .lineLimit(1)
         .fixedSize()
-        .foregroundStyle(Color.green)
+        .foregroundStyle(green)
         .padding(.horizontal, 8)
         .padding(.vertical, 3)
-        .background(Color.green.opacity(0.12), in: Capsule())
+        .background(green.opacity(0.12), in: Capsule())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Replied")
     }

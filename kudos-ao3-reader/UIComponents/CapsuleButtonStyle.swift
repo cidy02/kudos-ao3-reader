@@ -119,7 +119,8 @@ public struct KudosButtonStyle: ButtonStyle {
             }
         }
         .opacity(configuration.isPressed ? 0.78 : 1.0)
-        .opacity(isEnabled ? 1.0 : 0.45)
+        // Sepia: white on tan at 0.45 reads about 2:1, so its disabled state stays stronger.
+        .opacity(isEnabled ? 1.0 : (themeManager?.appTheme == .sepia ? 0.7 : 0.45))
     }
 }
 

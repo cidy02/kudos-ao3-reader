@@ -298,7 +298,6 @@ struct CustomizeThemeView: View {
                 // already uses (Text Size, next door).
                 .accessibilityLabel(title)
                 .accessibilityValue(valueLabel ?? String(format: "%.2f", value.wrappedValue))
-                .accentFill()
         }
         .padding(.vertical, 2)
     }

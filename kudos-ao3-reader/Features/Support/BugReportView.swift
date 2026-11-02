@@ -11,6 +11,7 @@ import UIKit
 struct BugReportView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
+    @Environment(ThemeManager.self) private var themeManager
     @State private var summary = ""
 
     #if os(iOS)
@@ -35,6 +36,8 @@ struct BugReportView: View {
                         TextField(
                             "What happened, and what did you expect instead?",
                             text: $summary,
+                            prompt: themeManager.appTheme.sepiaPrompt(
+                                "What happened, and what did you expect instead?"),
                             axis: .vertical
                         )
                         .lineLimit(4 ... 10)
