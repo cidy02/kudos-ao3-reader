@@ -215,12 +215,12 @@ struct CategoryCardSkeleton: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .topLeading)
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
         .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
                 .fill(themeManager.appTheme.cardSurface)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
                         .strokeBorder(themeManager.appTheme.cardBorder, lineWidth: 0.5)
                 )
                 .shadow(color: themeManager.appTheme.cardShadow.color,
@@ -465,11 +465,15 @@ struct CategoryCardSkeletonList: View {
     /// the handful of "recently read" fandoms, where these are the panel's
     /// cluster of up to twelve (see `MediaBrowserView.clusterFandomLimit`).
     private static let chipCountPattern = [3, 2, 1, 3, 2, 3, 1, 2]
+    #if os(iOS)
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    #endif
 
     var body: some View {
         #if os(iOS)
         ScrollView {
-            MasonryLayout(columns: 2, spacing: 10, rowSpacing: 10) {
+            let columns = dynamicTypeSize.isAccessibilitySize ? 1 : 2
+            MasonryLayout(columns: columns, spacing: 10, rowSpacing: 10) {
                 ForEach(0 ..< count, id: \.self) { index in
                     CategoryCardSkeleton(chipCount: Self.chipCountPattern[index % Self.chipCountPattern.count])
                 }
