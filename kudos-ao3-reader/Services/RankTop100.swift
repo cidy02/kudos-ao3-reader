@@ -499,12 +499,10 @@ struct RankTop100ProgressCard: View {
 /// Idle controls and loaded-count footnote below the result rows.
 struct RankTop100Controls: View {
     let controller: RankTop100Controller
-    let currentPage: Int
     let totalPages: Int
     let loadedWorks: Int
     let totalWorks: Int
     let isPageLoading: Bool
-    let loadNextPage: () -> Void
     let start: () -> Void
 
     @ViewBuilder
@@ -512,10 +510,11 @@ struct RankTop100Controls: View {
         if RankTop100Feature.isEnabled {
             VStack(alignment: .leading, spacing: 8) {
                 if controller.progress == nil {
-                    ViewThatFits(in: .horizontal) {
-                        HStack(spacing: 8) { actionButtons }
-                        VStack(alignment: .leading, spacing: 8) { actionButtons }
+                    Button(action: start) {
+                        Label("Rank Top 100", systemImage: "arrow.up.arrow.down")
                     }
+                    .buttonStyle(.kudosSecondary)
+                    .disabled(!controller.canStart || isPageLoading || totalPages < 2)
                 }
                 if let message = controller.message ?? controller.availabilityText {
                     Text(message)
@@ -531,15 +530,4 @@ struct RankTop100Controls: View {
         }
     }
 
-    @ViewBuilder
-    private var actionButtons: some View {
-        Button("Load Page \(min(currentPage + 1, totalPages))", action: loadNextPage)
-            .buttonStyle(.kudosSecondary)
-            .disabled(isPageLoading || currentPage >= totalPages)
-        Button(action: start) {
-            Label("Rank Top 100", systemImage: "arrow.up.arrow.down")
-        }
-        .buttonStyle(.kudosSecondary)
-        .disabled(!controller.canStart || isPageLoading || totalPages < 2)
-    }
 }

@@ -6,6 +6,7 @@ import SwiftUI
 struct AO3WorkRow: View {
     enum Presentation: Equatable {
         case standard
+        case fandomTop
         case searchLedger
     }
 
@@ -29,6 +30,8 @@ struct AO3WorkRow: View {
     /// Search's computed-sort figure (T-473 "Show the signal on each result"),
     /// drawn under the ledger's figures in their style. Nil draws nothing.
     var signal: String?
+    /// Search-only local state shown beside the title, such as "In Library".
+    var badgeTitle: String? = nil
     /// Detailed surfaces. Off hides the summary paragraph only; tags, the stat
     /// line and the bookmark note stay. A ledger row still shows its summary.
     var showsSummary = true
@@ -118,6 +121,8 @@ struct AO3WorkRow: View {
             switch presentation {
             case .standard:
                 standardCard
+            case .fandomTop:
+                standardCard
             case .searchLedger:
                 searchLedgerCard
             }
@@ -168,6 +173,9 @@ struct AO3WorkRow: View {
                     .animation(nil, value: expanded)
             }
             if expanded {
+                if presentation == .fandomTop {
+                    chipGroup("Fandoms", Array(nonemptyFandoms.dropFirst()), field: .fandom)
+                }
                 // No "Archive Warnings" group: expanding turns the stats row's
                 // warning chip into the warnings themselves.
                 chipGroup("Relationships", work.relationships, field: .relationship)
@@ -189,15 +197,6 @@ struct AO3WorkRow: View {
         } heading: {
             searchLedgerIdentity
         } remainder: {
-            if !work.summary.isEmpty {
-                Text(work.summary)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(expanded || dynamicTypeSize.isAccessibilitySize ? nil : 2)
-                    .multilineTextAlignment(.leading)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .animation(nil, value: expanded)
-            }
             if !expanded {
                 WorkTagLineView(
                     relationships: work.relationships,
@@ -213,6 +212,15 @@ struct AO3WorkRow: View {
                 chipGroup("Characters", work.characters, field: .character)
                 chipGroup("Additional Tags", additionalTags, field: .freeform)
             }
+            if showsSummary, !work.summary.isEmpty {
+                Text(work.summary)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(expanded || dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .animation(nil, value: expanded)
+            }
             ledgerFacts
             searchLedgerSignal
             if showsPerformance {
@@ -223,6 +231,9 @@ struct AO3WorkRow: View {
 
     private var standardHeading: some View {
         VStack(alignment: .leading, spacing: 2) {
+            if presentation == .fandomTop {
+                fandomLabel
+            }
             HStack(alignment: .top, spacing: 6) {
                 Text(work.title)
                     .font(.headline.weight(.semibold))
@@ -231,6 +242,9 @@ struct AO3WorkRow: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .layoutPriority(1)
                 WorkPlusBadge(count: badgeCount)
+                if let badgeTitle {
+                    SubjectStateBadge(title: badgeTitle, color: themeManager.effectiveTint)
+                }
                 Spacer(minLength: 4)
                 if !work.dateUpdated.isEmpty {
                     WorkUpdatedDateBadge(dateUpdated: work.dateUpdated)
@@ -238,7 +252,24 @@ struct AO3WorkRow: View {
                 if isExpandable && showsExpandButton { expandButton }
                 if isSelecting { WorkSelectionBubble(isSelected: isSelected) }
             }
-            authorAndFandoms
+            if presentation == .fandomTop {
+                authorByline
+            } else {
+                authorAndFandoms
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var authorByline: some View {
+        if !work.authors.isEmpty {
+            AO3AuthorBylineView(
+                names: work.authors,
+                identities: work.authorIdentities,
+                font: .subheadline,
+                compact: !dynamicTypeSize.isAccessibilitySize
+            )
+            .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -575,6 +606,9 @@ extension AO3WorkRow {
                     .fixedSize(horizontal: false, vertical: true)
                     .layoutPriority(1)
                 WorkPlusBadge(count: badgeCount)
+                if let badgeTitle {
+                    SubjectStateBadge(title: badgeTitle, color: themeManager.effectiveTint)
+                }
                 Spacer(minLength: 4)
                 if isSelecting {
                     WorkSelectionBubble(isSelected: isSelected)
