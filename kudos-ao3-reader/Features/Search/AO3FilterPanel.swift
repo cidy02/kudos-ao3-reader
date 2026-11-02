@@ -91,9 +91,10 @@ struct AO3FilterPanel: View {
         _sortPresentation = State(initialValue: WorksSortPresentation(applied: worksSort))
     }
 
-    var isDark: Bool {
-        theme.appTheme == .dark || theme.appTheme == .oled
-    }
+    // From colorScheme (ContentView sets it from the app theme), not ThemeManager: the form reads this
+    // while `body` is built, and reading ThemeManager there crashes when none is in the environment.
+    @Environment(\.colorScheme) private var colorScheme
+    var isDark: Bool { colorScheme == .dark }
 
     private var resultsButtonTitle: String {
         if mode == .refine {
