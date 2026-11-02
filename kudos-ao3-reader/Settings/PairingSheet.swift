@@ -290,12 +290,19 @@ struct PairingSheet: View {
             #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
+                    #if os(iOS)
                     Button {
                         dismiss()
                     } label: {
                         Image(systemName: "xmark")
                     }
                     .accessibilityLabel("Close")
+                    #else
+                    Button("Close") {
+                        dismiss()
+                    }
+                    .accessibilityLabel("Close")
+                    #endif
                 }
             }
         }
