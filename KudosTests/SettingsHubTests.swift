@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 import Testing
 @testable import Kudos
 
@@ -181,5 +182,51 @@ struct SettingsHubTests {
         #expect(SettingsHubValue.privacy(hidesMature: true, mode: .obscure) == "Blur mature works")
         #expect(SettingsHubValue.privacy(hidesMature: true, mode: .hide) == "Hide mature works")
         #expect(SettingsHubValue.privacy(hidesMature: false, mode: .hide) == "Off")
+    }
+
+    // MARK: Icon tiles & Search
+
+    @Test func everyRouteHasValidTileColorAndSystemImage() {
+        for route in SettingsRoute.allCases {
+            #expect(!route.iconTileSystemImage.isEmpty, "Missing system image for \(route)")
+            #expect(route.iconTileHex.hasPrefix("#"), "Hex must start with # for \(route)")
+            #expect(route.iconTileHex.count == 7, "Hex must be #RRGGBB for \(route)")
+            #expect(Color(hex: route.iconTileHex) != nil, "Invalid hex for \(route)")
+        }
+
+        let customAccent = Color.purple
+        #expect(SettingsRoute.downloads.iconTileColor(accent: customAccent) == customAccent)
+        #expect(SettingsRoute.account.iconTileColor(accent: customAccent) == customAccent)
+        #expect(SettingsRoute.reader.iconTileColor(accent: customAccent) != customAccent)
+    }
+
+    @Test func settingsRouteSearchMatching() {
+        // Empty query matches everything
+        #expect(SettingsRoute.appearance.matches(query: "", currentValue: ""))
+        #expect(SettingsRoute.appearance.matches(query: "   ", currentValue: ""))
+
+        // Matches title
+        #expect(SettingsRoute.appearance.matches(query: "appear", currentValue: "Dark"))
+        #expect(SettingsRoute.font.matches(query: "font", currentValue: "Georgia"))
+
+        // Matches current value
+        #expect(SettingsRoute.appearance.matches(query: "sepia", currentValue: "Sepia"))
+        #expect(SettingsRoute.account.matches(query: "AddictedFic", currentValue: "AddictedFicLover"))
+
+        // Matches keywords
+        #expect(SettingsRoute.listening.matches(query: "tts", currentValue: ""))
+        #expect(SettingsRoute.listening.matches(query: "kokoro", currentValue: ""))
+        #expect(SettingsRoute.syncFolder.matches(query: "icloud", currentValue: "On"))
+        #expect(SettingsRoute.importFiles.matches(query: "epub", currentValue: ""))
+        #expect(SettingsRoute.privacySettings.matches(query: "mature", currentValue: "Off"))
+        #expect(SettingsRoute.backup.matches(query: "archive", currentValue: ""))
+
+        // Non-matching query
+        #expect(!SettingsRoute.font.matches(query: "xyznonexistent", currentValue: "Georgia"))
+    }
+
+    @Test func hubFirstSectionFooterCarriesFactAndVoiceOverValue() {
+        #expect(SettingsHubView.hubFooterText == "Changes here affect Kudos, not your AO3 account")
+        #expect(SettingsHubView.hubFooterAccessibilityValue == "These settings are stored on this device only and are never sent to AO3.")
     }
 }

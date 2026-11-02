@@ -43,7 +43,10 @@ struct SettingsPreservationPage: View {
                 Button {
                     showingAvailabilitySweep = true
                 } label: {
-                    Label("Check Availability…", systemImage: "arrow.triangle.2.circlepath")
+                    HStack(spacing: 12) {
+                        SettingsIconTile(color: Color(hex: "#30B0C7") ?? .teal, systemImage: "arrow.triangle.2.circlepath")
+                        Text("Check Availability…")
+                    }
                 }
             } footer: {
                 // Deliberately a button, never a background task: it is one AO3
@@ -116,7 +119,10 @@ struct SettingsReadingQueuesPage: View {
                 NavigationLink {
                     ReadingQueueStorageView()
                 } label: {
-                    Label("Queue Storage", systemImage: "externaldrive")
+                    HStack(spacing: 12) {
+                        SettingsIconTile(color: Color(hex: "#007AFF") ?? .blue, systemImage: "externaldrive")
+                        Text("Queue Storage")
+                    }
                 }
 
                 Toggle(
@@ -135,7 +141,10 @@ struct SettingsReadingQueuesPage: View {
                     Button {
                         showSavedWorkMigrationConfirmation = true
                     } label: {
-                        Label("Add Saved Works to Want to Read", systemImage: "arrow.right.doc.on.clipboard")
+                        HStack(spacing: 12) {
+                            SettingsIconTile(color: Color(hex: "#FF9500") ?? .orange, systemImage: "arrow.right.doc.on.clipboard")
+                            Text("Add Saved Works to Want to Read")
+                        }
                     }
                     .disabled(isMigratingSavedWorks)
                 }

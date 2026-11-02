@@ -65,10 +65,15 @@ struct ReaderSpeechSettingsSection: View {
         downloadSection
 
         Section {
-            Picker("Engine", selection: $engineID) {
+            Picker(selection: $engineID) {
                 Text("Automatic").tag("")
                 ForEach(ReaderTTSEngineKind.allCases, id: \.rawValue) { engine in
                     Text(engine.displayName).tag(engine.rawValue)
+                }
+            } label: {
+                HStack(spacing: 12) {
+                    SettingsIconTile(color: Color(hex: "#007AFF") ?? .blue, systemImage: "waveform")
+                    Text("Engine")
                 }
             }
 
@@ -110,12 +115,17 @@ struct ReaderSpeechSettingsSection: View {
                 }
             }
 
-            Toggle("Read author's notes", isOn: $readAuthorNotes)
-                .accessibilityHint(
-                    "Author's notes often carry content warnings. "
-                        + "Turn this off to hear only the story."
-                )
-                .accentFill()
+            Toggle(isOn: $readAuthorNotes) {
+                HStack(spacing: 12) {
+                    SettingsIconTile(color: Color(hex: "#C25E00") ?? .orange, systemImage: "text.quote")
+                    Text("Read author's notes")
+                }
+            }
+            .accessibilityHint(
+                "Author's notes often carry content warnings. "
+                    + "Turn this off to hear only the story."
+            )
+            .accentFill()
 
             if isKokoroAwaitingVoicePack {
                 Label(
@@ -133,7 +143,10 @@ struct ReaderSpeechSettingsSection: View {
             NavigationLink {
                 voicePicker
             } label: {
-                LabeledContent("Voice", value: selectedVoiceLabel)
+                HStack(spacing: 12) {
+                    SettingsIconTile(color: Color(hex: "#7B3FA0") ?? .purple, systemImage: "person.wave.2")
+                    LabeledContent("Voice", value: selectedVoiceLabel)
+                }
             }
 
             NavigationLink {
@@ -142,20 +155,27 @@ struct ReaderSpeechSettingsSection: View {
                     onScanChapter: onScanChapter
                 )
             } label: {
-                LabeledContent("Pronunciations", value: pronunciationCountLabel)
+                HStack(spacing: 12) {
+                    SettingsIconTile(color: Color(hex: "#2F8F3A") ?? .green, systemImage: "character.bubble")
+                    LabeledContent("Pronunciations", value: pronunciationCountLabel)
+                }
             }
 
             NavigationLink {
                 ReaderSpeechDeveloperSettingsView()
             } label: {
-                LabeledContent(
-                    "Developer Settings",
-                    value: ReaderSpeechTuning.isModified ? "Modified" : "Default"
-                )
+                HStack(spacing: 12) {
+                    SettingsIconTile(color: Color(hex: "#6C6C70") ?? .gray, systemImage: "gearshape")
+                    LabeledContent(
+                        "Developer Settings",
+                        value: ReaderSpeechTuning.isModified ? "Modified" : "Default"
+                    )
+                }
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                HStack {
+                HStack(spacing: 12) {
+                    SettingsIconTile(color: Color(hex: "#2F8F3A") ?? .green, systemImage: "gauge.with.needle")
                     Text("Speed")
                     Spacer()
                     Text(rateLabel)
@@ -169,7 +189,8 @@ struct ReaderSpeechSettingsSection: View {
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                HStack {
+                HStack(spacing: 12) {
+                    SettingsIconTile(color: Color(hex: "#B3127A") ?? .pink, systemImage: "waveform.path")
                     Text("Pitch")
                     Spacer()
                     Text(pitchLabel)
@@ -182,13 +203,18 @@ struct ReaderSpeechSettingsSection: View {
                     .accentFill()
             }
 
-            Button("Reset Read Aloud") {
+            Button(role: .destructive) {
                 engineID = ""
                 voiceID = ""
                 rate = ReaderSpeechPreferences.defaultRate
                 pitch = ReaderSpeechPreferences.defaultPitch
                 kokoroModelPackID = KokoroModelPack.defaultPack.rawValue
                 kokoroExecutionProviderID = KokoroExecutionProvider.defaultProvider.rawValue
+            } label: {
+                HStack(spacing: 12) {
+                    SettingsIconTile(color: Color(hex: "#D70015") ?? .red, systemImage: "arrow.counterclockwise")
+                    Text("Reset Read Aloud")
+                }
             }
         } header: {
             Text("Read Aloud")
@@ -281,7 +307,8 @@ struct ReaderSpeechSettingsSection: View {
         case .installing:
             busyRow("Installing Core ML Kokoro…")
         case .completed:
-            HStack {
+            HStack(spacing: 12) {
+                SettingsIconTile(color: Color(hex: "#2F8F3A") ?? .green, systemImage: "checkmark")
                 Text("Neural Engine pack ready")
                 Spacer()
                 Image(systemName: "checkmark")
@@ -292,11 +319,23 @@ struct ReaderSpeechSettingsSection: View {
                 Text(error)
                     .font(.caption)
                     .foregroundColor(.red)
-                Button("Retry Download") { isShowingCoreMLDownloadConfirmation = true }
+                Button {
+                    isShowingCoreMLDownloadConfirmation = true
+                } label: {
+                    HStack(spacing: 12) {
+                        SettingsIconTile(color: Color(hex: "#1E63C8") ?? .blue, systemImage: "arrow.clockwise")
+                        Text("Retry Download")
+                    }
+                }
             }
         case .idle:
-            Button("Download Kokoro (Neural Engine)") {
+            Button {
                 isShowingCoreMLDownloadConfirmation = true
+            } label: {
+                HStack(spacing: 12) {
+                    SettingsIconTile(color: Color(hex: "#1E63C8") ?? .blue, systemImage: "arrow.down")
+                    Text("Download Kokoro (Neural Engine)")
+                }
             }
         }
     }
@@ -412,8 +451,13 @@ struct ReaderSpeechSettingsSection: View {
     }
 
     private func downloadOrRetryButton(title: String) -> some View {
-        Button(title) {
+        Button {
             isShowingKokoroDownloadConfirmation = true
+        } label: {
+            HStack(spacing: 12) {
+                SettingsIconTile(color: Color(hex: "#1E63C8") ?? .blue, systemImage: "arrow.down")
+                Text(title)
+            }
         }
         .disabled(
             selectedKokoroModelPack.requiresInt8SupportFiles
