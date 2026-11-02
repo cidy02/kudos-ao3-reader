@@ -659,7 +659,8 @@ struct AO3AccountWorksList: View {
                                         showsFavoriteStar: true,
                                         showsFullLedgerStats: true,
                                         showsSummary: false,
-                                        badgeCount: newChapterCount(for: entry)
+                                        badgeCount: newChapterCount(for: entry),
+                                        twin: entry.remote
                                     )
                                 }
                                     .cardRow(chrome: .plain)

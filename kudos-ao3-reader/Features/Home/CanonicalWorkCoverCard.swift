@@ -13,14 +13,14 @@ struct CanonicalWorkCoverCard: View {
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
 
     var body: some View {
-        if let work = entry.local, gate.isBlurred(work, enabled: hideMature, mode: matureMode) {
+        if let work = entry.local, gate.isBlurred(entry, enabled: hideMature, mode: matureMode) {
             // A blurred cover is its own button: its tap reveals, and it sits in no link.
-            SensitiveWorkCoverCard(work: work, progress: work.readingProgress)
+            SensitiveWorkCoverCard(work: work, progress: work.readingProgress, twin: entry.remote)
         } else if let work = entry.local {
             NavigationLink(value: LocalWorkDestination.reader(work)) {
                 // readingProgress is nil until there's something meaningful to show,
                 // so a freshly-saved work keeps the clean cover.
-                SensitiveWorkCoverCard(work: work, progress: work.readingProgress)
+                SensitiveWorkCoverCard(work: work, progress: work.readingProgress, twin: entry.remote)
             }
             .buttonStyle(.plain)
             .localWorkContextMenu(work: work)
@@ -59,9 +59,7 @@ struct EnrichingAO3WorkCoverCard: View {
 
     var body: some View {
         Group {
-            if gate.isPrivacyUndetermined(displayed, enabled: hideMature) {
-                SensitiveWorkCoverCard(work: displayed, showsProvenanceBadge: showsProvenanceBadge)
-            } else if gate.isBlurred(displayed, enabled: hideMature, mode: matureMode) {
+            if gate.isBlurred(displayed, enabled: hideMature, mode: matureMode) {
                 // A blurred cover is its own button: its tap reveals, and it sits in no link.
                 SensitiveWorkCoverCard(work: displayed, showsProvenanceBadge: showsProvenanceBadge)
             } else if !gate.isHidden(displayed, enabled: hideMature, mode: matureMode) {

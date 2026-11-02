@@ -262,7 +262,8 @@ struct AO3BookmarksWorksBrowser: View {
                 showsFavoriteStar: fullLedgerStats,
                 showsFullLedgerStats: fullLedgerStats,
                 showsSummary: false,
-                showsSeparator: false
+                showsSeparator: false,
+                twin: entry.remote
             )
         } else if let remote = entry.remote {
             // The remote ledger row already prints the full AO3 stat line.

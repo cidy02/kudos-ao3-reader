@@ -69,12 +69,14 @@ final class PrivacyGate {
     }
 
     /// Reveals a single work (a Blur-mode tap), authenticating first if required.
-    func reveal(_ work: SavedWork) {
+    /// `alsoRemoteID` is the canonical remote twin's id, revealed in the same (single) authentication.
+    func reveal(_ work: SavedWork, alsoRemoteID: Int? = nil) {
         authenticate {
             self.revealedIDs.insert(work.id)
             if let ao3ID = work.ao3WorkID ?? WorkTags.ao3WorkID(from: work.sourceURL) {
                 self.revealedRemoteIDs.insert(ao3ID)
             }
+            if let alsoRemoteID { self.revealedRemoteIDs.insert(alsoRemoteID) }
             Log.privacy.info("Revealed a mature work for this session")
         }
     }
@@ -120,8 +122,11 @@ final class PrivacyGate {
         enabled && work.isAdult && mode == .obscure && !isRevealed(work)
     }
 
+    /// An unknown rating is drawn blurred in either mode (we do not know it is safe), and
+    /// stays revealable by its id; once enrichment supplies a rating the normal rules apply.
     func isBlurred(_ work: AO3WorkSummary, enabled: Bool, mode: MaturePrivacyMode) -> Bool {
-        enabled && work.isAdult && mode == .obscure && !isRevealed(work)
+        (enabled && work.isAdult && mode == .obscure && !isRevealed(work))
+            || isPrivacyUndetermined(work, enabled: enabled)
     }
 
     /// Whether a place that shows a work's title or author must leave this one out right
@@ -132,7 +137,7 @@ final class PrivacyGate {
     }
 
     func isConcealed(_ work: AO3WorkSummary, enabled: Bool) -> Bool {
-        enabled && work.isAdult && !isRevealed(work)
+        (enabled && work.isAdult && !isRevealed(work)) || isPrivacyUndetermined(work, enabled: enabled)
     }
 
     /// A sparse AO3 listing has not supplied the rating yet. Keep it anonymous
@@ -148,14 +153,30 @@ final class PrivacyGate {
             || (work.remote.map { isHidden($0, enabled: enabled, mode: mode) } ?? false)
     }
 
+    /// A sparse remote with no rating defers to a rated local twin instead of blurring it.
+    private func remoteDefersToLocal(_ work: CanonicalWork) -> Bool {
+        guard let local = work.local, let remote = work.remote else { return false }
+        return !local.rating.isEmpty
+            && remote.rating.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     func isBlurred(_ work: CanonicalWork, enabled: Bool, mode: MaturePrivacyMode) -> Bool {
         (work.local.map { isBlurred($0, enabled: enabled, mode: mode) } ?? false)
-            || (work.remote.map { isBlurred($0, enabled: enabled, mode: mode) } ?? false)
+            || (!remoteDefersToLocal(work)
+                && (work.remote.map { isBlurred($0, enabled: enabled, mode: mode) } ?? false))
     }
 
     func isConcealed(_ work: CanonicalWork, enabled: Bool) -> Bool {
         (work.local.map { isConcealed($0, enabled: enabled) } ?? false)
-            || (work.remote.map { isConcealed($0, enabled: enabled) } ?? false)
+            || (!remoteDefersToLocal(work)
+                && (work.remote.map { isConcealed($0, enabled: enabled) } ?? false))
+    }
+
+    /// A series-edit row carries only its blurb's rating and id: concealed (title masked) once
+    /// it is Mature/Explicit and unrevealed, in Blur and Hide alike (the row cannot be omitted
+    /// without breaking the reorder it belongs to).
+    func isConcealed(_ row: AO3SeriesWorkRow, enabled: Bool) -> Bool {
+        enabled && row.isAdult && !(row.sourceWorkID.map { isRevealed(remoteID: $0) } ?? false)
     }
 
     private func authenticate(_ onSuccess: @escaping () -> Void) {
@@ -210,6 +231,9 @@ struct SensitiveWorkRow: View {
     var contentInsets = EdgeInsets()
     var scopedRemoval: ScopedRemoval?
     var queueMenu: QueueItemMenuActions?
+    /// The canonical remote twin of a saved work: if it is Mature/Explicit the row is
+    /// concealed even when the local copy's rating is empty or stale.
+    private var twin: AO3WorkSummary?
 
     @Environment(PrivacyGate.self) private var gate
     @AppStorage("hideMatureContent") private var hideMature = true
@@ -234,9 +258,11 @@ struct SensitiveWorkRow: View {
         usesInlineNavigation: Bool = false,
         contentInsets: EdgeInsets = EdgeInsets(),
         scopedRemoval: ScopedRemoval? = nil,
-        queueMenu: QueueItemMenuActions? = nil
+        queueMenu: QueueItemMenuActions? = nil,
+        twin: AO3WorkSummary? = nil
     ) {
         self.target = .saved(work)
+        self.twin = twin
         self.expandAll = expandAll
         self.openMode = openMode
         self.onSelect = onSelect
@@ -296,32 +322,24 @@ struct SensitiveWorkRow: View {
         switch target {
         case .saved(let work):
             gate.isHidden(work, enabled: hideMature, mode: mode)
+                || (twin.map { gate.isHidden($0, enabled: hideMature, mode: mode) } ?? false)
         case .remote(let work):
             gate.isHidden(work, enabled: hideMature, mode: mode)
         }
-    }
-
-    private var privacyUndetermined: Bool {
-        guard case .remote(let work) = target else { return false }
-        return gate.isPrivacyUndetermined(work, enabled: hideMature)
     }
 
     private var blurred: Bool {
         switch target {
         case .saved(let work):
             gate.isBlurred(work, enabled: hideMature, mode: mode)
+                || (twin.map { gate.isBlurred($0, enabled: hideMature, mode: mode) } ?? false)
         case .remote(let work):
             gate.isBlurred(work, enabled: hideMature, mode: mode)
         }
     }
 
     var body: some View {
-        if privacyUndetermined {
-            AO3WorkRowSkeleton()
-                .padding(contentInsets)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Checking content rating")
-        } else if isHidden {
+        if isHidden {
             EmptyView()
         } else if blurred {
             blurredBody
@@ -442,7 +460,7 @@ struct SensitiveWorkRow: View {
     private func revealTarget() {
         switch target {
         case .saved(let work):
-            gate.reveal(work)
+            gate.reveal(work, alsoRemoteID: twin?.id)
         case .remote(let work):
             gate.reveal(work)
         }
@@ -556,6 +574,8 @@ struct SensitiveWorkCoverCard: View {
     var isSelecting: Bool = false
     var isSelected: Bool = false
     var onToggleSelection: (() -> Void)?
+    /// The canonical remote twin of a saved work (see `SensitiveWorkRow.twin`).
+    private var twin: AO3WorkSummary?
     @Environment(PrivacyGate.self) private var gate
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var mode: MaturePrivacyMode = .obscure
@@ -567,9 +587,11 @@ struct SensitiveWorkCoverCard: View {
         metadataStyle: WorkCoverMetadataStyle = .standard,
         isSelecting: Bool = false,
         isSelected: Bool = false,
-        onToggleSelection: (() -> Void)? = nil
+        onToggleSelection: (() -> Void)? = nil,
+        twin: AO3WorkSummary? = nil
     ) {
         self.target = .saved(work)
+        self.twin = twin
         self.footer = footer
         self.progress = progress
         self.metadataStyle = metadataStyle
@@ -600,31 +622,24 @@ struct SensitiveWorkCoverCard: View {
         switch target {
         case .saved(let work):
             gate.isHidden(work, enabled: hideMature, mode: mode)
+                || (twin.map { gate.isHidden($0, enabled: hideMature, mode: mode) } ?? false)
         case .remote(let work):
             gate.isHidden(work, enabled: hideMature, mode: mode)
         }
-    }
-
-    private var privacyUndetermined: Bool {
-        guard case .remote(let work) = target else { return false }
-        return gate.isPrivacyUndetermined(work, enabled: hideMature)
     }
 
     private var blurred: Bool {
         switch target {
         case .saved(let work):
             gate.isBlurred(work, enabled: hideMature, mode: mode)
+                || (twin.map { gate.isBlurred($0, enabled: hideMature, mode: mode) } ?? false)
         case .remote(let work):
             gate.isBlurred(work, enabled: hideMature, mode: mode)
         }
     }
 
     var body: some View {
-        if privacyUndetermined {
-            WorkCoverCardSkeleton()
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Checking content rating")
-        } else if isHidden {
+        if isHidden {
             EmptyView()
         } else if blurred {
             blurredCard
@@ -695,7 +710,7 @@ struct SensitiveWorkCoverCard: View {
     private func revealTarget() {
         switch target {
         case .saved(let work):
-            gate.reveal(work)
+            gate.reveal(work, alsoRemoteID: twin?.id)
         case .remote(let work):
             gate.reveal(work)
         }
@@ -776,20 +791,21 @@ struct SensitiveWorkCoverCard: View {
 struct SensitiveRemoteWorkCard<Content: View>: View {
     let work: AO3WorkSummary
     let content: Content
+    /// False for a surface that owns its own destination (an own draft opens the editor).
+    var opensWork = true
 
     @Environment(PrivacyGate.self) private var gate
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var mode: MaturePrivacyMode = .obscure
 
-    init(work: AO3WorkSummary, @ViewBuilder content: () -> Content) {
+    init(work: AO3WorkSummary, opensWork: Bool = true, @ViewBuilder content: () -> Content) {
         self.work = work
+        self.opensWork = opensWork
         self.content = content()
     }
 
     var body: some View {
-        if gate.isPrivacyUndetermined(work, enabled: hideMature) {
-            EmptyView()
-        } else if gate.isHidden(work, enabled: hideMature, mode: mode) {
+        if gate.isHidden(work, enabled: hideMature, mode: mode) {
             EmptyView()
         } else if gate.isBlurred(work, enabled: hideMature, mode: mode) {
             Button { gate.reveal(work) } label: {
@@ -803,8 +819,10 @@ struct SensitiveRemoteWorkCard<Content: View>: View {
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Hidden mature work")
             .accessibilityHint("Activate to reveal.")
-        } else {
+        } else if opensWork {
             content.cardNavigation(to: work, accessibilityLabel: work.title)
+        } else {
+            content
         }
     }
 }

@@ -767,8 +767,13 @@ nonisolated struct AO3SeriesWorkRow: Equatable, Identifiable, Sendable {
     /// From the series page's blurb, when the screen that opened this had it.
     var words: Int?
     var dateText: String = ""
+    /// Display-only, from the same blurb: lets the privacy gate conceal a mature row's title.
+    var rating: String = ""
+    var sourceWorkID: Int?
 
     var id: Int { serialWorkID }
+
+    var isAdult: Bool { rating == "Mature" || rating == "Explicit" }
 
     /// 1br's "4,200 words · 12 Jan 2023"; nil when no blurb matched. The date
     /// is the blurb's own, unlabelled as AO3 prints it: it is the last update,
@@ -794,6 +799,8 @@ nonisolated struct AO3SeriesWorkRow: Equatable, Identifiable, Sendable {
             let work = remaining.remove(at: index)
             row.words = work.words
             row.dateText = work.dateUpdated
+            row.rating = work.rating
+            row.sourceWorkID = work.id
             return row
         }
     }

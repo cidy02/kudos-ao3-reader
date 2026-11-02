@@ -204,7 +204,8 @@ struct AO3AuthorWorkCard: View {
                         presentation: usesLedger ? .ledger : .standard,
                         showsFullLedgerStats: showsFullLedgerStats,
                         showsSummary: usesLedger ? false : showsSummary,
-                        showsSeparator: false
+                        showsSeparator: false,
+                        twin: entry.remote
                     )
                     if showsPerformance, let blurb = entry.remote,
                        !gate.isConcealed(entry, enabled: hideMature) {

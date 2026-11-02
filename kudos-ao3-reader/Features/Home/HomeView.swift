@@ -969,10 +969,6 @@ private struct HomeNewChapterRow: View {
         return displayedRemote.map { gate.isHidden($0, enabled: hideMature, mode: mode) } ?? false
     }
 
-    private var privacyUndetermined: Bool {
-        displayedRemote.map { gate.isPrivacyUndetermined($0, enabled: hideMature) } ?? false
-    }
-
     private var newCount: Int {
         if let work {
             return max(0, work.postedChapterCount - work.knownChapterCount)
@@ -1060,11 +1056,7 @@ private struct HomeNewChapterRow: View {
 
     var body: some View {
         Group {
-            if privacyUndetermined {
-                AO3WorkRowSkeleton()
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("Checking content rating")
-            } else if isHidden {
+            if isHidden {
                 EmptyView()
             } else if let work {
                 localBody(work: work)

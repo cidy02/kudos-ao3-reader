@@ -391,7 +391,8 @@ struct AO3MarkedForLaterWorksBrowser: View {
                 presentation: .ledger,
                 showsFullLedgerStats: true,
                 showsSummary: false,
-                showsSeparator: false
+                showsSeparator: false,
+                twin: entry.remote
             )
         } else if let remote = entry.remote {
             EnrichingAO3WorkRow(

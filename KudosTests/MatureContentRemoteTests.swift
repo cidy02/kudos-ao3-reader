@@ -102,6 +102,63 @@ struct MatureContentRemoteTests {
         #expect(!gate.isPrivacyUndetermined(makeSummary(rating: "Not Rated"), enabled: true))
     }
 
+    @Test func undeterminedRatingIsBlurredAndRevealsById() {
+        let defaults = UserDefaults.standard
+        let previous = defaults.object(forKey: "requireBiometricToReveal")
+        defaults.set(false, forKey: "requireBiometricToReveal")
+        defer {
+            if let previous {
+                defaults.set(previous, forKey: "requireBiometricToReveal")
+            } else {
+                defaults.removeObject(forKey: "requireBiometricToReveal")
+            }
+        }
+        let gate = PrivacyGate()
+        let sparse = makeSummary(id: 77, rating: "")
+
+        // Blurred (so revealable), never omitted, in both modes; never in the clear.
+        #expect(gate.isBlurred(sparse, enabled: true, mode: .obscure))
+        #expect(gate.isBlurred(sparse, enabled: true, mode: .hide))
+        #expect(!gate.isHidden(sparse, enabled: true, mode: .hide))
+        #expect(gate.isConcealed(sparse, enabled: true))
+        #expect(!gate.isBlurred(sparse, enabled: false, mode: .obscure))
+
+        gate.reveal(remoteID: 77)
+        #expect(!gate.isBlurred(sparse, enabled: true, mode: .hide))
+        #expect(!gate.isConcealed(sparse, enabled: true))
+        // Once enrichment supplies a rating the normal rules apply.
+        #expect(!gate.isBlurred(makeSummary(id: 78, rating: "Teen And Up Audiences"), enabled: true, mode: .hide))
+    }
+
+    @Test func canonicalEntryIsBlurredWhenOnlyTheRemoteIsAdult() {
+        let gate = PrivacyGate()
+        let local = SavedWork(
+            title: "Local work",
+            author: "Author",
+            sourceURL: "https://archiveofourown.org/works/31"
+        )
+        local.rating = ""
+        let entry = CanonicalWork(local: local, remote: makeSummary(id: 31, rating: "Explicit"))
+
+        #expect(!gate.isBlurred(local, enabled: true, mode: .obscure))
+        #expect(gate.isBlurred(entry, enabled: true, mode: .obscure))
+        #expect(gate.isConcealed(entry, enabled: true))
+        #expect(gate.isHidden(entry, enabled: true, mode: .hide))
+
+        // A rated, non-adult local twin is not blurred by a sparse remote.
+        local.rating = "Teen And Up Audiences"
+        let sparse = CanonicalWork(local: local, remote: makeSummary(id: 31, rating: ""))
+        #expect(!gate.isBlurred(sparse, enabled: true, mode: .obscure))
+    }
+
+    @Test func bulkBarNamesNoConcealedWork() {
+        let work = makeSummary(id: 5, rating: "Explicit")
+        #expect(OwnWorksBulkBar.displayTitle(work, isConcealed: true) == "Hidden mature work")
+        #expect(OwnWorksBulkBar.displayTitle(work, isConcealed: false) == "Test Work")
+        #expect(OwnWorksBulkBar.deleteTitle([work], isConcealed: { _ in true }) == "Delete “Hidden mature work”?")
+        #expect(!OwnWorksBulkBar.deleteMessage([work, work], isConcealed: { _ in true }).contains("Test Work"))
+    }
+
     @Test func canonicalPrivacyUsesTheLocalTwinBeforeRenderingSparseRemoteData() {
         let gate = PrivacyGate()
         let local = SavedWork(

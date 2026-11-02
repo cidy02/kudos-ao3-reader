@@ -538,11 +538,11 @@ struct AccountWorksCompactGrid<Accessory: View>: View {
 
     @ViewBuilder
     private func compactCard(for entry: CanonicalWork) -> some View {
-        if let work = entry.local, gate.isBlurred(work, enabled: hideMature, mode: matureMode) {
-            SensitiveWorkCoverCard(work: work, progress: work.readingProgress)
-        } else if let work = entry.local, !gate.isHidden(work, enabled: hideMature, mode: matureMode) {
+        if let work = entry.local, gate.isBlurred(entry, enabled: hideMature, mode: matureMode) {
+            SensitiveWorkCoverCard(work: work, progress: work.readingProgress, twin: entry.remote)
+        } else if let work = entry.local, !gate.isHidden(entry, enabled: hideMature, mode: matureMode) {
             NavigationLink(value: WorkCardTap.destination(for: work)) {
-                SensitiveWorkCoverCard(work: work, progress: work.readingProgress)
+                SensitiveWorkCoverCard(work: work, progress: work.readingProgress, twin: entry.remote)
             }
             .buttonStyle(.plain)
             .localWorkContextMenu(work: work)
@@ -802,7 +802,7 @@ struct AccountWorksInlineSection: View {
                 // internally (MatureContent.swift) for its non-blurred, non-selecting
                 // branch — re-wrapping it stacks a second, unhidden, real-titled
                 // NavigationLink behind the blurred branch's reveal gate.
-                SensitiveWorkRow(work: work, expandAll: expandAll)
+                SensitiveWorkRow(work: work, expandAll: expandAll, twin: entry.remote)
                     .modifier(OptionalCardRow(enabled: useCardRow))
             } else if let remote = entry.remote {
                 SensitiveWorkRow(work: remote, expandAll: expandAll)

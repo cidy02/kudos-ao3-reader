@@ -19,6 +19,8 @@ private enum AuthorProfileContentDestination: Hashable {
 
 struct AuthorProfileView: View {
     @AppStorage("hideMatureContent") private var hideMature = true
+    @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
+    @Environment(PrivacyGate.self) private var gate
     @Environment(AO3AuthService.self) private var auth
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var theme
@@ -906,8 +908,10 @@ private extension AuthorProfileView {
             // 1bn's Select All, over the works loaded so far — AO3's later pages
             // are not on screen, so they are not selectable.
             ToolbarItem(placement: .primaryAction) {
-                Button(bulkSelection.allSelected(in: model.works) ? "Deselect All" : "Select All") {
-                    bulkSelection.toggleSelectAll(in: model.works)
+                // Hide mode leaves hidden works out, so Select All cannot sweep them in.
+                let selectable = model.works.filter { !gate.isHidden($0, enabled: hideMature, mode: matureMode) }
+                Button(bulkSelection.allSelected(in: selectable) ? "Deselect All" : "Select All") {
+                    bulkSelection.toggleSelectAll(in: selectable)
                 }
                 .disabled(model.works.isEmpty)
             }

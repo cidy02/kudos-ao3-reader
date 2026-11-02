@@ -5,6 +5,9 @@ import SwiftUI
 struct WritingDraftsView: View {
     @Environment(AO3AuthService.self) private var auth
     @Environment(ThemeManager.self) private var theme
+    @Environment(PrivacyGate.self) private var gate
+    @AppStorage("hideMatureContent") private var hideMature = true
+    @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
     @Environment(\.scenePhase) private var scenePhase
     @State private var result: AO3SearchPage?
     /// Each draft's deletion date from its blurb, keyed by work id (1x).
@@ -83,11 +86,7 @@ struct WritingDraftsView: View {
                     // card in the app carries. One card per row, so one link per
                     // row — the rows cannot misfire.
                     ForEach(result.works) { work in
-                        DraftCard(work: work, deletion: deletionDates[work.id], now: now)
-                            .subjectRowNavigation(accessibilityLabel: work.title.isEmpty ? "Untitled" : work.title) {
-                                WritingWorkDestination(workID: work.id) { reload += 1 }
-                            }
-                            .cardRow(tintHue: CoverArt.workHue(fandoms: work.fandoms, title: work.title))
+                        draftRow(work)
                     }
                 }
                 // 1k's switcher pill, the same control every other paged screen
@@ -126,6 +125,25 @@ struct WritingDraftsView: View {
         .onChange(of: scenePhase) { _, phase in if phase == .active { now = Date() } }
         .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged).receive(on: RunLoop.main)) { _ in
             now = Date()
+        }
+    }
+
+    /// A hidden mature draft is omitted; a blurred (or rating-unknown) one is the shared
+    /// placeholder, whose tap reveals instead of opening the editor.
+    @ViewBuilder
+    private func draftRow(_ work: AO3WorkSummary) -> some View {
+        let card = DraftCard(work: work, deletion: deletionDates[work.id], now: now)
+        if gate.isHidden(work, enabled: hideMature, mode: matureMode) {
+            EmptyView()
+        } else if gate.isBlurred(work, enabled: hideMature, mode: matureMode) {
+            SensitiveRemoteWorkCard(work: work, opensWork: false) { card }
+                .cardRow(tintHue: CoverArt.workHue(fandoms: work.fandoms, title: work.title))
+        } else {
+            card
+                .subjectRowNavigation(accessibilityLabel: work.title.isEmpty ? "Untitled" : work.title) {
+                    WritingWorkDestination(workID: work.id) { reload += 1 }
+                }
+                .cardRow(tintHue: CoverArt.workHue(fandoms: work.fandoms, title: work.title))
         }
     }
 

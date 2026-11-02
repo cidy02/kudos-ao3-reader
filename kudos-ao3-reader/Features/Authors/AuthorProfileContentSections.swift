@@ -402,7 +402,8 @@ struct AO3AuthorWorksSection: View {
     /// no trailing swipe at all.
     @ViewBuilder
     private func ownWorkSwipeActions(_ entry: CanonicalWork) -> some View {
-        if let onOwnWorkAction, let remote = entry.remote {
+        if let onOwnWorkAction, let remote = entry.remote,
+           !gate.isConcealed(entry, enabled: hideMature) {
             Button(role: .destructive) {
                 onOwnWorkAction(.delete(workID: remote.id, title: remote.title))
             } label: {
