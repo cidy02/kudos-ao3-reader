@@ -1,16 +1,14 @@
+// swiftlint:disable file_length
 import SwiftUI
 
 /// The shared AO3 work-filter form: sort, rating, warnings, categories, crossovers,
-/// completion, word count, language, and include/exclude tag pickers. Used by the
-/// Search tab's inspector, by Browse → Category → Fandom → Works, and — with
-/// `worksSort` set — by the author works list's one sort-and-filter sheet.
+/// completion, word count, language, popularity, and include/exclude tag pickers.
+/// Used by the Search tab's inspector, by Browse → Category → Fandom → Works, and —
+/// with `worksSort` set — by the author works list's one sort-and-filter sheet.
 ///
-/// Pure UI over a bound `AO3SearchFilters`: the host runs the actual search via
-/// `onApply` and decides what "reset" means via `onReset` (Search clears everything;
-/// Browse resets back to the page's fixed fandom).
-///
-/// One showing of the works-index sort. Appearing reseeds from the applied
-/// sort, and Apply posts the draft only when this showing changed it.
+/// Regrouped per redesign board 12 (T-493):
+/// Top Active filters block, Sort, Content, Tags and text, Length and status, Popularity,
+/// two-column cycling symbol chip cards, Settings-style tiles, and pinned Results bar.
 struct WorksSortPresentation: Equatable {
     var draft: AO3WorksSort
     private var seeded: AO3WorksSort
@@ -29,68 +27,30 @@ struct WorksSortPresentation: Equatable {
 }
 
 struct AO3FilterPanel: View {
-    /// How the panel applies. `.search` re-runs an AO3 query (Search tab, Browse →
-    /// Fandom); `.refine` narrows the already-loaded works on the page in place, so it
-    /// hides the facets that need a fresh query (Sort, Crossover, Updated) and its
-    /// primary button just confirms rather than searching.
-    ///
-    /// The author works list is the exception that still refetches: it passes
-    /// `worksSort`, and Apply commits that draft. Those nine columns are AO3's
-    /// works-index sort, not Search's Best Match menu, which stays hidden here.
     enum Mode { case search, refine }
 
-    @Environment(ThemeManager.self) private var theme
+    @Environment(\.dismiss) private var dismiss
+    @Environment(ThemeManager.self) var theme
     @ScaledMetric(relativeTo: .footnote) private var refineMatchSize: CGFloat = 12.5
-    @ScaledMetric(relativeTo: .caption) private var sortHintSize: CGFloat = 12
+    @ScaledMetric(relativeTo: .caption) var sortHintSize: CGFloat = 12
 
     @Binding var filters: AO3SearchFilters
     var mode: Mode = .search
-    /// Whether "Best Match" is an option. AO3's tag listing — Browse's endpoint —
-    /// has no relevance ordering at all: its sort menu runs Creator … Bookmarks and
-    /// it defaults to Date Updated. Offering Best Match there would send no
-    /// `sort_column`, AO3 would order by Date Updated anyway, and the panel would
-    /// sit there claiming a sort that isn't happening.
     var allowsRelevanceSort: Bool = true
-    /// Show the Fandoms include/exclude picker. Hidden in Browse, where the page's
-    /// fandom is fixed and shouldn't be edited away.
     var showFandomPicker: Bool = true
-    /// Whether the Reset button is offered (the host owns the baseline it resets to).
     var canReset: Bool
-    /// Run the search with the current filters.
     var onApply: () -> Void
-    /// Save the current filters as a named Saved Search. When nil (e.g. Browse), no
-    /// Save action is shown.
     var onSave: (() -> Void)?
-    /// Clear filters back to the host's baseline.
     var onReset: () -> Void
-    /// The works already on the page behind a `.refine` panel — 1au's
-    /// "14 of the 20 works on this page match".
-    ///
-    /// Refine narrows what is loaded rather than re-querying AO3, so the answer is
-    /// already in memory and the line can track the facets as they are set. Empty
-    /// in `.search` mode, where there is no loaded page to count and the result
-    /// depends on a request that has not been made.
     var refineSource: [AO3WorkSummary] = []
-    /// The host's own count of `refineSource` rows it shows, when its rule is not
-    /// `filters.apply` alone (Subscriptions keeps rows it knows nothing about yet —
-    /// `AO3SubscriptionsRefine`). Nil counts with `filters.apply`.
     var refineMatchCount: Int?
-    /// Rows the host shows but could not judge yet (Subscriptions' index-only
-    /// rows). Not in `refineMatchCount`; the line names them separately.
     var refinePendingCount = 0
-    /// 1v's works-index sort, when this panel is that sheet. Nil on Search and
-    /// Browse, which have their own sort and must not grow a second one.
-    ///
-    /// Held as a draft: a live binding would refetch on every tap of the menu.
-    /// Refine facets stay on `filters` and still apply as they are tapped,
-    /// because those cost no request.
     var worksSort: AO3WorksSort?
-    /// Commits `worksSort` when Apply finds it changed. The host refetches.
     var onApplyWorksSort: ((AO3WorksSort) -> Void)?
-    /// Search/tag-list computed ranking (T-473), edited on the Sort By screen.
-    /// Nil where the host has no loaded-works ranking, which hides those sections.
     var ranking: Binding<LoadedWorksRanking>?
-    @State private var sortPresentation: WorksSortPresentation
+    var totalWorks: Int?
+
+    @State var sortPresentation: WorksSortPresentation
     #if DEBUG
     @State private var debugLanguage = false
     @State private var debugTagPicker = false
@@ -110,7 +70,8 @@ struct AO3FilterPanel: View {
         refinePendingCount: Int = 0,
         worksSort: AO3WorksSort? = nil,
         onApplyWorksSort: ((AO3WorksSort) -> Void)? = nil,
-        ranking: Binding<LoadedWorksRanking>? = nil
+        ranking: Binding<LoadedWorksRanking>? = nil,
+        totalWorks: Int? = nil
     ) {
         _filters = filters
         self.mode = mode
@@ -126,18 +87,26 @@ struct AO3FilterPanel: View {
         self.worksSort = worksSort
         self.onApplyWorksSort = onApplyWorksSort
         self.ranking = ranking
+        self.totalWorks = totalWorks
         _sortPresentation = State(initialValue: WorksSortPresentation(applied: worksSort))
     }
 
-    /// The panel owns its own `NavigationStack`, because a presented panel has no
-    /// navigation container of its own and a bare `.toolbar` there renders nothing.
-    /// Same arrangement `CommentsView` uses for the same reason, and what gets the
-    /// two actions drawn as the system's circular toolbar buttons rather than a
-    /// hand-rolled row.
-    ///
-    /// This stack is exactly why iPhone must present the panel as a `.sheet` and not
-    /// an `.inspector` — see `FilterPanelPresentation`. Change one and the other
-    /// stops being safe.
+    // From colorScheme (ContentView sets it from the app theme), not ThemeManager: the form reads this
+    // while `body` is built, and reading ThemeManager there crashes when none is in the environment.
+    @Environment(\.colorScheme) private var colorScheme
+    var isDark: Bool { colorScheme == .dark }
+
+    private var resultsButtonTitle: String {
+        if mode == .refine {
+            let matching = refineMatchCount ?? filters.apply(to: refineSource).count
+            return "Show \(matching.formatted()) \(matching == 1 ? "Work" : "Works")"
+        }
+        if let total = totalWorks {
+            return "Show \(total.formatted()) \(total == 1 ? "Work" : "Works")"
+        }
+        return "Show Works"
+    }
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
@@ -150,6 +119,15 @@ struct AO3FilterPanel: View {
             #endif
                 .modifier(WorksFilterSheetGround())
                 .toolbar { actionButtons }
+                .safeAreaInset(edge: .bottom) {
+                    FilterResultsBar(
+                        buttonTitle: resultsButtonTitle,
+                        isConfirmDisabled: mode == .search && !filters.isSearchable,
+                        onSave: onSave,
+                        isSaveDisabled: !filters.isSearchable,
+                        onConfirm: confirm
+                    )
+                }
         }
         #if os(iOS)
             .modifier(ScopeSurfaceAccent())
@@ -157,9 +135,6 @@ struct AO3FilterPanel: View {
         .onAppear { sortPresentation.appear(applied: worksSort) }
     }
 
-    /// 1au's live count, above the form. Only in refine mode, and only with a page
-    /// behind it: in search mode the number depends on a request that has not been
-    /// made, and inventing one would be a count the app cannot source.
     @ViewBuilder
     private var refineMatchLine: some View {
         if mode == .refine, !refineSource.isEmpty {
@@ -183,55 +158,34 @@ struct AO3FilterPanel: View {
         return refinePendingCount > 0 ? "\(line) · \(refinePendingCount) not checked yet" : line
     }
 
-    /// Reset top-left, Apply top-right — the ends of the bar, where a sheet's
-    /// dismiss and confirm live everywhere else in the app. Both used to be rows at
-    /// the *bottom* of the form, which meant scrolling past every facet to run the
-    /// search you had just configured.
-    ///
-    /// Icons rather than words so they read as chrome, and because the system draws
-    /// a toolbar item's own circular background on iOS 26 — matching the Comments
-    /// sheet without reimplementing it.
-    ///
-    /// Reset is disabled rather than hidden: a control that appears and disappears
-    /// as filters change makes the bar's contents move under the user's thumb.
     @ToolbarContentBuilder
     private var actionButtons: some ToolbarContent {
         ToolbarItem(placement: .cancellationAction) {
-            // Clearing filters is not a delete: no destructive role.
-            Button(action: onReset) {
-                Image(systemName: "arrow.counterclockwise")
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "xmark")
             }
-            .disabled(!canReset)
-            .accessibilityLabel("Reset filters")
+            .accessibilityLabel("Close")
         }
         ToolbarItem(placement: .confirmationAction) {
             Button(action: confirm) {
-                // Refine narrows live as facets change, so its button just confirms;
-                // search needs a query/filter before it can run. The works sheet's
-                // checkmark also commits the sort draft, which is the refetch.
                 Image(systemName: mode == .refine ? "checkmark" : "magnifyingglass")
             }
-            // 1au draws this one ACCENT-FILLED with a dark glyph, against the
-            // leading Reset's plain glass — the confirm is the only filled circle
-            // on the board. Reset stays unfilled so the pair reads as one primary
-            // and one secondary rather than two equal buttons.
             .buttonStyle(.kudosPrimary)
             .disabled(mode == .search && !filters.isSearchable)
             .accessibilityLabel(confirmLabel)
         }
     }
 
-    /// Apply posts a sort only when this showing changed it. `onAppear` already
-    /// reseeded a cancelled draft. Reset still clears only the facets.
     private func confirm() {
         if worksSort != nil, let sort = sortPresentation.sortToCommit {
             onApplyWorksSort?(sort)
         }
         onApply()
+        dismiss()
     }
 
-    /// The works sheet's chips are the completion AO3 is asked for. The page
-    /// facet is the other control, and the two together can empty the list.
     static func showsPageCompletionFacet(worksSort: AO3WorksSort?) -> Bool {
         worksSort == nil
     }
@@ -241,168 +195,48 @@ struct AO3FilterPanel: View {
         return mode == .refine ? "Done" : "Apply filters"
     }
 
-    /// 1au draws every group label as `600 11px`, `.07em` tracking, uppercase, at
-    /// 55% — which is exactly `SubjectFieldLabel`'s `.formGroup` style, the one the
-    /// form artboards use over a group of rows. A bare `Section("Warnings")` gave
-    /// sentence case with no tracking, and that mismatch was the loudest remaining
-    /// "this is the old app" signal on the panel.
-    private func groupLabel(_ text: String) -> some View {
+    func groupLabel(_ text: String) -> some View {
         SubjectFieldLabel(text: text, style: .formGroup)
     }
 
     private var form: some View {
         Form {
-            // Group so .appThemedRows() reaches every section's rows (it doesn't
-            // propagate from the Form container, only from a Group/Section/ForEach).
+            if !activeFilterItems.isEmpty {
+                Section {
+                    ActiveFiltersBlock(items: activeFilterItems) {
+                        onReset()
+                    }
+                }
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+            }
+
             Group {
+                // MARK: 1. Sort
                 worksSortSections
-                Section {
-                    // Sort needs AO3 to re-order results, so it only appears when the panel
-                    // actually issues a query. Search's menu, not 1v's nine columns. The
-                    // board pushes it (T-473): Ways to Find, the AO3 column, Search's
-                    // computed ranking and the one Order all live on Sort By.
-                    if mode == .search {
-                        NavigationLink {
-                            SearchSortByView(
-                                filters: $filters,
-                                ranking: ranking,
-                                allowsRelevanceSort: allowsRelevanceSort
-                            )
-                        } label: {
-                            LabeledContent(
-                                "Sort by",
-                                value: SearchSortBySummary.value(filters: filters, ranking: ranking?.wrappedValue)
-                            )
-                        }
-                        .onChange(of: filters.sort) { _, newValue in
-                            // Picking a column re-seeds the direction to the one a
-                            // reader expects from it (A-Z for names, most-first for
-                            // counts) — from Sort By or from Search's own sort menu
-                            // while the panel is open. Still overridable on Sort By.
-                            filters.sortDirection = newValue.naturalDirection
-                        }
-                    }
-                    Picker("Rating", selection: $filters.rating) {
-                        ForEach(AO3SearchFilters.Rating.searchCases) { Text($0.title).tag($0) }
-                    }
-                    .onChange(of: filters.rating) { oldValue, newValue in
-                        if oldValue == .any, newValue != .any {
-                            // A specific rating starts exact and excludes unrated works;
-                            // the separate toggle lets the reader opt them back in.
-                            filters.ratingMatch = .exact
-                            filters.includeNotRated = false
-                        } else if newValue == .any {
-                            filters.ratingMatch = .exact
-                        }
-                    }
-                    // Both stay in refine: artboard 1au draws "Match — Rating+" and
-                    // "Include Not Rated" on the Refine panel itself, and
-                    // `AO3SummaryFilter.ratingMatches` now reads them off the blurb's
-                    // rating text rather than ignoring them.
-                    if filters.rating != .any {
-                        Picker("Match", selection: $filters.ratingMatch) {
-                            ForEach(AO3SearchFilters.RatingMatch.allCases) {
-                                Text($0.title).tag($0)
-                            }
-                        }
-                    }
-                    // Drawn in both modes: Refine applies Search's rule under Any
-                    // too (1au.4), so the switch filters wherever it shows.
-                    Toggle("Include Not Rated", isOn: $filters.includeNotRated).accentFill()
+
+                if mode == .search {
+                    sortSection
                 }
 
-                Section {
-                    ForEach(AO3SearchFilters.Warning.allCases) { warning in
-                        cyclingFacetRow(warning.title, state: warningState(warning)) {
-                            cycle(warning)
-                        }
-                    }
-                } header: {
-                    groupLabel("Warnings")
+                // MARK: 2. Content
+                contentSection
+                categoriesSection
+                warningsSection
+
+                // MARK: 3. Tags and text
+                tagAndTextSection
+
+                // MARK: 4. Length and status
+                lengthAndStatusSection
+
+                // MARK: 5. Popularity
+                if mode == .search {
+                    popularitySection
                 }
 
-                Section {
-                    ForEach(AO3SearchFilters.Category.allCases) { category in
-                        cyclingFacetRow(category.title, state: categoryState(category)) {
-                            cycle(category)
-                        }
-                    }
-                } header: {
-                    groupLabel("Categories")
-                }
-
-                Section {
-                    // Crossover status isn't carried on a blurb, so it's query-only.
-                    if mode == .search {
-                        Picker("Crossovers", selection: $filters.crossover) {
-                            ForEach(AO3SearchFilters.Crossover.allCases) { Text($0.title).tag($0) }
-                        }
-                    }
-                    if Self.showsPageCompletionFacet(worksSort: worksSort) {
-                        Picker("Completion", selection: $filters.completion) {
-                            ForEach(AO3SearchFilters.Completion.allCases) { Text($0.title).tag($0) }
-                        }
-                    }
-                    // 1au draws "Chapters — Any" too, and `chapterCountMatches` reads
-                    // the blurb's own "posted/total" text, so this narrows in refine
-                    // as well as in search.
-                    Picker("Chapters", selection: $filters.chapterCount) {
-                        ForEach(AO3SearchFilters.ChapterCount.allCases) { Text($0.title).tag($0) }
-                    }
-                } footer: {
-                    // Artboard 1aq says this out loud, and the reason was only a
-                    // code comment until now: Crossovers re-runs the search rather
-                    // than narrowing what is already on screen, and a filter that
-                    // costs a round trip should say so before it is tapped.
-                    // Completion is not in the sentence: every blurb carries it, and
-                    // Refine narrows by it (`AO3SummaryFilter`).
-                    if mode == .search {
-                        Text("When you change crossover status, Kudos runs a new AO3 search because "
-                            + "each result doesn't include it.")
-                    }
-                }
-
-                Section {
-                    // "Updated within" filters on a date AO3 computes; not derivable from a blurb.
-                    if mode == .search {
-                        Picker("Updated", selection: $filters.updated) {
-                            ForEach(AO3SearchFilters.Updated.allCases) { Text($0.title).tag($0) }
-                        }
-                        // Absolute bounds on the same axis as the picker above —
-                        // AO3 filters both on `revised_at` and ANDs them, so the
-                        // footer says so rather than letting a reader guess why
-                        // "Past week" plus a 2020 range returns nothing.
-                        dateBound("After", date: $filters.dateFrom)
-                        dateBound("Before", date: $filters.dateTo)
-                    }
-                    NavigationLink {
-                        FilterLanguagePicker(selection: $filters.language)
-                    } label: {
-                        LabeledContent("Language", value: filters.language.title)
-                    }
-                } footer: {
-                    // The footer the comment above promises (1aq). otwarchive's
-                    // `WorkQuery` turns both into `revised_at` ranges and ANDs them.
-                    if mode == .search {
-                        Text("The Updated, After, and Before choices all use the work's update date. "
-                            + "A work appears only if it matches every date choice.")
-                    }
-                }
-
-                tagSection
-
-                typedSections
-
-                // Apply and Reset live in `actionHeader`; only Save is left here,
-                // because it is a rarer, more deliberate action than either.
-                if let onSave {
-                    Section {
-                        Button(action: onSave) {
-                            Label("Save Search…", systemImage: "bookmark")
-                        }
-                        .disabled(!filters.isSearchable)
-                    }
-                }
+                // MARK: Reset form row
+                resetSection
             }
             .appThemedRows()
         }
@@ -411,7 +245,6 @@ struct AO3FilterPanel: View {
         #if DEBUG
         .task {
             if DebugLaunchRoute.takePush("languagepicker") { debugLanguage = true }
-            // From the panel: the tag rows sit below the fold and are not drawn until scrolled to.
             if DebugLaunchRoute.takeSheet("tagpicker") {
                 try? await Task.sleep(for: .seconds(1))
                 debugTagPicker = true
@@ -428,101 +261,140 @@ struct AO3FilterPanel: View {
         }
         #endif
     }
+}
 
-    /// Everything you have to *type*, last — after the tag pickers.
-    ///
-    /// The rest of the panel is tappable: pickers, toggles and facet rows you can
-    /// run down with a thumb. These five ask for a keyboard, and sitting them in
-    /// the middle put a keyboard between the reader and the facets below it. They
-    /// are also the least-used controls here, which is the other half of the
-    /// argument for the bottom.
-    @ViewBuilder
-    private var typedSections: some View {
-        // Title/creator are AO3's own fields, distinct from the free-text query —
-        // which also matches summaries and tags, so an author searched through it
-        // comes back far noisier. The only *text* fields in this group.
-        if mode == .search {
-            Section {
-                // AO3 pseuds are case-sensitive-looking and rarely start
-                // capitalized, so autocapitalization gets in the way — but the
-                // modifier is iOS-only, like the keyboard types below.
-                TextField("Title", text: $filters.title)
-                TextField("Creator", text: $filters.creators)
-                #if !os(macOS)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                #endif
-            } header: {
-                groupLabel("Title & creator")
-            }
-        }
+// MARK: - Form Sections
 
+extension AO3FilterPanel {
+    private var sortSection: some View {
         Section {
-            FilterRangeSlider(
-                from: $filters.wordsFrom,
-                to: $filters.wordsTo,
-                defaultMaximum: FilterRangeSlider.wordCountMaximum
-            )
+            NavigationLink {
+                SearchSortByView(
+                    filters: $filters,
+                    ranking: ranking,
+                    allowsRelevanceSort: allowsRelevanceSort
+                )
+            } label: {
+                HStack(spacing: 12) {
+                    SettingsIconTile(
+                        color: Color(red: 0x1E / 255.0, green: 0x63 / 255.0, blue: 0xC8 / 255.0),
+                        systemImage: "arrow.up.arrow.down"
+                    )
+                    Text("Sort by")
+                    Spacer()
+                    Text(SearchSortBySummary.value(filters: filters, ranking: ranking?.wrappedValue))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .onChange(of: filters.sort) { _, newValue in
+                filters.sortDirection = newValue.naturalDirection
+            }
+        }
+    }
+
+    private var contentSection: some View {
+        Section {
+            HStack(spacing: 12) {
+                SettingsIconTile(
+                    color: Color(red: 0xE0 / 255.0, green: 0xA1 / 255.0, blue: 0x00 / 255.0),
+                    systemImage: "shield.fill"
+                )
+                Picker("Rating", selection: $filters.rating) {
+                    ForEach(AO3SearchFilters.Rating.searchCases) { Text($0.title).tag($0) }
+                }
+            }
+            .onChange(of: filters.rating) { oldValue, newValue in
+                if oldValue == .any, newValue != .any {
+                    filters.ratingMatch = .exact
+                    filters.includeNotRated = false
+                } else if newValue == .any {
+                    filters.ratingMatch = .exact
+                }
+            }
+
+            HStack(spacing: 12) {
+                SettingsIconTile(
+                    color: Color(red: 0x8E / 255.0, green: 0x8E / 255.0, blue: 0x93 / 255.0),
+                    systemImage: "questionmark.circle"
+                )
+                Toggle("Include Not Rated", isOn: $filters.includeNotRated).accentFill()
+            }
+
+            if filters.rating != .any {
+                HStack(spacing: 12) {
+                    SettingsIconTile(
+                        color: Color(red: 0xE0 / 255.0, green: 0xA1 / 255.0, blue: 0x00 / 255.0),
+                        systemImage: "slider.horizontal.2"
+                    )
+                    Picker("Match", selection: $filters.ratingMatch) {
+                        ForEach(AO3SearchFilters.RatingMatch.allCases) {
+                            Text($0.title).tag($0)
+                        }
+                    }
+                }
+            }
         } header: {
-            groupLabel("Word count")
-        } footer: {
-            if mode == .refine {
-                openBoundFooter
-            }
-        }
-
-        // AO3 accepts the same range grammar on each of these. Refine hides
-        // them — they aren't on a loaded blurb — and keeps word count.
-        if mode == .search {
-            Section {
-                FilterRangeSlider(
-                    from: $filters.hitsFrom,
-                    to: $filters.hitsTo,
-                    defaultMaximum: FilterRangeSlider.hitsMaximum
-                )
-            } header: {
-                groupLabel("Hits")
-            }
-            Section {
-                FilterRangeSlider(
-                    from: $filters.kudosFrom,
-                    to: $filters.kudosTo,
-                    defaultMaximum: FilterRangeSlider.kudosMaximum
-                )
-            } header: {
-                groupLabel("Kudos")
-            }
-            Section {
-                FilterRangeSlider(
-                    from: $filters.commentsFrom,
-                    to: $filters.commentsTo,
-                    defaultMaximum: FilterRangeSlider.commentsMaximum
-                )
-            } header: {
-                groupLabel("Comments")
-            }
-            Section {
-                FilterRangeSlider(
-                    from: $filters.bookmarksFrom,
-                    to: $filters.bookmarksTo,
-                    defaultMaximum: FilterRangeSlider.bookmarksMaximum
-                )
-            } header: {
-                groupLabel("Bookmarks")
-            } footer: {
-                openBoundFooter
-            }
+            groupLabel("Content")
         }
     }
 
-    private var openBoundFooter: Text {
-        Text(
-            "Leave either end of the slider at its starting position if you don't want a minimum "
-                + "or maximum. AO3 treats one-sided ranges as “more than” or “fewer than”."
-        )
+    private var categoriesSection: some View {
+        Section {
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                ForEach(AO3SearchFilters.Category.allCases) { category in
+                    FilterSymbolChipCard(
+                        title: category.title,
+                        symbol: WorkSymbolTile.category([category.title], dark: isDark),
+                        state: categoryState(category)
+                    ) {
+                        cycle(category)
+                    }
+                }
+            }
+            .padding(.vertical, 4)
+        } header: {
+            groupLabel("Categories")
+        }
     }
 
-    private var tagSection: some View {
+    private var warningsSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Overall")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .textCase(.uppercase)
+                        .padding(.horizontal, 4)
+
+                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                        warningCard(.noWarnings, title: "No Warnings Apply")
+                        warningCard(.chooseNotTo, title: "Creator Chose Not To Use")
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Content")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .textCase(.uppercase)
+                        .padding(.horizontal, 4)
+
+                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                        warningCard(.violence, title: "Graphic Violence")
+                        warningCard(.death, title: "Major Character Death")
+                        warningCard(.nonCon, title: "Rape/Non-Con")
+                        warningCard(.underage, title: "Underage Sex")
+                    }
+                }
+            }
+            .padding(.vertical, 4)
+        } header: {
+            groupLabel("Warnings")
+        }
+    }
+
+    private var tagAndTextSection: some View {
         Section {
             if showFandomPicker {
                 TagSelectField(title: "Fandoms", kind: .fandom,
@@ -537,24 +409,257 @@ struct AO3FilterPanel: View {
             TagSelectField(title: "Additional Tags", kind: .freeform,
                            included: $filters.additionalTags, excluded: $filters.excludedAdditionalTags,
                            fandomContext: selectedFandoms)
+
+            if mode == .search {
+                HStack(spacing: 12) {
+                    SettingsIconTile(
+                        color: Color(red: 0x2C / 255.0, green: 0x6D / 255.0, blue: 0xB0 / 255.0),
+                        systemImage: "person.2"
+                    )
+                    Picker("Crossovers", selection: $filters.crossover) {
+                        ForEach(AO3SearchFilters.Crossover.allCases) { Text($0.title).tag($0) }
+                    }
+                }
+
+                DisclosureGroup {
+                    TextField("Title", text: $filters.title)
+                    TextField("Creator", text: $filters.creators)
+                    #if !os(macOS)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                    #endif
+                } label: {
+                    HStack(spacing: 12) {
+                        SettingsIconTile(
+                            color: Color(red: 0x6C / 255.0, green: 0x6C / 255.0, blue: 0x70 / 255.0),
+                            systemImage: "text.quote"
+                        )
+                        Text("Title & creator")
+                        Spacer()
+                        Text(titleAndCreatorSummary)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
         } header: {
-            groupLabel("Tags")
+            groupLabel("Tags and text")
         }
     }
 
-    /// The fandoms currently chosen in the filters, used to seed the other tag pickers
-    /// with that fandom's popular tags.
-    private var selectedFandoms: [String] {
-        filters.fandom.split(separator: ",")
+    private var lengthAndStatusSection: some View {
+        Section {
+            if Self.showsPageCompletionFacet(worksSort: worksSort) {
+                HStack(spacing: 12) {
+                    SettingsIconTile(
+                        color: Color(red: 0x2F / 255.0, green: 0x8F / 255.0, blue: 0x3A / 255.0),
+                        systemImage: "checkmark.circle"
+                    )
+                    Picker("Completion", selection: $filters.completion) {
+                        ForEach(AO3SearchFilters.Completion.allCases) { Text($0.title).tag($0) }
+                    }
+                }
+            }
+
+            HStack(spacing: 12) {
+                SettingsIconTile(
+                    color: Color(red: 0x7B / 255.0, green: 0x3F / 255.0, blue: 0xA0 / 255.0),
+                    systemImage: "list.number"
+                )
+                Picker("Chapters", selection: $filters.chapterCount) {
+                    ForEach(AO3SearchFilters.ChapterCount.allCases) { Text($0.title).tag($0) }
+                }
+            }
+
+            if mode == .search {
+                HStack(spacing: 12) {
+                    SettingsIconTile(
+                        color: Color(red: 0xE0 / 255.0, green: 0x70 / 255.0, blue: 0x00 / 255.0),
+                        systemImage: "calendar"
+                    )
+                    Picker("Updated", selection: $filters.updated) {
+                        ForEach(AO3SearchFilters.Updated.allCases) { Text($0.title).tag($0) }
+                    }
+                }
+                dateBound("After", date: $filters.dateFrom)
+                dateBound("Before", date: $filters.dateTo)
+            }
+
+            NavigationLink {
+                FilterLanguagePicker(selection: $filters.language)
+            } label: {
+                HStack(spacing: 12) {
+                    SettingsIconTile(
+                        color: Color(red: 0x1E / 255.0, green: 0x63 / 255.0, blue: 0xC8 / 255.0),
+                        systemImage: "globe"
+                    )
+                    Text("Language")
+                    Spacer()
+                    Text(filters.language.title)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            FilterLengthSection(wordsFrom: $filters.wordsFrom, wordsTo: $filters.wordsTo)
+        } header: {
+            groupLabel("Length and status")
+        }
+    }
+
+    private var popularitySection: some View {
+        Section {
+            DisclosureGroup {
+                FilterRangeSlider(
+                    from: $filters.kudosFrom,
+                    to: $filters.kudosTo,
+                    defaultMaximum: FilterRangeSlider.kudosMaximum
+                )
+            } label: {
+                HStack(spacing: 12) {
+                    SettingsIconTile(
+                        color: Color(red: 0x82 / 255.0, green: 0x10 / 255.0, blue: 0x19 / 255.0),
+                        systemImage: "heart.fill"
+                    )
+                    Text("Kudos")
+                    Spacer()
+                    Text(rangeSummary(from: filters.kudosFrom, to: filters.kudosTo))
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            DisclosureGroup {
+                FilterRangeSlider(
+                    from: $filters.hitsFrom,
+                    to: $filters.hitsTo,
+                    defaultMaximum: FilterRangeSlider.hitsMaximum
+                )
+            } label: {
+                HStack(spacing: 12) {
+                    SettingsIconTile(
+                        color: Color(red: 0x58 / 255.0, green: 0x56 / 255.0, blue: 0xD6 / 255.0),
+                        systemImage: "eye.fill"
+                    )
+                    Text("Hits")
+                    Spacer()
+                    Text(rangeSummary(from: filters.hitsFrom, to: filters.hitsTo))
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            DisclosureGroup {
+                FilterRangeSlider(
+                    from: $filters.commentsFrom,
+                    to: $filters.commentsTo,
+                    defaultMaximum: FilterRangeSlider.commentsMaximum
+                )
+            } label: {
+                HStack(spacing: 12) {
+                    SettingsIconTile(
+                        color: Color(red: 0x2F / 255.0, green: 0x8F / 255.0, blue: 0x3A / 255.0),
+                        systemImage: "bubble.left.and.bubble.right.fill"
+                    )
+                    Text("Comments")
+                    Spacer()
+                    Text(rangeSummary(from: filters.commentsFrom, to: filters.commentsTo))
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            DisclosureGroup {
+                FilterRangeSlider(
+                    from: $filters.bookmarksFrom,
+                    to: $filters.bookmarksTo,
+                    defaultMaximum: FilterRangeSlider.bookmarksMaximum
+                )
+            } label: {
+                HStack(spacing: 12) {
+                    SettingsIconTile(
+                        color: Color(red: 0xC2 / 255.0, green: 0x5E / 255.0, blue: 0x00 / 255.0),
+                        systemImage: "bookmark.fill"
+                    )
+                    Text("Bookmarks")
+                    Spacer()
+                    Text(rangeSummary(from: filters.bookmarksFrom, to: filters.bookmarksTo))
+                        .foregroundStyle(.secondary)
+                }
+            }
+        } header: {
+            groupLabel("Popularity")
+        }
+    }
+
+    private var resetSection: some View {
+        Section {
+            Button(role: .destructive, action: onReset) {
+                HStack {
+                    Spacer()
+                    Text("Reset all filters")
+                        .foregroundStyle(
+                            canReset
+                                ? theme.appTheme.errorColor
+                                : Color.secondary
+                        )
+                    Spacer()
+                }
+            }
+            .disabled(!canReset)
+        }
+    }
+}
+
+// MARK: - Facet Selection & Helpers
+
+extension AO3FilterPanel {
+    private var titleAndCreatorSummary: String {
+        let titleText = filters.title.trimmingCharacters(in: .whitespaces)
+        let creatorText = filters.creators.trimmingCharacters(in: .whitespaces)
+        switch (!titleText.isEmpty, !creatorText.isEmpty) {
+        case (false, false): return "Any"
+        case (true, false): return titleText
+        case (false, true): return creatorText
+        case (true, true): return "\(titleText) · \(creatorText)"
+        }
+    }
+
+    private func rangeSummary(from: String, to: String) -> String {
+        let fromVal = from.trimmingCharacters(in: .whitespaces)
+        let toVal = to.trimmingCharacters(in: .whitespaces)
+        switch (!fromVal.isEmpty, !toVal.isEmpty) {
+        case (false, false): return "Any"
+        case (true, false): return "\(fromVal) or more"
+        case (false, true): return "Up to \(toVal)"
+        case (true, true): return "\(fromVal)–\(toVal)"
+        }
+    }
+
+    private static func commaSeparatedValues(_ field: String) -> [String] {
+        field.split(separator: ",")
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
     }
 
-    // MARK: - Facet rows (warnings / categories)
+    private var selectedFandoms: [String] {
+        Self.commaSeparatedValues(filters.fandom)
+    }
 
-    /// One optional date bound. `DatePicker` can't bind to a `Date?`, so the
-    /// toggle *is* the optionality: off means "no bound", and switching it on
-    /// seeds today rather than a silent 2001 default.
+    private func warningCard(_ warning: AO3SearchFilters.Warning, title: String) -> some View {
+        let symbol: WorkSymbolTile = switch warning {
+        case .noWarnings:
+            WorkSymbolTile.warnings(.none, dark: isDark)
+        case .chooseNotTo:
+            WorkSymbolTile.warnings(.undisclosed, dark: isDark)
+        case .violence, .death, .nonCon, .underage:
+            WorkSymbolTile.warnings(.present(count: 1), dark: isDark)
+        }
+        return FilterSymbolChipCard(
+            title: title,
+            fullTitle: warning.title,
+            symbol: symbol,
+            state: warningState(warning)
+        ) {
+            cycle(warning)
+        }
+    }
+
     @ViewBuilder
     private func dateBound(_ title: String, date: Binding<Date?>) -> some View {
         Toggle(title, isOn: Binding(
@@ -568,45 +673,6 @@ struct AO3FilterPanel: View {
                 displayedComponents: .date
             )
             .labelsHidden().accentFill()
-        }
-    }
-
-    @ViewBuilder
-    private func cyclingFacetRow(_ title: String, state: FilterSelectionState,
-                                 toggle: @escaping () -> Void) -> some View {
-        let row = Button(action: toggle) {
-            HStack {
-                Text(title)
-                    .foregroundStyle(state == .excluded ? Color.secondary : Color.primary)
-                    .strikethrough(state == .excluded, color: theme.appTheme.excludeColor.opacity(0.7))
-                Spacer()
-                switch state {
-                case .clear:
-                    EmptyView()
-                case .included:
-                    Label("Include", systemImage: "plus.circle.fill")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(theme.appTheme.includeColor)
-                case .excluded:
-                    Label("Exclude", systemImage: "minus.circle.fill")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(theme.appTheme.excludeColor)
-                }
-            }
-            .contentShape(Rectangle())
-            // Without this, VoiceOver splits the row into two stops — the title,
-            // then a separate "Include"/"Exclude" Label — even though both live
-            // inside the same Button (HIG audit T-115, adversarially verified).
-            .combinedAccessibilityRow([title, state.accessibilityStatus].compactMap { $0 }.joined(separator: ", "))
-        }
-        .buttonStyle(.plain)
-        .accessibilityHint("Tap to \(state.nextActionLabel.lowercased())")
-        // Only override the themed cell when included — an EmptyView background
-        // would wipe `.appThemedRows()` on the other states.
-        if state == .included {
-            row.listRowBackground(theme.appTheme.includeColor.opacity(0.10))
-        } else {
-            row
         }
     }
 
@@ -651,13 +717,296 @@ struct AO3FilterPanel: View {
     }
 }
 
+// MARK: - Active Filter Items Generation
+
+extension AO3FilterPanel {
+    private var activeFilterItems: [ActiveFilterItem] {
+        var items: [ActiveFilterItem] = []
+
+        if mode == .search && filters.sort != .relevance {
+            items.append(ActiveFilterItem(
+                id: "sort",
+                label: "Sort: \(filters.sort.title)",
+                kind: .facetValue,
+                onRemove: { filters.sort = .relevance }
+            ))
+        }
+
+        if filters.rating != .any {
+            items.append(ActiveFilterItem(
+                id: "rating",
+                label: filters.rating.title,
+                kind: .facetValue,
+                onRemove: { filters.rating = .any }
+            ))
+        }
+
+        if !filters.includeNotRated {
+            items.append(ActiveFilterItem(
+                id: "noNotRated",
+                label: "No Not Rated",
+                kind: .facetValue,
+                onRemove: { filters.includeNotRated = true }
+            ))
+        }
+
+        for cat in AO3SearchFilters.Category.allCases {
+            if filters.categories.contains(cat) {
+                items.append(ActiveFilterItem(
+                    id: "cat-\(cat.rawValue)",
+                    label: cat.title,
+                    kind: .included,
+                    onRemove: { filters.categories.remove(cat) }
+                ))
+            } else if filters.excludedCategories.contains(cat) {
+                items.append(ActiveFilterItem(
+                    id: "cat-ex-\(cat.rawValue)",
+                    label: cat.title,
+                    kind: .excluded,
+                    onRemove: { filters.excludedCategories.remove(cat) }
+                ))
+            }
+        }
+
+        for warning in AO3SearchFilters.Warning.allCases {
+            if filters.warnings.contains(warning) {
+                items.append(ActiveFilterItem(
+                    id: "warn-\(warning.rawValue)",
+                    label: warning.title,
+                    kind: .included,
+                    onRemove: { filters.warnings.remove(warning) }
+                ))
+            } else if filters.excludedWarnings.contains(warning) {
+                items.append(ActiveFilterItem(
+                    id: "warn-ex-\(warning.rawValue)",
+                    label: warning.title,
+                    kind: .excluded,
+                    onRemove: { filters.excludedWarnings.remove(warning) }
+                ))
+            }
+        }
+
+        for fandom in Self.commaSeparatedValues(filters.fandom) {
+            items.append(ActiveFilterItem(
+                id: "fandom-\(fandom)",
+                label: fandom,
+                kind: .included,
+                onRemove: { removeTag(fandom, from: &filters.fandom) }
+            ))
+        }
+        for fandom in Self.commaSeparatedValues(filters.excludedFandoms) {
+            items.append(ActiveFilterItem(
+                id: "fandom-ex-\(fandom)",
+                label: fandom,
+                kind: .excluded,
+                onRemove: { removeTag(fandom, from: &filters.excludedFandoms) }
+            ))
+        }
+
+        for character in Self.commaSeparatedValues(filters.characters) {
+            items.append(ActiveFilterItem(
+                id: "char-\(character)",
+                label: character,
+                kind: .included,
+                onRemove: { removeTag(character, from: &filters.characters) }
+            ))
+        }
+        for character in Self.commaSeparatedValues(filters.excludedCharacters) {
+            items.append(ActiveFilterItem(
+                id: "char-ex-\(character)",
+                label: character,
+                kind: .excluded,
+                onRemove: { removeTag(character, from: &filters.excludedCharacters) }
+            ))
+        }
+
+        for relationship in Self.commaSeparatedValues(filters.relationships) {
+            items.append(ActiveFilterItem(
+                id: "rel-\(relationship)",
+                label: relationship,
+                kind: .included,
+                onRemove: { removeTag(relationship, from: &filters.relationships) }
+            ))
+        }
+        for relationship in Self.commaSeparatedValues(filters.excludedRelationships) {
+            items.append(ActiveFilterItem(
+                id: "rel-ex-\(relationship)",
+                label: relationship,
+                kind: .excluded,
+                onRemove: { removeTag(relationship, from: &filters.excludedRelationships) }
+            ))
+        }
+
+        for tag in Self.commaSeparatedValues(filters.additionalTags) {
+            items.append(ActiveFilterItem(
+                id: "tag-\(tag)",
+                label: tag,
+                kind: .included,
+                onRemove: { removeTag(tag, from: &filters.additionalTags) }
+            ))
+        }
+        for tag in Self.commaSeparatedValues(filters.excludedAdditionalTags) {
+            items.append(ActiveFilterItem(
+                id: "tag-ex-\(tag)",
+                label: tag,
+                kind: .excluded,
+                onRemove: { removeTag(tag, from: &filters.excludedAdditionalTags) }
+            ))
+        }
+
+        if !filters.title.trimmingCharacters(in: .whitespaces).isEmpty {
+            items.append(ActiveFilterItem(
+                id: "title",
+                label: "Title: \(filters.title)",
+                kind: .facetValue,
+                onRemove: { filters.title = "" }
+            ))
+        }
+        if !filters.creators.trimmingCharacters(in: .whitespaces).isEmpty {
+            items.append(ActiveFilterItem(
+                id: "creator",
+                label: "Creator: \(filters.creators)",
+                kind: .facetValue,
+                onRemove: { filters.creators = "" }
+            ))
+        }
+
+        if filters.crossover != .any {
+            items.append(ActiveFilterItem(
+                id: "crossover",
+                label: filters.crossover.title,
+                kind: .facetValue,
+                onRemove: { filters.crossover = .any }
+            ))
+        }
+
+        if filters.completion != .any {
+            items.append(ActiveFilterItem(
+                id: "completion",
+                label: filters.completion.title,
+                kind: .facetValue,
+                onRemove: { filters.completion = .any }
+            ))
+        }
+
+        if filters.chapterCount != .any {
+            items.append(ActiveFilterItem(
+                id: "chapters",
+                label: filters.chapterCount.title,
+                kind: .facetValue,
+                onRemove: { filters.chapterCount = .any }
+            ))
+        }
+
+        let wf = filters.wordsFrom.trimmingCharacters(in: .whitespaces)
+        let wt = filters.wordsTo.trimmingCharacters(in: .whitespaces)
+        if !wf.isEmpty || !wt.isEmpty {
+            let label: String
+            if !wf.isEmpty && !wt.isEmpty {
+                label = "\(wf)–\(wt) words"
+            } else if !wf.isEmpty {
+                label = "≥ \(wf) words"
+            } else {
+                label = "≤ \(wt) words"
+            }
+            items.append(ActiveFilterItem(
+                id: "words",
+                label: label,
+                kind: .facetValue,
+                onRemove: {
+                    filters.wordsFrom = ""
+                    filters.wordsTo = ""
+                }
+            ))
+        }
+
+        if filters.updated != .any {
+            items.append(ActiveFilterItem(
+                id: "updated",
+                label: filters.updated.title,
+                kind: .facetValue,
+                onRemove: { filters.updated = .any }
+            ))
+        }
+        if let df = filters.dateFrom {
+            items.append(ActiveFilterItem(
+                id: "dateFrom",
+                label: "After \(AO3SearchFilters.dateBoundFormatter.string(from: df))",
+                kind: .facetValue,
+                onRemove: { filters.dateFrom = nil }
+            ))
+        }
+        if let dt = filters.dateTo {
+            items.append(ActiveFilterItem(
+                id: "dateTo",
+                label: "Before \(AO3SearchFilters.dateBoundFormatter.string(from: dt))",
+                kind: .facetValue,
+                onRemove: { filters.dateTo = nil }
+            ))
+        }
+
+        if filters.language != .any {
+            items.append(ActiveFilterItem(
+                id: "language",
+                label: filters.language.title,
+                kind: .facetValue,
+                onRemove: { filters.language = .any }
+            ))
+        }
+
+        appendPopularityActiveItems(to: &items)
+
+        return items
+    }
+
+    private func appendPopularityActiveItems(to items: inout [ActiveFilterItem]) {
+        for (name, key, from, to) in [
+            ("kudos", "kudos", filters.kudosFrom, filters.kudosTo),
+            ("hits", "hits", filters.hitsFrom, filters.hitsTo),
+            ("comments", "comments", filters.commentsFrom, filters.commentsTo),
+            ("bookmarks", "bookmarks", filters.bookmarksFrom, filters.bookmarksTo)
+        ] {
+            let fromVal = from.trimmingCharacters(in: .whitespaces)
+            let toVal = to.trimmingCharacters(in: .whitespaces)
+            if !fromVal.isEmpty || !toVal.isEmpty {
+                let label: String
+                if !fromVal.isEmpty && !toVal.isEmpty {
+                    label = "\(fromVal)–\(toVal) \(name)"
+                } else if !fromVal.isEmpty {
+                    label = "\(fromVal)+ \(name)"
+                } else {
+                    label = "≤ \(toVal) \(name)"
+                }
+                items.append(ActiveFilterItem(
+                    id: key,
+                    label: label,
+                    kind: .facetValue,
+                    onRemove: {
+                        switch key {
+                        case "kudos": filters.kudosFrom = ""; filters.kudosTo = ""
+                        case "hits": filters.hitsFrom = ""; filters.hitsTo = ""
+                        case "comments": filters.commentsFrom = ""; filters.commentsTo = ""
+                        case "bookmarks": filters.bookmarksFrom = ""; filters.bookmarksTo = ""
+                        default: break
+                        }
+                    }
+                ))
+            }
+        }
+    }
+
+    private func removeTag(_ tag: String, from commaSeparated: inout String) {
+        var tags = Self.commaSeparatedValues(commaSeparated)
+        tags.removeAll { $0.caseInsensitiveCompare(tag) == .orderedSame }
+        commaSeparated = tags.joined(separator: ", ")
+    }
+}
+
 // MARK: - 1v works sort
 
 extension AO3FilterPanel {
-    /// 1v's sort, direction and completion, above the refine facets. The "N
-    /// fields" caption sits under the chosen column, not under the row label.
     @ViewBuilder
-    private var worksSortSections: some View {
+    var worksSortSections: some View {
         if worksSort != nil {
             Section {
                 Menu {
@@ -667,7 +1016,13 @@ extension AO3FilterPanel {
                         }
                     }
                 } label: {
-                    LabeledContent("Sort by") {
+                    HStack(spacing: 12) {
+                        SettingsIconTile(
+                            color: Color(red: 0x1E / 255.0, green: 0x63 / 255.0, blue: 0xC8 / 255.0),
+                            systemImage: "arrow.up.arrow.down"
+                        )
+                        Text("Sort by")
+                        Spacer()
                         VStack(alignment: .trailing, spacing: 2) {
                             Text(sortPresentation.draft.column.title)
                             Text(AO3WorksSort.fieldsHint)
@@ -693,14 +1048,10 @@ extension AO3FilterPanel {
                 worksCompletionChips
             } header: {
                 groupLabel("Completion")
-            } footer: {
-                Text("AO3 applies this choice to all matching works, not only the page you can see.")
             }
         }
     }
 
-    /// Choosing a column adopts that column's own default direction, the way
-    /// AO3 does when no direction is sent.
     private var worksColumnBinding: Binding<AO3WorksSortColumn> {
         Binding(
             get: { sortPresentation.draft.column },
@@ -731,7 +1082,6 @@ extension AO3FilterPanel {
 
 #if DEBUG
 extension AO3FilterPanel {
-    /// A tag field's comma-separated value as the picker's set, as `TagSelectField` binds it.
     func debugTagSet(_ value: Binding<String>) -> Binding<Set<String>> {
         Binding(
             get: {

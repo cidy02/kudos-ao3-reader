@@ -17,7 +17,9 @@ struct LibraryFilters: Equatable {
     // Faceted filters (shared enums with Search).
     var rating: AO3SearchFilters.Rating = .any
     var warnings: Set<AO3SearchFilters.Warning> = []
+    var excludedWarnings: Set<AO3SearchFilters.Warning> = []
     var categories: Set<AO3SearchFilters.Category> = []
+    var excludedCategories: Set<AO3SearchFilters.Category> = []
     var completion: AO3SearchFilters.Completion = .any
     /// A language display name (e.g. "English"); empty means any.
     var language: String = ""
@@ -32,7 +34,8 @@ struct LibraryFilters: Equatable {
     var hasActiveFilters: Bool {
         !userTags.isEmpty || !fandoms.isEmpty || !characters.isEmpty
             || !relationships.isEmpty || !additionalTags.isEmpty || !excludeTags.isEmpty
-            || rating != .any || !warnings.isEmpty || !categories.isEmpty
+            || rating != .any || !warnings.isEmpty || !excludedWarnings.isEmpty
+            || !categories.isEmpty || !excludedCategories.isEmpty
             || completion != .any || !language.isEmpty
             || !wordsFrom.isLibraryBlank || !wordsTo.isLibraryBlank
             || sort != .natural
@@ -61,7 +64,9 @@ struct LibraryFilters: Equatable {
             joined(excludeTags),
             rating.rawValue,
             joined(Set(warnings.map(\.rawValue))),
+            joined(Set(excludedWarnings.map(\.rawValue))),
             joined(Set(categories.map(\.rawValue))),
+            joined(Set(excludedCategories.map(\.rawValue))),
             completion.rawValue,
             language,
             wordsFrom,
@@ -111,8 +116,14 @@ struct LibraryFilters: Equatable {
         for warning in AO3SearchFilters.Warning.allCases.filter(warnings.contains) {
             add(warning.title, AO3TagSearch.Field.warning.symbol)
         }
+        for warning in AO3SearchFilters.Warning.allCases.filter(excludedWarnings.contains) {
+            add("−\(warning.title)", AO3TagSearch.Field.warning.symbol)
+        }
         for category in AO3SearchFilters.Category.allCases.filter(categories.contains) {
             add(category.title)
+        }
+        for category in AO3SearchFilters.Category.allCases.filter(excludedCategories.contains) {
+            add("−\(category.title)")
         }
         if completion == .complete || (completion == .inProgress && includesInProgress) {
             add(completion.title)
@@ -232,8 +243,14 @@ struct LibraryFilters: Equatable {
         for warning in AO3SearchFilters.Warning.allCases where warnings.contains(warning) {
             add("warning", warning.rawValue, warning.title) { $0.warnings.remove(warning) }
         }
+        for warning in AO3SearchFilters.Warning.allCases where excludedWarnings.contains(warning) {
+            add("excluded warning", warning.rawValue, "−\(warning.title)") { $0.excludedWarnings.remove(warning) }
+        }
         for category in AO3SearchFilters.Category.allCases where categories.contains(category) {
             add("category", category.rawValue, category.title) { $0.categories.remove(category) }
+        }
+        for category in AO3SearchFilters.Category.allCases where excludedCategories.contains(category) {
+            add("excluded category", category.rawValue, "−\(category.title)") { $0.excludedCategories.remove(category) }
         }
         if completion != .any { add("status", completion.rawValue, completion.title) { $0.completion = .any } }
         if !language.isEmpty { add("language", language, language) { $0.language = "" } }
@@ -294,15 +311,32 @@ struct LibraryFilters: Equatable {
         if rating != .any, !rating.matchesRatingText(work.rating) { return false }
 
         if !warnings.isEmpty {
-            let present = FilterTextMatching.lowercased(work.workWarnings.isEmpty ? work.workTags : work.workWarnings)
+            let tags = work.workWarnings.isEmpty ? work.workTags : work.workWarnings
+            let present = FilterTextMatching.lowercased(tags)
             for warning in warnings where !warning.matchNames.contains(where: { present.contains($0.lowercased()) }) {
+                return false
+            }
+        }
+        if !excludedWarnings.isEmpty {
+            let tags = work.workWarnings.isEmpty ? work.workTags : work.workWarnings
+            let present = FilterTextMatching.lowercased(tags)
+            for warning in excludedWarnings
+                where warning.matchNames.contains(where: { present.contains($0.lowercased()) }) {
                 return false
             }
         }
 
         if !categories.isEmpty {
-            let present = FilterTextMatching.lowercased(work.workCategories.isEmpty ? work.workTags : work.workCategories)
+            let tags = work.workCategories.isEmpty ? work.workTags : work.workCategories
+            let present = FilterTextMatching.lowercased(tags)
             for category in categories where !present.contains(category.title.lowercased()) {
+                return false
+            }
+        }
+        if !excludedCategories.isEmpty {
+            let tags = work.workCategories.isEmpty ? work.workTags : work.workCategories
+            let present = FilterTextMatching.lowercased(tags)
+            for category in excludedCategories where present.contains(category.title.lowercased()) {
                 return false
             }
         }
