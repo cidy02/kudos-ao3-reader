@@ -24,6 +24,9 @@ struct SettingsHubView: View {
     @State private var folderSyncStatus = FolderSyncService.snapshot()
     @State private var searchText = ""
 
+    static let hubFooterText = "Changes here affect Kudos, not your AO3 account"
+    static let hubFooterAccessibilityValue = "These settings are stored on this device only and are never sent to AO3."
+
     private var filteredGroups: [SettingsHubGroup] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         if query.isEmpty {
@@ -42,12 +45,20 @@ struct SettingsHubView: View {
         let inputs = self.inputs
         List {
             ForEach(filteredGroups) { group in
-                Section(group.title) {
+                Section {
                     ForEach(group.routes, id: \.self) { route in
                         let value = SettingsHubValue.row(route, inputs)
                         NavigationLink(value: route) {
                             SettingsHubRow(route: route, value: value)
                         }
+                    }
+                } header: {
+                    Text(group.title)
+                } footer: {
+                    if group.id == SettingsRoute.hubGroups.first?.id {
+                        Text(Self.hubFooterText)
+                            .accessibilityLabel(Self.hubFooterText)
+                            .accessibilityValue(Self.hubFooterAccessibilityValue)
                     }
                 }
             }
@@ -118,7 +129,8 @@ struct SettingsHubRow: View {
                 }
             }
             .accessibilityElement(children: .combine)
-            .accessibilityLabel(accessibilityDescription)
+            .accessibilityLabel(route.title)
+            .accessibilityValue(value)
         } else {
             HStack(spacing: 12) {
                 SettingsIconTile(
@@ -137,12 +149,9 @@ struct SettingsHubRow: View {
                 }
             }
             .accessibilityElement(children: .combine)
-            .accessibilityLabel(accessibilityDescription)
+            .accessibilityLabel(route.title)
+            .accessibilityValue(value)
         }
-    }
-
-    private var accessibilityDescription: String {
-        value.isEmpty ? route.title : "\(route.title), \(value)"
     }
 }
 

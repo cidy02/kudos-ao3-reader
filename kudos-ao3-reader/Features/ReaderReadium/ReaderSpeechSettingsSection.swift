@@ -65,13 +65,15 @@ struct ReaderSpeechSettingsSection: View {
         downloadSection
 
         Section {
-            HStack(spacing: 12) {
-                SettingsIconTile(color: Color(hex: "#007AFF") ?? .blue, systemImage: "waveform")
-                Picker("Engine", selection: $engineID) {
-                    Text("Automatic").tag("")
-                    ForEach(ReaderTTSEngineKind.allCases, id: \.rawValue) { engine in
-                        Text(engine.displayName).tag(engine.rawValue)
-                    }
+            Picker(selection: $engineID) {
+                Text("Automatic").tag("")
+                ForEach(ReaderTTSEngineKind.allCases, id: \.rawValue) { engine in
+                    Text(engine.displayName).tag(engine.rawValue)
+                }
+            } label: {
+                HStack(spacing: 12) {
+                    SettingsIconTile(color: Color(hex: "#007AFF") ?? .blue, systemImage: "waveform")
+                    Text("Engine")
                 }
             }
 
@@ -113,15 +115,17 @@ struct ReaderSpeechSettingsSection: View {
                 }
             }
 
-            HStack(spacing: 12) {
-                SettingsIconTile(color: Color(hex: "#C25E00") ?? .orange, systemImage: "text.quote")
-                Toggle("Read author's notes", isOn: $readAuthorNotes)
-                    .accessibilityHint(
-                        "Author's notes often carry content warnings. "
-                            + "Turn this off to hear only the story."
-                    )
-                    .accentFill()
+            Toggle(isOn: $readAuthorNotes) {
+                HStack(spacing: 12) {
+                    SettingsIconTile(color: Color(hex: "#C25E00") ?? .orange, systemImage: "text.quote")
+                    Text("Read author's notes")
+                }
             }
+            .accessibilityHint(
+                "Author's notes often carry content warnings. "
+                    + "Turn this off to hear only the story."
+            )
+            .accentFill()
 
             if isKokoroAwaitingVoicePack {
                 Label(

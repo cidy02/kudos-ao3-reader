@@ -224,4 +224,9 @@ struct SettingsHubTests {
         // Non-matching query
         #expect(!SettingsRoute.font.matches(query: "xyznonexistent", currentValue: "Georgia"))
     }
+
+    @Test func hubFirstSectionFooterCarriesFactAndVoiceOverValue() {
+        #expect(SettingsHubView.hubFooterText == "Changes here affect Kudos, not your AO3 account")
+        #expect(SettingsHubView.hubFooterAccessibilityValue == "These settings are stored on this device only and are never sent to AO3.")
+    }
 }

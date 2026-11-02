@@ -119,7 +119,10 @@ struct SettingsReadingQueuesPage: View {
                 NavigationLink {
                     ReadingQueueStorageView()
                 } label: {
-                    Label("Queue Storage", systemImage: "externaldrive")
+                    HStack(spacing: 12) {
+                        SettingsIconTile(color: Color(hex: "#007AFF") ?? .blue, systemImage: "externaldrive")
+                        Text("Queue Storage")
+                    }
                 }
 
                 Toggle(

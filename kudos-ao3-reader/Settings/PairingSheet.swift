@@ -115,7 +115,14 @@ struct TombstoneTrustSettingsSection: View {
                 }
             }
 
-            Button("Pair a Device") { showPairingSheet = true }
+            Button {
+                showPairingSheet = true
+            } label: {
+                HStack(spacing: 12) {
+                    SettingsIconTile(color: themeManager.effectiveTint, systemImage: "iphone.badge.plus")
+                    Text("Pair a Device…")
+                }
+            }
 
             if let statusMessage {
                 Text(statusMessage)
