@@ -16,11 +16,13 @@ struct ReaderView: View {
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var themeManager
     @Environment(AO3AuthService.self) private var auth
+    @Environment(PrivacyGate.self) private var privacyGate
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \CustomFont.dateAdded) private var customFonts: [CustomFont]
     @AppStorage("readerFontID") private var fontID: String = "system"
     @AppStorage("readerMode") private var readingMode: ReadingMode = .scroll
     @AppStorage("readerTwoPage") private var twoPageEnabled = false
+    @AppStorage("hideMatureContent") private var hideMature = true
 
     // Apple Books–style custom typography. `customizeEnabled` gates the layout
     // options; bold/font always apply. See `ReaderTextStyle`.
@@ -354,7 +356,10 @@ struct ReaderView: View {
             kudosEnabled: !workActions.isWorking && !work.hasGivenKudos,
             isBookmarked: workActions.workPageStates?.existingBookmark != nil,
             bookmarkEnabled: !workActions.isWorking,
-            upNext: ReaderEndOfWorkFacts.findUpNext(for: work),
+            upNext: ReaderEndOfWorkFacts.findUpNext(
+                for: work,
+                isEligible: { !privacyGate.isConcealed($0, enabled: hideMature) }
+            ),
             onKudos: {
                 if let ao3ID {
                     workActions.giveKudos(workID: ao3ID, auth: auth)
@@ -464,6 +469,7 @@ struct ReaderView: View {
     }
 
     private func jump(to index: Int) {
+        isAtEnd = false
         landNextChapterOnLastPage = false
         if index == currentIndex {
             // Same chapter: an explicit re-pick means "back to the start", so

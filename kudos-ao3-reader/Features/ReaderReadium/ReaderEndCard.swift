@@ -40,7 +40,9 @@ struct ReaderEndCard: View {
                 upNextBlock(upNext)
             }
         }
-        .padding(18)
+        .padding(.horizontal, 18)
+        .padding(.top, 20)
+        .padding(.bottom, 16)
         .frame(maxWidth: 480)
         .frame(maxWidth: .infinity)
         .background(
@@ -101,12 +103,14 @@ struct ReaderEndCard: View {
                     .font(.headline)
             }
             .frame(maxWidth: .infinity)
-            .frame(height: 50)
+            .padding(.vertical, 12)
+            .frame(minHeight: 50)
         }
         .buttonStyle(.plain)
         .foregroundStyle(ThemeManager.label(on: fill))
         .background(fill, in: SubjectMetrics.controlShape(dynamicTypeSize))
         .disabled(!kudosEnabled || kudosGiven)
+        .minimumHitTarget()
         .accessibilityLabel(kudosGiven ? "Kudos given" : "Give Kudos")
     }
 
@@ -151,7 +155,8 @@ struct ReaderEndCard: View {
                     .font(.subheadline.weight(.semibold))
             }
             .frame(maxWidth: .infinity)
-            .frame(height: 44)
+            .padding(.vertical, 10)
+            .frame(minHeight: 44)
         }
         .buttonStyle(.plain)
         .foregroundStyle(.accentInk)
@@ -233,7 +238,8 @@ struct ReaderEndCard: View {
             .font(.subheadline.weight(.semibold))
             .foregroundStyle(.accentInk)
             .padding(.horizontal, 14)
-            .frame(height: 36)
-            .background(Color.primary.opacity(0.06), in: Capsule())
+            .padding(.vertical, 8)
+            .frame(minHeight: 36)
+            .background(Color.primary.opacity(0.06), in: SubjectMetrics.controlShape(dynamicTypeSize))
     }
 }

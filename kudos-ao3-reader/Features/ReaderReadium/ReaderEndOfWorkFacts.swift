@@ -46,16 +46,7 @@ public enum ReaderEndOfWorkFacts {
 
     /// Reading time estimate for a work: "about 50 min" or "about 1 h 20 min".
     public static func readingTimeEstimate(wordCount: Int) -> String {
-        guard wordCount > 0 else { return "about 1 min" }
-        let rawMinutes = Double(wordCount) / 200
-        let minutes = max(5, Int((rawMinutes / 5).rounded()) * 5)
-        let hours = minutes / 60
-        let remainder = minutes % 60
-        if hours > 0 {
-            return "about \(hours) h" + (remainder > 0 ? " \(remainder) min" : "")
-        } else {
-            return "about \(minutes) min"
-        }
+        ReadingQueueFacts.readingTimeEstimate(wordCount: wordCount) ?? "about 1 min"
     }
 
     /// Next work metadata line: "author · 12,400 words · about 50 min"
@@ -74,36 +65,48 @@ public enum ReaderEndOfWorkFacts {
     }
 
     /// Next work in the queue relative to the current work.
-    static func nextWorkInQueue(
+    /// Filters out deleted works, works pending deletion, and works ineligible under privacy.
+    public static func nextWorkInQueue(
         orderedWorks: [SavedWork],
-        currentWorkID: UUID
+        currentWorkID: UUID,
+        isEligible: (SavedWork) -> Bool = { _ in true }
     ) -> SavedWork? {
         guard let currentIndex = orderedWorks.firstIndex(where: { $0.id == currentWorkID }) else {
             return nil
         }
+        let candidate: (SavedWork) -> Bool = {
+            $0.id != currentWorkID && !$0.isPendingDeletion && isEligible($0)
+        }
         let after = orderedWorks.suffix(from: currentIndex + 1)
-        if let nextUnfinished = after.first(where: { !$0.isFinished }) {
+        if let nextUnfinished = after.first(where: { candidate($0) && !$0.isFinished }) {
             return nextUnfinished
         }
         let before = orderedWorks.prefix(upTo: currentIndex)
-        if let prevUnfinished = before.first(where: { !$0.isFinished }) {
+        if let prevUnfinished = before.first(where: { candidate($0) && !$0.isFinished }) {
             return prevUnfinished
         }
-        if let nextAny = after.first {
+        if let nextAny = after.first(where: candidate) {
             return nextAny
         }
         return nil
     }
 
     /// Finds candidate next work from the active queues containing `work`.
+    /// Prefers custom/specific queues over generic `savedForLater`.
     @MainActor
-    static func findUpNext(
-        for work: SavedWork
+    public static func findUpNext(
+        for work: SavedWork,
+        isEligible: (SavedWork) -> Bool = { _ in true }
     ) -> (queueName: String, nextWork: SavedWork)? {
-        for membership in work.activeQueueMemberships {
+        let sortedMemberships = work.activeQueueMemberships.sorted { m1, m2 in
+            let q1Later = m1.queue?.kind == .savedForLater ? 1 : 0
+            let q2Later = m2.queue?.kind == .savedForLater ? 1 : 0
+            return q1Later < q2Later
+        }
+        for membership in sortedMemberships {
             guard let queue = membership.queue, !queue.isPendingDeletion else { continue }
             let ordered = ReadingQueueService.orderedWorks(in: queue)
-            if let next = nextWorkInQueue(orderedWorks: ordered, currentWorkID: work.id) {
+            if let next = nextWorkInQueue(orderedWorks: ordered, currentWorkID: work.id, isEligible: isEligible) {
                 return (queue.displayName, next)
             }
         }
