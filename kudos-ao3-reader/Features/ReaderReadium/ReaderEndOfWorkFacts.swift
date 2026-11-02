@@ -61,7 +61,7 @@ enum ReaderEndOfWorkFacts {
     static func nextWorkInQueue(
         orderedWorks: [SavedWork],
         currentWorkID: UUID,
-        isEligible: (SavedWork) -> Bool = { _ in true }
+        isEligible: @escaping (SavedWork) -> Bool = { _ in true }
     ) -> SavedWork? {
         guard let currentIndex = orderedWorks.firstIndex(where: { $0.id == currentWorkID }) else {
             return nil
