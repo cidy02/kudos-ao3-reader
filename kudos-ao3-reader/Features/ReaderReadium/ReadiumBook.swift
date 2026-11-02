@@ -57,6 +57,10 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     /// Chapter/Afterword), one per spine item. See `ReaderSection`.
     private(set) var sections: [ReaderSection] = []
     private(set) var currentLocator: Locator?
+    /// Bumped on every navigator-resolved `locationDidChange` that passes the
+    /// ingestion gate; 0 until the first real settle after open (the seeded
+    /// persisted locator does not count).
+    private(set) var settledLocationCount = 0
     /// Whether the viewport's trailing edge rests at the very end of the final
     /// reading-order resource — the only state that may auto-finish a work.
     /// See `ReadiumReaderCompletion`. Kept as a boolean (not the full viewport)
@@ -522,6 +526,7 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
             _ = self?.routeWebURLToBrowse(url)
         }
         phase = .loading
+        settledLocationCount = 0
         hasPresentedFirstPage = false
         firstPagePresentationGeneration += 1
         let presentationGeneration = firstPagePresentationGeneration
@@ -723,6 +728,7 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
             schedulePageBarRemeasure()
         }
         currentLocator = locator
+        settledLocationCount += 1
         // Mid-scrub locator settles are transient — the reader is flying past
         // these pages, not reading them. `currentLocator` still advances (so a
         // dismiss mid-drag flushes the right spot), but the debounced progress
