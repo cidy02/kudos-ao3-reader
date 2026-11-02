@@ -97,23 +97,9 @@ extension WorkDetailView {
 
     // MARK: Quick actions
 
-    /// 1a: the local half lives behind "…" and the My copy row, not in a grid
-    /// on the page. Open on AO3, Mark as Finished and Comments already have
-    /// their own places on the page.
+    /// Spec board 20: Library section rows in the Work Detail "…" menu.
     @ViewBuilder
     var localWorkMenuItems: some View {
-        Button {
-            withLocalWork { _ in showingAddToQueue = true }
-        } label: {
-            Label("Add to Queue", systemImage: "list.bullet.rectangle")
-        }
-        .disabled(working)
-        Button {
-            withLocalWork { _ in showingAddToCollection = true }
-        } label: {
-            Label("Add to Collection", systemImage: "square.stack")
-        }
-        .disabled(working)
         let queued = localWork?.isInSavedForLaterQueue ?? false
         let later = WorkActionLabels.savedForLater(isQueued: queued)
         Button {
@@ -122,23 +108,46 @@ extension WorkDetailView {
             Label(later.title, systemImage: later.systemImage)
         }
         .disabled(working || preservingStatusIsBusy)
+
+        let fav = localWork?.isFavorite ?? false
+        let favLabels = WorkActionLabels.favorite(isFavorite: fav)
+        Button {
+            withLocalWork { work in
+                work.isFavorite.toggle()
+                work.markModified()
+                context.saveBestEffort(reason: "Saving favorite state failed")
+            }
+        } label: {
+            Label(favLabels.title, systemImage: favLabels.systemImage)
+        }
+
+        let finished = localWork?.isFinished ?? false
+        let finishedLabels = WorkActionLabels.finished(isFinished: finished)
+        Button(action: toggleFinished) {
+            Label(finishedLabels.title, systemImage: finishedLabels.systemImage)
+        }
+        .disabled(working)
+
+        Button {
+            withLocalWork { _ in showingAddToQueue = true }
+        } label: {
+            Label("Add to Queue", systemImage: "list.bullet.rectangle")
+        }
+        .disabled(working)
+
+        Button {
+            withLocalWork { _ in showingAddToCollection = true }
+        } label: {
+            Label("Add to Collection", systemImage: "square.stack")
+        }
+        .disabled(working)
+
         let download = localWork.flatMap(WorkDownload.action(for:))
         let downloadLabel = download.map(WorkDownload.label) ?? WorkDownload.label(.download)
         Button(action: toggleSaved) {
             Label(downloadLabel.title, systemImage: downloadLabel.systemImage)
         }
         .disabled(working || download?.isInformational == true)
-        if let ao3URL {
-            Divider()
-            ShareLink(item: ao3URL) {
-                Label("Share", systemImage: "square.and.arrow.up")
-            }
-            Button {
-                router.open(ao3URL)
-            } label: {
-                Label("Open on AO3", systemImage: "safari")
-            }
-        }
     }
 
     @ViewBuilder

@@ -1121,6 +1121,14 @@ private struct CommentPostRow: View {
             commentBody(timestamp: timestamp)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .contextMenu {
+            if !comment.isDeleted, !comment.isThreadCutoff {
+                let showsReply = CommentActionRowLayout.showsLeadingReply(
+                    canReply: comment.canReply, isLoggedIn: auth.isLoggedIn
+                )
+                commentMenuItems(showsReply: showsReply)
+            }
+        }
     }
 
     @ViewBuilder
@@ -1478,38 +1486,7 @@ private struct CommentPostRow: View {
             }
             Spacer(minLength: 0)
             Menu {
-                if showsReply {
-                    Button { handlers.onReply(comment) } label: {
-                        Label("Reply", systemImage: "arrowshape.turn.up.left")
-                    }
-                } else if comment.canReply {
-                    Button { handlers.onRequestLogin() } label: {
-                        Label("Log in to Reply", systemImage: "person.crop.circle.badge.questionmark")
-                    }
-                }
-                if comment.editPath != nil {
-                    Button { handlers.onEdit(comment) } label: {
-                        Label("Edit Comment", systemImage: "pencil")
-                    }
-                }
-                Button { handlers.onCopyLink(comment) } label: {
-                    Label("Copy Link", systemImage: "link")
-                }
-                if comment.threadPath != nil {
-                    Button { handlers.onFocusThread(comment.id) } label: {
-                        Label("Thread", systemImage: "bubble.left.and.bubble.right")
-                    }
-                }
-                if let parentID = comment.parentCommentID {
-                    Button { handlers.onFocusThread(parentID) } label: {
-                        Label("Parent Thread", systemImage: "arrowshape.turn.up.backward")
-                    }
-                }
-                if comment.deletePath != nil {
-                    Button(role: .destructive) { handlers.onDelete(comment) } label: {
-                        Label("Delete Comment", systemImage: "trash")
-                    }
-                }
+                commentMenuItems(showsReply: showsReply)
             } label: {
                 CommentOverflowButtonLabel()
             }
@@ -1520,6 +1497,52 @@ private struct CommentPostRow: View {
             .accessibilityLabel("More actions for \(comment.author)'s comment")
         }
         .padding(.vertical, -overlap)
+    }
+
+    @ViewBuilder
+    private func commentMenuItems(showsReply: Bool) -> some View {
+        MenuTopRow {
+            if showsReply {
+                Button { handlers.onReply(comment) } label: {
+                    Label("Reply", systemImage: "arrowshape.turn.up.left")
+                }
+            } else if comment.canReply {
+                Button { handlers.onRequestLogin() } label: {
+                    Label("Log in to Reply", systemImage: "person.crop.circle.badge.questionmark")
+                }
+            }
+
+            Button { handlers.onCopyLink(comment) } label: {
+                Label("Copy Link", systemImage: "link")
+            }
+
+            if let threadURL = comment.threadURL {
+                ShareLink(item: threadURL) {
+                    Label("Share", systemImage: "square.and.arrow.up")
+                }
+            }
+        }
+
+        if comment.threadPath != nil {
+            Button { handlers.onFocusThread(comment.id) } label: {
+                Label("Show Thread", systemImage: "bubble.left.and.bubble.right")
+            }
+        }
+        if let parentID = comment.parentCommentID {
+            Button { handlers.onFocusThread(parentID) } label: {
+                Label("Parent Thread", systemImage: "arrowshape.turn.up.backward")
+            }
+        }
+        if comment.editPath != nil {
+            Button { handlers.onEdit(comment) } label: {
+                Label("Edit Comment", systemImage: "pencil")
+            }
+        }
+        if comment.deletePath != nil {
+            Button(role: .destructive) { handlers.onDelete(comment) } label: {
+                Label("Delete Comment", systemImage: "trash")
+            }
+        }
     }
 }
 

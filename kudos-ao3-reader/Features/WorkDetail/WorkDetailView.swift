@@ -99,6 +99,8 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     @State private var readerWork: SavedWork? // non-nil → push the reader
     @State var queuingSeries = false
     @State var showingAddToQueue = false
+    @State private var pendingDelete: SavedWork?
+    @State private var confirmingRedundantRebuild = false
     @State private var showingSeriesQueuePrompt = false
     @State var preservingSeries = false
     @State private var seriesPreservationTask: Task<Void, Never>?
@@ -116,6 +118,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     /// 1ab's Downloads toggle. Set in Settings; read here, the one place a
     /// subscribe can turn into a download.
     @AppStorage("downloadOnSubscribe") private var downloadOnSubscribe = false
+    @AppStorage("confirmBeforeDelete") private var confirmBeforeDelete = true
 
     // MARK: - Source helpers
 
@@ -223,6 +226,19 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             }
         }
         .sheet(isPresented: $showingMyCopy) { myCopySheet }
+        .confirmationDialog(
+            "Rebuild this work?",
+            isPresented: $confirmingRedundantRebuild,
+            titleVisibility: .visible
+        ) {
+            Button("Rebuild") {
+                if let work = localWork { Task { await rebuildFromMenu(work) } }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This work already uses the latest way Kudos builds imported files, so rebuilding "
+                + "will probably not change it. Your progress, tags, and collections are kept.")
+        }
         .sheet(isPresented: $showingSeriesQueuePrompt) {
             if let seriesPrompt {
                 SeriesPreservationPromptSheet(
@@ -246,9 +262,16 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                     .accentFill()
             }
         }
-            .ao3WorkActions(workActions, workID: ao3WorkID ?? 0, auth: auth)
-            .toolbar { detailToolbar }
-            .screenTint(workPalette)
+        .deleteConfirmation(
+            for: $pendingDelete,
+            title: "Delete this work?",
+            confirmLabel: "Delete",
+            message: { PreservedWorkService.deleteConfirmationMessage(for: $0) },
+            perform: deleteFromLibrary
+        )
+        .ao3WorkActions(workActions, workID: ao3WorkID ?? 0, auth: auth)
+        .toolbar { detailToolbar }
+        .screenTint(workPalette)
     }
 
     @ViewBuilder
@@ -535,14 +558,69 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             ),
             AnyView(
                 Menu {
-                    localWorkMenuItems
                     if let id = ao3WorkID {
-                        Divider()
+                        AO3WorkActionsTopRow(
+                            workID: id, actions: workActions,
+                            onSubscribeSuccess: downloadIfSubscribedWithoutEPUB,
+                            onKudosSuccess: markKudosGiven,
+                            shareURL: ao3URL,
+                            hasGivenKudos: localWork?.hasGivenKudos ?? false
+                        )
+                    } else if let share = ao3URL ?? (localWork.flatMap { WorkShareLink.url(for: $0) }) {
+                        MenuTopRow {
+                            ShareLink(item: share) {
+                                Label("Share", systemImage: "square.and.arrow.up")
+                            }
+                        }
+                    }
+
+                    Section("Library") {
+                        localWorkMenuItems
+                    }
+
+                    if let id = ao3WorkID {
                         AO3WorkActionsMenu(
                             workID: id, actions: workActions,
                             workContext: commentsWorkContext,
-                            onSubscribeSuccess: downloadIfSubscribedWithoutEPUB
+                            onSubscribeSuccess: downloadIfSubscribedWithoutEPUB,
+                            shareURL: ao3URL,
+                            hasGivenKudos: localWork?.hasGivenKudos ?? false,
+                            showsTopRow: false
                         )
+                    } else if let sourceURL = ao3URL {
+                        Button {
+                            router.open(sourceURL)
+                        } label: {
+                            Label("Open Original Source", systemImage: "safari")
+                        }
+                    }
+
+                    if let work = localWork,
+                       let candidate = WorkReconversion.candidate(for: work) {
+                        Button {
+                            if candidate.isStale {
+                                Task { await rebuildFromMenu(work) }
+                            } else {
+                                confirmingRedundantRebuild = true
+                            }
+                        } label: {
+                            Label("Rebuild from Original", systemImage: "arrow.triangle.2.circlepath")
+                        }
+                        .disabled(working)
+                    }
+
+                    if let work = localWork {
+                        Button(role: .destructive) {
+                            if PreservedWorkService.shouldConfirmDelete(
+                                work, settingOn: confirmBeforeDelete
+                            ) {
+                                pendingDelete = work
+                            } else {
+                                deleteFromLibrary(work)
+                            }
+                        } label: {
+                            Label("Delete from Library", systemImage: "trash")
+                        }
                     }
                 } label: {
                     Label("More actions", systemImage: "ellipsis")
@@ -551,6 +629,31 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                 .tint(Color.primary)
             )
         ])
+    }
+
+    private func rebuildFromMenu(_ work: SavedWork) async {
+        working = true
+        loadError = nil
+        queueNotice = nil
+        defer { working = false }
+        do {
+            try await WorkReconversion.reconvert(work, in: context)
+            queueNotice = "Rebuilt from original."
+        } catch {
+            loadError = UserFacingError.message(for: error)
+        }
+    }
+
+    private func deleteFromLibrary(_ work: SavedWork) {
+        PreservedWorkService.softDelete(work, in: context)
+        dismiss()
+    }
+
+    private func markKudosGiven() {
+        guard let work = localWork, work.modelContext != nil else { return }
+        work.hasGivenKudos = true
+        work.markModified()
+        context.saveBestEffort(reason: "Saving kudos state failed")
     }
 
     // MARK: - Display values (local record first, remote summary fallback)

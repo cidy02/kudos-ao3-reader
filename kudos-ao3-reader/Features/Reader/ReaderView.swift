@@ -170,12 +170,21 @@ struct ReaderView: View {
                             if let id = WorkTags.ao3WorkID(from: work.sourceURL) {
                                 AO3WorkActionsMenu(workID: id, actions: workActions,
                                                    workContext: .init(savedWork: work),
-                                                   commentsInitialChapterPosition: currentAO3Chapter)
+                                                   commentsInitialChapterPosition: currentAO3Chapter,
+                                                   onKudosSuccess: markKudosGiven,
+                                                   shareURL: WorkShareLink.url(for: work),
+                                                   hasGivenKudos: work.hasGivenKudos)
+                            } else if let shareURL = WorkShareLink.url(for: work) {
+                                MenuTopRow {
+                                    ShareLink(item: shareURL) {
+                                        Label("Share", systemImage: "square.and.arrow.up")
+                                    }
+                                }
                             }
                         } label: {
                             Label("More actions", systemImage: "ellipsis")
                         }
-                        .disabled(WorkTags.ao3WorkID(from: work.sourceURL) == nil)
+                        .disabled(WorkShareLink.url(for: work) == nil)
                     )
                 ])
             }
@@ -238,6 +247,13 @@ struct ReaderView: View {
                 flushProgress()
                 configureController()
             }
+    }
+
+    private func markKudosGiven() {
+        guard work.modelContext != nil else { return }
+        work.hasGivenKudos = true
+        work.markModified()
+        modelContext.saveBestEffort(reason: "Saving kudos state failed")
     }
 
     @Environment(\.modelContext) private var modelContext

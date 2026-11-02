@@ -15,17 +15,26 @@ struct AO3WorkActionsMenu: View {
     /// See `WorkAO3ActionChips.onSubscribeSuccess` — same rule, same reason
     /// the two carry it independently rather than sharing one call site.
     var onSubscribeSuccess: (() -> Void)? = nil
+    var onKudosSuccess: (() -> Void)? = nil
+    var shareURL: URL? = nil
+    var hasGivenKudos: Bool = false
+    var showsTopRow: Bool = true
 
     @Environment(AppRouter.self) private var router
     @Environment(AO3AuthService.self) private var auth
 
     var body: some View {
+        if showsTopRow {
+            AO3WorkActionsTopRow(
+                workID: workID,
+                actions: actions,
+                onSubscribeSuccess: onSubscribeSuccess,
+                onKudosSuccess: onKudosSuccess,
+                shareURL: shareURL,
+                hasGivenKudos: hasGivenKudos
+            )
+        }
         Section("On AO3") {
-            Button { actions.giveKudos(workID: workID, auth: auth) } label: {
-                Label("Give Kudos", systemImage: "heart")
-            }
-            .disabled(actions.isWorking)
-
             Button {
                 actions.startViewingComments(context: workContext,
                                              initialChapterPosition: commentsInitialChapterPosition)
@@ -33,26 +42,8 @@ struct AO3WorkActionsMenu: View {
                 Label("Comments", systemImage: "bubble.left.and.bubble.right")
             }
 
-            Button { actions.startBookmark() } label: {
-                if actions.workPageStates?.existingBookmark != nil {
-                    Label("Edit Bookmark on AO3", systemImage: "bookmark.fill")
-                } else {
-                    Label("Bookmark on AO3", systemImage: "bookmark")
-                }
-            }
             Button { actions.markForLater(workID: workID, auth: auth) } label: {
                 Label("Mark for Later", systemImage: "clock.badge")
-            }
-            .disabled(actions.isWorking)
-
-            Button {
-                actions.subscribe(workID: workID, auth: auth, onSubscribed: onSubscribeSuccess)
-            } label: {
-                if actions.workPageStates?.isSubscribed == true {
-                    Label("Unsubscribe", systemImage: "bell.slash")
-                } else {
-                    Label("Subscribe", systemImage: "bell")
-                }
             }
             .disabled(actions.isWorking)
 
@@ -61,16 +52,83 @@ struct AO3WorkActionsMenu: View {
                 Label("Open on AO3", systemImage: "safari")
             }
         }
-        // Menu content builds when the menu opens — fetch the subscribed/
-        // bookmarked state then (never on plain work-detail views), so the
-        // labels above reflect AO3 instead of always reading "Subscribe" /
-        // "Bookmark on AO3".
-        .onAppear { actions.refreshWorkPageStates(workID: workID, auth: auth) }
     }
 
     private func openWeb(_ path: String) {
         if let url = URL(string: "https://archiveofourown.org\(path)") {
             router.open(url)
         }
+    }
+}
+
+struct AO3WorkActionsTopRow: View {
+    let workID: Int
+    @Bindable var actions: AO3WorkActionsModel
+    var onSubscribeSuccess: (() -> Void)?
+    var onKudosSuccess: (() -> Void)?
+    var shareURL: URL?
+    var hasGivenKudos: Bool
+
+    @Environment(AO3AuthService.self) private var auth
+    @Environment(\.accentFill) private var accentFill
+
+    var body: some View {
+        MenuTopRow {
+            let isGiven = hasGivenKudos || actions.kudosGivenWorkID == workID
+            Button {
+                actions.giveKudos(
+                    workID: workID,
+                    auth: auth,
+                    onSuccess: onKudosSuccess
+                )
+            } label: {
+                Label(
+                    isGiven ? "Kudos Given" : "Kudos",
+                    systemImage: MenuTopRowRules.kudosSymbol(isGiven: isGiven)
+                )
+            }
+            .disabled(actions.isWorking || isGiven)
+            .tint(isGiven ? accentFill : Color.primary)
+            .accessibilityLabel(isGiven ? "Kudos given" : "Give Kudos")
+            .accessibilityAddTraits(isGiven ? [.isSelected] : [])
+
+            let isBookmarked = actions.workPageStates?.existingBookmark != nil
+            Button { actions.startBookmark() } label: {
+                Label(
+                    isBookmarked ? "Edit Bookmark" : "Bookmark",
+                    systemImage: MenuTopRowRules.bookmarkSymbol(isBookmarked: isBookmarked)
+                )
+            }
+            .tint(isBookmarked ? accentFill : Color.primary)
+            .accessibilityLabel(
+                isBookmarked
+                    ? "Edit Bookmark on AO3" : "Bookmark on AO3"
+            )
+            .accessibilityAddTraits(
+                isBookmarked ? [.isSelected] : []
+            )
+
+            let isSubscribed = actions.workPageStates?.isSubscribed == true
+            Button {
+                actions.subscribe(workID: workID, auth: auth, onSubscribed: onSubscribeSuccess)
+            } label: {
+                Label(
+                    isSubscribed ? "Unsubscribe" : "Subscribe",
+                    systemImage: MenuTopRowRules.subscribeSymbol(isSubscribed: isSubscribed)
+                )
+            }
+            .disabled(actions.isWorking)
+            .tint(isSubscribed ? accentFill : Color.primary)
+            .accessibilityLabel(isSubscribed ? "Unsubscribe" : "Subscribe")
+            .accessibilityAddTraits(
+                isSubscribed ? [.isSelected] : []
+            )
+
+            ShareLink(item: shareURL ?? AO3AuthService.workURL(workID)) {
+                Label("Share", systemImage: "square.and.arrow.up")
+            }
+        }
+        // Menu content builds when the menu opens, so this fetch is user-driven.
+        .onAppear { actions.refreshWorkPageStates(workID: workID, auth: auth) }
     }
 }

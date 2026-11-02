@@ -14,383 +14,134 @@ struct ReaderFanMenuPill: Identifiable {
     let action: () -> Void
 }
 
-/// One round action button in the fan's bottom row (share, kudos, read aloud,
-/// bookmark).
+/// One of the reader's existing quick actions, retained when the old fan is
+/// presented as a native menu.
 struct ReaderFanRoundAction: Identifiable {
     let id: String
     let systemImage: String
-    let tint: Color
     let accessibilityLabel: String
     var isEnabled = true
-    /// When true, the capsule is filled with `tint` and the glyph uses a
-    /// contrasting colour so on/off is obvious at a glance (rotation lock).
-    /// Outline-vs-fill alone is too subtle for some symbols.
+    /// When true, the symbol is filled and uses the app colour.
     var isEmphasized = false
     let action: () -> Void
-    /// Optional long-press. Used by Read Aloud to reach its settings without
-    /// first starting playback — the mini-player's waveform is the other way
-    /// in, and that only exists once something is already being read.
-    var longPressAction: (() -> Void)?
+    /// Optional companion command. Read Aloud uses it for settings.
+    var settingsAction: (() -> Void)?
 
-    /// Attach a long press without repeating the whole initialiser at the call
-    /// site, which is already long enough to obscure what it configures.
-    func withLongPress(_ handler: @escaping () -> Void) -> ReaderFanRoundAction {
+    func withSettingsAction(_ handler: @escaping () -> Void) -> ReaderFanRoundAction {
         var copy = self
-        copy.longPressAction = handler
+        copy.settingsAction = handler
         return copy
     }
 }
 
-/// The top-right "more" button that fans open into labelled menu pills plus a row
-/// of round quick actions, all right-aligned below it. Modeled on Apple Books' own
-/// reading-options glyph (three list bars over three dots).
-///
-/// As in Apple Books, the button is *replaced by* the menu rather than sitting
-/// above it: opening hides the button and the pills take its place, and closing
-/// brings it back. Dismissal therefore can't come from the button — the host
-/// supplies a tap-anywhere-else backdrop (`ReaderFanMenu.dismissBackdrop`), and
-/// VoiceOver uses the standard escape action below.
-///
-/// The open/close transition is the system's own Liquid Glass morph, not a
-/// fade: a `GlassEffectContainer` plus a shared `glassEffectID` per row lets the
-/// button's glass shape flow outward into the pills and pour back into the
-/// button on dismiss, which is the effect Apple Books uses. Everything inside a
-/// container is one glass system, so neighbouring shapes also blend as they
-/// separate instead of popping in independently.
-/// Long enough to cover the release that follows a hold, short enough that a
-/// deliberate tap afterwards is never eaten. The hold opens a sheet over the
-/// button, so there is nothing to tap inside the window.
-///
-/// File scope because `LongPressableRoundAction` is generic, and a generic
-/// type cannot hold a static stored property.
-private let readerFanSuppressTapWindow: TimeInterval = 1.0
-
+/// The top-right "more" menu for the reader. Features a MenuTopRow with
+/// Find, Comments, Read Aloud, Share, followed by rows for Contents,
+/// Bookmarks & Highlights, Themes & Settings, etc.
+/// (Spec board 27 and component `Menu top row`).
 struct ReaderFanMenu: View {
-    @Binding var isOpen: Bool
     let pills: [ReaderFanMenuPill]
-    /// The work's AO3 URL, shared via a native `ShareLink` in the round row's first
-    /// slot. nil for works with no AO3 origin (imported EPUBs) — the slot is omitted.
+    /// The work's AO3 URL, shared via a native `ShareLink`. nil for works with no AO3 origin (imported EPUBs).
     let shareURL: URL?
     let roundActions: [ReaderFanRoundAction]
-    /// The reader theme's own control colour (`ThemeManager.effectiveTint`), so an
-    /// active toggle and any system-tinted chrome inside the menu read as the
-    /// current theme — Sepia's warm brown rather than the raw AO3 red.
+    /// The app control colour (`ThemeManager.effectiveTint`), kept independent
+    /// of the work, fandom, queue, and reader paper colours.
     let accentColor: Color
-    let reduceMotion: Bool
-
-    /// Ties the button's glass to the pills' so the system morphs between them
-    /// rather than cross-fading two unrelated shapes.
-    @Namespace private var glassNamespace
-
-    private static let roundActionWidth: CGFloat = 52
-    private static let roundActionHeight: CGFloat = 46
-    private static let rowSpacing: CGFloat = 9
-
-    /// How many circles the bottom row actually renders (the share slot only
-    /// exists for AO3-backed works).
-    private var roundActionCount: Int {
-        roundActions.count + (shareURL == nil ? 0 : 1)
-    }
-
-    /// Pills span exactly the width of the circle row beneath them, so the menu
-    /// reads as one block with flush edges instead of two stacks of different
-    /// widths. Derived rather than hardcoded so adding or removing a circle keeps
-    /// the two in step.
-    private var pillWidth: CGFloat {
-        let count = max(roundActionCount, 1)
-        return CGFloat(count) * Self.roundActionWidth
-            + CGFloat(count - 1) * Self.rowSpacing
-    }
 
     var body: some View {
-        GlassEffectContainer(spacing: Self.rowSpacing) {
-            content
-        }
-        // Outside the container, so over its glass. Shapes drawn inside it, as the
-        // button's label or as an overlay on the button, end up under the glass: the
-        // mark came out at about a third of its strength, grey beside the back
-        // button's solid chevron and every other round button in the app.
-        .overlay(alignment: .topTrailing) {
-            if !isOpen {
-                toggleMark.frame(width: 44, height: 44).allowsHitTesting(false)
-            }
-        }
-        .tint(accentColor)
-        // With the button gone while open there is no control to close the menu,
-        // so give VoiceOver the standard dismiss gesture (two-finger scrub) it
-        // would otherwise get from that button.
-        .accessibilityAction(.escape) { close() }
-    }
-
-    private var content: some View {
-        VStack(alignment: .trailing, spacing: Self.rowSpacing) {
-            if !isOpen {
-                toggleButton
-            }
-
-            if isOpen {
-                ForEach(pills) { pill in
-                    Button {
-                        close()
-                        pill.action()
-                    } label: {
-                        HStack(spacing: 12) {
-                            // Neutral, not the theme tint — these are plain navigation
-                            // rows (Contents, Find, Themes…) with no active/inactive
-                            // state to signal, so tinting them made every row read as
-                            // already "on."
-                            Text(pill.title)
-                                .font(.system(size: 15.5))
-                                .foregroundStyle(pill.isEnabled ? .primary : .secondary)
-                            Spacer(minLength: 8)
-                            Image(systemName: pill.systemImage)
-                                // A size of its own, as the label and the round actions have:
-                                // left to the text size, the glyph grew out of its 46pt pill at
-                                // the accessibility sizes and pushed the label onto two lines.
-                                .font(.system(size: 17))
-                                .foregroundStyle(pill.isEnabled ? Color.primary : Color.secondary)
-                        }
-                        .padding(.horizontal, 18)
-                        .frame(width: pillWidth, height: Self.roundActionHeight)
-                        // .plain draws no background of its own, so without this the
-                        // only tappable parts are the glyphs themselves and taps in
-                        // between fall through to the page.
-                        .contentShape(.capsule)
+        Menu {
+            MenuTopRow {
+                if let find = pills.first(where: { $0.id == "find" }) {
+                    Button(action: find.action) {
+                        Label("Find", systemImage: find.systemImage)
                     }
-                    // .plain so the label keeps its own .primary/.secondary
-                    // foreground — the default button style tints it with the accent.
-                    .buttonStyle(.plain)
-                    .glassEffect(.regular, in: .capsule)
-                    // The first pill inherits the button's glass identity, so the
-                    // button morphs into it; the rest get their own so they read as
-                    // separating out of that same shape.
-                    .glassEffectID(pill.id == pills.first?.id ? Self.rootGlassID : pill.id,
-                                   in: glassNamespace)
-                    .disabled(!pill.isEnabled)
-                    .accessibilityLabel(pill.title)
-                    .accessibilityHint(pill.isEnabled ? "" : "Coming soon")
+                    .disabled(!find.isEnabled)
+                    .accessibilityLabel(find.title)
                 }
 
-                HStack(spacing: Self.rowSpacing) {
-                    if let shareURL {
-                        ShareLink(item: shareURL) {
-                            Image(systemName: "square.and.arrow.up")
-                                .font(.system(size: 17))
-                                // Neutral — Share has no active state either.
-                                .foregroundStyle(Color.primary)
-                                .frame(width: Self.roundActionWidth, height: Self.roundActionHeight)
-                                .contentShape(.capsule)
-                        }
-                        .buttonStyle(.plain)
-                        .glassEffect(.regular, in: .capsule)
-                        .glassEffectID("share", in: glassNamespace)
-                        .accessibilityLabel("Share")
+                if let comments = pills.first(where: { $0.id == "comments" }) {
+                    Button(action: comments.action) {
+                        Label(comments.title, systemImage: comments.systemImage)
                     }
-                    ForEach(roundActions) { action in
-                        roundActionButton(action)
+                    .disabled(!comments.isEnabled)
+                }
+
+                if let readAloud = roundActions.first(where: { $0.id == "readAloud" }) {
+                    Button(action: readAloud.action) {
+                        Label(
+                            readAloud.isEmphasized ? "Stop Read Aloud" : "Read Aloud",
+                            systemImage: MenuTopRowRules.readAloudSymbol(
+                                isActive: readAloud.isEmphasized
+                            )
+                        )
+                    }
+                    .disabled(!readAloud.isEnabled)
+                    .tint(readAloud.isEmphasized ? accentColor : Color.primary)
+                    .accessibilityLabel(readAloud.accessibilityLabel)
+                    .accessibilityAddTraits(readAloud.isEmphasized ? [.isSelected] : [])
+                }
+
+                if let shareURL {
+                    ShareLink(item: shareURL) {
+                        Label("Share", systemImage: "square.and.arrow.up")
                     }
                 }
             }
-        }
-        // With the button gone while open there is no control to close the menu,
-        // so give VoiceOver the standard dismiss gesture (two-finger scrub) it
-        // would otherwise get from that button.
-        .accessibilityAction(.escape) { close() }
-    }
 
-    /// One round action: neutral glass glyph by default; when `isEmphasized`, a
-    /// solid theme fill with a light glyph so an active state (locked, speaking,
-    /// bookmarked…) is obvious. Neutral, not the theme tint, the rest of the
-    /// time — an always-tinted glyph read as already "on" regardless of state.
-    /// `.replace` is the Control Center-style morph for lock/heart/bookmark swaps.
-    @ViewBuilder
-    private func roundActionButton(_ action: ReaderFanRoundAction) -> some View {
-        let glyphColor: Color = {
-            if action.isEmphasized { return Color.white }
-            return action.isEnabled ? Color.primary : Color.primary.opacity(0.45)
-        }()
-
-        LongPressableRoundAction(action: action) {
-            roundActionGlyph(action, color: glyphColor)
-                .frame(width: Self.roundActionWidth, height: Self.roundActionHeight)
-                .contentShape(.capsule)
-        }
-        .background {
-            if action.isEmphasized {
-                Capsule().fill(action.tint)
-            }
-        }
-        // Solid fill replaces glass while emphasized so the theme colour reads
-        // as a true selected state; glassEffectID stays so the fan morph still
-        // has a stable identity for this slot.
-        .glassEffect(action.isEmphasized ? .clear : .regular, in: .capsule)
-        .glassEffectID(action.id, in: glassNamespace)
-        .disabled(!action.isEnabled)
-        .accessibilityLabel(action.accessibilityLabel)
-        .accessibilityHint(action.isEnabled ? "" : "Coming soon")
-        // VoiceOver cannot long-press, so the same destination is offered as a
-        // custom action rather than being unreachable.
-        .accessibilityActions {
-            if action.isEnabled, let longPress = action.longPressAction {
-                Button("Read Aloud settings", action: longPress)
-            }
-        }
-        .accessibilityAddTraits(action.isEmphasized ? [.isSelected] : [])
-    }
-
-    /// A round action whose tap and long press do not both fire.
-    ///
-    /// `simultaneousGesture` runs *alongside* the button's own gesture, so a
-    /// hold satisfies the long press **and** the button's tap on release. On
-    /// Read Aloud that meant holding opened settings and toggled playback —
-    /// exactly what the long press exists to avoid. The flag swallows the tap
-    /// that follows a completed hold.
-    ///
-    /// A separate view because the flag needs `@State`, which a helper
-    /// function cannot hold.
-    private struct LongPressableRoundAction<Content: View>: View {
-        let action: ReaderFanRoundAction
-        @ViewBuilder var content: () -> Content
-        /// When the long press last fired. A timestamp rather than a flag
-        /// because it expires on its own: the long press presents a sheet,
-        /// which cancels the touch sequence, so neither the button's action
-        /// nor `DragGesture.onEnded` is guaranteed to arrive and any flag we
-        /// set could latch forever. The previous flag pair did exactly that
-        /// and cost one dead tap after every long press.
-        @State private var longPressedAt: Date?
-
-        var body: some View {
-            Button {
-                // `simultaneousGesture` runs alongside the button's own
-                // gesture, so a completed hold satisfies the long press *and*
-                // the tap on release. Swallow only the tap that belongs to
-                // that hold — anything later than the window is a real tap.
-                if let longPressedAt,
-                   Date().timeIntervalSince(longPressedAt) < readerFanSuppressTapWindow {
-                    self.longPressedAt = nil
-                    return
+            ForEach(pills.filter {
+                $0.id != "find" && $0.id != "comments" && $0.id != "rebuild"
+            }) { pill in
+                Button(action: pill.action) {
+                    Label(pill.title, systemImage: pill.systemImage)
                 }
-                action.action()
-            } label: {
-                content()
+                .disabled(!pill.isEnabled)
             }
-            .buttonStyle(.plain)
-            .simultaneousGesture(
-                LongPressGesture(minimumDuration: 0.4).onEnded { _ in
-                    guard action.isEnabled, let longPress = action.longPressAction else { return }
-                    longPressedAt = Date()
-                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                    longPress()
+
+            ForEach(roundActions.filter { $0.id != "readAloud" }) { action in
+                Button(action: action.action) {
+                    Label(rowTitle(for: action), systemImage: action.systemImage)
                 }
-            )
-        }
-    }
+                .disabled(!action.isEnabled)
+                .tint(action.isEmphasized ? accentColor : Color.primary)
+                .accessibilityLabel(action.accessibilityLabel)
+                .accessibilityAddTraits(action.isEmphasized ? [.isSelected] : [])
+            }
 
-    /// Symbol + transitions. Rotation lock also spins the circular arrows once
-    /// per toggle (Control Center’s arrow motion on `lock.rotation` symbols).
-    @ViewBuilder
-    private func roundActionGlyph(_ action: ReaderFanRoundAction, color: Color) -> some View {
-        let image = Image(systemName: action.systemImage)
-            .font(.system(size: 17))
-            .foregroundStyle(color)
-            .contentTransition(.symbolEffect(.replace))
+            if let readAloud = roundActions.first(where: { $0.id == "readAloud" }),
+               readAloud.isEnabled,
+               let settings = readAloud.settingsAction {
+                Button(action: settings) {
+                    Label("Read Aloud Settings", systemImage: "gearshape")
+                }
+            }
 
-        if action.id == "rotationLock", !reduceMotion {
-            // Discrete one-shot: arrows rotate around the lock when the state
-            // flips. `byLayer` keeps the padlock body still and only turns the
-            // ring layers the symbol authors for this effect.
-            image
-                .symbolEffect(
-                    .rotate.byLayer,
-                    options: .nonRepeating,
-                    value: action.isEmphasized
-                )
-        } else {
-            image
-        }
-    }
-
-    /// The glass morph's curve. A gently damped spring, not a linear fade — the
-    /// shapes should look like they flow apart and back together. Shared by every
-    /// open/close path so the two directions always match.
-    ///
-    /// Tuned a touch slower/softer than a snappy spring so the fan reads closer
-    /// to Apple Books' calm open (was response 0.34 / damping 0.82).
-    static let morph: Animation = .spring(response: 0.44, dampingFraction: 0.88)
-
-    /// Closes the menu, matching the open animation (and skipping it under
-    /// Reduce Motion). Shared by the escape action and the host's backdrop.
-    static func close(isOpen: Binding<Bool>, reduceMotion: Bool) {
-        if reduceMotion {
-            isOpen.wrappedValue = false
-        } else {
-            withAnimation(morph) { isOpen.wrappedValue = false }
-        }
-    }
-
-    private func close() {
-        Self.close(isOpen: $isOpen, reduceMotion: reduceMotion)
-    }
-
-    private var toggleButton: some View {
-        Button {
-            if reduceMotion {
-                isOpen = true
-            } else {
-                withAnimation(Self.morph) { isOpen = true }
+            if let rebuild = pills.first(where: { $0.id == "rebuild" }) {
+                Divider()
+                Button(action: rebuild.action) {
+                    Label(rebuild.title, systemImage: rebuild.systemImage)
+                }
+                .disabled(!rebuild.isEnabled)
             }
         } label: {
-            // Empty: the mark is drawn over the container's glass (see `body`). The
-            // whole 44pt circle takes the tap.
-            Color.clear
+            Image(systemName: "ellipsis")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(Color.primary)
                 .frame(width: 44, height: 44)
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
         .glassEffect(.regular, in: Circle())
-        .glassEffectID(Self.rootGlassID, in: glassNamespace)
-        // Only ever rendered while closed, so the label is unconditional.
-        .accessibilityLabel("More")
+        .accessibilityLabel("More actions")
+        .tint(Color.primary)
     }
 
-    /// Three bars over three dots. Neutral, not the theme tint — the button has no
-    /// active state (open/closed is a transient interaction, not a persisted toggle).
-    private var toggleMark: some View {
-        VStack(spacing: 3) {
-            VStack(spacing: 2.5) {
-                ForEach(0 ..< 3, id: \.self) { _ in
-                    RoundedRectangle(cornerRadius: 1.1).frame(width: 22, height: 2.2)
-                }
-            }
-            HStack(spacing: 5.5) {
-                ForEach(0 ..< 3, id: \.self) { _ in Circle().frame(width: 2.6, height: 2.6) }
-            }
+    private func rowTitle(for action: ReaderFanRoundAction) -> String {
+        switch action.id {
+        case "kudos": return "Kudos"
+        case "original": return "Original File"
+        case "rotationLock": return "Rotation Lock"
+        case "bookmark": return "Bookmark"
+        default: return action.accessibilityLabel
         }
-        .foregroundStyle(Color.primary)
-        .accessibilityHidden(true)
-    }
-
-    /// Shared by the closed button and the first open pill — the identity the
-    /// system morphs along.
-    private static let rootGlassID = "reader-fan-root"
-}
-
-extension ReaderFanMenu {
-    /// A full-screen, invisible tap target that closes the open menu — the
-    /// dismissal path that the toggle button used to provide before it started
-    /// hiding itself (Apple Books' tap-anywhere-else behaviour). Closing the menu
-    /// this way leaves the surrounding chrome up, unlike a tap on the page, which
-    /// Readium turns into a chrome toggle.
-    ///
-    /// Host it *beneath* the menu and above the other chrome layers so the first
-    /// tap outside the menu dismisses it instead of hitting a control behind it.
-    /// Hidden from VoiceOver — a screen-sized invisible button is noise there, and
-    /// the menu's own `.escape` action covers dismissal.
-    static func dismissBackdrop(isOpen: Binding<Bool>, reduceMotion: Bool) -> some View {
-        Color.clear
-            .contentShape(Rectangle())
-            .onTapGesture { close(isOpen: isOpen, reduceMotion: reduceMotion) }
-            .accessibilityHidden(true)
     }
 }
 #endif
