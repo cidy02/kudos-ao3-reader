@@ -45,6 +45,10 @@ struct MediaBrowserView: View {
     /// Jump Back In picks from the off-actor pass — see `jumpBackInFandoms`.
     @State private var jumpBackInPicks: [JumpBackInPick] = []
     @ScaledMetric(relativeTo: .subheadline) private var categoryNameSize: CGFloat = 17
+    @ScaledMetric(relativeTo: .caption) private var categoryStatSize: CGFloat = 12
+    @ScaledMetric(relativeTo: .subheadline) private var chipTitleSize: CGFloat = 13
+    @ScaledMetric(relativeTo: .caption2) private var chipCountSize: CGFloat = 11
+    @ScaledMetric(relativeTo: .subheadline) private var moreLinkSize: CGFloat = 13
     @ScaledMetric(relativeTo: .subheadline) private var jumpBackInTitleSize: CGFloat = 15
     @ScaledMetric(relativeTo: .footnote) private var jumpBackInDetailSize: CGFloat = 13
     @ScaledMetric(relativeTo: .footnote) private var openWebsiteSize: CGFloat = 13.5
@@ -195,9 +199,9 @@ struct MediaBrowserView: View {
                                 return ""
                             }()
                             Text("\(fandomText) \(worksText)")
-                                .font(.system(size: 12))
+                                .font(.system(size: categoryStatSize))
                                 .foregroundStyle(Color.white.opacity(0.8))
-                                .lineLimit(1)
+                                .lineLimit(2)
                         } else {
                             SkeletonBlock(height: 12, width: 80, cornerRadius: 3)
                                 .opacity(0.4)
@@ -235,19 +239,22 @@ struct MediaBrowserView: View {
                                 Circle()
                                     .fill(Color.white)
                                     .frame(width: 6, height: 6)
+                                    .accessibilityHidden(true)
                             }
                             Text(chip.title)
-                                .font(.system(size: 13, weight: .semibold))
+                                .font(.system(size: chipTitleSize, weight: .semibold))
                                 .foregroundStyle(Color.white)
                                 .lineLimit(1)
                                 .truncationMode(.tail)
                             Spacer(minLength: 4)
                             Text((chip.isApproximate ? "~" : "") + compact(chip.workCount))
-                                .font(.system(size: 11))
+                                .font(.system(size: chipCountSize))
                                 .foregroundStyle(Color.white.opacity(0.8))
                                 .lineLimit(1)
+                                .layoutPriority(1)
                         }
                         .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
                         .frame(minHeight: 30)
                         .background(Color.white.opacity(0.18), in: Capsule())
                     }
@@ -259,13 +266,14 @@ struct MediaBrowserView: View {
                     HStack(spacing: 4) {
                         if let count = stats?.familyCount ?? stats?.fandomCount {
                             Text("\(compact(count)) fandoms")
-                                .font(.system(size: 13, weight: .semibold))
+                                .font(.system(size: moreLinkSize, weight: .semibold))
                         } else {
                             Text("All fandoms")
-                                .font(.system(size: 13, weight: .semibold))
+                                .font(.system(size: moreLinkSize, weight: .semibold))
                         }
                         Image(systemName: "chevron.right")
                             .font(.system(size: 10, weight: .semibold))
+                            .accessibilityHidden(true)
                     }
                     .foregroundStyle(Color.white)
                     .frame(minHeight: 24)
@@ -279,7 +287,7 @@ struct MediaBrowserView: View {
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
                 .fill(CoverArt.workGradient(fandoms: [category.name], title: ""))
         )
         .overlay(alignment: .topTrailing) {
@@ -288,8 +296,9 @@ struct MediaBrowserView: View {
                 .foregroundStyle(Color.white.opacity(0.15))
                 .offset(x: 20, y: -10)
                 .allowsHitTesting(false)
+                .accessibilityHidden(true)
         }
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
         .workCardZoomSource(BrowseZoomKey.category(category.id), in: zoomNamespace)
     }
 
@@ -395,6 +404,10 @@ struct MediaBrowserView: View {
         #endif
     }
 
+    private var jumpBackInMaxWidth: CGFloat? {
+        dynamicTypeSize.isAccessibilitySize ? nil : 260
+    }
+
     private func jumpBackInCard(_ entry: JumpBackInEntry) -> some View {
         Button {
             onSelectFandom([entry.fandom], entry.fandom)
@@ -407,6 +420,7 @@ struct MediaBrowserView: View {
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
                             .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5)
                     )
+                    .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(FandomDisplayName.bareTitle(entry.fandom, among: jumpBackInPicks.map(\.fandom)))
@@ -420,8 +434,8 @@ struct MediaBrowserView: View {
                             Text("·")
                             Image(systemName: "star.fill")
                                 .font(.system(size: 9))
-                                .foregroundStyle(Color(red: 0.96, green: 0.77, blue: 0.0))
-                            Text("favourite")
+                                .foregroundStyle(Color.subjectFavoriteGold)
+                            Text("favorite")
                         } else if let visited = entry.lastVisitedAt, Calendar.current.isDateInToday(visited) {
                             Text("· visited today")
                         } else if let count = entry.workCount, count > 0 {
@@ -437,7 +451,7 @@ struct MediaBrowserView: View {
             .padding(.trailing, 14)
             .padding(.vertical, 8)
             .frame(minHeight: 56)
-            .frame(maxWidth: 220, alignment: .leading)
+            .frame(maxWidth: jumpBackInMaxWidth, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .fill(jumpBackInChipBackground)
@@ -450,7 +464,7 @@ struct MediaBrowserView: View {
     private func jumpBackInAccessibilityLabel(_ entry: JumpBackInEntry) -> String {
         var parts = [entry.fandom, entry.category.name]
         if entry.isFavorite {
-            parts.append("favourite")
+            parts.append("favorite")
         } else if let visited = entry.lastVisitedAt, Calendar.current.isDateInToday(visited) {
             parts.append("visited today")
         } else if let count = entry.workCount, count > 0 {
