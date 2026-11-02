@@ -457,6 +457,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                     .foregroundStyle(.tertiary)
             }
             .padding(.horizontal, 16)
+            .padding(.top, -20)
             .frame(maxWidth: .infinity, alignment: .leading)
             .dashboardLeadingRegion()
             .accessibilityElement(children: .ignore)
@@ -698,18 +699,18 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                     ForEach(Array(visibleRows.enumerated()), id: \.element.id) { index, entry in
                         if index > 0 {
                             Divider()
-                                .padding(.leading, 16)
+                                .padding(.leading, 79)
                         }
                         subscriptionRow(entry)
                     }
 
                     if merged.count > 2 {
                         Divider()
-                            .padding(.leading, 16)
+                            .padding(.leading, 79)
                         ListMoreRow(
                             count: merged.count - 2,
                             sectionTitle: "Subscriptions",
-                            leadingInset: 16,
+                            leadingInset: 79,
                             action: { path.append(SubscriptionsRoute()) }
                         )
                     }
@@ -722,22 +723,16 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
     @ViewBuilder
     private func subscriptionRow(_ entry: CanonicalWork) -> some View {
         if let work = entry.local {
-            SensitiveWorkRow(
+            HomeNewChapterRow(
                 work: work,
-                openMode: .reader,
-                presentation: .ledger,
-                showsSeparator: false,
-                usesInlineNavigation: true,
-                contentInsets: EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16)
+                isSelecting: isSelecting,
+                isSelected: selection.contains(work.id),
+                onToggleSelection: { toggleSelection(work) },
+                onSelect: selectAction(for: work)
             )
         } else if let remote = entry.remote {
-            EnrichingAO3WorkRow(
-                work: remote,
-                presentation: .searchLedger,
-                showsSeparator: false
-            )
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
+            // T-490: Route remote row through remote blur privacy wrapper once landed
+            HomeNewChapterRow(remote: remote)
         }
     }
 
@@ -904,7 +899,8 @@ private struct HomeProfileAvatar: View {
 }
 
 private struct HomeNewChapterRow: View {
-    let work: SavedWork
+    var work: SavedWork?
+    var remote: AO3WorkSummary?
     var isSelecting: Bool = false
     var isSelected: Bool = false
     var onToggleSelection: (() -> Void)?
@@ -915,36 +911,149 @@ private struct HomeNewChapterRow: View {
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var mode: MaturePrivacyMode = .obscure
 
+    @State private var enrichedRemote: AO3WorkSummary?
+
+    init(
+        work: SavedWork,
+        isSelecting: Bool = false,
+        isSelected: Bool = false,
+        onToggleSelection: (() -> Void)? = nil,
+        onSelect: (() -> Void)? = nil
+    ) {
+        self.work = work
+        self.remote = nil
+        self.isSelecting = isSelecting
+        self.isSelected = isSelected
+        self.onToggleSelection = onToggleSelection
+        self.onSelect = onSelect
+    }
+
+    init(
+        remote: AO3WorkSummary,
+        onSelect: (() -> Void)? = nil
+    ) {
+        self.work = nil
+        self.remote = remote
+        self.isSelecting = false
+        self.isSelected = false
+        self.onToggleSelection = nil
+        self.onSelect = onSelect
+    }
+
+    private var displayedRemote: AO3WorkSummary? {
+        enrichedRemote ?? remote
+    }
+
     private var blurred: Bool {
-        gate.isBlurred(work, enabled: hideMature, mode: mode)
+        if let work {
+            return gate.isBlurred(work, enabled: hideMature, mode: mode)
+        }
+        // T-490: Route remote row through remote blur privacy wrapper once landed
+        return false
     }
 
     private var newCount: Int {
-        max(0, work.postedChapterCount - work.knownChapterCount)
+        if let work {
+            return max(0, work.postedChapterCount - work.knownChapterCount)
+        }
+        if let displayedRemote {
+            return SubscriptionWatermarks.newChapterCount(
+                for: displayedRemote,
+                watermarks: SubscriptionWatermarks.load()
+            )
+        }
+        return 0
+    }
+
+    private var rowTitle: String {
+        work?.title ?? displayedRemote?.title ?? ""
+    }
+
+    private var rowRating: String? {
+        if let rating = work?.rating, !rating.isEmpty { return rating }
+        if let rating = displayedRemote?.rating, !rating.isEmpty { return rating }
+        return nil
+    }
+
+    private var rowCategories: [String] {
+        work?.workCategories ?? displayedRemote?.categories ?? []
+    }
+
+    private var rowWarnings: [String] {
+        work?.workWarnings ?? displayedRemote?.warnings ?? []
+    }
+
+    private var rowCompletion: WorkCompletionStatus {
+        if let status = work?.completionStatus { return status }
+        if let displayedRemote {
+            return WorkCompletionStatus(isComplete: displayedRemote.isComplete)
+        }
+        return .unknown
     }
 
     private var metaText: String {
-        let author = work.author.trimmingCharacters(in: .whitespacesAndNewlines)
-        let fandom = work.workFandoms.first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-            .map(FandomDisplayName.bareTitle)
-        let storedDate = work.dateUpdated.trimmingCharacters(in: .whitespacesAndNewlines)
-        let when = storedDate.isEmpty ? nil : WorkStat.displayDate(storedDate)
-        return [author.isEmpty ? nil : author, fandom, when]
-            .compactMap { $0 }
-            .joined(separator: " · ")
+        if let work {
+            let author = work.author.trimmingCharacters(in: .whitespacesAndNewlines)
+            let fandom = work.workFandoms.first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+                .map(FandomDisplayName.bareTitle)
+            let storedDate = work.dateUpdated.trimmingCharacters(in: .whitespacesAndNewlines)
+            let when = storedDate.isEmpty ? nil : WorkStat.displayDate(storedDate)
+            return [author.isEmpty ? nil : author, fandom, when]
+                .compactMap { $0 }
+                .joined(separator: " · ")
+        }
+        if let remote = displayedRemote {
+            let author = remote.authorText.trimmingCharacters(in: .whitespacesAndNewlines)
+            let fandom = remote.fandoms.first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+                .map(FandomDisplayName.bareTitle)
+            let storedDate = remote.dateUpdated.trimmingCharacters(in: .whitespacesAndNewlines)
+            let when = storedDate.isEmpty ? nil : WorkStat.displayDate(storedDate)
+            return [author.isEmpty ? nil : author, fandom, when]
+                .compactMap { $0 }
+                .joined(separator: " · ")
+        }
+        return ""
     }
 
     private var chapterBarItems: [ChapterBarItem] {
-        ChapterBarModel.items(
-            chapters: work.chapters,
-            progress: work.readingProgress,
-            isFinished: work.isFinished,
-            weights: nil,
-            newChapterCount: newCount
-        )
+        if let work {
+            return ChapterBarModel.items(
+                chapters: work.chapters,
+                progress: work.readingProgress,
+                isFinished: work.isFinished,
+                weights: nil,
+                newChapterCount: newCount
+            )
+        }
+        if let remote = displayedRemote {
+            return ChapterBarModel.items(
+                chapters: remote.chapters,
+                progress: nil,
+                isFinished: remote.isComplete == true,
+                weights: nil,
+                newChapterCount: newCount
+            )
+        }
+        return []
     }
 
     var body: some View {
+        Group {
+            if let work {
+                localBody(work: work)
+            } else if let remote = displayedRemote {
+                remoteBody(remote: remote)
+            }
+        }
+        .task(id: remote?.id) {
+            if let remote {
+                enrichedRemote = await AO3SparseWorkEnricher.shared.enrich(remote)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func localBody(work: SavedWork) -> some View {
         Group {
             if blurred {
                 let content = rowContent
@@ -991,6 +1100,16 @@ private struct HomeNewChapterRow: View {
         .downloadDimmed(work)
     }
 
+    @ViewBuilder
+    private func remoteBody(remote: AO3WorkSummary) -> some View {
+        // T-490: Route remote row through remote blur privacy wrapper once landed
+        NavigationLink(value: remote) {
+            rowContent
+        }
+        .buttonStyle(.plain)
+        .remoteWorkContextMenu(work: remote)
+    }
+
     private var rowContent: some View {
         HStack(alignment: .center, spacing: 12) {
             if isSelecting {
@@ -999,10 +1118,10 @@ private struct HomeNewChapterRow: View {
             }
 
             WorkStatusIconGrid(
-                rating: work.rating.isEmpty ? nil : work.rating,
-                categories: work.workCategories,
-                warnings: work.workWarnings,
-                completion: work.completionStatus,
+                rating: rowRating,
+                categories: rowCategories,
+                warnings: rowWarnings,
+                completion: rowCompletion,
                 tileSize: 24,
                 announcesToVoiceOver: true,
                 arrangement: .grid,
@@ -1010,7 +1129,7 @@ private struct HomeNewChapterRow: View {
             )
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(work.title)
+                Text(rowTitle)
                     .font(.body.weight(.semibold))
                     .foregroundStyle(.primary)
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
@@ -1027,8 +1146,8 @@ private struct HomeNewChapterRow: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
 
-                if let preservation = work.preservationState.badgeLabel {
-                    WorkStateBadge(text: preservation, symbol: work.preservationState.badgeSymbol)
+                if let preservation = work?.preservationState.badgeLabel {
+                    WorkStateBadge(text: preservation, symbol: work?.preservationState.badgeSymbol ?? "")
                         .font(.caption2)
                 }
             }

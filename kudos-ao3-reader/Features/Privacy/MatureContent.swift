@@ -327,19 +327,12 @@ struct SensitiveWorkCoverCard: View {
                 footer: footer,
                 progress: progress,
                 metadataStyle: metadataStyle,
-                showsInitial: false
+                showsInitial: false,
+                isMatureObscured: true,
+                showsMatureRevealCapsule: !isSelecting
             )
-                .environment(\.ao3AuthorNavigationEnabled, false)
-                .blur(radius: 6)
-                .overlay {
-                    // Only while a tap would actually reveal — in select mode a tap
-                    // toggles selection instead (use the toolbar's "Show mature" to
-                    // reveal while selecting), so the label shouldn't promise otherwise.
-                    if !isSelecting {
-                        MatureRevealCapsule()
-                    }
-                }
-                .contentShape(Rectangle())
+            .environment(\.ao3AuthorNavigationEnabled, false)
+            .contentShape(Rectangle())
             if isSelecting {
                 card
                     .overlay(alignment: .topTrailing) {

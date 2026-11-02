@@ -26,7 +26,6 @@ struct WorkCarouselSection<Cards: View, Empty: View>: View {
     private let cardWidth: CGFloat
     /// Visible card count, defaulting to min(itemCount, 12).
     private let visibleCount: Int?
-    private let isPinned: Bool
     /// Action label when everything fits (e.g. "Organise").
     private let actionTitle: String?
     private let onSeeAll: (() -> Void)?
@@ -41,7 +40,6 @@ struct WorkCarouselSection<Cards: View, Empty: View>: View {
         cardSpacing: CGFloat = CarouselCardMetrics.compactGridColumnSpacing,
         cardWidth: CGFloat = CarouselCardMetrics.width,
         visibleCount: Int? = nil,
-        isPinned: Bool = false,
         actionTitle: String? = nil,
         onSeeAll: (() -> Void)? = nil,
         @ViewBuilder cards: @escaping () -> Cards,
@@ -54,7 +52,6 @@ struct WorkCarouselSection<Cards: View, Empty: View>: View {
         self.cardSpacing = cardSpacing
         self.cardWidth = cardWidth
         self.visibleCount = visibleCount
-        self.isPinned = isPinned
         self.actionTitle = actionTitle
         self.onSeeAll = onSeeAll
         self.cards = cards
@@ -106,7 +103,6 @@ struct WorkCarouselSection<Cards: View, Empty: View>: View {
             count: itemCount,
             countText: countText,
             actionTitle: decision.headerLinkLabel,
-            isPinned: isPinned,
             onSeeAll: hasItems && decision.headerLinkLabel != nil ? onSeeAll : nil
         )
         .dashboardLeadingRegion()
