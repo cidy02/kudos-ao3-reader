@@ -10,16 +10,8 @@ enum ReadingQueueFacts {
     static func rowDetail(workCount: Int, totalWordCount: Int, offlineCount: Int) -> String {
         guard workCount > 0 else { return "No works yet" }
         var parts = ["\(workCount) work\(workCount == 1 ? "" : "s")"]
-        if totalWordCount > 0 {
-            let rawMinutes = Double(totalWordCount) / 200
-            let minutes = max(5, Int((rawMinutes / 5).rounded()) * 5)
-            let hours = minutes / 60
-            let remainder = minutes % 60
-            if hours > 0 {
-                parts.append("about \(hours) h" + (remainder > 0 ? " \(remainder) min" : ""))
-            } else {
-                parts.append("about \(minutes) min")
-            }
+        if let estimate = readingTimeEstimate(wordCount: totalWordCount) {
+            parts.append(estimate)
         }
         let offline = min(max(offlineCount, 0), workCount)
         if offline == workCount {
@@ -28,6 +20,37 @@ enum ReadingQueueFacts {
             parts.append("\(offline) offline")
         }
         return parts.joined(separator: " · ")
+    }
+
+    /// Computes the queue plan facts line ("8 works · about 9 h 40 min · 6 offline")
+    /// from a list of saved works, matching the queue organizer and shelf cards.
+    static func planFacts(
+        for works: [SavedWork],
+        fileExists: (URL) -> Bool = { FileManager.default.fileExists(atPath: $0.path) }
+    ) -> String {
+        let offlineCount = works.filter {
+            $0.hasEPUB && fileExists($0.fileURL)
+        }.count
+        let totalWordCount = works.allSatisfy { $0.wordCount > 0 }
+            ? works.reduce(0) { $0 + $1.wordCount }
+            : 0
+        return rowDetail(
+            workCount: works.count,
+            totalWordCount: totalWordCount,
+            offlineCount: offlineCount
+        )
+    }
+
+    static func readingTimeEstimate(wordCount: Int) -> String? {
+        guard wordCount > 0 else { return nil }
+        let rawMinutes = Double(wordCount) / 200
+        let minutes = max(5, Int((rawMinutes / 5).rounded()) * 5)
+        let hours = minutes / 60
+        let remainder = minutes % 60
+        if hours > 0 {
+            return "about \(hours) h" + (remainder > 0 ? " \(remainder) min" : "")
+        }
+        return "about \(minutes) min"
     }
 
     /// 1h's strip and its legend. Three buckets that always sum to the queue's

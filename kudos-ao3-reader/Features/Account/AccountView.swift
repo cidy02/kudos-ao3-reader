@@ -1357,33 +1357,26 @@ private extension AccountView {
         let count: Int?
         let layout: AccountWorksLayout
         let content: Content
-        @AppStorage private var isCollapsed: Bool
-
         init(title: String, count: Int?, layout: AccountWorksLayout, @ViewBuilder content: () -> Content) {
             self.title = title
             self.count = count
             self.layout = layout
             self.content = content()
-            _isCollapsed = AppStorage(wrappedValue: false, "account.scopeGroup.\(title).isCollapsed")
         }
 
         var body: some View {
             if layout == .list {
                 Section {
-                    if !isCollapsed {
-                        content.subjectPanel()
-                            .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
-                    }
+                    content.subjectPanel()
+                        .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
                 } header: {
                     header.pageBodyRow(top: 18, gutter: 0)
                 }
             } else {
                 VStack(alignment: .leading, spacing: 8) {
                     header
-                    if !isCollapsed {
-                        content.subjectPanel()
-                            .padding(.horizontal, SubjectMetrics.accountGutter)
-                    }
+                    content.subjectPanel()
+                        .padding(.horizontal, SubjectMetrics.accountGutter)
                 }
                 .padding(.top, 18)
             }
@@ -1392,9 +1385,7 @@ private extension AccountView {
         private var header: some View {
             SectionRuleHeader(
                 title: title,
-                count: count,
-                isCollapsed: isCollapsed,
-                onToggleCollapse: { isCollapsed.toggle() }
+                count: count
             )
         }
     }

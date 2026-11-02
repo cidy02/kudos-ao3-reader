@@ -26,24 +26,22 @@ struct WorkCarouselSection<Cards: View, Empty: View>: View {
     private let cardWidth: CGFloat
     /// Visible card count, defaulting to min(itemCount, 12).
     private let visibleCount: Int?
+    private let isPinned: Bool
     /// Action label when everything fits (e.g. "Organise").
     private let actionTitle: String?
     private let onSeeAll: (() -> Void)?
     private let cards: () -> Cards
     private let emptyState: () -> Empty
 
-    @AppStorage private var collapsed: Bool
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
     init(
         title: String,
-        collapseKey: String,
         hasItems: Bool,
         itemCount: Int? = nil,
         countText: String? = nil,
         cardSpacing: CGFloat = CarouselCardMetrics.compactGridColumnSpacing,
         cardWidth: CGFloat = CarouselCardMetrics.width,
         visibleCount: Int? = nil,
+        isPinned: Bool = false,
         actionTitle: String? = nil,
         onSeeAll: (() -> Void)? = nil,
         @ViewBuilder cards: @escaping () -> Cards,
@@ -56,11 +54,11 @@ struct WorkCarouselSection<Cards: View, Empty: View>: View {
         self.cardSpacing = cardSpacing
         self.cardWidth = cardWidth
         self.visibleCount = visibleCount
+        self.isPinned = isPinned
         self.actionTitle = actionTitle
         self.onSeeAll = onSeeAll
         self.cards = cards
         self.emptyState = emptyState
-        _collapsed = AppStorage(wrappedValue: false, "section.collapsed.\(collapseKey)")
     }
 
     /// 1b/1c: 11pt from the header to the cards. The shelf's scroll view pads
@@ -78,28 +76,26 @@ struct WorkCarouselSection<Cards: View, Empty: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: headerSpacing) {
             header
-            if !collapsed {
-                if hasItems {
-                    DashboardCardShelf(
-                        compactSpacing: cardSpacing,
-                        columnSpacing: cardSpacing,
-                        cardWidth: cardWidth
-                    ) {
-                        cards()
-                        if decision.showsCarouselMoreTile, let onSeeAll {
-                            CarouselMoreTile(
-                                count: decision.hiddenCount,
-                                sectionTitle: title,
-                                action: onSeeAll
-                            )
-                        }
+            if hasItems {
+                DashboardCardShelf(
+                    compactSpacing: cardSpacing,
+                    columnSpacing: cardSpacing,
+                    cardWidth: cardWidth
+                ) {
+                    cards()
+                    if decision.showsCarouselMoreTile, let onSeeAll {
+                        CarouselMoreTile(
+                            count: decision.hiddenCount,
+                            sectionTitle: title,
+                            action: onSeeAll
+                        )
                     }
-                } else {
-                    emptyState()
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 16)
-                        .dashboardLeadingRegion()
                 }
+            } else {
+                emptyState()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .dashboardLeadingRegion()
             }
         }
     }
@@ -110,12 +106,7 @@ struct WorkCarouselSection<Cards: View, Empty: View>: View {
             count: itemCount,
             countText: countText,
             actionTitle: decision.headerLinkLabel,
-            isCollapsed: collapsed,
-            onToggleCollapse: {
-                withAnimationUnlessReduced(.snappy(duration: 0.22), reduceMotion: reduceMotion) {
-                    collapsed.toggle()
-                }
-            },
+            isPinned: isPinned,
             onSeeAll: hasItems && decision.headerLinkLabel != nil ? onSeeAll : nil
         )
         .dashboardLeadingRegion()
@@ -208,12 +199,8 @@ struct WorkLedgerListSection<Rows: View, Empty: View>: View {
     private let emptyState: () -> Empty
     private let topSpacing: CGFloat
 
-    @AppStorage private var collapsed: Bool
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
     init(
         title: String,
-        collapseKey: String,
         hasItems: Bool,
         itemCount: Int? = nil,
         visibleCount: Int? = nil,
@@ -232,7 +219,6 @@ struct WorkLedgerListSection<Rows: View, Empty: View>: View {
         self.topSpacing = topSpacing
         self.rows = rows
         self.emptyState = emptyState
-        _collapsed = AppStorage(wrappedValue: false, "section.collapsed.\(collapseKey)")
     }
 
     private var decision: SectionSeeAllDecision {
@@ -249,35 +235,27 @@ struct WorkLedgerListSection<Rows: View, Empty: View>: View {
                 title: title,
                 count: itemCount,
                 actionTitle: decision.headerLinkLabel,
-                isCollapsed: collapsed,
-                onToggleCollapse: {
-                    withAnimationUnlessReduced(.snappy(duration: 0.22), reduceMotion: reduceMotion) {
-                        collapsed.toggle()
-                    }
-                },
                 onSeeAll: hasItems && decision.headerLinkLabel != nil ? onSeeAll : nil
             )
             // 1d: 22pt between sections, 10pt to the first row (5 here + the
             // row's own 5).
             .dashboardListRow(EdgeInsets(top: topSpacing, leading: 0, bottom: 5, trailing: 0))
 
-            if !collapsed {
-                if hasItems {
-                    rows()
-                    if decision.showsListMoreRow, let onSeeAll {
-                        ListMoreRow(
-                            count: decision.hiddenCount,
-                            sectionTitle: title,
-                            leadingInset: 79,
-                            action: onSeeAll
-                        )
-                        .dashboardListRow(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 16))
-                    }
-                } else {
-                    emptyState()
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .dashboardListRow(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+            if hasItems {
+                rows()
+                if decision.showsListMoreRow, let onSeeAll {
+                    ListMoreRow(
+                        count: decision.hiddenCount,
+                        sectionTitle: title,
+                        leadingInset: 79,
+                        action: onSeeAll
+                    )
+                    .dashboardListRow(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 16))
                 }
+            } else {
+                emptyState()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .dashboardListRow(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
             }
         }
     }

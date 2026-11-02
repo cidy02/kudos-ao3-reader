@@ -85,17 +85,7 @@ struct ReadingQueueCard: View {
     }
 
     private func detailLine(works: [SavedWork]) -> String {
-        let offlineCount = works.filter {
-            $0.hasEPUB && FileManager.default.fileExists(atPath: $0.fileURL.path)
-        }.count
-        let totalWordCount = works.allSatisfy { $0.wordCount > 0 }
-            ? works.reduce(0) { $0 + $1.wordCount }
-            : 0
-        return ReadingQueueFacts.rowDetail(
-            workCount: works.count,
-            totalWordCount: totalWordCount,
-            offlineCount: offlineCount
-        )
+        ReadingQueueFacts.planFacts(for: works)
     }
 
     /// Blur and Hide both conceal a work's generated art; the count and progress

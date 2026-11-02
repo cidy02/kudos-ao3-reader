@@ -895,10 +895,15 @@ extension WorkResumeCard {
     }
 }
 
-/// The same hero and next four works, composed only when their measured region
-/// fits. Privacy, navigation and selection remain with the original card views.
+/// The same hero and following works, composed only when their measured region
+/// fits. A compact Home may give the following cards their own titled shelf;
+/// privacy, navigation and selection remain with the original card views.
 struct HomeResumeComposition<Hero: View, Next: View>: View {
     let hasNext: Bool
+    var nextSectionTitle: String? = nil
+    var nextSectionCount: Int? = nil
+    var nextSectionVisibleCount: Int? = nil
+    var onSeeAll: (() -> Void)? = nil
     @ViewBuilder var hero: () -> Hero
     @ViewBuilder var next: () -> Next
     @Environment(\.dashboardContentRegions) private var regions
@@ -915,10 +920,32 @@ struct HomeResumeComposition<Hero: View, Next: View>: View {
             DashboardRegionRow(panes: panes, width: regions.viewport.width) {
                 hero().padding(.horizontal, 16)
                 if hasNext, panes.count > 1 {
-                    DashboardCardShelf(groupsInSinglePane: true) { next() }
-                        .environment(\.dashboardContentRegions, AdaptiveContentRegions(
-                            bounds: CGRect(origin: .zero, size: panes[1].size)
-                        ))
+                    VStack(alignment: .leading, spacing: 5) {
+                        if let title = nextSectionTitle, let count = nextSectionCount {
+                            SectionRuleHeader(
+                                title: title,
+                                count: count,
+                                actionTitle: nextSectionDecision?.headerLinkLabel,
+                                onSeeAll: nextSectionDecision?.headerLinkLabel != nil ? onSeeAll : nil
+                            )
+                        }
+                        DashboardCardShelf(groupsInSinglePane: true) {
+                            next()
+                            if let decision = nextSectionDecision,
+                               decision.showsCarouselMoreTile,
+                               let title = nextSectionTitle,
+                               let onSeeAll {
+                                CarouselMoreTile(
+                                    count: decision.hiddenCount,
+                                    sectionTitle: title,
+                                    action: onSeeAll
+                                )
+                            }
+                        }
+                    }
+                    .environment(\.dashboardContentRegions, AdaptiveContentRegions(
+                        bounds: CGRect(origin: .zero, size: panes[1].size)
+                    ))
                 }
             }
         } else {
@@ -929,12 +956,37 @@ struct HomeResumeComposition<Hero: View, Next: View>: View {
         #endif
     }
 
+    private var nextSectionDecision: SectionSeeAllDecision? {
+        guard nextSectionTitle != nil, let nextSectionCount else { return nil }
+        return SectionSeeAllDecision(
+            totalCount: nextSectionCount,
+            visibleCount: nextSectionVisibleCount ?? nextSectionCount
+        )
+    }
+
     private var compactContent: some View {
-        VStack(alignment: .leading, spacing: 11) {
+        VStack(
+            alignment: .leading,
+            spacing: nextSectionTitle == nil ? 11 : SubjectMetrics.sectionSpacing
+        ) {
             hero().padding(.horizontal, 16)
             if hasNext {
-                DashboardCardShelf { next() }
-                    .padding(.top, -8)
+                if let title = nextSectionTitle, let count = nextSectionCount {
+                    WorkCarouselSection(
+                        title: title,
+                        hasItems: true,
+                        itemCount: count,
+                        visibleCount: nextSectionVisibleCount,
+                        onSeeAll: onSeeAll
+                    ) {
+                        next()
+                    } emptyState: {
+                        EmptyView()
+                    }
+                } else {
+                    DashboardCardShelf { next() }
+                        .padding(.top, -8)
+                }
             }
         }
     }

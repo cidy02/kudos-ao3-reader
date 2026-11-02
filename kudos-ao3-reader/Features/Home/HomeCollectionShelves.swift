@@ -34,10 +34,10 @@ struct HomeCollectionShelf: View {
     var body: some View {
         WorkCarouselSection(
             title: collection.name,
-            collapseKey: "home.collection.\(collection.id.uuidString)",
             hasItems: !works.isEmpty,
             itemCount: works.isEmpty ? nil : works.count,
             visibleCount: min(works.count, 12),
+            isPinned: true,
             onSeeAll: onSeeAll
         ) {
             ForEach(works.prefix(12)) { work in
