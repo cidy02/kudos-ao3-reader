@@ -105,7 +105,7 @@ with a shared language file rather than with a screen.
 | hue → wash / accent / chip / border | `SubjectPalette` | 1b, 1k, 1h |
 | full-bleed page gradient | `.subjectWash(_:)` | 1k, 1l, 1t, 1u |
 | kicker · rule | `SubjectKicker` | everywhere |
-| kicker · rule · 32pt hero · tallies | `SubjectHeaderBlock` | 1k, 1l, 1t, 1u, 1h |
+| kicker · rule · 32pt hero · tallies | `SubjectHeaderBlock` *(removed in T-481; pushed pages use system navigation titles and the header blocks are gone)* | 1k, 1l, 1t, 1u, 1h |
 | section header with hairline + see-all | `SectionRuleHeader` | 1b, 1c |
 | four-cell divided figure strip | `SubjectStatStrip` | 1k, 1h, 1i |
 | 68pt read-progress ring | `WorkProgressRing` | 1b, 1o, 1t, 1ad |
@@ -147,7 +147,7 @@ each in forty screens is the design system.
 | 21 | 28 | 97 | `700 11px`, `.13em`, uppercase scope tab | ✅ **already** `SectionRuleHeader` |
 | 22 · 35 | 27 · 21 | 60 | 44pt bar, 14pt gutter | ✅ `SubjectScreenScaffold` |
 | 23 | 26 | **300** | row, `gap 10`, `padding 12×14` | ✅ `SubjectFormRow(.value)` |
-| 24 · 39 · 61 | 26 · 20 · 14 | 71 | `700 32px`, `-.02em` | ✅ `SubjectHeaderBlock` |
+| 24 · 39 · 61 | 26 · 20 · 14 | 71 | `700 32px`, `-.02em` | `SubjectHeaderBlock` *(removed in T-481; pushed pages use system navigation titles, header blocks are gone)* |
 | 25 | 24 | 127 | row, `gap 12`, `padding 11×14` | ✅ `SubjectFormRow(.control)` |
 | 26 · 46 | 23 · 18 | 47 | **104pt** bottom gradient | ⚪️ **the tab bar's scrim** — not a header |
 | 32 | 21 | 62 | `500 11px` monospace figure | ✅ `SubjectFormValue(isMonospaced:)` |
@@ -3430,10 +3430,9 @@ Two candidates, in order of value:
    on in this session: rewriting a working themed `Form` into hand-built rows,
    with no local type checker and no simulator, is a large change whose failure
    mode is invisible until someone opens the sheet. Worth doing with a device.
-2. **Account subsections** (`1o`–`1ac`), Phase 6. Every one opens with the same
-   header — kicker · rule · 32pt title · tally line — at a **16pt** gutter
-   rather than 1a's 26. `SubjectHeaderBlock` already draws it; only the gutter
-   differs, which probably wants a parameter rather than a second type.
+2. **Account subsections** (`1o`–`1ac`), Phase 6. Pushed pages use system navigation
+   titles (T-481) and the header blocks (`SubjectHeaderBlock`, `SettingsHeaderBlock`)
+   are gone.
 
 ## 4. Working notes for whoever is next
 
@@ -3550,8 +3549,9 @@ to answer. So:
 - **Verify the claim, not the checkbox.** This table has now twice said a screen
   was done when it was not: Comments (§Phase 7) and the Account hub (§Phase 5),
   both caught by the owner rather than by the plan. Before building, grep the
-  screen for the design-system primitives (`SubjectHeaderBlock`, `subjectPanel`,
-  `SubjectFormRow`, `subjectScreenWash`, `SectionRuleHeader`). A screen that
+  screen for the design-system primitives (`subjectPanel`, `SubjectFormRow`,
+  `subjectScreenWash`, `SectionRuleHeader`; pushed pages use system navigation
+  titles, T-481, and the header blocks are gone). A screen that
   uses none of them has not been redesigned, whatever the row says.
 - **Definition of done per screen:** iOS Simulator build, macOS Debug build,
   `Scripts/lint.sh` exit 0, the focused tests for anything with logic in it, a
