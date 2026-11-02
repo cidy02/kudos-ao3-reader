@@ -164,26 +164,39 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
             Group {
                 if hasSectionCache {
                     DashboardRegionHost {
-                        ScrollView {
-                            // 26pt between sections (Rules; 1b drew 22).
-                            VStack(alignment: .leading, spacing: SubjectMetrics.sectionSpacing) {
-                                statsLine
-                                resumeSection
-                                newChaptersSection
-                                readingQueuesSection
-                                ForEach(HomeCollectionShelves.shelves(homeCollections)) { collection in
-                                    HomeCollectionShelf(
-                                        collection: collection,
-                                        works: HomeCollectionShelves.works(in: collection, visible: passesPrivacy),
-                                        onSeeAll: { path.append(collection) }
-                                    )
+                        ScrollViewReader { proxy in
+                            ScrollView {
+                                // 26pt between sections (Rules; 1b drew 22).
+                                VStack(alignment: .leading, spacing: SubjectMetrics.sectionSpacing) {
+                                    statsLine
+                                    resumeSection
+                                    newChaptersSection
+                                        .id("chapters")
+                                    readingQueuesSection
+                                        .id("queues")
+                                    ForEach(HomeCollectionShelves.shelves(homeCollections)) { collection in
+                                        HomeCollectionShelf(
+                                            collection: collection,
+                                            works: HomeCollectionShelves.works(in: collection, visible: passesPrivacy),
+                                            onSeeAll: { path.append(collection) }
+                                        )
+                                        .id("collections")
+                                    }
+                                    subscriptionsSection
+                                        .id("subscriptions")
                                 }
-                                subscriptionsSection
+                                .padding(.vertical, 12)
                             }
-                            .padding(.vertical, 12)
+                            .refreshable { await refreshHome() }
+                            .scrollAwayTopChrome()
+                            #if DEBUG
+                            .task {
+                                guard let anchor = DebugLaunchRoute.homeAnchor else { return }
+                                try? await Task.sleep(for: .seconds(1.5))
+                                proxy.scrollTo(anchor, anchor: .top)
+                            }
+                            #endif
                         }
-                        .refreshable { await refreshHome() }
-                        .scrollAwayTopChrome()
                     }
                 } else {
                     TabDashboardShell(
