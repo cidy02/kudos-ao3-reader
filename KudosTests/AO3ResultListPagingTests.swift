@@ -9,6 +9,7 @@ struct AO3ResultListPagingTests {
 
     @Test func titleFormattingQuotesQueryWhenSubjectAbsent() {
         #expect(AO3ResultListPaging.title(subject: nil, query: "lighthouse") == "“lighthouse”")
+        #expect(AO3ResultListPaging.title(subject: "lighthouse", query: "lighthouse") == "“lighthouse”")
         #expect(AO3ResultListPaging.title(subject: "", query: "enemies to lovers") == "“enemies to lovers”")
         #expect(AO3ResultListPaging.title(subject: "   ", query: "slow burn") == "“slow burn”")
     }
@@ -42,14 +43,6 @@ struct AO3ResultListPagingTests {
         #expect(AO3ResultListPaging.footerLoadedText(loaded: 5, total: 0) == "5 works")
     }
 
-    @Test func pagingTriggerDecidesCorrectly() {
-        #expect(AO3ResultListPaging.shouldTriggerNextPage(isLoading: false, currentPage: 1, totalPages: 5) == true)
-        #expect(AO3ResultListPaging.shouldTriggerNextPage(isLoading: true, currentPage: 1, totalPages: 5) == false)
-        #expect(AO3ResultListPaging.shouldTriggerNextPage(isLoading: false, currentPage: 5, totalPages: 5) == false)
-        #expect(AO3ResultListPaging.shouldTriggerNextPage(isLoading: false, currentPage: 6, totalPages: 5) == false)
-        #expect(AO3ResultListPaging.shouldTriggerNextPage(isLoading: false, currentPage: 0, totalPages: 5) == false)
-    }
-
     @Test func appendUniqueDeduplicatesAndPreservesOrder() {
         let work1 = makeWork(id: 101, title: "Work 1")
         let work2 = makeWork(id: 102, title: "Work 2")
@@ -63,6 +56,12 @@ struct AO3ResultListPagingTests {
         #expect(combined.count == 3)
         #expect(combined.map(\.id) == [101, 102, 103])
         #expect(combined[1].title == "Work 2")
+    }
+
+    @Test func rankLookaheadAdvancesOrdinaryPagingPastItsLoadedPages() {
+        #expect(AO3ResultListPaging.furthestLoadedPage(currentPage: 1, loadedPages: [1, 2, 3, 4, 5]) == 5)
+        #expect(AO3ResultListPaging.furthestLoadedPage(currentPage: 4, loadedPages: [1, 2]) == 4)
+        #expect(AO3ResultListPaging.furthestLoadedPage(currentPage: 2, loadedPages: []) == 2)
     }
 
     private func makeWork(id: Int, title: String) -> AO3WorkSummary {

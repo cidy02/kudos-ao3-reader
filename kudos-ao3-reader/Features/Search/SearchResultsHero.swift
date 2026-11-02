@@ -1,14 +1,18 @@
 import SwiftUI
 
 /// Pure logic for AO3 result lists (search results, fandom works, tag works).
-/// Covers header copy, filter counting, loading footer status, paging trigger,
-/// and unique work appending.
+/// Covers header copy, loading footer status, and unique work appending.
 enum AO3ResultListPaging {
     static func title(subject: String?, query: String?) -> String {
-        if let subject = subject?.trimmingCharacters(in: .whitespacesAndNewlines), !subject.isEmpty {
+        let subject = subject?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let query = query?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let subject, !subject.isEmpty {
+            if let query, !query.isEmpty, subject == query {
+                return "“\(query)”"
+            }
             return subject
         }
-        if let query = query?.trimmingCharacters(in: .whitespacesAndNewlines), !query.isEmpty {
+        if let query, !query.isEmpty {
             return "“\(query)”"
         }
         return "Search Results"
@@ -30,10 +34,6 @@ enum AO3ResultListPaging {
         return "\(loaded.formatted()) \(loaded == 1 ? "work" : "works")"
     }
 
-    static func shouldTriggerNextPage(isLoading: Bool, currentPage: Int, totalPages: Int) -> Bool {
-        !isLoading && currentPage < totalPages && currentPage >= 1
-    }
-
     static func appendUnique(newWorks: [AO3WorkSummary], to existingWorks: [AO3WorkSummary]) -> [AO3WorkSummary] {
         var seen = Set(existingWorks.map(\.id))
         var combined = existingWorks
@@ -43,6 +43,10 @@ enum AO3ResultListPaging {
             }
         }
         return combined
+    }
+
+    static func furthestLoadedPage(currentPage: Int, loadedPages: [Int]) -> Int {
+        max(currentPage, loadedPages.max() ?? currentPage)
     }
 }
 
@@ -86,9 +90,6 @@ struct SearchResultsHero: View {
     var subjectField: AO3TagSearch.Field?
     var onEditFilters: (() -> Void)?
     var presentation: Presentation = .card
-    /// Page numbers for the figure strip / context.
-    var currentPage: Int = 1
-    var totalPages: Int = 1
     /// The sort control 1k puts beside the subject. Nil draws the sort as plain
     /// text instead, which is what a caller with no binding to offer should get
     /// rather than a menu that cannot change anything.
@@ -100,9 +101,6 @@ struct SearchResultsHero: View {
     var showSummaries: Binding<Bool>?
     /// Query string for search results title display.
     var query: String?
-    /// Explicit active filter count when supplied by the caller.
-    var activeFilterCount: Int?
-
     @Environment(ThemeManager.self) private var themeManager
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -133,7 +131,7 @@ struct SearchResultsHero: View {
     private var subjectPageBody: some View {
         let displayTitle = AO3ResultListPaging.title(subject: summary.subject, query: query)
         let countFact = AO3ResultListPaging.subtitle(total: summary.total)
-        let filterCount = activeFilterCount ?? nonSortFilterLabels.count
+        let filterCount = nonSortFilterLabels.count
 
         return VStack(alignment: .leading, spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
@@ -443,7 +441,7 @@ struct SearchResultsHero: View {
 }
 
 /// How many filters the Search toolbar's Filter button counts: what the hero's
-/// "Filters" cell counts for the same search — every summary label except the
+/// Filters capsule counts for the same search — every summary label except the
 /// subject, which the heading already names, and the sort, which is always in
 /// effect and has its own control. One function so the two cannot disagree.
 enum SearchFilterBadge {
@@ -453,7 +451,7 @@ enum SearchFilterBadge {
 }
 
 /// Redesigned loading footer at the end of AO3 search and fandom result lists (T-492).
-/// Replaces the old SearchPaginationBar on result lists with scroll-triggered loading.
+/// Replaces the old SearchPaginationBar with an explicit next-page action.
 struct AO3ResultListEndFooter: View {
     let loadedCount: Int
     let totalCount: Int
@@ -463,9 +461,6 @@ struct AO3ResultListEndFooter: View {
     var targetPage: Int?
     var errorMessage: String?
     let loadNextPage: () -> Void
-    var retry: (() -> Void)?
-
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         VStack(spacing: 8) {
@@ -489,24 +484,15 @@ struct AO3ResultListEndFooter: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
-                    if let retry {
-                        Button("Try Again", action: retry)
-                            .buttonStyle(.kudosSecondary)
-                    }
+                    Button("Try Again", action: loadNextPage)
+                        .buttonStyle(.kudosSecondary)
                 }
             } else if currentPage < totalPages {
                 Text(AO3ResultListPaging.footerLoadedText(loaded: loadedCount, total: totalCount))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-                    .task(id: currentPage) {
-                        if AO3ResultListPaging.shouldTriggerNextPage(
-                            isLoading: isLoading,
-                            currentPage: currentPage,
-                            totalPages: totalPages
-                        ) {
-                            loadNextPage()
-                        }
-                    }
+                Button("Load Page \(currentPage + 1)", action: loadNextPage)
+                    .buttonStyle(.kudosSecondary)
             } else {
                 Text(AO3ResultListPaging.footerLoadedText(loaded: loadedCount, total: totalCount))
                     .font(.footnote)
@@ -516,6 +502,5 @@ struct AO3ResultListEndFooter: View {
         .frame(maxWidth: .infinity, alignment: .center)
         .padding(.vertical, 12)
         .padding(.horizontal, SubjectMetrics.gutter)
-        .accessibilityElement(children: .combine)
     }
 }

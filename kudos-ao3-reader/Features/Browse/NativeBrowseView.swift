@@ -208,8 +208,7 @@ struct FandomWorksView: View {
                 AO3WorkRowSkeletonList(count: 6)
             } else {
                 List {
-                    // Above pagination: the total describes the whole list, not
-                    // the page you happen to be on.
+                    // The total describes the whole list, not one loaded page.
                     if let heroSummary {
                         Section {
                             // Spec 1k, as the Search tab draws it: the page head
@@ -220,8 +219,6 @@ struct FandomWorksView: View {
                                 subjectField: heroSummary.subjectField(inAnyOf: results),
                                 onEditFilters: { showingFilters = true },
                                 presentation: .subjectPage,
-                                currentPage: currentPage,
-                                totalPages: totalPages,
                                 sortSelection: sortSelection,
                                 sortOptions: AO3SearchFilters.Sort.allCases.filter { $0 != .relevance },
                                 showSummaries: $showSummaries,
@@ -245,10 +242,9 @@ struct FandomWorksView: View {
                                 work: entry.work,
                                 expandAll: expandAll,
                                 controller: bulkSelection,
-                                presentation: .searchLedger,
+                                presentation: .fandomTop,
                                 signal: ranking.signal(for: entry),
-                                showsSummary: showSummaries,
-                                wide: true
+                                showsSummary: showSummaries
                             )
                             .cardRow(
                                 isSelected: bulkSelection.isSelecting
@@ -261,12 +257,10 @@ struct FandomWorksView: View {
                         Section {
                             RankTop100Controls(
                                 controller: rankTop100,
-                                currentPage: currentPage,
                                 totalPages: totalPages,
                                 loadedWorks: results.count,
                                 totalWorks: resultSummary?.total ?? results.count,
                                 isPageLoading: phase == .loading,
-                                loadNextPage: loadNextPage,
                                 start: startRankTop100
                             )
                             .bareListRow()
@@ -281,11 +275,7 @@ struct FandomWorksView: View {
                             isLoading: phase == .loading,
                             targetPage: requestedPage,
                             errorMessage: lastAppendError,
-                            loadNextPage: loadNextPage,
-                            retry: {
-                                lastAppendError = nil
-                                loadNextPage()
-                            }
+                            loadNextPage: loadNextPage
                         )
                         .bareListRow()
                     }
@@ -303,7 +293,7 @@ struct FandomWorksView: View {
             title: fandom,
             overrideInlineTitle: bulkSelection.isSelecting
                 ? WorkSelectionTitle.text(selectedCount: bulkSelection.selected(in: results).count)
-                : nil,
+                : (heroSummary == nil ? fandom : nil),
             isActive: !(phase == .loading && results.isEmpty)
         )
         .screenTint(resultsPalette)
@@ -576,6 +566,10 @@ struct FandomWorksView: View {
             onPages: { pages in
                 rankTop100Pages = pages
                 results = ranking.noting(RankTop100Pages.works(in: pages))
+                currentPage = AO3ResultListPaging.furthestLoadedPage(
+                    currentPage: currentPage,
+                    loadedPages: Array(pages.keys)
+                )
             }
         )
     }
@@ -597,6 +591,11 @@ struct FandomWorksView: View {
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         if bulkSelection.isSelecting {
+            #if os(iOS)
+            ToolbarItem(placement: .topBarLeading) { selectAllButton }
+            #else
+            ToolbarItem(placement: .primaryAction) { selectAllButton }
+            #endif
             RemoteWorkSelectionToolbar(controller: bulkSelection) {
                 bulkSelection.selected(in: results)
             }
@@ -619,16 +618,23 @@ struct FandomWorksView: View {
             ])
         }
     }
+
+    private var selectAllButton: some View {
+        Button(bulkSelection.allSelected(in: results) ? "Deselect All" : "Select All") {
+            bulkSelection.toggleSelectAll(in: results)
+        }
+        .disabled(results.isEmpty)
+    }
 }
 
 /// A tag's works, loaded natively from an AO3 `/tags/<name>/works` URL (e.g. a tag
-/// link tapped in a work's preface). Reuses the search result row, pagination, and
+/// link tapped in a work's preface). Reuses the search result row, explicit paging, and
 /// first-load skeleton, and filters through AO3 exactly as `FandomWorksView` does.
 ///
 /// **This screen used to filter the fetched page in memory**, which is why its
 /// panel offered only a third of the controls: you cannot sort 20 works out of
 /// 142,000, and a blurb does not say whether a work is a crossover. Worse, the
-/// header and pager went on reporting AO3's *unfiltered* totals while the list
+/// header and paging footer went on reporting AO3's *unfiltered* totals while the list
 /// showed the survivors — "142,362 works, page 1 of 5,000" above three cards.
 ///
 /// AO3 honours every `work_search[...]` parameter on a tag listing (23 of 23
@@ -694,8 +700,7 @@ struct TagWorksView: View {
                 AO3WorkRowSkeletonList(count: 6)
             } else {
                 List {
-                    // Above pagination: the total describes the whole list, not
-                    // the page you happen to be on.
+                    // The total describes the whole list, not one loaded page.
                     if let heroSummary {
                         Section {
                             // Spec 1k, as the Search tab draws it: the page head
@@ -706,8 +711,6 @@ struct TagWorksView: View {
                                 subjectField: heroSummary.subjectField(inAnyOf: results),
                                 onEditFilters: { showingFilters = true },
                                 presentation: .subjectPage,
-                                currentPage: currentPage,
-                                totalPages: totalPages,
                                 sortSelection: sortSelection,
                                 sortOptions: AO3SearchFilters.Sort.allCases.filter { $0 != .relevance },
                                 showSummaries: $showSummaries,
@@ -747,12 +750,10 @@ struct TagWorksView: View {
                         Section {
                             RankTop100Controls(
                                 controller: rankTop100,
-                                currentPage: currentPage,
                                 totalPages: totalPages,
                                 loadedWorks: results.count,
                                 totalWorks: resultSummary?.total ?? results.count,
                                 isPageLoading: phase == .loading,
-                                loadNextPage: loadNextPage,
                                 start: startRankTop100
                             )
                             .bareListRow()
@@ -767,11 +768,7 @@ struct TagWorksView: View {
                             isLoading: phase == .loading,
                             targetPage: requestedPage,
                             errorMessage: lastAppendError,
-                            loadNextPage: loadNextPage,
-                            retry: {
-                                lastAppendError = nil
-                                loadNextPage()
-                            }
+                            loadNextPage: loadNextPage
                         )
                         .bareListRow()
                     }
@@ -789,7 +786,7 @@ struct TagWorksView: View {
             title: request.title,
             overrideInlineTitle: bulkSelection.isSelecting
                 ? WorkSelectionTitle.text(selectedCount: bulkSelection.selected(in: results).count)
-                : nil,
+                : (heroSummary == nil ? request.title : nil),
             isActive: !(phase == .loading && results.isEmpty)
         )
         .screenTint(resultsPalette)
@@ -1029,6 +1026,10 @@ struct TagWorksView: View {
             onPages: { pages in
                 rankTop100Pages = pages
                 results = ranking.noting(RankTop100Pages.works(in: pages))
+                currentPage = AO3ResultListPaging.furthestLoadedPage(
+                    currentPage: currentPage,
+                    loadedPages: Array(pages.keys)
+                )
             }
         )
     }

@@ -202,6 +202,7 @@ struct SelectableAO3WorkRow: View {
     var presentation: AO3WorkRow.Presentation = .standard
     /// Search's computed-sort figure for this work, when the reader shows it.
     var signal: String?
+    var badgeTitle: String? = nil
     var showsSummary = true
     var badgeCount = 0
     var wide = false
@@ -216,6 +217,7 @@ struct SelectableAO3WorkRow: View {
             onToggleSelection: { controller.toggle(work) },
             presentation: presentation,
             signal: signal,
+            badgeTitle: badgeTitle,
             showsSummary: showsSummary,
             badgeCount: badgeCount,
             wide: wide,
