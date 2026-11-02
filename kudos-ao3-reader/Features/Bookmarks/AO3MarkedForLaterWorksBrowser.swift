@@ -235,6 +235,8 @@ struct AO3MarkedForLaterWorksBrowser: View {
     /// 1o.4: AO3's `mark_as_read`. The host runs the write and drops the row.
     var onUnmark: (CanonicalWork) -> Void = { _ in }
 
+    @Environment(PrivacyGate.self) private var gate
+    @AppStorage("hideMatureContent") private var hideMature = true
     @ScaledMetric(relativeTo: .caption) private var footerSize: CGFloat = 11.5
 
     private var sections: [AO3MarkedForLaterSection<CanonicalWork>] {
@@ -418,7 +420,11 @@ struct AO3MarkedForLaterWorksBrowser: View {
             .buttonStyle(.plain)
             .disabled(isUnmarking)
             .minimumHitTarget()
-            .accessibilityLabel("Unmark \(entry.title)")
+            .accessibilityLabel(
+                gate.isConcealed(entry, enabled: hideMature)
+                    ? "Unmark hidden mature work"
+                    : "Unmark \(entry.title)"
+            )
         }
     }
 

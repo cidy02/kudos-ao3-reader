@@ -216,8 +216,7 @@ struct AO3SeriesDetailView: View {
                     SensitiveWorkRow(work: work, expandAll: expandAll, showsSummary: showSummaries)
                         .cardRow(chrome: .plain)
                 } else if let remote = entry.remote {
-                    AO3WorkRow(work: remote, expandAll: expandAll, showsSummary: showSummaries)
-                        .cardNavigation(to: remote, accessibilityLabel: remote.title)
+                    SensitiveWorkRow(work: remote, expandAll: expandAll, showsSummary: showSummaries)
                         .cardRow(chrome: .plain)
                 }
             }
@@ -235,10 +234,8 @@ struct AO3SeriesDetailView: View {
     private var workEntries: [CanonicalWork] {
         CanonicalWorkMerge.remoteLed(
             remote: works,
-            localLibrary: localWorks.filter {
-                !gate.isHidden($0, enabled: hideMature, mode: matureMode)
-            }
-        )
+            localLibrary: localWorks
+        ).filter { !gate.isHidden($0, enabled: hideMature, mode: matureMode) }
     }
 
     private var authenticationScope: String {

@@ -315,6 +315,9 @@ struct AuthorProfileOverviewSections: View {
     @Environment(AO3AuthService.self) private var auth
     @Environment(ThemeManager.self) private var theme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(PrivacyGate.self) private var gate
+    @AppStorage("hideMatureContent") private var hideMature = true
+    @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
 
     var body: some View {
         if let header = model.header {
@@ -386,15 +389,22 @@ struct AuthorProfileOverviewSections: View {
 
     private var latest: some View {
         Section {
-            SectionRuleHeader(title: "Latest")
-                .pageBodyRow(top: 18, gutter: 0)
             if let work = model.latestWork {
-                AuthorProfileLatestCard(work: work)
-                    .cardNavigation(to: work, accessibilityLabel: work.title)
+                if !gate.isHidden(work, enabled: hideMature, mode: matureMode) {
+                    SectionRuleHeader(title: "Latest")
+                        .pageBodyRow(top: 18, gutter: 0)
+                    SensitiveRemoteWorkCard(work: work) {
+                        AuthorProfileLatestCard(work: work)
+                    }
                     .pageBodyRow(top: 10, gutter: SubjectMetrics.accountGutter)
+                }
             } else if model.header?.recentWorks == nil {
+                SectionRuleHeader(title: "Latest")
+                    .pageBodyRow(top: 18, gutter: 0)
                 overviewMessage("Couldn't read the latest work. Open Works to try again.")
             } else {
+                SectionRuleHeader(title: "Latest")
+                    .pageBodyRow(top: 18, gutter: 0)
                 overviewMessage("No recent works visible on AO3.")
             }
         }
@@ -449,8 +459,12 @@ struct AuthorProfileOverviewSections: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(alignment: .top, spacing: 12) {
                 ForEach(works) { work in
-                    AO3WorkCoverCard(work: work)
-                        .cardNavigation(to: work, accessibilityLabel: work.title)
+                    if gate.isBlurred(work, enabled: hideMature, mode: matureMode) {
+                        SensitiveWorkCoverCard(work: work)
+                    } else if !gate.isHidden(work, enabled: hideMature, mode: matureMode) {
+                        SensitiveWorkCoverCard(work: work)
+                            .cardNavigation(to: work, accessibilityLabel: work.title)
+                    }
                 }
             }
         }
@@ -553,11 +567,9 @@ struct AuthorProfileOverviewSections: View {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(alignment: .top, spacing: 12) {
                             ForEach(items) { bookmark in
-                                AuthorProfileBookmarkNoteCard(bookmark: bookmark)
-                                    .cardNavigation(
-                                        to: bookmark.work,
-                                        accessibilityLabel: bookmark.work.title
-                                    )
+                                SensitiveRemoteWorkCard(work: bookmark.work) {
+                                    AuthorProfileBookmarkNoteCard(bookmark: bookmark)
+                                }
                             }
                         }
                     }

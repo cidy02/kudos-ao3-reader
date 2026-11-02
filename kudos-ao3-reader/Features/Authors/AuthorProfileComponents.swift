@@ -475,7 +475,7 @@ struct AO3AuthorBookmarkRow: View {
     var presentation: AO3WorkRow.Presentation = .standard
 
     var body: some View {
-        AO3WorkRow(
+        SensitiveWorkRow(
             work: bookmark.work,
             expandAll: expandAll,
             presentation: presentation,

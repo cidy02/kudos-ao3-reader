@@ -515,6 +515,10 @@ struct AccountShortcutGridTile: View {
 struct AccountWorksCompactGrid<Accessory: View>: View {
     let entries: [CanonicalWork]
 
+    @Environment(PrivacyGate.self) private var gate
+    @AppStorage("hideMatureContent") private var hideMature = true
+    @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
+
     /// Drawn under each card, outside its link. Marked for Later's Unmark
     /// (1o.4); nothing on every other list.
     @ViewBuilder var accessory: (CanonicalWork) -> Accessory
@@ -534,7 +538,9 @@ struct AccountWorksCompactGrid<Accessory: View>: View {
 
     @ViewBuilder
     private func compactCard(for entry: CanonicalWork) -> some View {
-        if let work = entry.local {
+        if let work = entry.local, gate.isBlurred(work, enabled: hideMature, mode: matureMode) {
+            SensitiveWorkCoverCard(work: work, progress: work.readingProgress)
+        } else if let work = entry.local, !gate.isHidden(work, enabled: hideMature, mode: matureMode) {
             NavigationLink(value: WorkCardTap.destination(for: work)) {
                 SensitiveWorkCoverCard(work: work, progress: work.readingProgress)
             }
@@ -556,13 +562,22 @@ extension AccountWorksCompactGrid where Accessory == EmptyView {
 struct AccountBookmarksCompactGrid: View {
     let bookmarks: [AO3AuthorBookmark]
 
+    @Environment(PrivacyGate.self) private var gate
+    @AppStorage("hideMatureContent") private var hideMature = true
+    @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
+
     var body: some View {
         CarouselCardGrid(uniformHeights: true) {
             ForEach(bookmarks) { bookmark in
-                NavigationLink(value: WorkCardTap.destination(for: bookmark.work)) {
-                    AO3WorkCoverCard(work: bookmark.work)
+                let work = bookmark.work
+                if gate.isBlurred(work, enabled: hideMature, mode: matureMode) {
+                    SensitiveWorkCoverCard(work: work)
+                } else if !gate.isHidden(work, enabled: hideMature, mode: matureMode) {
+                    NavigationLink(value: WorkCardTap.destination(for: work)) {
+                        SensitiveWorkCoverCard(work: work)
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -648,11 +663,8 @@ struct AccountWorksInlineSection: View {
     }
 
     private var entries: [CanonicalWork] {
-        canonicalEntries(
-            localLibrary: localWorks.filter {
-                !gate.isHidden($0, enabled: hideMature, mode: matureMode)
-            }
-        )
+        canonicalEntries(localLibrary: localWorks)
+            .filter { !gate.isHidden($0, enabled: hideMature, mode: matureMode) }
     }
 
     private func canonicalEntries(localLibrary: [SavedWork]) -> [CanonicalWork] {
@@ -793,8 +805,7 @@ struct AccountWorksInlineSection: View {
                 SensitiveWorkRow(work: work, expandAll: expandAll)
                     .modifier(OptionalCardRow(enabled: useCardRow))
             } else if let remote = entry.remote {
-                AO3WorkRow(work: remote, expandAll: expandAll)
-                    .cardNavigation(to: remote, accessibilityLabel: remote.title)
+                SensitiveWorkRow(work: remote, expandAll: expandAll)
                     .modifier(OptionalCardRow(enabled: useCardRow))
             }
         }

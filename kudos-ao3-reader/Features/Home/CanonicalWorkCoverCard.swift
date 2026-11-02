@@ -49,15 +49,28 @@ struct EnrichingAO3WorkCoverCard: View {
     /// Passed through to `AO3WorkCoverCard`.
     var showsProvenanceBadge = false
 
+    @Environment(PrivacyGate.self) private var gate
+    @AppStorage("hideMatureContent") private var hideMature = true
+    @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
+
     @State private var enriched: AO3WorkSummary?
 
     private var displayed: AO3WorkSummary { enriched ?? work }
 
     var body: some View {
-        NavigationLink(value: WorkCardTap.destination(for: displayed)) {
-            AO3WorkCoverCard(work: displayed, showsProvenanceBadge: showsProvenanceBadge)
+        Group {
+            if gate.isPrivacyUndetermined(displayed, enabled: hideMature) {
+                SensitiveWorkCoverCard(work: displayed, showsProvenanceBadge: showsProvenanceBadge)
+            } else if gate.isBlurred(displayed, enabled: hideMature, mode: matureMode) {
+                // A blurred cover is its own button: its tap reveals, and it sits in no link.
+                SensitiveWorkCoverCard(work: displayed, showsProvenanceBadge: showsProvenanceBadge)
+            } else if !gate.isHidden(displayed, enabled: hideMature, mode: matureMode) {
+                NavigationLink(value: WorkCardTap.destination(for: displayed)) {
+                    SensitiveWorkCoverCard(work: displayed, showsProvenanceBadge: showsProvenanceBadge)
+                }
+                .buttonStyle(.plain)
+            }
         }
-        .buttonStyle(.plain)
         .task(id: work.id) {
             enriched = await AO3SparseWorkEnricher.shared.enrich(work)
         }
