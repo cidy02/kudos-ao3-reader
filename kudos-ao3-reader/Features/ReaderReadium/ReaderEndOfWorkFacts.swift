@@ -2,15 +2,15 @@ import Foundation
 import SwiftData
 
 /// Pure logic and formatting for the Reader's End of Work screen (board 34, T-496).
-public enum ReaderEndOfWorkFacts {
+enum ReaderEndOfWorkFacts {
     /// Heading: "The End" for completed works, "You're caught up" for WIPs.
-    public static func heading(isComplete: Bool) -> String {
+    static func heading(isComplete: Bool) -> String {
         isComplete ? "The End" : "You're caught up"
     }
 
     /// Formats logged reading time in minutes or hours and minutes: e.g. "1 h 20 min", "45 min".
     /// Nil when nothing was logged: the end card never invents a time.
-    public static func durationString(seconds: Double) -> String? {
+    static func durationString(seconds: Double) -> String? {
         guard seconds > 0 else { return nil }
         let totalMinutes = seconds >= 60 ? Int((seconds / 60).rounded()) : 1
         let hours = totalMinutes / 60
@@ -25,7 +25,7 @@ public enum ReaderEndOfWorkFacts {
     /// Logged time and finished: "Read in 1 h 20 min · moved to Finished"
     /// Logged time only: "Read in 1 h 20 min"
     /// Finished with no logged time: "Moved to Finished"
-    public static func subtitle(durationSeconds: Double, isFinished: Bool) -> String? {
+    static func subtitle(durationSeconds: Double, isFinished: Bool) -> String? {
         let read = durationString(seconds: durationSeconds).map { "Read in \($0)" }
         switch (read, isFinished) {
         case let (read?, true): return "\(read) · moved to Finished"
@@ -36,12 +36,12 @@ public enum ReaderEndOfWorkFacts {
     }
 
     /// Reading time estimate for a work: "about 50 min" or "about 1 h 20 min".
-    public static func readingTimeEstimate(wordCount: Int) -> String {
+    static func readingTimeEstimate(wordCount: Int) -> String {
         ReadingQueueFacts.readingTimeEstimate(wordCount: wordCount) ?? "about 1 min"
     }
 
     /// Next work metadata line: "author · 12,400 words · about 50 min"
-    public static func nextWorkMeta(author: String, wordCount: Int) -> String {
+    static func nextWorkMeta(author: String, wordCount: Int) -> String {
         var parts: [String] = []
         let trimmedAuthor = author.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmedAuthor.isEmpty {
@@ -58,7 +58,7 @@ public enum ReaderEndOfWorkFacts {
     /// Next work in the queue relative to the current work.
     /// Skips finished works, works pending deletion, and works ineligible under privacy;
     /// nil when nothing unfinished remains.
-    public static func nextWorkInQueue(
+    static func nextWorkInQueue(
         orderedWorks: [SavedWork],
         currentWorkID: UUID,
         isEligible: (SavedWork) -> Bool = { _ in true }
@@ -83,7 +83,7 @@ public enum ReaderEndOfWorkFacts {
     /// Finds candidate next work from the active queues containing `work`.
     /// Prefers custom/specific queues over generic `savedForLater`.
     @MainActor
-    public static func findUpNext(
+    static func findUpNext(
         for work: SavedWork,
         isEligible: (SavedWork) -> Bool = { _ in true }
     ) -> (queueName: String, nextWork: SavedWork)? {
