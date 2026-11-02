@@ -78,6 +78,7 @@ struct ReadiumReaderView: View {
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var themeManager
     @Environment(AO3AuthService.self) private var auth
+    @Environment(PrivacyGate.self) private var privacyGate
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -93,6 +94,7 @@ struct ReadiumReaderView: View {
     @AppStorage("readerMode") private var readingMode: ReadingMode = .scroll
     @AppStorage("readerTwoPage") private var twoPageEnabled = false
     @AppStorage("readerFontID") private var fontID: String = "system"
+    @AppStorage("hideMatureContent") private var hideMature = true
     // Apple Books–style typography; layout options are gated by `customizeEnabled`
     // (mirrored from the legacy reader via `ReaderTextStyle.resolved`).
     @AppStorage("readerCustomize") private var customizeEnabled = false
@@ -1105,7 +1107,10 @@ struct ReadiumReaderView: View {
             kudosEnabled: !kudosWorking && !work.hasGivenKudos,
             isBookmarked: bookmarkAtCurrentPosition != nil,
             bookmarkEnabled: currentReadingPosition != nil,
-            upNext: ReaderEndOfWorkFacts.findUpNext(for: work),
+            upNext: ReaderEndOfWorkFacts.findUpNext(
+                for: work,
+                isEligible: { !privacyGate.isConcealed($0, enabled: hideMature) }
+            ),
             onKudos: { if let ao3WorkID { giveKudos(workID: ao3WorkID) } },
             onComment: { showingComments = true },
             onBookmark: { toggleBookmarkAtCurrentPosition() }

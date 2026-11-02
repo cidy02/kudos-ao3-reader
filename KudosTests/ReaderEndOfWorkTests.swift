@@ -109,4 +109,35 @@ struct ReaderEndOfWorkTests {
         #expect(ReaderEndOfWorkFacts.nextWorkInQueue(orderedWorks: [work1], currentWorkID: work1.id) == nil)
         #expect(ReaderEndOfWorkFacts.nextWorkInQueue(orderedWorks: [work1], currentWorkID: unknownWork.id) == nil)
     }
+
+    @Test func nextWorkInQueueSkipsPendingDeletionWorks() {
+        let work1 = SavedWork(title: "Work 1", author: "Author 1")
+        let work2 = SavedWork(title: "Work 2", author: "Author 2")
+        let work3 = SavedWork(title: "Work 3", author: "Author 3")
+        work1.isFinished = true
+        work2.isPendingDeletion = true
+        work3.isFinished = false
+
+        let queue = [work1, work2, work3]
+        let next = ReaderEndOfWorkFacts.nextWorkInQueue(orderedWorks: queue, currentWorkID: work1.id)
+        #expect(next?.id == work3.id)
+    }
+
+    @Test func nextWorkInQueueRespectsEligibilityFilter() {
+        let work1 = SavedWork(title: "Work 1", author: "Author 1")
+        let work2 = SavedWork(title: "Work 2", author: "Author 2")
+        let work3 = SavedWork(title: "Work 3", author: "Author 3")
+        work1.isFinished = true
+        work2.isFinished = false
+        work3.isFinished = false
+
+        let queue = [work1, work2, work3]
+        // Filter out work2 (e.g. concealed mature work)
+        let next = ReaderEndOfWorkFacts.nextWorkInQueue(
+            orderedWorks: queue,
+            currentWorkID: work1.id,
+            isEligible: { $0.id != work2.id }
+        )
+        #expect(next?.id == work3.id)
+    }
 }
