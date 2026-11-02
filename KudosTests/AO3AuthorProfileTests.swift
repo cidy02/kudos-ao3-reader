@@ -442,6 +442,12 @@ struct AO3AuthorProfileStateTests {
         try #require(slowLoadStarted)
         model.selectScope(final, auth: auth)
         await model.waitForActiveLoad()
+        // waitForActiveLoad awaits the final load, not the cancelled one's catch block:
+        // wait (bounded) for the cancellation to be observed instead of racing it.
+        let cancelDeadline = ContinuousClock.now + Duration.seconds(2)
+        while !cancelledSlowLoad, ContinuousClock.now < cancelDeadline {
+            try await Task.sleep(for: .milliseconds(5))
+        }
 
         #expect(cancelledSlowLoad)
         #expect(model.route == final)
