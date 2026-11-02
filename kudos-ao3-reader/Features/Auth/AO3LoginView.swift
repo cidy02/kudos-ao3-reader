@@ -133,7 +133,11 @@ struct AO3LoginView: View {
         Form {
             Group {
                 Section {
-                    TextField("Username or email", text: $username)
+                    TextField(
+                        "",
+                        text: $username,
+                        prompt: Text("Username or email").foregroundStyle(themeManager.appTheme.placeholderColor)
+                    )
                         .textContentType(.username)
                     #if os(iOS)
                         .textInputAutocapitalization(.never)
@@ -141,7 +145,11 @@ struct AO3LoginView: View {
                     #endif
                         .submitLabel(.next)
 
-                    SecureField("Password", text: $password)
+                    SecureField(
+                        "",
+                        text: $password,
+                        prompt: Text("Password").foregroundStyle(themeManager.appTheme.placeholderColor)
+                    )
                         .textContentType(.password)
                         .submitLabel(.go)
                         .onSubmit { submit() }

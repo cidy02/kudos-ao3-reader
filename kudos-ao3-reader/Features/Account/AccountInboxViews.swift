@@ -611,19 +611,22 @@ struct AccountInboxItemRow: View {
 
 /// AO3's replied state, visually distinct from neutral work-state chips.
 private struct InboxRepliedBadge: View {
+    @Environment(ThemeManager.self) private var themeManager
+
     var body: some View {
         // 1l's badge is the word alone; on the byline the checkmark only
         // pushed the commenter's name into truncation.
+        let green = themeManager.appTheme.statusSuccessColor
         Text("Replied")
-        .font(.caption2.weight(.semibold))
-        .lineLimit(1)
-        .fixedSize()
-        .foregroundStyle(Color.green)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 3)
-        .background(Color.green.opacity(0.12), in: Capsule())
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Replied")
+            .font(.caption2.weight(.semibold))
+            .lineLimit(1)
+            .fixedSize()
+            .foregroundStyle(green)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(green.opacity(0.12), in: Capsule())
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Replied")
     }
 }
 

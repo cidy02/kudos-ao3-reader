@@ -5,6 +5,7 @@ import SwiftUI
 /// Search field and the Browse address bar so both keep one consistent look —
 /// same internal padding, frame, and cross-platform input behaviour.
 struct GlassFieldBar<Leading: View, Trailing: View>: View {
+    @Environment(ThemeManager.self) private var themeManager
     @Binding var text: String
     let placeholder: String
     var submitLabel: SubmitLabel = .search
@@ -15,7 +16,7 @@ struct GlassFieldBar<Leading: View, Trailing: View>: View {
     var body: some View {
         HStack(spacing: 6) {
             leading()
-            TextField(placeholder, text: $text)
+            TextField("", text: $text, prompt: Text(placeholder).foregroundStyle(themeManager.appTheme.placeholderColor))
                 .textFieldStyle(.plain)
                 .submitLabel(submitLabel)
                 .onSubmit(onSubmit)

@@ -518,8 +518,12 @@ struct FilterResultsBar: View {
                         .padding(.horizontal, 18)
                         .padding(.vertical, 14)
                         .frame(minHeight: 52)
-                        .background(isDark ? Color(white: 0.22) : Color.white)
-                        .foregroundStyle(theme.effectiveTint)
+                        .background(isDark ? Color(white: 0.22) : (theme.appTheme == .sepia ? theme.appTheme.cardSurface : Color.white))
+                        .foregroundStyle(
+                            isSaveDisabled && theme.appTheme == .sepia
+                                ? theme.appTheme.textColor.opacity(0.65)
+                                : theme.effectiveTint
+                        )
                         .clipShape(Capsule())
                         .overlay(
                             Capsule()
@@ -528,21 +532,31 @@ struct FilterResultsBar: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(isSaveDisabled)
+                    .opacity(isSaveDisabled && theme.appTheme == .sepia ? 1.0 : (isSaveDisabled ? 0.4 : 1.0))
                     .accessibilityLabel("Save Search")
                 }
 
                 Button(action: onConfirm) {
                     Text(buttonTitle)
                         .font(.headline)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(
+                            isConfirmDisabled && theme.appTheme == .sepia
+                                ? theme.appTheme.textColor
+                                : Color.white
+                        )
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
                         .frame(minHeight: 52)
-                        .background(theme.effectiveTint)
+                        .background(
+                            isConfirmDisabled && theme.appTheme == .sepia
+                                ? theme.effectiveTint.opacity(0.20)
+                                : theme.effectiveTint
+                        )
                         .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
                 .disabled(isConfirmDisabled)
+                .opacity(isConfirmDisabled && theme.appTheme == .sepia ? 1.0 : (isConfirmDisabled ? 0.4 : 1.0))
                 .accessibilityLabel(buttonTitle)
             }
             .padding(.horizontal, 16)

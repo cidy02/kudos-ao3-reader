@@ -23,15 +23,28 @@ extension Color {
         )
     }
 
-    /// The colour as an uppercase `#RRGGBB` hex string (opacity dropped).
-    var hexString: String {
+    private func getRGB(red: inout CGFloat, green: inout CGFloat, blue: inout CGFloat, alpha: inout CGFloat) {
         let platform = PlatformColor(self)
-        var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
         #if canImport(UIKit)
-        platform.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        if !platform.getRed(&red, green: &green, blue: &blue, alpha: &alpha) {
+            if let srgb = CGColorSpace(name: CGColorSpace.sRGB),
+               let converted = platform.cgColor.converted(to: srgb, intent: .defaultIntent, options: nil),
+               let components = converted.components, components.count >= 3 {
+                red = components[0]
+                green = components[1]
+                blue = components[2]
+                alpha = converted.alpha
+            }
+        }
         #else
         (platform.usingColorSpace(.sRGB) ?? platform).getRed(&red, green: &green, blue: &blue, alpha: &alpha)
         #endif
+    }
+
+    /// The colour as an uppercase `#RRGGBB` hex string (opacity dropped).
+    var hexString: String {
+        var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
+        getRGB(red: &red, green: &green, blue: &blue, alpha: &alpha)
         // Clamped: the system colour picker can hand back extended-range
         // (Display P3) components below 0 or above 1.
         func byte(_ component: CGFloat) -> Int { Int((min(max(component, 0), 1) * 255).rounded()) }
@@ -66,13 +79,8 @@ extension Color {
     /// cases, so contrast has to be computed from the actual color rather than
     /// switched on a case.
     var relativeLuminance: Double {
-        let platform = PlatformColor(self)
         var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
-        #if canImport(UIKit)
-        platform.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
-        #else
-        (platform.usingColorSpace(.sRGB) ?? platform).getRed(&red, green: &green, blue: &blue, alpha: &alpha)
-        #endif
+        getRGB(red: &red, green: &green, blue: &blue, alpha: &alpha)
         func channel(_ component: CGFloat) -> Double {
             let value = Double(component)
             return value <= 0.03928 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
@@ -90,13 +98,8 @@ extension Color {
     /// Mix toward white in 5% steps, matching Android's `readableOn` (owner Q19).
     func readable(on page: Color, minimum: Double = 4.5) -> Color {
         guard contrastRatio(on: page) < minimum else { return self }
-        let platform = PlatformColor(self)
         var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
-        #if canImport(UIKit)
-        platform.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
-        #else
-        (platform.usingColorSpace(.sRGB) ?? platform).getRed(&red, green: &green, blue: &blue, alpha: &alpha)
-        #endif
+        getRGB(red: &red, green: &green, blue: &blue, alpha: &alpha)
         var mixed = self
         for step in 1...20 {
             let fraction = Float(step) / 20

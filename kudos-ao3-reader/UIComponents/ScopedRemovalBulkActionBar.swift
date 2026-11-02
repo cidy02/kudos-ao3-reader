@@ -26,6 +26,7 @@ struct ScopedRemovalBulkActionBar: View {
 
     @Environment(\.modelContext) private var context
     @Environment(DownloadQueue.self) private var downloadQueue
+    @Environment(ThemeManager.self) private var themeManager
     @State private var confirmRemove = false
     @State private var showingAddToQueue = false
     @State private var showingAddToCollection = false
@@ -89,11 +90,16 @@ struct ScopedRemovalBulkActionBar: View {
                 .disabled(isDownloading || missingCopies.isEmpty)
                 finishedAction
             } label: {
+                let isDark = themeManager.appTheme.isDarkFamily
                 Text("Actions")
                     .font(.subheadline.weight(.medium))
                     .padding(.horizontal, 14)
                     .padding(.vertical, 6)
-                    .background(.regularMaterial, in: Capsule())
+                    .background {
+                        Capsule()
+                            .fill(isDark ? Color.black.opacity(0.55) : Color.clear)
+                            .background(.regularMaterial, in: Capsule())
+                    }
             }
             .disabled(selectedWorks.isEmpty)
         }

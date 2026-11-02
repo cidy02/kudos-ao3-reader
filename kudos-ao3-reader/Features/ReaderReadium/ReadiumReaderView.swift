@@ -278,6 +278,8 @@ struct ReadiumReaderView: View {
                     characterTags: speechCastTags,
                     onScanChapter: scanChapterForPronunciation
                 )
+                .environment(themeManager)
+                .accentTint(themeManager.effectiveTint, on: themeManager.readerChromeTheme)
             }
             .sheet(item: $correctingPronunciation) { target in
                 ReaderPronunciationEditor(word: target.word, ipa: target.existing) { word, ipa in
@@ -1188,7 +1190,7 @@ struct ReadiumReaderView: View {
         summary: ReaderPositionSummary,
         includeMiniPlayer: Bool
     ) -> some View {
-        let tint = themeManager.effectiveTint
+        let tint = themeManager.accentInk
         // Always use readingPosition for both page and pageCount so we never mix
         // visual swipe pages (e.g. 95) with Readium ~1 KB chapter positions (e.g. 10).
         // That mixed pair produced "Page 95 of 10" until the next swipe refreshed UI.

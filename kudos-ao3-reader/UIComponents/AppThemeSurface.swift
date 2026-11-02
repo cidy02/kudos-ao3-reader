@@ -213,6 +213,21 @@ extension ReaderTheme {
         case .sepia: Color(red: 0.34, green: 0.22, blue: 0.08).opacity(0.30)
         }
     }
+
+    /// Placeholder text color for inputs. Light/Dark/OLED keep system placeholder styling;
+    /// Sepia darkens the theme's warm brown to achieve >= 4.5:1 contrast against warm paper (P2 5).
+    var placeholderColor: Color {
+        switch self {
+        case .sepia:
+            Color(red: 0.34, green: 0.22, blue: 0.08).opacity(0.68)
+        case .light, .dark, .oled:
+            #if os(iOS)
+            Color(uiColor: .placeholderText)
+            #else
+            Color(nsColor: .placeholderTextColor)
+            #endif
+        }
+    }
 }
 
 /// Card-list spacing constants, kept in one place so every adopting list matches.

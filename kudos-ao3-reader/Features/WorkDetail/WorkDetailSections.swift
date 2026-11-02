@@ -432,7 +432,7 @@ extension WorkDetailView {
                             .frame(maxWidth: .infinity, alignment: .leading)
                         myCopyValue(progressLabel)
                     }
-                    ProgressView(value: progress).accentFill()
+                    ProgressView(value: progress).accentInk()
                 }
                 .accessibilityElement(children: .combine)
                 .myCopyRow()

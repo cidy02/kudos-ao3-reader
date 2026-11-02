@@ -141,7 +141,7 @@ struct AvailabilitySweepView: View {
     private var progressSection: some View {
         Section {
             VStack(alignment: .leading, spacing: 8) {
-                ProgressView(value: Double(completed), total: Double(max(total, 1))).accentFill()
+                ProgressView(value: Double(completed), total: Double(max(total, 1))).accentInk()
                 Text("Checked \(completed.formatted()) of \(total.formatted())")
                     .font(.caption)
                     .foregroundStyle(.secondary)

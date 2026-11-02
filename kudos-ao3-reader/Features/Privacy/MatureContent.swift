@@ -33,13 +33,27 @@ extension AO3WorkSummary {
 
 /// One reveal affordance everywhere a mature item keeps its blurred footprint.
 struct MatureRevealCapsule: View {
+    @Environment(ThemeManager.self) private var themeManager
+
     var body: some View {
+        let isSepia = themeManager.appTheme == .sepia
         Label("Tap to reveal", systemImage: "eye.slash")
             .font(.caption.weight(.medium))
-            .foregroundStyle(.primary)
+            .foregroundStyle(isSepia ? themeManager.appTheme.textColor : .primary)
             .padding(.horizontal, 12)
             .padding(.vertical, 7)
-            .background(.regularMaterial, in: Capsule())
+            .background {
+                if isSepia {
+                    Capsule()
+                        .fill(themeManager.appTheme.appElevatedBackground ?? themeManager.appTheme.cardSurface)
+                        .overlay(
+                            Capsule().strokeBorder(themeManager.appTheme.cardBorder, lineWidth: 0.5)
+                        )
+                } else {
+                    Capsule()
+                        .fill(.regularMaterial)
+                }
+            }
             .accessibilityHidden(true)
     }
 }

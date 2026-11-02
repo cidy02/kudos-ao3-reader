@@ -17,6 +17,7 @@ struct ReaderSpeechSettingsSheet: View {
     var onScanChapter: (() async -> Result<KokoroCastPreflight.ScanResult, Error>)?
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(ThemeManager.self) private var themeManager
 
     var body: some View {
         NavigationStack {
@@ -32,6 +33,7 @@ struct ReaderSpeechSettingsSheet: View {
             // Themed like the Pronunciation sheet beside it (Sepia rows and ground).
             .formStyle(.grouped)
             .appThemedScroll()
+            .accentTint(themeManager.effectiveTint, on: themeManager.readerChromeTheme)
             .navigationTitle("Read Aloud")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

@@ -151,7 +151,20 @@ final class ThemeManager {
     }
 
     /// Text, glyphs and text-button labels; filled controls keep `effectiveTint`.
-    var accentInk: Color { appTheme.accentInk(for: effectiveTint) }
+    var accentInk: Color {
+        switch appTheme {
+        case .dark, .oled:
+            if let named = AppAccent.named(hex: accentHex),
+               let step = Color(hex: named.darkInkHex) {
+                return step
+            }
+            return appTheme.accentInk(for: effectiveTint)
+        case .sepia:
+            return appTheme.accentInk(for: effectiveTint)
+        case .light:
+            return effectiveTint
+        }
+    }
 
     /// The palette every *scope*-level surface in the redesign draws from — the
     /// Account hub, the pushed Home and Library sections, the inbox, Writing.

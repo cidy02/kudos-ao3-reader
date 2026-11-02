@@ -44,11 +44,11 @@ extension ReaderTheme {
 
     /// Positive/success status: healthy session, replied-to comment, saved
     /// confirmation. Olive-leaning on Sepia so it reads on cream rather than a
-    /// clinical system green.
+    /// clinical system green, darkened to achieve >= 4.5:1 contrast against warm paper (P2 4).
     var statusSuccessColor: Color {
         switch self {
         case .light: Color(red: 0.20, green: 0.55, blue: 0.25)
-        case .sepia: Color(red: 0.35, green: 0.50, blue: 0.20)
+        case .sepia: Color(red: 0.26, green: 0.42, blue: 0.15)
         case .dark, .oled: Color(red: 0.40, green: 0.78, blue: 0.45)
         }
     }

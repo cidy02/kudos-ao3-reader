@@ -11,6 +11,7 @@ import UIKit
 struct BugReportView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
+    @Environment(ThemeManager.self) private var themeManager
     @State private var summary = ""
 
     #if os(iOS)
@@ -33,8 +34,9 @@ struct BugReportView: View {
 
                     Section("What went wrong?") {
                         TextField(
-                            "What happened, and what did you expect instead?",
+                            "",
                             text: $summary,
+                            prompt: Text("What happened, and what did you expect instead?").foregroundStyle(themeManager.appTheme.placeholderColor),
                             axis: .vertical
                         )
                         .lineLimit(4 ... 10)
@@ -195,14 +197,23 @@ struct BugReportView: View {
 /// Keep the grouped-form action's title and icon visibly disabled together.
 struct BugReportContinueLabelStyle: LabelStyle {
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(ThemeManager.self) private var themeManager
+
+    private var disabledColor: Color {
+        if themeManager.appTheme == .sepia {
+            // Darken disabled label on Sepia paper to keep contrast >= 4.5:1 (P3 12)
+            return themeManager.appTheme.textColor
+        }
+        return .secondary
+    }
 
     func makeBody(configuration: Configuration) -> some View {
         Label {
             configuration.title
-                .foregroundStyle(isEnabled ? Color.primary : .secondary)
+                .foregroundStyle(isEnabled ? Color.primary : disabledColor)
         } icon: {
             configuration.icon
-                .foregroundStyle(isEnabled ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                .foregroundStyle(isEnabled ? AnyShapeStyle(.tint) : AnyShapeStyle(disabledColor))
         }
         .labelStyle(.titleAndIcon)
     }
