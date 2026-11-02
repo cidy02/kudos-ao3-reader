@@ -34,16 +34,11 @@ struct ReadingInsightsView: View {
 
     @State private var rankTasteByWorks: Bool = false
     @State private var showingOptionsSheet: Bool = false
-    @State private var showingStoppedSheet: Bool = false
-    @State private var stoppedWork: SavedWork?
     @State private var showingHowCountedSheet: Bool = false
     @State private var finishedWorksInPeriod: [SavedWork] = []
 
     @AppStorage("kudos.insights.discreetMode") private var discreetMode: Bool = false
     @AppStorage("kudos.insights.hideReadingTime") private var hideReadingTime: Bool = false
-    @AppStorage("kudos.insights.countRereads") private var countRereads: Bool = true
-    @AppStorage("kudos.insights.countReadAloud") private var countReadAloud: Bool = true
-    @AppStorage("kudos.insights.askAboutUntouched") private var askAboutUntouched: Bool = true
 
     enum Tab: String, CaseIterable, Identifiable {
         case overview
@@ -154,24 +149,12 @@ struct ReadingInsightsView: View {
         }
         .sheet(isPresented: $showingOptionsSheet) {
             InsightsOptionsSheet(
+                exportText: exportHistoryText(),
                 onShowHowCounted: {
                     showingOptionsSheet = false
                     showingHowCountedSheet = true
                 },
-                onExport: {
-                    showingOptionsSheet = false
-                }
-            )
-        }
-        .sheet(item: $stoppedWork) { work in
-            StoppedReadingSheet(
-                work: work,
-                onMarkStopped: { reason, tag in
-                    markWorkAsStopped(work: work, reason: reason, tag: tag)
-                },
-                onPutOnHold: {
-                    putWorkOnHold(work: work)
-                }
+                onReset: reload
             )
         }
         .sheet(isPresented: $showingHowCountedSheet) {
@@ -312,7 +295,6 @@ struct ReadingInsightsView: View {
 
         ReadingAndListeningCard(
             readingSeconds: insights.readingSeconds,
-            readAloudSeconds: insights.readAloudSeconds,
             hideReadingTime: hideReadingTime
         )
 
@@ -368,7 +350,7 @@ struct ReadingInsightsView: View {
     @ViewBuilder
     private var tasteContent: some View {
         if let taste = tasteInsights {
-            YourUsualFicCard(taste: taste)
+            YourUsualFicCard(taste: taste, discreetMode: discreetMode)
 
             TasteFandomsCard(
                 fandoms: taste.fandoms,
@@ -416,6 +398,12 @@ struct ReadingInsightsView: View {
                 totalWorks: taste.totalWorksCount,
                 languages: taste.languages
             )
+        } else {
+            Text("Nothing read in \(periodTitle) yet, so there is no taste to show.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 24)
         }
     }
 
@@ -437,30 +425,30 @@ struct ReadingInsightsView: View {
 
             HabitsSittingsCard(
                 sittings: habits.sittingBuckets,
-                typicalSeconds: habits.typicalSittingSeconds,
-                chaptersPerSitting: habits.chaptersPerSitting,
-                endOnChapterPercent: habits.endOnChapterPercent
+                typicalSeconds: habits.typicalSittingSeconds
             )
 
-            HabitsSavedToFinishedCard(
-                savedToOpenedDays: habits.savedToOpenedMedianDays,
-                openedToFinishedDays: habits.openedToFinishedMedianDays,
-                newChaptersDelayDays: habits.newChaptersDelayDays
-            )
-
-            HabitsRereadsCard(rereads: habits.rereads)
-
-            if !habits.fandomTimeline.isEmpty {
-                HabitsFandomTimelineCard(lanes: habits.fandomTimeline)
+            if habits.savedToOpenedMedianDays != nil || habits.openedToFinishedMedianDays != nil {
+                HabitsSavedToFinishedCard(
+                    savedToOpenedDays: habits.savedToOpenedMedianDays,
+                    openedToFinishedDays: habits.openedToFinishedMedianDays
+                )
             }
 
-            HabitsStoppedCard(
-                stoppedCount: habits.stoppedCount,
-                stoppedTotal: habits.stoppedTotalCount,
-                medianProgress: habits.stoppedMedianProgress,
-                reasons: habits.stopReasons,
-                commonTags: habits.commonStopTags
-            )
+            HabitsRereadsCard(rereads: habits.rereads, discreetMode: discreetMode)
+
+            if !habits.fandomTimeline.isEmpty {
+                HabitsFandomTimelineCard(lanes: habits.fandomTimeline, discreetMode: discreetMode)
+            }
+
+            if habits.stoppedCount > 0 {
+                HabitsStoppedCard(
+                    stoppedCount: habits.stoppedCount,
+                    medianProgress: habits.stoppedMedianProgress,
+                    commonTags: habits.commonStopTags,
+                    discreetMode: discreetMode
+                )
+            }
         }
     }
 
@@ -482,11 +470,10 @@ struct ReadingInsightsView: View {
             if let candidate = lib.stillReadingCandidate {
                 LibraryStillReadingCard(
                     candidate: candidate,
+                    discreetMode: discreetMode,
                     onStillReading: {
-                        putWorkOnHold(work: candidate.work)
-                    },
-                    onStopped: {
-                        stoppedWork = candidate.work
+                        WorkLifecycle.keepInProgress(candidate.work, in: context)
+                        reload()
                     }
                 )
             }
@@ -501,18 +488,11 @@ struct ReadingInsightsView: View {
                 )
             }
 
-            LibraryFeedbackCard(
-                kudosLeftPercent: lib.kudosLeftPercent,
-                bookmarkedPercent: lib.bookmarkedPercent,
-                commentedPercent: lib.commentedPercent
-            )
+            if let kudos = lib.kudosLeftPercent, let bookmarked = lib.bookmarkedPercent {
+                LibraryFeedbackCard(kudosLeftPercent: kudos, bookmarkedPercent: bookmarked)
+            }
 
-            LibraryFoundEarlyCard(
-                percent: lib.foundEarlyPercent,
-                example: lib.foundEarlyExample
-            )
-
-            LibraryPreservedStatsCard(stats: stats)
+            LibraryPreservedStatsCard(stats: stats, discreetMode: discreetMode)
         }
     }
 
@@ -615,8 +595,10 @@ struct ReadingInsightsView: View {
         let readWorkIDs = Set(periodFacts.map(\.workID))
         let worksInPeriod = effectiveWorks.filter { readWorkIDs.contains($0.id) }
 
-        tasteInsights = ReadingTasteInsights.make(
-            works: worksInPeriod.isEmpty ? effectiveWorks : worksInPeriod,
+        // An empty period has no taste; the Taste tab shows its empty state
+        // rather than all-time rankings under the period title.
+        tasteInsights = worksInPeriod.isEmpty ? nil : ReadingTasteInsights.make(
+            works: worksInPeriod,
             facts: periodFacts
         )
 
@@ -631,6 +613,7 @@ struct ReadingInsightsView: View {
             works: effectiveWorks,
             facts: periodFacts,
             periodInterval: currentInterval,
+            periodMonths: range == .year ? 12 : 1,
             calendar: calendar
         )
 
@@ -643,18 +626,7 @@ struct ReadingInsightsView: View {
 
     // MARK: - Actions
 
-    private func markWorkAsStopped(work: SavedWork, reason: String, tag: String?) {
-        work.keepInProgressOverride = true
-        try? context.save()
-        reload()
-    }
-
-    private func putWorkOnHold(work: SavedWork) {
-        work.keepInProgressOverride = true
-        try? context.save()
-        reload()
-    }
-
+    /// The period's aggregate lines; no work is named.
     private func exportHistoryText() -> String {
         """
         Kudos Reading Insights Export

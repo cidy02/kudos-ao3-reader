@@ -3,7 +3,7 @@ import SwiftUI
 
 /// Artboard **07** / `Insights-Options.dc.html` — Insights Options sheet.
 ///
-/// Controls privacy, which reading sessions count, exclusions, export, and reset.
+/// Controls privacy, export, and reset.
 /// Settings are local-only and stored via `@AppStorage`.
 struct InsightsOptionsSheet: View {
     @Environment(\.dismiss) private var dismiss
@@ -12,15 +12,15 @@ struct InsightsOptionsSheet: View {
 
     @AppStorage("kudos.insights.discreetMode") private var discreetMode: Bool = false
     @AppStorage("kudos.insights.hideReadingTime") private var hideReadingTime: Bool = false
-    @AppStorage("kudos.insights.countRereads") private var countRereads: Bool = true
-    @AppStorage("kudos.insights.countReadAloud") private var countReadAloud: Bool = true
-    @AppStorage("kudos.insights.askAboutUntouched") private var askAboutUntouched: Bool = true
 
+    /// The same text the toolbar's ShareLink exports.
+    let exportText: String
     let onShowHowCounted: () -> Void
-    let onExport: () -> Void
+    /// Called after a reset so the page reloads from the emptied log.
+    let onReset: () -> Void
 
     @State private var showingResetAlert = false
-    @State private var showingLeftOutInfo = false
+    @State private var resetFailure: String?
 
     var body: some View {
         NavigationStack {
@@ -53,66 +53,11 @@ struct InsightsOptionsSheet: View {
                 .appThemedRows()
 
                 Section {
-                    Toggle(isOn: $countRereads) {
-                        Label {
-                            Text("Count Rereads in Totals")
-                        } icon: {
-                            Image(systemName: "arrow.triangle.2.circlepath")
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .tint(theme.effectiveTint)
-
-                    Toggle(isOn: $countReadAloud) {
-                        Label {
-                            Text("Count Read Aloud as Reading")
-                        } icon: {
-                            Image(systemName: "headphones")
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .tint(theme.effectiveTint)
-
-                    Toggle(isOn: $askAboutUntouched) {
-                        Label {
-                            Text("Ask About Untouched Works")
-                        } icon: {
-                            Image(systemName: "questionmark.circle")
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .tint(theme.effectiveTint)
-
-                    Button {
-                        showingLeftOutInfo = true
-                    } label: {
-                        HStack {
-                            Label {
-                                Text("Left Out of Insights")
-                            } icon: {
-                                Image(systemName: "minus.circle")
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Text("0")
-                                .foregroundStyle(.secondary)
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(.tertiary)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                } header: {
-                    Text("What Counts")
-                } footer: {
-                    Text("Kudos asks after 3 weeks without opening a work you’re partway through. A work is only marked stopped when you say so.")
-                }
-                .appThemedRows()
-
-                Section {
-                    Button {
-                        onExport()
-                    } label: {
+                    ShareLink(
+                        item: exportText,
+                        subject: Text("Reading Insights Export"),
+                        message: Text("Export of Reading Insights from Kudos")
+                    ) {
                         Label {
                             Text("Export Reading History…")
                                 .foregroundStyle(theme.effectiveTint)
@@ -134,7 +79,7 @@ struct InsightsOptionsSheet: View {
                 } header: {
                     Text("Reading History")
                 } footer: {
-                    Text("Export saves sessions, statuses and reasons. Reset deletes the reading log only; works, progress and statuses stay.")
+                    Text("Export shares this period’s totals (words, hours, works finished, reading days); no works are named. Reset deletes the reading log only; works, progress and statuses stay.")
                 }
                 .appThemedRows()
 
@@ -179,241 +124,33 @@ struct InsightsOptionsSheet: View {
                     resetReadingLog()
                 }
             } message: {
-                Text("This permanently deletes your local reading log. Your saved works, shelves and reading progress are kept.")
+                Text("This permanently deletes your local reading log. Your saved works, shelves and reading progress are kept, but Finished, History and reread counts come from this log and will start again from zero.")
             }
-            .alert("Left Out of Insights", isPresented: $showingLeftOutInfo) {
+            .alert("Couldn’t Reset Insights", isPresented: Binding(
+                get: { resetFailure != nil },
+                set: { if !$0 { resetFailure = nil } }
+            )) {
                 Button("OK", role: .cancel) {}
             } message: {
-                Text("Works, fandoms or tags you exclude in Settings won't be counted in Reading Insights.")
+                Text(resetFailure ?? "")
             }
         }
     }
 
     private func resetReadingLog() {
-        let descriptor = FetchDescriptor<ReadingSession>()
-        if let sessions = try? modelContext.fetch(descriptor) {
+        do {
+            let sessions = try modelContext.fetch(FetchDescriptor<ReadingSession>())
             for session in sessions {
-                ReadingLogService.delete(session, in: modelContext)
+                SyncTombstones.recordDeletion(of: session, in: modelContext)
+                modelContext.delete(session)
             }
+            try modelContext.save()
+            FolderSyncService.markDirty()
+            onReset()
+        } catch {
+            modelContext.rollback()
+            resetFailure = error.localizedDescription
         }
-    }
-}
-
-/// Artboard **07** / `Insights-Stopped.dc.html` — Stopped Reading sheet.
-///
-/// Prompts for why reading was stopped, offers to hide the tag in search,
-/// and lets the reader put the work On Hold instead.
-struct StoppedReadingSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    @Environment(ThemeManager.self) private var theme
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-
-    let work: SavedWork
-    let onMarkStopped: (String, String?) -> Void
-    let onPutOnHold: () -> Void
-
-    @State private var selectedReason: String = "Lost Interest"
-    @State private var selectedTag: String? = nil
-    @State private var hideTagInSearch: Bool = false
-    @State private var privateNote: String = ""
-
-    private let reasons = [
-        "Lost Interest",
-        "Too Long",
-        "Writing Style",
-        "Tag Dealbreaker",
-        "Got Spoiled",
-        "Other"
-    ]
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    // Work Summary Card
-                    workCard
-
-                    // Reason Section
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Reason")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 4)
-
-                        FlowLayout(spacing: 8) {
-                            ForEach(reasons, id: \.self) { reason in
-                                let isSelected = selectedReason == reason
-                                Button {
-                                    selectedReason = reason
-                                } label: {
-                                    Text(reason)
-                                        .font(.subheadline.weight(isSelected ? .semibold : .regular))
-                                        .padding(.horizontal, 14)
-                                        .padding(.vertical, 8)
-                                        .background(
-                                            isSelected ? theme.effectiveTint : theme.appTheme.cardSurface
-                                        )
-                                        .foregroundStyle(isSelected ? Color.white : Color.primary)
-                                        .clipShape(Capsule())
-                                        .overlay(
-                                            Capsule()
-                                                .strokeBorder(isSelected ? Color.clear : theme.appTheme.cardBorder, lineWidth: 0.5)
-                                        )
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityLabel("Reason: \(reason)")
-                                .accessibilityAddTraits(isSelected ? .isSelected : [])
-                            }
-                        }
-                    }
-
-                    // Which Tag Section
-                    let availableTags = work.workWarnings + work.workTags
-                    if !availableTags.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Which Tag")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                                .padding(.horizontal, 4)
-
-                            VStack(alignment: .leading, spacing: 12) {
-                                FlowLayout(spacing: 8) {
-                                    ForEach(Array(availableTags.prefix(8)), id: \.self) { tag in
-                                        let isSelected = selectedTag == tag
-                                        Button {
-                                            selectedTag = isSelected ? nil : tag
-                                        } label: {
-                                            Text(tag)
-                                                .font(.footnote)
-                                                .padding(.horizontal, 12)
-                                                .padding(.vertical, 6)
-                                                .background(
-                                                    isSelected ? theme.effectiveTint.opacity(0.16) : theme.appTheme.cardBackdrop
-                                                )
-                                                .foregroundStyle(isSelected ? theme.effectiveTint : Color.primary)
-                                                .clipShape(Capsule())
-                                                .overlay(
-                                                    Capsule()
-                                                        .strokeBorder(isSelected ? theme.effectiveTint : Color.clear, lineWidth: 1)
-                                                )
-                                        }
-                                        .buttonStyle(.plain)
-                                        .accessibilityLabel("Tag: \(tag)")
-                                        .accessibilityAddTraits(isSelected ? .isSelected : [])
-                                    }
-                                }
-
-                                Divider()
-
-                                Toggle("Hide This Tag in Search", isOn: $hideTagInSearch)
-                                    .font(.subheadline)
-                                    .tint(theme.effectiveTint)
-
-                                Divider()
-
-                                HStack(spacing: 8) {
-                                    Image(systemName: "pencil")
-                                        .foregroundStyle(.secondary)
-                                    TextField("Private Note", text: $privateNote)
-                                        .font(.subheadline)
-                                }
-                            }
-                            .padding(14)
-                            .background(theme.appTheme.cardSurface)
-                            .clipShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
-                                    .strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5)
-                            )
-                        }
-                    }
-
-                    // Action Buttons (50 pt full-width per I-9)
-                    VStack(spacing: 10) {
-                        Button {
-                            onMarkStopped(selectedReason, selectedTag)
-                            dismiss()
-                        } label: {
-                            Text("Mark as Stopped")
-                                .font(.headline)
-                                .frame(maxWidth: .infinity)
-                                .frame(minHeight: 50)
-                                .background(theme.effectiveTint)
-                                .foregroundStyle(.white)
-                                .clipShape(Capsule())
-                        }
-                        .buttonStyle(.plain)
-
-                        Button {
-                            onPutOnHold()
-                            dismiss()
-                        } label: {
-                            Text("Put On Hold Instead")
-                                .font(.headline)
-                                .frame(maxWidth: .infinity)
-                                .frame(minHeight: 50)
-                                .background(Color.primary.opacity(0.08))
-                                .foregroundStyle(.primary)
-                                .clipShape(Capsule())
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .padding(.top, 8)
-                }
-                .padding(16)
-            }
-            .background(theme.appTheme.cardBackdrop)
-            .navigationTitle("Stopped Reading?")
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                    .foregroundStyle(theme.effectiveTint)
-                }
-            }
-        }
-    }
-
-    private var workCard: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            if let firstFandom = work.workFandoms.first, !firstFandom.isEmpty {
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(fandomColor(for: firstFandom))
-                        .frame(width: 8, height: 8)
-                    Text(firstFandom)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            Text(work.title)
-                .font(.headline)
-                .foregroundStyle(.primary)
-
-            let progress = Int(((work.readingProgress ?? 0) * 100).rounded())
-            let chapterStr = work.postedChapterCount > 0 ? "Chapter \(work.lastSpineIndex + 1) of \(work.postedChapterCount)" : ""
-            Text("\(chapterStr)\(chapterStr.isEmpty ? "" : " · ")\(progress)%")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .background(theme.appTheme.cardSurface)
-        .clipShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
-                .strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5)
-        )
-    }
-
-    private func fandomColor(for fandom: String) -> Color {
-        let hue = CoverArt.workHue(fandoms: [fandom], title: "")
-        return theme.appTheme.subjectPalette(hue: hue).accent
     }
 }
 
