@@ -1,281 +1,114 @@
 import SwiftUI
 
-// The lower half of artboard 1a: the grouped facts card, the archive tally
-// strip, the two outline buttons, and the My copy row that leads to the local
-// state. Built from the shared form family (`UIComponents/SubjectForm.swift`)
-// rather than from anything of its own — these rows are the same shape the
-// spec's fifty-odd form and settings artboards are made of.
+// The lower half of board 19: the 3×3 stats card and the My copy card. Built from
+// the shared form family (`UIComponents/SubjectForm.swift`) rather than from
+// anything of its own — these rows are the same shape the spec's form and
+// settings artboards are made of.
 
 extension WorkDetailView {
-    // MARK: Grouped facts
+    // MARK: Stats
 
-    /// Artboard 1a's outlined card of labelled facts.
-    ///
-    /// The artboard's example work carries four of these rows; this app knows
-    /// more about a work than that mock did, and `AGENTS.md` treats dropping a
-    /// stat to match a mock as a regression. So the card is the spec's chrome
-    /// around every fact the three cards it replaces used to state — Publication
-    /// and Work and Stats — minus only what the figure strip at the top of the
-    /// page now says better.
-    ///
-    /// Unfilled, unlike a form panel: this card sits on the work's own wash, and
-    /// a glass fill over it would mute the colour the whole page is built from.
-    @ViewBuilder
-    var factsCardSection: some View {
-        let rows = factRows
-        if !rows.isEmpty {
-            Section {
-                VStack(spacing: 0) {
-                    ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
-                        if index > 0 {
-                            // Full-bleed, not inset: on an outlined card the line
-                            // reads as a division of the card itself rather than
-                            // as a gap under a label.
-                            SubjectRowSeparator(inset: 0)
-                        }
-                        row.view
-                    }
-                }
-                .subjectPanel(isFilled: false)
-                .pageBodyRow(top: 24)
-            }
-        }
-    }
-
-    /// One row of the facts card, kept as data so the separators can be placed
-    /// between them without the container having to take its children apart.
-    struct FactRow: Identifiable {
-        let id: String
-        let view: AnyView
-    }
-
-    private var factRows: [FactRow] {
-        var rows: [FactRow] = []
-
-        if !displaySeriesTitle.isEmpty {
-            rows.append(FactRow(id: "series", view: AnyView(seriesFactRow)))
-        }
-        if !headlineFactSegments.isEmpty {
-            rows.append(FactRow(id: "headline", view: AnyView(headlineFactRow)))
-        }
-        if !displayPublishedDate.isEmpty {
-            rows.append(FactRow(id: "published", view: AnyView(
-                SubjectFormRow(label: "Published", value: displayPublishedDate, isMonospaced: true)
-            )))
-        }
-        // The date added, source and preservation are this device's facts, not
-        // the work's: 1a keeps them in My copy (Activity, Storage, Origin), and
-        // the page's card holds only what AO3 says.
-        return rows
-    }
-
-    /// Spec 1a's own last row: the work's shape on the left, when AO3 last
-    /// touched it pushed to the trailing edge in monospace. The two facts a
-    /// reader scanning a shelf compares between works.
-    private var headlineFactRow: some View {
-        var updated = ""
-        if !displayUpdatedDate.isEmpty {
-            updated = "upd " + displayUpdatedDate
-        }
-        return SubjectFormRow(
-            label: headlineFactSegments.joined(separator: " · "),
-            value: updated,
-            isMonospaced: true
+    /// The nine-figure card under the Resume card. Kudos carries a filled heart
+    /// once the reader has given them: what this device recorded
+    /// (`SavedWork.hasGivenKudos`, set by `markKudosGiven`), or the give this
+    /// screen's own actions model just made, which the saved record may not
+    /// hold yet.
+    var statsSection: some View {
+        let givenNow = ao3WorkID.map { workActions.kudosGivenWorkID == $0 } ?? false
+        let cells = WorkDetailStats.cells(
+            words: displayWords,
+            chapters: displayChapters,
+            kudos: displayKudos,
+            kudosGiven: (localWork?.hasGivenKudos ?? false) || givenNow,
+            hits: displayHits,
+            comments: displayComments,
+            bookmarks: displayBookmarks,
+            published: displayPublishedDate,
+            updated: displayUpdatedDate,
+            language: displayLanguage
         )
-    }
-
-    private var headlineFactSegments: [String] {
-        var segments: [String] = []
-        if !displayLanguage.isEmpty {
-            segments.append(displayLanguage)
-        }
-        if let words = displayWords {
-            segments.append(words.formatted() + " words")
-        }
-        return segments
-    }
-
-    /// The series row states the series' own name and where this work sits in
-    /// it. It opens the series on AO3 when there is one to open — the works
-    /// already downloaded from it are listed by `seriesSection` below, which is
-    /// navigation rather than a fact and stays where it is.
-    private var seriesFactRow: some View {
-        var partText = "Series"
-        if displaySeriesPosition > 0 {
-            partText = "Part " + String(displaySeriesPosition)
-        }
-        let seriesURL: URL? = URL(string: displaySeriesURL)
-        var openSeries: (() -> Void)?
-        if let seriesURL {
-            openSeries = { router.open(seriesURL) }
-        }
-        return SubjectFormRow(
-            label: displaySeriesTitle,
-            value: partText,
-            showsDisclosure: seriesURL != nil,
-            action: openSeries
-        )
-    }
-
-    // MARK: Archive tallies
-
-    /// Kudos · comments · bookmarks · hits, as spec 1a's second figure strip.
-    ///
-    /// Comments is the accented cell and the only one that acts: it is a way
-    /// into the discussion rather than a number about the work, which is why
-    /// the artboard draws it in the subject accent with a glyph beside it.
-    @ViewBuilder
-    var archiveStatsSection: some View {
-        let cells = archiveStatCells
-        if !cells.isEmpty {
-            Section {
-                SubjectStatStrip(cells: cells, palette: workPalette)
-                    .pageBodyRow(top: 14)
-            }
-        }
-    }
-
-    private var archiveStatCells: [SubjectStatStrip.Cell] {
-        var cells: [SubjectStatStrip.Cell] = []
-        if let kudos = displayKudos {
-            cells.append(SubjectStatStrip.Cell(
-                value: kudos.compactCount, label: "Kudos",
-                accessibilityText: kudos.formatted() + " kudos"
-            ))
-        }
-        if ao3WorkID != nil {
-            let printed = displayComments.map(\.compactCount) ?? "—"
-            cells.append(SubjectStatStrip.Cell(
-                value: printed,
-                label: "Comments",
-                isHighlighted: true,
-                accessibilityText: "Comments, " + printed + ", opens the discussion",
-                action: { workActions.startViewingComments(context: commentsWorkContext) }
-            ))
-        } else if let comments = displayComments {
-            cells.append(SubjectStatStrip.Cell(
-                value: comments.compactCount, label: "Comments",
-                accessibilityText: comments.formatted() + " comments"
-            ))
-        }
-        if let bookmarks = displayBookmarks {
-            cells.append(SubjectStatStrip.Cell(
-                value: bookmarks.compactCount, label: "Bookmarks",
-                accessibilityText: bookmarks.formatted() + " bookmarks"
-            ))
-        }
-        if let hits = displayHits {
-            cells.append(SubjectStatStrip.Cell(
-                value: hits.compactCount, label: "Hits",
-                accessibilityText: hits.formatted() + " hits"
-            ))
-        }
-        return cells
-    }
-
-    // MARK: Page actions
-
-    /// The artboard's pair of outline buttons. Deliberately outlined rather than
-    /// filled: the page already has one filled control, the resume card's
-    /// circle, and a second would compete with it for the same glance.
-    @ViewBuilder
-    var pageActionsSection: some View {
-        Section {
-            HStack(spacing: 10) {
-                let finished = localWork?.isFinished ?? false
-                Button(WorkActionLabels.finished(isFinished: finished).title, action: toggleFinished)
-                    .buttonStyle(.kudosSecondary)
-                    .frame(maxWidth: .infinity)
-                    .disabled(working)
-
-                if let url = ao3URL {
-                    Button("Open on AO3") { router.open(url) }
-                        .buttonStyle(.kudosSecondary)
-                        .frame(maxWidth: .infinity)
-                }
-            }
-            .pageBodyRow(top: 22)
+        return Section {
+            WorkDetailStatsCard(cells: cells)
+                .pageBodyRow(top: 14)
         }
     }
 
     // MARK: My copy
 
-    /// The row at the foot of the page that leads to everything local about this
-    /// work. Shown only once there *is* a local copy — on a work being browsed
-    /// from Search there is nothing behind it yet.
+    /// Everything local about this work that fits on a row, then one row into the
+    /// full My copy sheet for the rest (status toggles, activity dates, origin,
+    /// conversion, suggestions). Shown only once there *is* a local copy — a work
+    /// being browsed from Search has nothing behind it yet, and its Add to Queue
+    /// and Add to Collection stay in the ••• menu.
     @ViewBuilder
     var myCopySection: some View {
         if let work = localWork {
             Section {
-                WorkDetailMyCopyRow(
-                    summary: WorkDetailPresentation.myCopySummary(
+                SectionRuleHeader(title: "My copy", note: "Private to this device")
+                    .accessibilityAddTraits(.isHeader)
+                    .pageBodyRow(top: 24, gutter: 0)
+
+                VStack(spacing: 0) {
+                    ForEach(myCopyRows(for: work)) { row in
+                        if row.kind != .progress { SubjectRowSeparator() }
+                        myCopyRowView(row)
+                    }
+                    SubjectRowSeparator()
+                    SubjectFormRow(
+                        label: "Storage and history",
+                        value: "",
+                        showsDisclosure: true,
+                        action: { showingMyCopy = true }
+                    )
+                    .accessibilityValue(WorkDetailPresentation.myCopySummary(
                         isDownloaded: work.isDownloaded,
                         queueCount: work.activeQueueMemberships.count,
                         tagCount: work.tags.count,
                         collectionCount: work.activeCollections.count
-                    ),
-                    action: { showingMyCopy = true }
-                )
-                .pageBodyRow(top: 10)
-            }
-        }
-    }
-}
-
-/// One of the page's two buttons (deprecated in favor of `KudosButtonStyle.kudosSecondary`).
-struct WorkDetailOutlineButton: View {
-    let title: String
-    let action: () -> Void
-
-    var body: some View {
-        Button(title, action: action)
-            .buttonStyle(.kudosSecondary)
-            .frame(maxWidth: .infinity)
-    }
-}
-
-/// The My copy row: a glyph, the two lines that say what this device holds, and
-/// a chevron into the detail.
-struct WorkDetailMyCopyRow: View {
-    let summary: String
-    let action: () -> Void
-
-    @ScaledMetric(relativeTo: .subheadline) private var titleSize: CGFloat = 15
-    @ScaledMetric(relativeTo: .caption) private var summarySize: CGFloat = 12
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 12) {
-                Image(systemName: "iphone")
-                    .font(.system(size: 17))
-                    .foregroundStyle(.secondary)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("My copy")
-                        .font(.system(size: titleSize, weight: .medium))
-                        .foregroundStyle(.primary)
-                    Text(summary)
-                        .font(.system(size: summarySize))
-                        .foregroundStyle(.secondary)
+                    ))
                 }
-                // One line cut the summary to "Downloaded · 1 que…" at the accessibility sizes.
-                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
-                .minimumScaleFactor(0.75)
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Color.secondary.opacity(0.7))
+                .subjectPanel()
+                .pageBodyRow(top: 8)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
-            .subjectPanel()
-            .contentShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
         }
-        .buttonStyle(.plain)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("My copy")
-        .accessibilityValue(summary)
+    }
+
+    private func myCopyRows(for work: SavedWork) -> [WorkDetailPresentation.MyCopyRow] {
+        let hasFile = WorkReaderPreparation.hasReadableEPUB(for: work)
+        return WorkDetailPresentation.myCopyRows(
+            progress: work.publicationProgress,
+            chapterTitle: work.hasStartedReading ? WorkReadingPosition.title(from: work.readiumLocator) : nil,
+            downloadedAt: work.downloadedAt,
+            tags: work.tags.map(\.name).sorted(),
+            collections: work.activeCollections.map(\.name).sorted(),
+            queues: work.activeQueueMemberships.compactMap { $0.queue?.name }.sorted(),
+            hasFile: hasFile,
+            fileSize: hasFile ? WorkDetailPresentation.fileSizeLabel(forFileAt: work.fileURL) : nil
+        )
+    }
+
+    private func myCopyRowView(_ row: WorkDetailPresentation.MyCopyRow) -> some View {
+        SubjectFormRow(label: row.label) {
+            HStack(spacing: 10) {
+                SubjectFormValue(text: row.value)
+                if let action = row.action {
+                    Button(action.title) { performMyCopyAction(row.kind) }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 15))
+                        .foregroundStyle(.accentInk)
+                        .accessibilityLabel(action.title + " " + row.label.lowercased())
+                }
+            }
+        }
+    }
+
+    private func performMyCopyAction(_ kind: WorkDetailPresentation.MyCopyRow.Kind) {
+        switch kind {
+        case .downloaded: showingPageDateEditor = true
+        case .tags: showingAddTag = true
+        case .collections: withLocalWork { _ in showingAddToCollection = true }
+        case .queues: withLocalWork { _ in showingAddToQueue = true }
+        case .progress, .file: break
+        }
     }
 }

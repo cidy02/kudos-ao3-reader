@@ -1,11 +1,11 @@
 import SwiftData
 import SwiftUI
 
-// The Tags, Discussion, and Library sections of the redesigned Work Details
-// hub. Tags carries the AO3 classification chips (unchanged tap-to-search
-// behavior); Discussion is the native comments entry point (no comment pages
-// are fetched until the user opens them); Library holds every piece of
-// local/personal state, clearly separated from AO3 metadata.
+// The Tags, Comments, and Library sections of the Work Details hub. Tags carries
+// the AO3 classification chips (tap-to-search); Comments is the native
+// comments entry point (no comment pages are fetched until the user opens
+// them); Library holds every piece of local/personal state — the My copy
+// sheet's rows, clearly separated from AO3 metadata.
 
 extension WorkDetailView {
     // MARK: - Tags section
@@ -14,21 +14,18 @@ extension WorkDetailView {
         let title: String
         let tags: [String]
         let field: AO3TagSearch.Field
-        /// Spec 1a tints exactly one cluster — the relationships — and leaves
-        /// characters and freeforms neutral. That is the accent staying scarce:
-        /// the relationship is what a reader picks a fic for, and if every
-        /// cluster took the colour none of them would mean anything by it.
-        var isTinted = false
     }
 
+    /// Board 19's three groups lead; archive warnings and fandoms keep their
+    /// place after them. Fandoms are chips too: the label above the title names
+    /// only the first, and these are how a reader reaches the others.
     private var tagGroups: [TagGroup] {
         let categorized: [TagGroup] = [
-            TagGroup(title: "Archive Warnings", tags: displayWarnings, field: .warning),
-            TagGroup(title: "Fandoms", tags: displayFandoms, field: .fandom),
-            TagGroup(title: "Relationships", tags: displayRelationships,
-                     field: .relationship, isTinted: true),
+            TagGroup(title: "Relationships", tags: displayRelationships, field: .relationship),
             TagGroup(title: "Characters", tags: displayCharacters, field: .character),
-            TagGroup(title: "Additional Tags", tags: displayFreeforms, field: .freeform)
+            TagGroup(title: "Additional tags", tags: displayFreeforms, field: .freeform),
+            TagGroup(title: "Warnings", tags: displayWarnings, field: .warning),
+            TagGroup(title: "Fandoms", tags: displayFandoms, field: .fandom)
         ].filter { !$0.tags.isEmpty }
         if !categorized.isEmpty { return categorized }
         // Un-refreshed local imports carry only a flat, uncategorized tag list.
@@ -41,8 +38,12 @@ extension WorkDetailView {
     @ViewBuilder
     var tagSections: some View {
         let groups = tagGroups
-        if groups.isEmpty {
-            Section {
+        Section {
+            SectionRuleHeader(title: "Tags")
+                .accessibilityAddTraits(.isHeader)
+                .pageBodyRow(top: 24, gutter: 0)
+
+            if groups.isEmpty {
                 // A plain imported EPUB has no AO3 identity, so it says why it
                 // has no AO3 tags rather than that AO3 hasn't sent them yet.
                 Text(ao3WorkID != nil
@@ -50,45 +51,45 @@ extension WorkDetailView {
                     : "This imported work isn't linked to AO3, so you won't see AO3 tags here.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                    .pageBodyRow(top: 20)
-            }
-        } else {
-            ForEach(Array(groups.enumerated()), id: \.element.title) { index, group in
-                Section {
+                    .pageBodyRow(top: 6)
+            } else {
+                ForEach(Array(groups.enumerated()), id: \.element.title) { index, group in
                     tagCluster(group)
-                        .pageBodyRow(top: index == 0 ? 20 : 22)
+                        .pageBodyRow(top: index == 0 ? 8 : 12)
                 }
             }
         }
     }
 
-    /// Artboard 1a's tag cluster: the field label, then the chips, straight on
-    /// the page wash.
-    ///
-    /// The card that used to hold each group is gone. Five stacked cards made
-    /// the page read as five things when it is one — a work's classification —
-    /// and the label plus the chips' own shapes already separate the groups.
+    /// Board 19's tag cluster: the group's name in sentence case, then neutral
+    /// capsules, straight on the page.
     ///
     /// The count is printed only where it tells the reader something they cannot
     /// see at a glance. Two relationships are two chips; nineteen freeforms are
     /// a paragraph, and knowing it is nineteen is worth a line.
     private func tagCluster(_ group: TagGroup) -> some View {
-        var printedCount: Int?
-        if group.tags.count > 4 {
-            printedCount = group.tags.count
-        }
-        return VStack(alignment: .leading, spacing: 9) {
-            SubjectFieldLabel(text: group.title, count: printedCount)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Text(group.title)
+                if group.tags.count > 4 {
+                    Text(group.tags.count.compactCount)
+                        .monospacedDigit()
+                        .opacity(0.7)
+                }
+            }
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(
+                group.tags.count > 4 ? group.title + ", " + group.tags.count.formatted() : group.title
+            )
+            .accessibilityAddTraits(.isHeader)
 
-            FlowLayout(spacing: 7, rowSpacing: 7) {
+            FlowLayout(spacing: 6, rowSpacing: 6) {
                 ForEach(group.tags, id: \.self) { tag in
                     // Tap a tag → search AO3 for works carrying it.
                     Button { router.searchAO3(group.field, tag) } label: {
-                        SubjectChip(
-                            text: tag,
-                            style: group.isTinted ? .tinted : .neutral,
-                            palette: workPalette
-                        )
+                        SubjectChip(text: tag, style: .neutral)
                     }
                     .buttonStyle(.plain)
                     .minimumHitTarget(30)
@@ -101,79 +102,43 @@ extension WorkDetailView {
 
     // MARK: - Comments
 
-    /// The ways into the discussion, as a labelled group of form rows.
+    /// Board 19's Comments row: the name, the count, a chevron into the
+    /// discussion.
     ///
-    /// Artboard 1a offers only the accented COMMENTS cell in its tally strip,
-    /// and that cell is wired — but it is one way in, and this screen has three.
-    /// Chapter comments and Write a Comment are reachable from nowhere else on
-    /// the page, so dropping them to match a mock would be exactly the
-    /// scanability regression `AGENTS.md` forbids.
+    /// The row replaces three (All comments, Chapter comments, Write a comment).
+    /// Nothing is lost: the native Comments screen opens on all comments and
+    /// carries the By Chapter picker and the write bar itself, and the ••• menu
+    /// still lists Comments under On AO3.
     ///
-    /// The links stay value-based. A destination-based `NavigationLink` would
+    /// The link stays value-based. A destination-based `NavigationLink` would
     /// sit outside the stack's path and be discarded by the author-byline push
     /// made from inside Comments — see `AO3CommentsRoute`.
     @ViewBuilder
     var commentsSection: some View {
         if let id = ao3WorkID {
             Section {
-                SubjectFieldLabel(text: "Comments", style: .formGroup)
-                    .padding(.bottom, 9)
-                    .pageBodyRow(top: 24)
+                // Space above the card, as its own row: padding on the segment
+                // would stretch the card's row background into it.
+                Color.clear
+                    .frame(height: 24)
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .accessibilityHidden(true)
 
-                commentsRows(workID: id)
-
-                Text("Comments load only when you open them.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .pageBodyRow(top: 9)
+                SubjectFormRow(
+                    label: "Comments",
+                    value: displayComments.map { $0.formatted() } ?? "",
+                    showsDisclosure: true
+                )
+                .subjectRowNavigation(
+                    to: AO3CommentsRoute(workID: id, context: commentsWorkContext),
+                    accessibilityLabel: "Comments"
+                )
+                .accessibilityHint("Comments load only when you open them")
+                .panelSegment(0, of: 1, gutter: SubjectMetrics.gutter)
             }
         }
-    }
-
-    /// One `List` row per link.
-    ///
-    /// The three ways in shared a single `VStack` row, and `List` gives a row
-    /// one tap target — so a tap anywhere on the card fired every
-    /// `subjectRowNavigation` inside it and pushed Comments two or three deep,
-    /// with a Back press owed for each. `panelSegment` is the same card drawn
-    /// as separate rows, which is the shape the rest of the app now uses.
-    @ViewBuilder
-    private func commentsRows(workID id: Int) -> some View {
-        // A single-chapter work has no per-chapter view worth opening; an
-        // unknown total ("5/?") is not one chapter, so it keeps the entry.
-        let hasChapterComments = SavedWork.totalChapterCount(from: displayChapters) != 1
-        let count = hasChapterComments ? 3 : 2
-
-        SubjectFormRow(
-            label: "All comments",
-            value: displayComments.map { $0.formatted() } ?? "",
-            showsDisclosure: true
-        )
-        .subjectRowNavigation(
-            to: AO3CommentsRoute(workID: id, context: commentsWorkContext),
-            accessibilityLabel: "All comments"
-        )
-        .panelSegment(0, of: count, gutter: SubjectMetrics.gutter)
-
-        if hasChapterComments {
-            SubjectFormRow(label: "Chapter comments", value: "", showsDisclosure: true)
-                .subjectRowNavigation(
-                    to: AO3CommentsRoute(
-                        workID: id, context: commentsWorkContext, focusesChapter: true
-                    ),
-                    accessibilityLabel: "Chapter comments"
-                )
-                .panelSegment(1, of: count, gutter: SubjectMetrics.gutter)
-        }
-
-        SubjectFormRow(label: "Write a comment", value: "", showsDisclosure: true)
-            .subjectRowNavigation(
-                to: AO3CommentsRoute(
-                    workID: id, context: commentsWorkContext, composes: true
-                ),
-                accessibilityLabel: "Write a comment"
-            )
-            .panelSegment(count - 1, of: count, gutter: SubjectMetrics.gutter)
     }
 
     // MARK: - Library section
