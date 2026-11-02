@@ -185,7 +185,6 @@ struct ReaderSpeechSettingsSection: View {
                 Slider(value: $rate, in: ReaderSpeechPreferences.rateRange, step: 0.05)
                     .accessibilityLabel("Read-aloud speed")
                     .accessibilityValue(rateLabel)
-                    .accentFill()
             }
 
             VStack(alignment: .leading, spacing: 8) {
@@ -200,7 +199,6 @@ struct ReaderSpeechSettingsSection: View {
                 Slider(value: $pitch, in: ReaderSpeechPreferences.pitchRange, step: 0.05)
                     .accessibilityLabel("Read-aloud pitch")
                     .accessibilityValue(pitchLabel)
-                    .accentFill()
             }
 
             Button(role: .destructive) {

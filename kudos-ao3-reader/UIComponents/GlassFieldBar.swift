@@ -12,10 +12,12 @@ struct GlassFieldBar<Leading: View, Trailing: View>: View {
     @ViewBuilder var leading: () -> Leading
     @ViewBuilder var trailing: () -> Trailing
 
+    @Environment(ThemeManager.self) private var themeManager
+
     var body: some View {
         HStack(spacing: 6) {
             leading()
-            TextField(placeholder, text: $text)
+            TextField(placeholder, text: $text, prompt: themeManager.appTheme.sepiaPrompt(placeholder))
                 .textFieldStyle(.plain)
                 .submitLabel(submitLabel)
                 .onSubmit(onSubmit)
@@ -30,5 +32,13 @@ struct GlassFieldBar<Leading: View, Trailing: View>: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .frame(minWidth: 220, idealWidth: 480, maxWidth: 680)
+    }
+}
+
+extension ReaderTheme {
+    /// Sepia's system placeholder is tan on cream (about 2:1); this darkens it with the
+    /// theme's own text colour. Other themes return nil and keep the system placeholder.
+    func sepiaPrompt(_ text: String) -> Text? {
+        self == .sepia ? Text(text).foregroundStyle(textColor.opacity(0.6)) : nil
     }
 }

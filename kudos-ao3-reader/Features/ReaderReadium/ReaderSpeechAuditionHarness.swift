@@ -68,7 +68,6 @@ struct ReaderSpeechAuditionHarness: View {
                 Slider(value: $rate, in: ReaderSpeechPreferences.rateRange, step: 0.05)
                     .accessibilityLabel("Audition speed")
                     .accessibilityValue(rateLabel)
-                    .accentFill()
 
                 // The open question is specifically 0.9 (widely recommended for
                 // audiobook narration) against our 1.0 default, so make that
@@ -201,7 +200,7 @@ struct RatePillStyle: ButtonStyle {
         configuration.label
             .padding(.vertical, 7)
             .padding(.horizontal, 12)
-            .foregroundStyle(isEnabled ? AnyShapeStyle(.accentInk) : AnyShapeStyle(.primary))
+            .foregroundStyle(isEnabled ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
             .background(
                 isEnabled ? AnyShapeStyle(.accentFill.opacity(0.15)) : AnyShapeStyle(.quaternary),
                 in: Capsule()
