@@ -303,9 +303,7 @@ enum ReadingLogService {
                 // Rows written before the count was recorded fall back to the
                 // work's count now, which is the best the log can do for them.
                 chapterCount: session.chapterCountAtVisit > 0
-                    ? session.chapterCountAtVisit : work?.postedChapterCount ?? 0,
-                modeRaw: session.modeRaw,
-                playbackRate: session.playbackRate
+                    ? session.chapterCountAtVisit : work?.postedChapterCount ?? 0
             )
         }
     }

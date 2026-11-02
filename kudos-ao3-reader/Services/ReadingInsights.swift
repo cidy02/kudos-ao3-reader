@@ -33,10 +33,6 @@ nonisolated struct ReadingSessionFacts: Equatable, Sendable {
     var endingProgress: Double = 0
     /// Chapters posted at this visit; 0 when unknown.
     var chapterCount: Int = 0
-    /// D4: reading mode (`read` or `listen`). Defaults to `read`.
-    var modeRaw: String = "read"
-    /// D4: playback rate for Read Aloud sessions (e.g. 1.0, 1.2).
-    var playbackRate: Double = 1.0
 }
 
 /// What the log knows about one work, for a history or favourites row.
@@ -106,8 +102,6 @@ nonisolated struct ReadingInsights: Equatable, Sendable {
     var lengthMix: LengthMixCounts = LengthMixCounts()
     /// Duration spent reading.
     var readingSeconds: Double = 0
-    /// Duration spent in Read Aloud.
-    var readAloudSeconds: Double = 0
     /// Count of distinct works finished in this period.
     var finishedWorksCount: Int = 0
     /// Days with at least one reading session in this period.
@@ -205,8 +199,7 @@ nonisolated struct ReadingInsights: Equatable, Sendable {
         insights.dailyWords = dailyWordsBuckets(from: facts, calendar: calendar)
         insights.hourlyDuration = hourlyDurationBuckets(from: facts, calendar: calendar)
         insights.sittingBuckets = sittingBuckets(from: facts)
-        insights.readingSeconds = facts.filter { $0.modeRaw != "listen" }.reduce(0) { $0 + $1.durationSeconds }
-        insights.readAloudSeconds = facts.filter { $0.modeRaw == "listen" }.reduce(0) { $0 + $1.durationSeconds }
+        insights.readingSeconds = facts.reduce(0) { $0 + $1.durationSeconds }
         insights.finishedWorksCount = Set(facts.filter(\.didFinish).map(\.workID)).count
         insights.readingDaysCount = Set(facts.map { calendar.startOfDay(for: $0.startedAt) }).count
         insights.biggestDay = insights.dailyWords.max(by: { $0.words < $1.words })
@@ -943,22 +936,15 @@ nonisolated struct ReadingHabitsInsights: Equatable, Sendable {
     var lateNightSharePercent: Int = 0
     var calendarDays: [ReadingInsights.DailyWordsBucket] = []
     var longestStreak: Int = 0
-    var currentStreak: Int = 0
     var sittingBuckets: [ReadingInsights.SittingBucket] = []
     var typicalSittingSeconds: Double = 0
-    var chaptersPerSitting: Double = 1.8
-    var endOnChapterPercent: Int = 62
-    var skimmedWords: Int = 0
-    var peekedWorksCount: Int = 0
-    var savedToOpenedMedianDays: Int? = 6
-    var openedToFinishedMedianDays: Int? = 3
-    var newChaptersDelayDays: Double? = 1.4
+    /// Medians come from the stored dates and log; nil when the data cannot say.
+    var savedToOpenedMedianDays: Int?
+    var openedToFinishedMedianDays: Int?
     var rereads: [RereadWork] = []
     var fandomTimeline: [FandomTimelineLane] = []
     var stoppedCount: Int = 0
-    var stoppedTotalCount: Int = 0
-    var stoppedMedianProgress: Double = 0.31
-    var stopReasons: [(label: String, count: Int, percent: Int)] = []
+    var stoppedMedianProgress: Double?
     var commonStopTags: [(name: String, count: Int)] = []
 
     static func == (lhs: ReadingHabitsInsights, rhs: ReadingHabitsInsights) -> Bool {
@@ -967,22 +953,14 @@ nonisolated struct ReadingHabitsInsights: Equatable, Sendable {
             && lhs.lateNightSharePercent == rhs.lateNightSharePercent
             && lhs.calendarDays == rhs.calendarDays
             && lhs.longestStreak == rhs.longestStreak
-            && lhs.currentStreak == rhs.currentStreak
             && lhs.sittingBuckets == rhs.sittingBuckets
             && lhs.typicalSittingSeconds == rhs.typicalSittingSeconds
-            && lhs.chaptersPerSitting == rhs.chaptersPerSitting
-            && lhs.endOnChapterPercent == rhs.endOnChapterPercent
-            && lhs.skimmedWords == rhs.skimmedWords
-            && lhs.peekedWorksCount == rhs.peekedWorksCount
             && lhs.savedToOpenedMedianDays == rhs.savedToOpenedMedianDays
             && lhs.openedToFinishedMedianDays == rhs.openedToFinishedMedianDays
-            && lhs.newChaptersDelayDays == rhs.newChaptersDelayDays
             && lhs.rereads == rhs.rereads
             && lhs.fandomTimeline == rhs.fandomTimeline
             && lhs.stoppedCount == rhs.stoppedCount
-            && lhs.stoppedTotalCount == rhs.stoppedTotalCount
             && lhs.stoppedMedianProgress == rhs.stoppedMedianProgress
-            && lhs.stopReasons.elementsEqual(rhs.stopReasons, by: { $0.label == $1.label && $0.count == $1.count && $0.percent == $1.percent })
             && lhs.commonStopTags.elementsEqual(rhs.commonStopTags, by: { $0.name == $1.name && $0.count == $1.count })
     }
 
@@ -998,6 +976,14 @@ nonisolated struct ReadingHabitsInsights: Equatable, Sendable {
         var id: String { name }
         var name: String
         var monthlyActivity: [Int]
+    }
+
+    /// Median of the values; nil when there are none.
+    static func median(_ values: [Double]) -> Double? {
+        let sorted = values.sorted()
+        guard !sorted.isEmpty else { return nil }
+        let mid = sorted.count / 2
+        return sorted.count.isMultiple(of: 2) ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid]
     }
 
     static func make(
@@ -1065,12 +1051,7 @@ nonisolated struct ReadingHabitsInsights: Equatable, Sendable {
         let stoppedWorks = works.filter { ReadingLogService.isAbandoned(work: $0) }
         let stoppedCount = stoppedWorks.count
 
-        let stopReasons = [
-            (label: "Lost interest", count: max(1, stoppedCount / 2), percent: 50),
-            (label: "Too long", count: max(1, stoppedCount / 4), percent: 25),
-            (label: "Tag dealbreaker", count: max(1, stoppedCount / 5), percent: 20),
-            (label: "Writing style", count: max(1, stoppedCount / 6), percent: 15)
-        ]
+        let stoppedMedianProgress = median(stoppedWorks.compactMap(\.readingProgress))
 
         var stopTags: [String: Int] = [:]
         for work in stoppedWorks {
@@ -1084,28 +1065,35 @@ nonisolated struct ReadingHabitsInsights: Equatable, Sendable {
             .prefix(3)
             .map { $0 }
 
+        // First sitting per work from the whole log, then the gaps the dates can prove.
+        let firstSitting = Dictionary(grouping: allFacts, by: \.workID).mapValues { $0.map(\.startedAt).min() }
+        let secondsPerDay = 86_400.0
+        let savedToOpened = works.compactMap { work -> Double? in
+            guard facts.contains(where: { $0.workID == work.id }),
+                  let first = firstSitting[work.id] ?? nil else { return nil }
+            return max(0, first.timeIntervalSince(work.dateAdded)) / secondsPerDay
+        }
+        let openedToFinished = works.compactMap { work -> Double? in
+            guard let first = firstSitting[work.id] ?? nil,
+                  let done = facts.filter({ $0.workID == work.id && $0.didFinish }).map(\.startedAt).min()
+            else { return nil }
+            return max(0, done.timeIntervalSince(first)) / secondsPerDay
+        }
+
         return ReadingHabitsInsights(
             hourlyDuration: hourly,
             lateNightDuration: lateNightSec,
             lateNightSharePercent: lateNightPct,
             calendarDays: calDays,
             longestStreak: streak,
-            currentStreak: streak > 0 ? 1 : 0,
             sittingBuckets: sittings,
             typicalSittingSeconds: typicalSec,
-            chaptersPerSitting: 1.8,
-            endOnChapterPercent: 62,
-            skimmedWords: 0,
-            peekedWorksCount: 0,
-            savedToOpenedMedianDays: 6,
-            openedToFinishedMedianDays: 3,
-            newChaptersDelayDays: 1.4,
+            savedToOpenedMedianDays: median(savedToOpened).map { Int($0.rounded()) },
+            openedToFinishedMedianDays: median(openedToFinished).map { Int($0.rounded()) },
             rereads: rereads,
             fandomTimeline: timelineLanes,
             stoppedCount: stoppedCount,
-            stoppedTotalCount: stoppedCount,
-            stoppedMedianProgress: 0.31,
-            stopReasons: stopReasons,
+            stoppedMedianProgress: stoppedMedianProgress,
             commonStopTags: Array(commonStopTags)
         )
     }
@@ -1125,11 +1113,9 @@ nonisolated struct ReadingLibraryInsights: Equatable, Sendable {
     var noLongerOnAO3Count: Int = 0
     var noLongerOnAO3Words: Int = 0
     var noLongerOnAO3LastCopies: Int = 0
-    var kudosLeftPercent: Int = 0
-    var bookmarkedPercent: Int = 0
-    var commentedPercent: Int = 0
-    var foundEarlyPercent: Int = 34
-    var foundEarlyExample: (title: String, kudosAtSave: Int, kudosNow: Int)? = nil
+    /// Share of finished works you left kudos on / favourited; nil with nothing finished.
+    var kudosLeftPercent: Int?
+    var bookmarkedPercent: Int?
 
     static func == (lhs: ReadingLibraryInsights, rhs: ReadingLibraryInsights) -> Bool {
         lhs.unreadWords == rhs.unreadWords
@@ -1145,18 +1131,6 @@ nonisolated struct ReadingLibraryInsights: Equatable, Sendable {
             && lhs.noLongerOnAO3LastCopies == rhs.noLongerOnAO3LastCopies
             && lhs.kudosLeftPercent == rhs.kudosLeftPercent
             && lhs.bookmarkedPercent == rhs.bookmarkedPercent
-            && lhs.commentedPercent == rhs.commentedPercent
-            && lhs.foundEarlyPercent == rhs.foundEarlyPercent
-            && {
-                switch (lhs.foundEarlyExample, rhs.foundEarlyExample) {
-                case (.none, .none):
-                    return true
-                case let (.some(l), .some(r)):
-                    return l.title == r.title && l.kudosAtSave == r.kudosAtSave && l.kudosNow == r.kudosNow
-                default:
-                    return false
-                }
-            }()
     }
 
     nonisolated struct StillReadingCandidate: Equatable, Sendable, Identifiable {
@@ -1164,7 +1138,8 @@ nonisolated struct ReadingLibraryInsights: Equatable, Sendable {
         var title: String
         var fandom: String
         var chapterProgress: String
-        var progressPercent: Int
+        /// Nil when the work has no stored position; nothing is guessed.
+        var progressPercent: Int?
         var daysUntouched: Int
         var work: SavedWork
     }
@@ -1173,6 +1148,7 @@ nonisolated struct ReadingLibraryInsights: Equatable, Sendable {
         works: [SavedWork],
         facts: [ReadingSessionFacts],
         periodInterval: DateInterval,
+        periodMonths: Double = 1,
         calendar: Calendar = .current
     ) -> ReadingLibraryInsights {
         let unread = works.filter { !$0.hasStartedReading && !$0.isFinished }
@@ -1182,19 +1158,24 @@ nonisolated struct ReadingLibraryInsights: Equatable, Sendable {
         let addedInPeriod = works.filter { periodInterval.contains($0.dateAdded) }
         let addedWordsInPeriod = addedInPeriod.reduce(0) { $0 + max(0, $1.wordCount) }
 
-        let recentPace = max(1, readWordsInPeriod)
-        let monthsToClear = unreadWords > 0 ? max(1, Int((Double(unreadWords) / Double(recentPace)).rounded())) : 0
+        // Nil without reading in the period; the pace is per month, so a Year
+        // period's words are divided by its 12 months first.
+        let monthsToClear: Int? = unreadWords > 0 && readWordsInPeriod > 0
+            ? max(1, Int((Double(unreadWords) / (Double(readWordsInPeriod) / max(1, periodMonths))).rounded()))
+            : nil
 
         let statuses = ReadingInsights.partitionStatuses(works: works)
-        let candidateWork = works.first { ReadingLogService.isAbandoned(work: $0) }
+        // isAbandoned needs lastReadDate, so the untouched time is always real.
+        let candidateWork = works.first { ReadingLogService.isAbandoned(work: $0) && $0.lastReadDate != nil }
         let candidate: StillReadingCandidate? = candidateWork.map { w in
-            let progress = Int(((w.readingProgress ?? 0.5) * 100).rounded())
-            let days = calendar.dateComponents([.day], from: w.lastReadDate ?? w.dateAdded, to: Date()).day ?? 21
+            let progress = w.readingProgress.map { Int(($0 * 100).rounded()) }
+            let chapters = "Chapter \(w.lastSpineIndex + 1) of \(w.postedChapterCount > 0 ? w.postedChapterCount : 1)"
+            let days = w.lastReadDate.flatMap { calendar.dateComponents([.day], from: $0, to: Date()).day } ?? 0
             return StillReadingCandidate(
                 id: w.id,
                 title: w.title,
                 fandom: w.workFandoms.first ?? "",
-                chapterProgress: "Chapter \(w.lastSpineIndex + 1) of \(w.postedChapterCount > 0 ? w.postedChapterCount : 1) · \(progress)%",
+                chapterProgress: progress.map { "\(chapters) · \($0)%" } ?? chapters,
                 progressPercent: progress,
                 daysUntouched: max(1, days),
                 work: w
@@ -1208,15 +1189,10 @@ nonisolated struct ReadingLibraryInsights: Equatable, Sendable {
         let lastCopies = works.filter { $0.preservationState == .preservedLastCopy }.count
 
         let finished = works.filter(\.isFinished)
-        let finishedCount = max(1, finished.count)
-        let kudosPct = Int(Double(finished.filter(\.hasGivenKudos).count) / Double(finishedCount) * 100)
-        let bookmarkPct = Int(Double(finished.filter(\.isFavorite).count) / Double(finishedCount) * 100)
-        let commentPct = Int(Double(finished.filter { $0.kudos > 0 && $0.hasGivenKudos }.count) / Double(finishedCount) * 100)
-
-        let earlyCandidate = finished.first { $0.kudos > 0 }
-        let earlyExample: (title: String, kudosAtSave: Int, kudosNow: Int)? = earlyCandidate.map {
-            ($0.title, max(1, $0.kudos / 4), $0.kudos)
-        }
+        let kudosPct: Int? = finished.isEmpty ? nil
+            : Int(Double(finished.filter(\.hasGivenKudos).count) / Double(finished.count) * 100)
+        let bookmarkPct: Int? = finished.isEmpty ? nil
+            : Int(Double(finished.filter(\.isFavorite).count) / Double(finished.count) * 100)
 
         return ReadingLibraryInsights(
             unreadWords: unreadWords,
@@ -1231,10 +1207,7 @@ nonisolated struct ReadingLibraryInsights: Equatable, Sendable {
             noLongerOnAO3Words: goneWords,
             noLongerOnAO3LastCopies: lastCopies,
             kudosLeftPercent: kudosPct,
-            bookmarkedPercent: bookmarkPct,
-            commentedPercent: max(9, commentPct),
-            foundEarlyPercent: 34,
-            foundEarlyExample: earlyExample
+            bookmarkedPercent: bookmarkPct
         )
     }
 }

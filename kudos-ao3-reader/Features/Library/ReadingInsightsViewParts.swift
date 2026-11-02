@@ -281,81 +281,19 @@ struct WhereTheWordsWentCard: View {
 
 struct ReadingAndListeningCard: View {
     let readingSeconds: Double
-    let readAloudSeconds: Double
     let hideReadingTime: Bool
     @Environment(ThemeManager.self) private var theme
 
-    private var totalSeconds: Double { readingSeconds + readAloudSeconds }
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("Reading and Listening")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.primary)
-                Spacer()
-                Text(hideReadingTime ? "—" : ReadingInsights.durationLabel(totalSeconds))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            // Proportional bar
-            HStack(spacing: 2) {
-                RoundedRectangle(cornerRadius: 3)
-                    .fill(theme.effectiveTint)
-                    .frame(height: 14)
-                    .frame(maxWidth: .infinity)
-
-                if readAloudSeconds > 0 {
-                    RoundedRectangle(cornerRadius: 3)
-                        .fill(theme.effectiveTint.opacity(0.35))
-                        .frame(height: 14)
-                        .frame(width: max(8, CGFloat(readAloudSeconds / max(1, totalSeconds)) * 200))
-                }
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 4))
-
-            VStack(spacing: 0) {
-                HStack(spacing: 10) {
-                    RoundedRectangle(cornerRadius: 3)
-                        .fill(theme.effectiveTint)
-                        .frame(width: 10, height: 10)
-
-                    Text("Reading")
-                        .font(.subheadline)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                    Text(hideReadingTime ? "—" : ReadingInsights.durationLabel(readingSeconds))
-                        .font(.subheadline.weight(.semibold))
-                        .monospacedDigit()
-                }
-                .frame(minHeight: 30)
-
-                Divider()
-                    .overlay(theme.appTheme.cardBorder)
-
-                HStack(spacing: 10) {
-                    RoundedRectangle(cornerRadius: 3)
-                        .fill(theme.effectiveTint.opacity(0.35))
-                        .frame(width: 10, height: 10)
-
-                    Text("Read Aloud")
-                        .font(.subheadline)
-
-                    Spacer()
-
-                    if readAloudSeconds > 0 {
-                        Text("1.2×")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Text(hideReadingTime ? "—" : (readAloudSeconds > 0 ? ReadingInsights.durationLabel(readAloudSeconds) : "0 m"))
-                        .font(.subheadline.weight(.semibold))
-                        .monospacedDigit()
-                }
-                .frame(minHeight: 30)
-            }
+        // The log records time in the reader, not Read Aloud, so this is reading time only.
+        HStack(alignment: .firstTextBaseline) {
+            Text("Time Reading")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.primary)
+            Spacer()
+            Text(hideReadingTime ? "—" : ReadingInsights.durationLabel(readingSeconds))
+                .font(.subheadline.weight(.semibold))
+                .monospacedDigit()
         }
         .padding(16)
         .background(theme.appTheme.cardSurface)
@@ -548,7 +486,7 @@ struct FinishedInPeriodSection: View {
                                     }
                                 }
 
-                                Text(work.title)
+                                Text(discreetMode ? "Work \(index + 1)" : work.title)
                                     .font(.subheadline.weight(.semibold))
                                     .foregroundStyle(.primary)
                                     .lineLimit(1)
@@ -606,6 +544,7 @@ struct FinishedInPeriodSection: View {
 
 struct YourUsualFicCard: View {
     let taste: ReadingTasteInsights
+    let discreetMode: Bool
     @Environment(ThemeManager.self) private var theme
 
     var body: some View {
@@ -627,8 +566,8 @@ struct YourUsualFicCard: View {
 
             if !taste.usualFicTags.isEmpty {
                 FlowLayout(spacing: 6) {
-                    ForEach(taste.usualFicTags, id: \.self) { tag in
-                        Text(tag)
+                    ForEach(Array(taste.usualFicTags.enumerated()), id: \.offset) { index, tag in
+                        Text(discreetMode ? "Tag \(index + 1)" : tag)
                             .font(.caption2.weight(.medium))
                             .padding(.horizontal, 9)
                             .padding(.vertical, 4)
@@ -1343,8 +1282,6 @@ struct HabitsCalendarCard: View {
 struct HabitsSittingsCard: View {
     let sittings: [ReadingInsights.SittingBucket]
     let typicalSeconds: Double
-    let chaptersPerSitting: Double
-    let endOnChapterPercent: Int
     @Environment(ThemeManager.self) private var theme
 
     private var maxCount: Int {
@@ -1390,8 +1327,6 @@ struct HabitsSittingsCard: View {
 
             HStack {
                 statColumn(label: "Typical sitting", value: ReadingInsights.durationLabel(typicalSeconds))
-                statColumn(label: "Chapters each", value: String(format: "%.1f", chaptersPerSitting))
-                statColumn(label: "End on chapter", value: "\(endOnChapterPercent)%")
             }
         }
         .padding(16)
@@ -1419,7 +1354,6 @@ struct HabitsSittingsCard: View {
 struct HabitsSavedToFinishedCard: View {
     let savedToOpenedDays: Int?
     let openedToFinishedDays: Int?
-    let newChaptersDelayDays: Double?
     @Environment(ThemeManager.self) private var theme
 
     var body: some View {
@@ -1462,41 +1396,27 @@ struct HabitsSavedToFinishedCard: View {
             }
 
             HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("\(savedToOpenedDays ?? 6) days")
-                        .font(.headline)
-                    Text("saved to opened, median")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                if let days = savedToOpenedDays {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("\(days) days")
+                            .font(.headline)
+                        Text("saved to opened, median")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
 
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("\(openedToFinishedDays ?? 3) days")
-                        .font(.headline)
-                    Text("opened to finished, median")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                if let days = openedToFinishedDays {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("\(days) days")
+                            .font(.headline)
+                        Text("opened to finished, median")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-
-            Divider()
-                .overlay(theme.appTheme.cardBorder)
-
-            HStack {
-                Image(systemName: "clock.badge")
-                    .foregroundStyle(.secondary)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("New Chapters")
-                        .font(.subheadline)
-                    Text("read after they post, median")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                Text(String(format: "%.1f days", newChaptersDelayDays ?? 1.4))
-                    .font(.subheadline.weight(.semibold))
             }
         }
         .padding(16)
@@ -1511,6 +1431,7 @@ struct HabitsSavedToFinishedCard: View {
 
 struct HabitsRereadsCard: View {
     let rereads: [ReadingHabitsInsights.RereadWork]
+    let discreetMode: Bool
     @Environment(ThemeManager.self) private var theme
 
     var body: some View {
@@ -1535,10 +1456,10 @@ struct HabitsRereadsCard: View {
 
                         HStack(spacing: 12) {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(work.title)
+                                Text(discreetMode ? "Work \(index + 1)" : work.title)
                                     .font(.subheadline.weight(.semibold))
                                     .lineLimit(1)
-                                Text("\(work.fandom) · \(work.totalWordsAcrossReads.formatted()) words across reads")
+                                Text("\(discreetMode ? "Fandom" : work.fandom) · \(work.totalWordsAcrossReads.formatted()) words across reads")
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
                             }
@@ -1565,6 +1486,7 @@ struct HabitsRereadsCard: View {
 
 struct HabitsFandomTimelineCard: View {
     let lanes: [ReadingHabitsInsights.FandomTimelineLane]
+    let discreetMode: Bool
     @Environment(ThemeManager.self) private var theme
 
     var body: some View {
@@ -1579,9 +1501,9 @@ struct HabitsFandomTimelineCard: View {
                     .foregroundStyle(.secondary)
             } else {
                 VStack(spacing: 8) {
-                    ForEach(lanes) { lane in
+                    ForEach(Array(lanes.enumerated()), id: \.element.id) { index, lane in
                         HStack(spacing: 6) {
-                            Text(lane.name)
+                            Text(discreetMode ? "Fandom \(index + 1)" : lane.name)
                                 .font(.caption)
                                 .lineLimit(1)
                                 .frame(width: 90, alignment: .leading)
@@ -1621,10 +1543,9 @@ struct HabitsFandomTimelineCard: View {
 
 struct HabitsStoppedCard: View {
     let stoppedCount: Int
-    let stoppedTotal: Int
-    let medianProgress: Double
-    let reasons: [(label: String, count: Int, percent: Int)]
+    let medianProgress: Double?
     let commonTags: [(name: String, count: Int)]
+    let discreetMode: Bool
     @Environment(ThemeManager.self) private var theme
 
     var body: some View {
@@ -1634,42 +1555,18 @@ struct HabitsStoppedCard: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.primary)
                 Spacer()
-                Text("\(stoppedCount) this month · \(stoppedTotal) in all")
+                Text("\(stoppedCount) in all")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
 
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text("\(Int((medianProgress * 100).rounded()))%")
-                    .font(.title2.weight(.bold))
-                Text("of the way in, typically")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            VStack(spacing: 6) {
-                ForEach(reasons, id: \.label) { r in
-                    HStack(spacing: 8) {
-                        Text(r.label)
-                            .font(.caption)
-                            .frame(width: 100, alignment: .leading)
-
-                        GeometryReader { proxy in
-                            Capsule()
-                                .fill(Color.primary.opacity(0.08))
-                                .overlay(alignment: .leading) {
-                                    Capsule()
-                                        .fill(Color.secondary)
-                                        .frame(width: proxy.size.width * CGFloat(r.percent) / 100.0)
-                                }
-                        }
-                        .frame(height: 6)
-
-                        Text("\(r.count)")
-                            .font(.caption.weight(.semibold))
-                            .monospacedDigit()
-                            .frame(width: 24, alignment: .trailing)
-                    }
+            if let medianProgress {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text("\(Int((medianProgress * 100).rounded()))%")
+                        .font(.title2.weight(.bold))
+                    Text("of the way in, typically")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
             }
 
@@ -1682,8 +1579,8 @@ struct HabitsStoppedCard: View {
                     .foregroundStyle(.primary)
 
                 FlowLayout(spacing: 6) {
-                    ForEach(commonTags, id: \.name) { tag in
-                        Text("\(tag.name) \(tag.count)")
+                    ForEach(Array(commonTags.enumerated()), id: \.offset) { index, tag in
+                        Text("\(discreetMode ? "Tag \(index + 1)" : tag.name) \(tag.count)")
                             .font(.caption2)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
@@ -1862,8 +1759,8 @@ struct LibraryWhereEverythingStandsCard: View {
 
 struct LibraryStillReadingCard: View {
     let candidate: ReadingLibraryInsights.StillReadingCandidate
+    let discreetMode: Bool
     let onStillReading: () -> Void
-    let onStopped: () -> Void
     @Environment(ThemeManager.self) private var theme
 
     var body: some View {
@@ -1873,12 +1770,12 @@ struct LibraryStillReadingCard: View {
                     Circle()
                         .fill(fandomColor(for: candidate.fandom))
                         .frame(width: 8, height: 8)
-                    Text("\(candidate.fandom) · untouched for \(candidate.daysUntouched / 7) weeks")
+                    Text("\(discreetMode ? "Fandom" : candidate.fandom) · untouched for \(candidate.daysUntouched / 7) weeks")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
 
-                Text("Still reading \(candidate.title)?")
+                Text("Still reading \(discreetMode ? "this work" : candidate.title)?")
                     .font(.subheadline.weight(.semibold))
 
                 Text(candidate.chapterProgress)
@@ -1900,10 +1797,8 @@ struct LibraryStillReadingCard: View {
                 }
                 .buttonStyle(.plain)
 
-                Button {
-                    onStopped()
-                } label: {
-                    Text("Stopped…")
+                NavigationLink(value: candidate.work) {
+                    Text("Open Work")
                         .font(.subheadline.weight(.semibold))
                         .frame(maxWidth: .infinity)
                         .frame(minHeight: 38)
@@ -2046,7 +1941,6 @@ struct LibraryNoLongerOnAO3Card: View {
 struct LibraryFeedbackCard: View {
     let kudosLeftPercent: Int
     let bookmarkedPercent: Int
-    let commentedPercent: Int
     @Environment(ThemeManager.self) private var theme
 
     var body: some View {
@@ -2058,7 +1952,6 @@ struct LibraryFeedbackCard: View {
             VStack(spacing: 8) {
                 feedbackRow(label: "Kudos left", percent: kudosLeftPercent)
                 feedbackRow(label: "Bookmarked", percent: bookmarkedPercent)
-                feedbackRow(label: "Commented", percent: commentedPercent)
             }
         }
         .padding(16)
@@ -2095,70 +1988,9 @@ struct LibraryFeedbackCard: View {
     }
 }
 
-struct LibraryFoundEarlyCard: View {
-    let percent: Int
-    let example: (title: String, kudosAtSave: Int, kudosNow: Int)?
-    @Environment(ThemeManager.self) private var theme
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("Found Early")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.primary)
-                Spacer()
-                Text("since saving")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text("\(percent)%")
-                    .font(.title2.weight(.bold))
-                Text("of finished works had under 500 kudos when you saved them")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            if let ex = example {
-                HStack {
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(ex.title)
-                            .font(.subheadline.weight(.medium))
-                            .lineLimit(1)
-                        Text("\(ex.kudosAtSave.formatted()) kudos when saved")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Image(systemName: "arrow.right")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    VStack(alignment: .trailing, spacing: 1) {
-                        Text("\(ex.kudosNow.formatted())")
-                            .font(.subheadline.weight(.semibold))
-                        Text("now")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .padding(10)
-                .background(Color.primary.opacity(0.06))
-                .clipShape(RoundedRectangle(cornerRadius: 10))
-            }
-        }
-        .padding(16)
-        .background(theme.appTheme.cardSurface)
-        .clipShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
-                .strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5)
-        )
-    }
-}
-
 struct LibraryPreservedStatsCard: View {
     let stats: ReadingStatistics
+    let discreetMode: Bool
     @Environment(ThemeManager.self) private var theme
 
     var body: some View {
@@ -2189,7 +2021,7 @@ struct LibraryPreservedStatsCard: View {
                         Circle()
                             .fill(fandomColor(for: f.name))
                             .frame(width: 7, height: 7)
-                        Text(f.name)
+                        Text(discreetMode ? "Fandom" : f.name)
                             .font(.caption)
                             .lineLimit(1)
                         Spacer()

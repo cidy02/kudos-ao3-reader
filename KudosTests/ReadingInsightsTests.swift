@@ -284,8 +284,44 @@ struct ReadingInsightsTests {
         // modeRaw and playbackRate are computed properties and must not be in stored mirror children
         #expect(!propertyNames.contains("modeRaw"))
         #expect(!propertyNames.contains("playbackRate"))
-        #expect(session.modeRaw == "read")
-        #expect(session.playbackRate == 1.0)
+    }
+
+    // MARK: Library insights are honest
+
+    private func libraryInsights(
+        words: Int, works: [SavedWork], months: Double
+    ) -> ReadingLibraryInsights {
+        let interval = DateInterval(start: day(1), end: day(28))
+        let facts = words == 0 ? [] : [
+            ReadingSessionFacts(
+                workID: UUID(), startedAt: day(2), durationSeconds: 3600,
+                wordCount: words, didFinish: false, wordsRead: words
+            )
+        ]
+        return ReadingLibraryInsights.make(
+            works: works, facts: facts, periodInterval: interval,
+            periodMonths: months, calendar: calendar
+        )
+    }
+
+    @Test func monthsToClearIsNilWhenThePeriodHasNoReading() {
+        let unread = SavedWork(title: "Unread", author: "A")
+        unread.wordCount = 100_000
+        #expect(libraryInsights(words: 0, works: [unread], months: 1).monthsToClear == nil)
+    }
+
+    @Test func monthsToClearUsesAPerMonthPaceInYearMode() {
+        let unread = SavedWork(title: "Unread", author: "A")
+        unread.wordCount = 120_000
+        // 60k words read in a month is 60k/month; across a year it is 5k/month.
+        #expect(libraryInsights(words: 60_000, works: [unread], months: 1).monthsToClear == 2)
+        #expect(libraryInsights(words: 60_000, works: [unread], months: 12).monthsToClear == 24)
+    }
+
+    @Test func libraryInsightsInventNothingWithNoFinishedWorks() {
+        let insights = libraryInsights(words: 0, works: [SavedWork(title: "T", author: "A")], months: 1)
+        #expect(insights.kudosLeftPercent == nil)
+        #expect(insights.bookmarkedPercent == nil)
     }
 
     @Test func rereadsExcludesWorksNotPresentInVisibleWorks() {
@@ -344,5 +380,24 @@ struct ReadingInsightsTests {
         #expect(habits.rereads.count == 1)
         #expect(habits.rereads.first?.title == "Allowed Fic")
         #expect(habits.rereads.first?.finishCount == 2)
+    }
+
+    @Test func habitsMediansComeFromTheDataNotConstants() {
+        // Nothing read, nothing stopped: every median is nil. A hard-coded 6, 3 or 0.31 fails here.
+        let empty = ReadingHabitsInsights.make(works: [], facts: [], allFacts: [], calendar: calendar)
+        #expect(empty.savedToOpenedMedianDays == nil)
+        #expect(empty.openedToFinishedMedianDays == nil)
+        #expect(empty.stoppedMedianProgress == nil)
+
+        // Saved 10 days before the first sitting, finished 4 days after it.
+        let work = SavedWork(title: "W", author: "A")
+        work.dateAdded = day(1)
+        let facts = [
+            ReadingSessionFacts(workID: work.id, startedAt: day(11), durationSeconds: 600, wordCount: 1000, didFinish: false),
+            ReadingSessionFacts(workID: work.id, startedAt: day(15), durationSeconds: 600, wordCount: 1000, didFinish: true)
+        ]
+        let habits = ReadingHabitsInsights.make(works: [work], facts: facts, allFacts: facts, calendar: calendar)
+        #expect(habits.savedToOpenedMedianDays == 10)
+        #expect(habits.openedToFinishedMedianDays == 4)
     }
 }
