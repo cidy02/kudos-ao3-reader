@@ -3,14 +3,15 @@ import SwiftUI
 
 /// The end of a work (board 34, T-496).
 ///
-/// Complete: "The End", the title, "Read in 1 h 20 min · moved to Finished",
+/// Complete: "The End", the title, "Read in 1 h 20 min · moved to Finished" (when finished),
 /// Give Kudos (with a given state), Comment, Bookmark, then "Up next in <queue>" with Start.
 /// WIP: "You're caught up", the title, "Read in 1 h 20 min", Give Kudos, Comment, Bookmark.
 struct ReaderEndCard: View {
     let title: String
     var isComplete: Bool = true
+    /// Logged reading time, computed once by the reader on arrival (never fetched in `body`).
     var durationSeconds: Double = 0
-    var wordCount: Int = 0
+    var isFinished: Bool = false
     /// Kudos and Comment exist only for a work that has an AO3 page.
     var showsAO3Actions: Bool = true
     var kudosGiven: Bool = false
@@ -70,14 +71,15 @@ struct ReaderEndCard: View {
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 3)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Text(ReaderEndOfWorkFacts.subtitle(
+            if let subtitle = ReaderEndOfWorkFacts.subtitle(
                 durationSeconds: durationSeconds,
-                wordCount: wordCount,
-                isComplete: isComplete
-            ))
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .multilineTextAlignment(.center)
+                isFinished: isFinished
+            ) {
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
         }
         .frame(maxWidth: .infinity)
     }
@@ -174,12 +176,8 @@ struct ReaderEndCard: View {
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
 
-            let isAccessibility = dynamicTypeSize.isAccessibilitySize
-            let rowLayout = isAccessibility
-                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 10))
-                : AnyLayout(HStackLayout(spacing: 10))
-
-            rowLayout {
+            // One row at every size so the card stays compact at accessibility sizes.
+            HStack(spacing: 10) {
                 WorkStatusIconGrid(
                     rating: upNext.nextWork.rating.isEmpty ? nil : upNext.nextWork.rating,
                     categories: upNext.nextWork.workCategories,
@@ -194,7 +192,7 @@ struct ReaderEndCard: View {
                     Text(upNext.nextWork.title)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.primary)
-                        .lineLimit(isAccessibility ? nil : 1)
+                        .lineLimit(1)
 
                     let meta = ReaderEndOfWorkFacts.nextWorkMeta(
                         author: upNext.nextWork.author,
@@ -204,7 +202,7 @@ struct ReaderEndCard: View {
                         Text(meta)
                             .font(.caption2)
                             .foregroundStyle(.secondary)
-                            .lineLimit(isAccessibility ? nil : 1)
+                            .lineLimit(1)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -218,13 +216,6 @@ struct ReaderEndCard: View {
     private func startNextWorkButton(for nextWork: SavedWork) -> some View {
         if let onStartNextWork {
             Button(action: { onStartNextWork(nextWork) }) {
-                startBadge
-            }
-            .buttonStyle(.plain)
-            .minimumHitTarget()
-            .accessibilityLabel("Start reading \(nextWork.title)")
-        } else {
-            NavigationLink(value: LocalWorkDestination.reader(nextWork)) {
                 startBadge
             }
             .buttonStyle(.plain)

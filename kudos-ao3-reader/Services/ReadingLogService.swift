@@ -228,10 +228,18 @@ enum ReadingLogService {
         return all.filter { $0.workID == workID }.reduce(0) { $0 + $1.durationSeconds }
     }
 
-    /// Total duration including any in-flight, unpersisted session.
+    /// Total duration including any in-flight session.
+    ///
+    /// The open session's own row is left out of the persisted sum: `pauseSession`
+    /// writes it while keeping the session open, so adding the row *and*
+    /// `accumulatedSeconds` would count the same time twice.
     static func currentTotalDuration(of workID: UUID, in context: ModelContext, now: Date = Date()) -> Double {
-        var duration = totalDuration(of: workID, in: context)
-        if let open = openSessions[workID] {
+        let open = openSessions[workID]
+        let all = (try? context.fetch(FetchDescriptor<ReadingSession>())) ?? []
+        var duration = all
+            .filter { $0.workID == workID && $0.id != open?.recordID }
+            .reduce(0) { $0 + $1.durationSeconds }
+        if let open {
             let currentStretch = open.isPaused ? 0 : max(0, now.timeIntervalSince(open.lastResumedAt))
             duration += open.accumulatedSeconds + currentStretch
         }

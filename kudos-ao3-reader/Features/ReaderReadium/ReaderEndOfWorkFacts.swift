@@ -8,39 +8,30 @@ public enum ReaderEndOfWorkFacts {
         isComplete ? "The End" : "You're caught up"
     }
 
-    /// Formats a reading duration in minutes or hours and minutes: e.g. "1 h 20 min", "45 min".
-    public static func durationString(seconds: Double, wordCount: Int = 0) -> String {
-        let positiveSeconds = max(0, seconds)
-        let totalMinutes: Int
-        if positiveSeconds >= 60 {
-            totalMinutes = Int((positiveSeconds / 60).rounded())
-        } else if positiveSeconds > 0 {
-            totalMinutes = 1
-        } else if wordCount > 0 {
-            // Fall back to silent reading estimate (~200 wpm)
-            totalMinutes = max(1, Int((Double(wordCount) / 200).rounded()))
-        } else {
-            totalMinutes = 1
-        }
-
+    /// Formats logged reading time in minutes or hours and minutes: e.g. "1 h 20 min", "45 min".
+    /// Nil when nothing was logged: the end card never invents a time.
+    public static func durationString(seconds: Double) -> String? {
+        guard seconds > 0 else { return nil }
+        let totalMinutes = seconds >= 60 ? Int((seconds / 60).rounded()) : 1
         let hours = totalMinutes / 60
         let minutes = totalMinutes % 60
         if hours > 0 {
             return minutes > 0 ? "\(hours) h \(minutes) min" : "\(hours) h"
-        } else {
-            return "\(totalMinutes) min"
         }
+        return "\(totalMinutes) min"
     }
 
-    /// Subtitle under the title on the End of Work screen.
-    /// Complete: "Read in 1 h 20 min · moved to Finished"
-    /// WIP: "Read in 1 h 20 min"
-    public static func subtitle(durationSeconds: Double, wordCount: Int = 0, isComplete: Bool) -> String {
-        let dur = durationString(seconds: durationSeconds, wordCount: wordCount)
-        if isComplete {
-            return "Read in \(dur) · moved to Finished"
-        } else {
-            return "Read in \(dur)"
+    /// Subtitle under the title on the End of Work screen, or nil when there is nothing to say.
+    /// Logged time and finished: "Read in 1 h 20 min · moved to Finished"
+    /// Logged time only: "Read in 1 h 20 min"
+    /// Finished with no logged time: "Moved to Finished"
+    public static func subtitle(durationSeconds: Double, isFinished: Bool) -> String? {
+        let read = durationString(seconds: durationSeconds).map { "Read in \($0)" }
+        switch (read, isFinished) {
+        case let (read?, true): return "\(read) · moved to Finished"
+        case let (read?, false): return read
+        case (nil, true): return "Moved to Finished"
+        case (nil, false): return nil
         }
     }
 
@@ -65,7 +56,8 @@ public enum ReaderEndOfWorkFacts {
     }
 
     /// Next work in the queue relative to the current work.
-    /// Filters out deleted works, works pending deletion, and works ineligible under privacy.
+    /// Skips finished works, works pending deletion, and works ineligible under privacy;
+    /// nil when nothing unfinished remains.
     public static func nextWorkInQueue(
         orderedWorks: [SavedWork],
         currentWorkID: UUID,
@@ -84,9 +76,6 @@ public enum ReaderEndOfWorkFacts {
         let before = orderedWorks.prefix(upTo: currentIndex)
         if let prevUnfinished = before.first(where: { candidate($0) && !$0.isFinished }) {
             return prevUnfinished
-        }
-        if let nextAny = after.first(where: candidate) {
-            return nextAny
         }
         return nil
     }

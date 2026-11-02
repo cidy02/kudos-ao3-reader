@@ -51,6 +51,12 @@ struct ReaderView: View {
     @State private var landNextChapterOnLastPage = false
     @State private var availableWidth: CGFloat = 0
     @State private var isAtEnd = false
+    /// The scroll fraction when the end was reached; scrolling back above it clears the card.
+    @State private var endFraction: Double = 1
+    /// Logged reading time for the end card, read once on arrival at the end.
+    @State private var endCardDuration: Double = 0
+    /// The next queued work, opened from the end card's Start.
+    @State private var nextWorkDestination: LocalWorkDestination?
     /// Snapshot at session start so a reopen of an already-finished work does
     /// not count as another finishing session.
     @State private var workActions = AO3WorkActionsModel()
@@ -246,6 +252,9 @@ struct ReaderView: View {
                 }
                 if !isLoading { loadCurrentChapter() }
             }
+            .navigationDestination(item: $nextWorkDestination) { destination in
+                LocalWorkDestinationView(destination: destination)
+            }
             .onChange(of: renderToken) { _, _ in
                 // Mode/style/theme reflow: persist the position first; the layout
                 // script then re-derives the page / scroll offset from the same
@@ -253,6 +262,12 @@ struct ReaderView: View {
                 flushProgress()
                 configureController()
             }
+    }
+
+    private func reachEnd() {
+        isAtEnd = true
+        endFraction = progressBridge.currentFraction
+        endCardDuration = ReadingLogService.currentTotalDuration(of: work.id, in: modelContext)
     }
 
     private func markKudosGiven() {
@@ -349,8 +364,8 @@ struct ReaderView: View {
         return ReaderEndCard(
             title: work.title,
             isComplete: work.isComplete,
-            durationSeconds: ReadingLogService.currentTotalDuration(of: work.id, in: modelContext),
-            wordCount: work.wordCount,
+            durationSeconds: endCardDuration,
+            isFinished: work.isFinished,
             showsAO3Actions: ao3ID != nil,
             kudosGiven: work.hasGivenKudos,
             kudosEnabled: !workActions.isWorking && !work.hasGivenKudos,
@@ -362,7 +377,7 @@ struct ReaderView: View {
             ),
             onKudos: {
                 if let ao3ID {
-                    workActions.giveKudos(workID: ao3ID, auth: auth)
+                    workActions.giveKudos(workID: ao3ID, auth: auth, onSuccess: markKudosGiven)
                 }
             },
             onComment: {
@@ -375,7 +390,8 @@ struct ReaderView: View {
                 if ao3ID != nil {
                     workActions.startBookmark()
                 }
-            }
+            },
+            onStartNextWork: { nextWorkDestination = .reader($0) }
         )
     }
 
@@ -497,7 +513,7 @@ struct ReaderView: View {
                 landNextChapterOnLastPage = false
                 currentIndex += 1
             } else {
-                isAtEnd = true
+                reachEnd()
                 autoFinishIfComplete() // paged: past the last page of the last chapter
             }
         }
@@ -509,7 +525,7 @@ struct ReaderView: View {
         }
         controller.onReachedScrollBottom = {
             if currentIndex == chapterCount - 1 {
-                isAtEnd = true
+                reachEnd()
                 autoFinishIfComplete() // scrolled: bottom of the last chapter
             }
         }
@@ -523,6 +539,10 @@ struct ReaderView: View {
         // bridge's debounce so scrolling doesn't hammer SwiftData.
         controller.onProgressFraction = { fraction in
             if currentIndex < chapterCount - 1 || (readingMode == .paged && controller.page < controller.pageTotal) {
+                isAtEnd = false
+            } else if isAtEnd && fraction < endFraction - 0.02 {
+                // Scrolled back up from where the end was reached: the chapter controls return.
+                // (The fraction is the content above the viewport, so it stays below 1 at the bottom.)
                 isAtEnd = false
             }
             progressBridge.recordProgress(fraction)

@@ -165,6 +165,11 @@ struct ReadiumReaderView: View {
     }
     /// UIKit peel surface — interactive samples never touch SwiftUI state.
     @State private var dismissSurface = ReaderDismissDragSurface()
+    /// Logged reading time for the end card, read once on arrival at the end
+    /// (never fetched while the card renders).
+    @State private var endCardDuration: Double = 0
+    /// The next queued work, opened from the end card's Start.
+    @State private var nextWorkDestination: LocalWorkDestination?
     @State private var isDismissingByDrag = false
 
     // MARK: Chrome state
@@ -313,6 +318,14 @@ struct ReadiumReaderView: View {
                 }
                 .preferredColorScheme(readerPageColors.colorScheme)
                 .presentationDragIndicator(.visible)
+            }
+            .onChange(of: book.isAtPublicationEnd) { _, atEnd in
+                if atEnd {
+                    endCardDuration = ReadingLogService.currentTotalDuration(of: work.id, in: modelContext)
+                }
+            }
+            .navigationDestination(item: $nextWorkDestination) { destination in
+                LocalWorkDestinationView(destination: destination)
             }
             .onChange(of: work.isPendingDeletion) { _, isPendingDeletion in
                 if isPendingDeletion {
@@ -1067,11 +1080,12 @@ struct ReadiumReaderView: View {
 
     /// Bottom chrome stack:
     /// - **Chrome up, at the end of the work:** the end card, in place of the position card
+    ///   (with the mini player above it while speech is active)
     /// - **Chrome up + speech:** colour bar (optional) + position card with mini player inside
     /// - **Chrome down + speech:** mini player alone (decoupled; seek card hidden)
     /// - **Chrome up, no speech:** position card only
-    /// - **Chrome down, no speech:** empty (the end card hides with the chrome so
-    ///   it cannot cover the last lines in paged mode, or stack over the mini player)
+    /// - **Chrome down, no speech:** empty (the end card hides with the chrome, so a
+    ///   tap on the text never leaves it covering the closing lines)
     ///
     /// Colour bar lives in this VStack (not a magic `+ 88` offset) so it always
     /// clears the card cleanly.
@@ -1080,11 +1094,11 @@ struct ReadiumReaderView: View {
         let speechActive = speech.isSessionActive
         let atEnd = book.isAtPublicationEnd
         VStack(spacing: 10) {
-            if atEnd {
+            if chromeVisible, atEnd {
+                if speechActive { standaloneMiniPlayer }
                 endOfWorkCard
             } else if chromeVisible {
                 highlightColorBar
-                // The end card takes this slot. The position card would cover it.
                 positionCard(includeMiniPlayer: speechActive)
             } else if speechActive {
                 // Decoupled: transport stays reachable while full chrome is hidden.
@@ -1093,15 +1107,15 @@ struct ReadiumReaderView: View {
         }
         .padding(.horizontal, Self.chromeInset)
         .padding(.bottom, book.pageBoxChromeSafeBottom + Self.chromeInset)
-        .allowsHitTesting(atEnd || chromeVisible || speechActive)
+        .allowsHitTesting(chromeVisible || speechActive)
     }
 
     private var endOfWorkCard: some View {
         ReaderEndCard(
             title: work.title,
             isComplete: work.isComplete,
-            durationSeconds: ReadingLogService.currentTotalDuration(of: work.id, in: modelContext),
-            wordCount: work.wordCount,
+            durationSeconds: endCardDuration,
+            isFinished: work.isFinished,
             showsAO3Actions: ao3WorkID != nil,
             kudosGiven: work.hasGivenKudos,
             kudosEnabled: !kudosWorking && !work.hasGivenKudos,
@@ -1113,7 +1127,8 @@ struct ReadiumReaderView: View {
             ),
             onKudos: { if let ao3WorkID { giveKudos(workID: ao3WorkID) } },
             onComment: { showingComments = true },
-            onBookmark: { toggleBookmarkAtCurrentPosition() }
+            onBookmark: { toggleBookmarkAtCurrentPosition() },
+            onStartNextWork: { nextWorkDestination = .reader($0) }
         )
     }
 

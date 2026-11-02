@@ -10,39 +10,24 @@ struct ReaderEndOfWorkTests {
     }
 
     @Test func durationFormattingHandlesVariousIntervals() {
-        // 4800s = 80 min = 1 h 20 min
         #expect(ReaderEndOfWorkFacts.durationString(seconds: 4800) == "1 h 20 min")
-        // 3600s = 60 min = 1 h
         #expect(ReaderEndOfWorkFacts.durationString(seconds: 3600) == "1 h")
-        // 7200s = 120 min = 2 h
         #expect(ReaderEndOfWorkFacts.durationString(seconds: 7200) == "2 h")
-        // 1500s = 25 min
         #expect(ReaderEndOfWorkFacts.durationString(seconds: 1500) == "25 min")
-        // < 60s rounds up to 1 min
+        // Logged time under a minute rounds up to 1 min.
         #expect(ReaderEndOfWorkFacts.durationString(seconds: 45) == "1 min")
-        // 0s falls back to word count estimate (12400 words / 200 = 62 min = 1 h 2 min)
-        #expect(ReaderEndOfWorkFacts.durationString(seconds: 0, wordCount: 12400) == "1 h 2 min")
-        // 0s and 0 words
-        #expect(ReaderEndOfWorkFacts.durationString(seconds: 0, wordCount: 0) == "1 min")
+        // No logged time: nothing is invented.
+        #expect(ReaderEndOfWorkFacts.durationString(seconds: 0) == nil)
     }
 
-    @Test func subtitleFormattingMatchesBoard34() {
+    @Test func subtitleOmitsReadInWithoutLoggedTimeAndNeedsFinishedForMoved() {
         #expect(
-            ReaderEndOfWorkFacts.subtitle(durationSeconds: 4800, wordCount: 0, isComplete: true)
+            ReaderEndOfWorkFacts.subtitle(durationSeconds: 4800, isFinished: true)
             == "Read in 1 h 20 min · moved to Finished"
         )
-        #expect(
-            ReaderEndOfWorkFacts.subtitle(durationSeconds: 4800, wordCount: 0, isComplete: false)
-            == "Read in 1 h 20 min"
-        )
-        #expect(
-            ReaderEndOfWorkFacts.subtitle(durationSeconds: 1500, wordCount: 0, isComplete: true)
-            == "Read in 25 min · moved to Finished"
-        )
-        #expect(
-            ReaderEndOfWorkFacts.subtitle(durationSeconds: 1500, wordCount: 0, isComplete: false)
-            == "Read in 25 min"
-        )
+        #expect(ReaderEndOfWorkFacts.subtitle(durationSeconds: 4800, isFinished: false) == "Read in 1 h 20 min")
+        #expect(ReaderEndOfWorkFacts.subtitle(durationSeconds: 0, isFinished: true) == "Moved to Finished")
+        #expect(ReaderEndOfWorkFacts.subtitle(durationSeconds: 0, isFinished: false) == nil)
     }
 
     @Test func readingTimeEstimateCalculatesEstimatedTime() {
@@ -97,9 +82,18 @@ struct ReaderEndOfWorkTests {
 
         let queue = [work1, work2, work3]
 
-        // When at work 2, work 3 is finished, so it wraps to work 1 (which is unfinished)
+        // Work 3 is finished, so it wraps to work 1 (which is unfinished)
         let next = ReaderEndOfWorkFacts.nextWorkInQueue(orderedWorks: queue, currentWorkID: work2.id)
         #expect(next?.id == work1.id)
+    }
+
+    @Test func nextWorkInQueueIsNilWhenEveryOtherWorkIsFinished() {
+        let work1 = SavedWork(title: "Work 1", author: "Author 1")
+        let work2 = SavedWork(title: "Work 2", author: "Author 2")
+        work1.isFinished = false
+        work2.isFinished = true
+
+        #expect(ReaderEndOfWorkFacts.nextWorkInQueue(orderedWorks: [work1, work2], currentWorkID: work1.id) == nil)
     }
 
     @Test func nextWorkInQueueReturnsNilWhenSingleWorkOrNotFound() {
