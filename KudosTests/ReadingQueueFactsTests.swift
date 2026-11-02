@@ -62,6 +62,23 @@ struct ReadingQueueFactsTests {
         #expect(progress.total == 5)
     }
 
+    @Test func progressLegendSummarizesQueueReadingStates() {
+        let sample = ReadingQueueFacts.Progress(finished: 2, inProgress: 1, unread: 5)
+        #expect(ReadingQueueFacts.progressLegend(sample) == "2 finished · 1 in progress · 5 to go")
+
+        let allUnread = ReadingQueueFacts.Progress(finished: 0, inProgress: 0, unread: 4)
+        #expect(ReadingQueueFacts.progressLegend(allUnread) == "4 to go")
+
+        let inProgressOnly = ReadingQueueFacts.Progress(finished: 0, inProgress: 1, unread: 2)
+        #expect(ReadingQueueFacts.progressLegend(inProgressOnly) == "1 in progress · 2 to go")
+
+        let allFinished = ReadingQueueFacts.Progress(finished: 3, inProgress: 0, unread: 0)
+        #expect(ReadingQueueFacts.progressLegend(allFinished) == "3 finished")
+
+        let empty = ReadingQueueFacts.Progress(finished: 0, inProgress: 0, unread: 0)
+        #expect(ReadingQueueFacts.progressLegend(empty) == "Empty queue")
+    }
+
     @Test func lastReadIsTheLatestDateIgnoringUnread() {
         let early = Date(timeIntervalSince1970: 100)
         let late = Date(timeIntervalSince1970: 900)

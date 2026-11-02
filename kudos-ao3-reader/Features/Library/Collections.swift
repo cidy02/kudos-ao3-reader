@@ -433,7 +433,7 @@ struct CollectionDetailView: View {
             title: collection.name,
             overrideInlineTitle: isSelecting
                 ? WorkSelectionTitle.text(selectedCount: selectedWorks.count)
-                : nil,
+                : (works.isEmpty ? collection.name : nil),
             isActive: !works.isEmpty
         )
         .onAppear(perform: loadArrangement)

@@ -173,23 +173,25 @@ struct ReadingQueueBrowserView: View {
         preservedWorks.reduce(0) { $0 + queueWorkFileSize($1.fileURL) }
     }
 
-    /// The header block's own tally line — spec 1h: "12 works · 9 kept offline
-    /// · 24.1 MB".
-    private var queueSubtitle: String {
-        let count = works.count
-        let base = "\(count) work\(count == 1 ? "" : "s")"
-        guard count > 0 else { return base }
-        let offline = preservedWorks.count == count
-            ? "all kept offline"
-            : "\(preservedWorks.count) kept offline"
-        return "\(base) · \(offline) · \(queueByteCountString(preservedByteCount))"
-    }
-
     /// The Library's active-filter labels, drawn only while `LibraryFilters` is
     /// narrowing the queue — 1h's own quick filters (`QueueQuickFilter`) are
     /// the everyday rail, and the toolbar's Filter button opens the panel.
     private var filterChipRail: some View {
         SubjectFilterRail {
+            if quickFilter != .all {
+                Button {
+                    quickFilter = .all
+                } label: {
+                    SubjectChip(
+                        text: quickFilter.title,
+                        style: .tinted,
+                        systemImage: "xmark",
+                        palette: subjectPalette
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Remove \(quickFilter.title) filter")
+            }
             ForEach(filters.summaryLabels(), id: \.self) { label in
                 SubjectChip(
                     text: label.text,
@@ -199,14 +201,6 @@ struct ReadingQueueBrowserView: View {
                 )
             }
         }
-    }
-
-    private var subjectHeader: some View {
-        SubjectPageHeading(
-            title: selectedQueue?.displayName ?? "Reading Queues",
-            subtitle: queueSubtitle,
-            palette: subjectPalette
-        )
     }
 
     /// Spec 1h splits a queue into "Up next" and "In line" (everything else,
@@ -298,6 +292,16 @@ struct ReadingQueueBrowserView: View {
             showsSummary: false,
             queueMenu: queueMenu(for: work)
         )
+        .swipeActions(edge: .leading) {
+            if !isSelecting {
+                Button {
+                    moveWork(work, toIndex: 0, requireDragLive: false)
+                } label: {
+                    Label("Read Next", systemImage: "arrow.up.to.line")
+                }
+                .tint(.accentColor)
+            }
+        }
         .swipeActions(edge: .trailing) {
             if !isSelecting {
                 Button(role: .destructive) {
@@ -325,7 +329,7 @@ struct ReadingQueueBrowserView: View {
 
     private var queueOverrideInlineTitle: String? {
         if isSelecting { return "\(selectedWorks.count) selected" }
-        if isReordering { return queueInlineTitle }
+        if isReordering || works.isEmpty { return queueInlineTitle }
         return nil
     }
 
@@ -432,7 +436,6 @@ struct ReadingQueueBrowserView: View {
                     }
                 }
             )
-            .screenTint(subjectPalette)
     }
 
     // MARK: - Compact (iPhone)
@@ -560,37 +563,25 @@ extension ReadingQueueBrowserView {
             } else {
                 subjectHeaderSection
                 if let upNextWork {
-                    Section {
-                        SectionRuleHeader(title: "Up Next")
-                            .padding(.bottom, Self.listRuleBottom)
-                            .pageBodyRow(top: Self.ruleTop, gutter: 0)
-                        upNextLinked(upNextWork)
-                            .bareListRow()
-                            .swipeActions(edge: .trailing) {
-                                if !isSelecting {
-                                    Button(role: .destructive) {
-                                        pendingRemoval = upNextWork
-                                    } label: {
-                                        Label("Remove", systemImage: "minus.circle")
-                                    }
+                    upNextLinked(upNextWork)
+                        .bareListRow()
+                        .padding(.bottom, inLineWorks.isEmpty ? 16 : 8)
+                        .swipeActions(edge: .trailing) {
+                            if !isSelecting {
+                                Button(role: .destructive) {
+                                    pendingRemoval = upNextWork
+                                } label: {
+                                    Label("Remove", systemImage: "minus.circle")
                                 }
                             }
-                    }
+                        }
                 }
                 if !inLineWorks.isEmpty {
-                    Section {
-                        // After a card row, that row already keeps half the
-                        // inter-card gap below its card.
-                        inLineHeader
-                            .padding(.bottom, Self.listRuleBottom)
-                            .pageBodyRow(
-                                top: upNextWork == nil ? Self.ruleTop : Self.ruleTop - Self.halfCardGap,
-                                gutter: 0
-                            )
-                        ForEach(inLineWorks) { work in
-                            ledgerRow(work, position: queuePosition(of: work))
-                                .environment(\.ledgerPositionNumber, queuePosition(of: work))
-                        }
+                    inLineHeader
+                        .bareListRow()
+                    ForEach(inLineWorks) { work in
+                        ledgerRow(work, position: queuePosition(of: work))
+                            .environment(\.ledgerPositionNumber, queuePosition(of: work))
                     }
                 }
             }
@@ -600,57 +591,52 @@ extension ReadingQueueBrowserView {
         // padded it top and bottom and put ~10pt more round each rule than
         // Compact draws.
         .environment(\.defaultMinListRowHeight, 0)
-        .subjectScreenWash(palette: subjectPalette, role: .content)
         #if os(iOS)
             .environment(\.editMode, dragEditMode)
         #endif
     }
 
-    /// The header block and `headerDetails` as `detailedList`'s first rows;
-    /// `compactGrid` stacks the same two views in its `ScrollView` (a `List` and
-    /// a `ScrollView` can't share one parent without one losing what it needs —
-    /// swipe actions here, a `LazyVGrid` there).
+    /// The header block and details as `detailedList`'s first rows.
     private var subjectHeaderSection: some View {
         Section {
-            // 1bg: selecting, the title bar names the count and one status rule
-            // names the queue — the full hero would say it twice.
             if !isSelecting {
-                subjectHeader
-                    .pageBodyRow(top: 20, gutter: 0)
-            }
-            if isSelecting {
-                // Artboard 1bg's select-mode status line replaces the meta line
-                // and filter rail — narrowing to one work at a time isn't what
-                // selection mode is for, and "N selected" already lives on the
-                // toolbar's own "N selected" / Select All pair.
-                selectionStatusRow
-                    .pageBodyRow(top: 12, gutter: SubjectMetrics.gutter)
+                if let selectedQueue {
+                    QueuePageHeader(
+                        queue: selectedQueue,
+                        works: works,
+                        preservedIDs: Set(preservedWorks.map(\.id)),
+                        palette: subjectPalette,
+                        onAddTag: { showingQueueTags = true },
+                        filterRail: {
+                            if filters.hasActiveFilters || quickFilter != .all {
+                                filterChipRail
+                            }
+                        }
+                    )
+                    .bareListRow()
+                    .padding(.horizontal, SubjectMetrics.gutter)
+                    .padding(.top, 16)
+                    .padding(.bottom, 8)
+                }
             } else {
-                headerDetails
-                    .pageBodyRow(top: 8, gutter: 0)
+                selectionStatusRow
+                    .bareListRow()
+                    .padding(.horizontal, SubjectMetrics.gutter)
+                    .padding(.top, 12)
+                    .padding(.bottom, 8)
             }
-        }
-    }
-
-    /// One `QueueHeaderDetails` shared by `detailedList` and `compactGrid`.
-    private var headerDetails: some View {
-        QueueHeaderDetails(
-            works: works,
-            preservedIDs: Set(preservedWorks.map(\.id)),
-            tags: selectedQueue?.tags ?? [],
-            palette: subjectPalette,
-            quickFilter: $quickFilter,
-            onAddTag: { showingQueueTags = true }
-        ) {
-            if filters.hasActiveFilters { filterChipRail }
         }
     }
 
     private var inLineHeader: some View {
-        // 1h build note: "List and grid are no longer an inline picker — the
-        // view choice lives in the overflow menu, so the section header carries
-        // only its label."
-        SectionRuleHeader(title: "In Line", count: inLineWorks.count)
+        Text("In line")
+            .font(.title3.bold())
+            .foregroundStyle(.primary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, SubjectMetrics.gutter)
+            .padding(.top, 12)
+            .padding(.bottom, 4)
+            .accessibilityAddTraits(.isHeader)
     }
 
     private var selectionStatusRow: some View {
@@ -662,45 +648,54 @@ extension ReadingQueueBrowserView {
     }
 
     /// 1h's grid: the front of the queue is a plain ledger row and In line is
-    /// the cover grid. The section header supplies the next rule, so this row
-    /// draws no separator. Reordering drops the split: a drag has to reach
-    /// every work, Up next too.
+    /// the cover grid.
     private var compactGrid: some View {
         ScrollView {
-            // The same gaps as `detailedList`, so switching Ledger ↔ Compact does
-            // not move the text: 20 above the header, 8 (12 selecting) above its
-            // details, then 1h.1's 18 above a section rule and 10 after it.
             VStack(alignment: .leading, spacing: 0) {
-                if !isSelecting {
-                    subjectHeader.padding(.top, 20)
-                }
-                if isSelecting {
+                if !isReordering && !isSelecting {
+                    if let selectedQueue {
+                        QueuePageHeader(
+                            queue: selectedQueue,
+                            works: works,
+                            preservedIDs: Set(preservedWorks.map(\.id)),
+                            palette: subjectPalette,
+                            onAddTag: { showingQueueTags = true },
+                            filterRail: {
+                                if filters.hasActiveFilters || quickFilter != .all {
+                                    filterChipRail
+                                }
+                            }
+                        )
+                        .padding(.horizontal, SubjectMetrics.gutter)
+                        .padding(.top, 16)
+                        .padding(.bottom, 8)
+                    }
+                } else if isSelecting {
                     selectionStatusRow
                         .padding(.horizontal, SubjectMetrics.gutter)
                         .padding(.top, 12)
-                } else {
-                    headerDetails.padding(.top, 8)
+                        .padding(.bottom, 8)
                 }
                 if isReordering || isSelecting {
-                    SectionRuleHeader(title: "Works", count: compactDisplayedWorks.count)
+                    Text("Works")
+                        .font(.title3.bold())
+                        .padding(.horizontal, SubjectMetrics.gutter)
                         .padding(.top, Self.ruleTop)
                     coverGrid(compactDisplayedWorks)
                         .padding(.top, Self.afterRule)
                 } else {
                     if let upNextWork {
-                        SectionRuleHeader(title: "Up Next")
-                            .padding(.top, Self.ruleTop)
                         upNextCompact(upNextWork)
                     }
                     if !inLineWorks.isEmpty {
-                        inLineHeader.padding(.top, Self.ruleTop)
+                        inLineHeader
+                            .padding(.top, Self.ruleTop)
                         coverGrid(inLineWorks).padding(.top, Self.afterRule)
                     }
                 }
             }
             .padding(.bottom, 16)
         }
-        .subjectScreenWash(palette: subjectPalette, role: .content)
     }
 
     /// 1h.1: 18 between blocks, 10 from a section rule to what it heads. Both
@@ -835,6 +830,12 @@ extension ReadingQueueBrowserView {
                         .disabled(isNarrowed || hidesMatureWorks)
                         ListGridMenuPicker(arrangement: $arrangement)
                         Divider()
+                        Picker("Filter", selection: $quickFilter) {
+                            ForEach(QueueQuickFilter.allCases) { filter in
+                                Text(filter.title).tag(filter)
+                            }
+                        }
+                        Divider()
                         queueMenuItems
                     })
                 ])
@@ -862,16 +863,13 @@ extension ReadingQueueBrowserView {
         }
     }
 
-    /// Untinted toolbar '+' control matching the rest of the queue toolbar (board 04; keeps .glassProminent).
+    /// Untinted toolbar '+' control matching the rest of the queue toolbar (board 04).
     private var addWorksButton: some View {
         Button {
             showingAddWorks = true
         } label: {
             Label("Add Works", systemImage: "plus")
         }
-        #if os(iOS)
-        .buttonStyle(.glassProminent)
-        #endif
         .help("Add works from your library")
     }
 
