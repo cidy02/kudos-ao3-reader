@@ -68,12 +68,20 @@ struct CommentsHeaderLayoutTests {
         #expect(CommentsHeaderLayout.totalChaptersCount(chapters: [], chaptersLoaded: false, rawChapters: "") == nil)
     }
 
-    @Test func totalChaptersFromLoadedListTakesPrecedence() {
+    @Test func totalChaptersFromRawTakesPrecedenceOverLoadedList() {
         let list = [
             AO3ChapterRef(id: 101, position: 1, title: "Ch 1"),
             AO3ChapterRef(id: 102, position: 2, title: "Ch 2")
         ]
-        #expect(CommentsHeaderLayout.totalChaptersCount(chapters: list, chaptersLoaded: true, rawChapters: "1/10") == 2)
+        #expect(CommentsHeaderLayout.totalChaptersCount(chapters: list, chaptersLoaded: true, rawChapters: "2/10") == 10)
+    }
+
+    @Test func totalChaptersFallbackToLoadedListWhenRawEmpty() {
+        let list = [
+            AO3ChapterRef(id: 101, position: 1, title: "Ch 1"),
+            AO3ChapterRef(id: 102, position: 2, title: "Ch 2")
+        ]
+        #expect(CommentsHeaderLayout.totalChaptersCount(chapters: list, chaptersLoaded: true, rawChapters: "") == 2)
     }
 
     @Test func chapterSubtitleByChapter() {
@@ -91,6 +99,13 @@ struct CommentsHeaderLayoutTests {
             totalChapters: nil
         )
         #expect(subWithoutTotal == "Chapter 7")
+
+        let subMalformedTotal = CommentsHeaderLayout.chapterSubtitle(
+            scope: .byChapter,
+            selectedChapter: chapter,
+            totalChapters: 3
+        )
+        #expect(subMalformedTotal == "Chapter 7")
     }
 
     @Test func chapterSubtitleAllScopeReturnsNil() {
@@ -101,5 +116,15 @@ struct CommentsHeaderLayoutTests {
             totalChapters: 20
         )
         #expect(sub == nil)
+    }
+
+    @Test func matureWorkConcealment() {
+        #expect(CommentsHeaderLayout.isWorkConcealed(rating: "Mature", hideMature: true, isRevealed: false) == true)
+        #expect(CommentsHeaderLayout.isWorkConcealed(rating: "Explicit", hideMature: true, isRevealed: false) == true)
+        #expect(CommentsHeaderLayout.isWorkConcealed(rating: "General", hideMature: true, isRevealed: false) == false)
+        #expect(CommentsHeaderLayout.isWorkConcealed(rating: "Teen", hideMature: true, isRevealed: false) == false)
+        #expect(CommentsHeaderLayout.isWorkConcealed(rating: "Mature", hideMature: false, isRevealed: false) == false)
+        #expect(CommentsHeaderLayout.isWorkConcealed(rating: "Mature", hideMature: true, isRevealed: true) == false)
+        #expect(CommentsHeaderLayout.isWorkConcealed(rating: "", hideMature: true, isRevealed: false) == false)
     }
 }

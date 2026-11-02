@@ -1,3 +1,4 @@
+import SwiftData
 import SwiftUI
 #if os(macOS)
 import AppKit
@@ -69,6 +70,10 @@ struct CommentsView: View {
     @Environment(AO3AuthService.self) private var auth
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var theme
+    @Environment(PrivacyGate.self) private var gate
+    @AppStorage("hideMatureContent") private var hideMature = true
+    @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
+    @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }) private var allWorks: [SavedWork]
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -80,6 +85,8 @@ struct CommentsView: View {
     @State private var showingLogin = false
     @State private var pendingDelete: PendingDelete?
     @State private var actionBanner: String?
+    /// Reveal for a work that isn't in the library: this screen only, never the app-wide reveal-all.
+    @State private var revealedUnsavedWork = false
     @State private var contextLoadTask: Task<Void, Never>?
     /// The comment "Thread"/"Parent Thread" most recently scrolled to, briefly
     /// tinted so the jump is visible even when the target was already on-screen.
@@ -490,77 +497,120 @@ struct CommentsView: View {
         )
     }
 
-    private var compactWorkRow: some View {
-        NavigationLink(value: workSummary) {
-            HStack(alignment: dynamicTypeSize.isAccessibilitySize ? .top : .center, spacing: 12) {
-                compactWorkCover
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(model.workContext.title)
-                        .font(.headline)
-                        .foregroundStyle(Color.primary)
-                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
-                        .truncationMode(.tail)
-                        .fixedSize(horizontal: false, vertical: true)
-                    workSubtitle
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.tertiary)
-                    .padding(.top, dynamicTypeSize.isAccessibilitySize ? 4 : 0)
-            }
-            .contentShape(Rectangle())
+    private var isMatureConcealed: Bool {
+        guard hideMature else { return false }
+        if let matching = allWorks.first(where: { $0.ao3WorkID == workID }) {
+            return gate.isConcealed(matching, enabled: hideMature)
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(workRowAccessibilityLabel)
-        .accessibilityHint("Opens work details")
+        return CommentsHeaderLayout.isWorkConcealed(
+            rating: model.workContext.rating,
+            hideMature: hideMature,
+            isRevealed: gate.revealAll || revealedUnsavedWork
+        )
     }
 
-    private var compactWorkCover: some View {
-        let title = model.workContext.title
-        let fandoms = model.workContext.fandoms
-        let initial = title.trimmingCharacters(in: .whitespacesAndNewlines).first.map { String($0).uppercased() } ?? ""
-        return ZStack(alignment: .bottomLeading) {
-            CoverArt.workGradient(fandoms: fandoms, title: title)
-            if !initial.isEmpty {
-                Text(initial)
-                    .font(.system(size: 44, weight: .semibold, design: .serif))
-                    .foregroundStyle(Color.white.opacity(0.18))
-                    .fixedSize()
-                    .alignmentGuide(.bottom) { $0[.lastTextBaseline] }
-                    .offset(x: -3, y: 12)
-            }
+    private func revealMatureWork() {
+        if let matching = allWorks.first(where: { $0.ao3WorkID == workID }) {
+            gate.reveal(matching)
+        } else {
+            revealedUnsavedWork = true
         }
-        .frame(width: 40, height: 56)
-        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-        .shadow(color: Color.black.opacity(0.18), radius: 3, x: 0, y: 2)
-        .accessibilityHidden(true)
+    }
+
+    @ViewBuilder
+    private var compactWorkRow: some View {
+        if isMatureConcealed {
+            compactWorkRowContent(concealed: true)
+                .environment(\.ao3AuthorNavigationEnabled, false)
+                .blur(radius: 6)
+                .overlay {
+                    MatureRevealCapsule()
+                }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    revealMatureWork()
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Hidden mature work")
+                .accessibilityHint("Activate to reveal.")
+        } else {
+            compactWorkRowContent(concealed: false)
+                .contentShape(Rectangle())
+                .cardNavigation(to: workSummary, accessibilityLabel: workRowAccessibilityLabel)
+        }
+    }
+
+    private func compactWorkRowContent(concealed: Bool) -> some View {
+        HStack(alignment: dynamicTypeSize.isAccessibilitySize ? .top : .center, spacing: 12) {
+            CompactWorkCover(
+                title: model.workContext.title,
+                fandoms: model.workContext.fandoms,
+                showsInitial: !concealed
+            )
+            VStack(alignment: .leading, spacing: 2) {
+                Text(model.workContext.title)
+                    .font(.headline)
+                    .foregroundStyle(Color.primary)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
+                    .truncationMode(.tail)
+                    .fixedSize(horizontal: false, vertical: true)
+                workSubtitle
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Image(systemName: "chevron.right")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.tertiary)
+                .padding(.top, dynamicTypeSize.isAccessibilitySize ? 4 : 0)
+                .accessibilityHidden(true)
+        }
     }
 
     @ViewBuilder
     private var workSubtitle: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 4) {
-            if hasByline {
-                AO3AuthorBylineView(
-                    names: model.workAuthors,
-                    identities: model.workAuthorIdentities,
-                    includesBy: false,
-                    font: .subheadline,
-                    compact: true,
-                    expandsHitTarget: false,
-                    onOpenRoute: openAuthor
-                )
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 2) {
+                if hasByline {
+                    AO3AuthorBylineView(
+                        names: model.workAuthors,
+                        identities: model.workAuthorIdentities,
+                        includesBy: false,
+                        font: .subheadline,
+                        compact: true,
+                        expandsHitTarget: false,
+                        onOpenRoute: openAuthor
+                    )
+                }
+                if let selectedChapterFact {
+                    Text(selectedChapterFact)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
-            if hasByline, selectedChapterFact != nil {
-                Text("·")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            if let selectedChapterFact {
-                Text(selectedChapterFact)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+        } else {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                if hasByline {
+                    AO3AuthorBylineView(
+                        names: model.workAuthors,
+                        identities: model.workAuthorIdentities,
+                        includesBy: false,
+                        font: .subheadline,
+                        compact: true,
+                        expandsHitTarget: false,
+                        onOpenRoute: openAuthor
+                    )
+                }
+                if hasByline, selectedChapterFact != nil {
+                    Text("·")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                if let selectedChapterFact {
+                    Text(selectedChapterFact)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
             }
         }
     }

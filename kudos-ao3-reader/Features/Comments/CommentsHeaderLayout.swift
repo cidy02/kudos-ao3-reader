@@ -1,7 +1,7 @@
 import Foundation
 
 /// Pure logic for formatting the Comments header:
-/// the compact work row chapter subtitle and the meta line figures.
+/// the compact work row chapter subtitle, the meta line figures, and mature privacy concealment.
 enum CommentsHeaderLayout {
     struct MetaLineData: Equatable, Sendable {
         let commentsText: String
@@ -80,24 +80,37 @@ enum CommentsHeaderLayout {
         return "Chapter \(selectedChapter.position)"
     }
 
-    /// Determines total chapter count from the chapters list or raw chapters string (e.g. "7/20" or "20").
+    /// Determines total chapter count from the raw chapters string (e.g. "7/20" or "20")
+    /// or falling back to the loaded chapters list when rawChapters is empty.
     static func totalChaptersCount(
         chapters: [AO3ChapterRef],
         chaptersLoaded: Bool,
         rawChapters: String
     ) -> Int? {
-        if chaptersLoaded && !chapters.isEmpty {
-            return chapters.count
-        }
         let trimmed = rawChapters.trimmingCharacters(in: .whitespacesAndNewlines)
         if let slashIndex = trimmed.firstIndex(of: "/") {
             let totalPart = trimmed[trimmed.index(after: slashIndex)...].trimmingCharacters(in: .whitespacesAndNewlines)
             if let total = Int(totalPart) {
                 return total
             }
+            return nil
         } else if let total = Int(trimmed) {
             return total
         }
+        if chaptersLoaded && !chapters.isEmpty {
+            return chapters.count
+        }
         return nil
+    }
+
+    /// Whether a mature/explicit work should be concealed under the content privacy setting.
+    static func isWorkConcealed(
+        rating: String,
+        hideMature: Bool,
+        isRevealed: Bool
+    ) -> Bool {
+        guard hideMature else { return false }
+        let isAdult = rating == "Mature" || rating == "Explicit"
+        return isAdult && !isRevealed
     }
 }
