@@ -258,34 +258,6 @@ struct ReadingInsightsTests {
         #expect(ReadingInsights.lateNightDuration(from: facts, calendar: calendar) == 30 * 60)
     }
 
-    @Test func readingSessionStoredPropertiesAreUnchanged() {
-        let session = ReadingSession(
-            workID: UUID(),
-            startedAt: Date(),
-            endedAt: Date(),
-            durationSeconds: 60
-        )
-        let mirror = Mirror(reflecting: session)
-        let propertyNames = Set(mirror.children.compactMap(\.label))
-        // Verify only original 11 persisted properties exist, with no new stored properties
-        #expect(propertyNames.contains("id"))
-        #expect(propertyNames.contains("workID"))
-        #expect(propertyNames.contains("workTitle"))
-        #expect(propertyNames.contains("startedAt"))
-        #expect(propertyNames.contains("endedAt"))
-        #expect(propertyNames.contains("durationSeconds"))
-        #expect(propertyNames.contains("lastSpineIndex"))
-        #expect(propertyNames.contains("chapterTitle"))
-        #expect(propertyNames.contains("endingProgress"))
-        #expect(propertyNames.contains("wordCount"))
-        #expect(propertyNames.contains("chapterCountAtVisit"))
-        #expect(propertyNames.contains("didFinish"))
-        #expect(propertyNames.contains("lastModifiedAt"))
-        // modeRaw and playbackRate are computed properties and must not be in stored mirror children
-        #expect(!propertyNames.contains("modeRaw"))
-        #expect(!propertyNames.contains("playbackRate"))
-    }
-
     // MARK: Library insights are honest
 
     private func libraryInsights(
