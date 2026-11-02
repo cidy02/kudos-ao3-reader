@@ -785,7 +785,7 @@ extension AO3FilterPanel {
             }
         }
 
-        for fandom in commaSeparatedValues(filters.fandom) {
+        for fandom in Self.commaSeparatedValues(filters.fandom) {
             items.append(ActiveFilterItem(
                 id: "fandom-\(fandom)",
                 label: fandom,
@@ -793,7 +793,7 @@ extension AO3FilterPanel {
                 onRemove: { removeTag(fandom, from: &filters.fandom) }
             ))
         }
-        for fandom in commaSeparatedValues(filters.excludedFandoms) {
+        for fandom in Self.commaSeparatedValues(filters.excludedFandoms) {
             items.append(ActiveFilterItem(
                 id: "fandom-ex-\(fandom)",
                 label: fandom,
@@ -802,7 +802,7 @@ extension AO3FilterPanel {
             ))
         }
 
-        for character in commaSeparatedValues(filters.characters) {
+        for character in Self.commaSeparatedValues(filters.characters) {
             items.append(ActiveFilterItem(
                 id: "char-\(character)",
                 label: character,
@@ -810,7 +810,7 @@ extension AO3FilterPanel {
                 onRemove: { removeTag(character, from: &filters.characters) }
             ))
         }
-        for character in commaSeparatedValues(filters.excludedCharacters) {
+        for character in Self.commaSeparatedValues(filters.excludedCharacters) {
             items.append(ActiveFilterItem(
                 id: "char-ex-\(character)",
                 label: character,
@@ -819,7 +819,7 @@ extension AO3FilterPanel {
             ))
         }
 
-        for relationship in commaSeparatedValues(filters.relationships) {
+        for relationship in Self.commaSeparatedValues(filters.relationships) {
             items.append(ActiveFilterItem(
                 id: "rel-\(relationship)",
                 label: relationship,
@@ -827,7 +827,7 @@ extension AO3FilterPanel {
                 onRemove: { removeTag(relationship, from: &filters.relationships) }
             ))
         }
-        for relationship in commaSeparatedValues(filters.excludedRelationships) {
+        for relationship in Self.commaSeparatedValues(filters.excludedRelationships) {
             items.append(ActiveFilterItem(
                 id: "rel-ex-\(relationship)",
                 label: relationship,
@@ -836,7 +836,7 @@ extension AO3FilterPanel {
             ))
         }
 
-        for tag in commaSeparatedValues(filters.additionalTags) {
+        for tag in Self.commaSeparatedValues(filters.additionalTags) {
             items.append(ActiveFilterItem(
                 id: "tag-\(tag)",
                 label: tag,
@@ -844,7 +844,7 @@ extension AO3FilterPanel {
                 onRemove: { removeTag(tag, from: &filters.additionalTags) }
             ))
         }
-        for tag in commaSeparatedValues(filters.excludedAdditionalTags) {
+        for tag in Self.commaSeparatedValues(filters.excludedAdditionalTags) {
             items.append(ActiveFilterItem(
                 id: "tag-ex-\(tag)",
                 label: tag,
@@ -995,7 +995,7 @@ extension AO3FilterPanel {
     }
 
     private func removeTag(_ tag: String, from commaSeparated: inout String) {
-        var tags = commaSeparatedValues(commaSeparated)
+        var tags = Self.commaSeparatedValues(commaSeparated)
         tags.removeAll { $0.caseInsensitiveCompare(tag) == .orderedSame }
         commaSeparated = tags.joined(separator: ", ")
     }
