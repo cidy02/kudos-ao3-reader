@@ -217,6 +217,8 @@ struct AO3CollectionFormView: View {
                 if !isNew {
                     openOnAO3Card.pageBodyRow(top: 12, gutter: SubjectMetrics.accountGutter)
                 }
+            } footer: {
+                Text("Your changes are saved to AO3.")
             }
         }
         .cardList()
