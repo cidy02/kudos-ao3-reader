@@ -78,6 +78,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     /// Drives artboard 1a screen 2 — everything this device holds about the
     /// work, behind the My copy row at the foot of the page.
     @State var showingMyCopy = false
+    @State var myCopyChapterPositions: [Int]?
     @State var showingDownloadedDateEditor = false
     /// The same editor, opened from the page's My copy card. A separate flag from
     /// the sheet's own: both presenters would otherwise answer to one value.

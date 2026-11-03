@@ -44,8 +44,7 @@ extension WorkDetailView {
     var myCopySection: some View {
         if let work = localWork {
             Section {
-                SectionRuleHeader(title: "My copy", note: "Private to this device")
-                    .accessibilityAddTraits(.isHeader)
+                myCopyHeader
                     .pageBodyRow(top: 24, gutter: 0)
 
                 VStack(spacing: 0) {
@@ -69,15 +68,41 @@ extension WorkDetailView {
                 }
                 .subjectPanel()
                 .pageBodyRow(top: 8)
+                // The measured chapter lengths, so the row's "Ch N" is the Resume card's.
+                .task(id: ChapterLengthCache.taskKey(for: work)) {
+                    myCopyChapterPositions = await ChapterLengthCache.lengths(for: work)?.positions
+                }
             }
         }
+    }
+
+    /// Board 19: the section title, and whose it is in a quiet lock line at the trailing edge.
+    /// Stacks under the title when the two no longer fit on one line.
+    private var myCopyHeader: some View {
+        let note = HStack(spacing: 4) {
+            Image(systemName: "lock").imageScale(.small)
+            Text("Private to this device")
+        }
+        .font(.footnote)
+        .foregroundStyle(Color.secondary)
+        .lineLimit(1)
+        let title = Text("My copy")
+            .font(.title3.weight(.bold))
+            .foregroundStyle(Color.primary)
+            .accessibilityAddTraits(.isHeader)
+        return ViewThatFits(in: .horizontal) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) { title; Spacer(minLength: 8); note }
+            VStack(alignment: .leading, spacing: 4) { title; note }
+        }
+        .padding(.horizontal, SubjectMetrics.gutter)
+        .accessibilityElement(children: .combine)
     }
 
     private func myCopyRows(for work: SavedWork) -> [WorkDetailPresentation.MyCopyRow] {
         let hasFile = WorkReaderPreparation.hasReadableEPUB(for: work)
         return WorkDetailPresentation.myCopyRows(
             progress: work.publicationProgress,
-            chapterTitle: work.hasStartedReading ? WorkReadingPosition.title(from: work.readiumLocator) : nil,
+            chapterNumber: work.hasStartedReading ? myCopyChapterNumber(for: work) : nil,
             downloadedAt: work.downloadedAt,
             tags: work.tags.map(\.name).sorted(),
             collections: work.activeCollections.map(\.name).sorted(),
@@ -85,6 +110,13 @@ extension WorkDetailView {
             hasFile: hasFile,
             fileSize: hasFile ? WorkDetailPresentation.fileSizeLabel(forFileAt: work.fileURL) : nil
         )
+    }
+
+    /// The chapter the Resume card names (`ResumeCardModel.chapterNumber`), from the same lengths.
+    private func myCopyChapterNumber(for work: SavedWork) -> Int {
+        var model = ResumeCardModel(work: work)
+        model.chapterPositions = myCopyChapterPositions
+        return model.chapterNumber
     }
 
     private func myCopyRowView(_ row: WorkDetailPresentation.MyCopyRow) -> some View {

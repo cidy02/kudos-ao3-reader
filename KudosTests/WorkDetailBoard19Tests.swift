@@ -108,12 +108,12 @@ struct WorkDetailBoard19Tests {
     // MARK: My copy rows
 
     private func rows(
-        progress: Double? = 0.58, chapterTitle: String? = nil, downloadedAt: Date? = nil,
+        progress: Double? = 0.58, chapterNumber: Int? = nil, downloadedAt: Date? = nil,
         tags: [String] = [], collections: [String] = [], queues: [String] = [],
         hasFile: Bool = true, fileSize: String? = "1.2 MB"
     ) -> [WorkDetailPresentation.MyCopyRow] {
         WorkDetailPresentation.myCopyRows(
-            progress: progress, chapterTitle: chapterTitle, downloadedAt: downloadedAt, tags: tags,
+            progress: progress, chapterNumber: chapterNumber, downloadedAt: downloadedAt, tags: tags,
             collections: collections, queues: queues, hasFile: hasFile, fileSize: fileSize
         )
     }
@@ -125,7 +125,7 @@ struct WorkDetailBoard19Tests {
     }
 
     @Test func myCopyProgressNamesTheChapterWhenKnown() {
-        #expect(rows(chapterTitle: "The Salt Road")[0].value == "The Salt Road · 58%")
+        #expect(rows(chapterNumber: 7)[0].value == "Ch 7 · 58%")
         #expect(rows()[0].value == "58%")
         #expect(rows(progress: nil)[0].value == "Not started")
     }
