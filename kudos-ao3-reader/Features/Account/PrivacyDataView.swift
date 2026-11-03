@@ -62,7 +62,7 @@ struct PrivacyDataView: View {
     /// of which the dialog's other promise, that the works "can be re-downloaded
     /// from AO3 anytime", is simply untrue for.
     private var freedHistory: [SavedWork] {
-        works.filter { !$0.hasEPUB && !$0.isProtected }
+        LocalDataClearDialogs.freedHistory(from: works)
     }
 
     @State private var footprint = LocalStorageFootprint()
@@ -116,64 +116,16 @@ struct PrivacyDataView: View {
         .subjectScreenWash(title: "Privacy", palette: accountPalette)
         .task { await measureIfNeeded() }
         .refreshable { await measure() }
-        .confirmationDialog(
-            "Clear Reading History?",
-            isPresented: $confirmClearHistory,
-            titleVisibility: .visible
-        ) {
-            Button("Clear \(countLabel(freedHistory.count, "Work"))", role: .destructive) {
-                for work in freedHistory {
-                    PreservedWorkService.softDelete(work, in: context)
-                }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Moves works that only remain in your reading history to Recently Deleted for "
-                + "\(PreservedWorkService.recoveryWindowText). Your saved and downloaded works "
-                + "stay where they are, and you can download these works from AO3 again.")
-        }
-        .confirmationDialog(
-            "Free Up Space?",
-            isPresented: $confirmClearDownloads,
-            titleVisibility: .visible
-        ) {
-            Button("Free \(countLabel(freeableDownloads.count, "File"))", role: .destructive) {
-                LocalDataClearing.clearFreeableDownloads(from: works, in: context)
-                Task { await measure() }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Removes the copies of works you've finished reading and didn't download, "
-                + "favourite or queue. Kudos gets them again from AO3 if you open them.")
-        }
-        .confirmationDialog(
-            "Clear Reading Positions?",
-            isPresented: $confirmClearPositions,
-            titleVisibility: .visible
-        ) {
-            Button("Clear \(countLabel(positionedWorks.count, "Position"))", role: .destructive) {
-                LocalDataClearing.clearReadingPositions(from: works, in: context)
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Clears your place in every work. Your works and their order in Continue Reading "
-                + "stay the same.")
-        }
-        .confirmationDialog(
-            "Clear Browse Cache?",
-            isPresented: $confirmClearBrowseCache,
-            titleVisibility: .visible
-        ) {
-            Button("Clear \(byteLabel(footprint.cacheBytes))", role: .destructive) {
-                FandomCatalog.shared.clearCache()
-                browseCacheCleared = true
-                Task { await measure() }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Removes saved fandom and category lists. Your reading, saved works, and "
-                + "downloads stay untouched; Browse rebuilds the lists next time you open it.")
-        }
+        .modifier(LocalDataClearDialogs(
+            works: works,
+            confirmHistory: $confirmClearHistory,
+            confirmDownloads: $confirmClearDownloads,
+            confirmPositions: $confirmClearPositions,
+            confirmBrowseCache: $confirmClearBrowseCache,
+            browseCacheCleared: $browseCacheCleared,
+            cacheLabel: byteLabel(footprint.cacheBytes),
+            onMeasure: { Task { await measure() } }
+        ))
     }
 
     /// The account's own hue, not a work's — every account surface is scoped to
