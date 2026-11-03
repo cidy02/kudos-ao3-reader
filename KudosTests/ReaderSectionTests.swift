@@ -204,6 +204,29 @@ struct ReaderSectionTests {
         #expect(ReaderSectionBuilder.hrefKey("a.xhtml") != ReaderSectionBuilder.hrefKey("b.xhtml"))
     }
 
+    // MARK: - AO3 comment chapter → reader section mapping
+
+    @Test func mapsAO3ChapterToTheMatchingStoryChapter() {
+        let toc = (1 ... 3).map { Raw(title: "Chapter \($0)", spineIndex: $0 - 1) }
+        let sections = ReaderSectionBuilder.build(tocEntries: toc, spineHrefs: spine(3))
+
+        #expect(sections.spineIndex(forStoryChapter: 2) == 1)
+    }
+
+    @Test func mappingSkipsPrefaceAndSummary() {
+        let toc = [Raw(title: "Preface", spineIndex: 0), Raw(title: "Chapter 1", spineIndex: 2)]
+        let sections = ReaderSectionBuilder.build(tocEntries: toc, spineHrefs: spine(3))
+
+        #expect(sections.spineIndex(forStoryChapter: 1) == 2)
+    }
+
+    @Test func chapterBeyondTheBookHasNoReaderDestination() {
+        let toc = [Raw(title: "Chapter 1", spineIndex: 0)]
+        let sections = ReaderSectionBuilder.build(tocEntries: toc, spineHrefs: spine(1))
+
+        #expect(sections.spineIndex(forStoryChapter: 2) == nil)
+    }
+
     // MARK: - ao3StoryChapter mapping (reader position → AO3 comment chapter)
 
     /// The spec's reference table over the real EPUB shape: Preface(0),

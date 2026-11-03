@@ -236,6 +236,9 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     /// SwiftData save on every call (scrolled-mode hang). Completion is
     /// signaled separately by `onReachedPublicationEnd`.
     var onLocatorChange: ((Locator) -> Void)?
+    /// Fires for every settled locator, including transient scrub settles that
+    /// `onLocatorChange` deliberately excludes from persistence.
+    var onLocatorSettled: ((Locator) -> Void)?
     /// Fires once each time the viewport newly reaches the publication's true
     /// end (`ReadiumReaderCompletion.isAtEnd`) — used to auto-finish completed
     /// works. Never fired for intermediate progressions such as 0.99/0.999.
@@ -729,6 +732,7 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         }
         currentLocator = locator
         settledLocationCount += 1
+        onLocatorSettled?(locator)
         // Mid-scrub locator settles are transient — the reader is flying past
         // these pages, not reading them. `currentLocator` still advances (so a
         // dismiss mid-drag flushes the right spot), but the debounced progress

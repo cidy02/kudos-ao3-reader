@@ -1,5 +1,30 @@
 import Foundation
 
+/// Keeps a chapter-targeted open from replacing the saved resume locator merely
+/// because Readium reported its opening landing. Ordinary opens are pass-through.
+nonisolated struct ReadiumInitialPositionPersistenceGate {
+    private let protectsOpeningPosition: Bool
+    private var openingLocatorString: String?
+    private var hasMoved = false
+
+    init(protectsOpeningPosition: Bool) {
+        self.protectsOpeningPosition = protectsOpeningPosition
+    }
+
+    var allowsPersistence: Bool {
+        !protectsOpeningPosition || hasMoved
+    }
+
+    mutating func observeSettledLocator(_ locatorString: String) {
+        guard protectsOpeningPosition, !hasMoved, !locatorString.isEmpty else { return }
+        guard let openingLocatorString else {
+            self.openingLocatorString = locatorString
+            return
+        }
+        hasMoved = locatorString != openingLocatorString
+    }
+}
+
 /// Debounced durable writes for the iOS Readium reader's `Locator` stream
 /// (scrolled-mode hang fix / T-98).
 ///

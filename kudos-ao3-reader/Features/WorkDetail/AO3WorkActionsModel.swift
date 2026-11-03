@@ -194,8 +194,20 @@ final class AO3WorkActionsModel {
 extension View {
     /// Presents the comments screen, bookmark composer, and result alert.
     /// Apply on the host that also shows `AO3WorkActionsMenu`.
-    func ao3WorkActions(_ actions: AO3WorkActionsModel, workID: Int, auth: AO3AuthService) -> some View {
-        modifier(AO3WorkActionsModifier(actions: actions, workID: workID, auth: auth))
+    func ao3WorkActions(
+        _ actions: AO3WorkActionsModel,
+        workID: Int,
+        auth: AO3AuthService,
+        readerSections: [ReaderSection] = [],
+        onOpenReaderChapter: ((Int) -> Void)? = nil
+    ) -> some View {
+        modifier(AO3WorkActionsModifier(
+            actions: actions,
+            workID: workID,
+            auth: auth,
+            readerSections: readerSections,
+            onOpenReaderChapter: onOpenReaderChapter
+        ))
     }
 }
 
@@ -203,6 +215,8 @@ private struct AO3WorkActionsModifier: ViewModifier {
     @Bindable var actions: AO3WorkActionsModel
     let workID: Int
     let auth: AO3AuthService
+    var readerSections: [ReaderSection]
+    var onOpenReaderChapter: ((Int) -> Void)?
 
     func body(content: Content) -> some View {
         content
@@ -216,7 +230,9 @@ private struct AO3WorkActionsModifier: ViewModifier {
                 isPresented: $actions.showingCommentsScreen,
                 workID: workID,
                 context: actions.commentsContext,
-                initialChapterPosition: actions.commentsInitialChapterPosition
+                initialChapterPosition: actions.commentsInitialChapterPosition,
+                readerSections: readerSections,
+                onOpenReaderChapter: onOpenReaderChapter
             )
             .sensoryFeedback(.success, trigger: actions.writeSuccesses)
             .sensoryFeedback(.error, trigger: actions.writeFailures)

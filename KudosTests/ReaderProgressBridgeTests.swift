@@ -117,6 +117,16 @@ struct ReaderProgressBridgeTests {
         #expect(bridge.currentFraction == 0)
     }
 
+    @Test func openingAtAChapterStartDoesNotCountAsReadingMovement() {
+        let bridge = ReaderProgressBridge()
+        _ = bridge.beginChapter(spine: 4)
+        bridge.recordProgress(0)
+        #expect(!bridge.hasMovedFromOpening)
+
+        bridge.recordProgress(0.2)
+        #expect(bridge.hasMovedFromOpening)
+    }
+
     // MARK: Write debounce + guaranteed final flush
 
     @Test func streamedUpdatesAreDebounced() {

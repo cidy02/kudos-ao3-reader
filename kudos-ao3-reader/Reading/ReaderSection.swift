@@ -4,7 +4,7 @@ import Foundation
 /// (and Calibre's re-splitting of it into per-file EPUBs) puts a Preface and
 /// optional Afterword around the real story chapters; neither the reader index
 /// nor the progress pill should count those as numbered chapters.
-nonisolated enum ReaderSectionKind: Equatable {
+nonisolated enum ReaderSectionKind: Equatable, Sendable {
     case preface
     case summary
     case chapter
@@ -17,7 +17,7 @@ nonisolated enum ReaderSectionKind: Equatable {
 /// One normalized reading-order item, aligned 1:1 with the EPUB's spine —
 /// `ReaderSectionBuilder.build` always returns exactly `spineHrefs.count` entries,
 /// in spine order, so `sections[spineIndex]` is always valid.
-nonisolated struct ReaderSection: Identifiable, Equatable {
+nonisolated struct ReaderSection: Identifiable, Equatable, Sendable {
     var id: Int { spineIndex }
     let href: String
     let title: String
@@ -148,6 +148,15 @@ extension Array where Element == ReaderSection {
     /// the fallback source when AO3's own "Chapters: X/Y" stat isn't available.
     var storyChapterCount: Int {
         count(where: { $0.kind == .chapter })
+    }
+
+    /// The reading-order item that starts AO3 story chapter `position`.
+    /// Front/back matter never participates, so AO3 Chapter 1 maps to the first
+    /// `.chapter` even when Preface and Summary precede it. An out-of-range AO3
+    /// chapter has no destination; callers hide the action instead of guessing.
+    func spineIndex(forStoryChapter position: Int) -> Int? {
+        guard position > 0 else { return nil }
+        return first(where: { $0.storyChapterIndex == position })?.spineIndex
     }
 
     /// The 1-based AO3 **story-chapter** number a reader position maps to — for

@@ -17,6 +17,26 @@ struct ReadiumProgressPersistenceTests {
         #"{"href":"\#(href)","type":"application/xhtml+xml","locations":{"totalProgression":\#(total),"progression":\#(total),"position":5}}"#
     }
 
+    @Test func chapterTargetedOpenWaitsForMovementBeforePersisting() {
+        var gate = ReadiumInitialPositionPersistenceGate(protectsOpeningPosition: true)
+        #expect(!gate.allowsPersistence)
+
+        gate.observeSettledLocator(locator(total: 0.6, href: "chapter7.xhtml"))
+        #expect(!gate.allowsPersistence)
+        gate.observeSettledLocator(locator(total: 0.6, href: "chapter7.xhtml"))
+        #expect(!gate.allowsPersistence)
+
+        gate.observeSettledLocator(locator(total: 0.61, href: "chapter7.xhtml"))
+        #expect(gate.allowsPersistence)
+    }
+
+    @Test func ordinaryOpenNeverGatesPersistence() {
+        var gate = ReadiumInitialPositionPersistenceGate(protectsOpeningPosition: false)
+        #expect(gate.allowsPersistence)
+        gate.observeSettledLocator(locator(total: 0.2))
+        #expect(gate.allowsPersistence)
+    }
+
     // MARK: Debounce window
 
     @Test func streamedUpdatesAreDebounced() {

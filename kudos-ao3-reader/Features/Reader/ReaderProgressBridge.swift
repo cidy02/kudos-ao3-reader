@@ -85,6 +85,9 @@ final class ReaderProgressBridge {
     /// `readerRestore`; that pair is one settle, not a move.
     private var opening: (spine: Int, fraction: Double)?
     private var hasMoved = false
+    /// Whether this session has left its opening landing. Reader deep links use
+    /// this to avoid replacing the saved resume point merely by opening elsewhere.
+    var hasMovedFromOpening: Bool { hasMoved }
     /// Fraction the restore landing settled on. Nil while a page-1 prelude is
     /// still waiting for `readerRestore`.
     private var settledFraction: Double?

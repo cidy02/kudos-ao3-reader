@@ -580,10 +580,7 @@ final class CommentsModel {
             .first(where: { $0.chapterID != nil }),
               let chapterID = comment.chapterID
         else { return nil }
-        let position = comment.chapterLabel?
-            .split(whereSeparator: { !$0.isNumber })
-            .compactMap { Int($0) }
-            .first ?? 1
+        let position = comment.storyChapterPosition ?? 1
         return AO3ChapterRef(id: chapterID, position: position, title: "")
     }
 
