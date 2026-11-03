@@ -207,7 +207,8 @@ struct WritingView: View {
                 } label: {
                     AccountNavCardLabel(title: "No drafts on AO3", systemImage: "doc.badge.plus")
                 }
-                .buttonStyle(.cardPress)
+                .buttonStyle(.plain)
+                .listCardPressFeedback()
                 .accountControlCardRow()
             }
         }
@@ -234,7 +235,8 @@ struct WritingView: View {
                         Button { openInboxItem(item) } label: {
                             WritingCommentPreviewRow(item: item)
                         }
-                        .buttonStyle(.cardPress)
+                        .buttonStyle(.plain)
+                        .listCardPressFeedback()
                         .cardRow()
                     }
                 }

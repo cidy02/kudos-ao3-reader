@@ -532,14 +532,12 @@ private struct CardNavigationModifier<Value: Hashable>: ViewModifier {
     let value: Value
     let accessibilityLabel: String
     @Environment(AppRouter.self) private var router
-    @State private var isPressed = false
 
     func body(content: Content) -> some View {
         content
-            .cardPressed(isPressed)
+            .listCardPressFeedback()
             .background {
                 NavigationLink(value: value) { EmptyView() }
-                    .buttonStyle(CardPressStateStyle(isPressed: $isPressed))
                     .opacity(0)
                     .disabled(router.cardNavigationSuppressed)
                     .allowsHitTesting(!router.cardNavigationSuppressed)
@@ -560,18 +558,17 @@ private struct SubjectRowNavigationModifier<Value: Hashable>: ViewModifier {
     let value: Value
     let accessibilityLabel: String
     let cardPressFeedback: Bool
-    @State private var isPressed = false
 
+    @ViewBuilder
     func body(content: Content) -> some View {
-        content
-            .cardPressed(cardPressFeedback && isPressed)
-            .background {
-                if cardPressFeedback {
-                    link.buttonStyle(CardPressStateStyle(isPressed: $isPressed))
-                } else {
-                    link
-                }
-            }
+        if cardPressFeedback {
+            content
+                .listCardPressFeedback()
+                .background { link }
+        } else {
+            content
+                .background { link }
+        }
     }
 
     private var link: some View {
@@ -586,18 +583,17 @@ private struct SubjectRowDestinationNavigationModifier<Destination: View>: ViewM
     let accessibilityLabel: String
     let cardPressFeedback: Bool
     @ViewBuilder var destination: () -> Destination
-    @State private var isPressed = false
 
+    @ViewBuilder
     func body(content: Content) -> some View {
-        content
-            .cardPressed(cardPressFeedback && isPressed)
-            .background {
-                if cardPressFeedback {
-                    link.buttonStyle(CardPressStateStyle(isPressed: $isPressed))
-                } else {
-                    link
-                }
-            }
+        if cardPressFeedback {
+            content
+                .listCardPressFeedback()
+                .background { link }
+        } else {
+            content
+                .background { link }
+        }
     }
 
     private var link: some View {
