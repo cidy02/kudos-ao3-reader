@@ -448,6 +448,12 @@ enum DebugLaunchRoute {
     /// Search filters, for the shots whose sheet or picker lives on that panel.
     static var opensSearchFilters: Bool { opensFilters || wantsSearchFilters }
 
+    /// `query:<text>`: the text Search types and submits for a results screenshot.
+    static var searchQuery: String? {
+        guard let value = pageRoute, value.hasPrefix("query:") else { return nil }
+        return String(value.dropFirst("query:".count))
+    }
+
     static var wantsSearchFilters: Bool {
         wantsSheet("savesearch") || wantsSheet("tagpicker") || wantsPush("languagepicker") || wantsSheet("searchfilters")
     }
@@ -509,6 +515,9 @@ enum DebugLaunchRoute {
         } else if value.hasPrefix("section:"),
            let kind = LibrarySectionKind(rawValue: String(value.dropFirst("section:".count))) {
             router.showLibrarySection(kind)
+        } else if value.hasPrefix("query:") {
+            // `query:<text>` — Search runs that text as an AO3 works search (boards 11, 18).
+            router.selection = .search
         } else if value.hasPrefix("tagsearch:") {
             // `tagsearch:<fandom>` — Search's results for a fandom tag.
             router.searchAO3(.fandom, String(value.dropFirst("tagsearch:".count)))

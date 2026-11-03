@@ -321,7 +321,7 @@ extension AO3FilterPanel {
                 HStack(spacing: 12) {
                     SettingsIconTile(
                         color: Color(red: 0xE0 / 255.0, green: 0xA1 / 255.0, blue: 0x00 / 255.0),
-                        systemImage: "slider.horizontal.2"
+                        systemImage: "slider.horizontal.3"
                     )
                     Picker("Match", selection: $filters.ratingMatch) {
                         ForEach(AO3SearchFilters.RatingMatch.allCases) {

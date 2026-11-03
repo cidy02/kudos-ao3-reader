@@ -508,7 +508,7 @@ struct AO3AuthorSeriesSection: View {
                             // app does post works. What stays true is where series are made.
                             AccountExternalNavCard(
                                 title: "New series on AO3",
-                                systemImage: "square.stack.badge.plus",
+                                systemImage: "rectangle.stack.badge.plus",
                                 // Site-wide: AO3's New Series form is `/series/new`
                                 // (`AO3Client.newSeriesURL`), not under /users/<you>/.
                                 sitePath: "/series/new",

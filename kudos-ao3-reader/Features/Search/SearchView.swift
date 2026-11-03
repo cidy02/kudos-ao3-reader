@@ -150,6 +150,10 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 .task {
                     try? await Task.sleep(for: .seconds(2))
                     if DebugLaunchRoute.opensSearchFilters { router.panel = .searchFilters }
+                    if let query = DebugLaunchRoute.searchQuery, filters.query.isEmpty {
+                        filters.query = query
+                        runSearch()
+                    }
                 }
                 #endif
                 .task(id: localMatchKey) { await refreshLocalMatches() }
@@ -236,7 +240,9 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                             (phase == .loaded && !results.isEmpty)
                                 ? AnyView(ToolbarIconButton(
                                     title: "Save Search",
-                                    systemImage: "bookmark.badge.plus",
+                                    // Board 18's bookmark glyph. ("bookmark.badge.plus" is not an SF
+                                    // Symbol, so the toolbar fell back to the "Save Search" title.)
+                                    systemImage: "bookmark",
                                     action: presentResultsSaveDialog
                                 ))
                                 : nil,
