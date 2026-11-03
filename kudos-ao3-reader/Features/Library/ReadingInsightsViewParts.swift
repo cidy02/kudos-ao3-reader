@@ -204,7 +204,7 @@ struct WhereTheWordsWentCard: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.primary)
                 Spacer()
-                Text("\(fandoms.count) fandoms")
+                Text("\(fandoms.count) \(fandoms.count == 1 ? "fandom" : "fandoms")")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -253,7 +253,9 @@ struct WhereTheWordsWentCard: View {
                         Text("\(Int((f.share * 100).rounded()))%")
                             .font(.subheadline.weight(.semibold))
                             .monospacedDigit()
-                            .frame(width: 36, alignment: .trailing)
+                            .lineLimit(1)
+                            .fixedSize()
+                            .frame(minWidth: 36, alignment: .trailing)
                     }
                     .frame(minHeight: 34)
                 }
@@ -1980,10 +1982,13 @@ struct LibraryFeedbackCard: View {
             }
             .frame(height: 6)
 
+            // One line: "100%" was wider than the old fixed column and broke before the "%".
             Text("\(percent)%")
                 .font(.caption.weight(.semibold))
                 .monospacedDigit()
-                .frame(width: 32, alignment: .trailing)
+                .lineLimit(1)
+                .fixedSize()
+                .frame(minWidth: 32, alignment: .trailing)
         }
     }
 }
@@ -2025,7 +2030,7 @@ struct LibraryPreservedStatsCard: View {
                             .font(.caption)
                             .lineLimit(1)
                         Spacer()
-                        Text("\(f.count) works")
+                        Text("\(f.count) \(f.count == 1 ? "work" : "works")")
                             .font(.caption.weight(.medium))
                             .foregroundStyle(.secondary)
                     }

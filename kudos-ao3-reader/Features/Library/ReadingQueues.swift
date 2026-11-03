@@ -586,6 +586,7 @@ struct AddToQueueView: View {
     }
 
     private func toggle(_ queue: ReadingQueue) {
+        Haptics.selection()
         if isMember(queue) {
             for work in works {
                 ReadingQueueService.removeFromQueue(work, from: queue, in: context)

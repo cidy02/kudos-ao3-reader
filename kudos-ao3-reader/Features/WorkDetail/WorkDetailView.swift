@@ -660,6 +660,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
 
     private func deleteFromLibrary(_ work: SavedWork) {
         PreservedWorkService.softDelete(work, in: context)
+        Haptics.deleted()
         dismiss()
     }
 

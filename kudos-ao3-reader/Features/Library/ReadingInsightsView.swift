@@ -132,12 +132,12 @@ struct ReadingInsightsView: View {
                         Label("Export Reading History…", systemImage: "square.and.arrow.up")
                     }
                 } label: {
+                    // Bare glyph: the toolbar draws the glass circle; a custom
+                    // filled circle here read as a stuck pressed state.
                     Image(systemName: "ellipsis")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.primary)
-                        .frame(width: 34, height: 34)
-                        .background(Circle().fill(Color.primary.opacity(0.08)))
                 }
+                // Neutral dots like every other toolbar "…" (WorkListMoreMenu).
+                .tint(Color.primary)
                 .accessibilityLabel("More: options, export, how this is counted")
             }
         }

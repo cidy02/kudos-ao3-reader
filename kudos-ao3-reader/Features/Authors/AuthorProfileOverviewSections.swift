@@ -594,6 +594,8 @@ struct AuthorProfileOverviewSections: View {
 
 struct AuthorProfileLatestCard: View {
     let work: AO3WorkSummary
+    /// Board 23 (Author) draws a play disc; board 35 (Account) a chevron disc.
+    var discSymbol = "play.fill"
 
     @Environment(ThemeManager.self) private var theme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -659,7 +661,7 @@ struct AuthorProfileLatestCard: View {
             // Board 23's play disc. Decorative: the whole card is already the
             // work's link (SensitiveRemoteWorkCard), and the card has no read
             // action of its own, so the disc shares that one tap target.
-            Image(systemName: "play.fill")
+            Image(systemName: discSymbol)
                 .font(.system(size: 16))
                 .foregroundStyle(.accentFill)
                 .frame(width: 40, height: 40)

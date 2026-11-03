@@ -140,6 +140,7 @@ struct WorkBulkActionBar: View {
         for work in selectedWorks {
             PreservedWorkService.softDelete(work, in: context)
         }
+        Haptics.deleted()
         onDeleted()
     }
 
