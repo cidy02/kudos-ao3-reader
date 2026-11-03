@@ -6,6 +6,7 @@ struct WorkEditView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(ThemeManager.self) private var theme
     @Environment(AO3AuthService.self) private var auth
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @ScaledMetric(relativeTo: .subheadline) private var actionRowTitleSize: CGFloat = 15
     @ScaledMetric(relativeTo: .caption) private var footnoteSize: CGFloat = 11.5
@@ -52,34 +53,28 @@ struct WorkEditView: View {
     }
 
     private var gutter: CGFloat { SubjectMetrics.accountGutter }
-    private var selfGuttered: CGFloat { 0 }
+    private var isDarkTheme: Bool { theme.appTheme == .dark || theme.appTheme == .oled }
 
     var body: some View {
         List {
             Section {
-                // 1bs's "saved 2 minutes ago" is dropped: the form carries
-                // no saved time, and a guessed one would be wrong.
-                SubjectPageFact(Self.subtitle(for: form), gutter: gutter)
-                    .pageBodyRow(top: 12, gutter: selfGuttered)
+                // The text editors checkpoint into the form and a device-local
+                // recovery copy after 1.5 seconds idle or 20 seconds of typing.
+                Text("Saved as you type · recovery copy on this device")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .pageBodyRow(top: 12, gutter: gutter)
                 if form.isDraft {
                     footnote("This draft isn't public yet. Options that apply only after posting "
                         + "will appear once you post it.")
                 }
             }
 
-            Section {
-                // The bottom padding is the 8pt a `.pageBodyRow(top: 8)` card
-                // below gets; segment rows sit flush and cannot carry it.
-                SectionRuleHeader(title: form.isDraft ? "Required before posting" : "Required")
-                    .padding(.bottom, 8)
-                    .pageBodyRow(top: 18, gutter: selfGuttered)
-            }
+            Section { sectionHeader("Required tags") }
             Section { requiredRows }
 
             Section {
-                SectionRuleHeader(title: "Tags")
-                    .padding(.bottom, 8)
-                    .pageBodyRow(top: 18, gutter: selfGuttered)
+                sectionHeader("Tags")
                 if needsTagRefresh {
                     Button("Reload tags") { tagRetry += 1 }
                         .pageBodyRow(top: 4, gutter: gutter)
@@ -87,34 +82,17 @@ struct WorkEditView: View {
             }
             Section {
                 tagsRows
-                Text("Tags can also be edited separately from the work text.")
-                    .font(.system(size: footnoteSize))
-                    .foregroundStyle(.secondary.opacity(0.7))
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 14)
-                    .pageBodyRow(top: 8, gutter: gutter)
+                footnote("Suggestions come from AO3 as you type.")
             }
 
-            Section {
-                SectionRuleHeader(title: "Association")
-                    .padding(.bottom, 8)
-                    .pageBodyRow(top: 18, gutter: selfGuttered)
-            }
+            Section { sectionHeader("Preface") }
+            Section { prefaceRows }
+
+            Section { sectionHeader("Associations") }
             Section { associationRows }
 
-            Section {
-                SectionRuleHeader(title: "Text")
-                    .padding(.bottom, 8)
-                    .pageBodyRow(top: 18, gutter: selfGuttered)
-            }
-            Section { textRows }
-
-            Section {
-                SectionRuleHeader(title: form.isDraft ? "When posted" : "Publication")
-                    .padding(.bottom, 8)
-                    .pageBodyRow(top: 18, gutter: selfGuttered)
-            }
+            Section { sectionHeader("Chapters and publishing") }
+            Section { chapterRows }
             Section {
                 // Rows only, no links — converted so the screen keeps one card
                 // style rather than because this card could misfire.
@@ -133,18 +111,14 @@ struct WorkEditView: View {
             // the toolbar keeps only Save, as the board draws it.
             if !form.isPosted {
                 Section {
-                    SectionRuleHeader(title: "Post")
-                        .pageBodyRow(top: 18, gutter: selfGuttered)
-                    postPanel.pageBodyRow(top: 8, gutter: gutter)
+                    postPanel.pageBodyRow(top: 14, gutter: gutter)
                     if form.workID != nil {
                         footnote("AO3 deletes an unposted draft 30 days after it is created.")
                     }
                 }
             } else if form.workID != nil {
                 Section {
-                    SectionRuleHeader(title: "Delete")
-                        .pageBodyRow(top: 18, gutter: selfGuttered)
-                    deletePanel.pageBodyRow(top: 8, gutter: gutter)
+                    deletePanel.pageBodyRow(top: 14, gutter: gutter)
                 }
             }
         }
@@ -266,6 +240,177 @@ struct WorkEditView: View {
         }
     }
 
+    private func sectionHeader(_ title: String) -> some View {
+        Text(title)
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .accessibilityAddTraits(.isHeader)
+            .padding(.horizontal, 14)
+            .pageBodyRow(top: 18, gutter: gutter)
+    }
+
+    private func fieldLabel(_ title: String, isRequired: Bool = false) -> Text {
+        if isRequired {
+            Text("\(title) \(Text("∗").foregroundStyle(.accentInk))")
+        } else {
+            Text(title)
+        }
+    }
+
+    private func choiceRow(
+        title: String,
+        value: Binding<String>,
+        options: [AO3FormOption]
+    ) -> some View {
+        let currentTitle = options.first { $0.value == value.wrappedValue }?.title
+            ?? (value.wrappedValue.isEmpty ? "Select…" : value.wrappedValue)
+        return SubjectFormRow(label: title, arrangement: .control) {
+            Menu {
+                Picker(title, selection: value) {
+                    if !options.contains(where: { $0.value == value.wrappedValue }) {
+                        Text(currentTitle).tag(value.wrappedValue)
+                    }
+                    ForEach(options) { Text($0.title).tag($0.value) }
+                }
+                .pickerStyle(.inline)
+                .labelsHidden()
+            } label: {
+                HStack(spacing: 6) {
+                    if dynamicTypeSize.isAccessibilitySize {
+                        Text(currentTitle)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(3)
+                        Spacer(minLength: 0)
+                    } else {
+                        Spacer(minLength: 0)
+                        Text(currentTitle)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.trailing)
+                    }
+                    disclosureChevron
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .menuStyle(.button)
+            .buttonStyle(.plain)
+            .accessibilityLabel(title)
+            .accessibilityValue(currentTitle)
+        }
+    }
+
+    private func symbolChoiceRow(
+        title: String,
+        value: Binding<String>,
+        options: [AO3FormOption],
+        symbol: WorkSymbolTile
+    ) -> some View {
+        let currentTitle = options.first { $0.value == value.wrappedValue }?.title
+            ?? (value.wrappedValue.isEmpty ? "Select…" : value.wrappedValue)
+        return Menu {
+            Picker(title, selection: value) {
+                if !options.contains(where: { $0.value == value.wrappedValue }) {
+                    Text(currentTitle).tag(value.wrappedValue)
+                }
+                ForEach(options) { Text($0.title).tag($0.value) }
+            }
+            .pickerStyle(.inline)
+            .labelsHidden()
+        } label: {
+            symbolRowContent(title: title, value: currentTitle, symbol: symbol)
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
+        .accessibilityValue(currentTitle)
+    }
+
+    private func symbolDisclosureRow(
+        title: String,
+        value: String,
+        symbol: WorkSymbolTile,
+        isRequired: Bool = false
+    ) -> some View {
+        symbolRowContent(title: title, value: value, symbol: symbol, isRequired: isRequired)
+    }
+
+    private func symbolRowContent(
+        title: String,
+        value: String,
+        symbol: WorkSymbolTile,
+        isRequired: Bool = false
+    ) -> some View {
+        HStack(spacing: 10) {
+            WorkSymbolTileView(symbol: symbol, side: 22)
+                .accessibilityHidden(true)
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 2) {
+                    fieldLabel(title, isRequired: isRequired)
+                        .foregroundStyle(.primary)
+                    Text(value)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(3)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                fieldLabel(title, isRequired: isRequired)
+                    .foregroundStyle(.primary)
+                    .layoutPriority(1)
+                Spacer(minLength: 0)
+                Text(value)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.trailing)
+            }
+            disclosureChevron
+        }
+        .font(.system(size: actionRowTitleSize))
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+        .frame(maxWidth: .infinity)
+        .contentShape(Rectangle())
+    }
+
+    private var disclosureChevron: some View {
+        Image(systemName: "chevron.right")
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(Color.secondary.opacity(0.7))
+            .accessibilityHidden(true)
+    }
+
+    private func tagChipsRow(
+        title: String,
+        values: Binding<[String]>,
+        isRequired: Bool = false
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            fieldLabel(title, isRequired: isRequired)
+                .font(.system(size: actionRowTitleSize))
+                .foregroundStyle(.primary)
+                .accessibilityLabel(isRequired ? "\(title), required" : title)
+            FlowLayout(spacing: 6, rowSpacing: 6) {
+                ForEach(values.wrappedValue, id: \.self) { value in
+                    SubjectChip(
+                        text: value,
+                        style: .neutral,
+                        palette: accountPalette,
+                        horizontalPadding: 10,
+                        verticalPadding: 4
+                    )
+                }
+                Text("Add…")
+                    .font(.footnote)
+                    .foregroundStyle(.accentInk)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 4)
+                    .accessibilityHidden(true)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .contentShape(Rectangle())
+    }
+
     /// One `List` row per field, drawn as segments of one card. These were a
     /// `VStack` in a single row, and a `List` row fires EVERY navigation link
     /// inside it: tapping Fandoms pushed Archive warnings and Fandoms both, and
@@ -273,33 +418,100 @@ struct WorkEditView: View {
     /// simulator). A row holding one link fires only that one.
     @ViewBuilder
     private var requiredRows: some View {
-        SubjectFormRow(label: "Title", arrangement: .control, isRequired: true) {
-            TextField("Title", text: $form.title).multilineTextAlignment(.trailing)
-        }
-        .panelSegment(0, of: 5, gutter: gutter)
-        WritingChoiceRow(title: "Rating", value: $form.rating, options: form.ratingOptions)
-            .panelSegment(1, of: 5, gutter: gutter)
-        WritingTagsRow(
-            title: "Archive warnings", values: $form.warnings, options: form.warningOptions, isRequired: true
+        symbolChoiceRow(
+            title: "Rating",
+            value: $form.rating,
+            options: form.ratingOptions,
+            symbol: WorkSymbolTile.rating(form.rating, dark: isDarkTheme)
         )
-        .panelSegment(2, of: 5, gutter: gutter)
-        WritingTagsRow(title: "Fandoms", values: $form.fandoms, kind: .fandom, isRequired: true)
-            .panelSegment(3, of: 5, gutter: gutter)
-        WritingChoiceRow(title: "Language", value: $form.languageID, options: form.languageOptions)
-            .panelSegment(4, of: 5, gutter: gutter)
+        .panelSegment(0, of: 4, gutter: gutter)
+        symbolDisclosureRow(
+            title: "Archive warnings",
+            value: form.warnings.isEmpty ? "None" : form.warnings.joined(separator: ", "),
+            symbol: WorkSymbolTile.warnings(WorkWarningStatus(rawWarnings: form.warnings), dark: isDarkTheme),
+            isRequired: true
+        )
+        .subjectRowNavigation(accessibilityLabel: "Archive warnings, required") {
+            WritingTagsEditor(
+                title: "Archive warnings",
+                values: $form.warnings,
+                options: form.warningOptions,
+                kind: nil
+            )
+        }
+        .panelSegment(1, of: 4, gutter: gutter)
+        symbolDisclosureRow(
+            title: "Category",
+            value: form.categories.isEmpty ? "None" : form.categories.joined(separator: ", "),
+            symbol: WorkSymbolTile.category(form.categories, dark: isDarkTheme)
+        )
+        .subjectRowNavigation(accessibilityLabel: "Category") {
+            WritingTagsEditor(
+                title: "Category",
+                values: $form.categories,
+                options: form.categoryOptions,
+                kind: nil
+            )
+        }
+        .panelSegment(2, of: 4, gutter: gutter)
+        tagChipsRow(title: "Fandoms", values: $form.fandoms, isRequired: true)
+            .subjectRowNavigation(accessibilityLabel: "Add Fandoms, required") {
+                WritingTagsEditor(
+                    title: "Fandoms", values: $form.fandoms, options: [], kind: .fandom
+                )
+            }
+            .panelSegment(3, of: 4, gutter: gutter)
     }
 
     /// See `requiredRows` — four links in one row pushed the wrong screen.
     @ViewBuilder
     private var tagsRows: some View {
-        WritingTagsRow(title: "Categories", values: $form.categories, options: form.categoryOptions)
-            .panelSegment(0, of: 4, gutter: gutter)
-        WritingTagsRow(title: "Relationships", values: $form.relationships, kind: .relationship)
-            .panelSegment(1, of: 4, gutter: gutter)
-        WritingTagsRow(title: "Characters", values: $form.characters, kind: .character)
-            .panelSegment(2, of: 4, gutter: gutter)
-        WritingTagsRow(title: "Additional tags", values: $form.additionalTags, kind: .freeform)
-            .panelSegment(3, of: 4, gutter: gutter)
+        tagChipsRow(title: "Relationships", values: $form.relationships)
+            .subjectRowNavigation(accessibilityLabel: "Add Relationships") {
+                WritingTagsEditor(
+                    title: "Relationships", values: $form.relationships, options: [], kind: .relationship
+                )
+            }
+            .panelSegment(0, of: 3, gutter: gutter)
+        tagChipsRow(title: "Characters", values: $form.characters)
+            .subjectRowNavigation(accessibilityLabel: "Add Characters") {
+                WritingTagsEditor(title: "Characters", values: $form.characters, options: [], kind: .character)
+            }
+            .panelSegment(1, of: 3, gutter: gutter)
+        tagChipsRow(title: "Additional tags", values: $form.additionalTags)
+            .subjectRowNavigation(accessibilityLabel: "Add Additional tags") {
+                WritingTagsEditor(
+                    title: "Additional tags", values: $form.additionalTags, options: [], kind: .freeform
+                )
+            }
+            .panelSegment(2, of: 3, gutter: gutter)
+    }
+
+    @ViewBuilder
+    private var prefaceRows: some View {
+        SubjectFormRow(label: "Title", arrangement: .control, isRequired: true) {
+            TextField("Title", text: $form.title).multilineTextAlignment(.trailing)
+        }
+        .panelSegment(0, of: 6, gutter: gutter)
+        SubjectFormRow(label: "Co-creators", value: creatorsValue, showsDisclosure: true)
+            .subjectRowNavigation(accessibilityLabel: "Co-creators") {
+                WorkCreatorsPickerView(creators: $form.creators, workTitle: form.title)
+            }
+            .panelSegment(1, of: 6, gutter: gutter)
+        WritingTextEditorRow(
+            title: "Summary", text: $form.summary, target: recoveryTarget, field: "summary", previewsText: true
+        )
+        .panelSegment(2, of: 6, gutter: gutter)
+        WritingTextEditorRow(title: "Beginning notes", text: $form.notes, target: recoveryTarget, field: "notes")
+            .panelSegment(3, of: 6, gutter: gutter)
+        WritingTextEditorRow(title: "End notes", text: $form.endnotes, target: recoveryTarget, field: "endnotes")
+            .panelSegment(4, of: 6, gutter: gutter)
+        choiceRow(
+            title: "Work skin",
+            value: $form.workSkinID,
+            options: defaultFirst(form.workSkinOptions, label: "Default")
+        )
+        .panelSegment(5, of: 6, gutter: gutter)
     }
 
     /// 1bw's pushes, one `List` row each. They were one `VStack` row, and a
@@ -321,8 +533,8 @@ struct WorkEditView: View {
                 )
             }
             .panelSegment(0, of: 5, gutter: gutter)
-        SubjectFormRow(label: "Add to collections", value: collectionsValue, showsDisclosure: true)
-            .subjectRowNavigation(accessibilityLabel: "Add to collections") {
+        SubjectFormRow(label: "Collections and gifts", value: collectionsValue, showsDisclosure: true)
+            .subjectRowNavigation(accessibilityLabel: "Collections and gifts") {
                 collectionsAndGifts
             }
             .panelSegment(1, of: 5, gutter: gutter)
@@ -335,11 +547,6 @@ struct WorkEditView: View {
             collectionsAndGifts
         }
         .panelSegment(2, of: 5, gutter: gutter)
-        SubjectFormRow(label: "Co-creators", value: creatorsValue, showsDisclosure: true)
-            .subjectRowNavigation(accessibilityLabel: "Co-creators") {
-                WorkCreatorsPickerView(creators: $form.creators, workTitle: form.title)
-            }
-            .panelSegment(3, of: 5, gutter: gutter)
         SubjectFormRow(
             label: "Inspired by",
             value: form.parentWork.url.isEmpty ? "None" : "1",
@@ -351,7 +558,9 @@ struct WorkEditView: View {
                 languageOptions: form.languageOptions
             )
         }
-        .panelSegment(4, of: 5, gutter: gutter)
+        .panelSegment(3, of: 5, gutter: gutter)
+        choiceRow(title: "Language", value: $form.languageID, options: form.languageOptions)
+            .panelSegment(4, of: 5, gutter: gutter)
     }
 
     /// One screen behind two rows — 1bw draws collections and gifts together,
@@ -424,30 +633,22 @@ struct WorkEditView: View {
     /// conditional (Work text only before posting; Add chapter and Edit tags
     /// only after), so the segment positions are counted, not fixed.
     @ViewBuilder
-    private var textRows: some View {
+    private var chapterRows: some View {
         // Not for a draft with several chapters: AO3 serves no text box there, and
         // this row would be an empty one that replaces chapter 1 (audit A4-1).
         let showsWorkText = (form.kind == .new || form.isDraft) && form.chapter?.contentServed != false
         let postedWorkID: Int? = form.isPosted ? form.workID : nil
-        let count = 4 + (showsWorkText ? 1 : 0) + (postedWorkID == nil ? 0 : 3)
-        let afterNotes = showsWorkText ? 4 : 3
-        WritingTextEditorRow(
-            title: "Summary", text: $form.summary, target: recoveryTarget, field: "summary", previewsText: true
-        )
-        .panelSegment(0, of: count, gutter: gutter)
-        WritingTextEditorRow(title: "Beginning notes", text: $form.notes, target: recoveryTarget, field: "notes")
-            .panelSegment(1, of: count, gutter: gutter)
-        WritingTextEditorRow(title: "End notes", text: $form.endnotes, target: recoveryTarget, field: "endnotes")
-            .panelSegment(2, of: count, gutter: gutter)
+        let count = (showsWorkText ? 1 : 0) + (postedWorkID == nil ? 0 : 3)
+        let afterText = showsWorkText ? 1 : 0
         if showsWorkText {
-            WritingTextEditorRow(title: "Work text", text: Binding(
+            WritingTextEditorRow(title: "Chapter 1 text", text: Binding(
                 get: { form.chapter?.content ?? "" },
                 set: { value in
                     if form.chapter == nil { form.chapter = AO3WorkChapterDraft() }
                     form.chapter?.content = value
                 }
             ), target: recoveryTarget, field: "content")
-            .panelSegment(3, of: count, gutter: gutter)
+            .panelSegment(0, of: count, gutter: gutter)
         }
         if let workID = postedWorkID {
             // 1bo's Chapters row. Posted works only, like the two below: a
@@ -459,14 +660,14 @@ struct WorkEditView: View {
             .subjectRowNavigation(accessibilityLabel: "Chapters") {
                 WritingChaptersView(workID: workID, workTitle: form.title) { needsPublicationRefresh = true }
             }
-            .panelSegment(afterNotes, of: count, gutter: gutter)
+            .panelSegment(afterText, of: count, gutter: gutter)
             SubjectFormRow(label: "Add chapter", value: "", showsDisclosure: true)
                 .subjectRowNavigation(accessibilityLabel: "Add chapter") {
                     WritingChapterDestination(workID: workID, workTitle: form.title) {
                         needsPublicationRefresh = true
                     }
                 }
-                .panelSegment(afterNotes + 1, of: count, gutter: gutter)
+                .panelSegment(afterText + 1, of: count, gutter: gutter)
             // 1bp's own page, reachable at last. Gated exactly like Add chapter
             // rather than on `workID` alone: AO3 keeps `/works/<id>/edit_tags`
             // for a work that exists publicly, and a draft's tags are already
@@ -477,14 +678,8 @@ struct WorkEditView: View {
                         needsTagRefresh = true
                     }
                 }
-                .panelSegment(afterNotes + 2, of: count, gutter: gutter)
+                .panelSegment(afterText + 2, of: count, gutter: gutter)
         }
-        WritingChoiceRow(
-            title: "Work skin",
-            value: $form.workSkinID,
-            options: defaultFirst(form.workSkinOptions, label: "Default")
-        )
-        .panelSegment(count - 1, of: count, gutter: gutter)
     }
 
     /// Segments, for one card style across the screen. The toggles are titled
@@ -531,7 +726,7 @@ struct WorkEditView: View {
                 .accentFill()
         }
         .panelSegment(afterDate + 1, of: count, gutter: gutter)
-        WritingChoiceRow(
+        choiceRow(
             title: "Who can comment",
             value: $form.commentPermissions,
             options: form.commentPermissionOptions
@@ -770,11 +965,11 @@ extension WorkEditView {
     /// once AO3 has the draft. Post asks first (`showPostConfirmation`).
     private var postPanel: some View {
         VStack(spacing: 0) {
-            postPanelRow("Post work", icon: "arrow.up.circle.fill", color: theme.appTheme.statusSuccessColor) {
+            postPanelRow("Post work", icon: "arrow.up.circle.fill", color: theme.accentInk) {
                 showPostConfirmation = true
             }
             SubjectRowSeparator()
-            postPanelRow("Preview on AO3", icon: "eye", color: .primary) { openPreview() }
+            postPanelRow("Preview on AO3", icon: "eye", color: theme.accentInk) { openPreview() }
             if form.workID != nil {
                 SubjectRowSeparator()
                 postPanelRow("Delete draft", icon: "trash.fill", color: .red) { confirmDelete() }
@@ -817,7 +1012,7 @@ extension WorkEditView {
 
     private var screenTitle: String {
         switch form.kind {
-        case .new: "New work"
+        case .new: "New Work"
         case .draft: "Draft"
         case .edit, .editTags: "Edit work"
         }
