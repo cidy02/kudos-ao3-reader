@@ -188,7 +188,7 @@ struct WritingView: View {
                     WritingDraftHero(work: draft)
                 }
                 .buttonStyle(.plain)
-                .cardRow(tintHue: CoverArt.workHue(fandoms: draft.fandoms, title: draft.title))
+                .pageBodyRow(top: 18, gutter: SubjectMetrics.accountGutter)
             } else if isLoadingDrafts {
                 ProgressView("Loading drafts…")
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -208,12 +208,6 @@ struct WritingView: View {
                 .buttonStyle(.plain)
                 .accountControlCardRow()
             }
-        } header: {
-            SectionRuleHeader(
-                title: "Last Edited Draft",
-                onSeeAll: { path.append(WritingRoute.drafts) }
-            )
-            .pageBodyRow(top: 18, gutter: 0)
         }
     }
 
@@ -586,54 +580,67 @@ private struct WritingDraftHero: View {
     let work: AO3WorkSummary
 
     @Environment(ThemeManager.self) private var theme
-    @ScaledMetric(relativeTo: .title2) private var titleSize: CGFloat = 25
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            SubjectKicker(
-                text: "Draft",
-                palette: theme.appTheme.subjectPalette(
-                    hue: CoverArt.workHue(fandoms: work.fandoms, title: work.title)
-                ),
-                ruleWidth: 34,
-                ruleSpacing: 7
-            )
-            Text(work.title.isEmpty ? "Untitled" : work.title)
-                .font(.system(size: titleSize, weight: .bold, design: .serif))
-                .foregroundStyle(.primary)
-                .fixedSize(horizontal: false, vertical: true)
-            if !work.fandoms.isEmpty {
-                Text(work.fandoms.map(FandomDisplayName.bareTitle).joined(separator: " · "))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-            }
-            HStack(alignment: .center, spacing: 12) {
-                VStack(alignment: .leading, spacing: 3) {
-                    if !work.dateUpdated.isEmpty {
-                        Label(work.dateUpdated, systemImage: "clock")
-                    }
-                    if let words = work.words {
-                        Text("\(words.formatted()) words")
-                    }
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(editedLine)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.white.opacity(0.85))
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(work.title.isEmpty ? "Untitled" : work.title)
+                    .font(.system(.title2, design: .serif, weight: .semibold))
+                    .fixedSize(horizontal: false, vertical: true)
+                if let detailLine {
+                    Text(detailLine)
+                        .font(.subheadline)
+                        .foregroundStyle(Color.white.opacity(0.9))
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            }
+            HStack {
                 Spacer(minLength: 8)
-                let isDark = theme.appTheme.isDarkFamily
                 Text("Continue")
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(isDark ? Color.white : theme.effectiveTint)
+                    .foregroundStyle(theme.effectiveTint)
                     .padding(.horizontal, 16)
-                    .frame(minHeight: 34)
-                    .background(isDark ? Color.white.opacity(0.18) : Color.white, in: Capsule())
+                    .frame(minHeight: 44)
+                    .background(Color.white, in: Capsule())
                     .overlay(
-                        Capsule().strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
+                        Capsule().strokeBorder(Color.black.opacity(0.08), lineWidth: 0.5)
                     )
-                    .shadow(color: Color.black.opacity(isDark ? 0 : 0.08), radius: 3, x: 0, y: 1)
+                    .shadow(color: Color.black.opacity(0.08), radius: 3, x: 0, y: 1)
             }
         }
-        .padding(.vertical, 4)
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .foregroundStyle(.white)
+        .background(
+            WorkIdentityCardBackground(
+                art: CoverArt.workArt(fandoms: work.fandoms, title: work.title),
+                title: work.title
+            )
+        )
+        .contentShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
+        .environment(\.colorScheme, .dark)
+    }
+
+    private var editedLine: String {
+        guard !work.dateUpdated.isEmpty else { return "Draft" }
+        let date = WorkStat.date(from: work.dateUpdated)
+        let edited = date?.formatted(.relative(presentation: .named)) ?? work.dateUpdated
+        return "Draft · edited \(edited)"
+    }
+
+    private var detailLine: String? {
+        var parts = work.fandoms
+            .map(FandomDisplayName.bareTitle)
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        if let words = work.words {
+            parts.append("\(words.formatted()) word\(words == 1 ? "" : "s")")
+        }
+        let line = parts.joined(separator: " · ")
+        return line.isEmpty ? nil : line
     }
 }
 
