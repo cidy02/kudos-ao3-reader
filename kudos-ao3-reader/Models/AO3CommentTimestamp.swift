@@ -96,6 +96,27 @@ nonisolated enum AO3CommentTimestamp {
         return dateFormatter.string(from: date)
     }
 
+    /// The board's compact age: "now", "5m", "20h", "2d", "4mo", "2y". Falls back to
+    /// `displayText` when the date can't be parsed, so nothing is ever dropped.
+    nonisolated static func shortText(
+        rawText: String, date parsedDate: Date?, relativeTo now: Date = Date()
+    ) -> String {
+        guard let date = parsedDate ?? parse(rawText) else { return rawText }
+        return shortAge(seconds: now.timeIntervalSince(date))
+    }
+
+    nonisolated static func shortAge(seconds: TimeInterval) -> String {
+        let minute = 60.0, hour = 3600.0, day = 86_400.0
+        switch seconds {
+        case ..<minute: return "now"
+        case ..<hour: return "\(Int(seconds / minute))m"
+        case ..<day: return "\(Int(seconds / hour))h"
+        case ..<(30 * day): return "\(Int(seconds / day))d"
+        case ..<(365 * day): return "\(Int(seconds / (30 * day)))mo"
+        default: return "\(Int(seconds / (365 * day)))y"
+        }
+    }
+
     nonisolated private static func timeText(
         for date: Date,
         calendar: Calendar,

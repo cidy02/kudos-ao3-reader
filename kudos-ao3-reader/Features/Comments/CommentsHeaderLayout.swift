@@ -3,6 +3,15 @@ import Foundation
 /// Pure logic for formatting the Comments header:
 /// the compact work row chapter subtitle, the meta line figures, and mature privacy concealment.
 enum CommentsHeaderLayout {
+    /// The board's chip form: "Chapter 7" -> "Ch 7". Anything that isn't
+    /// "Chapter <number>…" (a title-only label) is returned unchanged.
+    static func shortChapterLabel(_ label: String) -> String {
+        let prefix = "Chapter "
+        guard label.hasPrefix(prefix) else { return label }
+        let digits = label.dropFirst(prefix.count).prefix(while: \.isNumber)
+        return digits.isEmpty ? label : "Ch \(digits)"
+    }
+
     struct MetaLineData: Equatable, Sendable {
         let commentsText: String
         let threadsText: String

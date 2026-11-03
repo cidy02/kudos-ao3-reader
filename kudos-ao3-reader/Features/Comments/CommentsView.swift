@@ -171,19 +171,21 @@ struct CommentsView: View {
                     compactWorkRow.pageBodyRow(top: 14, gutter: gutter)
                     if model.page != nil {
                         metaLine(figures).pageBodyRow(top: 10, gutter: gutter)
-                        if let note = signalScopeNote {
-                            Text(note)
-                                .font(.system(size: noteSize))
-                                .foregroundStyle(Color.secondary.opacity(0.7))
-                                .fixedSize(horizontal: false, vertical: true)
-                                .pageBodyRow(top: 6, gutter: gutter + 4)
-                        }
                     }
                     filterRail.pageBodyRow(top: 10, gutter: gutter)
                     headerDivider.pageBodyRow(top: 14, gutter: gutter)
                 }
                 contentSections(scrollProxy: proxy, figures: figures)
                 if case .loaded = model.phase {
+                    // Board 21 draws no paragraph under the meta line: the scope note
+                    // is a footnote under the list instead (same words, same condition).
+                    if let note = signalScopeNote {
+                        Text(note)
+                            .font(.system(size: noteSize))
+                            .foregroundStyle(Color.secondary.opacity(0.7))
+                            .fixedSize(horizontal: false, vertical: true)
+                            .pageBodyRow(top: 12, gutter: gutter + 4)
+                    }
                     // The safe-area inset reserves the floating CTA's footprint; this
                     // final breathing room also lets the last long comment scroll fully
                     // clear of glass/tab/home-indicator overlays.
@@ -365,6 +367,23 @@ struct CommentsView: View {
                 Text(actionBanner ?? "")
             }
             .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    WorkListMoreMenu {
+                        Button {
+                            Task { await model.load(auth: auth, forceRefresh: true) }
+                        } label: {
+                            Label("Refresh", systemImage: "arrow.clockwise")
+                        }
+                        if let workURL {
+                            ShareLink(item: workURL) {
+                                Label("Share", systemImage: "square.and.arrow.up")
+                            }
+                            Link(destination: workURL) {
+                                Label("Open on AO3", systemImage: "safari")
+                            }
+                        }
+                    }
+                }
                 // Only when presented modally: a push already gets the system's
                 // automatic back button, and a fully-expanded presentation (reached
                 // via onRequestExpand) has nowhere further to expand to.
@@ -390,6 +409,10 @@ struct CommentsView: View {
                 }
             }
         }
+    }
+
+    private var workURL: URL? {
+        URL(string: "https://archiveofourown.org/works/\(model.workID)")
     }
 
     private func reportResolvedWorkContext() {
@@ -677,8 +700,11 @@ struct CommentsView: View {
 
     private func metaLine(_ figures: LoadedFigures) -> some View {
         let totalComments = model.page?.totalComments ?? figures.comments
-        let latestRelative = figures.latest.map {
-            $0.formatted(.relative(presentation: .numeric, unitsStyle: .narrow))
+        // The rows' own short age, so "latest" never disagrees with the newest row (Foundation's
+        // relative format rounded 3.6 months up to "4mo" while the row said "3mo").
+        let latestRelative = figures.latest.map { date -> String in
+            let age = AO3CommentTimestamp.shortAge(seconds: Date().timeIntervalSince(date))
+            return age == "now" ? "just now" : "\(age) ago"
         }
         let data = CommentsHeaderLayout.metaLineData(
             totalComments: totalComments,
@@ -876,14 +902,8 @@ struct CommentsView: View {
                 }
                 .cardRow()
             } else {
-                Section {
-                    // The count is what is actually under the rule — every loaded
-                    // comment, replies included — not the work's total, which the
-                    // strip above already prints from AO3's own figure. Omitted
-                    // entirely when there is nothing to head.
-                    SectionRuleHeader(title: "Comments", count: figures.comments)
-                        .pageBodyRow(top: 18, gutter: 0)
-                }
+                // No "Comments N" rule here: board 21 has none, and the meta line
+                // above already states the count (AO3's own total for the work).
                 // One flat, lazy ForEach over rows the model already resolved —
                 // no nested ForEach and no per-pass allocation, so a swipe
                 // re-evaluating this body stays cheap.
