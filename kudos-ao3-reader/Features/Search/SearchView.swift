@@ -194,7 +194,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 .ao3AuthorNavigation(path: $path, tab: .search)
                 .toolbar {
                     if bulkSelection.isSelecting {
-                        RemoteWorkSelectionToolbar(controller: bulkSelection) {
+                        RemoteWorkSelectionToolbar(controller: bulkSelection, selectable: { results }) {
                             bulkSelection.selected(in: results)
                         }
                     } else if isSelectingLocal {
@@ -1163,6 +1163,13 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                     )
                 }
                 phase = .loaded
+                #if DEBUG
+                // `shot:remoteselect` (board 15): select mode with two works picked.
+                if DebugLaunchRoute.takeSheet("remoteselect") {
+                    bulkSelection.isSelecting = true
+                    results.prefix(2).forEach(bulkSelection.toggle)
+                }
+                #endif
             } catch is CancellationError {
                 // Superseded on purpose — the newer load owns the UI now.
                 return

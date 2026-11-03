@@ -107,10 +107,25 @@ final class RemoteWorkSelectionController {
 /// iOS, primary action on macOS).
 struct RemoteWorkSelectionToolbar: ToolbarContent {
     let controller: RemoteWorkSelectionController
+    /// The works Select All covers (the loaded results). Nil leaves Select All to the caller.
+    var selectable: (() -> [AO3WorkSummary])?
     /// Evaluated when a bulk button's task runs, so it acts on the live selection.
     let selectedSummaries: () -> [AO3WorkSummary]
 
     var body: some ToolbarContent {
+        // Spec 1af / board 15: select mode takes the title bar for a count, as Library's does.
+        ToolbarItem(placement: .principal) {
+            Text(WorkSelectionTitle.text(selectedCount: controller.selection.count))
+                .font(.headline)
+                .contentTransition(.numericText())
+        }
+        if let selectable {
+            #if os(iOS)
+            ToolbarItem(placement: .topBarLeading) { selectAllButton(selectable) }
+            #else
+            ToolbarItem(placement: .primaryAction) { selectAllButton(selectable) }
+            #endif
+        }
         ToolbarItem(placement: .confirmationAction) {
             Button { controller.exitSelectMode() } label: {
                 Image(systemName: "checkmark")
@@ -126,6 +141,13 @@ struct RemoteWorkSelectionToolbar: ToolbarContent {
             RemoteWorkBulkActionBar(controller: controller, selectedSummaries: selectedSummaries)
         }
         #endif
+    }
+
+    private func selectAllButton(_ selectable: @escaping () -> [AO3WorkSummary]) -> some View {
+        SelectAllButton(allSelected: controller.allSelected(in: selectable())) {
+            controller.toggleSelectAll(in: selectable())
+        }
+        .disabled(selectable().isEmpty)
     }
 }
 

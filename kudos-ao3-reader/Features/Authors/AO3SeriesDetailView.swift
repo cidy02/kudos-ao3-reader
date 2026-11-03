@@ -90,7 +90,7 @@ struct AO3SeriesDetailView: View {
         #endif
             .toolbar {
                 if bulkSelection.isSelecting {
-                    RemoteWorkSelectionToolbar(controller: bulkSelection) {
+                    RemoteWorkSelectionToolbar(controller: bulkSelection, selectable: { works }) {
                         bulkSelection.selected(in: works)
                     }
                 } else {

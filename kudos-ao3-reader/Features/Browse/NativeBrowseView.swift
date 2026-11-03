@@ -592,12 +592,7 @@ struct FandomWorksView: View {
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         if bulkSelection.isSelecting {
-            #if os(iOS)
-            ToolbarItem(placement: .topBarLeading) { selectAllButton }
-            #else
-            ToolbarItem(placement: .primaryAction) { selectAllButton }
-            #endif
-            RemoteWorkSelectionToolbar(controller: bulkSelection) {
+            RemoteWorkSelectionToolbar(controller: bulkSelection, selectable: { results }) {
                 bulkSelection.selected(in: results)
             }
         } else if phase == .loaded, !results.isEmpty {
@@ -620,12 +615,6 @@ struct FandomWorksView: View {
         }
     }
 
-    private var selectAllButton: some View {
-        Button(bulkSelection.allSelected(in: results) ? "Deselect All" : "Select All") {
-            bulkSelection.toggleSelectAll(in: results)
-        }
-        .disabled(results.isEmpty)
-    }
 }
 
 /// A tag's works, loaded natively from an AO3 `/tags/<name>/works` URL (e.g. a tag
@@ -826,7 +815,7 @@ struct TagWorksView: View {
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         if bulkSelection.isSelecting {
-            RemoteWorkSelectionToolbar(controller: bulkSelection) {
+            RemoteWorkSelectionToolbar(controller: bulkSelection, selectable: { results }) {
                 bulkSelection.selected(in: results)
             }
         } else if phase == .loaded, !results.isEmpty {
