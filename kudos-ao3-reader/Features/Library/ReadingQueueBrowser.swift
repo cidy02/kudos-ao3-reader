@@ -799,15 +799,21 @@ extension ReadingQueueBrowserView {
                 ToolbarItemGroup(placement: .primaryAction) { bulkActionBar }
                 #endif
             } else {
-                ActionToolbar(items: [
-                    AnyView(addWorksButton),
-                    AnyView(FilterButton(
+                // Board 04: filter on its own, then + and ••• as one pill (adjacent items in
+                // one placement share a glass pill; the spacer keeps the filter out of it).
+                ToolbarItem(placement: .primaryAction) {
+                    FilterButton(
                         filtersActive: filters.hasActiveFilters,
                         showingFilters: $showingFilters,
                         filterHelp: "Filter the works in this queue",
                         onClearFilters: { filters = LibraryFilters() }
-                    )),
-                    AnyView(WorkListMoreMenu {
+                    )
+                    .labelStyle(.iconOnly)
+                }
+                ToolbarSpacer(.fixed, placement: .primaryAction)
+                ToolbarItemGroup(placement: .primaryAction) {
+                    addWorksButton.labelStyle(.iconOnly)
+                    WorkListMoreMenu {
                         if hideMature {
                             MatureRevealToggle()
                         }
@@ -836,8 +842,9 @@ extension ReadingQueueBrowserView {
                         }
                         Divider()
                         queueMenuItems
-                    })
-                ])
+                    }
+                    .labelStyle(.iconOnly)
+                }
             }
         } else if selectedQueue != nil {
             // Empty queue: still allow adding works, seeing its details, and

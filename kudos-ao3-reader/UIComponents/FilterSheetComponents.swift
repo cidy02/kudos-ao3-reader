@@ -493,6 +493,32 @@ struct FilterResultsBar: View {
         theme.appTheme.cardBackdrop
     }
 
+    /// Sepia's disabled fill is a faded brown the system dims again behind its own white label
+    /// (about 2:1). There the label is drawn in the theme's text brown by a style the system does
+    /// not dim; every other theme keeps the plain button.
+    private var drawsReadableDisabled: Bool { isConfirmDisabled && theme.appTheme == .sepia }
+
+    @ViewBuilder
+    private var confirmButton: some View {
+        let button = Button(action: onConfirm) {
+            Text(buttonTitle)
+                .font(.headline)
+                .foregroundStyle(drawsReadableDisabled ? theme.appTheme.textColor : .white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .frame(minHeight: 52)
+                .background(theme.effectiveTint.opacity(drawsReadableDisabled ? 0.15 : 1))
+                .clipShape(Capsule())
+        }
+        .disabled(isConfirmDisabled)
+        .accessibilityLabel(buttonTitle)
+        if drawsReadableDisabled {
+            button.buttonStyle(UndimmedButtonStyle())
+        } else {
+            button.buttonStyle(.plain)
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             LinearGradient(
@@ -531,23 +557,18 @@ struct FilterResultsBar: View {
                     .accessibilityLabel("Save Search")
                 }
 
-                Button(action: onConfirm) {
-                    Text(buttonTitle)
-                        .font(.headline)
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .frame(minHeight: 52)
-                        .background(theme.effectiveTint)
-                        .clipShape(Capsule())
-                }
-                .buttonStyle(.plain)
-                .disabled(isConfirmDisabled)
-                .accessibilityLabel(buttonTitle)
+                confirmButton
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 16)
             .background(backdropColor.opacity(0.96))
         }
+    }
+}
+
+/// A button style that draws its label as given: unlike the system styles it adds no disabled dimming.
+struct UndimmedButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
     }
 }

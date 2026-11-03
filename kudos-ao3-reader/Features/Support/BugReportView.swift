@@ -61,13 +61,23 @@ struct BugReportView: View {
                             // is used here instead — same visible label/icon/behavior
                             // when enabled, but a `.disabled()` VoiceOver users can
                             // actually hear (UI-2).
-                            Button {
+                            let continueButton = Button {
                                 openURL(url)
                             } label: {
                                 Label("Continue on GitHub", systemImage: "ladybug")
-                                    .labelStyle(BugReportContinueLabelStyle())
+                                    .labelStyle(BugReportContinueLabelStyle(
+                                        sepiaDisabledInk: themeManager.appTheme == .sepia
+                                            ? themeManager.appTheme.textColor.opacity(0.75) : nil
+                                    ))
                             }
                             .disabled(trimmedSummary.isEmpty)
+                            // Sepia's disabled row is dimmed by the system on top of its own grey
+                            // (about 2:1); an undimmed style lets the label draw its readable brown.
+                            if themeManager.appTheme == .sepia, trimmedSummary.isEmpty {
+                                continueButton.buttonStyle(UndimmedButtonStyle())
+                            } else {
+                                continueButton
+                            }
                         }
                         if let issues = URL(string: AppLinks.issues) {
                             Link(destination: issues) {
@@ -198,14 +208,17 @@ struct BugReportView: View {
 /// Keep the grouped-form action's title and icon visibly disabled together.
 struct BugReportContinueLabelStyle: LabelStyle {
     @Environment(\.isEnabled) private var isEnabled
+    /// The disabled ink on Sepia (the theme's text brown); nil keeps the secondary grey elsewhere.
+    var sepiaDisabledInk: Color?
 
     func makeBody(configuration: Configuration) -> some View {
+        let disabledInk = sepiaDisabledInk.map(AnyShapeStyle.init) ?? AnyShapeStyle(.secondary)
         Label {
             configuration.title
-                .foregroundStyle(isEnabled ? Color.primary : .secondary)
+                .foregroundStyle(isEnabled ? AnyShapeStyle(Color.primary) : disabledInk)
         } icon: {
             configuration.icon
-                .foregroundStyle(isEnabled ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                .foregroundStyle(isEnabled ? AnyShapeStyle(.tint) : disabledInk)
         }
         .labelStyle(.titleAndIcon)
     }
