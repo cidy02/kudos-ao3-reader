@@ -507,7 +507,7 @@ struct FinishedInPeriodSection: View {
                         .padding(.horizontal, 16)
                         .padding(.vertical, 10)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.cardPress)
                 }
 
                 if works.count > 3 {
@@ -639,7 +639,7 @@ struct TasteFandomsCard: View {
                     .foregroundStyle(.primary)
                     .clipShape(Capsule())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.cardPress)
             }
             .padding(.horizontal, 4)
 
@@ -1797,7 +1797,7 @@ struct LibraryStillReadingCard: View {
                         .foregroundStyle(.primary)
                         .clipShape(Capsule())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.cardPress)
 
                 NavigationLink(value: candidate.work) {
                     Text("Open Work")
@@ -1808,7 +1808,7 @@ struct LibraryStillReadingCard: View {
                         .foregroundStyle(theme.effectiveTint)
                         .clipShape(Capsule())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.cardPress)
             }
         }
         .padding(14)

@@ -75,7 +75,25 @@ struct AccountExternalNavCard: View {
 
     @ViewBuilder
     var body: some View {
-        let button = Button {
+        if isFormRow {
+            button.buttonStyle(.plain)
+        } else if let footnote {
+            VStack(alignment: .leading, spacing: 6) {
+                button.buttonStyle(.cardPress)
+                Text(footnote)
+                    .font(.system(size: footnoteSize))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .accountControlCardRow()
+        } else {
+            button.buttonStyle(.cardPress).accountControlCardRow()
+        }
+    }
+
+    private var button: some View {
+        Button {
             open()
         } label: {
             // AO3 opens in the app's own Browse, so this is a push (chevron),
@@ -87,25 +105,8 @@ struct AccountExternalNavCard: View {
             )
             .padding(.horizontal, isFormRow ? 14 : 0)
         }
-        .buttonStyle(.plain)
         .disabled(isDisabled)
         .opacity(isDisabled ? 0.45 : 1)
-
-        if isFormRow {
-            button
-        } else if let footnote {
-            VStack(alignment: .leading, spacing: 6) {
-                button
-                Text(footnote)
-                    .font(.system(size: footnoteSize))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .accountControlCardRow()
-        } else {
-            button.accountControlCardRow()
-        }
     }
 
     private func open() {

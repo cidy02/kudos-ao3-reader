@@ -82,7 +82,7 @@ struct AvailabilitySweepView: View {
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.cardPress)
                     .accessibilityLabel("Hidden mature work. Activate to reveal.")
                     .cardRow()
                 } else {
@@ -97,6 +97,7 @@ struct AvailabilitySweepView: View {
                                 .lineLimit(1)
                         }
                     }
+                    .buttonStyle(.cardPress)
                     .cardRow()
                 }
             }

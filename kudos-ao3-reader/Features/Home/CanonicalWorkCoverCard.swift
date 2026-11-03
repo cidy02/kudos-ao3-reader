@@ -22,7 +22,7 @@ struct CanonicalWorkCoverCard: View {
                 // so a freshly-saved work keeps the clean cover.
                 SensitiveWorkCoverCard(work: work, progress: work.readingProgress, twin: entry.remote)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.cardPress)
             .localWorkContextMenu(work: work)
         } else if let remote = entry.remote {
             // AO3WorkCoverCard applies the remote context menu itself.
@@ -66,7 +66,7 @@ struct EnrichingAO3WorkCoverCard: View {
                 NavigationLink(value: WorkCardTap.destination(for: displayed)) {
                     SensitiveWorkCoverCard(work: displayed, showsProvenanceBadge: showsProvenanceBadge)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.cardPress)
             }
         }
         .task(id: work.id) {

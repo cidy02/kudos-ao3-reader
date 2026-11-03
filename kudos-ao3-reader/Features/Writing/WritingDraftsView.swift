@@ -140,7 +140,10 @@ struct WritingDraftsView: View {
                 .cardRow(tintHue: CoverArt.workHue(fandoms: work.fandoms, title: work.title))
         } else {
             card
-                .subjectRowNavigation(accessibilityLabel: work.title.isEmpty ? "Untitled" : work.title) {
+                .subjectRowNavigation(
+                    accessibilityLabel: work.title.isEmpty ? "Untitled" : work.title,
+                    cardPressFeedback: true
+                ) {
                     WritingWorkDestination(workID: work.id) { reload += 1 }
                 }
                 .cardRow(tintHue: CoverArt.workHue(fandoms: work.fandoms, title: work.title))

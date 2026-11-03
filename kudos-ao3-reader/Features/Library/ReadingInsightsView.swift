@@ -342,7 +342,7 @@ struct ReadingInsightsView: View {
                     .strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5)
             )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.cardPress)
     }
 
     // MARK: - Taste Tab Content

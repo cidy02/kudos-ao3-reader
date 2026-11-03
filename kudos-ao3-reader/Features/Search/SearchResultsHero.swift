@@ -337,7 +337,7 @@ struct SearchResultsHero: View {
     private var cardBody: some View {
         if let onEditFilters {
             Button(action: onEditFilters) { content }
-                .buttonStyle(.plain)
+                .buttonStyle(.cardPress)
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel(Text(spokenLabel))
                 .accessibilityHint(Text("Opens filters"))

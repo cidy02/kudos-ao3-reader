@@ -66,7 +66,7 @@ struct FavoriteAffinityRow: View {
             } label: {
                 card
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.cardPress)
             .accessibilityHint("Shows these works in your Library")
         } else {
             card
@@ -262,7 +262,8 @@ struct FavoriteAffinityRow: View {
             // `LibraryView` already registers the `AO3WorkSummary` destination.
             .subjectRowNavigation(
                 to: work,
-                accessibilityLabel: "Open \(work.title)"
+                accessibilityLabel: "Open \(work.title)",
+                cardPressFeedback: true
             )
         }
     }

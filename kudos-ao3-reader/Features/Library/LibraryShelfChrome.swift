@@ -144,7 +144,7 @@ struct LibraryShelfButtonGrid: View {
                     } label: {
                         LibraryShelfTile(shelf: shelf, count: counts[shelf] ?? 0)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.cardPress)
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel("\(shelf.title), \(counts[shelf] ?? 0)")
                     .accessibilityHint("Opens the \(shelf.title) shelf")

@@ -692,7 +692,7 @@ private extension AuthorProfileView {
                             }
                             .frame(minHeight: 44)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.cardPress)
                         .cardRow()
                     }
                 }

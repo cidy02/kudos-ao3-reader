@@ -253,7 +253,8 @@ struct ReadingHistoryTimelineList<Header: View, OffTimelineRow: View>: View {
         .contentShape(Rectangle())
         .subjectRowNavigation(
             to: LocalWorkDestination.reader(work),
-            accessibilityLabel: "\(rank). \(entry.title), \(time)"
+            accessibilityLabel: "\(rank). \(entry.title), \(time)",
+            cardPressFeedback: true
         )
     }
 
