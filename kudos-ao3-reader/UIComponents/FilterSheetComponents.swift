@@ -495,10 +495,10 @@ struct FilterResultsBar: View {
         theme.appTheme.cardBackdrop
     }
 
-    /// Sepia's disabled fill is a faded brown the system dims again behind its own white label
-    /// (about 2:1). There the label is drawn in the theme's text brown by a style the system does
-    /// not dim; every other theme keeps the plain button.
-    private var drawsReadableDisabled: Bool { isConfirmDisabled && theme.appTheme == .sepia }
+    /// A disabled confirm was a faded accent fill the system dimmed again behind its white
+    /// label (about 2:1 in every theme; worst on Dark/OLED). Disabled, the label is drawn in the
+    /// theme's text colour on a pale tint by a style the system does not dim.
+    private var drawsReadableDisabled: Bool { isConfirmDisabled }
 
     @ViewBuilder
     private var confirmButton: some View {
@@ -510,6 +510,8 @@ struct FilterResultsBar: View {
                 .padding(.vertical, 14)
                 .frame(minHeight: 52)
                 .background(theme.effectiveTint.opacity(drawsReadableDisabled ? 0.15 : 1))
+                // Opaque under the pale tint, so rows scrolling behind the bar don't show through.
+                .background(backdropColor)
                 .clipShape(Capsule())
         }
         .disabled(isConfirmDisabled)
@@ -547,14 +549,16 @@ struct FilterResultsBar: View {
                         .padding(.vertical, 14)
                         .frame(minHeight: 52)
                         .background(isDark ? Color(white: 0.22) : Color.white)
-                        .foregroundStyle(theme.effectiveTint)
+                        // The readable accent ink (the fill red is ~1.2:1 on Dark's grey);
+                        // disabled, plain secondary text the system does not dim further.
+                        .foregroundStyle(isSaveDisabled ? AnyShapeStyle(.secondary) : AnyShapeStyle(theme.accentInk))
                         .clipShape(Capsule())
                         .overlay(
                             Capsule()
                                 .strokeBorder(theme.effectiveTint.opacity(0.3), lineWidth: 0.5)
                         )
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(UndimmedButtonStyle())
                     .disabled(isSaveDisabled)
                     .accessibilityLabel("Save Search")
                 }
