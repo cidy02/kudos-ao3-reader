@@ -41,6 +41,9 @@ struct ResumeCardModel {
     let extraFandomCount: Int
     /// Raw primary fandom, for the search the ledger row's kicker performed.
     let primaryFandomFull: String?
+    /// Readium positions per chapter from the downloaded file, so the chapter number
+    /// agrees with the bars (`ChapterLengthCache`). Nil counts chapters as equal.
+    var chapterPositions: [Int]?
 
     init(work: SavedWork) {
         title = work.title
@@ -174,7 +177,7 @@ struct ResumeCardModel {
         return ChapterBarGeometry.readingChapter(
             posted: postedChapters,
             progress: progress ?? 0,
-            weights: nil
+            weights: chapterPositions?.map(Double.init)
         )
     }
 
@@ -210,12 +213,14 @@ struct ResumeCardModel {
         return text.isEmpty ? nil : text
     }
 
-    func chapterItems(weights: [Int]?) -> [ChapterBarItem] {
+    /// Bar heights from word counts; read / current / unread from positions.
+    func chapterItems(lengths: ChapterLengths?) -> [ChapterBarItem] {
         ChapterBarModel.items(
             chapters: chapters,
             progress: progress,
             isFinished: progress == 1,
-            weights: weights
+            weights: lengths?.positions,
+            heights: lengths?.words
         )
     }
 }
@@ -353,7 +358,14 @@ struct WorkResumeCard: View {
     @Environment(\.accentFill) private var accentFill
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @AppStorage("showsZeroStats") private var showsZeroStats = true
-    @State private var chapterWeights: [Int]?
+    @State private var chapterLengths: ChapterLengths?
+
+    /// The model with the measured lengths, so "Chapter N" matches the bars.
+    private var shown: ResumeCardModel {
+        var copy = model
+        copy.chapterPositions = chapterLengths?.positions
+        return copy
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -371,7 +383,10 @@ struct WorkResumeCard: View {
         .background(cardBackground)
         .contentShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
         .environment(\.colorScheme, .dark)
-        .task(id: chapterCacheKey) { await loadChapterWeights() }
+        .task(id: ChapterLengthCache.taskKey(for: localWork)) {
+            guard let localWork else { chapterLengths = nil; return }
+            chapterLengths = await ChapterLengthCache.lengths(for: localWork)
+        }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(accessibilityLabel)
     }
@@ -479,29 +494,6 @@ struct WorkResumeCard: View {
             ? "Up next"
             : variant == .detail ? "Your reading" : "Continue reading"
         return "\(prefix): \(model.title), \(model.workPercent) percent read"
-    }
-
-    private var chapterCacheKey: String {
-        guard let localWork, localWork.hasEPUB else { return "none" }
-        let values = try? localWork.fileURL.resourceValues(
-            forKeys: [.fileSizeKey, .contentModificationDateKey]
-        )
-        return "\(localWork.id)-\(values?.fileSize ?? -1)-"
-            + "\(values?.contentModificationDate?.timeIntervalSince1970 ?? -1)"
-    }
-
-    private func loadChapterWeights() async {
-        guard let localWork, localWork.hasEPUB else {
-            chapterWeights = nil
-            return
-        }
-        let id = localWork.id
-        let url = localWork.fileURL
-        let weights = await Task.detached(priority: .utility) {
-            ChapterLengthCache.weights(workID: id, fileURL: url)
-        }.value
-        guard localWork.modelContext != nil else { return }
-        chapterWeights = weights
     }
 }
 
@@ -653,7 +645,7 @@ extension WorkResumeCard {
 
     private var detailChapterLabels: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(model.displayedChapterName)
+            Text(shown.displayedChapterName)
                 .font(.headline)
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
             if let line = model.detailProgressLine {
@@ -681,7 +673,7 @@ extension WorkResumeCard {
     private var chapterSection: some View {
         VStack(alignment: .leading, spacing: 6) {
             ChapterBars(
-                items: model.chapterItems(weights: chapterWeights),
+                items: model.chapterItems(lengths: chapterLengths),
                 scale: .card,
                 onGradient: true,
                 height: variant.barsHeight
@@ -698,12 +690,12 @@ extension WorkResumeCard {
             } else {
                 ViewThatFits(in: .horizontal) {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text(model.displayedChapterName + " · " + model.postedLabel)
+                        Text(shown.displayedChapterName + " · " + model.postedLabel)
                         Spacer(minLength: 4)
                         if !model.updated.isEmpty { Text("Updated \(model.updated)") }
                     }
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(model.displayedChapterName + " · " + model.postedLabel)
+                        Text(shown.displayedChapterName + " · " + model.postedLabel)
                         if !model.updated.isEmpty { Text("Updated \(model.updated)") }
                     }
                 }
@@ -912,7 +904,7 @@ extension WorkResumeCard {
                 } else {
                     Image(systemName: "play.fill").font(.caption)
                 }
-                Text(variant == .detail ? model.detailPrimaryTitle(fallback: primaryLabel) : primaryLabel)
+                Text(variant == .detail ? shown.detailPrimaryTitle(fallback: primaryLabel) : primaryLabel)
             }
             .frame(maxWidth: variant == .detail ? .infinity : nil)
         }

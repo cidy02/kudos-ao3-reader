@@ -287,32 +287,44 @@ nonisolated struct EPUBDocument {
         return EPUBPackageInspection(metadata: metadata, readableItemCount: readableItemCount)
     }
 
-    /// One Readium position-weight per story chapter, in reading order.
-    /// Front matter (Preface, Summary, Afterword) is left out. Lengths are the
-    /// ZIP entry sizes Readium already uses (`WorkReadingPosition`), read without
-    /// keeping the unzipped tree. Equal bars are the caller's job when this throws.
-    static func storyChapterPositionWeights(ofEPUBAt url: URL) throws -> [Int] {
+    /// Per story chapter, in reading order: the Readium position weight (what reading
+    /// progress is measured in) and the chapter's word count (what the chapter bars draw).
+    /// Front matter (Preface, Summary, Afterword) is left out. Equal bars are the caller's
+    /// job when this throws.
+    static func storyChapterLengths(ofEPUBAt url: URL) throws -> ChapterLengths {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("chapter-lengths-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
         let document = try EPUBDocument.open(epubURL: url, into: directory)
-        let hrefs = document.spineURLs.map(\.lastPathComponent)
         let sections = ReaderSectionBuilder.build(
             tocEntries: document.chapters.map {
                 ReaderSectionBuilder.RawTOCEntry(title: $0.title, spineIndex: $0.spineIndex)
             },
-            spineHrefs: hrefs
+            spineHrefs: document.spineURLs.map(\.lastPathComponent)
         )
-        let weights = sections.compactMap { section -> Int? in
-            guard section.kind == .chapter else { return nil }
-            let bytes = document.spineEntryLengths.indices.contains(section.spineIndex)
-                ? (document.spineEntryLengths[section.spineIndex] ?? 0)
-                : 0
-            return WorkReadingPosition.positions(forEntryLength: bytes)
+        var lengths = ChapterLengths(positions: [], words: [])
+        for section in sections where section.kind == .chapter {
+            let index = section.spineIndex
+            let bytes = document.spineEntryLengths.indices.contains(index) ? (document.spineEntryLengths[index] ?? 0) : 0
+            lengths.positions.append(WorkReadingPosition.positions(forEntryLength: bytes))
+            let xhtml = document.spineURLs.indices.contains(index)
+                ? (try? String(contentsOf: document.spineURLs[index], encoding: .utf8)) ?? ""
+                : ""
+            lengths.words.append(Self.wordCount(ofXHTML: xhtml))
         }
-        guard !weights.isEmpty else { throw EPUBError.noReadableContent }
-        return weights
+        guard !lengths.positions.isEmpty else { throw EPUBError.noReadableContent }
+        return lengths
+    }
+
+    /// Words in one chapter file, counted the way `EPUBBuilder` counts a work: the head
+    /// dropped, tags stripped, whitespace-separated runs.
+    static func wordCount(ofXHTML xhtml: String) -> Int {
+        let body = xhtml.replacingOccurrences(
+            of: "(?is)<head\\b.*?</head>", with: " ", options: .regularExpression
+        )
+        let text = body.replacingOccurrences(of: "<[^>]+>", with: " ", options: .regularExpression)
+        return text.split(whereSeparator: \.isWhitespace).count
     }
 
     /// Pulls the OPF path out of META-INF/container.xml.
