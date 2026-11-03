@@ -144,6 +144,7 @@ struct WritingTextEditor: View {
                 // the word no longer fitted beside the four icons and went into "…".
                 if dynamicTypeSize.isAccessibilitySize {
                     Button { close() } label: { Image(systemName: "checkmark") }
+                        .sheetConfirmStyle()
                         .accessibilityLabel("Done")
                 } else {
                     Button("Done") { close() }

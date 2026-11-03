@@ -94,6 +94,7 @@ struct ReaderNoteEditor: View {
                     } label: {
                         Image(systemName: "checkmark")
                     }
+                    .sheetConfirmStyle()
                     .accessibilityLabel("Done")
                 }
             }

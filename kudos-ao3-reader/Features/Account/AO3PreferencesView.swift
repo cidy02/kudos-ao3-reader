@@ -291,6 +291,7 @@ struct AO3PreferencesView: View {
                     Button { helpSheet = nil } label: {
                         Image(systemName: "checkmark")
                     }
+                    .sheetConfirmStyle()
                     .accessibilityLabel("Done")
                 }
             }
