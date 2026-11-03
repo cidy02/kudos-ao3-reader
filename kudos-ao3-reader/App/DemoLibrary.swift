@@ -337,6 +337,7 @@ enum DebugShots {
         ("aboutkudos", DebugShot(route: "acct:settings:about", sheets: ["aboutkudos"])),
         ("libfilter", DebugShot(route: "library", sheets: ["libfilter"])),
         ("libselect", DebugShot(route: "library", sheets: ["libselect"])),
+        ("remoteselect", DebugShot(route: "tagsearch:Star Wars", sheets: ["remoteselect"])),
         ("searchfilters", DebugShot(route: "search", sheets: ["searchfilters"])),
     ]
 

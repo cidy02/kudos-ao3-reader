@@ -388,7 +388,9 @@ struct SensitiveWorkRow: View {
                         WorkSelectionBubble(isSelected: isSelected)
                     }
                 }
-                .padding(8)
+                // The unblurred row's controls sit inside its gutter; 8 pt left them out of line.
+                .padding(.top, 8)
+                .padding(.trailing, SubjectMetrics.gutter + contentInsets.trailing)
             }
             sensitiveActionContainer(for: content)
 
@@ -429,7 +431,9 @@ struct SensitiveWorkRow: View {
                         WorkSelectionBubble(isSelected: isSelected)
                     }
                 }
-                .padding(8)
+                // The unblurred row's controls sit inside its gutter; 8 pt left them out of line.
+                .padding(.top, 8)
+                .padding(.trailing, SubjectMetrics.gutter + contentInsets.trailing)
             }
             sensitiveActionContainer(for: content)
         }
