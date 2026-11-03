@@ -58,6 +58,7 @@ struct AuthorProfileView: View {
     @State private var dashboardDestination: AuthorProfileContentDestination?
     /// The works sort-and-refine panel, opened from the toolbar Filter.
     @State private var showingWorksFilters = false
+    @State private var isShowingDrafts = false
     /// Nav bar title. Account's **My Dashboard** reuses this surface for the
     /// signed-in user's home (`/users/:login`) under the title "Dashboard".
     private let navigationTitle: String
@@ -129,6 +130,7 @@ struct AuthorProfileView: View {
                 WritingWorkDestination(workID: nil) { Task { await model.refresh(auth: auth) } }
             }
             .navigationDestination(isPresented: $isShowingStats) { WritingStatsView() }
+            .navigationDestination(isPresented: $isShowingDrafts) { WritingDraftsView() }
             .navigationDestination(item: ownWorkPushBinding) { action in
                 ownWorkDestination(action)
                     .environment(\.writingOtherWorks, WritingOtherWorkTags.sources(from: model.works))
@@ -257,6 +259,11 @@ private extension AuthorProfileView {
     private var isYourWorksList: Bool {
         isOwnProfile && !showsDashboard && !isOverview
             && (model.selectedTab == .works || model.selectedTab == .gifts)
+    }
+
+    private var isOwnWorksOrSeries: Bool {
+        isOwnProfile && !showsDashboard && !isOverview
+            && (model.selectedTab == .works || model.selectedTab == .series || model.selectedTab == .gifts)
     }
 
     private var showsYourWorksGrid: Bool {
@@ -419,14 +426,81 @@ private extension AuthorProfileView {
     private var usesAccountHeader: Bool { showsDashboard || (isOwnProfile && isContentDestination) }
 
     private var accountHeader: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            SubjectPageFact(accountSubtitle, gutter: SubjectMetrics.accountGutter)
+        VStack(alignment: .leading, spacing: 10) {
+            // Board 41's "Posting as" sits above the counts line, which keeps its
+            // works · words · kudos facts.
+            let postingLine = isOwnWorksOrSeries ? postingPseud : nil
+            if let postingLine {
+                Text("Posting as \(postingLine)")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, SubjectMetrics.accountGutter)
+            }
+            // Before the counts load the subtitle is just the name; under "Posting as"
+            // that would print the same name twice.
+            if let subtitle = accountSubtitle, subtitle != postingLine {
+                SubjectPageFact(subtitle, gutter: SubjectMetrics.accountGutter)
+            }
             if let header = model.header, !header.pseuds.isEmpty {
                 pseudSelector(header.pseuds)
                     .padding(.horizontal, SubjectMetrics.accountGutter)
             }
+            if isOwnWorksOrSeries {
+                YourWorksSegmentControl(
+                    currentTab: model.selectedTab,
+                    worksCount: yourWorksCountText,
+                    seriesCount: yourSeriesCountText,
+                    draftsCount: yourDraftsCountText,
+                    onSelectTab: { tab in
+                        model.selectTab(tab, auth: auth)
+                    },
+                    onSelectDrafts: {
+                        isShowingDrafts = true
+                    }
+                )
+                .padding(.horizontal, SubjectMetrics.accountGutter)
+            }
         }
         .pageBodyRow(top: 12, gutter: 0)
+    }
+
+    private var postingPseud: String? {
+        if let pseud = model.route.pseud, !pseud.isEmpty { return pseud }
+        if let pseud = auth.preferredPostingPseudName, !pseud.isEmpty { return pseud }
+        if let username = auth.username, !username.isEmpty { return username }
+        return nil
+    }
+
+    private var yourWorksCountText: String? {
+        if let count = model.header?.listCount(for: .works, route: model.route) {
+            return count.formatted()
+        }
+        let scope = AO3AuthorProfileFetcher.sessionScopedCacheScope(for: auth)
+        if let cached = AO3AccountListCountsCache.shared.count(for: .myWorks, authenticationScope: scope)?.displayText {
+            return cached
+        }
+        if model.selectedTab == .works, !model.works.isEmpty {
+            return model.works.count.formatted()
+        }
+        return nil
+    }
+
+    private var yourSeriesCountText: String? {
+        if let count = model.header?.listCount(for: .series, route: model.route) {
+            return count.formatted()
+        }
+        let scope = AO3AuthorProfileFetcher.sessionScopedCacheScope(for: auth)
+        if let cached = AO3AccountListCountsCache.shared.count(for: .series, authenticationScope: scope)?.displayText {
+            return cached
+        }
+        if model.selectedTab == .series, !model.series.isEmpty {
+            return model.series.count.formatted()
+        }
+        return nil
+    }
+
+    private var yourDraftsCountText: String? {
+        nil
     }
 
     private var accountSubtitle: String? {
@@ -992,6 +1066,7 @@ private extension AuthorProfileView {
             return "\(bulkSelection.selected(in: model.works).count) selected"
         }
         if showsDashboard { return model.route.displayName }
+        if isOwnWorksOrSeries, model.selectedTab == .works { return "Your Works" }
         if isContentDestination, navigationTitle == "Author" { return model.selectedTab.rawValue }
         return navigationTitle
     }
