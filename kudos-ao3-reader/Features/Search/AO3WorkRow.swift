@@ -296,7 +296,8 @@ struct AO3WorkRow: View {
                     compact: !dynamicTypeSize.isAccessibilitySize
                 )
             }
-            if !work.authors.isEmpty, !visibleFandoms.isEmpty {
+            // Only between them on one line: stacked, the dot was a line of its own.
+            if !wraps, !work.authors.isEmpty, !visibleFandoms.isEmpty {
                 Text("·")
                     .font(.subheadline)
                     .foregroundStyle(.tertiary)
