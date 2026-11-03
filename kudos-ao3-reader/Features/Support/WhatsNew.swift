@@ -81,6 +81,7 @@ struct WhatsNewView: View {
                         Button(action: onDone) {
                             Image(systemName: "checkmark")
                         }
+                        .sheetConfirmStyle()
                         .accessibilityLabel("Done")
                     }
                 }

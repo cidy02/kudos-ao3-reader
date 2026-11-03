@@ -726,6 +726,7 @@ struct AddToCollectionView: View {
                         Button { dismiss() } label: {
                             Image(systemName: "checkmark")
                         }
+                        .sheetConfirmStyle()
                         .accessibilityLabel("Done")
                     }
                 }

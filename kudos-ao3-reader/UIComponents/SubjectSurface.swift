@@ -1368,6 +1368,16 @@ extension View {
     func prominentLabel() -> some View {
         modifier(ProminentLabel())
     }
+
+    /// The filled Done control used by iPhone sheets.
+    func sheetConfirmStyle() -> some View {
+        #if os(iOS)
+        buttonStyle(.glassProminent)
+            .prominentLabel()
+        #else
+        self
+        #endif
+    }
 }
 
 private struct ScreenControlTint: ViewModifier {

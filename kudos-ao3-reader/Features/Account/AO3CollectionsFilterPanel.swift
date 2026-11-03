@@ -62,6 +62,7 @@ struct AO3CollectionsFilterPanel: View {
                         } label: {
                             Image(systemName: "checkmark")
                         }
+                        .sheetConfirmStyle()
                         .accessibilityLabel("Apply")
                         .disabled(editor.draft == editor.initial)
                     }

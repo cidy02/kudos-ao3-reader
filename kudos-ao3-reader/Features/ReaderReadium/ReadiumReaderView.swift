@@ -1740,6 +1740,7 @@ extension ReadiumReaderView {
                     Button { router.panel = .none } label: {
                         Image(systemName: "checkmark")
                     }
+                    .sheetConfirmStyle()
                     .accessibilityLabel("Done")
                 }
             }
