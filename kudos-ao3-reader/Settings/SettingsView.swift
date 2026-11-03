@@ -14,6 +14,9 @@ struct ReaderOptionsForm: View {
     var twoPageAvailable: Bool = true
 
     @Environment(ThemeManager.self) private var themeManager
+    #if os(iOS)
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    #endif
     @State private var isImportingFonts = false
     @State private var showCustomize = false
 
@@ -33,10 +36,12 @@ struct ReaderOptionsForm: View {
                     ReaderThemePicker(title: "Theme", selection: readerThemeBinding)
 
                     #if os(iOS)
-                    Button {
-                        showCustomize = true
-                    } label: {
-                        Label("Customize Theme…", systemImage: "slider.horizontal.3")
+                    if dynamicTypeSize.isAccessibilitySize {
+                        Button {
+                            showCustomize = true
+                        } label: {
+                            Label("Customize Theme…", systemImage: "slider.horizontal.3")
+                        }
                     }
                     #endif
                 }
@@ -63,6 +68,13 @@ struct ReaderOptionsForm: View {
         .appThemedScroll()
         .readerFontImporter(isPresented: $isImportingFonts)
         #if os(iOS)
+        .toolbar {
+            if !dynamicTypeSize.isAccessibilitySize {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Customize…") { showCustomize = true }
+                }
+            }
+        }
         .sheet(isPresented: $showCustomize) {
             CustomizeThemeView()
                 .environment(themeManager)
@@ -74,20 +86,84 @@ struct ReaderOptionsForm: View {
     }
 }
 
-/// A segmented Light/Sepia/Dark/OLED picker bound to the given selection.
+/// Light/Sepia/Dark/OLED tiles on iOS; the macOS inspector keeps its segmented picker.
 struct ReaderThemePicker: View {
     let title: String
     @Binding var selection: ReaderTheme
 
+    #if os(iOS)
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    private var columns: [GridItem] {
+        let count = ThemePreviewTilePicker.columnCount(
+            isAccessibilitySize: dynamicTypeSize.isAccessibilitySize
+        )
+        return Array(repeating: GridItem(.flexible(), spacing: 10), count: count)
+    }
+    #endif
+
     var body: some View {
+        #if os(iOS)
+        LazyVGrid(columns: columns, spacing: 10) {
+            ForEach(ReaderTheme.allCases) { theme in
+                ReaderThemeTile(
+                    theme: theme,
+                    isSelected: selection == theme,
+                    onSelect: { selection = theme }
+                )
+            }
+        }
+        .padding(.vertical, 4)
+        #else
         Picker(title, selection: $selection) {
             ForEach(ReaderTheme.allCases) { Label($0.title, systemImage: $0.symbol).tag($0) }
         }
         .pickerStyle(.segmented)
         .accentFill()
         .labelStyle(.titleOnly)
+        #endif
     }
 }
+
+#if os(iOS)
+private struct ReaderThemeTile: View {
+    let theme: ReaderTheme
+    let isSelected: Bool
+    let onSelect: () -> Void
+
+    @Environment(\.accentFill) private var accentFill
+
+    var body: some View {
+        Button(action: onSelect) {
+            VStack(spacing: 6) {
+                Text("Aa")
+                    .font(.system(.title2, design: .serif))
+                    .foregroundStyle(theme.textColor)
+                    .frame(maxWidth: .infinity, minHeight: 64)
+                    .background(theme.backgroundColor, in: RoundedRectangle(cornerRadius: 16))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 16)
+                            .strokeBorder(
+                                isSelected ? accentFill : Color.secondary.opacity(0.3),
+                                lineWidth: isSelected ? 2.5 : 0.5
+                            )
+                    }
+                Text(theme.title)
+                    .font(.footnote.weight(isSelected ? .bold : .regular))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.65)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(ThemePreviewTilePicker.accessibilityLabel(for: theme))
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+#endif
 
 /// Layout, two-page spread and keep screen awake — the reader's sheet and
 /// Settings › Reader.
