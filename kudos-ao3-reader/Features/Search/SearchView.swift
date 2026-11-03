@@ -712,7 +712,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     @ViewBuilder
     private var libraryMatchesSections: some View {
         if !localWorks.isEmpty {
-            Section(SearchCombinedResultsLogic.librarySectionTitle(count: localWorks.count)) {
+            Section {
                 let displayCount = SearchCombinedResultsLogic.displayedWorksCount(
                     total: localWorks.count,
                     isExpanded: isLibraryExpanded
@@ -735,7 +735,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                         HStack {
                             Text(SearchCombinedResultsLogic.seeAllRowTitle(total: localWorks.count))
                                 .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(Color.accentColor)
+                                .foregroundStyle(.accentInk)
                             Spacer()
                             Image(systemName: "chevron.right")
                                 .font(.caption2.weight(.semibold))
@@ -746,11 +746,13 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                     .buttonStyle(.plain)
                     .cardRow(chrome: .plain)
                 }
+            } header: {
+                combinedHeader("In your library", count: localWorks.count)
             }
         }
 
         if !localChips.isEmpty {
-            Section(SearchCombinedResultsLogic.chipsSectionTitle) {
+            Section {
                 SearchLocalChipsView(
                     chips: localChips,
                     collections: localMatches.collections,
@@ -758,11 +760,13 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                     onFandomTap: { name in router.filterLibrary(.fandom, name) }
                 )
                 .bareListRow()
+            } header: {
+                combinedHeader(SearchCombinedResultsLogic.chipsSectionTitle)
             }
         }
 
         if !localMatches.ao3Fandoms.isEmpty {
-            Section(SearchCombinedResultsLogic.ao3FandomsSectionTitle) {
+            Section {
                 ForEach(localMatches.ao3Fandoms, id: \.id) { fandom in
                     SearchAO3FandomRow(fandom: fandom, onSearchFandom: { name in
                         setIncludedFandom(name)
@@ -770,8 +774,18 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                     })
                     .cardRow(chrome: .plain)
                 }
+            } header: {
+                combinedHeader(SearchCombinedResultsLogic.ao3FandomsSectionTitle)
             }
         }
+    }
+
+    /// The same bold section title "On AO3" and every other list section uses; a plain
+    /// `Section("…")` title draws small and grey.
+    private func combinedHeader(_ title: String, count: Int? = nil) -> some View {
+        SectionRuleHeader(title: title, count: count)
+            .textCase(nil)
+            .listRowInsets(EdgeInsets())
     }
 
     private var showsLocalResults: Bool { phase == .idle && !localQuery.isEmpty }

@@ -19,11 +19,6 @@ enum SearchCombinedResultsLogic {
         worksCount > 0
     }
 
-    /// Header title for the library works section (e.g. "In your library · 2").
-    static func librarySectionTitle(count: Int) -> String {
-        "In your library · \(count)"
-    }
-
     /// Number of works to display given whether the section is expanded.
     static func displayedWorksCount(total: Int, isExpanded: Bool) -> Int {
         isExpanded ? total : min(total, libraryRowCap)

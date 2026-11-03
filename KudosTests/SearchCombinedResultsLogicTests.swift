@@ -51,10 +51,6 @@ struct SearchCombinedResultsLogicTests {
         #expect(SearchCombinedResultsLogic.showAO3FandomsSection(ao3FandomsCount: 1))
     }
 
-    @Test func librarySectionTitleMatchesBoard11() {
-        #expect(SearchCombinedResultsLogic.librarySectionTitle(count: 2) == "In your library · 2")
-        #expect(SearchCombinedResultsLogic.librarySectionTitle(count: 15) == "In your library · 15")
-    }
 
     @Test func libraryWorkCapAndSeeAllRowLogic() {
         #expect(SearchCombinedResultsLogic.libraryRowCap == 5)
