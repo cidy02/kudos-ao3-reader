@@ -182,13 +182,12 @@ struct WritingView: View {
     private var draftSection: some View {
         Section {
             if let draft = latestDraft {
-                NavigationLink {
-                    WritingWorkDestination(workID: draft.id) { draftsReload += 1 }
-                } label: {
-                    WritingDraftHero(work: draft)
-                }
-                .buttonStyle(.plain)
-                .pageBodyRow(top: 18, gutter: SubjectMetrics.accountGutter)
+                // The link sits behind the hero so List adds no chevron beside the card.
+                WritingDraftHero(work: draft)
+                    .subjectRowNavigation(accessibilityLabel: "Continue draft, \(draft.title)") {
+                        WritingWorkDestination(workID: draft.id) { draftsReload += 1 }
+                    }
+                    .pageBodyRow(top: 18, gutter: SubjectMetrics.accountGutter)
             } else if isLoadingDrafts {
                 ProgressView("Loading drafts…")
                     .frame(maxWidth: .infinity, alignment: .leading)
