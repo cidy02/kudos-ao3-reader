@@ -337,6 +337,39 @@ struct HomeResumeHero: View {
     }
 }
 
+struct WorkIdentityCardBackground: View {
+    let art: CoverArt.WorkArt
+    let title: String
+    var showsInitial = true
+
+    @Environment(ThemeManager.self) private var themeManager
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
+            .fill(CoverArt.workGradient(for: art))
+            .overlay(alignment: .bottomTrailing) {
+                if showsInitial {
+                    Text(title.trimmingCharacters(in: .whitespacesAndNewlines).first.map(String.init) ?? "")
+                        .font(.system(size: 250, weight: .semibold, design: .serif))
+                        .foregroundStyle(Color.white.opacity(0.08))
+                        .offset(x: 10, y: 58)
+                        .accessibilityHidden(true)
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5)
+            )
+            .shadow(
+                color: themeManager.appTheme.carouselCardShadow.color,
+                radius: themeManager.appTheme.carouselCardShadow.radius + 6,
+                x: 0,
+                y: themeManager.appTheme.carouselCardShadow.y + 2
+            )
+    }
+}
+
 struct WorkResumeCard: View {
     let model: ResumeCardModel
     var localWork: SavedWork?
@@ -352,7 +385,6 @@ struct WorkResumeCard: View {
     var onContents: (() -> Void)?
     var onUpdate: (() -> Void)?
 
-    @Environment(ThemeManager.self) private var themeManager
     @Environment(AppRouter.self) private var router
     @Environment(DownloadQueue.self) private var downloads
     @Environment(\.accentFill) private var accentFill
@@ -457,28 +489,11 @@ struct WorkResumeCard: View {
     }
 
     private var cardBackground: some View {
-        RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
-            .fill(CoverArt.workGradient(for: model.art))
-            .overlay(alignment: .bottomTrailing) {
-                if showsInitial {
-                    Text(model.title.trimmingCharacters(in: .whitespacesAndNewlines).first.map(String.init) ?? "")
-                        .font(.system(size: 250, weight: .semibold, design: .serif))
-                        .foregroundStyle(Color.white.opacity(0.08))
-                        .offset(x: 10, y: 58)
-                        .accessibilityHidden(true)
-                }
-            }
-            .clipShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5)
-            )
-            .shadow(
-                color: themeManager.appTheme.carouselCardShadow.color,
-                radius: themeManager.appTheme.carouselCardShadow.radius + 6,
-                x: 0,
-                y: themeManager.appTheme.carouselCardShadow.y + 2
-            )
+        WorkIdentityCardBackground(
+            art: model.art,
+            title: model.title,
+            showsInitial: showsInitial
+        )
     }
 
     private var detailDates: String {
