@@ -114,9 +114,11 @@ struct FilterSymbolChipCard: View {
                 WorkSymbolTileView(symbol: symbol, side: 22)
                     .opacity(state == .excluded ? 0.4 : 1.0)
 
+                // Boards 03/12 wrap long warnings ("Creator Chose Not To Use") instead of truncating.
                 Text(title)
                     .font(.subheadline.weight(.semibold))
-                    .lineLimit(2)
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
                     .foregroundStyle(foreground)
                     .strikethrough(state == .excluded, color: strokeColor)
                     .frame(maxWidth: .infinity, alignment: .leading)
