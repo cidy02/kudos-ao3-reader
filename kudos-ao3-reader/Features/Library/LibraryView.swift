@@ -21,6 +21,9 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }, sort: \SavedWork.dateAdded, order: .reverse)
     private var works: [SavedWork]
     @Query(sort: \Tag.name) private var tags: [Tag]
+    /// Finishing sessions only (a small slice of the log): the Favourites cards' "Read ×N · date".
+    @Query(filter: #Predicate<ReadingSession> { $0.didFinish })
+    private var finishingSessions: [ReadingSession]
     @Query(
         filter: #Predicate<WorkCollection> { !$0.isPendingDeletion },
         sort: \WorkCollection.dateAdded, order: .reverse
@@ -937,8 +940,17 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         switch kind {
         case .readingNow: WorkReadingPosition.cardProgressLabel(progress: work.publicationProgress)
         case .finished: "Finished"
+        case .favorites: rereadFooter(work)
         default: nil
         }
+    }
+
+    /// Board 01: "Read ×2 · Oct 24" under a finished favourite — the finish count and the date of
+    /// the latest finish, both from the reading log. Nil when the log has no finish for the work.
+    private func rereadFooter(_ work: SavedWork) -> String? {
+        let finishes = finishingSessions.filter { $0.workID == work.id }
+        guard let last = finishes.map(\.endedAt).max() else { return nil }
+        return "Read ×\(finishes.count) · \(last.formatted(.dateTime.month(.abbreviated).day()))"
     }
 
     private func progress(_ kind: LibrarySectionKind, _ work: SavedWork) -> Double? {
@@ -988,44 +1000,50 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             // toolbar slot, which is exactly what showed a blank "..." button when
             // the Library was empty.
             // New Collection is always there — it was the collections shelf's
-            // first card (owner, 2026-10-01). Filter is the only other control
-            // directly visible; Privacy lives behind "..." (with Select and
-            // Reading Insights).
-            ActionToolbar(items: [
-                    AnyView(ToolbarIconButton(title: "New Collection", systemImage: "plus") {
-                        showingNewCollection = true
-                    }),
-                    !works.isEmpty
-                        ? AnyView(FilterButton(filtersActive: filters.hasActiveFilters,
-                                                showingFilters: router.isShowing(.libraryFilters),
-                                                onClearFilters: { filters = LibraryFilters() }))
-                        : nil,
-                    showsMoreMenu
-                        ? AnyView(WorkListMoreMenu {
-                            Button {
-                                showingEditShelves = true
-                            } label: {
-                                Label("Edit Shelves", systemImage: "square.grid.2x2")
+            // first card (owner, 2026-10-01). Edit Shelves, Privacy and Reading
+            // Insights live behind "...".
+            // Board 01: the filter, then + and ••• as one pill (adjacent items in one placement
+            // share a glass pill; the spacer keeps the filter out of it), then a Select pill.
+            if !works.isEmpty {
+                ToolbarItem(placement: .primaryAction) {
+                    FilterButton(filtersActive: filters.hasActiveFilters,
+                                 showingFilters: router.isShowing(.libraryFilters),
+                                 onClearFilters: { filters = LibraryFilters() })
+                        .labelStyle(.iconOnly)
+                }
+                ToolbarSpacer(.fixed, placement: .primaryAction)
+            }
+            ToolbarItemGroup(placement: .primaryAction) {
+                ToolbarIconButton(title: "New Collection", systemImage: "plus") {
+                    showingNewCollection = true
+                }
+                .labelStyle(.iconOnly)
+                if showsMoreMenu {
+                    WorkListMoreMenu {
+                        Button {
+                            showingEditShelves = true
+                        } label: {
+                            Label("Edit Shelves", systemImage: "square.grid.2x2")
+                        }
+                        if showsMature {
+                            MatureRevealToggle()
+                        }
+                        // A page item, so after the shelf controls (pass2-2).
+                        if showsStatistics {
+                            NavigationLink(value: ReadingInsightsDestination()) {
+                                Label("Reading Insights", systemImage: "chart.bar.xaxis")
                             }
-                            if showsMature {
-                                MatureRevealToggle()
-                            }
-                            if showsSelect {
-                                Button {
-                                    enterSelectMode()
-                                } label: {
-                                    Label("Select", systemImage: "checklist")
-                                }
-                            }
-                            // A page item, so after Select (pass2-2).
-                            if showsStatistics {
-                                NavigationLink(value: ReadingInsightsDestination()) {
-                                    Label("Reading Insights", systemImage: "chart.bar.xaxis")
-                                }
-                            }
-                        })
-                        : nil
-                ].compactMap { $0 })
+                        }
+                    }
+                    .labelStyle(.iconOnly)
+                }
+            }
+            if showsSelect {
+                ToolbarSpacer(.fixed, placement: .primaryAction)
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Select") { enterSelectMode() }
+                }
+            }
         }
     }
 
