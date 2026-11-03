@@ -54,7 +54,10 @@ nonisolated enum ReaderContentsLabels {
 
     static func progress(percent: Int, remainingPositions: Int?) -> String {
         let place = "\(percent)% of the work"
-        guard let remainingPositions else { return place }
+        // Under half a minute rounds to "0 min": say nothing rather than "about 0 min left".
+        guard let remainingPositions, ReaderTimeEstimate.minutes(forPositions: remainingPositions) > 0 else {
+            return place
+        }
         return "\(place) · about \(ReaderTimeEstimate.workRemainingLabel(positions: remainingPositions))"
     }
 }
