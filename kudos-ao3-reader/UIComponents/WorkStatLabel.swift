@@ -93,7 +93,7 @@ struct WorkPlusBadge: View {
         if count > 0 {
             Text("+\(count)")
                 .font(.caption2.bold())
-                .foregroundStyle(.white)
+                .foregroundStyle(ThemeManager.label(on: accentFill))
                 .padding(.horizontal, 6)
                 .frame(minHeight: 16)
                 .background(accentFill, in: Capsule())

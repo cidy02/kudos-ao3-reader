@@ -546,6 +546,7 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
                             pendingDelete = work
                         } else {
                             PreservedWorkService.softDelete(work, in: context)
+                            Haptics.deleted()
                         }
                     } label: {
                         Label("Delete", systemImage: "trash")
@@ -574,7 +575,10 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
                 title: "Delete this work?",
                 confirmLabel: "Delete",
                 message: { PreservedWorkService.deleteConfirmationMessage(for: $0) },
-                perform: { PreservedWorkService.softDelete($0, in: context) }
+                perform: {
+                    PreservedWorkService.softDelete($0, in: context)
+                    Haptics.deleted()
+                }
             )
             .confirmationDialog(
                 "Rebuild this work?",
@@ -615,6 +619,7 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
 
     @MainActor
     private func toggleFavorite() {
+        Haptics.selection()
         work.isFavorite.toggle()
         work.markModified()
         try? context.save()
@@ -622,6 +627,7 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
 
     @MainActor
     private func toggleFinished() {
+        Haptics.selection()
         if work.isFinished {
             WorkLifecycle.markStillReading(work, in: context)
         } else {
@@ -631,6 +637,7 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
 
     @MainActor
     private func toggleSavedForLater() {
+        Haptics.selection()
         ReadingQueueService.toggleSavedForLater(work, in: context)
     }
 }
@@ -709,6 +716,7 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
                             pendingDelete = existingLocalWork
                         } else {
                             PreservedWorkService.softDelete(existingLocalWork, in: context)
+                            Haptics.deleted()
                         }
                     } label: {
                         Label("Delete", systemImage: "trash")
@@ -745,6 +753,7 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
                             pendingDelete = existingLocalWork
                         } else {
                             PreservedWorkService.softDelete(existingLocalWork, in: context)
+                            Haptics.deleted()
                         }
                     } label: {
                         Label("Delete", systemImage: "trash")
@@ -823,7 +832,10 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
                 title: "Delete this work?",
                 confirmLabel: "Delete",
                 message: { PreservedWorkService.deleteConfirmationMessage(for: $0) },
-                perform: { PreservedWorkService.softDelete($0, in: context) }
+                perform: {
+                    PreservedWorkService.softDelete($0, in: context)
+                    Haptics.deleted()
+                }
             )
             .alert(
                 "Action Failed",
@@ -875,6 +887,7 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
     }
 
     private func toggleSavedForLater() {
+        Haptics.selection()
         performRemoteAction(requireEPUB: false) { saved in
             if saved.isInSavedForLaterQueue {
                 ReadingQueueService.removeFromQueueAndDeleteIfQueueOnly(
@@ -902,6 +915,7 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
     }
 
     private func toggleFinished() {
+        Haptics.selection()
         performRemoteAction(requireEPUB: false) { saved in
             if saved.isFinished {
                 WorkLifecycle.markStillReading(saved, in: context)

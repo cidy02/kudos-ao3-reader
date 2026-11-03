@@ -348,7 +348,14 @@ struct WritingView: View {
         if let username = auth.username, let route = AO3AuthorRoute(username: username) {
             AuthorProfileView(route: route, navigationTitle: title, initialTab: tab)
         } else {
-            ContentUnavailableView("Not signed in", systemImage: "person.crop.circle.badge.questionmark")
+            ContentUnavailableView {
+                Label("Not signed in", systemImage: "person.crop.circle.badge.questionmark")
+            } description: {
+                Text("Log in to AO3 to see your works.")
+            } actions: {
+                Button("Log In") { showingLogin = true }
+                    .buttonStyle(.kudosPrimary)
+            }
         }
     }
 

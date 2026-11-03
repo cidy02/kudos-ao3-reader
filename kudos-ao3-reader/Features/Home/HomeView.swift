@@ -454,7 +454,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                 .fixedSize(horizontal: false, vertical: true)
 
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.caption2.weight(.semibold))
                     .foregroundStyle(.tertiary)
             }
             .padding(.horizontal, 16)
@@ -1212,6 +1212,7 @@ private struct HomeQueueRow: View {
     @Environment(PrivacyGate.self) private var gate
     @Environment(ThemeManager.self) private var themeManager
     @AppStorage("hideMatureContent") private var hideMature = true
+    @Environment(\.accentFill) private var accentFill
     /// The up-next work's measured chapters, so its "Ch N" matches its bars elsewhere.
     @State private var upNextLengths: ChapterLengths?
 
@@ -1343,10 +1344,12 @@ private struct HomeQueueRow: View {
                     .foregroundStyle(palette.accent)
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
 
+                // Two lines before it truncates: the offline count is the last fact.
                 Text(ReadingQueueFacts.planFacts(for: queuedWorks))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 if let work = upNextWork {
                     Text(work.title)
@@ -1392,10 +1395,11 @@ private struct HomeQueueRow: View {
             Button(action: { onStartWork(work) }) {
                 Text(actionTitle)
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Color.accentColor)
+                    // The theme's app colour (Sepia brown), not the fixed asset red.
+                    .foregroundStyle(.accentInk)
                     .padding(.horizontal, 14)
                     .frame(minHeight: 34)
-                    .background(Color.accentColor.opacity(0.10), in: Capsule())
+                    .background(accentFill.opacity(0.10), in: Capsule())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("\(actionTitle) \(work.title)")

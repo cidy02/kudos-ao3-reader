@@ -126,15 +126,16 @@ struct CarouselMoreTile: View {
         Button(action: action) {
             VStack(spacing: 4) {
                 Text("+\(count)")
-                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                    .font(.title2.weight(.bold))
+                    .fontDesign(.rounded)
                 Text("more")
                     .font(.subheadline.weight(.semibold))
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.caption2.weight(.semibold))
             }
             .foregroundStyle(.accentInk)
             .frame(width: width)
-            .frame(height: uniformHeight ?? 166)
+            .frame(minHeight: uniformHeight ?? 166)
             .background {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     #if os(iOS)
@@ -144,7 +145,7 @@ struct CarouselMoreTile: View {
                     #endif
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.cardPress)
         .accessibilityLabel("\(count) more in \(sectionTitle)")
     }
 }
@@ -165,14 +166,15 @@ struct ListMoreRow: View {
                 Text("\(count) more")
                     .font(.subheadline.weight(.semibold))
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.caption2.weight(.semibold))
             }
             .foregroundStyle(.accentInk)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
             .padding(.leading, leadingInset)
             .padding(.vertical, 10)
+            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.cardPress)
         .accessibilityLabel(sectionTitle != nil ? "\(count) more in \(sectionTitle!)" : "\(count) more")
     }
 }

@@ -13,6 +13,10 @@ final class AO3WorkActionsModel {
     /// Set only after AO3 accepts kudos, so a menu opened again in this screen
     /// immediately shows the filled, disabled state even for an unsaved work.
     private(set) var kudosGivenWorkID: Int?
+    /// Bumped by the write handlers when AO3 accepts / rejects a write — the haptic
+    /// triggers (never a value that also changes when a page loads).
+    private(set) var writeSuccesses = 0
+    private(set) var writeFailures = 0
 
     /// Drives the bookmark composer sheet.
     var showingBookmark = false
@@ -110,11 +114,13 @@ final class AO3WorkActionsModel {
         Task {
             do {
                 banner = try await action()
+                writeSuccesses += 1
                 if let refresh = afterSuccessRefresh {
                     refreshWorkPageStates(workID: refresh.workID, auth: refresh.auth, force: true)
                 }
             } catch {
                 banner = Self.message(for: error)
+                writeFailures += 1
             }
             isWorking = false
         }
@@ -144,9 +150,11 @@ final class AO3WorkActionsModel {
                 let message = try await auth.saveBookmark(workID: workID, input: input)
                 showingBookmark = false
                 banner = message
+                writeSuccesses += 1
                 refreshWorkPageStates(workID: workID, auth: auth, force: true)
             } catch {
                 bookmarkError = Self.message(for: error)
+                writeFailures += 1
             }
             isWorking = false
         }
@@ -186,6 +194,8 @@ private struct AO3WorkActionsModifier: ViewModifier {
                 context: actions.commentsContext,
                 initialChapterPosition: actions.commentsInitialChapterPosition
             )
+            .sensoryFeedback(.success, trigger: actions.writeSuccesses)
+            .sensoryFeedback(.error, trigger: actions.writeFailures)
             .alert("AO3", isPresented: bannerPresented) {
                 Button("OK", role: .cancel) { actions.banner = nil }
             } message: {

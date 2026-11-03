@@ -13,6 +13,7 @@ struct WorkDownloadButton: View {
         if let action = WorkDownload.action(for: work) {
             let label = WorkDownload.label(action)
             Button {
+                Haptics.selection()
                 // Through the queue, so the download banner shows it — and a failure.
                 Task { try? await WorkDownload.perform(action, on: work, in: context, queue: downloadQueue) }
             } label: {
@@ -41,6 +42,7 @@ struct SaveForLaterButton: View {
     var body: some View {
         let label = WorkActionLabels.savedForLater(isQueued: work.isInSavedForLaterQueue)
         Button {
+            Haptics.selection()
             ReadingQueueService.toggleSavedForLater(work, in: context)
         } label: {
             Label(label.title, systemImage: label.systemImage)

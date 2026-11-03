@@ -257,5 +257,7 @@ extension View {
             .toolbar(controller.isSelecting ? .hidden : .automatic, for: .tabBar)
             #endif
             .onDisappear { controller.batchTask?.cancel() }
+            // A tick per row ticked, but not for the clear when selection mode ends.
+            .sensoryFeedback(.selection, trigger: controller.selection.count) { _, _ in controller.isSelecting }
     }
 }

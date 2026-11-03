@@ -288,6 +288,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             perform: deleteFromLibrary
         )
         .ao3WorkActions(workActions, workID: ao3WorkID ?? 0, auth: auth)
+        .sensoryFeedback(.selection, trigger: localWork?.isFavorite ?? false)
         .toolbar { detailToolbar }
         .screenTint(workPalette)
     }

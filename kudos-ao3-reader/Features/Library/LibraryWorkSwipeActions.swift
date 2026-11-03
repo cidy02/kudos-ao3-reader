@@ -68,6 +68,7 @@ private struct LibraryWorkSwipeActions: ViewModifier {
                 // one question.
                 if !isFavoritesList {
                     Button {
+                        Haptics.selection()
                         work.isFavorite.toggle()
                         work.markModified()
                         try? context.save()
@@ -85,6 +86,7 @@ private struct LibraryWorkSwipeActions: ViewModifier {
                     // page that is *about* the star, taking it off is the removal,
                     // and soft-deleting the whole work from here was out of scale.
                     Button {
+                        Haptics.selection()
                         work.isFavorite = false
                         work.markModified()
                         try? context.save()
@@ -112,6 +114,7 @@ private struct LibraryWorkSwipeActions: ViewModifier {
                             pendingDelete = work
                         } else {
                             PreservedWorkService.softDelete(work, in: context)
+                            Haptics.deleted()
                         }
                     } label: {
                         Label("Delete", systemImage: "trash")
@@ -134,7 +137,10 @@ private struct LibraryWorkRemovalConfirmations: ViewModifier {
                 title: "Delete this work?",
                 confirmLabel: "Delete",
                 message: { PreservedWorkService.deleteConfirmationMessage(for: $0) },
-                perform: { PreservedWorkService.softDelete($0, in: context) }
+                perform: {
+                    PreservedWorkService.softDelete($0, in: context)
+                    Haptics.deleted()
+                }
             )
             // Taking a work off a list asks first everywhere else, so it asks
             // here too (pass2-9).

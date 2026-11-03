@@ -50,6 +50,10 @@ struct AuthorProfileView: View {
     @State private var pendingDeleteWork: (id: Int, title: String)?
     @State private var deleteErrorMessage: String?
     @State private var confirmingUnsubscribe = false
+    /// Haptic triggers bumped by `toggleSubscription()` from the write's outcome, never from the
+    /// header's `isSubscribed` (which also changes whenever the page loads).
+    @State private var subscriptionSuccesses = 0
+    @State private var subscriptionFailures = 0
     /// Signed-out Mute/Block/Subscribe — same prompt for all profile write actions.
     @State private var showingLoginRequired = false
     @State private var showingLogin = false
@@ -163,6 +167,8 @@ struct AuthorProfileView: View {
             }) {
                 AO3LoginView()
             }
+            .sensoryFeedback(.success, trigger: subscriptionSuccesses)
+            .sensoryFeedback(.error, trigger: subscriptionFailures)
             .alert("AO3 Profile", isPresented: actionMessagePresented) {
                 Button("OK", role: .cancel) { model.clearActionMessage() }
             } message: {
@@ -201,7 +207,7 @@ struct AuthorProfileView: View {
                 titleVisibility: .visible
             ) {
                 Button("Unsubscribe", role: .destructive) {
-                    Task { await model.toggleSubscription(auth: auth) }
+                    Task { await toggleSubscription() }
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
@@ -860,7 +866,19 @@ private extension AuthorProfileView {
         if form.isSubscribed {
             confirmingUnsubscribe = true
         } else {
-            Task { await model.toggleSubscription(auth: auth) }
+            Task { await toggleSubscription() }
+        }
+    }
+
+    /// Subscribe / unsubscribe, then buzz on the outcome: success when the reloaded header shows the
+    /// flipped state, error when it does not.
+    private func toggleSubscription() async {
+        guard let before = model.header?.subscriptionForm?.isSubscribed else { return }
+        await model.toggleSubscription(auth: auth)
+        if model.header?.subscriptionForm?.isSubscribed == !before {
+            subscriptionSuccesses += 1
+        } else {
+            subscriptionFailures += 1
         }
     }
 
@@ -899,7 +917,7 @@ private extension AuthorProfileView {
             if form.isSubscribed {
                 confirmingUnsubscribe = true
             } else {
-                await model.toggleSubscription(auth: auth)
+                await toggleSubscription()
             }
         case let .moderation(kind):
             let actions = (model.header?.actions ?? []) + (model.about?.actions ?? [])
