@@ -6,9 +6,9 @@ import SwiftUI
 /// switches count tags; "more than one tag" counts families.
 struct FandomListFilterSheet: View {
     @Binding var options: FandomListFilterOptions
+    @Binding var sort: FandomFamilySort
+    @Binding var groupsVariants: Bool
     let families: [FandomFamily]
-    /// 1al's switch. Off, "more than one tag" has no groups to judge.
-    var groupsVariants = true
     let library: FandomLibraryIndex
     var palette: SubjectPalette
     var onApply: () -> Void
@@ -35,6 +35,8 @@ struct FandomListFilterSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
+                    sortBlock
+                    spacer
                     minimumWorksBlock
                     spacer
                     sectionLabel("Tag kinds")
@@ -71,6 +73,12 @@ struct FandomListFilterSheet: View {
                     spacer
                     sectionLabel("Grouping")
                     toggleRow(
+                        title: "Group variants",
+                        detail: "Group sibling tags sharing a title",
+                        isOn: $groupsVariants
+                    )
+                    rowDivider
+                    toggleRow(
                         title: "Only fandoms with more than one tag",
                         detail: groupsVariants
                             ? familyCountLabel(tallies.multiTagFamilies)
@@ -106,9 +114,24 @@ struct FandomListFilterSheet: View {
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Reset", action: onReset)
-                            .disabled(!options.hasActiveFilters)
+                            .disabled(!hasActiveModifications)
                     }
                 }
+        }
+    }
+
+    private var hasActiveModifications: Bool {
+        options.hasActiveFilters || sort != .alphabetical || !groupsVariants
+    }
+
+    private var sortBlock: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            sectionLabel("Sort by")
+            SubjectSegmentedControl(
+                options: FandomFamilySort.allCases,
+                title: { $0.title },
+                selection: $sort
+            )
         }
     }
 
