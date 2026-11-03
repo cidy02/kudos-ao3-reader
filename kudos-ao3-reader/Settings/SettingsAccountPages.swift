@@ -1,3 +1,4 @@
+import SwiftData
 import SwiftUI
 
 // Settings › Account & Privacy (AO3 Account, Privacy) and Settings › About.
@@ -23,6 +24,26 @@ struct SettingsPrivacyPage: View {
     @AppStorage("hideMatureContent") private var hideMatureContent = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
     @AppStorage("requireBiometricToReveal") private var requireBiometric = false
+
+    // Board 51's "Data on this iPhone": the same figures, selections and
+    // confirmations as Privacy and local data (`LocalDataClearDialogs`).
+    @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion })
+    private var works: [SavedWork]
+    @State private var footprint = LocalStorageFootprint()
+    @State private var hasMeasured = false
+    @State private var confirmClearHistory = false
+    @State private var confirmClearDownloads = false
+    @State private var confirmClearPositions = false
+    @State private var confirmClearBrowseCache = false
+    @State private var browseCacheCleared = false
+
+    private var freedHistory: [SavedWork] { LocalDataClearDialogs.freedHistory(from: works) }
+    private var freeableDownloads: [SavedWork] { LocalDataClearing.selectFreeableDownloads(from: works) }
+    private var positionedWorks: [SavedWork] { LocalDataClearing.selectReadingPositions(from: works) }
+
+    private var cacheLabel: String {
+        hasMeasured ? LocalStorageFootprint.formatted(bytes: footprint.cacheBytes) : "—"
+    }
 
     var body: some View {
         SettingsPageForm(route: .privacySettings) {
@@ -51,6 +72,82 @@ struct SettingsPrivacyPage: View {
                         : "Kudos blurs Mature and Explicit works in your Library, History, and "
                         + "Favorites until you tap to reveal them.")
                     : "You see Mature and Explicit works normally.")
+            }
+
+            Section {
+                dataRow(
+                    title: "Browse cache",  // what it clears: saved fandom lists
+                    detail: cacheLabel,
+                    button: browseCacheCleared ? "Cleared" : "Clear",
+                    disabled: browseCacheCleared
+                ) { confirmClearBrowseCache = true }
+                dataRow(
+                    title: "Reading history",
+                    detail: Self.workCount(freedHistory.count),
+                    button: "Clear…",
+                    disabled: freedHistory.isEmpty
+                ) { confirmClearHistory = true }
+                dataRow(
+                    title: "Reading positions",
+                    detail: Self.workCount(positionedWorks.count),
+                    button: "Clear…",
+                    disabled: positionedWorks.isEmpty
+                ) { confirmClearPositions = true }
+                dataRow(
+                    title: "Downloads of finished works",
+                    detail: Self.workCount(freeableDownloads.count),
+                    button: "Free…",
+                    disabled: freeableDownloads.isEmpty
+                ) { confirmClearDownloads = true }
+            } header: {
+                Text("Data on this iPhone")
+            } footer: {
+                Text("Kudos keeps your reading on this device. Your AO3 sign-in stays in the "
+                    + "Keychain and is never in a backup. Privacy and Local Data lists everything "
+                    + "stored here.")
+            }
+        }
+        .task {
+            guard !hasMeasured else { return }
+            await measure()
+        }
+        .modifier(LocalDataClearDialogs(
+            works: works,
+            confirmHistory: $confirmClearHistory,
+            confirmDownloads: $confirmClearDownloads,
+            confirmPositions: $confirmClearPositions,
+            confirmBrowseCache: $confirmClearBrowseCache,
+            browseCacheCleared: $browseCacheCleared,
+            cacheLabel: cacheLabel,
+            onMeasure: { Task { await measure() } }
+        ))
+    }
+
+    nonisolated static func workCount(_ count: Int) -> String { "\(count) work\(count == 1 ? "" : "s")" }
+
+    private func measure() async {
+        let readingCopies = works.filter { $0.hasEPUB && !$0.isDownloaded }.map(\.fileURL)
+        footprint = await LocalDataFootprintScanner.measure(readingCopies: readingCopies)
+        hasMeasured = true
+    }
+
+    /// Title and measured detail on the left, the inline destructive button on the
+    /// right. The button is the only control: the row itself does nothing, so a
+    /// stray tap on the text cannot start a clear.
+    private func dataRow(
+        title: String, detail: String, button: String, disabled: Bool, action: @escaping () -> Void
+    ) -> some View {
+        LabeledContent {
+            Button(button, role: .destructive, action: action)
+                .buttonStyle(.bordered)
+                .buttonBorderShape(.capsule)
+                .controlSize(.small)
+                .disabled(disabled)
+                .accessibilityLabel("\(button.replacingOccurrences(of: "…", with: "")) \(title)")
+        } label: {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                Text(detail).font(.footnote).foregroundStyle(.secondary).monospacedDigit()
             }
         }
     }

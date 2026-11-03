@@ -196,7 +196,7 @@ enum SettingsHubValue {
     }
 
     /// "Keep downloads for" is not shown: no retention sweep exists (see
-    /// `StorageUsedRow`), so the one download setting there is to state is this.
+    /// `StorageSummaryRow`), so the one download setting there is to state is this.
     /// Keeping what you read covers more than a subscribe does, so it names the row.
     static func downloads(onSubscribe: Bool, keepsWorksYouRead: Bool = false) -> String {
         keepsWorksYouRead ? "Keep what you read" : onSubscribe ? "On subscribe" : "Manual"

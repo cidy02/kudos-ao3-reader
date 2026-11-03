@@ -81,6 +81,18 @@ struct SettingsBackupPage: View {
 
     var body: some View {
         SettingsPageForm(route: .backup) {
+            // Board 49's Sync folder card, as one summary row. The controls stay on
+            // the Sync Folder page (board 47 lists it as its own row). Board 49's
+            // "Last backup" row has nothing to read: no export date is stored.
+            Section {
+                NavigationLink(value: SettingsRoute.syncFolder) {
+                    SettingsRowSummary(
+                        title: "Sync Folder",
+                        status: SettingsHubValue.syncFolder(folderSyncStatus),
+                        detail: BackupSyncSummary.detail(folderSyncStatus)
+                    )
+                }
+            }
             BackupSettingsSection(
                 isPreparingExport: isPreparingBackupExport,
                 isImporting: isImportingBackup,
@@ -471,6 +483,37 @@ struct SettingsBackupPage: View {
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter
     }()
+}
+
+/// The detail line under the Sync Folder summary row, from what
+/// `FolderSyncService.snapshot()` already holds.
+enum BackupSyncSummary {
+    static func detail(_ sync: FolderSyncSnapshot) -> String {
+        guard sync.isConnected else { return "No folder connected" }
+        let name = sync.folderDisplayName
+        guard let date = sync.lastSyncAt else { return name.isEmpty ? "Not synced yet" : "\(name) · Not synced yet" }
+        let synced = "Synced \(date.formatted(date: .abbreviated, time: .shortened))"
+        return name.isEmpty ? synced : "\(name) · \(synced)"
+    }
+}
+
+/// Title with a trailing status and a secondary line; stacks at accessibility sizes.
+struct SettingsRowSummary: View {
+    let title: String
+    let status: String
+    let detail: String
+
+    var body: some View {
+        LabeledContent {
+            Text(status)
+        } label: {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                Text(detail).font(.footnote).foregroundStyle(.secondary)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
 }
 
 struct BackupSettingsSection: View {

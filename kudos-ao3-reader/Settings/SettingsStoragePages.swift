@@ -12,8 +12,23 @@ struct SettingsDownloadsPage: View {
     /// Read where a work opens in the reader (`WorkLifecycle.keepIfKeepingWorksYouRead`).
     @AppStorage(WorkLifecycle.keepsWorksYouReadKey) private var keepsWorksYouRead = false
 
+    // Board 50's other groups. Each is the same key the page that owns it reads:
+    // Preserve series -> Reading Queues, the two Library toggles -> Library,
+    // Check Availability -> Preservation. One stored value each, two ways in.
+    @AppStorage("autoPreserveSmallSeriesOnSaveForLater") private var autoPreserveSeries = false
+    @AppStorage("autoPreserveSeriesWorkThreshold") private var seriesLimit = 5
+    @AppStorage("confirmBeforeDelete") private var confirmBeforeDelete = true
+    @AppStorage("showsZeroStats") private var showsZeroStats = true
+    @Query private var works: [SavedWork]
+    @State private var showingAvailabilitySweep = false
+
+    private var lastAvailabilityRun: Date? { works.compactMap(\.lastAvailabilityCheck).max() }
+
     var body: some View {
         SettingsPageForm(route: .downloads) {
+            Section {
+                StorageSummaryRow()
+            }
             Section {
                 Toggle("Keep works you read", isOn: $keepsWorksYouRead).accentFill()
             } footer: {
@@ -24,12 +39,39 @@ struct SettingsDownloadsPage: View {
             }
             Section {
                 Toggle("Download on subscribe", isOn: $downloadOnSubscribe).accentFill()
-                StorageUsedRow()
+                NavigationLink(value: SettingsRoute.readingQueues) {
+                    LabeledContent(
+                        "Preserve series",
+                        value: SettingsHubValue.readingQueues(autoPreserve: autoPreserveSeries, seriesLimit: seriesLimit)
+                    )
+                }
             } footer: {
                 Text("When you subscribe to a work already in your Library, Kudos downloads it "
                     + "if no copy is stored. Privacy and Local Data shows what uses space and "
                     + "lets you remove individual downloads.")
             }
+            Section {
+                Toggle("Show zero counts", isOn: $showsZeroStats).accentFill()
+                Toggle("Confirm before deleting", isOn: $confirmBeforeDelete).accentFill()
+            } header: {
+                Text("Library")
+            }
+            Section {
+                Button {
+                    showingAvailabilitySweep = true
+                } label: {
+                    LabeledContent("Check Availability") {
+                        if let date = lastAvailabilityRun {
+                            Text("Last run \(date.formatted(.dateTime.month(.abbreviated).day()))")
+                        }
+                    }
+                }
+            } header: {
+                Text("AO3")
+            }
+        }
+        .sheet(isPresented: $showingAvailabilitySweep) {
+            AvailabilitySweepView()
         }
     }
 }
