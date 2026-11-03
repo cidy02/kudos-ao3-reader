@@ -294,7 +294,13 @@ struct FandomListView: View {
                 await AO3Client.shared.invalidateCachedResponses()
                 await refresh()
             }
+            // Board 14: the field is always visible, not hidden in the pull-down drawer.
+            #if os(iOS)
+            .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always),
+                        prompt: "Search \(category.name)")
+            #else
             .searchable(text: $query, prompt: "Search \(category.name)")
+            #endif
             // Top right, like every other filtered list (owner, 2026-10-01).
             .toolbar {
                 ActionToolbar(items: [AnyView(FilterButton(
