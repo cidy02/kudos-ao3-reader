@@ -10,8 +10,9 @@ struct AO3InvitationRequestLink: View {
     let onOpen: () -> Void
 
     var body: some View {
-        Text("No AO3 account? [Create one](\(AO3InvitationRequest.url.absoluteString))")
+        Text("No AO3 account? [Create one ↗](\(AO3InvitationRequest.url.absoluteString))")
             .font(.subheadline)
+            .foregroundStyle(.secondary)
             .multilineTextAlignment(.center)
             .frame(maxWidth: .infinity)
             .environment(\.openURL, OpenURLAction { url in
@@ -86,13 +87,19 @@ struct AO3LoginView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .navigationTitle("Log In to AO3")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
+                    Button {
                         userInitiatedClose = true
                         auth.cancelLogin()
                         dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
                     }
+                    .accessibilityLabel("Cancel")
                 }
             }
         }
@@ -130,76 +137,122 @@ struct AO3LoginView: View {
     }
 
     private var nativeContent: some View {
-        Form {
-            Group {
-                Section {
-                    TextField("Username or email", text: $username,
-                              prompt: themeManager.appTheme.sepiaPrompt("Username or email"))
-                        .textContentType(.username)
-                    #if os(iOS)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                    #endif
-                        .submitLabel(.next)
-
-                    SecureField("Password", text: $password,
-                                prompt: themeManager.appTheme.sepiaPrompt("Password"))
-                        .textContentType(.password)
-                        .submitLabel(.go)
-                        .onSubmit { submit() }
-                } header: {
-                    Label("AO3 Account", systemImage: "person.crop.circle")
-                } footer: {
+        ScrollView {
+            VStack(spacing: 14) {
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: "lock")
+                        .foregroundStyle(.green)
+                        .accessibilityHidden(true)
                     Text("Kudos submits these credentials only to AO3's official login page. "
-                        + "Your password is never saved.")
+                        + "Your password is never saved; only the session lives in this device's Keychain.")
+                        .font(.subheadline)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(14)
+                .background(themeManager.appTheme.cardSurface, in: RoundedRectangle(cornerRadius: 16))
+
+                VStack(spacing: 0) {
+                    LabeledContent("Username") {
+                        TextField("or email", text: $username,
+                                  prompt: themeManager.appTheme.sepiaPrompt("or email"))
+                            .textContentType(.username)
+                        #if os(iOS)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                        #endif
+                            .submitLabel(.next)
+                            .multilineTextAlignment(.trailing)
+                            .accessibilityLabel("Username or email")
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .frame(minHeight: 50)
+
+                    Divider()
+                        .padding(.leading, 16)
+
+                    LabeledContent("Password") {
+                        SecureField("Password", text: $password,
+                                    prompt: themeManager.appTheme.sepiaPrompt("Password"))
+                            .textContentType(.password)
+                            .submitLabel(.go)
+                            .onSubmit { submit() }
+                            .multilineTextAlignment(.trailing)
+                            .accessibilityLabel("Password")
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .frame(minHeight: 50)
+                }
+                .background(themeManager.appTheme.cardSurface, in: RoundedRectangle(cornerRadius: 16))
 
                 if let error = auth.errorMessage {
-                    Section {
-                        Label(error, systemImage: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.red)
-                    }
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.red)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(14)
+                        .background(themeManager.appTheme.cardSurface, in: RoundedRectangle(cornerRadius: 16))
                 }
 
-                Section {
-                    Button(action: submit) {
-                        HStack {
-                            Spacer()
-                            if auth.status == .signingIn {
-                                ProgressView()
-                                    .controlSize(.small)
-                                    .accentFill()
-                                Text("Logging In…")
-                            } else {
-                                Label("Log In", systemImage: "person.badge.key")
-                            }
-                            Spacer()
-                        }
-                    }
-                    .disabled(
-                        auth.status == .signingIn
-                            || username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                            || password.isEmpty
-                    )
+                loginButton
+
+                Button("Forgot your password?") {
+                    openOnAO3(Self.passwordResetURL)
+                }
+                .foregroundStyle(.accentInk)
+
+                AO3InvitationRequestLink {
+                    openOnAO3(AO3InvitationRequest.url)
                 }
 
-                Section {
-                    Button {
-                        openOnAO3(Self.passwordResetURL)
-                    } label: {
-                        Label("Forgot your password?", systemImage: "key")
-                    }
-                    AO3InvitationRequestLink {
-                        openOnAO3(AO3InvitationRequest.url)
-                    }
-                } footer: {
-                    Text("These open AO3 in Kudos. Come back here to log in afterwards.")
+                Text("These open AO3 in Kudos. Come back here to log in afterwards.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+            .padding(.bottom, 24)
+        }
+        .appScreenSurface(.grouped)
+    }
+
+    /// Filled accent capsule when enabled. Disabled, an undimmed pale tint keeps
+    /// the label readable in every theme, matching `FilterResultsBar`.
+    @ViewBuilder
+    private var loginButton: some View {
+        let enabled = auth.status != .signingIn
+            && !username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !password.isEmpty
+        let button = Button(action: submit) {
+            HStack(spacing: 8) {
+                if auth.status == .signingIn {
+                    ProgressView()
+                        .controlSize(.small)
+                        .accentFill()
+                    Text("Logging In…")
+                } else {
+                    Text("Log In")
                 }
             }
-            .appThemedRows()
+            .frame(maxWidth: .infinity)
         }
-        .formStyle(.grouped)
-        .appThemedScroll()
+        .disabled(!enabled)
+
+        if enabled {
+            button.buttonStyle(.kudosPrimaryConfirm)
+        } else {
+            button
+                .buttonStyle(UndimmedButtonStyle())
+                .font(.headline)
+                .foregroundStyle(themeManager.appTheme.textColor)
+                .padding(.horizontal, 22)
+                .padding(.vertical, 8)
+                .frame(maxWidth: .infinity, minHeight: 50)
+                .background(themeManager.effectiveTint.opacity(0.15), in: Capsule())
+        }
     }
 
     /// Banner above the always-mounted WebView during the visible fallback.
