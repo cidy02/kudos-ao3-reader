@@ -369,7 +369,10 @@ struct ReaderView: View {
             showsAO3Actions: ao3ID != nil,
             kudosGiven: work.hasGivenKudos,
             kudosEnabled: !workActions.isWorking && !work.hasGivenKudos,
-            isBookmarked: workActions.workPageStates?.existingBookmark != nil,
+            isBookmarked: ao3ID.map {
+                workActions.bookmarkedWorkID == $0
+                    || workActions.workPageStates?.existingBookmark != nil
+            } ?? false,
             bookmarkEnabled: !workActions.isWorking,
             upNext: ReaderEndOfWorkFacts.findUpNext(
                 for: work,

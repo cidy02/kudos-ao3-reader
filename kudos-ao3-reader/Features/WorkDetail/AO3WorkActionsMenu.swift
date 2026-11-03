@@ -93,7 +93,8 @@ struct AO3WorkActionsTopRow: View {
             .accessibilityLabel(isGiven ? "Kudos given" : "Give Kudos")
             .accessibilityAddTraits(isGiven ? [.isSelected] : [])
 
-            let isBookmarked = actions.workPageStates?.existingBookmark != nil
+            let isBookmarked = actions.bookmarkedWorkID == workID
+                || actions.workPageStates?.existingBookmark != nil
             Button { actions.startBookmark() } label: {
                 Label(
                     isBookmarked ? "Edit Bookmark" : "Bookmark",

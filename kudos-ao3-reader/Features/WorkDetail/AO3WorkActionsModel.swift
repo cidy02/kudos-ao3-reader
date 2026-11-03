@@ -1,3 +1,4 @@
+import Accessibility
 import SwiftUI
 
 /// UI state + drivers for the native "On AO3" actions. Held by the host (Work
@@ -8,11 +9,14 @@ import SwiftUI
 final class AO3WorkActionsModel {
     /// True while a write is in flight (disables re-taps; shows progress).
     var isWorking = false
-    /// A short result/info message shown as a host alert.
+    /// A short error or non-kudos/bookmark result shown as a host alert.
     var banner: String?
     /// Set only after AO3 accepts kudos, so a menu opened again in this screen
     /// immediately shows the filled, disabled state even for an unsaved work.
     private(set) var kudosGivenWorkID: Int?
+    /// Set as soon as AO3 accepts a bookmark, without waiting for the advisory
+    /// work-page refresh that follows the write.
+    private(set) var bookmarkedWorkID: Int?
     /// Bumped by the write handlers when AO3 accepts / rejects a write — the haptic
     /// triggers (never a value that also changes when a page loads).
     private(set) var writeSuccesses = 0
@@ -22,6 +26,8 @@ final class AO3WorkActionsModel {
     var showingBookmark = false
     var bookmarkInput = AO3AuthService.BookmarkInput()
     var bookmarkError: String?
+    /// An update has no icon state to change, so confirm it briefly in the sheet.
+    private(set) var bookmarkSuccess: String?
     /// True when the composer edits the existing AO3 bookmark (title/labels only —
     /// the submit itself re-detects the real state from the fresh work page).
     private(set) var bookmarkIsUpdate = false
@@ -78,7 +84,7 @@ final class AO3WorkActionsModel {
         auth: AO3AuthService,
         onSuccess: (() -> Void)? = nil
     ) {
-        run {
+        run(presentsSuccess: false) {
             let message = try await auth.giveKudos(workID: workID)
             self.kudosGivenWorkID = workID
             onSuccess?()
@@ -102,18 +108,25 @@ final class AO3WorkActionsModel {
         run { try await auth.markForLater(workID: workID) }
     }
 
-    /// Runs a fire-and-forget write whose result is shown as the host banner.
+    /// Runs a fire-and-forget write. Kudos announces success in place; the
+    /// other actions continue to show their result in the host alert.
     /// Pass `afterSuccessRefresh` for writes that change the menu's
     /// subscribed/bookmarked labels so they refetch instead of going stale.
     private func run(
         afterSuccessRefresh: (workID: Int, auth: AO3AuthService)? = nil,
+        presentsSuccess: Bool = true,
         _ action: @escaping () async throws -> String
     ) {
         guard !isWorking else { return }
         isWorking = true
         Task {
             do {
-                banner = try await action()
+                let message = try await action()
+                if presentsSuccess {
+                    banner = message
+                } else {
+                    AccessibilityNotification.Announcement(message).post()
+                }
                 writeSuccesses += 1
                 if let refresh = afterSuccessRefresh {
                     refreshWorkPageStates(workID: refresh.workID, auth: refresh.auth, force: true)
@@ -137,6 +150,7 @@ final class AO3WorkActionsModel {
             bookmarkIsUpdate = false
         }
         bookmarkError = nil
+        bookmarkSuccess = nil
         showingBookmark = true
     }
 
@@ -148,15 +162,25 @@ final class AO3WorkActionsModel {
         Task {
             do {
                 let message = try await auth.saveBookmark(workID: workID, input: input)
-                showingBookmark = false
-                banner = message
+                bookmarkedWorkID = workID
+                AccessibilityNotification.Announcement(message).post()
                 writeSuccesses += 1
                 refreshWorkPageStates(workID: workID, auth: auth, force: true)
+                isWorking = false
+                guard message == "Bookmark updated." else {
+                    showingBookmark = false
+                    return
+                }
+                bookmarkSuccess = message
+                try? await Task.sleep(for: .seconds(2))
+                guard bookmarkSuccess == message else { return }
+                bookmarkSuccess = nil
+                showingBookmark = false
             } catch {
                 bookmarkError = Self.message(for: error)
                 writeFailures += 1
+                isWorking = false
             }
-            isWorking = false
         }
     }
 
@@ -246,6 +270,12 @@ private struct AO3BookmarkComposer: View {
                                 .foregroundStyle(.red)
                         }
                     }
+                    if let success = actions.bookmarkSuccess {
+                        Section {
+                            Label(success, systemImage: "checkmark.circle.fill")
+                                .foregroundStyle(.accentInk)
+                        }
+                    }
                 }
                 .appThemedRows()
             }
@@ -259,6 +289,8 @@ private struct AO3BookmarkComposer: View {
                 ToolbarItem(placement: .confirmationAction) {
                     if actions.isWorking {
                         ProgressView().accentFill()
+                    } else if actions.bookmarkSuccess != nil {
+                        Label("Saved", systemImage: "checkmark")
                     } else {
                         Button("Save") { actions.submitBookmark(workID: workID, auth: auth) }
                     }
