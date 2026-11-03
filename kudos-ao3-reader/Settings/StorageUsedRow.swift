@@ -50,7 +50,7 @@ struct StorageSummaryRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            LabeledContent("Kudos on this iPhone") {
+            LabeledContent("Kudos on this \(ThisDevice.name)") {
                 if let footprint {
                     Text(LocalStorageFootprint.formatted(bytes: footprint.totalBytes))
                         .monospacedDigit()
@@ -73,7 +73,7 @@ struct StorageSummaryRow: View {
             if footprint == nil { footprint = await LocalDataFootprintScanner.measure() }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Kudos on this iPhone")
+        .accessibilityLabel("Kudos on this \(ThisDevice.name)")
         .accessibilityValue(accessibilityValue)
     }
 

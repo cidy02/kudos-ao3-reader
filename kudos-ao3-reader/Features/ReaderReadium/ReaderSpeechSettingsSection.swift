@@ -74,9 +74,11 @@ struct ReaderSpeechSettingsSection: View {
         return voices.first(where: { $0.identifier == voiceID })
     }
 
+    /// Board 33's card names the voice alone ("Bella"); its quality and language go on
+    /// the line under it. The full "Samantha · Super Compact · US" wrapped to three lines.
     private var currentVoiceDisplayName: String {
         if let voice = activeVoice {
-            return ReaderSpeechPreferences.displayName(for: voice)
+            return voice.name
         }
         if voiceID.isEmpty {
             return "Automatic"
@@ -94,7 +96,12 @@ struct ReaderSpeechSettingsSection: View {
         }
         let langCode = activeVoice?.language.code.bcp47 ?? Locale.current.identifier
         let langName = Locale.current.localizedString(forIdentifier: langCode) ?? langCode
-        return "\(engineName) · \(langName) · on this iPhone"
+        // Every Kokoro voice is the same quality, so only a system voice says which it is.
+        if effectiveEngineKind == .system, let voice = activeVoice {
+            let quality = ReaderSpeechPreferences.qualityLabel(for: voice.quality)
+            return "\(engineName) · \(quality) · \(langName) · on this \(ThisDevice.name)"
+        }
+        return "\(engineName) · \(langName) · on this \(ThisDevice.name)"
     }
 
     var body: some View {
@@ -183,7 +190,7 @@ struct ReaderSpeechSettingsSection: View {
                         Text(currentVoiceSubtitle)
                             .font(.footnote)
                             .foregroundStyle(.secondary)
-                            .lineLimit(2)
+                            .lineLimit(3)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
 

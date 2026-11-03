@@ -100,7 +100,7 @@ struct SettingsPrivacyPage: View {
                     disabled: freeableDownloads.isEmpty
                 ) { confirmClearDownloads = true }
             } header: {
-                Text("Data on this iPhone")
+                Text("Data on this \(ThisDevice.name)")
             } footer: {
                 Text("Kudos keeps your reading on this device. Your AO3 sign-in stays in the "
                     + "Keychain and is never in a backup. Privacy and Local Data lists everything "
