@@ -1648,6 +1648,14 @@ extension ReadiumReaderView {
         annotations.filter { $0.kind == .highlight }
     }
 
+    private var contentsProgressLabel: String? {
+        guard let position = book.readingPosition else { return nil }
+        return ReaderContentsLabels.progress(
+            percent: position.percent,
+            remainingPositions: book.remainingPositions?.work
+        )
+    }
+
     /// The Readium position (1-based, publication-wide) the reader is on.
     /// This is the page's identity, so bookmarking can toggle exactly rather
     /// than fuzzily matching progressions.
@@ -1668,7 +1676,7 @@ extension ReadiumReaderView {
 
     private var readerSheetTitle: String {
         switch router.panel {
-        case .readerChapters: "Contents"
+        case .readerChapters: work.title
         case .readerFind: "Find in Work"
         default: "Display & Themes"
         }
@@ -1683,6 +1691,7 @@ extension ReadiumReaderView {
                         sections: book.sections,
                         bookmarks: bookmarkAnnotations,
                         notes: noteAnnotations,
+                        progressLabel: contentsProgressLabel,
                         chapterStartPercent: { section in
                             guard let locator = chapterStartLocator(for: section),
                                   let progression = locator.locations.totalProgression

@@ -28,7 +28,7 @@ extension ReadingAnnotation {
 
 /// The reader's Contents sheet segments: the chapter list, plus the in-book
 /// Bookmarks and Highlights lists.
-enum ReaderContentsSegment: String, CaseIterable, Identifiable {
+nonisolated enum ReaderContentsSegment: String, CaseIterable, Identifiable {
     // Raw case stays `notes` (SwiftData/persistence-adjacent identifiers elsewhere
     // key off it) — only the user-facing `title` changed. This segment lists
     // every highlight, noted or not (a bare highlight needs a sheet-based delete
@@ -45,6 +45,20 @@ enum ReaderContentsSegment: String, CaseIterable, Identifiable {
     }
 }
 
+/// Copy shared by the segmented control and the reader's live-place line.
+nonisolated enum ReaderContentsLabels {
+    static func segmentTitle(_ segment: ReaderContentsSegment, count: Int) -> String {
+        guard segment != .chapters, count > 0 else { return segment.title }
+        return "\(segment.title) · \(count)"
+    }
+
+    static func progress(percent: Int, remainingPositions: Int?) -> String {
+        let place = "\(percent)% of the work"
+        guard let remainingPositions else { return place }
+        return "\(place) · about \(ReaderTimeEstimate.workRemainingLabel(positions: remainingPositions))"
+    }
+}
+
 /// Contents / Bookmarks / Highlights, segmented. All three navigate by tapping a
 /// row; annotations additionally swipe to delete.
 struct ReaderContentsSheet: View {
@@ -54,6 +68,7 @@ struct ReaderContentsSheet: View {
     let sections: [ReaderSection]
     let bookmarks: [ReadingAnnotation]
     let notes: [ReadingAnnotation]
+    let progressLabel: String?
     /// How far into the work a chapter starts, as a whole percent, when the
     /// position list knows it yet.
     ///
@@ -74,13 +89,25 @@ struct ReaderContentsSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             Picker("", selection: $segment) {
-                ForEach(ReaderContentsSegment.allCases) { Text($0.title).tag($0) }
+                ForEach(ReaderContentsSegment.allCases) { segment in
+                    Text(ReaderContentsLabels.segmentTitle(segment, count: count(for: segment)))
+                        .tag(segment)
+                }
             }
             .pickerStyle(.segmented)
             .accentFill()
             .labelsHidden()
             .padding(.horizontal, 16)
             .padding(.bottom, 8)
+
+            if let progressLabel {
+                Text(progressLabel)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 8)
+            }
 
             switch segment {
             case .chapters:
@@ -101,6 +128,14 @@ struct ReaderContentsSheet: View {
                         + "Swipe a row to delete, or tap to edit."
                 )
             }
+        }
+    }
+
+    private func count(for segment: ReaderContentsSegment) -> Int {
+        switch segment {
+        case .chapters: 0
+        case .bookmarks: bookmarks.count
+        case .notes: notes.count
         }
     }
 
