@@ -57,7 +57,6 @@ struct AO3WorkRow: View {
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var themeManager
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("showsZeroStats") private var showsZeroStats = true
     @ScaledMetric(relativeTo: .title3) private var bookmarkTitleSize: CGFloat = 19
     @State private var internalExpanded = false
@@ -111,7 +110,11 @@ struct AO3WorkRow: View {
         }
         // Follow the global expand/collapse-all toggle (also applies on first
         // appearance so cards scrolled into view match the current state).
-        .onChange(of: expandAll, initial: true) { _, value in expandedBinding.wrappedValue = value }
+        .onChange(of: expandAll, initial: true) { _, value in
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) { expandedBinding.wrappedValue = value }
+        }
     }
 
     @ViewBuilder
@@ -164,30 +167,34 @@ struct AO3WorkRow: View {
                     freeforms: additionalTags,
                     onTap: { tag, field in router.searchAO3(field, tag) }
                 )
-                .transition(.opacity.combined(with: .move(edge: .top)))
             }
             if showsSummary, !work.summary.isEmpty {
-                summary(collapsedLineLimit: 3)
+                Text(work.summary)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(expanded || dynamicTypeSize.isAccessibilitySize ? nil : 3)
+                    .multilineTextAlignment(.leading)
+                    .animation(nil, value: expanded)
             }
             if expanded {
-                VStack(alignment: .leading, spacing: 12) {
-                    if presentation == .fandomTop {
-                        chipGroup("Fandoms", Array(nonemptyFandoms.dropFirst()), field: .fandom)
+                WorkRowExpandedDetails(animate: !expandAll) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        if presentation == .fandomTop {
+                            chipGroup("Fandoms", Array(nonemptyFandoms.dropFirst()), field: .fandom)
+                        }
+                        // No "Archive Warnings" group: expanding turns the stats row's
+                        // warning chip into the warnings themselves.
+                        chipGroup("Relationships", work.relationships, field: .relationship)
+                        chipGroup("Characters", work.characters, field: .character)
+                        chipGroup("Additional Tags", additionalTags, field: .freeform)
                     }
-                    // No "Archive Warnings" group: expanding turns the stats row's
-                    // warning chip into the warnings themselves.
-                    chipGroup("Relationships", work.relationships, field: .relationship)
-                    chipGroup("Characters", work.characters, field: .character)
-                    chipGroup("Additional Tags", additionalTags, field: .freeform)
                 }
-                .transition(.opacity.combined(with: .move(edge: .top)))
             }
             statsRow
             if showsPerformance {
                 AO3AuthorPerformanceStrip(work: work)
             }
         }
-        .clipped()
     }
 
     /// Fandom label, title, author, summary, every stat, and equal chapter bars.
@@ -205,20 +212,26 @@ struct AO3WorkRow: View {
                     freeforms: additionalTags,
                     onTap: { tag, field in router.searchAO3(field, tag) }
                 )
-                .transition(.opacity.combined(with: .move(edge: .top)))
             }
             if expanded {
-                VStack(alignment: .leading, spacing: 12) {
-                    chipGroup("Fandoms", Array(nonemptyFandoms.dropFirst()), field: .fandom)
-                    chipGroup("Archive Warnings", work.warnings, field: .warning)
-                    chipGroup("Relationships", work.relationships, field: .relationship)
-                    chipGroup("Characters", work.characters, field: .character)
-                    chipGroup("Additional Tags", additionalTags, field: .freeform)
+                WorkRowExpandedDetails(animate: !expandAll) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        chipGroup("Fandoms", Array(nonemptyFandoms.dropFirst()), field: .fandom)
+                        chipGroup("Archive Warnings", work.warnings, field: .warning)
+                        chipGroup("Relationships", work.relationships, field: .relationship)
+                        chipGroup("Characters", work.characters, field: .character)
+                        chipGroup("Additional Tags", additionalTags, field: .freeform)
+                    }
                 }
-                .transition(.opacity.combined(with: .move(edge: .top)))
             }
             if showsSummary, !work.summary.isEmpty {
-                summary(collapsedLineLimit: 2)
+                Text(work.summary)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(expanded || dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .animation(nil, value: expanded)
             }
             ledgerFacts
             searchLedgerSignal
@@ -226,27 +239,6 @@ struct AO3WorkRow: View {
                 AO3AuthorPerformanceStrip(work: work)
             }
         }
-        .clipped()
-    }
-
-    @ViewBuilder
-    private func summary(collapsedLineLimit: Int) -> some View {
-        if expanded || dynamicTypeSize.isAccessibilitySize {
-            summaryText(lineLimit: nil)
-                .transition(.opacity.combined(with: .move(edge: .top)))
-        } else {
-            summaryText(lineLimit: collapsedLineLimit)
-                .transition(.opacity.combined(with: .move(edge: .top)))
-        }
-    }
-
-    private func summaryText(lineLimit: Int?) -> some View {
-        Text(work.summary)
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-            .lineLimit(lineLimit)
-            .multilineTextAlignment(.leading)
-            .fixedSize(horizontal: false, vertical: true)
     }
 
     private var standardHeading: some View {
@@ -496,8 +488,10 @@ struct AO3WorkRow: View {
         let button = Button {
             toggleExpanded()
         } label: {
-            Image(systemName: expanded ? "chevron.up" : "chevron.down")
+            Image(systemName: "chevron.down")
                 .font(.caption.weight(.semibold))
+                .rotationEffect(.degrees(expanded ? 180 : 0))
+                .animation(unlessReduced: .easeInOut(duration: 0.2), value: expanded)
         }
         if presentation == .searchLedger {
             // Spec 1k draws this inline with the kicker as a bare 20pt glyph; it is
@@ -519,9 +513,9 @@ struct AO3WorkRow: View {
     }
 
     private func toggleExpanded() {
-        withAnimationUnlessReduced(.snappy(duration: 0.3), reduceMotion: reduceMotion) {
-            expandedBinding.wrappedValue.toggle()
-        }
+        // List snapshots both cell layouts when its height animates, causing
+        // row/header ghosting (filmed 2026-11-03); keep relayout instant.
+        expandedBinding.wrappedValue.toggle()
     }
 
     /// AO3's freeform/additional tags, defensively filtered against the categorized
