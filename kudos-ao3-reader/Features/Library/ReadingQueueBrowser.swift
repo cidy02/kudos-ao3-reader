@@ -253,7 +253,7 @@ struct ReadingQueueBrowserView: View {
             NavigationLink(value: LocalWorkDestination.reader(work)) {
                 card
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.cardPress)
         }
     }
 
@@ -760,7 +760,7 @@ extension ReadingQueueBrowserView {
             NavigationLink(value: LocalWorkDestination.reader(work)) {
                 SensitiveWorkCoverCard(work: work)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.cardPress)
             .localWorkContextMenu(
                 work: work,
                 scopedRemoval: ScopedRemoval(title: "Remove from Queue") { pendingRemoval = work },

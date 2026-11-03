@@ -490,7 +490,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             .subjectPanel()
             .padding(.horizontal, CardListMetrics.sideMargin)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.cardPress)
     }
 
     /// A purely local section carousel (Reading Now / Finished / Downloaded).
@@ -543,7 +543,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                     CollectionCard(collection: collection)
                         .collectionCardMenu(collection)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.cardPress)
             }
         } emptyState: {
             Text("Use + above to create a collection for works you want to group together.")
@@ -797,7 +797,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                                 previewWorks: collectionPreviews(collection)
                             )
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.cardPress)
                     }
                 }
                 .padding(.horizontal, 16)
@@ -826,7 +826,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 NavigationLink(value: AllReadingQueuesDestination(initialQueueID: queue.id)) {
                     ReadingQueueCard(queue: queue)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.cardPress)
             }
         } emptyState: {
             VStack(alignment: .leading, spacing: 8) {
@@ -866,7 +866,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                         NavigationLink(value: AllReadingQueuesDestination(initialQueueID: queue.id)) {
                             LibraryQueueLedgerRow(queue: queue)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.cardPress)
                     }
                 }
                 .padding(.horizontal, 16)
@@ -1172,7 +1172,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                     metadataStyle: metadataStyle
                 )
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.cardPress)
             .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
         }
     }

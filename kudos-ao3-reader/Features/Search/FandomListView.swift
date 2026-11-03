@@ -476,7 +476,7 @@ struct FandomListView: View {
                     libraryEntry: libraryIndex.entry(for: member.originalName)
                 )
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.cardPress)
             .workCardZoomSource(BrowseZoomKey.fandom(member.originalName), in: zoomNamespace)
             .cardRow(chrome: .plain)
         } else {

@@ -184,7 +184,10 @@ struct WritingView: View {
             if let draft = latestDraft {
                 // The link sits behind the hero so List adds no chevron beside the card.
                 WritingDraftHero(work: draft)
-                    .subjectRowNavigation(accessibilityLabel: "Continue draft, \(draft.title)") {
+                    .subjectRowNavigation(
+                        accessibilityLabel: "Continue draft, \(draft.title)",
+                        cardPressFeedback: true
+                    ) {
                         WritingWorkDestination(workID: draft.id) { draftsReload += 1 }
                     }
                     .pageBodyRow(top: 18, gutter: SubjectMetrics.accountGutter)
@@ -204,7 +207,7 @@ struct WritingView: View {
                 } label: {
                     AccountNavCardLabel(title: "No drafts on AO3", systemImage: "doc.badge.plus")
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.cardPress)
                 .accountControlCardRow()
             }
         }
@@ -231,7 +234,7 @@ struct WritingView: View {
                         Button { openInboxItem(item) } label: {
                             WritingCommentPreviewRow(item: item)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.cardPress)
                         .cardRow()
                     }
                 }

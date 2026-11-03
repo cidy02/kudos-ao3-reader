@@ -762,7 +762,7 @@ struct AccountInboxSeeAllRow: View {
             .frame(minHeight: 44)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.cardPress)
         .accountControlCardRow()
     }
 }

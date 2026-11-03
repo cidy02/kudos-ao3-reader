@@ -226,7 +226,7 @@ struct MediaBrowserView: View {
                     }
                 }
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.cardPress)
             .accessibilityLabel(categoryHeaderAccessibilityLabel(category, stats: stats))
 
             VStack(spacing: 6) {
@@ -258,7 +258,7 @@ struct MediaBrowserView: View {
                         .frame(minHeight: 30)
                         .background(Color.white.opacity(0.18), in: Capsule())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.cardPress)
                     .layoutFreeHitTarget { onSelectFandom(chip.names, chip.title) }
                     .accessibilityLabel("\(chip.title), \(compact(chip.workCount)) works" + (chip.isFamiliar ? ", you have read from this fandom" : ""))
                 }
@@ -281,7 +281,7 @@ struct MediaBrowserView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 2)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.cardPress)
                 .accessibilityLabel("All \(stats?.familyCount ?? stats?.fandomCount ?? 0) fandoms in \(category.name)")
             }
         }

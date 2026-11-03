@@ -43,7 +43,7 @@ struct HomeCollectionShelf: View {
                 NavigationLink(value: LocalWorkDestination.reader(work)) {
                     SensitiveWorkCoverCard(work: work, progress: work.readingProgress)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.cardPress)
                 .localWorkContextMenu(work: work)
             }
         } emptyState: {

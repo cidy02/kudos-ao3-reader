@@ -447,7 +447,7 @@ struct SensitiveWorkRow: View {
             } label: {
                 content
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.cardPress)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Hidden mature work")
             .accessibilityValue(isSelected ? "Selected" : "Not selected")
@@ -458,7 +458,7 @@ struct SensitiveWorkRow: View {
             } label: {
                 content
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.cardPress)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Hidden mature work")
             .accessibilityHint("Activate to reveal.")
@@ -500,9 +500,9 @@ struct SensitiveWorkRow: View {
                 if usesInlineNavigation {
                     switch openMode {
                     case .detail:
-                        NavigationLink(value: work) { row }.buttonStyle(.plain)
+                        NavigationLink(value: work) { row }.buttonStyle(.cardPress)
                     case .reader:
-                        NavigationLink(value: LocalWorkDestination.reader(work)) { row }.buttonStyle(.plain)
+                        NavigationLink(value: LocalWorkDestination.reader(work)) { row }.buttonStyle(.cardPress)
                     }
                 } else {
                     switch openMode {
@@ -535,7 +535,7 @@ struct SensitiveWorkRow: View {
             .contentShape(Rectangle())
             selectingOrNavigating(for: row, title: work.title) {
                 if usesInlineNavigation {
-                    NavigationLink(value: work) { row }.buttonStyle(.plain)
+                    NavigationLink(value: work) { row }.buttonStyle(.cardPress)
                 } else {
                     row.cardNavigation(to: work, accessibilityLabel: work.title)
                 }
@@ -555,7 +555,7 @@ struct SensitiveWorkRow: View {
             } label: {
                 row.environment(\.ao3AuthorNavigationEnabled, false)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.cardPress)
             .accessibilityLabel(title)
             .accessibilityValue(isSelected ? "Selected" : "Not selected")
             .accessibilityHint("Double-tap to \(isSelected ? "deselect" : "select") this work.")
@@ -692,24 +692,31 @@ struct SensitiveWorkCoverCard: View {
     @ViewBuilder
     private func sensitiveCoverContainer(for card: some View) -> some View {
         if isSelecting {
-            card
-                .overlay(alignment: .topTrailing) {
-                    WorkSelectionBubble(isSelected: isSelected)
-                        .padding(8)
+            Button {
+                onToggleSelection?()
+            } label: {
+                card
+                    .overlay(alignment: .topTrailing) {
+                        WorkSelectionBubble(isSelected: isSelected)
+                            .padding(8)
+                    }
+                    .overlay {
+                        RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
+                            .strokeBorder(
+                                isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(Color.clear),
+                                lineWidth: 2
+                            )
+                            .allowsHitTesting(false)
+                    }
                 }
-                .overlay {
-                    RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
-                        .strokeBorder(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(Color.clear), lineWidth: 2)
-                        .allowsHitTesting(false)
-                }
-                .onTapGesture { onToggleSelection?() }
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Hidden mature work")
-                .accessibilityValue(isSelected ? "Selected" : "Not selected")
-                .accessibilityHint("Double-tap to \(isSelected ? "deselect" : "select") this work.")
+            .buttonStyle(.cardPress)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Hidden mature work")
+            .accessibilityValue(isSelected ? "Selected" : "Not selected")
+            .accessibilityHint("Double-tap to \(isSelected ? "deselect" : "select") this work.")
         } else {
-            card
-                .onTapGesture { revealTarget() }
+            Button(action: revealTarget) { card }
+                .buttonStyle(.cardPress)
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("Hidden mature work")
                 .accessibilityHint("Activate to reveal.")
@@ -742,7 +749,7 @@ struct SensitiveWorkCoverCard: View {
                     )
                     .environment(\.ao3AuthorNavigationEnabled, false)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.cardPress)
                 .accessibilityLabel(work.title)
                 .accessibilityValue(isSelected ? "Selected" : "Not selected")
                 .accessibilityHint("Double-tap to \(isSelected ? "deselect" : "select") this work.")
@@ -778,7 +785,7 @@ struct SensitiveWorkCoverCard: View {
                     }
                     .environment(\.ao3AuthorNavigationEnabled, false)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.cardPress)
                 .accessibilityLabel(work.title)
                 .accessibilityValue(isSelected ? "Selected" : "Not selected")
                 .accessibilityHint("Double-tap to \(isSelected ? "deselect" : "select") this work.")
@@ -824,7 +831,7 @@ struct SensitiveRemoteWorkCard<Content: View>: View {
                     .overlay { MatureRevealCapsule() }
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.cardPress)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Hidden mature work")
             .accessibilityHint("Activate to reveal.")

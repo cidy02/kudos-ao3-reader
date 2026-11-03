@@ -429,7 +429,7 @@ struct HomeSectionListView: View {
                     NavigationLink(value: LocalWorkDestination.reader(work)) {
                         SensitiveWorkCoverCard(work: work, footer: updateFooter(for: work))
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.cardPress)
                     .localWorkContextMenu(
                         work: work,
                         onSelect: { isSelecting = true; selection = [work.id] }
