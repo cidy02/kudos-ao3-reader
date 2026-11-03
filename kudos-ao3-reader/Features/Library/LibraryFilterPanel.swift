@@ -63,13 +63,7 @@ struct LibraryFilterPanel: View {
             }
             .accessibilityLabel("Close")
         }
-        ToolbarItem(placement: .confirmationAction) {
-            Button { dismiss() } label: {
-                Image(systemName: "checkmark")
-            }
-            .buttonStyle(.kudosPrimary)
-            .accessibilityLabel("Done")
-        }
+        // No ✓ (board 03): the "Show N Works" bar below is the sheet's one confirm.
     }
 
     private func groupLabel(_ text: String) -> some View {

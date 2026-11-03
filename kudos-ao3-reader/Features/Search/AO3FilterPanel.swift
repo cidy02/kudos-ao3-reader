@@ -177,14 +177,7 @@ struct AO3FilterPanel: View {
             }
             .accessibilityLabel("Close")
         }
-        ToolbarItem(placement: .confirmationAction) {
-            Button(action: confirm) {
-                Image(systemName: mode == .refine ? "checkmark" : "magnifyingglass")
-            }
-            .buttonStyle(.kudosPrimary)
-            .disabled(mode == .search && !filters.isSearchable)
-            .accessibilityLabel(confirmLabel)
-        }
+        // No ✓ / magnifier (board 12): the results bar below is the sheet's one confirm.
     }
 
     private func confirm() {
@@ -197,11 +190,6 @@ struct AO3FilterPanel: View {
 
     static func showsPageCompletionFacet(worksSort: AO3WorksSort?) -> Bool {
         worksSort == nil
-    }
-
-    private var confirmLabel: String {
-        if worksSort != nil { return "Apply" }
-        return mode == .refine ? "Done" : "Apply filters"
     }
 
     func groupLabel(_ text: String) -> some View {
