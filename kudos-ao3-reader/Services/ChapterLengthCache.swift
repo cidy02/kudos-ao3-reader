@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 
 /// Per-chapter lengths for the chapter bars, kept off SwiftData and out of
 /// backups. The Caches directory is not in a device backup and is not part of
