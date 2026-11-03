@@ -1493,6 +1493,7 @@ struct CommentComposerSheet: View {
     /// wraps what the reader highlighted instead of appending at the end.
     @State private var selection: TextSelection?
     @State private var showingFormattingTray = false
+    @State private var detent: PresentationDetent = .medium
 
     private var isReply: Bool { model.composerParent != nil }
     private var isEdit: Bool { model.composerEditTarget != nil }
@@ -1510,9 +1511,10 @@ struct CommentComposerSheet: View {
         characterLimit - text.unicodeScalars.count
     }
 
-    /// 1ba's footer, under the identity and the character budget: the sheet is a
-    /// medium detent, and the reader can drag it taller.
-    static let dragTallerFooter = "Drag the sheet taller"
+    /// Board 22's header ↗ button: medium goes to large, large returns to medium.
+    static func toggledDetent(_ current: PresentationDetent) -> PresentationDetent {
+        current == .large ? .medium : .large
+    }
 
     /// 1ba: Cancel and Post sit in the sheet header. A reply uses that same
     /// Post — the board does not say "Post Reply". An edit stays Save.
@@ -1573,12 +1575,6 @@ struct CommentComposerSheet: View {
                     statusBanner
 
                     identityRow
-
-                    Text(Self.dragTallerFooter)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 16)
@@ -1611,25 +1607,29 @@ struct CommentComposerSheet: View {
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
+                    Button {
                         model.saveDraft()
                         dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
                     }
+                    .accessibilityLabel("Cancel")
                     .disabled(model.submissionGuard.phase.isBusy)
                 }
-                ToolbarItem(placement: .confirmationAction) {
+                ToolbarItem(placement: .primaryAction) {
                     Button {
-                        Task { await model.submit(auth: auth) }
+                        withAnimation { detent = Self.toggledDetent(detent) }
                     } label: {
-                        if model.submissionGuard.phase.isBusy {
-                            ProgressView().accentFill()
-                        } else {
-                            Text(Self.confirmationAction(isEdit: isEdit, isReply: isReply))
-                                .fontWeight(.semibold)
-                        }
+                        Image(systemName: detent == .large
+                            ? "arrow.down.right.and.arrow.up.left"
+                            : "arrow.up.left.and.arrow.down.right")
                     }
-                    .disabled(!canPost)
+                    .accessibilityLabel(detent == .large ? "Collapse" : "Expand")
                 }
+                ToolbarItem(placement: .confirmationAction) {
+                    postButton
+                }
+                .sharedBackgroundVisibility(.hidden)
             }
             .onChange(of: model.composerText) { _, _ in
                 // An edit away from a blocked submission's exact text must
@@ -1663,10 +1663,42 @@ struct CommentComposerSheet: View {
         // 462pt of sheet, and the system re-lays it out at the shorter height on
         // its own once the keyboard is up. A literal `.height(462)` would be one
         // device's number pinned to every screen size.
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.medium, .large], selection: $detent)
         .presentationDragIndicator(.visible)
         .interactiveDismissDisabled(model.submissionGuard.phase.isBusy)
             .screenTint(palette)
+    }
+
+    /// Filled accent capsule when enabled. Disabled, a pale tint with the theme's
+    /// text colour on an undimmed style (as `FilterResultsBar`), so it reads in every theme.
+    @ViewBuilder
+    private var postButton: some View {
+        let enabled = canPost
+        let button = Button {
+            Task { await model.submit(auth: auth) }
+        } label: {
+            if model.submissionGuard.phase.isBusy {
+                ProgressView().accentFill()
+            } else {
+                // One line in the toolbar: the disabled capsule had broken "Post" into "Po / st".
+                Text(Self.confirmationAction(isEdit: isEdit, isReply: isReply))
+                    .fontWeight(.semibold)
+                    .lineLimit(1)
+                    .fixedSize()
+            }
+        }
+        .disabled(!enabled)
+        if enabled {
+            button.buttonStyle(.kudosPrimary)
+        } else {
+            button
+                .buttonStyle(UndimmedButtonStyle())
+                .font(.headline)
+                .foregroundStyle(theme.appTheme.textColor)
+                .padding(.horizontal, 18)
+                .frame(minHeight: 44)
+                .background(theme.effectiveTint.opacity(0.15), in: Capsule())
+        }
     }
 
     /// The field, taking every point the sheet has left between the quoted
