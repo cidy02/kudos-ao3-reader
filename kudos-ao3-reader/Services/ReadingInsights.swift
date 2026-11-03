@@ -168,9 +168,12 @@ nonisolated struct ReadingInsights: Equatable, Sendable {
     static let remainderName = "Everything else"
 
     /// Builds every figure in one pass.
+    /// `dayRange`: the days Words per Day draws, one slot each (days without reading are
+    /// empty slots). Nil draws only the days that have reading.
     static func make(
         facts: [ReadingSessionFacts],
         previousPeriodFacts: [ReadingSessionFacts] = [],
+        dayRange: DateInterval? = nil,
         calendar: Calendar = .current
     ) -> ReadingInsights {
         var insights = ReadingInsights()
@@ -196,13 +199,14 @@ nonisolated struct ReadingInsights: Equatable, Sendable {
         for f in facts { wordCountsByWork[f.workID] = f.wordCount }
         insights.lengthMix = lengthMix(words: Array(wordCountsByWork.values))
 
-        insights.dailyWords = dailyWordsBuckets(from: facts, calendar: calendar)
+        insights.dailyWords = dailyWordsBuckets(from: facts, in: dayRange, calendar: calendar)
         insights.hourlyDuration = hourlyDurationBuckets(from: facts, calendar: calendar)
         insights.sittingBuckets = sittingBuckets(from: facts)
         insights.readingSeconds = facts.reduce(0) { $0 + $1.durationSeconds }
         insights.finishedWorksCount = Set(facts.filter(\.didFinish).map(\.workID)).count
         insights.readingDaysCount = Set(facts.map { calendar.startOfDay(for: $0.startedAt) }).count
-        insights.biggestDay = insights.dailyWords.max(by: { $0.words < $1.words })
+        // Days without reading are empty chart slots, never the biggest day.
+        insights.biggestDay = insights.dailyWords.filter { $0.words > 0 }.max(by: { $0.words < $1.words })
         return insights
     }
 
@@ -398,6 +402,17 @@ nonisolated struct ReadingInsights: Equatable, Sendable {
             }
         }
         return mix
+    }
+
+    /// The days a period's Words per Day chart draws: from the period's start to the end of
+    /// today (never future days), and only for periods of a month or less — a year of daily
+    /// slots would be unreadable. Nil keeps the reading days only.
+    static func chartDays(for period: DateInterval, now: Date = .now, calendar: Calendar = .current) -> DateInterval? {
+        let tomorrow = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now)) ?? period.end
+        let end = min(period.end, tomorrow)
+        guard end > period.start else { return nil }
+        let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: period.start), to: end).day ?? 0
+        return days <= 31 ? DateInterval(start: period.start, end: end) : nil
     }
 
     /// Daily words breakdown within an optional date interval.

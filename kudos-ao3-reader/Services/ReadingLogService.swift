@@ -371,7 +371,9 @@ enum ReadingLogService {
             )
         } ?? []
         return ReadingInsights.make(
-            facts: current, previousPeriodFacts: previous, calendar: calendar
+            facts: current, previousPeriodFacts: previous,
+            dayRange: ReadingInsights.chartDays(for: period, calendar: calendar),
+            calendar: calendar
         )
     }
 
