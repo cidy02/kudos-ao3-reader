@@ -14,6 +14,11 @@ enum DemoLibrary {
     static func seedIfRequested(in context: ModelContext) {
         guard UserDefaults.standard.bool(forKey: "KudosDemoLibrary") else { return }
         let existing = (try? context.fetch(FetchDescriptor<SavedWork>())) ?? []
+        if let sample = samples.first(where: { $0.title == "Winter Garden" }),
+           let work = existing.first(where: { $0.title == sample.title && $0.author == sample.author }) {
+            applyWorkTags(from: sample, to: work)
+            try? context.save()
+        }
         guard !existing.contains(where: { $0.title == samples[0].title }) else {
             seedRecentlyDeleted(in: context)
             return
@@ -44,6 +49,7 @@ enum DemoLibrary {
             }
             work.isFinished = sample.finished
             if let seen = sample.seenChapters { work.knownChapterCount = seen }
+            applyWorkTags(from: sample, to: work)
             context.insert(work)
             if sample.onDevice {
                 writePlaceholder(for: work)
@@ -159,6 +165,9 @@ enum DemoLibrary {
         let rating: String
         var warnings: [String] = ["No Archive Warnings Apply"]
         var categories: [String] = ["Gen"]
+        var relationships: [String] = []
+        var characters: [String] = []
+        var additionalTags: [String] = []
         let words: Int
         let chapters: String
         var progress: Double?
@@ -168,6 +177,18 @@ enum DemoLibrary {
         var onDevice = true
         /// The chapter count last seen; lower than posted means "new chapters".
         var seenChapters: Int?
+    }
+
+    private static func applyWorkTags(from sample: Sample, to work: SavedWork) {
+        guard !sample.relationships.isEmpty || !sample.characters.isEmpty || !sample.additionalTags.isEmpty else {
+            return
+        }
+        work.workRelationships = sample.relationships
+        work.workCharacters = sample.characters
+        work.workFreeforms = sample.additionalTags
+        work.workTags = sample.fandoms + sample.relationships + sample.characters + sample.additionalTags
+        work.workTagsFetched = true
+        WorkSearchIndex.reindex(work)
     }
 
     private static let samples: [Sample] = [
@@ -199,6 +220,9 @@ enum DemoLibrary {
                fandoms: ["Haikyuu!!"], rating: "General Audiences", words: 2_210, chapters: "1/1"),
         Sample(title: "Winter Garden", author: "frostbitten",
                fandoms: ["Frozen (Disney Movies)"], rating: "General Audiences", categories: ["F/F"],
+               relationships: ["Elsa/Honeymaren (Disney)"],
+               characters: ["Elsa (Disney)", "Honeymaren (Disney)", "Anna (Disney)"],
+               additionalTags: ["Post-Frozen II", "Slow Burn", "Magical Realism", "Gardening"],
                words: 18_020, chapters: "4/6", progress: 0.71, favorite: true, seenChapters: 3),
         Sample(title: "What the River Keeps", author: "undertow",
                fandoms: ["Les Misérables - Victor Hugo"], rating: "Teen And Up Audiences",
@@ -338,6 +362,7 @@ enum DebugShots {
         ("libfilter", DebugShot(route: "library", sheets: ["libfilter"])),
         ("libselect", DebugShot(route: "library", sheets: ["libselect"])),
         ("remoteselect", DebugShot(route: "tagsearch:Star Wars", sheets: ["remoteselect"])),
+        ("expandrow", DebugShot(route: "query:Winter Garden")),
         ("searchfilters", DebugShot(route: "search", sheets: ["searchfilters"])),
     ]
 
