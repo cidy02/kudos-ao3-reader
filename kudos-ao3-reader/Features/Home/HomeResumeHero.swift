@@ -248,20 +248,22 @@ struct HomeResumeHero: View {
 
     var body: some View {
         if blurred {
-            ZStack {
-                resumeCard(interactive: false, showsInitial: false)
-                    .environment(\.ao3AuthorNavigationEnabled, false)
-                    .blur(radius: 6)
-                    .allowsHitTesting(false)
-                if !isSelecting { MatureRevealCapsule() }
-            }
-            .contentShape(Rectangle())
-            .overlay(alignment: .topTrailing) {
-                if isSelecting { WorkSelectionBubble(isSelected: isSelected).padding(8) }
-            }
-            .onTapGesture {
+            Button {
                 if isSelecting { onToggleSelection?() } else { gate.reveal(work) }
+            } label: {
+                ZStack {
+                    resumeCard(interactive: false, showsInitial: false)
+                        .environment(\.ao3AuthorNavigationEnabled, false)
+                        .blur(radius: 6)
+                        .allowsHitTesting(false)
+                    if !isSelecting { MatureRevealCapsule() }
+                }
+                .contentShape(Rectangle())
+                .overlay(alignment: .topTrailing) {
+                    if isSelecting { WorkSelectionBubble(isSelected: isSelected).padding(8) }
+                }
             }
+            .buttonStyle(.cardPress)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Hidden mature work")
             .accessibilityValue(isSelecting ? (isSelected ? "Selected" : "Not selected") : "")
@@ -270,24 +272,28 @@ struct HomeResumeHero: View {
                 work: work, onSelect: onSelect, scopedRemoval: scopedRemoval, queueMenu: queueMenu
             )
         } else if isSelecting {
-            ZStack {
-                resumeCard(interactive: false)
-                    .environment(\.ao3AuthorNavigationEnabled, false)
-                    .allowsHitTesting(false)
+            Button {
+                onToggleSelection?()
+            } label: {
+                ZStack {
+                    resumeCard(interactive: false)
+                        .environment(\.ao3AuthorNavigationEnabled, false)
+                        .allowsHitTesting(false)
+                }
+                .contentShape(Rectangle())
+                .overlay(alignment: .topTrailing) {
+                    WorkSelectionBubble(isSelected: isSelected).padding(8)
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
+                        .strokeBorder(
+                            isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(Color.clear),
+                            lineWidth: 2
+                        )
+                        .allowsHitTesting(false)
+                }
             }
-            .contentShape(Rectangle())
-            .overlay(alignment: .topTrailing) {
-                WorkSelectionBubble(isSelected: isSelected).padding(8)
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
-                    .strokeBorder(
-                        isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(Color.clear),
-                        lineWidth: 2
-                    )
-                    .allowsHitTesting(false)
-            }
-            .onTapGesture { onToggleSelection?() }
+            .buttonStyle(.cardPress)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(work.title)
             .accessibilityValue(isSelected ? "Selected" : "Not selected")
@@ -315,7 +321,7 @@ struct HomeResumeHero: View {
             NavigationLink(value: LocalWorkDestination.reader(work)) {
                 resumeCard(interactive: true)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.cardPress)
         } else {
             resumeCard(interactive: true)
         }

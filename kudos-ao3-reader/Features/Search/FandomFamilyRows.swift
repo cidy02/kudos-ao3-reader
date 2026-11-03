@@ -36,7 +36,7 @@ struct FandomFamilyBlock: View {
             Button(action: onSelectFamily) {
                 header
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.cardPress)
             .workCardZoomSource(BrowseZoomKey.fandom(family.zoomKey), in: zoomNamespace)
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
@@ -132,7 +132,7 @@ struct FandomFamilyBlock: View {
                 } label: {
                     memberRow(member, libraryEntry: library.entry(for: member.originalName))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.cardPress)
                 .workCardZoomSource(BrowseZoomKey.fandom(member.originalName), in: zoomNamespace)
             }
         }

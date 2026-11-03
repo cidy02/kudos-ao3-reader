@@ -312,7 +312,7 @@ struct CollectionDetailView: View {
                         NavigationLink(value: LocalWorkDestination.reader(work)) {
                             SensitiveWorkCoverCard(work: work)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.cardPress)
                         .localWorkContextMenu(work: work)
                     }
                 }

@@ -499,26 +499,30 @@ extension View {
     /// chevron inside it and another floating outside. Putting the link in the
     /// background with an empty label leaves nothing for `List` to decorate,
     /// which is the same trick `cardNavigation` already uses for work cards.
-    func subjectRowNavigation(to value: some Hashable, accessibilityLabel: String) -> some View {
-        background {
-            NavigationLink(value: value) { EmptyView() }
-                .opacity(0)
-                .accessibilityLabel(accessibilityLabel)
-                .accessibilityAddTraits(.isButton)
-        }
+    /// Card press feedback is opt-in because this helper also serves plain form rows.
+    func subjectRowNavigation(
+        to value: some Hashable,
+        accessibilityLabel: String,
+        cardPressFeedback: Bool = false
+    ) -> some View {
+        modifier(SubjectRowNavigationModifier(
+            value: value,
+            accessibilityLabel: accessibilityLabel,
+            cardPressFeedback: cardPressFeedback
+        ))
     }
 
     /// Destination-based variant, for rows that push a view rather than a value.
     func subjectRowNavigation(
         accessibilityLabel: String,
+        cardPressFeedback: Bool = false,
         @ViewBuilder destination: @escaping () -> some View
     ) -> some View {
-        background {
-            NavigationLink { destination() } label: { EmptyView() }
-                .opacity(0)
-                .accessibilityLabel(accessibilityLabel)
-                .accessibilityAddTraits(.isButton)
-        }
+        modifier(SubjectRowDestinationNavigationModifier(
+            accessibilityLabel: accessibilityLabel,
+            cardPressFeedback: cardPressFeedback,
+            destination: destination
+        ))
     }
 }
 
@@ -528,22 +532,78 @@ private struct CardNavigationModifier<Value: Hashable>: ViewModifier {
     let value: Value
     let accessibilityLabel: String
     @Environment(AppRouter.self) private var router
+    @State private var isPressed = false
 
     func body(content: Content) -> some View {
-        content.background {
-            NavigationLink(value: value) { EmptyView() }
-                .opacity(0)
-                .disabled(router.cardNavigationSuppressed)
-                .allowsHitTesting(!router.cardNavigationSuppressed)
-                // Deliberately NOT accessibilityHidden nor combined with the row's own
-                // elements (see the doc comment above) — this stays its own reachable
-                // stop so VoiceOver users have an explicit "open" action, while the
-                // fandom/expand/byline buttons elsewhere in the row keep their own.
-                // Hidden only while suppressed, matching its disabled/hit-testing state,
-                // so VoiceOver doesn't announce a currently-inert control.
-                .accessibilityHidden(router.cardNavigationSuppressed)
-                .accessibilityLabel(accessibilityLabel)
-                .accessibilityAddTraits(.isButton)
-        }
+        content
+            .cardPressed(isPressed)
+            .background {
+                NavigationLink(value: value) { EmptyView() }
+                    .buttonStyle(CardPressStateStyle(isPressed: $isPressed))
+                    .opacity(0)
+                    .disabled(router.cardNavigationSuppressed)
+                    .allowsHitTesting(!router.cardNavigationSuppressed)
+                    // Deliberately NOT accessibilityHidden nor combined with the row's own
+                    // elements (see the doc comment above) — this stays its own reachable
+                    // stop so VoiceOver users have an explicit "open" action, while the
+                    // fandom/expand/byline buttons elsewhere in the row keep their own.
+                    // Hidden only while suppressed, matching its disabled/hit-testing state,
+                    // so VoiceOver doesn't announce a currently-inert control.
+                    .accessibilityHidden(router.cardNavigationSuppressed)
+                    .accessibilityLabel(accessibilityLabel)
+                    .accessibilityAddTraits(.isButton)
+            }
+    }
+}
+
+private struct SubjectRowNavigationModifier<Value: Hashable>: ViewModifier {
+    let value: Value
+    let accessibilityLabel: String
+    let cardPressFeedback: Bool
+    @State private var isPressed = false
+
+    func body(content: Content) -> some View {
+        content
+            .cardPressed(cardPressFeedback && isPressed)
+            .background {
+                if cardPressFeedback {
+                    link.buttonStyle(CardPressStateStyle(isPressed: $isPressed))
+                } else {
+                    link
+                }
+            }
+    }
+
+    private var link: some View {
+        NavigationLink(value: value) { EmptyView() }
+            .opacity(0)
+            .accessibilityLabel(accessibilityLabel)
+            .accessibilityAddTraits(.isButton)
+    }
+}
+
+private struct SubjectRowDestinationNavigationModifier<Destination: View>: ViewModifier {
+    let accessibilityLabel: String
+    let cardPressFeedback: Bool
+    @ViewBuilder var destination: () -> Destination
+    @State private var isPressed = false
+
+    func body(content: Content) -> some View {
+        content
+            .cardPressed(cardPressFeedback && isPressed)
+            .background {
+                if cardPressFeedback {
+                    link.buttonStyle(CardPressStateStyle(isPressed: $isPressed))
+                } else {
+                    link
+                }
+            }
+    }
+
+    private var link: some View {
+        NavigationLink { destination() } label: { EmptyView() }
+            .opacity(0)
+            .accessibilityLabel(accessibilityLabel)
+            .accessibilityAddTraits(.isButton)
     }
 }

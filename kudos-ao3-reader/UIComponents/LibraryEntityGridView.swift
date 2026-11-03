@@ -36,7 +36,7 @@ struct LibraryEntityGridView<Item: Identifiable, Destination: Hashable, Card: Vi
             ) {
                 ForEach(items) { item in
                     NavigationLink(value: destination(item)) { card(item) }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.cardPress)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

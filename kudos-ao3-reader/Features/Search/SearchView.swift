@@ -541,7 +541,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                             }
                             .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.cardPress)
                     }
                     .onDelete(perform: deleteSavedSearches)
                     .cardRow()
@@ -744,7 +744,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                         }
                         .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.cardPress)
                     .cardRow(chrome: .plain)
                 }
             } header: {

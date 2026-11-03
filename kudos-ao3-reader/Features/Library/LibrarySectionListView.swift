@@ -778,7 +778,7 @@ struct LibrarySectionListView: View {
                             metadataStyle: kind == .downloaded ? .downloaded : .standard
                         )
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.cardPress)
                     .localWorkContextMenu(
                         work: work,
                         onSelect: { isSelecting = true; selection = [work.id] }

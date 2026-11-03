@@ -545,7 +545,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                                     progress: progress(.readingNow, work)
                                 )
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.cardPress)
                             .localWorkContextMenu(work: work, onSelect: selectAction(for: work))
                         }
                     }
@@ -1083,7 +1083,7 @@ private struct HomeNewChapterRow: View {
                 obscuredBody { gate.reveal(work) }
             } else if isSelecting {
                 Button { onToggleSelection?() } label: { rowContent }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.cardPress)
                     .localWorkContextMenu(work: work, onSelect: onSelect)
                     .accessibilityLabel(work.title)
                     .accessibilityValue(isSelected ? "Selected" : "Not selected")
@@ -1093,7 +1093,7 @@ private struct HomeNewChapterRow: View {
                 NavigationLink(value: LocalWorkDestination.reader(work)) {
                     rowContent
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.cardPress)
                 .localWorkContextMenu(work: work, onSelect: onSelect)
             }
         }
@@ -1111,7 +1111,7 @@ private struct HomeNewChapterRow: View {
             NavigationLink(value: remote) {
                 rowContent
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.cardPress)
             .remoteWorkContextMenu(work: remote)
         }
     }
@@ -1131,14 +1131,14 @@ private struct HomeNewChapterRow: View {
                         .padding(.leading, 16)
                 }
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.cardPress)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Hidden mature work")
             .accessibilityValue(isSelected ? "Selected" : "Not selected")
             .accessibilityHint("Double-tap to \(isSelected ? "deselect" : "select") this work.")
         } else {
             Button(action: reveal) { content }
-                .buttonStyle(.plain)
+                .buttonStyle(.cardPress)
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("Hidden mature work")
                 .accessibilityHint("Activate to reveal.")
@@ -1332,7 +1332,7 @@ private struct HomeQueueRow: View {
                 size: CGSize(width: 52, height: 52)
             )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.cardPress)
         .accessibilityHidden(true)
     }
 
@@ -1386,7 +1386,7 @@ private struct HomeQueueRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.cardPress)
     }
 
     @ViewBuilder
@@ -1401,7 +1401,7 @@ private struct HomeQueueRow: View {
                     .frame(minHeight: 34)
                     .background(accentFill.opacity(0.10), in: Capsule())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.cardPress)
             .accessibilityLabel("\(actionTitle) \(work.title)")
         }
     }

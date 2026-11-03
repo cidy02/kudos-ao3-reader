@@ -172,7 +172,7 @@ struct LibraryCatalogueListView: View {
                             NavigationLink(value: LocalWorkDestination.reader(work)) {
                                 SensitiveWorkCoverCard(work: work)
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.cardPress)
                             .localWorkContextMenu(
                                 work: work,
                                 onSelect: { isSelecting = true; selection = [work.id] }

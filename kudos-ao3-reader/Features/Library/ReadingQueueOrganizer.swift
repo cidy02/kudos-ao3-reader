@@ -538,7 +538,7 @@ struct AllReadingQueuesGridView: View {
                 }
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.cardPress)
         .moveDisabled(!isReorderable)
         .accessibilityElement(children: .combine)
         .accessibilityValue(isSelecting ? "\(isSelected ? "Selected" : "Not selected"), \(summary)" : summary)
