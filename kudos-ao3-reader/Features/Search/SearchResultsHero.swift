@@ -3,7 +3,10 @@ import SwiftUI
 /// Pure logic for AO3 result lists (search results, fandom works, tag works).
 /// Covers header copy, loading footer status, and unique work appending.
 enum AO3ResultListPaging {
-    static func title(subject: String?, query: String?) -> String {
+    static func title(subject: String?, query: String?, hasLibrarySections: Bool = false) -> String {
+        if hasLibrarySections {
+            return "On AO3"
+        }
         let subject = subject?.trimmingCharacters(in: .whitespacesAndNewlines)
         let query = query?.trimmingCharacters(in: .whitespacesAndNewlines)
         if let subject, !subject.isEmpty {
@@ -21,6 +24,10 @@ enum AO3ResultListPaging {
     static func subtitle(total: Int) -> String {
         let count = total.formatted()
         return "\(count) \(total == 1 ? "work" : "works") on AO3"
+    }
+
+    static func countText(total: Int) -> String {
+        "\(total.formatted()) \(total == 1 ? "work" : "works")"
     }
 
     static func footerLoadingText(loaded: Int, total: Int, page: Int) -> String {
@@ -101,6 +108,9 @@ struct SearchResultsHero: View {
     var showSummaries: Binding<Bool>?
     /// Query string for search results title display.
     var query: String?
+    /// Redesigned header variant: when library sections are shown above on the combined
+    /// search page (Board 11), the title reads "On AO3" with the count beside it.
+    var showsOnAO3Header: Bool = false
     @Environment(ThemeManager.self) private var themeManager
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -129,35 +139,60 @@ struct SearchResultsHero: View {
     // MARK: - Redesigned result list header (T-492, boards 15 and 18)
 
     private var subjectPageBody: some View {
-        let displayTitle = AO3ResultListPaging.title(subject: summary.subject, query: query)
-        let countFact = AO3ResultListPaging.subtitle(total: summary.total)
+        let displayTitle = showsOnAO3Header
+            ? "On AO3"
+            : AO3ResultListPaging.title(subject: summary.subject, query: query)
+        let countFact = showsOnAO3Header
+            ? AO3ResultListPaging.countText(total: summary.total)
+            : AO3ResultListPaging.subtitle(total: summary.total)
         let filterCount = nonSortFilterLabels.count
 
         return VStack(alignment: .leading, spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(displayTitle)
-                    .font(.largeTitle.weight(.bold))
-                    .foregroundStyle(Color.primary)
-                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
-                    .minimumScaleFactor(0.85)
-                    .accessibilityAddTraits(.isHeader)
-
-                Text(countFact)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 8) {
-                    sortControl
-                    filterControl(count: filterCount)
-                    Spacer(minLength: 0)
-                    layoutControl
+            if showsOnAO3Header {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 8) {
+                        onAO3TitleBlock(title: displayTitle, count: countFact)
+                        Spacer(minLength: 0)
+                        sortControl
+                        filterControl(count: filterCount)
+                        layoutControl
+                    }
+                    VStack(alignment: .leading, spacing: 10) {
+                        onAO3TitleBlock(title: displayTitle, count: countFact)
+                        HStack(spacing: 8) {
+                            sortControl
+                            filterControl(count: filterCount)
+                            Spacer(minLength: 0)
+                            layoutControl
+                        }
+                    }
                 }
-                FlowLayout(spacing: 8, rowSpacing: 8) {
-                    sortControl
-                    filterControl(count: filterCount)
-                    layoutControl
+            } else {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(displayTitle)
+                        .font(.largeTitle.weight(.bold))
+                        .foregroundStyle(Color.primary)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                        .minimumScaleFactor(0.85)
+                        .accessibilityAddTraits(.isHeader)
+
+                    Text(countFact)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 8) {
+                        sortControl
+                        filterControl(count: filterCount)
+                        Spacer(minLength: 0)
+                        layoutControl
+                    }
+                    FlowLayout(spacing: 8, rowSpacing: 8) {
+                        sortControl
+                        filterControl(count: filterCount)
+                        layoutControl
+                    }
                 }
             }
 
@@ -188,6 +223,19 @@ struct SearchResultsHero: View {
             }
         }
         .padding(.horizontal, SubjectMetrics.gutter)
+    }
+
+    private func onAO3TitleBlock(title: String, count: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(title)
+                .font(.title3.weight(.bold))
+                .foregroundStyle(Color.primary)
+                .accessibilityAddTraits(.isHeader)
+
+            Text(count)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
     }
 
     /// Sort is pulled out of the chip rail and given its own control beside the

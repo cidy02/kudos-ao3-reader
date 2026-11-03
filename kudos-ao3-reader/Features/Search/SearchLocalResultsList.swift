@@ -73,21 +73,7 @@ struct SearchLocalResultsList: View {
             if !matches.ao3Fandoms.isEmpty {
                 Section("Fandoms on AO3") {
                     ForEach(matches.ao3Fandoms, id: \.id) { fandom in
-                        Button {
-                            onSearchFandom(fandom.name)
-                        } label: {
-                            HStack {
-                                Label(fandom.name, systemImage: "books.vertical")
-                                Spacer()
-                                if let count = fandom.workCount {
-                                    Text(count.formatted(.number.notation(.compactName)))
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
+                        SearchAO3FandomRow(fandom: fandom, onSearchFandom: onSearchFandom)
                     }
                 }
             }
@@ -124,5 +110,35 @@ struct SearchLocalResultsList: View {
         } else {
             selection.insert(work.id)
         }
+    }
+}
+
+/// An AO3 fandom match row with name, work count, and chevron (Board 11).
+/// Shared between `SearchLocalResultsList` (live typing) and `SearchView` (combined results).
+struct SearchAO3FandomRow: View {
+    let fandom: AO3Fandom
+    let onSearchFandom: (String) -> Void
+
+    var body: some View {
+        Button {
+            onSearchFandom(fandom.name)
+        } label: {
+            HStack {
+                Label(fandom.name, systemImage: "books.vertical")
+                    .lineLimit(1)
+                    .foregroundStyle(Color.primary)
+                Spacer()
+                if let count = fandom.workCount {
+                    Text(count.formatted(.number.notation(.compactName)))
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                Image(systemName: "chevron.right")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }

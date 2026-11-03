@@ -136,6 +136,9 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     // shell, so the bulk bar, swipes and menu match its section lists (T-339).
     @State private var isSelectingLocal = false
     @State private var localSelection: Set<UUID> = []
+    @State private var isLibraryExpanded = false
+    @State private var pendingDelete: SavedWork?
+    @State private var pendingRemoval: PendingLibraryRemoval?
 
     private enum Phase: Equatable {
         case idle, loading, loaded, failed(String)
@@ -357,53 +360,87 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
             } else {
                 localResultsList
             }
-        } else if phase == .loading, results.isEmpty {
-            // First load of an AO3 search: show the shape of the incoming results.
+        } else if phase == .loading, results.isEmpty, !hasLibrarySections {
+            // First load of an AO3 search without library matches: show the shape of the incoming results.
             AO3WorkRowSkeletonList(count: 7)
         } else {
             let libraryIDs = localAO3WorkIDs
-                List {
-                    // The total is context for the whole list rather than one loaded page.
-                    if let heroSummary {
+            List {
+                if hasLibrarySections {
+                    libraryMatchesSections
+                }
+
+                // The total is context for the whole list rather than one loaded page.
+                if let heroSummary {
+                    Section {
+                        SearchResultsHero(
+                            summary: heroSummary,
+                            // The heading already names the subject; the chips
+                            // must not say it a second time.
+                            filterLabels: filters.summaryLabels(
+                                excluding: filters.searchSubject.text
+                            ),
+                            // The field the user actually searched, when there
+                            // is one — exact, where matching the subject back
+                            // against the results is a guess that a free-text
+                            // query would get wrong.
+                            subjectField: filters.searchSubject.field
+                                ?? heroSummary.subjectField(inAnyOf: results),
+                            // Search's panel is router-owned (it's an inspector
+                            // shared with the toolbar's Filter button), so open
+                            // it the same way that button does.
+                            onEditFilters: { router.panel = .searchFilters },
+                            presentation: .subjectPage,
+                            // This menu applies immediately; the filter panel
+                            // keeps its separate Apply action.
+                            sortSelection: Binding(
+                                get: { filters.sort },
+                                set: { sort in
+                                    guard filters.sort != sort else { return }
+                                    filters.sort = sort
+                                    bulkSelection.selection.removeAll()
+                                    runSearch()
+                                }
+                            ),
+                            showSummaries: $showSummaries,
+                            query: filters.query,
+                            showsOnAO3Header: hasLibrarySections
+                        )
+                        // Its own gutters, like every page header: bareListRow's
+                        // card insets on top of them pushed it 26pt right of the cards.
+                        .pageBodyRow(top: 8, gutter: 0)
+                    }
+                } else if phase == .loading && hasLibrarySections {
+                    Section("On AO3") {
+                        ForEach(0 ..< 5, id: \.self) { _ in AO3WorkRowSkeleton() }
+                            .cardRow(chrome: .plain)
+                    }
+                }
+
+                if phase == .loading && results.isEmpty {
+                    if heroSummary != nil {
                         Section {
-                            SearchResultsHero(
-                                summary: heroSummary,
-                                // The heading already names the subject; the chips
-                                // must not say it a second time.
-                                filterLabels: filters.summaryLabels(
-                                    excluding: filters.searchSubject.text
-                                ),
-                                // The field the user actually searched, when there
-                                // is one — exact, where matching the subject back
-                                // against the results is a guess that a free-text
-                                // query would get wrong.
-                                subjectField: filters.searchSubject.field
-                                    ?? heroSummary.subjectField(inAnyOf: results),
-                                // Search's panel is router-owned (it's an inspector
-                                // shared with the toolbar's Filter button), so open
-                                // it the same way that button does.
-                                onEditFilters: { router.panel = .searchFilters },
-                                presentation: .subjectPage,
-                                // This menu applies immediately; the filter panel
-                                // keeps its separate Apply action.
-                                sortSelection: Binding(
-                                    get: { filters.sort },
-                                    set: { sort in
-                                        guard filters.sort != sort else { return }
-                                        filters.sort = sort
-                                        bulkSelection.selection.removeAll()
-                                        runSearch()
-                                    }
-                                ),
-                                showSummaries: $showSummaries,
-                                query: filters.query
-                            )
-                            // Its own gutters, like every page header: bareListRow's
-                            // card insets on top of them pushed it 26pt right of the cards.
-                            .pageBodyRow(top: 8, gutter: 0)
+                            ForEach(0 ..< 5, id: \.self) { _ in AO3WorkRowSkeleton() }
+                                .cardRow(chrome: .plain)
                         }
                     }
-
+                } else if phase == .loaded && results.isEmpty && hasLibrarySections {
+                    Section {
+                        ContentUnavailableView.search(text: filters.query)
+                            .bareListRow()
+                    }
+                } else if case let .failed(message) = phase, hasLibrarySections {
+                    Section {
+                        ContentUnavailableView {
+                            Label("Search failed", systemImage: "exclamationmark.triangle")
+                        } description: {
+                            Text(message)
+                        } actions: {
+                            Button("Try Again", action: retryFailedLoad)
+                        }
+                        .bareListRow()
+                    }
+                } else {
                     if totalPages > 1 {
                         Section {
                             RankTop100ProgressCard(
@@ -462,18 +499,20 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                         .bareListRow()
                     }
                 }
-                // Card-based list: each result is a fully-rounded card with ~12pt
-                // spacing, over the themed backdrop (replaces the grouped style).
-                .cardList()
-                .appScreenSurface(.content)
-                .refreshable { await refreshCurrentResults() }
-                // The other half of the cancellation story: `TabView` keeps this
-                // tab's hierarchy — and its `.refreshable` task — alive when the
-                // user switches away, so SwiftUI never cancels it and the handler
-                // in `refreshCurrentResults` never fires. Search is a tab root, so
-                // this is the likeliest way a refresh gets abandoned.
-                .cancelRefreshOnTabChange($loadTask)
-                .overlay { statusOverlay }
+            }
+            // Card-based list: each result is a fully-rounded card with ~12pt
+            // spacing, over the themed backdrop (replaces the grouped style).
+            .cardList()
+            .appScreenSurface(.content)
+            .refreshable { await refreshCurrentResults() }
+            // The other half of the cancellation story: `TabView` keeps this
+            // tab's hierarchy — and its `.refreshable` task — alive when the
+            // user switches away, so SwiftUI never cancels it and the handler
+            // in `refreshCurrentResults` never fires. Search is a tab root, so
+            // this is the likeliest way a refresh gets abandoned.
+            .cancelRefreshOnTabChange($loadTask)
+            .overlay { statusOverlay }
+            .libraryWorkRemovalConfirmations(pendingDelete: $pendingDelete, pendingRemoval: $pendingRemoval)
         }
     }
 
@@ -636,6 +675,119 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         localMatches.works.filter { $0.modelContext != nil }
     }
 
+    private var localChips: [SearchLocalChip] {
+        let shownWorks = savedWorks.filter { !gate.isHidden($0, enabled: hideMature, mode: matureMode) }
+        let validTags = localMatches.tags
+            .filter { $0.modelContext != nil }
+            .map { tag in
+                let count = tag.works.filter { $0.modelContext != nil && !$0.isPendingDeletion }.count
+                return (name: tag.name, workCount: count)
+            }
+        let validCollections = localMatches.collections
+            .filter { $0.modelContext != nil && !$0.isPendingDeletion }
+            .map { col in
+                let count = col.works.filter { $0.modelContext != nil && !$0.isPendingDeletion }.count
+                return (id: col.id, name: col.name, workCount: count)
+            }
+        let validFandoms = localMatches.libraryFandoms
+            .map { fandom in
+                let count = shownWorks.filter { $0.workFandoms.contains(fandom) }.count
+                return (name: fandom, workCount: count)
+            }
+        return SearchLocalChip.makeChips(
+            tags: validTags,
+            collections: validCollections,
+            fandoms: validFandoms
+        )
+    }
+
+    private var hasLibrarySections: Bool {
+        SearchCombinedResultsLogic.hasLibrarySections(
+            worksCount: localWorks.count,
+            chipsCount: localChips.count,
+            ao3FandomsCount: localMatches.ao3Fandoms.count
+        )
+    }
+
+    @ViewBuilder
+    private var libraryMatchesSections: some View {
+        if !localWorks.isEmpty {
+            Section {
+                let displayCount = SearchCombinedResultsLogic.displayedWorksCount(
+                    total: localWorks.count,
+                    isExpanded: isLibraryExpanded
+                )
+                ForEach(localWorks.prefix(displayCount)) { work in
+                    SensitiveWorkRow(work: work)
+                        .cardRow(chrome: .plain)
+                        .libraryWorkSwipeActions(
+                            work,
+                            kind: .readingNow,
+                            isFavoritesList: false,
+                            pendingDelete: $pendingDelete,
+                            pendingRemoval: $pendingRemoval
+                        )
+                }
+                if SearchCombinedResultsLogic.showsSeeAllRow(total: localWorks.count, isExpanded: isLibraryExpanded) {
+                    Button {
+                        withAnimation { isLibraryExpanded = true }
+                    } label: {
+                        HStack {
+                            Text(SearchCombinedResultsLogic.seeAllRowTitle(total: localWorks.count))
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.accentInk)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .cardRow(chrome: .plain)
+                }
+            } header: {
+                combinedHeader("In your library", count: localWorks.count)
+            }
+        }
+
+        if !localChips.isEmpty {
+            Section {
+                SearchLocalChipsView(
+                    chips: localChips,
+                    collections: localMatches.collections,
+                    onTagTap: { name in router.filterLibrary(.userTag, name) },
+                    onFandomTap: { name in router.filterLibrary(.fandom, name) }
+                )
+                .bareListRow()
+            } header: {
+                combinedHeader(SearchCombinedResultsLogic.chipsSectionTitle)
+            }
+        }
+
+        if !localMatches.ao3Fandoms.isEmpty {
+            Section {
+                ForEach(localMatches.ao3Fandoms, id: \.id) { fandom in
+                    SearchAO3FandomRow(fandom: fandom, onSearchFandom: { name in
+                        setIncludedFandom(name)
+                        runSearch()
+                    })
+                    .cardRow(chrome: .plain)
+                }
+            } header: {
+                combinedHeader(SearchCombinedResultsLogic.ao3FandomsSectionTitle)
+            }
+        }
+    }
+
+    /// The same bold section title "On AO3" and every other list section uses; a plain
+    /// `Section("…")` title draws small and grey.
+    private func combinedHeader(_ title: String, count: Int? = nil) -> some View {
+        SectionRuleHeader(title: title, count: count)
+            .textCase(nil)
+            .listRowInsets(EdgeInsets())
+    }
+
     private var showsLocalResults: Bool { phase == .idle && !localQuery.isEmpty }
 
     private var selectedLocalWorks: [SavedWork] {
@@ -673,6 +825,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     /// Clears the query, falling back to the Media Browser if nothing's left to search.
     private func clearQuery() {
         resetRankTop100()
+        isLibraryExpanded = false
         filters.query = ""
         if !filters.hasActiveFilters {
             filterHistory.removeAll()
@@ -695,6 +848,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     /// long-press confirmation and mirroring the sidebar's "Reset Filters".
     private func clearAllFilters() {
         filterHistory.removeAll()
+        isLibraryExpanded = false
         filters = AO3SearchFilters(query: filters.query)
         if filters.isSearchable {
             runSearch()
@@ -713,9 +867,9 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         // First-load (loading + empty) is handled upstream by the skeleton list, so it
         // never reaches this overlay; only the empty/failed result states do.
         switch phase {
-        case .loaded where results.isEmpty:
+        case .loaded where results.isEmpty && !hasLibrarySections:
             ContentUnavailableView.search(text: filters.query)
-        case let .failed(message):
+        case let .failed(message) where !hasLibrarySections:
             ContentUnavailableView {
                 Label("Search failed", systemImage: "exclamationmark.triangle")
             } description: {
@@ -834,6 +988,8 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         currentPage = 1
         totalPages = 1
         resultSummary = nil
+        isLibraryExpanded = false
+        localMatches = computeLocalMatches()
         resetRankTop100()
         load(page: 1)
     }
@@ -872,6 +1028,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     /// new search restores that stale, unrelated prior search instead of returning to
     /// wherever the user actually came from.
     private func pushFilters(_ new: AO3SearchFilters, isFreshTabJump: Bool) {
+        isLibraryExpanded = false
         if isFreshTabJump {
             filterHistory.removeAll()
         } else if filters.isSearchable {
@@ -925,6 +1082,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     /// Loads a saved search's filters and runs it.
     private func runSaved(_ saved: SavedSearch) {
         filterHistory.removeAll()
+        isLibraryExpanded = false
         filters = saved.filters
         router.panel = .none
         runSearch()

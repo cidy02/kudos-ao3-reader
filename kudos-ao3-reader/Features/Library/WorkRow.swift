@@ -368,7 +368,8 @@ struct WorkRow: View {
                     compact: !dynamicTypeSize.isAccessibilitySize
                 )
             }
-            if !work.author.isEmpty, !nonemptyFandomNames.isEmpty {
+            // Only between them on one line: stacked, the dot was a line of its own.
+            if !wraps, !work.author.isEmpty, !nonemptyFandomNames.isEmpty {
                 Text("·")
                     .font(.subheadline)
                     .foregroundStyle(.tertiary)
