@@ -269,66 +269,18 @@ struct AccountInboxItemRow: View {
         }
     }
 
-    /// The sighted layout below still overlaps a full-card button with per-piece
-    /// avatar/byline/excerpt buttons, a Chapter chip, a Reply button, and a More
-    /// menu — none of that visible layout or tap behavior changes. What changes
-    /// (UI-2/T91-RF10) is VoiceOver exposure: instead of hitting every one of
-    /// those as its own "open thread" stop, `.accessibilityElement(children:
-    /// .ignore)` below folds the whole card into one element whose default
-    /// action opens the thread, with Reply/Chapter/the More menu's items
-    /// reachable as named accessibility actions (the actions rotor) instead.
+    /// Board 40: a plain Mail-style row. Tapping opens the thread; every other
+    /// action (Reply, Chapter Comments, Copy Link, read state, delete) is in the
+    /// long-press menu, and the same ones are VoiceOver actions. The row is one
+    /// accessibility element whose default action opens the thread (UI-2/T91-RF10).
     private var interactiveContent: some View {
-        ZStack {
-            // Keeps the visible card surface (including the words around the
-            // Chapter chip and inter-control whitespace) tappable. Sibling
-            // Chapter/Reply buttons sit above it and retain their own actions.
-            Button(action: onOpen) {
-                Color.clear
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-
-            HStack(alignment: .top, spacing: 10) {
-                Button(action: onOpen) { avatar }
-                    .buttonStyle(.plain)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Button(action: onOpen) {
-                        byline
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-
-                    subjectControl
-
-                    if !item.excerpt.isEmpty {
-                        Button(action: onOpen) {
-                            Text(item.excerpt)
-                                .font(.subheadline)
-                                .foregroundStyle(.primary)
-                                .lineLimit(3)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                    }
-
-                    HStack(spacing: 8) {
-                        if item.canReply {
-                            CommentReplyButton(
-                                accessibilityLabel: "Reply to \(item.commenterName)",
-                                action: onReply
-                            )
-                        }
-                        Spacer(minLength: 0)
-                        moreActionsMenu
-                    }
-                }
+        Button(action: onOpen) {
+            rowBody
                 .frame(maxWidth: .infinity, alignment: .leading)
-            }
+                .contentShape(Rectangle())
         }
-        .padding(.vertical, 2)
+        .buttonStyle(.plain)
+        .contextMenu { rowMenuItems }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilitySummary)
         .accessibilityHint("Open the comment's thread")
@@ -349,6 +301,48 @@ struct AccountInboxItemRow: View {
                 Button("Delete From Inbox", role: .destructive) { confirmDelete = true }
             }
         }
+    }
+
+    /// Unread dot, name line (+ small markers + time), "on Work · Chapter N",
+    /// two-line excerpt. A read row keeps the dot's column so names align.
+    private var rowBody: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Circle()
+                .fill(.accentFill)
+                .opacity(item.isUnread ? 1 : 0)
+                .frame(width: 10, height: 10)
+                .padding(.top, 6)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                byline
+                if !item.subjectTitle.isEmpty {
+                    Text(subjectLine)
+                        .font(.subheadline)
+                        .foregroundStyle(.primary.opacity(0.8))
+                        .lineLimit(2)
+                }
+                if !item.excerpt.isEmpty {
+                    Text(item.excerpt)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    /// "on Keeper of the Northern Light · Chapter 7"; tag and other targets keep
+    /// AO3's own subject text.
+    private var subjectLine: String {
+        if let chapter = item.chapterIndicatorTitle {
+            return "on \(item.workTitle) · \(chapter)"
+        }
+        return "on \(item.subjectTitle)"
+    }
+
+    private var timeLabel: AO3InboxTimeLabel.Label? {
+        AO3InboxTimeLabel.label(for: item.postedAgo)
     }
 
     /// The admin-hidden/unavailable tombstone shape (T91-RF6): AO3 rendered a
@@ -379,35 +373,17 @@ struct AccountInboxItemRow: View {
             Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                 .font(.title3)
                 .foregroundStyle(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
-                .frame(width: 24, height: 40)
+                .frame(width: 24, height: 28)
                 .accessibilityHidden(true)
-            avatar
-
-            VStack(alignment: .leading, spacing: 4) {
-                if item.isUnavailable {
-                    Text("A comment here is unavailable")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                } else {
-                    byline
-                    if !item.subjectTitle.isEmpty {
-                        Text("on \(item.subjectTitle)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
-                    }
-                    if !item.excerpt.isEmpty {
-                        Text(item.excerpt)
-                            .font(.subheadline)
-                            .foregroundStyle(.primary)
-                            .lineLimit(3)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
+            if item.isUnavailable {
+                Text("A comment here is unavailable")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            } else {
+                rowBody
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.vertical, 2)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
     }
 
@@ -430,7 +406,7 @@ struct AccountInboxItemRow: View {
         if role != .user { parts.append(role.rawValue) }
         if !item.subjectTitle.isEmpty { parts.append("on \(item.subjectTitle)") }
         if !item.excerpt.isEmpty { parts.append(item.excerpt) }
-        if !item.postedAgo.isEmpty { parts.append(item.postedAgo) }
+        if let timeLabel { parts.append(timeLabel.spoken) }
         if item.isReplied { parts.append("Replied") }
         return parts.joined(separator: ". ")
     }
@@ -438,15 +414,15 @@ struct AccountInboxItemRow: View {
     @ViewBuilder
     private var byline: some View {
         if dynamicTypeSize.isAccessibilitySize {
-            // On one line the name and the time were both cut ("Rea…", "3 day…") at the
+            // On one line the name and the time were both cut at the
             // accessibility sizes: the name's line, then the time's.
             VStack(alignment: .leading, spacing: 2) {
-                HStack(alignment: .center, spacing: 6) { bylineWho }
-                HStack(alignment: .center, spacing: 6) { bylineWhen }
+                HStack(alignment: .firstTextBaseline, spacing: 6) { bylineWho }
+                HStack(alignment: .firstTextBaseline, spacing: 6) { bylineWhen }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         } else {
-            HStack(alignment: .center, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
                 bylineWho
                 Spacer(minLength: 4)
                 bylineWhen
@@ -456,14 +432,8 @@ struct AccountInboxItemRow: View {
 
     @ViewBuilder
     private var bylineWho: some View {
-        if item.isUnread {
-            Circle()
-                .fill(.accentFill)
-                .frame(width: 8, height: 8)
-                .accessibilityLabel("Unread")
-        }
         Text(item.commenterName)
-            .font(.subheadline.weight(.semibold))
+            .font(.body.weight(item.isUnread ? .semibold : .regular))
             .lineLimit(1)
         CommentParticipantBadge(role: item.participantRole(
             workAuthors: workAuthors,
@@ -474,123 +444,56 @@ struct AccountInboxItemRow: View {
 
     @ViewBuilder
     private var bylineWhen: some View {
-        // 1l: "Replied" rides the byline, beside the time.
-        if item.isReplied { InboxRepliedBadge() }
-        if !item.postedAgo.isEmpty {
-            Text(item.postedAgo)
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
+        // Board 40: Replied is the small reply glyph beside the time.
+        if item.isReplied {
+            Image(systemName: "arrow.turn.up.left")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .accessibilityLabel("Replied")
+        }
+        if let timeLabel {
+            Text(timeLabel.display)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
                 .lineLimit(1)
         }
     }
 
-    /// Both branches' buttons are folded into `interactiveContent`'s single
-    /// accessibility element (its "Open Chapter Comments" custom action covers
-    /// the Chapter chip; the default "open thread" action covers the plain-text
-    /// case) — neither carries its own accessibility label/hint here anymore.
+    /// The long-press menu: everything the old per-row Reply button and "…" held.
     @ViewBuilder
-    private var subjectControl: some View {
-        if !item.subjectTitle.isEmpty {
-            if let chapter = item.chapterIndicatorTitle {
-                let chip = Button(action: onOpenChapter) {
-                    // A chip never wraps ("Chapt / er 3" at AX sizes); the
-                    // work title beside it does.
-                    Text(chapter)
-                        .font(.caption2)
-                        .lineLimit(1)
-                        .fixedSize()
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 2)
-                        .background(.quaternary, in: Capsule())
-                        .foregroundStyle(.secondary)
-                        .frame(minHeight: 44)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.borderless)
-                Group {
-                    if dynamicTypeSize.isAccessibilitySize {
-                        // Beside the chip the title had room for "of …" and no more at the
-                        // accessibility sizes: it goes under it.
-                        VStack(alignment: .leading, spacing: 0) {
-                            HStack(spacing: 4) {
-                                Text("on")
-                                chip
-                            }
-                            Text("of \(item.workTitle)")
-                                .lineLimit(3)
-                        }
-                    } else {
-                        HStack(spacing: 4) {
-                            Text("on")
-                            chip
-                            Text("of \(item.workTitle)")
-                                .lineLimit(2)
-                        }
-                    }
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            } else {
-                Button(action: onOpen) {
-                    Text("on \(item.subjectTitle)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                        .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
+    private var rowMenuItems: some View {
+        if item.canReply {
+            Button(action: onReply) {
+                Label("Reply", systemImage: "arrowshape.turn.up.left")
             }
         }
-    }
-
-    /// Uses the same paced avatar pipeline as native comment cards.
-    private var avatar: some View {
-        CommentAvatar(
-            isGuest: item.isGuest,
-            avatarURL: item.avatarURL,
-            // Same initial fallback the thread cards use, so an inbox of
-            // icon-less commenters doesn't read as one repeated glyph either.
-            name: item.commenterName,
-            size: 40
-        )
-    }
-
-    private var moreActionsMenu: some View {
-        Menu {
-            Button(action: onOpen) {
+        Button(action: onOpen) {
+            Label(
+                item.workID == nil ? "Open Comment" : "Open Thread",
+                systemImage: "bubble.left.and.bubble.right"
+            )
+        }
+        if item.chapterPosition != nil {
+            Button(action: onOpenChapter) {
+                Label("Chapter Comments", systemImage: "text.bubble")
+            }
+        }
+        Button(action: copyLink) {
+            Label("Copy Link", systemImage: "link")
+        }
+        if canToggleReadState && !isPerformingAction {
+            Button(action: onToggleReadState) {
                 Label(
-                    item.workID == nil ? "Open Comment" : "Open Thread",
-                    systemImage: "bubble.left.and.bubble.right"
+                    item.isUnread ? "Mark Read" : "Mark Unread",
+                    systemImage: item.isUnread ? "envelope.open" : "envelope.badge"
                 )
             }
-            if item.chapterPosition != nil {
-                Button(action: onOpenChapter) {
-                    Label("Chapter Comments", systemImage: "text.bubble")
-                }
-            }
-            Button(action: copyLink) {
-                Label("Copy Link", systemImage: "link")
-            }
-            if canToggleReadState {
-                Button(action: onToggleReadState) {
-                    Label(
-                        item.isUnread ? "Mark Read" : "Mark Unread",
-                        systemImage: item.isUnread ? "envelope.open" : "envelope.badge"
-                    )
-                }
-            }
-            if canDeleteFromInbox {
-                Button(role: .destructive) { confirmDelete = true } label: {
-                    Label("Delete From Inbox", systemImage: "trash")
-                }
-            }
-        } label: {
-            CommentOverflowButtonLabel()
         }
-        .buttonStyle(.borderless)
-        .disabled(isPerformingAction)
-        .accessibilityLabel("More actions for \(item.commenterName)'s Inbox comment")
+        if canDeleteFromInbox && !isPerformingAction {
+            Button(role: .destructive) { confirmDelete = true } label: {
+                Label("Delete From Inbox", systemImage: "trash")
+            }
+        }
     }
 
     private var actionNoticeBinding: Binding<Bool> {
@@ -606,31 +509,6 @@ struct AccountInboxItemRow: View {
         NSPasteboard.general.setString(url.absoluteString, forType: .string)
         #endif
         actionNotice = "Link copied."
-    }
-}
-
-/// AO3's replied state, visually distinct from neutral work-state chips.
-private struct InboxRepliedBadge: View {
-    @Environment(ThemeManager.self) private var themeManager
-
-    /// Sepia's themed success green keeps contrast on tan; other themes keep the system green.
-    private var green: Color {
-        themeManager.appTheme == .sepia ? themeManager.appTheme.statusSuccessColor : Color.green
-    }
-
-    var body: some View {
-        // 1l's badge is the word alone; on the byline the checkmark only
-        // pushed the commenter's name into truncation.
-        Text("Replied")
-        .font(.caption2.weight(.semibold))
-        .lineLimit(1)
-        .fixedSize()
-        .foregroundStyle(green)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 3)
-        .background(green.opacity(0.12), in: Capsule())
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Replied")
     }
 }
 
@@ -760,9 +638,9 @@ struct AccountInboxRows: View {
     }
 }
 
-/// One comment in the Inbox list. Trailing swipe marks it read or unread.
-/// Delete stays in the overflow and the bulk bar: both already confirm, and a
-/// swipe must not post that write.
+/// One comment in the Inbox list (board 40). Trailing swipe: read/unread and
+/// Delete (asks first); leading swipe: Reply. All of them, and Copy Link and
+/// the chapter jump, are in the long-press menu too.
 struct AccountInboxCommentListRow: View {
     var model: AO3InboxModel
     let item: AO3InboxItem
@@ -809,7 +687,6 @@ struct AccountInboxCommentListRow: View {
             onToggleReadState: toggleReadState,
             onDeleteFromInbox: { model.startItemAction(.delete, item: item, auth: auth) }
         )
-        .padding(.horizontal, 14)
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             // Full swipe stays off. Marking read posts to AO3, and a flick
             // must not be the thing that sends it. Same gate as the overflow,
@@ -824,17 +701,26 @@ struct AccountInboxCommentListRow: View {
                 .tint(screenTint ?? themeManager.effectiveTint)
             }
             // The row's destructive action is its trailing swipe, as on every
-            // other list (pass2-11). It asks, like the overflow does.
+            // other list (pass2-11). It asks first.
             if !isSelecting && model.canPerformItemAction(.delete, item: item) && !isPerformingAction {
                 Button(role: .destructive) { confirmDelete = true } label: {
                     Label("Delete", systemImage: "trash")
                 }
             }
         }
+        // Reply is the leading swipe; the long-press menu holds it too.
+        .swipeActions(edge: .leading, allowsFullSwipe: false) {
+            if !isSelecting && item.canReply && !item.isUnavailable {
+                Button(action: onReply) {
+                    Label("Reply", systemImage: "arrowshape.turn.up.left")
+                }
+                .tint(screenTint ?? themeManager.effectiveTint)
+            }
+        }
         .inboxDeleteConfirmation(isPresented: $confirmDelete) {
             model.startItemAction(.delete, item: item, auth: auth)
         }
-        .modifier(InboxPanelSegment(isFirst: isFirst, isLast: isLast))
+        .modifier(InboxPlainRow())
     }
 
     private func toggleReadState() {
@@ -850,10 +736,8 @@ struct AccountInboxStaleCacheRow: View {
         Label("Showing cached AO3 data", systemImage: "wifi.slash")
             .font(.subheadline)
             .foregroundStyle(.secondary)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .modifier(InboxPanelSegment(isFirst: true, isLast: isLast))
+            .modifier(InboxPlainRow())
     }
 }
 
@@ -883,58 +767,14 @@ struct AccountInboxSeeAllRow: View {
     }
 }
 
-/// One segment of the Inbox panel.
-///
-/// The old feed was one `VStack` with `.subjectPanel()`, so every comment
-/// shared a single bordered card and a single List row. A swipe has to be its
-/// own row. `subjectPanelSegmentRow` is the same idea (first and last round
-/// the corners, the rest draw the hairline) and it deliberately does not
-/// stroke each segment — a full stroke on every row would draw a line between
-/// them. This copy keeps the Inbox hairline full-bleed (`inset: 0`, which is
-/// what the old separators used) and the 12pt gap above the first row and
-/// below the last, outside the fill, which the one-row panel got from its
-/// list insets. The 0.5pt outer stroke is not drawn. Joining an open stroke
-/// across rows was not something this change could check on a signed-in inbox.
-private struct InboxPanelSegment: ViewModifier {
-    var isFirst: Bool
-    var isLast: Bool
-
-    @Environment(ThemeManager.self) private var themeManager
-
+/// Board 40's plain row: no card, the List's hairline between rows, a 10pt
+/// leading gutter (the unread dot's) and 16pt trailing.
+private struct InboxPlainRow: ViewModifier {
     func body(content: Content) -> some View {
-        let gutter = SubjectMetrics.accountGutter
-        let topGap: CGFloat = isFirst ? 12 : 0
-        let bottomGap: CGFloat = isLast ? 12 : 0
-        let theme = themeManager.appTheme
-        let shape = UnevenRoundedRectangle(
-            topLeadingRadius: isFirst ? 14 : 0,
-            bottomLeadingRadius: isLast ? 14 : 0,
-            bottomTrailingRadius: isLast ? 14 : 0,
-            topTrailingRadius: isFirst ? 14 : 0,
-            style: .continuous
-        )
         content
-            // Inside the card: each avatar sat on the edge or separator above it.
-            .padding(.vertical, 10)
-            .listRowSeparator(.hidden)
-            .listRowInsets(EdgeInsets(
-                top: topGap,
-                leading: gutter,
-                bottom: bottomGap,
-                trailing: gutter
-            ))
-            .listRowBackground(
-                shape
-                    .fill(theme.glassFill(0.09))
-                    .overlay(alignment: .bottom) {
-                        if !isLast {
-                            SubjectRowSeparator(inset: 0)
-                        }
-                    }
-                    .padding(.horizontal, gutter)
-                    .padding(.top, topGap)
-                    .padding(.bottom, bottomGap)
-            )
+            .listRowInsets(EdgeInsets(top: 12, leading: 10, bottom: 12, trailing: 16))
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.visible, edges: .bottom)
     }
 }
 
