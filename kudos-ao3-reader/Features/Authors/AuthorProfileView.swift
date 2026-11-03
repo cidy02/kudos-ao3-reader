@@ -1023,11 +1023,14 @@ private extension AuthorProfileView {
                 ToolbarSpacer(.fixed, placement: .primaryAction)
             }
             // Board 23: Share and "…" are one glass pill (one group shares a pill).
+            // Your own works/series list (board 41) keeps Share in the menu, so the title fits.
             ToolbarItemGroup(placement: .primaryAction) {
-                ShareLink(item: model.route.dashboardURL) {
-                    Label("Share Profile", systemImage: "square.and.arrow.up")
+                if !isOwnWorksOrSeries {
+                    ShareLink(item: model.route.dashboardURL) {
+                        Label("Share Profile", systemImage: "square.and.arrow.up")
+                    }
+                    .labelStyle(.iconOnly)
                 }
-                .labelStyle(.iconOnly)
                 profileMenu.labelStyle(.iconOnly)
             }
         }
@@ -1090,9 +1093,11 @@ private extension AuthorProfileView {
     }
 
     /// 1u draws Select as its own glass button beside the overflow menu. Only
-    /// where Edit Multiple waits behind it; elsewhere it stays in the menu.
+    /// where Edit Multiple waits behind it; elsewhere it stays in the menu. Not on
+    /// your own works list (board 41): there the bar already carries New Work and
+    /// the filter, and a fifth button pushed the "Your Works" title off the bar.
     private var showsSelectButton: Bool {
-        showsBulkEdit && !showsDashboard && !model.works.isEmpty
+        showsBulkEdit && !showsDashboard && !model.works.isEmpty && !isOwnWorksOrSeries
     }
 
     private var selectButton: some View {
@@ -1134,6 +1139,11 @@ private extension AuthorProfileView {
                !showsDashboard, model.selectedTab == .works {
                 Button { isShowingStats = true } label: {
                     Label("Stats", systemImage: "chart.bar")
+                }
+            }
+            if isOwnWorksOrSeries {
+                ShareLink(item: model.route.dashboardURL) {
+                    Label("Share Profile", systemImage: "square.and.arrow.up")
                 }
             }
             Button { router.open(model.route.dashboardURL) } label: {

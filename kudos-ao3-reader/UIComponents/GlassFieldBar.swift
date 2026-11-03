@@ -31,7 +31,9 @@ struct GlassFieldBar<Leading: View, Trailing: View>: View {
         // glass pill edges (the toolbar provides the pill background itself).
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
-        .frame(minWidth: 220, idealWidth: 480, maxWidth: 680)
+        // A low floor: with results, Search's bar holds Back plus three buttons and leaves
+        // ~150 pt. At 220 the field spilled under its neighbours and lost its glass pill.
+        .frame(minWidth: 120, idealWidth: 480, maxWidth: 680)
     }
 }
 
