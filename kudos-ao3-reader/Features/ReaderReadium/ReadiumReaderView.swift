@@ -1,3 +1,4 @@
+import Accessibility
 import OSLog
 import SwiftData
 import SwiftUI
@@ -232,7 +233,8 @@ struct ReadiumReaderView: View {
     // knowledge AO3 doesn't give the app, just remembering this app's own past
     // successful action, which is honest and exactly what was asked for.
     @State private var kudosWorking = false
-    @State private var kudosBanner: String?
+    @State private var kudosError: String?
+    @State private var kudosSuccesses = 0
 
     var body: some View {
         // Dim + card peel are driven in UIKit during the gesture (see
@@ -399,10 +401,11 @@ struct ReadiumReaderView: View {
             .onChange(of: colorBarDismissToken) { _, _ in
                 colorBarAnnotationID = nil
             }
-            .alert("AO3", isPresented: kudosBannerPresented) {
-                Button("OK", role: .cancel) { kudosBanner = nil }
+            .sensoryFeedback(.success, trigger: kudosSuccesses)
+            .alert("AO3", isPresented: kudosErrorPresented) {
+                Button("OK", role: .cancel) { kudosError = nil }
             } message: {
-                Text(kudosBanner ?? "")
+                Text(kudosError ?? "")
             }
             // Immersive reading: hide the tab bar; the status bar follows the chrome.
             .toolbar(.hidden, for: .tabBar)
@@ -1306,7 +1309,6 @@ struct ReadiumReaderView: View {
                 isEnabled: !kudosWorking && !work.hasGivenKudos,
                 isEmphasized: work.hasGivenKudos
             ) {
-                playReaderToggleHaptic()
                 giveKudos(workID: ao3WorkID)
             })
         }
@@ -1975,20 +1977,22 @@ extension ReadiumReaderView {
         kudosWorking = true
         Task {
             do {
-                kudosBanner = try await auth.giveKudos(workID: workID)
+                let message = try await auth.giveKudos(workID: workID)
                 // Reached on both "Kudos left." and the benign "already left kudos
                 // here" outcome — either way it's confirmed given, so persist it.
                 work.hasGivenKudos = true
                 try? modelContext.save()
+                kudosSuccesses += 1
+                AccessibilityNotification.Announcement(message).post()
             } catch {
-                kudosBanner = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                kudosError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             }
             kudosWorking = false
         }
     }
 
-    private var kudosBannerPresented: Binding<Bool> {
-        Binding(get: { kudosBanner != nil }, set: { if !$0 { kudosBanner = nil } })
+    private var kudosErrorPresented: Binding<Bool> {
+        Binding(get: { kudosError != nil }, set: { if !$0 { kudosError = nil } })
     }
 }
 
