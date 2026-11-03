@@ -1306,6 +1306,7 @@ struct ReadiumReaderView: View {
                 isEnabled: !kudosWorking && !work.hasGivenKudos,
                 isEmphasized: work.hasGivenKudos
             ) {
+                playReaderToggleHaptic()
                 giveKudos(workID: ao3WorkID)
             })
         }
@@ -1388,24 +1389,24 @@ struct ReadiumReaderView: View {
 
     /// Light toggle tick for fan round actions (rotation lock, TTS, bookmark).
     private func playReaderToggleHaptic() {
-        let generator = UIImpactFeedbackGenerator(style: .medium)
-        generator.prepare()
-        generator.impactOccurred()
+        Self.impactGenerator.impactOccurred()
+        Self.impactGenerator.prepare()
     }
 
     /// Stronger tick when a chapter skip / restart commits (Music-like boundary).
     private func playSpeechChapterHaptic() {
-        let generator = UIImpactFeedbackGenerator(style: .medium)
-        generator.prepare()
-        generator.impactOccurred()
+        playReaderToggleHaptic()
     }
 
     /// Soft step feedback while hold-seeking within a chapter.
     private func playSpeechSeekTickHaptic() {
-        let generator = UISelectionFeedbackGenerator()
-        generator.prepare()
-        generator.selectionChanged()
+        Self.selectionGenerator.selectionChanged()
+        Self.selectionGenerator.prepare()
     }
+
+    /// Shared generators, so a tap reuses one instead of allocating its own.
+    private static let impactGenerator = UIImpactFeedbackGenerator(style: .medium)
+    private static let selectionGenerator = UISelectionFeedbackGenerator()
 
     // MARK: Loading + progress
 

@@ -11,6 +11,7 @@ struct HomeSectionListView: View {
     @Environment(PrivacyGate.self) private var gate
     @Environment(ThemeManager.self) private var themeManager
     @Environment(AO3AuthService.self) private var auth
+    @Environment(AppRouter.self) private var router
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
     /// List or Grid, remembered per Home shelf.
@@ -122,7 +123,14 @@ struct HomeSectionListView: View {
     var body: some View {
         Group {
             if items.isEmpty {
-                ContentUnavailableView("Nothing here yet", systemImage: "books.vertical")
+                ContentUnavailableView {
+                    Label("Nothing here yet", systemImage: "books.vertical")
+                } description: {
+                    Text("Works you read or save will show up here.")
+                } actions: {
+                    Button("Browse AO3") { router.selection = .browse }
+                        .buttonStyle(.kudosPrimary)
+                }
             } else {
                 Group {
                     if arrangement == .grid {

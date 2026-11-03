@@ -49,6 +49,9 @@ struct RecentlyDeletedView: View {
     @State private var selection = Set<UUID>()
     /// The selection waiting on the bulk alert, captured when it was asked for.
     @State private var pendingBulkDelete: Set<UUID> = []
+    /// Haptic triggers, bumped by the handlers when a restore / permanent delete is committed.
+    @State private var restoreCount = 0
+    @State private var permanentDeleteCount = 0
     /// The imported original waiting on the Files exporter, after "Save the
     /// Original File…" on a permanent-delete ask.
     @State private var originalExport: OriginalImportExport?
@@ -110,31 +113,32 @@ struct RecentlyDeletedView: View {
             }
             Button(entry.deleteLabel, role: .destructive) {
                 entry.deletePermanently()
+                permanentDeleteCount += 1
                 pendingPermanent = nil
             }
             Button("Cancel", role: .cancel) { pendingPermanent = nil }
         } message: { entry in
             Text(entry.deletionMessage())
         }
-        // One alert for the whole selection, naming the count. `presenting:`
-        // for the same reason as the per-item alert above.
-        .alert(
-            Self.bulkDeleteTitle(count: pendingBulkDelete.count),
-            isPresented: Binding(
-                get: { !pendingBulkDelete.isEmpty },
-                set: { if !$0 { pendingBulkDelete = [] } }
+        // One alert for the whole selection, naming the count. Item-driven, so the ids
+        // are handed INTO the action (see the per-item alert above).
+        .destructiveConfirmation(
+            for: Binding(
+                get: { pendingBulkDelete.isEmpty ? nil : pendingBulkDelete },
+                set: { pendingBulkDelete = $0 ?? [] }
             ),
-            presenting: pendingBulkDelete
-        ) { ids in
-            Button("Delete Permanently", role: .destructive) {
+            style: .alert,
+            title: Self.bulkDeleteTitle(count: pendingBulkDelete.count),
+            confirmLabel: "Delete Permanently",
+            message: { Self.bulkPermanentMessage(ids: $0, in: entries) },
+            perform: { ids in
                 Self.deletePermanently(ids, in: entries)
-                pendingBulkDelete = []
+                permanentDeleteCount += 1
                 exitSelectMode()
             }
-            Button("Cancel", role: .cancel) { pendingBulkDelete = [] }
-        } message: { ids in
-            Text(Self.bulkPermanentMessage(ids: ids, in: entries))
-        }
+        )
+        .sensoryFeedback(.success, trigger: restoreCount)
+        .sensoryFeedback(.impact(weight: .heavy), trigger: permanentDeleteCount)
         .fileExporter(
             isPresented: $exportingOriginal,
             item: originalExport,
@@ -182,6 +186,7 @@ struct RecentlyDeletedView: View {
         Button {
             let failed = Self.restore(chosen, in: entries)
             if !failed.isEmpty { restoreFailure = Self.restoreFailureMessage(failed) }
+            if failed.count < chosen.count { restoreCount += 1 }
             exitSelectMode()
         } label: {
             Label("Restore", systemImage: "arrow.uturn.backward")
@@ -270,7 +275,11 @@ struct RecentlyDeletedView: View {
                 if selection.contains(entry.id) { selection.remove(entry.id) } else { selection.insert(entry.id) }
             },
             onRestore: {
-                if !entry.restore() { restoreFailure = Self.restoreFailureMessage([entry]) }
+                if entry.restore() {
+                    restoreCount += 1
+                } else {
+                    restoreFailure = Self.restoreFailureMessage([entry])
+                }
             },
             onDeletePermanently: { pendingPermanent = entry }
         )

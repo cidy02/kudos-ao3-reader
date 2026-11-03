@@ -544,7 +544,7 @@ struct AccountWorksCompactGrid<Accessory: View>: View {
             NavigationLink(value: WorkCardTap.destination(for: work)) {
                 SensitiveWorkCoverCard(work: work, progress: work.readingProgress, twin: entry.remote)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.cardPress)
             .localWorkContextMenu(work: work)
         } else if let remote = entry.remote {
             EnrichingAO3WorkCoverCard(work: remote)
@@ -576,7 +576,7 @@ struct AccountBookmarksCompactGrid: View {
                     NavigationLink(value: WorkCardTap.destination(for: work)) {
                         SensitiveWorkCoverCard(work: work)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.cardPress)
                 }
             }
         }
