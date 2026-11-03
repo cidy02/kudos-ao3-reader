@@ -228,7 +228,7 @@ struct AO3CollectionsList: View {
                 if !filters.summaryLabels.isEmpty {
                     filterRail.pageBodyRow(top: 12, gutter: 0)
                 }
-                if showPagination {
+                if showPagination, SearchPaginationBar.showsTopPager(rowCount: visibleCollections.count) {
                     paginationBar.pageBodyRow(top: 12, gutter: SubjectMetrics.accountGutter)
                 }
             }

@@ -28,6 +28,20 @@ struct AboutView: View {
                     .padding(.vertical, 8)
                 }
 
+                // Board 55: what you came to About for sits right under the version.
+                Section("Help & Feedback") {
+                    Button {
+                        showingBugReport = true
+                    } label: {
+                        Label("Report a Bug", systemImage: "ladybug")
+                    }
+                    if let repo = URL(string: AppLinks.repository) {
+                        Link(destination: repo) {
+                            Label("View on GitHub", systemImage: "chevron.left.forwardslash.chevron.right")
+                        }
+                    }
+                }
+
                 Section("License") {
                     // A concatenated String is not Markdown: this drew the asterisks.
                     let license = Text("GNU Affero General Public License v3.0 (AGPL-3.0)").bold()
@@ -50,19 +64,6 @@ struct AboutView: View {
                         detail: "Helped guide how Kudos reads AO3 pages.",
                         url: "https://github.com/ArmindoFlores/ao3_api"
                     )
-                }
-
-                Section("Help & Feedback") {
-                    Button {
-                        showingBugReport = true
-                    } label: {
-                        Label("Report a Bug", systemImage: "ladybug")
-                    }
-                    if let repo = URL(string: AppLinks.repository) {
-                        Link(destination: repo) {
-                            Label("View on GitHub", systemImage: "chevron.left.forwardslash.chevron.right")
-                        }
-                    }
                 }
 
                 Section("Disclaimer") {
