@@ -20,6 +20,18 @@ struct AO3ResultListPagingTests {
         #expect(AO3ResultListPaging.title(subject: "  ", query: "   ") == "Search Results")
     }
 
+    @Test func titleFormattingShowsOnAO3WhenLibrarySectionsPresent() {
+        #expect(AO3ResultListPaging.title(subject: "Sherlock Holmes", query: "lighthouse", hasLibrarySections: true) == "On AO3")
+        #expect(AO3ResultListPaging.title(subject: nil, query: "Sodium", hasLibrarySections: true) == "On AO3")
+        #expect(AO3ResultListPaging.title(subject: nil, query: nil, hasLibrarySections: true) == "On AO3")
+    }
+
+    @Test func countTextFormattingMatchesBoard11() {
+        #expect(AO3ResultListPaging.countText(total: 1) == "1 work")
+        #expect(AO3ResultListPaging.countText(total: 1_284) == "1,284 works")
+        #expect(AO3ResultListPaging.countText(total: 0) == "0 works")
+    }
+
     @Test func subtitleFormattingCountsWorks() {
         #expect(AO3ResultListPaging.subtitle(total: 1) == "1 work on AO3")
         #expect(AO3ResultListPaging.subtitle(total: 2_431) == "2,431 works on AO3")
