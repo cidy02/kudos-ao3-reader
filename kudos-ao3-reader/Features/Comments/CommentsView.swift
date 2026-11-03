@@ -23,10 +23,14 @@ nonisolated struct AO3CommentsRoute: Hashable {
 /// A local downloaded work plus the EPUB section a comment named. Kept separate
 /// from `LocalWorkDestination`: ordinary reader entry resumes, while this route
 /// deliberately starts at a specific story chapter without changing saved progress.
-private struct CommentReaderDestination: Identifiable {
+private struct CommentReaderDestination: Identifiable, Hashable {
     let work: SavedWork
     let spineIndex: Int
     var id: String { "\(work.id.uuidString):\(spineIndex)" }
+
+    // `navigationDestination(item:)` needs Hashable; the id is the identity.
+    static func == (lhs: Self, rhs: Self) -> Bool { lhs.id == rhs.id }
+    func hash(into hasher: inout Hasher) { hasher.combine(id) }
 }
 
 /// Ordinary sizes keep the floating pill in a bottom safe-area inset (or the system
