@@ -419,6 +419,11 @@ struct WorkRowExpandButton: View {
         }
         .buttonStyle(.kudosSecondaryCircle)
         .minimumHitTarget()
+        // The details fade leaks into List's late relayout; keep the style background with the instant glyph swap.
+        .transaction {
+            $0.animation = nil
+            $0.disablesAnimations = true
+        }
         .accessibilityLabel(expanded ? "Show less" : "Show more")
     }
 }
