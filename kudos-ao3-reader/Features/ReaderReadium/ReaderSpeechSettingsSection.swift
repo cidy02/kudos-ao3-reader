@@ -27,6 +27,9 @@ struct ReaderSpeechSettingsSection: View {
     @AppStorage(ReaderSpeechPreferences.kokoroExecutionProviderKey)
     private var kokoroExecutionProviderID = KokoroExecutionProvider.defaultProvider.rawValue
 
+    @State private var auditionController = ReaderSpeechController()
+    @State private var selectedSample: AuditionSample = .narration
+
     @State private var voices: [TTSVoice] = []
     @State private var downloadManager = TTSDownloadManager.shared
     @State private var kokoroInstaller = CoreMLKokoroPackInstaller.shared
@@ -35,6 +38,10 @@ struct ReaderSpeechSettingsSection: View {
     @State private var isShowingCoreMLDownloadConfirmation = false
     @State private var cachedKokoroRuntimeConfiguration: KokoroRuntimeConfiguration?
     @State private var isShowingKokoroDownloadConfirmation = false
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accentFill) private var accentFill
+    @Environment(\.accentInk) private var accentInk
 
     private var sortedVoices: [TTSVoice] {
         voices.sorted()
@@ -59,23 +66,214 @@ struct ReaderSpeechSettingsSection: View {
         return "Automatic (best available)"
     }
 
+    private var activeVoice: TTSVoice? {
+        let language = Language(code: .bcp47(Locale.current.identifier))
+        if voiceID.isEmpty {
+            return ReaderSpeechPreferences.bestVoice(for: language, from: voices)
+        }
+        return voices.first(where: { $0.identifier == voiceID })
+    }
+
+    private var currentVoiceDisplayName: String {
+        if let voice = activeVoice {
+            return ReaderSpeechPreferences.displayName(for: voice)
+        }
+        if voiceID.isEmpty {
+            return "Automatic"
+        }
+        return voiceID
+    }
+
+    private var currentVoiceSubtitle: String {
+        let engineName: String
+        switch effectiveEngineKind {
+        case .kokoro:
+            engineName = "Kokoro"
+        case .system:
+            engineName = "System"
+        }
+        let langCode = activeVoice?.language.code.bcp47 ?? Locale.current.identifier
+        let langName = Locale.current.localizedString(forIdentifier: langCode) ?? langCode
+        return "\(engineName) · \(langName) · on this iPhone"
+    }
+
     var body: some View {
-        ReaderSpeechAuditionHarness()
+        Group {
+            voiceCardSection
 
-        downloadSection
+            voiceSection
 
+            deliverySection
+
+            downloadSection
+
+            pronunciationSection
+
+            developerAndResetSection
+        }
+        .onAppear {
+            normalizeEngineID()
+            normalizeKokoroConfiguration()
+            downloadManager.refreshStatus(for: selectedKokoroModelPack)
+            updateVoices()
+        }
+        .onDisappear {
+            auditionController.stop()
+        }
+        .onChange(of: downloadManager.status) { _, _ in
+            if downloadManager.statusPack != selectedKokoroModelPack {
+                downloadManager.refreshStatus(for: selectedKokoroModelPack)
+            }
+            updateVoices()
+        }
+        .onChange(of: engineID) { _, _ in
+            if auditionController.isPlaying {
+                auditionController.audition(text: selectedSample.text)
+            }
+            updateVoices()
+        }
+        .onChange(of: kokoroInstaller.status) { _, _ in updateVoices() }
+        .onChange(of: kokoroModelPackID) { _, _ in
+            normalizeKokoroConfiguration()
+            downloadManager.refreshStatus(for: selectedKokoroModelPack)
+            updateVoices()
+        }
+        .onChange(of: kokoroExecutionProviderID) { _, _ in
+            normalizeKokoroConfiguration()
+            updateVoices()
+        }
+        .onChange(of: voiceID) { _, _ in
+            if auditionController.isPlaying {
+                auditionController.audition(text: selectedSample.text)
+            }
+        }
+        .onChange(of: rate) { _, _ in
+            if auditionController.isPlaying {
+                auditionController.audition(text: selectedSample.text)
+            }
+        }
+    }
+
+    private var voiceCardSection: some View {
         Section {
-            Picker(selection: $engineID) {
-                Text("Automatic").tag("")
-                ForEach(ReaderTTSEngineKind.allCases, id: \.rawValue) { engine in
-                    Text(engine.displayName).tag(engine.rawValue)
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 12) {
+                        voiceIconTile
+                        Text(currentVoiceDisplayName)
+                            .font(.title3.weight(.bold))
+                            .foregroundStyle(.primary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Text(currentVoiceSubtitle)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    sampleButton
                 }
-            } label: {
-                HStack(spacing: 12) {
-                    SettingsIconTile(color: Color(hex: "#007AFF") ?? .blue, systemImage: "waveform")
-                    Text("Engine")
+                .padding(.vertical, 6)
+            } else {
+                HStack(spacing: 14) {
+                    voiceIconTile
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(currentVoiceDisplayName)
+                            .font(.title3.weight(.bold))
+                            .foregroundStyle(.primary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text(currentVoiceSubtitle)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    sampleButton
+                }
+                .padding(.vertical, 4)
+            }
+            // The sample text stays a visible control (it was the audition's own picker),
+            // not only the Sample button's long-press menu.
+            Picker("Sample text", selection: $selectedSample) {
+                ForEach(AuditionSample.allCases) { sample in
+                    Text(sample.rawValue).tag(sample)
                 }
             }
+            .onChange(of: selectedSample) { _, sample in
+                if auditionController.isPlaying { auditionController.audition(text: sample.text) }
+            }
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    private var voiceIconTile: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [Color(hex: "#B3127A") ?? .pink, Color(hex: "#7B3FA0") ?? .purple],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+            Image(systemName: "waveform")
+                .font(.system(size: 24, weight: .medium))
+                .foregroundStyle(.white)
+        }
+        .frame(width: 52, height: 52)
+        .accessibilityHidden(true)
+    }
+
+    private var sampleButton: some View {
+        Button {
+            if auditionController.isPlaying {
+                auditionController.stop()
+            } else {
+                auditionController.audition(text: selectedSample.text)
+            }
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: auditionController.isPlaying ? "stop.fill" : "play.fill")
+                    .font(.system(size: 11, weight: .bold))
+                Text(auditionController.isPlaying ? "Stop" : "Sample")
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+            .padding(.horizontal, 13)
+            .padding(.vertical, 7)
+            .foregroundStyle(accentInk)
+            .background(accentFill.opacity(0.12), in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(auditionController.isPlaying ? "Stop sample" : "Play a sample")
+        .contextMenu {
+            Section("Sample Text") {
+                ForEach(AuditionSample.allCases) { sample in
+                    Button {
+                        selectedSample = sample  // the picker's onChange restarts a playing sample
+                    } label: {
+                        if selectedSample == sample {
+                            Label(sample.rawValue, systemImage: "checkmark")
+                        } else {
+                            Text(sample.rawValue)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var voiceSection: some View {
+        Section {
+            Picker("Engine", selection: $engineID) {
+                Text("Automatic").tag("")
+                ForEach(ReaderTTSEngineKind.allCases, id: \.rawValue) { engine in
+                    // Board 33's short name; "Kokoro (Neural Engine)" truncated in a segment.
+                    Text(engine == .kokoro ? "Kokoro" : engine.displayName).tag(engine.rawValue)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
 
             // Model-pack and execution-provider choices are sherpa-onnx
             // concepts. On the Core ML line the stage placement is decided by
@@ -115,18 +313,6 @@ struct ReaderSpeechSettingsSection: View {
                 }
             }
 
-            Toggle(isOn: $readAuthorNotes) {
-                HStack(spacing: 12) {
-                    SettingsIconTile(color: Color(hex: "#C25E00") ?? .orange, systemImage: "text.quote")
-                    Text("Read author's notes")
-                }
-            }
-            .accessibilityHint(
-                "Author's notes often carry content warnings. "
-                    + "Turn this off to hear only the story."
-            )
-            .accentFill()
-
             if isKokoroAwaitingVoicePack {
                 Label(
                     KokoroAnePlayback.supportsCoreML()
@@ -150,30 +336,21 @@ struct ReaderSpeechSettingsSection: View {
             }
 
             NavigationLink {
-                ReaderPronunciationSettingsView(
-                    characterTags: characterTags,
-                    onScanChapter: onScanChapter
-                )
+                voicePicker
             } label: {
                 HStack(spacing: 12) {
-                    SettingsIconTile(color: Color(hex: "#2F8F3A") ?? .green, systemImage: "character.bubble")
-                    LabeledContent("Pronunciations", value: pronunciationCountLabel)
+                    SettingsIconTile(color: Color(hex: "#6C6C70") ?? .gray, systemImage: "list.bullet")
+                    LabeledContent("Installed voices", value: "\(sortedVoices.count)")
                 }
             }
+        } header: {
+            Text("Voice")
+        }
+    }
 
-            NavigationLink {
-                ReaderSpeechDeveloperSettingsView()
-            } label: {
-                HStack(spacing: 12) {
-                    SettingsIconTile(color: Color(hex: "#6C6C70") ?? .gray, systemImage: "gearshape")
-                    LabeledContent(
-                        "Developer Settings",
-                        value: ReaderSpeechTuning.isModified ? "Modified" : "Default"
-                    )
-                }
-            }
-
-            VStack(alignment: .leading, spacing: 8) {
+    private var deliverySection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 12) {
                     SettingsIconTile(color: Color(hex: "#2F8F3A") ?? .green, systemImage: "gauge.with.needle")
                     Text("Speed")
@@ -185,7 +362,24 @@ struct ReaderSpeechSettingsSection: View {
                 Slider(value: $rate, in: ReaderSpeechPreferences.rateRange, step: 0.05)
                     .accessibilityLabel("Read-aloud speed")
                     .accessibilityValue(rateLabel)
+
+                FlowLayout(spacing: 8, rowSpacing: 8) {
+                    ForEach(ReaderSpeechAuditionHarness.comparisonRates, id: \.self) { candidate in
+                        let isSelected = abs(rate - candidate) < 0.001
+                        Button {
+                            rate = candidate
+                        } label: {
+                            Text(ReaderSpeechAuditionHarness.speedChipTitle(for: candidate))
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
+                        }
+                        .buttonStyle(RatePillStyle(isSelected: isSelected))
+                        .accessibilityLabel(ReaderSpeechAuditionHarness.speedChipTitle(for: candidate))
+                        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+                    }
+                }
             }
+            .padding(.vertical, 4)
 
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 12) {
@@ -200,6 +394,57 @@ struct ReaderSpeechSettingsSection: View {
                     .accessibilityLabel("Read-aloud pitch")
                     .accessibilityValue(pitchLabel)
             }
+            .padding(.vertical, 4)
+
+            Toggle(isOn: $readAuthorNotes) {
+                HStack(spacing: 12) {
+                    SettingsIconTile(color: Color(hex: "#C25E00") ?? .orange, systemImage: "text.quote")
+                    Text("Read author's notes")
+                }
+            }
+            .accessibilityHint(
+                "Author's notes often carry content warnings. "
+                    + "Turn this off to hear only the story."
+            )
+            .accentFill()
+        } header: {
+            Text("Delivery")
+        } footer: {
+            Text(readAloudFooter)
+        }
+    }
+
+    private var pronunciationSection: some View {
+        Section {
+            NavigationLink {
+                ReaderPronunciationSettingsView(
+                    characterTags: characterTags,
+                    onScanChapter: onScanChapter
+                )
+            } label: {
+                HStack(spacing: 12) {
+                    SettingsIconTile(color: Color(hex: "#2F8F3A") ?? .green, systemImage: "character.bubble")
+                    LabeledContent("Pronunciations", value: pronunciationCountLabel)
+                }
+            }
+        } header: {
+            Text("Pronunciation")
+        }
+    }
+
+    private var developerAndResetSection: some View {
+        Section {
+            NavigationLink {
+                ReaderSpeechDeveloperSettingsView()
+            } label: {
+                HStack(spacing: 12) {
+                    SettingsIconTile(color: Color(hex: "#6C6C70") ?? .gray, systemImage: "gearshape")
+                    LabeledContent(
+                        "Developer Settings",
+                        value: ReaderSpeechTuning.isModified ? "Modified" : "Default"
+                    )
+                }
+            }
 
             Button(role: .destructive) {
                 engineID = ""
@@ -212,35 +457,9 @@ struct ReaderSpeechSettingsSection: View {
                 HStack(spacing: 12) {
                     SettingsIconTile(color: Color(hex: "#D70015") ?? .red, systemImage: "arrow.counterclockwise")
                     Text("Reset Read Aloud")
+                        .foregroundStyle(Color(hex: "#D70015") ?? .red)
                 }
             }
-        } header: {
-            Text("Read Aloud")
-        } footer: {
-            Text(readAloudFooter)
-        }
-        .onAppear {
-            normalizeEngineID()
-            normalizeKokoroConfiguration()
-            downloadManager.refreshStatus(for: selectedKokoroModelPack)
-            updateVoices()
-        }
-        .onChange(of: downloadManager.status) { _, _ in
-            if downloadManager.statusPack != selectedKokoroModelPack {
-                downloadManager.refreshStatus(for: selectedKokoroModelPack)
-            }
-            updateVoices()
-        }
-        .onChange(of: engineID) { _, _ in updateVoices() }
-        .onChange(of: kokoroInstaller.status) { _, _ in updateVoices() }
-        .onChange(of: kokoroModelPackID) { _, _ in
-            normalizeKokoroConfiguration()
-            downloadManager.refreshStatus(for: selectedKokoroModelPack)
-            updateVoices()
-        }
-        .onChange(of: kokoroExecutionProviderID) { _, _ in
-            normalizeKokoroConfiguration()
-            updateVoices()
         }
     }
 
@@ -262,7 +481,7 @@ struct ReaderSpeechSettingsSection: View {
         Section {
             coreMLPackStatusViews
         } header: {
-            Text("Kokoro Neural Engine")
+            Text("Kokoro voice pack")
         } footer: {
             Text(
                 "Kokoro runs on whichever part of your device is fastest at it: the Neural "
@@ -293,13 +512,23 @@ struct ReaderSpeechSettingsSection: View {
         switch kokoroInstaller.status {
         case .downloading(let progress):
             VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 12) {
+                    SettingsIconTile(color: Color(hex: "#1E63C8") ?? .blue, systemImage: "arrow.down")
+                    Text("Downloading · \(Int(progress * 100))%")
+                    Spacer()
+                    Text("Core ML pack")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
                 ProgressView(value: progress).accentFill()
                 HStack {
-                    Text("Downloading… \(Int(progress * 100))%")
+                    Text("Runs on the Neural Engine, fully offline.")
                         .font(.caption)
                         .foregroundColor(.secondary)
                     Spacer()
-                    Button("Cancel", role: .cancel) { kokoroInstaller.cancel() }
+                    Button("Cancel Download", role: .cancel) { kokoroInstaller.cancel() }
+                        .font(.subheadline)
+                        .foregroundColor(.red)
                 }
             }
         case .installing:
@@ -354,7 +583,7 @@ struct ReaderSpeechSettingsSection: View {
             }
             packStatusViews
         } header: {
-            Text("Kokoro Pack")
+            Text("Kokoro voice pack")
         } footer: {
             Text(downloadDisclosure)
         }
@@ -630,6 +859,9 @@ struct ReaderSpeechSettingsSection: View {
                 Text("Installed Voices")
             }
         }
+        .formStyle(.grouped)
+        .appThemedScroll()
+        .appThemedRows()
         .navigationTitle("Voice")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear(perform: updateVoices)

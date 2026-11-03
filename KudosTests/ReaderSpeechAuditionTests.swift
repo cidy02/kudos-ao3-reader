@@ -29,6 +29,8 @@ struct ReaderSpeechAuditionTests {
         let renderer = ImageRenderer(content: pill
             .padding(8)
             .background(theme.cardSurface)
+            // The accent every screen installs (the system default accent is not the app's).
+            .accentTint(ThemeManager.appTint(for: theme), on: theme)
             .environment(\.colorScheme, theme == .dark || theme == .oled ? .dark : .light))
         renderer.scale = 2
         guard let image = renderer.cgImage else { return 0 }
@@ -63,6 +65,31 @@ struct ReaderSpeechAuditionTests {
         _ = textContrast(of: current, on: .light)
         for theme in ReaderTheme.allCases {
             #expect(textContrast(of: current, on: theme) >= 4.5, "\(theme)")
+        }
+    }
+
+    /// Chip titles format clearly without line breaks in the label.
+    @Test func speedChipTitlesFormatCorrectly() {
+        #expect(ReaderSpeechAuditionHarness.speedChipTitle(for: 0.9) == "0.9x")
+        #expect(ReaderSpeechAuditionHarness.speedChipTitle(for: 1.0) == "1.0x (default)")
+        #expect(ReaderSpeechAuditionHarness.speedChipTitle(for: 1.1) == "1.1x")
+        #expect(!ReaderSpeechAuditionHarness.speedChipTitle(for: 1.0).contains("\n"))
+    }
+
+    /// Selected and unselected speed chips read with contrast >= 4.5 in every theme.
+    @Test func selectedAndUnselectedChipsReadInEveryTheme() {
+        let selected = Button {} label: { Text("1.0x (default)").frame(width: 160) }
+            .buttonStyle(RatePillStyle(isSelected: true))
+        _ = textContrast(of: selected, on: .light)
+        for theme in ReaderTheme.allCases {
+            #expect(textContrast(of: selected, on: theme) >= 4.5, "selected on \(theme)")
+        }
+
+        let unselected = Button {} label: { Text("0.9x").frame(width: 100) }
+            .buttonStyle(RatePillStyle(isSelected: false))
+        _ = textContrast(of: unselected, on: .light)
+        for theme in ReaderTheme.allCases {
+            #expect(textContrast(of: unselected, on: theme) >= 4.5, "unselected on \(theme)")
         }
     }
 

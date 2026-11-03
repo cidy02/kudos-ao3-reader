@@ -69,23 +69,20 @@ struct ReaderSpeechAuditionHarness: View {
                     .accessibilityLabel("Audition speed")
                     .accessibilityValue(rateLabel)
 
-                // The open question is specifically 0.9 (widely recommended for
-                // audiobook narration) against our 1.0 default, so make that
-                // one comparison a single tap rather than a slider hunt.
-                // One above another at the largest text: side by side "1.0x (default)" was
-                // squeezed to "1." (A69 #27).
-                let pills = dynamicTypeSize.isAccessibilitySize
-                    ? AnyLayout(VStackLayout(spacing: 8)) : AnyLayout(HStackLayout(spacing: 8))
-                pills {
+                // Speed comparison chips wrap as a row, but each chip label never wraps to two lines.
+                FlowLayout(spacing: 8, rowSpacing: 8) {
                     ForEach(Self.comparisonRates, id: \.self) { candidate in
+                        let isSelected = abs(rate - candidate) < 0.001
                         Button {
                             rate = candidate
                         } label: {
-                            Text(Self.label(for: candidate))
-                                .frame(maxWidth: .infinity)
+                            Text(Self.speedChipTitle(for: candidate))
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
                         }
-                        .buttonStyle(RatePillStyle())
-                        .disabled(abs(rate - candidate) < 0.001)
+                        .buttonStyle(RatePillStyle(isSelected: isSelected))
+                        .accessibilityLabel(Self.speedChipTitle(for: candidate))
+                        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
                     }
                 }
             }
@@ -163,10 +160,17 @@ struct ReaderSpeechAuditionHarness: View {
     /// 0.9 is the widely recommended audiobook-narration rate; 1.0 is what
     /// Kudos currently defaults to. 1.1 gives the comparison a third point so
     /// the middle is not just an endpoint.
-    private static let comparisonRates: [Double] = [0.9, 1.0, 1.1]
+    static let comparisonRates: [Double] = [0.9, 1.0, 1.1]
 
-    private static func label(for value: Double) -> String {
-        abs(value - 1.0) < 0.001 ? "1.0x (default)" : String(format: "%.2gx", value)
+    static func speedChipTitle(for candidate: Double) -> String {
+        if abs(candidate - 1.0) < 0.001 {
+            return "1.0x (default)"
+        }
+        return String(format: "%.1fx", candidate)
+    }
+
+    static func label(for value: Double) -> String {
+        speedChipTitle(for: value)
     }
 
     private var rateLabel: String {
@@ -189,23 +193,29 @@ struct ReaderSpeechAuditionHarness: View {
     }
 }
 
-/// The comparison rates. `.bordered` drew the current rate, which is disabled, as near-white
-/// text on pale glass in Light and Sepia (A88c). Here it's the primary ink on a neutral fill in
-/// every theme, and the others keep the accent. It's still a disabled button, so it can't be
-/// tapped and VoiceOver says "dimmed".
+/// The comparison rates. The selected chip uses the app colour (`\.accentFill`)
+/// with high-contrast white text, never grey. Unselected chips use a neutral secondary fill
+/// with primary text.
 struct RatePillStyle: ButtonStyle {
+    var isSelected: Bool? = nil
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accentFill) private var accentFill
+
+    private var active: Bool {
+        isSelected ?? !isEnabled
+    }
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
+            .lineLimit(1)
             .padding(.vertical, 7)
             .padding(.horizontal, 12)
-            .foregroundStyle(isEnabled ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
+            .foregroundStyle(active ? Color.white : Color.primary)
             .background(
-                isEnabled ? AnyShapeStyle(.accentFill.opacity(0.15)) : AnyShapeStyle(.quaternary),
+                active ? AnyShapeStyle(accentFill) : AnyShapeStyle(Color(.quaternarySystemFill)),
                 in: Capsule()
             )
-            .opacity(configuration.isPressed ? 0.6 : 1)
+            .opacity(configuration.isPressed ? 0.7 : 1)
     }
 }
 #endif
