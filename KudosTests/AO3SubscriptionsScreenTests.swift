@@ -218,8 +218,7 @@ struct AO3SubscriptionsScreenTests {
         )
         #expect(
             AO3SubscriptionsCopy.footer(currentPage: 1, totalPages: 1)
-                == "Your subscriptions are stored on AO3. Unsubscribing here also unsubscribes you on AO3. "
-                + "You're viewing 1 of 1 page."
+                == "Your subscriptions are stored on AO3. Unsubscribing here also unsubscribes you on AO3."
         )
     }
 

@@ -173,8 +173,9 @@ enum AO3SubscriptionsCopy {
         let pages = max(totalPages, 1)
         let page = min(max(currentPage, 1), pages)
         let noun = pages == 1 ? "page" : "pages"
-        return "Your subscriptions are stored on AO3. Unsubscribing here also unsubscribes you on AO3. "
-            + "You're viewing \(page) of \(pages) \(noun)."
+        let base = "Your subscriptions are stored on AO3. Unsubscribing here also unsubscribes you on AO3."
+        // "You're viewing 1 of 1 page" says nothing; the page count matters only with more than one.
+        return pages == 1 ? base : base + " You're viewing \(page) of \(pages) \(noun)."
     }
 }
 
@@ -247,7 +248,7 @@ struct AO3SubscriptionsWorksBrowser: View {
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
             }
-            if showPagination {
+            if showPagination, SearchPaginationBar.showsTopPager(rowCount: shownCount) {
                 Section { paginationBar.bareListRow() }
             }
             if sections.isEmpty {

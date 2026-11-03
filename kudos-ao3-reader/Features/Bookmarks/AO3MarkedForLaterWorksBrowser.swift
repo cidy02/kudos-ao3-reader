@@ -94,17 +94,19 @@ enum AO3MarkedForLaterGrouping {
     ) -> [AO3MarkedForLaterSection<Element>] {
         switch filter {
         case .all:
+            let updated = items.filter(isUpdated)
             return [
                 section(
                     .updatedSinceYouLooked,
-                    items.filter(isUpdated),
+                    updated,
                     showsHeader: true,
                     layout: .covers
                 ),
+                // "Everything else" only reads right under the updated run; alone it names nothing.
                 section(
                     .everythingElse,
                     items.filter { !isUpdated($0) },
-                    showsHeader: true,
+                    showsHeader: !updated.isEmpty,
                     layout: .ledger
                 )
             ].compactMap { $0 }
@@ -193,8 +195,10 @@ enum AO3MarkedForLaterCopy {
         let pages = max(totalPages, 1)
         let page = min(max(currentPage, 1), pages)
         let noun = pages == 1 ? "page" : "pages"
-        return "Your Marked for Later list is stored on AO3. Unmarking a work here also removes it "
-            + "from that list on AO3. You're viewing \(page) of \(pages) \(noun)."
+        let base = "Your Marked for Later list is stored on AO3. Unmarking a work here also removes it "
+            + "from that list on AO3."
+        // "You're viewing 1 of 1 page" says nothing; the page count matters only with more than one.
+        return pages == 1 ? base : base + " You're viewing \(page) of \(pages) \(noun)."
     }
 }
 
