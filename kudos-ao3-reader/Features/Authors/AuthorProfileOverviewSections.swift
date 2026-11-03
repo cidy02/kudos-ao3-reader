@@ -127,10 +127,11 @@ struct AuthorProfileOverviewHeader: View {
                 }
             } label: {
                 HStack(alignment: .firstTextBaseline, spacing: 5) {
-                    name
+                    // A title menu reads as the title (board 23: black name, grey chevron), not as a red link.
+                    name.foregroundStyle(Color.primary)
                     Image(systemName: "chevron.up.chevron.down")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.secondary)
                 }
             }
             .accessibilityLabel("\(model.route.displayName). Choose a pseud")
