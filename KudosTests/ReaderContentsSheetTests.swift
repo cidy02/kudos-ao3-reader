@@ -20,6 +20,7 @@ struct ReaderContentsSheetTests {
 
     @Test func progressKeepsThePercentWhenNoEstimateIsAvailable() {
         #expect(ReaderContentsLabels.progress(percent: 22, remainingPositions: nil) == "22% of the work")
+        #expect(ReaderContentsLabels.progress(percent: 99, remainingPositions: 0) == "99% of the work")
     }
 }
 #endif
