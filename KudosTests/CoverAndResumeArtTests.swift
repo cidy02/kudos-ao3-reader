@@ -88,7 +88,7 @@ struct CoverAndResumeArtTests {
         #expect(ResumeCardVariant.home.barsHeight == 52)
         #expect(ResumeCardVariant.next.barsHeight == 52)
         #expect(ResumeCardVariant.detail.barsHeight == 76)
-        let items = model.chapterItems(weights: nil)
+        let items = model.chapterItems(lengths: nil)
         #expect(items.count == 20)
         #expect(items.filter { if case .notPosted = $0.role { return true }; return false }.count == 8)
     }
