@@ -926,15 +926,29 @@ private extension AuthorProfileView {
                 }
             }
         } else {
-            ActionToolbar(items: [
-                showsNewWork
-                    ? AnyView(ToolbarIconButton(title: "New Work", systemImage: "plus") { isCreatingWork = true })
-                    : nil,
-                showsWorksFilter ? AnyView(worksFilterButton) : nil,
-                showsSelectButton ? AnyView(selectButton) : nil,
-                AnyView(profileMenu)
-            ].compactMap { $0 })
+            ActionToolbar(items: leadingToolbarItems)
+            if !leadingToolbarItems.isEmpty {
+                ToolbarSpacer(.fixed, placement: .primaryAction)
+            }
+            // Board 23: Share and "…" are one glass pill (one group shares a pill).
+            ToolbarItemGroup(placement: .primaryAction) {
+                ShareLink(item: model.route.dashboardURL) {
+                    Label("Share Profile", systemImage: "square.and.arrow.up")
+                }
+                .labelStyle(.iconOnly)
+                profileMenu.labelStyle(.iconOnly)
+            }
         }
+    }
+
+    private var leadingToolbarItems: [AnyView] {
+        [
+            showsNewWork
+                ? AnyView(ToolbarIconButton(title: "New Work", systemImage: "plus") { isCreatingWork = true })
+                : nil,
+            showsWorksFilter ? AnyView(worksFilterButton) : nil,
+            showsSelectButton ? AnyView(selectButton) : nil
+        ].compactMap { $0 }
     }
 
     /// The works funnel, moved up from the scope row (owner, 2026-10-01: global
@@ -1031,9 +1045,6 @@ private extension AuthorProfileView {
             }
             Button { router.open(model.route.dashboardURL) } label: {
                 Label("Open on AO3", systemImage: "safari")
-            }
-            ShareLink(item: model.route.dashboardURL) {
-                Label("Share Profile", systemImage: "square.and.arrow.up")
             }
             ForEach(visibleWebActions) { action in
                 Button { router.open(action.url) } label: {

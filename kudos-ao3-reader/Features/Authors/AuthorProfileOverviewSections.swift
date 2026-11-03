@@ -164,7 +164,7 @@ struct AuthorProfileOverviewHeader: View {
                 if model.isPerformingSubscription {
                     ProgressView().controlSize(.small).accentFill()
                 } else {
-                    Image(systemName: form.isSubscribed ? "bell.slash" : "bell")
+                    Image(systemName: form.isSubscribed ? "bell.slash" : "plus")
                 }
                 Text(form.isSubscribed ? "Unsubscribe" : "Subscribe")
             }
@@ -636,6 +636,8 @@ struct AuthorProfileLatestCard: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+                // Room for the play disc (board 23).
+                .padding(.trailing, 44)
             }
             if !work.summary.isEmpty {
                 Text(work.summary)
@@ -653,6 +655,19 @@ struct AuthorProfileLatestCard: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .overlay(alignment: .topTrailing) {
+            // Board 23's play disc. Decorative: the whole card is already the
+            // work's link (SensitiveRemoteWorkCard), and the card has no read
+            // action of its own, so the disc shares that one tap target.
+            Image(systemName: "play.fill")
+                .font(.system(size: 16))
+                .foregroundStyle(.accentFill)
+                .frame(width: 40, height: 40)
+                .background(Color.white, in: Circle())
+                .shadow(color: .black.opacity(0.2), radius: 6, y: 3)
+                .padding(14)
+                .accessibilityHidden(true)
+        }
         .background {
             RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
                 .fill(theme.appTheme.carouselCardSurface)
