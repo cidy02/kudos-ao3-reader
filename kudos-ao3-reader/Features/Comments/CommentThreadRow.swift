@@ -1592,20 +1592,12 @@ private struct ExpandableCommentBody: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            bodyText
-                .lineLimit(isExpanded ? nil : CommentThreadGeometry.collapsedBodyLineLimit)
-                .fixedSize(horizontal: false, vertical: true)
-                // Snap between the clamped and full layouts rather than
-                // animating the line-limit change: SwiftUI can't interpolate one
-                // text layout into another, so it cross-fades the two
-                // renderings and the glyphs visibly ghost and drift while the
-                // frame grows. The card's own growth still animates.
-                .animation(nil, value: isExpanded)
+            visibleBodyText
                 .background(alignment: .top) { truncationProbes }
 
             if needsExpansion {
                 Button {
-                    withAnimationUnlessReduced(.easeInOut(duration: 0.2), reduceMotion: reduceMotion) {
+                    withAnimationUnlessReduced(.snappy(duration: 0.3), reduceMotion: reduceMotion) {
                         isExpanded.toggle()
                     }
                 } label: {
@@ -1619,6 +1611,22 @@ private struct ExpandableCommentBody: View {
                         : "Expands the full comment"
                 )
             }
+        }
+        .clipped()
+    }
+
+    @ViewBuilder
+    private var visibleBodyText: some View {
+        if isExpanded {
+            bodyText
+                .lineLimit(nil)
+                .fixedSize(horizontal: false, vertical: true)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+        } else {
+            bodyText
+                .lineLimit(CommentThreadGeometry.collapsedBodyLineLimit)
+                .fixedSize(horizontal: false, vertical: true)
+                .transition(.opacity.combined(with: .move(edge: .top)))
         }
     }
 

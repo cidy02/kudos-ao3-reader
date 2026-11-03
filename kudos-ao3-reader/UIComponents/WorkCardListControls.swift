@@ -95,11 +95,11 @@ struct WorkListMoreMenu<Content: View>: View {
 /// page.
 struct ExpandAllMenuItem: View {
     @Binding var expandAll: Bool
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Button {
-            withAnimationUnlessReduced(.easeInOut(duration: 0.2), reduceMotion: reduceMotion) { expandAll.toggle() }
+            // A page can update dozens of List rows here; relayout them once without animation.
+            expandAll.toggle()
         } label: {
             Label(expandAll ? "Collapse All Cards" : "Expand All Cards",
                   systemImage: expandAll ? "rectangle.compress.vertical" : "rectangle.expand.vertical")

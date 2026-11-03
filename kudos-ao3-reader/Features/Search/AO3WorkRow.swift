@@ -57,6 +57,7 @@ struct AO3WorkRow: View {
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var themeManager
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("showsZeroStats") private var showsZeroStats = true
     @ScaledMetric(relativeTo: .title3) private var bookmarkTitleSize: CGFloat = 19
     @State private var internalExpanded = false
@@ -163,30 +164,30 @@ struct AO3WorkRow: View {
                     freeforms: additionalTags,
                     onTap: { tag, field in router.searchAO3(field, tag) }
                 )
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
             if showsSummary, !work.summary.isEmpty {
-                Text(work.summary)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(expanded || dynamicTypeSize.isAccessibilitySize ? nil : 3)
-                    .multilineTextAlignment(.leading)
-                    .animation(nil, value: expanded)
+                summary(collapsedLineLimit: 3)
             }
             if expanded {
-                if presentation == .fandomTop {
-                    chipGroup("Fandoms", Array(nonemptyFandoms.dropFirst()), field: .fandom)
+                VStack(alignment: .leading, spacing: 12) {
+                    if presentation == .fandomTop {
+                        chipGroup("Fandoms", Array(nonemptyFandoms.dropFirst()), field: .fandom)
+                    }
+                    // No "Archive Warnings" group: expanding turns the stats row's
+                    // warning chip into the warnings themselves.
+                    chipGroup("Relationships", work.relationships, field: .relationship)
+                    chipGroup("Characters", work.characters, field: .character)
+                    chipGroup("Additional Tags", additionalTags, field: .freeform)
                 }
-                // No "Archive Warnings" group: expanding turns the stats row's
-                // warning chip into the warnings themselves.
-                chipGroup("Relationships", work.relationships, field: .relationship)
-                chipGroup("Characters", work.characters, field: .character)
-                chipGroup("Additional Tags", additionalTags, field: .freeform)
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
             statsRow
             if showsPerformance {
                 AO3AuthorPerformanceStrip(work: work)
             }
         }
+        .clipped()
     }
 
     /// Fandom label, title, author, summary, every stat, and equal chapter bars.
@@ -204,22 +205,20 @@ struct AO3WorkRow: View {
                     freeforms: additionalTags,
                     onTap: { tag, field in router.searchAO3(field, tag) }
                 )
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
             if expanded {
-                chipGroup("Fandoms", Array(nonemptyFandoms.dropFirst()), field: .fandom)
-                chipGroup("Archive Warnings", work.warnings, field: .warning)
-                chipGroup("Relationships", work.relationships, field: .relationship)
-                chipGroup("Characters", work.characters, field: .character)
-                chipGroup("Additional Tags", additionalTags, field: .freeform)
+                VStack(alignment: .leading, spacing: 12) {
+                    chipGroup("Fandoms", Array(nonemptyFandoms.dropFirst()), field: .fandom)
+                    chipGroup("Archive Warnings", work.warnings, field: .warning)
+                    chipGroup("Relationships", work.relationships, field: .relationship)
+                    chipGroup("Characters", work.characters, field: .character)
+                    chipGroup("Additional Tags", additionalTags, field: .freeform)
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
             if showsSummary, !work.summary.isEmpty {
-                Text(work.summary)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(expanded || dynamicTypeSize.isAccessibilitySize ? nil : 2)
-                    .multilineTextAlignment(.leading)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .animation(nil, value: expanded)
+                summary(collapsedLineLimit: 2)
             }
             ledgerFacts
             searchLedgerSignal
@@ -227,6 +226,27 @@ struct AO3WorkRow: View {
                 AO3AuthorPerformanceStrip(work: work)
             }
         }
+        .clipped()
+    }
+
+    @ViewBuilder
+    private func summary(collapsedLineLimit: Int) -> some View {
+        if expanded || dynamicTypeSize.isAccessibilitySize {
+            summaryText(lineLimit: nil)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+        } else {
+            summaryText(lineLimit: collapsedLineLimit)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+        }
+    }
+
+    private func summaryText(lineLimit: Int?) -> some View {
+        Text(work.summary)
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .lineLimit(lineLimit)
+            .multilineTextAlignment(.leading)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     private var standardHeading: some View {
@@ -474,13 +494,7 @@ struct AO3WorkRow: View {
     @ViewBuilder
     private var expandButton: some View {
         let button = Button {
-            // No `withAnimation`: these rows live in a `List`, and animating a
-            // row's height change makes it composite a snapshot of the old cell
-            // over the new one. The two layouts differ in height, so every
-            // element — title, byline, fandom, stats — ghosts over the expanded
-            // summary and chips for the duration. Toggling instantly relayouts
-            // in one frame with nothing to cross-fade.
-            expandedBinding.wrappedValue.toggle()
+            toggleExpanded()
         } label: {
             Image(systemName: expanded ? "chevron.up" : "chevron.down")
                 .font(.caption.weight(.semibold))
@@ -494,13 +508,19 @@ struct AO3WorkRow: View {
                 .buttonStyle(.plain)
                 .foregroundStyle(themeManager.accentInk)
                 .frame(width: 20, height: 20)
-                .layoutFreeHitTarget(30) { expandedBinding.wrappedValue.toggle() }
+                .layoutFreeHitTarget(30, action: toggleExpanded)
                 .accessibilityLabel(expanded ? "Show less" : "Show more")
         } else {
             button
                 .buttonStyle(.kudosSecondaryCircle)
                 .minimumHitTarget()
                 .accessibilityLabel(expanded ? "Show less" : "Show more")
+        }
+    }
+
+    private func toggleExpanded() {
+        withAnimationUnlessReduced(.snappy(duration: 0.3), reduceMotion: reduceMotion) {
+            expandedBinding.wrappedValue.toggle()
         }
     }
 

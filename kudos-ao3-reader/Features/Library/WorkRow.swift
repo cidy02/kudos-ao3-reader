@@ -221,6 +221,7 @@ struct WorkRow: View {
         } remainder: {
             standardRemainder(summaryText: summaryText)
         }
+        .clipped()
     }
 
     @ViewBuilder
@@ -244,23 +245,22 @@ struct WorkRow: View {
                 freeforms: work.hasCategorizedWorkTags ? work.workFreeforms : work.workTags,
                 onTap: { tag, field in router.searchAO3(field, tag) }
             )
+            .transition(.opacity.combined(with: .move(edge: .top)))
         }
         if !summaryText.isEmpty {
-            Text(summaryText)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .lineLimit(expandedBinding.wrappedValue || dynamicTypeSize.isAccessibilitySize ? nil : 3)
-                .multilineTextAlignment(.leading)
-                .animation(nil, value: expandedBinding.wrappedValue)
+            summary(summaryText)
         }
         if expandedBinding.wrappedValue {
-            if work.hasCategorizedWorkTags {
-                chipGroup("Relationships", work.workRelationships, field: .relationship)
-                chipGroup("Characters", work.workCharacters, field: .character)
-                chipGroup("Additional Tags", work.workFreeforms, field: .freeform)
-            } else {
-                chipGroup("Tags", work.workTags, field: .freeform)
+            VStack(alignment: .leading, spacing: 12) {
+                if work.hasCategorizedWorkTags {
+                    chipGroup("Relationships", work.workRelationships, field: .relationship)
+                    chipGroup("Characters", work.workCharacters, field: .character)
+                    chipGroup("Additional Tags", work.workFreeforms, field: .freeform)
+                } else {
+                    chipGroup("Tags", work.workTags, field: .freeform)
+                }
             }
+            .transition(.opacity.combined(with: .move(edge: .top)))
         }
         WorkListStatsRow(
             rating: work.rating.isEmpty ? nil : work.rating,
@@ -280,6 +280,26 @@ struct WorkRow: View {
         if let standardProgress {
             WorkReadProgressBar(progress: standardProgress)
         }
+    }
+
+    @ViewBuilder
+    private func summary(_ text: String) -> some View {
+        if expandedBinding.wrappedValue || dynamicTypeSize.isAccessibilitySize {
+            summaryText(text, lineLimit: nil)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+        } else {
+            summaryText(text, lineLimit: 3)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+        }
+    }
+
+    private func summaryText(_ text: String, lineLimit: Int?) -> some View {
+        Text(text)
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .lineLimit(lineLimit)
+            .multilineTextAlignment(.leading)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     private var statusGrid: some View {
@@ -355,14 +375,28 @@ struct WorkRow: View {
                     .foregroundStyle(.tertiary)
             }
             if !nonemptyFandomNames.isEmpty {
-                Text(nonemptyFandomNames.joined(separator: ", "))
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(expandedBinding.wrappedValue || dynamicTypeSize.isAccessibilitySize ? nil : 1)
-                    .animation(nil, value: expandedBinding.wrappedValue)
+                fandomNames
             }
         }
         .fixedSize(horizontal: false, vertical: true)
+    }
+
+    @ViewBuilder
+    private var fandomNames: some View {
+        if expandedBinding.wrappedValue || dynamicTypeSize.isAccessibilitySize {
+            fandomNamesText(lineLimit: nil)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+        } else {
+            fandomNamesText(lineLimit: 1)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+        }
+    }
+
+    private func fandomNamesText(lineLimit: Int?) -> some View {
+        Text(nonemptyFandomNames.joined(separator: ", "))
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .lineLimit(lineLimit)
     }
 
     private var expandButton: some View {
@@ -397,13 +431,13 @@ struct WorkRow: View {
 /// `Binding` rather than owning its own state).
 struct WorkRowExpandButton: View {
     @Binding var expanded: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Button {
-            // No `withAnimation`: these rows live in a `List`, and animating a
-            // row's height change makes it composite a snapshot of the old cell
-            // over the new one. Toggling instantly relayouts in one frame.
-            expanded.toggle()
+            withAnimationUnlessReduced(.snappy(duration: 0.3), reduceMotion: reduceMotion) {
+                expanded.toggle()
+            }
         } label: {
             Image(systemName: expanded ? "chevron.up" : "chevron.down")
                 .font(.caption.weight(.semibold))
