@@ -507,6 +507,10 @@ struct AO3WorkRow: View {
             button
                 .buttonStyle(.kudosSecondaryCircle)
                 .minimumHitTarget()
+                .transaction {
+                    $0.animation = nil
+                    $0.disablesAnimations = true
+                }
                 .accessibilityLabel(expanded ? "Show less" : "Show more")
         }
     }
