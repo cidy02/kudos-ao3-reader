@@ -60,7 +60,7 @@ struct WorkRow: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @AppStorage("showsZeroStats") private var showsZeroStats = true
     @State private var internalExpanded = false
-    @State private var chapterWeights: [Int]?
+    @State private var chapterLengths: ChapterLengths?
 
     private var expandedBinding: Binding<Bool> {
         externalExpanded ?? $internalExpanded
@@ -97,7 +97,9 @@ struct WorkRow: View {
             // A ledger row does not expand. The facts a disclosure used to reveal
             // are on Work Detail, one tap away. Owner's call, 2026-09-12.
             case .ledger:
-                ledgerRow.task(id: chapterCacheKey) { await loadChapterWeights() }
+                ledgerRow.task(id: ChapterLengthCache.taskKey(for: work)) {
+                    chapterLengths = await ChapterLengthCache.lengths(for: work)
+                }
             }
         }
         .downloadDimmed(work)
@@ -137,22 +139,13 @@ struct WorkRow: View {
         )
     }
 
-    /// File size and modification date, so a replaced EPUB measures again.
-    /// "none" when there is no download: those bars stay equal.
-    private var chapterCacheKey: String {
-        guard work.hasEPUB else { return "none" }
-        let values = try? work.fileURL.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
-        let size = values?.fileSize ?? -1
-        let modified = values?.contentModificationDate?.timeIntervalSince1970 ?? -1
-        return "\(work.id.uuidString)-\(size)-\(modified)"
-    }
-
     private var chapterBarItems: [ChapterBarItem] {
         ChapterBarModel.items(
             chapters: work.chapters,
             progress: work.readingProgress,
             isFinished: work.isFinished,
-            weights: chapterWeights,
+            weights: chapterLengths?.positions,
+            heights: chapterLengths?.words,
             newChapterCount: badgeCount
         )
     }
@@ -161,22 +154,9 @@ struct WorkRow: View {
         ChapterBarGeometry.progressLabel(
             chapters: work.chapters,
             progress: work.readingProgress,
-            isFinished: work.isFinished
+            isFinished: work.isFinished,
+            weights: chapterLengths?.positions
         )
-    }
-
-    private func loadChapterWeights() async {
-        guard work.hasEPUB else {
-            chapterWeights = nil
-            return
-        }
-        let id = work.id
-        let url = work.fileURL
-        let measured = await Task.detached(priority: .utility) {
-            ChapterLengthCache.weights(workID: id, fileURL: url)
-        }.value
-        guard work.modelContext != nil else { return }
-        chapterWeights = measured
     }
 
     private var ledgerRow: some View {

@@ -920,6 +920,8 @@ private struct HomeNewChapterRow: View {
     @AppStorage("matureContentMode") private var mode: MaturePrivacyMode = .obscure
 
     @State private var enrichedRemote: AO3WorkSummary?
+    /// Measured chapter lengths for a downloaded work (word-count bar heights).
+    @State private var chapterLengths: ChapterLengths?
 
     init(
         work: SavedWork,
@@ -1038,7 +1040,8 @@ private struct HomeNewChapterRow: View {
                 chapters: work.chapters,
                 progress: work.readingProgress,
                 isFinished: work.isFinished,
-                weights: nil,
+                weights: chapterLengths?.positions,
+                heights: chapterLengths?.words,
                 newChapterCount: newCount
             )
         }
@@ -1095,6 +1098,9 @@ private struct HomeNewChapterRow: View {
             }
         }
         .downloadDimmed(work)
+        .task(id: ChapterLengthCache.taskKey(for: work)) {
+            chapterLengths = await ChapterLengthCache.lengths(for: work)
+        }
     }
 
     @ViewBuilder
@@ -1206,6 +1212,8 @@ private struct HomeQueueRow: View {
     @Environment(PrivacyGate.self) private var gate
     @Environment(ThemeManager.self) private var themeManager
     @AppStorage("hideMatureContent") private var hideMature = true
+    /// The up-next work's measured chapters, so its "Ch N" matches its bars elsewhere.
+    @State private var upNextLengths: ChapterLengths?
 
     private var queuedWorks: [SavedWork] {
         ReadingQueueService.orderedWorks(in: queue)
@@ -1246,7 +1254,9 @@ private struct HomeQueueRow: View {
         if !author.isEmpty { parts.append(author) }
         if isResume {
             if let progress = work.readingProgress, progress > 0 {
-                parts.append(WorkCoverMetadata.reading(chapters: work.chapters, progress: progress))
+                parts.append(WorkCoverMetadata.reading(
+                    chapters: work.chapters, progress: progress, weights: upNextLengths?.positions
+                ))
             } else if !work.chapters.isEmpty {
                 parts.append("Ch \(work.chapters)")
             }
@@ -1304,6 +1314,10 @@ private struct HomeQueueRow: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .modifier(QueueCardMenu(queue: queue))
+        .task(id: ChapterLengthCache.taskKey(for: upNextWork)) {
+            guard let upNextWork else { upNextLengths = nil; return }
+            upNextLengths = await ChapterLengthCache.lengths(for: upNextWork)
+        }
     }
 
     private var coverButton: some View {
