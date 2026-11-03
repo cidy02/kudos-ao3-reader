@@ -188,13 +188,14 @@ enum WorkDetailPresentation {
     /// (callers sort them); an empty list says "None" rather than leaving the
     /// value blank, since the Add beside it needs something to answer.
     static func myCopyRows(
-        progress: Double?, chapterTitle: String?, downloadedAt: Date?,
+        progress: Double?, chapterNumber: Int?, downloadedAt: Date?,
         tags: [String], collections: [String], queues: [String],
         hasFile: Bool, fileSize: String?
     ) -> [MyCopyRow] {
+        // Board 19's "Ch 7 · 58%": the chapter the Resume card above names, then the work.
         var progressValue = "Not started"
         if let percent = WorkReadingPosition.cardProgressLabel(progress: progress) {
-            progressValue = chapterTitle.map { $0 + " · " + percent } ?? percent
+            progressValue = chapterNumber.map { "Ch \($0) · " + percent } ?? percent
         }
         var fileValue = "Not on this device"
         if hasFile {
