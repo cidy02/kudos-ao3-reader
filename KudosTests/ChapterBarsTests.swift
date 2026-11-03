@@ -117,4 +117,57 @@ struct ChapterBarsTests {
         try Data("replaced".utf8).write(to: file)
         #expect(ChapterLengthCache.weights(workID: id, fileURL: file, directory: directory) == nil)
     }
+
+    /// Word counts draw the bars; positions (what reading progress is measured in) still
+    /// decide which bar is read, current or unread.
+    @Test func wordCountsSetBarHeightsWhilePositionsPlaceTheReader() {
+        let items = ChapterBarGeometry.items(
+            planned: 4, posted: 3, progress: 0.5, weights: [1, 1, 2], heights: [100, 300, 50]
+        )
+        #expect(items.map(\.weight) == [100, 300, 50, 150])
+        #expect(items.map(\.role) == [.read, .read, .postedUnread, .notPosted])
+
+        let noWords = ChapterBarGeometry.items(planned: 2, posted: 2, progress: nil, weights: [2, 6])
+        #expect(noWords.map(\.weight) == [2, 6])
+    }
+
+    /// The "Ch N" label counts the same measured chapters as the bars, not equal ones.
+    @Test func progressLabelUsesTheMeasuredChapters() {
+        #expect(ChapterBarGeometry.progressLabel(chapters: "3/3", progress: 0.5, isFinished: false) == "Ch 2 · 50%")
+        #expect(
+            ChapterBarGeometry.progressLabel(chapters: "3/3", progress: 0.5, isFinished: false, weights: [1, 1, 2])
+                == "Ch 3 · 50%"
+        )
+        #expect(WorkCoverMetadata.reading(chapters: "3/3", progress: 0.5, weights: [1, 1, 2]) == "Ch 3 of 3 · 50%")
+    }
+
+    @Test func wordCountSkipsTheHeadAndTags() {
+        let xhtml = "<html><head><title>Ch 1: A Long Title</title></head>"
+            + "<body><h2>One</h2><p>two <em>three</em></p></body></html>"
+        #expect(EPUBDocument.wordCount(ofXHTML: xhtml) == 3)
+    }
+
+    @Test func measuredChaptersCarryWordCountsAndOldRecordsMeasureAgain() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("chapter-words-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let file = directory.appendingPathComponent("book.epub")
+        try EPUBBuilder.archive(
+            metadata: .init(title: "Words", author: "A", identifier: "words"),
+            chapters: [
+                .init(title: "Chapter 1", bodyXHTML: "<p>Hi.</p>"),
+                .init(title: "Chapter 2", bodyXHTML: "<p>\(String(repeating: "word ", count: 800))</p>")
+            ]
+        ).write(to: file)
+
+        // A record from before word counts (positions only) measures again for lengths.
+        let id = UUID()
+        ChapterLengthCache.store(workID: id, fileURL: file, weights: [1, 1], directory: directory)
+        #expect(ChapterLengthCache.weights(workID: id, fileURL: file, directory: directory) == [1, 1])
+        let lengths = try #require(ChapterLengthCache.lengths(workID: id, fileURL: file, directory: directory))
+        #expect(lengths.words.count == 2)
+        #expect(lengths.words[1] - lengths.words[0] == 799)
+        #expect(ChapterLengthCache.lengths(workID: id, fileURL: file, directory: directory) == lengths)
+    }
 }

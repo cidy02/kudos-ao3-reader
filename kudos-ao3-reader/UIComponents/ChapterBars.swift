@@ -101,9 +101,11 @@ enum ChapterBarGeometry {
         return Metrics(width: width, gap: usedGap, radius: min(3, width / 2))
     }
 
-    /// One bar per planned chapter. `weights` is one length per posted chapter;
-    /// nil, or a count that is not `posted`, means every bar is the same height.
-    /// Unposted chapters take the average posted length when lengths are known.
+    /// One bar per planned chapter. `weights` is one length per posted chapter in the
+    /// units reading progress is measured in (Readium positions): it decides which bar is
+    /// read, current or unread. `heights` (word counts) draws the bars; without it the bars
+    /// take `weights`. Nil, or a count that is not `posted`, means every bar is the same
+    /// height. Unposted chapters take the average posted length when lengths are known.
     /// `progress` is the fraction of the downloaded work (0…1); nil has not been
     /// opened. The last `newChapterCount` posted chapters are the new-chapter
     /// variant, drawn apart from read and unread.
@@ -112,17 +114,20 @@ enum ChapterBarGeometry {
         posted: Int,
         progress: Double?,
         weights: [Double]?,
+        heights: [Double]? = nil,
         newChapterCount: Int = 0
     ) -> [ChapterBarItem] {
         let planned = max(0, planned)
         let posted = min(max(0, posted), planned)
         guard planned > 0 else { return [] }
-        let known = weights.flatMap { values -> [Double]? in
-            guard values.count == posted, posted > 0, values.allSatisfy({ $0 > 0 }) else { return nil }
-            return values
+        func usable(_ values: [Double]?) -> [Double]? {
+            values.flatMap { $0.count == posted && posted > 0 && $0.allSatisfy { $0 > 0 } ? $0 : nil }
         }
+        let known = usable(weights)
         let postedWeights = (0 ..< posted).map { known?[$0] ?? 1 }
-        let unpostedWeight = known.map { $0.reduce(0, +) / Double($0.count) } ?? 1
+        let drawn = usable(heights) ?? known
+        let postedHeights = (0 ..< posted).map { drawn?[$0] ?? 1 }
+        let unpostedHeight = drawn.map { $0.reduce(0, +) / Double($0.count) } ?? 1
         let total = postedWeights.reduce(0, +)
         let fraction = progress.map { min(max($0, 0), 1) }
         var remaining = (fraction ?? 0) * total
@@ -133,17 +138,18 @@ enum ChapterBarGeometry {
             let weight: Double
             let role: ChapterBarRole
             if index >= posted {
-                weight = unpostedWeight
+                weight = unpostedHeight
                 role = .notPosted
             } else {
-                weight = postedWeights[index]
+                weight = postedHeights[index]
+                let span = postedWeights[index]
                 if fraction == nil || fraction == 0 {
                     role = .postedUnread
-                } else if remaining >= weight - 0.000_001 {
+                } else if remaining >= span - 0.000_001 {
                     role = .read
-                    remaining -= weight
+                    remaining -= span
                 } else if remaining > 0.000_001 {
-                    role = .current(fill: remaining / weight)
+                    role = .current(fill: remaining / span)
                     remaining = 0
                 } else {
                     role = .postedUnread
@@ -159,17 +165,20 @@ enum ChapterBarGeometry {
     /// "Ch 7 · 58%". The chapter is where the progress falls; the percent is the
     /// whole downloaded work. Nothing at zero: a row must not claim a session
     /// that never happened.
-    static func progressLabel(chapters: String, progress: Double?, isFinished: Bool) -> String? {
+    static func progressLabel(
+        chapters: String, progress: Double?, isFinished: Bool, weights: [Int]? = nil
+    ) -> String? {
         let fraction: Double? = isFinished ? 1 : progress
         guard let fraction, fraction > 0 else { return nil }
         let percent = Int((min(fraction, 1) * 100).rounded())
         let posted = SavedWork.postedChapterCount(from: chapters)
         guard posted > 0 else { return "\(percent)%" }
-        let chapter = readingChapter(posted: posted, progress: fraction, weights: nil)
+        let chapter = readingChapter(posted: posted, progress: fraction, weights: weights?.map(Double.init))
         return "Ch \(chapter) · \(percent)%"
     }
 
-    /// 1-based story chapter that contains `progress` across equal posted chapters,
+    /// 1-based story chapter that contains `progress` across the posted chapters (equal
+    /// without `weights`, which are Readium positions per chapter),
     /// or the last posted chapter when the work is finished.
     static func readingChapter(posted: Int, progress: Double, weights: [Double]?) -> Int {
         guard posted > 0 else { return 1 }
@@ -219,6 +228,7 @@ enum ChapterBarModel {
         progress: Double?,
         isFinished: Bool = false,
         weights: [Int]?,
+        heights: [Int]? = nil,
         newChapterCount: Int = 0
     ) -> [ChapterBarItem] {
         let posted = SavedWork.postedChapterCount(from: chapters)
@@ -230,6 +240,7 @@ enum ChapterBarModel {
             posted: posted,
             progress: fraction,
             weights: lengths,
+            heights: heights?.map(Double.init),
             newChapterCount: newChapterCount
         )
     }

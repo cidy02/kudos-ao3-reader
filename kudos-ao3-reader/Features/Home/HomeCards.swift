@@ -7,7 +7,8 @@ enum WorkCoverMetadataStyle: Equatable {
 }
 
 enum WorkCoverMetadata {
-    static func reading(chapters: String, progress: Double) -> String {
+    /// `weights`: Readium positions per chapter (`ChapterLengthCache`); nil counts chapters as equal.
+    static func reading(chapters: String, progress: Double, weights: [Int]? = nil) -> String {
         let posted = SavedWork.postedChapterCount(from: chapters)
         let total = SavedWork.totalChapterCount(from: chapters)
         let fraction = min(max(progress, 0), 1)
@@ -15,7 +16,7 @@ enum WorkCoverMetadata {
         if posted > 0 {
             // N is the chapter being read, the same index the Resume card uses.
             let current = ChapterBarGeometry.readingChapter(
-                posted: posted, progress: fraction, weights: nil
+                posted: posted, progress: fraction, weights: weights?.map(Double.init)
             )
             parts.append(total.map { "Ch \(current) of \($0)" } ?? "Ch \(current)")
         }
@@ -55,13 +56,14 @@ enum WorkCoverMetadata {
         progress: Double?,
         chapters: String,
         footer: String?,
-        words: Int?
+        words: Int?,
+        weights: [Int]? = nil
     ) -> String? {
         if style == .downloaded {
             return downloaded(date: downloadedDate, size: downloadedSize)
         }
         if let progress {
-            return reading(chapters: chapters, progress: progress)
+            return reading(chapters: chapters, progress: progress, weights: weights)
         }
         if let footer, updateBadge(from: footer) == nil { return footer }
         return summary(words: words, chapters: chapters)
@@ -103,6 +105,8 @@ struct WorkCoverCard: View {
 
     @Environment(DownloadQueue.self) private var downloads
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    /// Measured chapters, only while the card shows "Ch N" (a reading position).
+    @State private var chapterLengths: ChapterLengths?
     /// Set per tab stack; the pushed reader zooms out of this card. See
     /// `WorkCardZoomTransition.swift`.
     @Environment(\.workCardTransitionNamespace) private var zoomNamespace
@@ -148,6 +152,11 @@ struct WorkCoverCard: View {
         // The reader pushed from this card zooms out of it, and collapses back into
         // it on dismiss. No-ops where no namespace is provided.
         .workCardZoomSource(work.zoomKey, in: zoomNamespace)
+        // Only a card that prints "Ch N" needs the measured chapters.
+        .task(id: progressValue == nil || metadataStyle == .downloaded ? "none" : ChapterLengthCache.taskKey(for: work)) {
+            guard progressValue != nil, metadataStyle != .downloaded else { chapterLengths = nil; return }
+            chapterLengths = await ChapterLengthCache.lengths(for: work)
+        }
     }
 
     private var cardStats: some View {
@@ -246,7 +255,8 @@ struct WorkCoverCard: View {
             progress: progressValue,
             chapters: work.chapters,
             footer: footer,
-            words: work.wordCount
+            words: work.wordCount,
+            weights: chapterLengths?.positions
         )
     }
 
