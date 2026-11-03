@@ -35,17 +35,20 @@ struct SettingsAppearancePage: View {
     var body: some View {
         SettingsPageForm(route: .appearance) {
             Section {
-                ReaderThemePicker(title: "App Theme", selection: appThemeBinding)
+                if !themeManager.matchAppAndReader {
+                    Text("App Theme")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                ThemePreviewTilePicker(selection: appThemeBinding)
                 Toggle("Match App & Reader Theme", isOn: matchThemeBinding).accentFill()
                 if !themeManager.matchAppAndReader {
-                    ReaderThemePicker(title: "Reader Theme", selection: readerThemeBinding)
+                    Text("Reader Theme")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    ThemePreviewTilePicker(selection: readerThemeBinding)
                 }
                 #if os(iOS)
-                Button {
-                    showCustomize = true
-                } label: {
-                    Label("Customize Theme…", systemImage: "slider.horizontal.3")
-                }
                 TextSizeSlider()
                 #endif
             } header: {
@@ -68,6 +71,25 @@ struct SettingsAppearancePage: View {
                 Text("Delete and other destructive actions stay system red with every colour. "
                     + "Sepia keeps its warm tint.")
             }
+
+            #if os(iOS)
+            Section {
+                Button {
+                    showCustomize = true
+                } label: {
+                    HStack {
+                        Text("Customize Theme")
+                            .foregroundStyle(.primary)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(Color.secondary.opacity(0.6))
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            #endif
         }
         .alert("Use a Custom Colour?", isPresented: $showCustomWarning) {
             Button("Choose a Colour") {
@@ -107,6 +129,119 @@ struct SettingsAppearancePage: View {
                 .presentationDragIndicator(.visible)
         }
         #endif
+    }
+}
+
+/// Four tappable preview tiles (Light, Sepia, Dark, OLED) with a mock page in that theme's
+/// background and text colors, the theme title, and an accentFill selection ring (board 48).
+struct ThemePreviewTilePicker: View {
+    @Binding var selection: ReaderTheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    /// VoiceOver label for a theme tile: "Light theme", etc.
+    static func accessibilityLabel(for theme: ReaderTheme) -> String {
+        "\(theme.title) theme"
+    }
+
+    /// Number of grid columns: 2 at accessibility sizes (2x2), 4 otherwise (1x4).
+    static func columnCount(isAccessibilitySize: Bool) -> Int {
+        isAccessibilitySize ? 2 : 4
+    }
+
+    private var columns: [GridItem] {
+        let count = Self.columnCount(isAccessibilitySize: dynamicTypeSize.isAccessibilitySize)
+        return Array(repeating: GridItem(.flexible(), spacing: 10), count: count)
+    }
+
+    var body: some View {
+        LazyVGrid(columns: columns, spacing: 10) {
+            ForEach(ReaderTheme.allCases) { theme in
+                ThemePreviewTile(
+                    theme: theme,
+                    isSelected: selection == theme,
+                    onSelect: { selection = theme }
+                )
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+/// An individual theme tile: mock page with proportional lines in the theme's colors,
+/// the theme name below, and an accent-tinted ring when selected.
+struct ThemePreviewTile: View {
+    let theme: ReaderTheme
+    let isSelected: Bool
+    let onSelect: () -> Void
+
+    @Environment(\.accentFill) private var accentFill
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        Button(action: onSelect) {
+            VStack(spacing: 6) {
+                ThemePreviewPageMock(theme: theme)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 12)
+                            .strokeBorder(
+                                isSelected ? accentFill : Color.secondary.opacity(0.3),
+                                lineWidth: isSelected ? 2.5 : 0.5
+                            )
+                    }
+                Text(theme.title)
+                    .font(.footnote.weight(isSelected ? .semibold : .regular))
+                    .foregroundStyle(.primary)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
+                    .minimumScaleFactor(0.8)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(ThemePreviewTilePicker.accessibilityLabel(for: theme))
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
+/// Small mock page drawing four left-aligned text lines of varying widths (70%, 90%, 80%, 60%)
+/// in the theme's own background and text colors (board 48).
+struct ThemePreviewPageMock: View {
+    let theme: ReaderTheme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            FractionalCapsule(fraction: 0.70)
+                .fill(theme.textColor.opacity(0.80))
+                .frame(height: 5)
+            FractionalCapsule(fraction: 0.90)
+                .fill(theme.textColor.opacity(0.45))
+                .frame(height: 5)
+            FractionalCapsule(fraction: 0.80)
+                .fill(theme.textColor.opacity(0.45))
+                .frame(height: 5)
+            FractionalCapsule(fraction: 0.60)
+                .fill(theme.textColor.opacity(0.45))
+                .frame(height: 5)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .frame(height: 88)
+        .background(theme.backgroundColor)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+/// A horizontal capsule shape that spans a fraction of the available width from the leading edge.
+struct FractionalCapsule: Shape {
+    let fraction: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        let width = max(0, rect.width * fraction)
+        let lineRect = CGRect(x: rect.minX, y: rect.minY, width: width, height: rect.height)
+        let radius = rect.height / 2
+        return Path(roundedRect: lineRect, cornerRadius: radius)
     }
 }
 
