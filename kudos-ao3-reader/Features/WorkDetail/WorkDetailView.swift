@@ -101,6 +101,8 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     }
     #endif
     @State private var readerWork: SavedWork? // non-nil → push the reader
+    /// The speaker button's push: the reader starts Read Aloud once the book is ready.
+    @State private var readerStartsReadAloud = false
     @State var queuingSeries = false
     @State var showingAddToQueue = false
     @State private var pendingDelete: SavedWork?
@@ -212,7 +214,9 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         }
         // BookReaderView routes to the Readium navigator on iOS, the legacy reader on
         // macOS — so the unified detail opens the right reader on this branch.
-        .navigationDestination(item: $readerWork) { BookReaderView(work: $0) }
+        .navigationDestination(item: $readerWork) {
+            BookReaderView(work: $0, startsReadAloud: readerStartsReadAloud)
+        }
         .sheet(isPresented: $showingAddToCollection) {
             if let work = localWork {
                 AddToCollectionView(work: work)
@@ -393,8 +397,8 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             localWork: localWork,
             isBusy: working,
             action: read,
-            // T-458: no entry starts speech, and macOS has no TTS.
-            readAloud: read,
+            // The card shows the speaker on iOS only (macOS has no TTS).
+            readAloud: readAloud,
             contents: openContents,
             updateDownload: resumeUpdate
         )
@@ -1242,11 +1246,18 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         read(openingContents: false)
     }
 
+    /// Opens the reader and starts Read Aloud there, through the reader's own start
+    /// path (`BookReaderView.startsReadAloud`), as Home's speaker does.
+    private func readAloud() {
+        read(openingContents: false, startsReadAloud: true)
+    }
+
     /// `openingContents` arms the reader's chapter sheet only after the reader
     /// itself exists. A failed download must not leave `.readerChapters`
     /// selected. Dismissing onto the reader this detail was opened from does:
     /// that reader is already there.
-    private func read(openingContents: Bool) {
+    private func read(openingContents: Bool, startsReadAloud: Bool = false) {
+        readerStartsReadAloud = startsReadAloud
         if openedFromReader {
             // Already reading this exact work one screen down — reopening it
             // here would stack a second reader over the live one (A2).

@@ -763,8 +763,11 @@ extension WorkResumeCard {
     private var actionContents: some View {
         if variant == .detail {
             primaryButton
-            // T-458: the circle stays hidden until Read Aloud can start speech.
-            // Detail puts it after Resume; Home and Up next keep it before.
+            // Board 19: the speaker sits beside Resume. Detail puts it after
+            // Resume; Home and Up next keep it before.
+            #if os(iOS)
+            readAloudCircle
+            #endif
             if model.newChapterCount > 0, let onUpdate {
                 updateCircle(onUpdate)
             }
