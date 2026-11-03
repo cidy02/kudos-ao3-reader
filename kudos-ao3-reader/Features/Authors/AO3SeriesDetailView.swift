@@ -15,6 +15,8 @@ struct AO3SeriesDetailView: View {
     @Environment(AppRouter.self) private var router
     @Environment(PrivacyGate.self) private var gate
     @Environment(ThemeManager.self) private var theme
+    @Environment(\.modelContext) private var context
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }) private var localWorks: [SavedWork]
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
@@ -40,6 +42,10 @@ struct AO3SeriesDetailView: View {
     @State private var isReorderingSeries = false
     /// The title this series was last saved with from here, until the list behind is read again.
     @State private var savedTitle: String?
+    /// "Preserve all N" — one run at a time; `preserveStatus` is its progress, then its result.
+    @State private var preserveTask: Task<Void, Never>?
+    @State private var preserveStatus: String?
+    @State private var isConfirmingPreserve = false
 
     /// Whether the signed-in account is one of this series' creators — the gate on
     /// 1br's Edit series.
@@ -55,8 +61,8 @@ struct AO3SeriesDetailView: View {
     var body: some View {
         List {
             Section {
-                AO3SeriesRow(series: shownSeries)
-                    .cardRow()
+                seriesHeader
+                    .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
             }
 
             if isShowingStaleCache {
@@ -164,6 +170,146 @@ struct AO3SeriesDetailView: View {
                     startLoad(page: 1, replace: true, bypassCache: true)
                 }
             }
+    }
+
+    // MARK: Header (board 24)
+
+    /// Fandom eyebrow, title, author, facts, summary, then the two actions.
+    private var seriesHeader: some View {
+        let shown = shownSeries
+        return VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text(Self.eyebrow(for: shown))
+                    .font(.caption.weight(.bold))
+                    .tracking(1.1)
+                    .foregroundStyle(seriesPalette.accent)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
+                Capsule()
+                    .fill(seriesPalette.accent)
+                    .frame(width: 22, height: 2.5)
+            }
+            Text(shown.title)
+                .font(.largeTitle.bold())
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+            AO3AuthorBylineView(
+                names: shown.creatorNames, identities: shown.creatorIdentities,
+                includesBy: false, compact: !dynamicTypeSize.isAccessibilitySize
+            )
+            Text(Self.facts(for: shown))
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if !shown.summary.isEmpty {
+                Text(shown.summary)
+                    .font(.subheadline)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            seriesActions
+            if let preserveStatus {
+                Text(preserveStatus)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private var seriesActions: some View {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+            : AnyLayout(HStackLayout(spacing: 12))
+        return layout {
+            // No native series subscribe exists (AO3's form is not in the app, and the
+            // networking policy forbids a new request type), so this opens the page on AO3.
+            // The arrow says it leaves the app.
+            Button { router.open(series.url) } label: {
+                HStack(spacing: 4) {
+                    Text("Subscribe")
+                    Image(systemName: "arrow.up.forward").imageScale(.small)
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.kudosPrimaryConfirm)
+            .accessibilityHint("Opens this series on AO3.")
+            // One tap can download a whole series, so it asks first; while it runs it is Cancel.
+            Button {
+                if let preserveTask {
+                    preserveTask.cancel()
+                    preserveStatus = "Cancelling series preservation…"
+                } else {
+                    isConfirmingPreserve = true
+                }
+            } label: {
+                Text(preserveTask == nil ? Self.preserveTitle(count: preserveCount) : "Cancel")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.kudosSecondaryConfirm)
+            .confirmationDialog(
+                Self.preserveTitle(count: preserveCount) + "?",
+                isPresented: $isConfirmingPreserve, titleVisibility: .visible
+            ) {
+                Button("Preserve", action: preserveAll)
+            } message: {
+                Text("Downloads every work in this series to Want to Read. Works you already have are skipped.")
+            }
+        }
+    }
+
+    private var preserveCount: Int? { shownSeries.workCount ?? (works.isEmpty ? nil : works.count) }
+
+    /// The fandom line above the title; "Series" when AO3 printed none.
+    static func eyebrow(for series: AO3SeriesSummary) -> String {
+        let names = series.fandoms.map(FandomDisplayName.bareTitle)
+        return (names.isEmpty ? "Series" : names.joined(separator: ", ")).uppercased()
+    }
+
+    /// Every fact the old card showed, in AO3's order: counts, restricted, status, date.
+    static func facts(for series: AO3SeriesSummary) -> String {
+        var parts: [String] = []
+        if let count = series.workCount { parts.append(count == 1 ? "1 work" : "\(count) works") }
+        if let words = series.words { parts.append("\(words.formatted()) words") }
+        if let bookmarks = series.bookmarkCount {
+            parts.append(bookmarks == 1 ? "1 bookmark" : "\(bookmarks.formatted()) bookmarks")
+        }
+        if series.isRestricted { parts.append("restricted") }
+        if let complete = series.isComplete { parts.append(complete ? "complete" : "in progress") }
+        if !series.dateUpdated.isEmpty { parts.append(series.dateUpdated) }
+        return parts.joined(separator: " · ")
+    }
+
+    static func preserveTitle(count: Int?) -> String {
+        count.map { "Preserve all \($0)" } ?? "Preserve all"
+    }
+
+    /// Downloads every work in the series into Want to Read through the same service Work
+    /// Detail uses. The works already loaded are used when they are the whole series;
+    /// otherwise the download queue's existing `seriesWorks` walk reads the other pages.
+    private func preserveAll() {
+        guard preserveTask == nil else { return }
+        preserveStatus = "Preserving series…"
+        preserveTask = Task { @MainActor in
+            defer { preserveTask = nil }
+            var summaries = works
+            if currentPage < totalPages || works.isEmpty {
+                do {
+                    summaries = try await AO3Client.shared.seriesWorks(seriesURL: series.url)
+                } catch {
+                    preserveStatus = UserFacingError.message(for: error)
+                    return
+                }
+            }
+            let result = await ReadingQueueService.preserveSeries(
+                summaries, in: context,
+                progress: { preserveStatus = "Preserving series \($0.completed) of \($0.total)…" }
+            )
+            let parts = result.summaryParts(verb: "preserved")
+            preserveStatus = result.cancelled > 0
+                ? "Series preservation cancelled. Preserved \(result.preserved)."
+                : result.total == 0 ? "No series works were found."
+                : parts.isEmpty ? "Series works are already preserved."
+                : "Series preservation complete: " + parts.joined(separator: ", ") + "."
+        }
     }
 
     private var shownSeries: AO3SeriesSummary {
