@@ -488,10 +488,9 @@ struct AO3WorkRow: View {
         let button = Button {
             toggleExpanded()
         } label: {
-            Image(systemName: "chevron.down")
+            // No rotation animation (see WorkRowExpandButton).
+            Image(systemName: expanded ? "chevron.up" : "chevron.down")
                 .font(.caption.weight(.semibold))
-                .rotationEffect(.degrees(expanded ? 180 : 0))
-                .animation(unlessReduced: .easeInOut(duration: 0.2), value: expanded)
         }
         if presentation == .searchLedger {
             // Spec 1k draws this inline with the kicker as a bare 20pt glyph; it is
