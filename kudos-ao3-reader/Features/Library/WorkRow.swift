@@ -412,10 +412,10 @@ struct WorkRowExpandButton: View {
             // row/header ghosting (filmed 2026-11-03); keep relayout instant.
             expanded.toggle()
         } label: {
-            Image(systemName: "chevron.down")
+            // No rotation animation: on collapse List rebuilds the row and any
+            // animation here slid the whole button in from the top (filmed 2026-11-03).
+            Image(systemName: expanded ? "chevron.up" : "chevron.down")
                 .font(.caption.weight(.semibold))
-                .rotationEffect(.degrees(expanded ? 180 : 0))
-                .animation(unlessReduced: .easeInOut(duration: 0.2), value: expanded)
         }
         .buttonStyle(.kudosSecondaryCircle)
         .minimumHitTarget()
@@ -433,16 +433,12 @@ struct WorkRowExpandedDetails<Content: View>: View {
     @State private var isVisible = false
 
     var body: some View {
+        // Scoped to opacity: a withAnimation here also animated the List's late
+        // relayout, sliding the row's chevron ~40 px (filmed 2026-11-03).
         content()
-            .opacity(isVisible || reduceMotion || !animate ? 1 : 0)
-            .onAppear {
-                guard animate else {
-                    isVisible = true
-                    return
-                }
-                withAnimationUnlessReduced(.easeOut(duration: 0.2), reduceMotion: reduceMotion) {
-                    isVisible = true
-                }
+            .animation(reduceMotion || !animate ? nil : .easeOut(duration: 0.2)) {
+                $0.opacity(isVisible || reduceMotion || !animate ? 1 : 0)
             }
+            .onAppear { isVisible = true }
     }
 }
