@@ -127,4 +127,21 @@ struct CommentsHeaderLayoutTests {
         #expect(CommentsHeaderLayout.isWorkConcealed(rating: "Mature", hideMature: true, isRevealed: true) == false)
         #expect(CommentsHeaderLayout.isWorkConcealed(rating: "", hideMature: true, isRevealed: false) == false)
     }
+
+    @Test func shortChapterLabelUsesBoardForm() {
+        #expect(CommentsHeaderLayout.shortChapterLabel("Chapter 7") == "Ch 7")
+        #expect(CommentsHeaderLayout.shortChapterLabel("Chapter 12: The Flats") == "Ch 12")
+        #expect(CommentsHeaderLayout.shortChapterLabel("Prologue") == "Prologue")
+        #expect(CommentsHeaderLayout.shortChapterLabel("Chapter ") == "Chapter ")
+    }
+
+    @Test func shortCommentAgeUsesBoardUnits() {
+        #expect(AO3CommentTimestamp.shortAge(seconds: 5) == "now")
+        #expect(AO3CommentTimestamp.shortAge(seconds: 5 * 60) == "5m")
+        #expect(AO3CommentTimestamp.shortAge(seconds: 20 * 3600) == "20h")
+        #expect(AO3CommentTimestamp.shortAge(seconds: 2 * 86_400) == "2d")
+        #expect(AO3CommentTimestamp.shortAge(seconds: 125 * 86_400) == "4mo")
+        #expect(AO3CommentTimestamp.shortAge(seconds: 800 * 86_400) == "2y")
+        #expect(AO3CommentTimestamp.shortText(rawText: "garbled", date: nil) == "garbled")
+    }
 }

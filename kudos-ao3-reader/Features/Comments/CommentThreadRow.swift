@@ -1106,7 +1106,7 @@ private struct CommentPostRow: View {
         // free, and this runs on every body pass.
         let timestamp = comment.postedText.isEmpty
             ? ""
-            : AO3CommentTimestamp.displayText(
+            : AO3CommentTimestamp.shortText(
                 rawText: comment.postedText, date: comment.postedAt
             )
 
@@ -1410,11 +1410,17 @@ private struct CommentPostRow: View {
     }
 
     private func timestampText(_ timestamp: String) -> some View {
-        Text(timestamp)
+        // Board 21 draws the short age ("2d"); the absolute date stays one hover/VoiceOver away.
+        let absolute = AO3CommentTimestamp.displayText(
+            rawText: comment.postedText, date: comment.postedAt
+        )
+        return Text(timestamp)
             .font(.caption2)
             .foregroundStyle(.secondary)
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
+            .accessibilityLabel(absolute)
+            .help(absolute)
     }
 
     @ViewBuilder
@@ -1424,8 +1430,9 @@ private struct CommentPostRow: View {
         if showChapterBadge,
            let chapter = comment.chapterLabel?.trimmingCharacters(in: .whitespacesAndNewlines),
            !chapter.isEmpty {
-            Text(chapter)
+            Text(CommentsHeaderLayout.shortChapterLabel(chapter))
                 .font(.caption2)
+                .accessibilityLabel(chapter)
                 .padding(.horizontal, 7)
                 .padding(.vertical, 2)
                 .background(.quaternary, in: Capsule())
@@ -1471,7 +1478,12 @@ private struct CommentPostRow: View {
                 // comment would be the heaviest thing in the column. The word, not
                 // its padding, lines up with the prose above it.
                 Button { handlers.onReply(comment) } label: {
-                    Label("Reply", systemImage: "arrowshape.turn.up.left")
+                    // "↩ Reply" set tight, as board 21 draws it (an inherited label style drew the
+                    // arrow alone, and the default title-and-icon gap left them far apart).
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrowshape.turn.up.left")
+                        Text("Reply")
+                    }
                         .font(.caption.weight(.medium))
                         .lineLimit(1)
                         .fixedSize()
