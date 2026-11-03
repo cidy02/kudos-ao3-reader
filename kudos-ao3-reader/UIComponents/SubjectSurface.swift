@@ -1008,6 +1008,7 @@ struct WorkProgressRing: View {
                 .trim(from: 0, to: clamped)
                 .stroke(progressColor, style: StrokeStyle(lineWidth: stroke, lineCap: .round))
                 .rotationEffect(.degrees(-90))
+                .animation(unlessReduced: .smooth, value: clamped)
             VStack(spacing: 1) {
                 // An unread work has nothing to report: an empty ring, not a
                 // "0%" that reads like a session that never happened.
@@ -1015,6 +1016,7 @@ struct WorkProgressRing: View {
                     Text("\(percent)%")
                         .font(.system(size: diameter * 15 / 68, weight: .semibold))
                         .monospacedDigit()
+                        .contentTransition(.numericText())
                         .lineLimit(1)
                         .minimumScaleFactor(0.6)
                 }
@@ -1056,7 +1058,7 @@ private struct DownloadDimming: ViewModifier {
         content
             .saturation(dimmed ? 0 : 1)
             .brightness(dimmed ? -0.12 : 0)
-            .animation(.easeInOut(duration: 0.25), value: dimmed)
+            .animation(unlessReduced: .easeInOut(duration: 0.25), value: dimmed)
     }
 }
 
@@ -1210,6 +1212,7 @@ struct GlassCircleButton<Label: View>: View {
     @Environment(ThemeManager.self) private var themeManager
     @Environment(\.accentFill) private var fill
     @Environment(\.accentInk) private var ink
+    @ScaledMetric(relativeTo: .caption2) private var badgeFontSize: CGFloat = 9.5
 
     var body: some View {
         let theme = themeManager.appTheme
@@ -1232,7 +1235,7 @@ struct GlassCircleButton<Label: View>: View {
                 .overlay(alignment: .topTrailing) {
                     if let badge {
                         Text(badge)
-                            .font(.system(size: 9.5, weight: .bold))
+                            .font(.system(size: badgeFontSize, weight: .bold))
                             .monospacedDigit()
                             .foregroundStyle(theme.cardBackdrop)
                             .padding(.horizontal, 4)

@@ -23,7 +23,7 @@ struct SettingsIconTile: View {
             RoundedRectangle(cornerRadius: 7, style: .continuous)
                 .fill(color)
             Image(systemName: systemImage)
-                .font(.system(size: 15, weight: .semibold))
+                .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.white)
         }
         .frame(width: 29, height: 29)
@@ -153,14 +153,14 @@ struct FilterSymbolChipCard: View {
                     .fill(theme.appTheme.includeColor)
                     .frame(width: 18, height: 18)
                 Image(systemName: "checkmark")
-                    .font(.system(size: 10, weight: .bold))
+                    .font(.caption2.weight(.bold))
                     .foregroundStyle(.white)
             case .excluded:
                 Circle()
                     .fill(theme.appTheme.excludeColor)
                     .frame(width: 18, height: 18)
                 Image(systemName: "minus")
-                    .font(.system(size: 10, weight: .bold))
+                    .font(.caption2.weight(.bold))
                     .foregroundStyle(.white)
             }
         }
@@ -236,10 +236,10 @@ struct ActiveFilterChipView: View {
                 switch item.kind {
                 case .included:
                     Image(systemName: "checkmark")
-                        .font(.system(size: 11, weight: .bold))
+                        .font(.caption2.weight(.bold))
                 case .excluded:
                     Image(systemName: "minus")
-                        .font(.system(size: 11, weight: .bold))
+                        .font(.caption2.weight(.bold))
                 case .facetValue:
                     EmptyView()
                 }

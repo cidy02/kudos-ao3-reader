@@ -18,6 +18,7 @@ struct AO3HistoryWorksBrowser: View {
     let isLoading: Bool
     @Binding var filter: AO3HistoryProgressFilter
     let onPage: (Int) -> Void
+    var onRefresh: (() async -> Void)? = nil
     let onDelete: (CanonicalWork) -> Void
 
     private var groups: [AO3HistoryVisitGroup<CanonicalWork>] {
@@ -34,6 +35,9 @@ struct AO3HistoryWorksBrowser: View {
             } else {
                 detailedBody
             }
+        }
+        .refreshable {
+            await onRefresh?()
         }
     }
 

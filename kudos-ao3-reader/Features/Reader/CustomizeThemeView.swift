@@ -174,7 +174,7 @@ struct CustomizeThemeView: View {
                 customPaperWell
             }
         }
-        .padding(.horizontal, 20)
+        .padding(.horizontal, SubjectMetrics.gutter)
         .padding(.top, 10)
         .padding(.bottom, 14)
         // Warm base under Sepia (matches the themed Form); system grouped otherwise.

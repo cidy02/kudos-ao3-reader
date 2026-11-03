@@ -404,7 +404,7 @@ private struct AccentCustomWell: View {
                 .fill(gap)
                 .frame(width: 24, height: 24)
             Image(systemName: "plus")
-                .font(.system(size: 12, weight: .bold))
+                .font(.caption2.weight(.bold))
                 // Not `label(on:)`: on Light the gap is a dynamic system colour,
                 // which resolves against the phone's scheme, not the app's.
                 .foregroundStyle(themeManager.appTheme.isDarkFamily ? Color.white : Color(hex: "#1C1C1E") ?? .black)

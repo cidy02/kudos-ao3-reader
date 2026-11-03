@@ -16,6 +16,7 @@ struct FilterButton: View {
     /// page still shows *why* the list is empty. 0 hides the number; the filled
     /// glyph still marks an active set.
     var badgeCount: Int = 0
+    @ScaledMetric(relativeTo: .caption2) private var badgeFontSize: CGFloat = 9
 
     var body: some View {
         Button { showingFilters = true } label: {
@@ -34,8 +35,9 @@ struct FilterButton: View {
                 .overlay(alignment: .topTrailing) {
                     if badgeCount > 0 {
                         Text(badgeCount > 99 ? "99+" : "\(badgeCount)")
-                            .font(.system(size: 9, weight: .bold))
+                            .font(.system(size: badgeFontSize, weight: .bold))
                             .monospacedDigit()
+                            .contentTransition(.numericText())
                             .foregroundStyle(.white)
                             .padding(.horizontal, 3)
                             .frame(minWidth: 15, minHeight: 15)
@@ -93,10 +95,11 @@ struct WorkListMoreMenu<Content: View>: View {
 /// page.
 struct ExpandAllMenuItem: View {
     @Binding var expandAll: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Button {
-            withAnimation(.easeInOut(duration: 0.2)) { expandAll.toggle() }
+            withAnimationUnlessReduced(.easeInOut(duration: 0.2), reduceMotion: reduceMotion) { expandAll.toggle() }
         } label: {
             Label(expandAll ? "Collapse All Cards" : "Expand All Cards",
                   systemImage: expandAll ? "rectangle.compress.vertical" : "rectangle.expand.vertical")

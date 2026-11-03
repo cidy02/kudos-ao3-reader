@@ -207,6 +207,7 @@ struct AO3SubscriptionsWorksBrowser: View {
     /// The parent owns it: its toolbar acts on Works only.
     @Binding var scope: AO3SubscriptionsScope
     let onPage: (Int) -> Void
+    var onRefresh: (() async -> Void)? = nil
     let onUnsubscribe: (CanonicalWork) -> Void
     let onEnriched: (AO3WorkSummary) -> Void
     @ScaledMetric(relativeTo: .caption) private var footerSize: CGFloat = 11.5
@@ -262,6 +263,9 @@ struct AO3SubscriptionsWorksBrowser: View {
             }
         }
         .cardList()
+        .refreshable {
+            await onRefresh?()
+        }
         .subjectScreenWash(palette: palette, role: .content)
     }
 

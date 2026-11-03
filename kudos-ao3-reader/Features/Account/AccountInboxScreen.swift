@@ -97,6 +97,9 @@ struct AccountInboxScreen: View {
             }
         }
         .cardList()
+        .refreshable {
+            await model.refresh(auth: auth)
+        }
         .subjectScreenWash(title: "Inbox", palette: theme.scopePalette)
         .toolbar { toolbarContent }
         #if os(iOS)

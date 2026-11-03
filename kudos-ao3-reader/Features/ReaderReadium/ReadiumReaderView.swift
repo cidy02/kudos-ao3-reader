@@ -409,7 +409,7 @@ struct ReadiumReaderView: View {
             .statusBarHidden(!chromeVisible)
             .persistentSystemOverlays(chromeVisible ? .automatic : .hidden)
             .animation(unlessReduced: .easeInOut(duration: 0.25), value: book.chromeHidden)
-            .animation(.easeInOut(duration: 0.25), value: speech.isSessionActive)
+            .animation(unlessReduced: .easeInOut(duration: 0.25), value: speech.isSessionActive)
             // Readium's WebView swallows the system edge-swipe; add our own.
             .edgeSwipeToGoBack { dismissReader() }
             .task(id: bookLoadToken) {
@@ -1346,7 +1346,7 @@ struct ReadiumReaderView: View {
             isEmphasized: speechActive
         ) {
             playReaderToggleHaptic()
-            withAnimation(.snappy(duration: 0.35)) {
+            withAnimationUnlessReduced(.snappy(duration: 0.35), reduceMotion: reduceMotion) {
                 toggleReadingAloud()
             }
         }
@@ -1368,7 +1368,7 @@ struct ReadiumReaderView: View {
             isEmphasized: rotationLocked
         ) {
             playReaderToggleHaptic()
-            withAnimation(.snappy(duration: 0.35)) {
+            withAnimationUnlessReduced(.snappy(duration: 0.35), reduceMotion: reduceMotion) {
                 orientationLock.toggle(in: ReaderOrientationLock.activeScene)
             }
         })

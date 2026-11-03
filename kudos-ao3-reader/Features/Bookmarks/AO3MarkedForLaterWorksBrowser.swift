@@ -232,6 +232,7 @@ struct AO3MarkedForLaterWorksBrowser: View {
     /// An unmark is in flight; the buttons wait for it (one write at a time).
     var isUnmarking = false
     let onPage: (Int) -> Void
+    var onRefresh: (() async -> Void)? = nil
     /// 1o.4: AO3's `mark_as_read`. The host runs the write and drops the row.
     var onUnmark: (CanonicalWork) -> Void = { _ in }
 
@@ -280,6 +281,9 @@ struct AO3MarkedForLaterWorksBrowser: View {
                 if showPagination { paginationBar }
             }
             .padding(.vertical, 8)
+        }
+        .refreshable {
+            await onRefresh?()
         }
         .subjectScreenWash(palette: palette, role: .content)
     }

@@ -123,7 +123,7 @@ struct ReaderFanMenu: View {
             }
         } label: {
             Image(systemName: "ellipsis")
-                .font(.system(size: 18, weight: .semibold))
+                .font(.headline)
                 .foregroundStyle(Color.primary)
                 .frame(width: 44, height: 44)
                 .contentShape(Circle())

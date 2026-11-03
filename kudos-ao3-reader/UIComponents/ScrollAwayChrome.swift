@@ -9,6 +9,7 @@ import SwiftUI
 struct ScrollAwayTopChrome: ViewModifier {
     var external: Binding<Bool>?
     @State private var own = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var isHidden: Bool { external?.wrappedValue ?? own }
 
@@ -38,7 +39,7 @@ struct ScrollAwayTopChrome: ViewModifier {
             } action: { old, new in
                 let next = Self.hides(isHidden, from: old.offset, to: new.offset, fromTop: new.fromTop)
                 guard next != isHidden else { return }
-                withAnimation(.easeInOut(duration: 0.22)) {
+                withAnimationUnlessReduced(.easeInOut(duration: 0.22), reduceMotion: reduceMotion) {
                     if let external { external.wrappedValue = next } else { own = next }
                 }
             }

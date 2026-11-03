@@ -392,6 +392,8 @@ struct SubjectSegmentedControl<Value: Hashable>: View {
     @Binding var selection: Value
 
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Namespace private var selectionAnimation
 
     var body: some View {
         HStack(spacing: 2) {
@@ -413,7 +415,9 @@ struct SubjectSegmentedControl<Value: Hashable>: View {
     private func segment(for option: Value) -> some View {
         let isSelected: Bool = option == selection
         return Button {
-            selection = option
+            withAnimationUnlessReduced(.snappy(duration: 0.25), reduceMotion: reduceMotion) {
+                selection = option
+            }
         } label: {
             Text(title(option))
                 .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
@@ -434,6 +438,7 @@ struct SubjectSegmentedControl<Value: Hashable>: View {
         if isSelected {
             Capsule()
                 .fill(themeManager.appTheme.glassFill(0.16))
+                .matchedGeometryEffect(id: "SubjectSegmentedControlSelection", in: selectionAnimation)
         }
     }
 }
