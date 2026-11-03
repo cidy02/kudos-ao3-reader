@@ -39,13 +39,6 @@ struct AccountInboxScreen: View {
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
                 }
-
-                if !availablePills.isEmpty {
-                    pillRail
-                        .listRowInsets(EdgeInsets(top: 12, leading: 0, bottom: 4, trailing: 0))
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
-                }
             }
 
             Section {
@@ -124,32 +117,36 @@ struct AccountInboxScreen: View {
         AO3InboxPill.available(in: model.filterForm)
     }
 
-    /// 1l's All / Unread / Awaiting reply / Replied — AO3's own filters, so a
-    /// pill reloads page 1 from the server. The dashed chip opens the full sheet.
-    /// A pill waits while a page is on its way: the lit one names the rows shown.
+    /// A pill waits while a page is on its way: the checked one names the rows shown.
     private var isLoadingPage: Bool {
         if case .loading = model.phase { return true }
         return false
     }
 
-    private var pillRail: some View {
+    /// Board 40: the All / Unread / Awaiting reply / Replied choice lives in the
+    /// filter button's menu (AO3's own server-side filters, so a pick reloads
+    /// page 1); "More Filters…" opens the full sheet.
+    private var filterMenu: some View {
         let selected = AO3InboxPill.selected(in: model.currentFilterValues)
-        return SubjectFilterRail {
-            ForEach(availablePills) { pill in
-                Button {
-                    model.applyFilters(pill.values, auth: auth)
-                } label: {
-                    SubjectChip(
-                        text: pill.title,
-                        style: .pill(isSelected: selected == pill),
-                        palette: theme.scopePalette
-                    )
+        return Menu {
+            if !availablePills.isEmpty {
+                Picker("Show", selection: Binding(
+                    get: { selected },
+                    set: { if let pill = $0 { model.applyFilters(pill.values, auth: auth) } }
+                )) {
+                    ForEach(availablePills) { pill in
+                        Text(pill.title).tag(Optional(pill))
+                    }
                 }
-                .buttonStyle(.plain)
                 .disabled(model.isPerformingBulkAction || isLoadingPage)
-                .accessibilityAddTraits(selected == pill ? [.isButton, .isSelected] : .isButton)
             }
+            Button { showingFilters = true } label: {
+                Label("More Filters…", systemImage: "slider.horizontal.3")
+            }
+        } label: {
+            Label("Inbox Filters", systemImage: "line.3.horizontal.decrease")
         }
+        .labelStyle(.iconOnly)
     }
 
     /// 1l heads the page with what is waiting rather than only what it is.
@@ -157,11 +154,12 @@ struct AccountInboxScreen: View {
     /// see `AO3InboxTally.headerLine`.
     private var tally: String? {
         guard let total = model.totalComments else { return nil }
-        return AO3InboxTally.headerLine(
+        return AO3InboxTally.summaryLine(
             total: total,
             unread: model.unreadCount,
             awaitingOnPage: AO3InboxTally.awaitingReplyCount(model.items),
-            totalPages: model.totalPages
+            totalPages: model.totalPages,
+            showing: AO3InboxPill.selected(in: model.currentFilterValues)
         )
     }
 
@@ -215,25 +213,19 @@ struct AccountInboxScreen: View {
                 }
             #endif
         } else {
-            // Filter stays a button; Select lives in the "…", as on every other
-            // list (owner, 2026-10-01 — 1l draws it as its own glass button).
-            ActionToolbar(items: [
-                model.canFilter
-                    ? AnyView(ToolbarIconButton(
-                        title: "Inbox Filters",
-                        systemImage: "line.3.horizontal.decrease"
-                    ) {
-                        showingFilters = true
-                    })
-                    : nil,
-                model.canSelectItems
-                    ? AnyView(WorkListMoreMenu {
+            // Board 40: filter and "…" share one glass pill (no spacer between
+            // them). Select lives in the "…", as on every other list.
+            ToolbarItemGroup(placement: .primaryAction) {
+                if model.canFilter { filterMenu }
+                if model.canSelectItems {
+                    WorkListMoreMenu {
                         Button(action: model.beginSelection) {
                             Label("Select", systemImage: "checklist")
                         }
-                    })
-                    : nil
-            ].compactMap { $0 })
+                    }
+                    .labelStyle(.iconOnly)
+                }
+            }
         }
     }
 

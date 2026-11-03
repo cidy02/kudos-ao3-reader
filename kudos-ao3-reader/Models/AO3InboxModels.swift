@@ -290,6 +290,95 @@ nonisolated enum AO3InboxTally {
     }
 }
 
+extension AO3InboxTally {
+    /// Board 40's summary: the 1l header line, plus which filter is showing
+    /// ("… · showing Unread"). All is the unfiltered default, so it adds nothing.
+    static func summaryLine(
+        total: Int,
+        unread: Int?,
+        awaitingOnPage: Int,
+        totalPages: Int,
+        showing: AO3InboxPill?
+    ) -> String {
+        var line = headerLine(
+            total: total, unread: unread, awaitingOnPage: awaitingOnPage, totalPages: totalPages
+        )
+        if let showing, showing != .all { line += " · showing \(showing.title)" }
+        return line
+    }
+}
+
+/// Board 40's Mail-style time ("9:12", "Yesterday", "Mon", "Oct 20"). AO3 prints
+/// either an absolute stamp ("Mon 20 Oct 2026 9:12AM UTC") or, in older fixtures,
+/// a relative one ("3 days ago"); anything else is shown as AO3 wrote it.
+nonisolated enum AO3InboxTimeLabel {
+    struct Label: Equatable {
+        /// The short trailing text.
+        var display: String
+        /// For VoiceOver: the full date when known, else AO3's own words.
+        var spoken: String
+    }
+
+    static func label(
+        for raw: String,
+        now: Date = .now,
+        calendar: Calendar = .current,
+        locale: Locale = .current
+    ) -> Label? {
+        let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return nil }
+        guard let (date, isExact) = parse(text, now: now, calendar: calendar) else {
+            return Label(display: text, spoken: text)
+        }
+        let spoken = isExact
+            ? date.formatted(Date.FormatStyle(locale: locale, calendar: calendar, timeZone: calendar.timeZone)
+                .weekday(.wide).day().month(.wide).year().hour().minute())
+            : text
+        return Label(display: short(date, now: now, calendar: calendar, locale: locale), spoken: spoken)
+    }
+
+    static func short(_ date: Date, now: Date, calendar: Calendar, locale: Locale) -> String {
+        var calendar = calendar
+        calendar.locale = locale
+        let days = calendar.dateComponents(
+            [.day], from: calendar.startOfDay(for: date), to: calendar.startOfDay(for: now)
+        ).day ?? 0
+        let style = Date.FormatStyle(locale: locale, calendar: calendar, timeZone: calendar.timeZone)
+        switch days {
+        case ..<1: return date.formatted(style.hour().minute())
+        case 1: return String(localized: "Yesterday", locale: locale)
+        case 2...6: return date.formatted(style.weekday(.abbreviated))
+        default:
+            let sameYear = calendar.component(.year, from: date) == calendar.component(.year, from: now)
+            return sameYear
+                ? date.formatted(style.month(.abbreviated).day())
+                : date.formatted(style.month(.abbreviated).day().year())
+        }
+    }
+
+    private static func parse(_ text: String, now: Date, calendar: Calendar) -> (Date, Bool)? {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        for format in ["EEE d MMM yyyy h:mma z", "d MMM yyyy h:mma z", "EEE d MMM yyyy"] {
+            formatter.dateFormat = format
+            if let date = formatter.date(from: text) { return (date, true) }
+        }
+        // "3 days ago", "an hour ago", "1 week ago": approximate, so VoiceOver keeps AO3's words.
+        let words = text.lowercased().split(separator: " ")
+        guard words.count == 3, words[2] == "ago" else { return nil }
+        let amount = Int(words[0]) ?? (["a", "an"].contains(words[0]) ? 1 : nil)
+        let unit = words[1].hasSuffix("s") ? String(words[1].dropLast()) : String(words[1])
+        let component: Calendar.Component? = [
+            "minute": .minute, "hour": .hour, "day": .day, "week": .weekOfYear,
+            "month": .month, "year": .year
+        ][unit]
+        guard let amount, let component,
+              let date = calendar.date(byAdding: component, value: -amount, to: now)
+        else { return nil }
+        return (date, false)
+    }
+}
+
 /// One page of the AO3 Inbox, plus the exact totals AO3 prints in the page
 /// heading ("My Inbox (12 comments, 3 unread)") when they could be read.
 nonisolated struct AO3InboxPage {
