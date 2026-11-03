@@ -23,6 +23,14 @@ struct FandomFamilyBlock: View {
     /// name has its own line and the figures go under it; the chevron goes.
     private var stacks: Bool { dynamicTypeSize.isAccessibilitySize }
 
+    private var isFavourite: Bool {
+        family.members.contains { library.isFavourited($0.originalName) }
+    }
+
+    private var downloadedWorkCount: Int {
+        family.members.reduce(0) { $0 + library.entry(for: $1.originalName).downloadedWorkCount }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Button(action: onSelectFamily) {
@@ -30,29 +38,51 @@ struct FandomFamilyBlock: View {
             }
             .buttonStyle(.plain)
             .workCardZoomSource(BrowseZoomKey.fandom(family.zoomKey), in: zoomNamespace)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
 
             memberList
-                .padding(.leading, 35)
+                .padding(.leading, 54)
+                .padding(.trailing, 16)
                 .overlay(alignment: .leading) {
                     Rectangle()
                         .fill(palette.accent.opacity(0.32))
                         .frame(width: 1.5)
-                        .padding(.leading, 21)
+                        .padding(.leading, 30)
                 }
+
+            Rectangle()
+                .fill(Color.primary.opacity(0.12))
+                .frame(height: 0.5)
+                .padding(.leading, 54)
         }
-        .padding(.vertical, 4)
     }
 
     private var header: some View {
-        let layout = stacks
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
-            : AnyLayout(HStackLayout(alignment: .top, spacing: 11))
-        return layout {
+        HStack(alignment: .center, spacing: 10) {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(CoverArt.workGradient(fandoms: [family.parsedTitle], title: ""))
+                .frame(width: 28, height: 40)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5)
+                )
+                .accessibilityHidden(true)
+
             VStack(alignment: .leading, spacing: 2) {
-                Text(family.parsedTitle)
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(.primary)
-                    .fixedSize(horizontal: false, vertical: true)
+                HStack(alignment: .firstTextBaseline, spacing: 5) {
+                    Text(family.parsedTitle)
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if isFavourite {
+                        Image(systemName: "star.fill")
+                            .font(.system(size: starSize))
+                            .foregroundStyle(Color.subjectFavoriteGold)
+                            .accessibilityLabel("Favorite")
+                    }
+                }
 
                 ForEach(Array(headerAliases.enumerated()), id: \.offset) { _, alias in
                     aliasText(alias)
@@ -60,34 +90,29 @@ struct FandomFamilyBlock: View {
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+
+                if let subtitle = FandomSubtitle.text(
+                    fandomsCount: family.memberCount,
+                    worksCount: family.displayedWorkCount,
+                    downloadedCount: downloadedWorkCount
+                ) {
+                    Text(subtitle)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            VStack(alignment: stacks ? .leading : .trailing, spacing: 3) {
-                if sort == .familyTotal {
-                    HStack(spacing: 5) {
-                        Text(countLabel)
-                            .font(.footnote.weight(.semibold))
-                            .monospacedDigit()
-                            .foregroundStyle(.primary)
-                        Image(systemName: "doc.text")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                    }
-                    .accessibilityLabel(countAccessibilityLabel)
-                }
-
-                Text("All \(family.memberCount) tags")
+            HStack(spacing: 6) {
+                Text("All \(family.memberCount)")
                     .font(.system(size: allTagsSize, weight: .medium, design: .monospaced))
                     .foregroundStyle(themeManager.accentInk)
                     .monospacedDigit()
-            }
 
-            if !stacks {
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.tertiary)
-                    .padding(.top, 4)
                     .accessibilityHidden(true)
             }
         }
@@ -226,50 +251,5 @@ struct FandomLetterHeader: View {
         }
         .textCase(nil)
         .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 8, trailing: 16))
-    }
-}
-
-/// Sort chips (A–Z / Most works) and Group variants. Filter is the toolbar's
-/// (owner, 2026-10-01: global actions live in the top-right chrome).
-struct FandomListSortRail: View {
-    @Binding var sort: FandomFamilySort
-    /// 1al's "Group variants" switch: tinted while on.
-    @Binding var groupsVariants: Bool
-    var palette: SubjectPalette
-
-    var body: some View {
-        HStack(spacing: 8) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 7) {
-                    ForEach(FandomFamilySort.allCases, id: \.self) { option in
-                        Button {
-                            sort = option
-                        } label: {
-                            SubjectChip(
-                                text: option.title,
-                                style: .pill(isSelected: sort == option),
-                                palette: palette
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityAddTraits(sort == option ? .isSelected : [])
-                    }
-                    Button {
-                        groupsVariants.toggle()
-                    } label: {
-                        SubjectChip(
-                            text: "Group variants",
-                            style: groupsVariants ? .tinted : .neutral,
-                            systemImage: "square.stack",
-                            palette: palette
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityAddTraits(groupsVariants ? .isSelected : [])
-                }
-            }
-            .horizontalScrollViewport()
-
-        }
     }
 }

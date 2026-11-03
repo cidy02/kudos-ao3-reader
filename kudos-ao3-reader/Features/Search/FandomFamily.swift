@@ -267,6 +267,7 @@ nonisolated struct FandomListFilterOptions: Equatable, Sendable {
     enum MinimumWorks: Int, CaseIterable, Hashable, Sendable {
         case any = 0
         case ten = 10
+        case fifty = 50
         case hundred = 100
         case thousand = 1_000
 
@@ -274,6 +275,7 @@ nonisolated struct FandomListFilterOptions: Equatable, Sendable {
             switch self {
             case .any: "Any"
             case .ten: "10+"
+            case .fifty: "50+"
             case .hundred: "100+"
             case .thousand: "1,000+"
             }
@@ -568,5 +570,83 @@ extension FandomFamily {
         parts.append(contentsOf: members.map(\.qualifierDisplay))
         parts.append(contentsOf: members.flatMap(\.aliases))
         return WorkSearchIndex.normalize(parts.joined(separator: " "))
+    }
+}
+
+// MARK: - Subtitle under title (Board 14)
+
+/// Formats "N fandoms · about N works · N downloaded" from data the screen/row already has.
+/// Omits any part that is zero, unknown (nil), or single-fandom (fandomsCount <= 1).
+nonisolated enum FandomSubtitle {
+    static func text(
+        fandomsCount: Int? = nil,
+        worksCount: Int? = nil,
+        downloadedCount: Int? = nil,
+        exactWorks: Bool = false
+    ) -> String? {
+        var parts: [String] = []
+
+        if let fandomsCount, fandomsCount > 1 {
+            let label = fandomsCount == 1 ? "fandom" : "fandoms"
+            parts.append("\(fandomsCount.formatted()) \(label)")
+        }
+
+        if let worksCount, worksCount > 0 {
+            let label = worksCount == 1 ? "work" : "works"
+            parts.append(exactWorks
+                ? "\(worksCount.formatted()) \(label)"
+                : "about \(worksCount.compactCount.lowercased()) \(label)")
+        }
+
+        if let downloadedCount, downloadedCount > 0 {
+            parts.append("\(downloadedCount.formatted()) downloaded")
+        }
+
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+}
+
+// MARK: - Filter-state line (Board 14)
+
+/// Reflects current sort/grouping/minimum-works/tag-kind settings, e.g.
+/// "Grouped by family · at least 50 works · Reset".
+nonisolated enum FandomFilterState {
+    static func text(
+        groupsVariants: Bool,
+        sort: FandomFamilySort,
+        options: FandomListFilterOptions
+    ) -> String {
+        var parts: [String] = []
+
+        // Grouping
+        parts.append(groupsVariants ? "Grouped by family" : "Ungrouped")
+
+        // Sort (only shown when non-default, i.e. Most works)
+        if sort == .familyTotal {
+            parts.append("most works")
+        }
+
+        // Minimum works
+        if options.minimumWorks != .any {
+            parts.append("at least \(options.minimumWorks.rawValue) works")
+        }
+
+        // Other active filters
+        if options.hideRPF { parts.append("no RPF") }
+        if options.hideAllMediaTypes { parts.append("no All Media Types") }
+        if options.hideRelatedFandoms { parts.append("no Related Fandoms") }
+        if options.favouritedOnly { parts.append("favourited only") }
+        if options.downloadsOnly { parts.append("downloaded only") }
+        if options.multiTagOnly { parts.append("multi-tag only") }
+
+        return parts.joined(separator: " · ")
+    }
+
+    static func hasDiffFromDefaults(
+        groupsVariants: Bool,
+        sort: FandomFamilySort,
+        options: FandomListFilterOptions
+    ) -> Bool {
+        !groupsVariants || sort != .alphabetical || options.hasActiveFilters
     }
 }

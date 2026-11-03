@@ -38,13 +38,15 @@ struct FandomListView: View {
     @State private var filtered: [FandomFamily] = []
     @State private var phase: Phase = .loading
     @State private var query = ""
-    @State private var sort: FandomFamilySort = .familyTotal
+    @State private var sort: FandomFamilySort = .alphabetical
+    @State private var draftSort: FandomFamilySort = .alphabetical
     @State private var filterOptions = FandomListFilterOptions()
     @State private var draftFilterOptions = FandomListFilterOptions()
     @State private var showingFilters = false
     @State private var exactCounts = FandomFamilyExactCountCache.shared
     /// 1al's switch. Off lists every raw tag on its own (`FandomFamily.ungrouped`).
     @AppStorage("browse.fandoms.groupsVariants") private var groupsVariants = true
+    @State private var draftGroupsVariants = true
     /// Whether `families` is the grouped build. Lags the switch while a rebuild
     /// runs, so the tally describes the rows on screen.
     @State private var familiesAreGrouped = true
@@ -136,20 +138,33 @@ struct FandomListView: View {
             .filterPanelPresentation(isPresented: $showingFilters) {
                 FandomListFilterSheet(
                     options: $draftFilterOptions,
+                    sort: $draftSort,
+                    groupsVariants: $draftGroupsVariants,
                     families: families,
-                    groupsVariants: groupsVariants,
                     library: libraryIndex,
                     palette: palette,
                     onApply: {
                         filterOptions = draftFilterOptions
+                        sort = draftSort
+                        if groupsVariants != draftGroupsVariants {
+                            groupsVariants = draftGroupsVariants
+                        }
                         showingFilters = false
                     },
-                    onReset: { draftFilterOptions = FandomListFilterOptions() }
+                    onReset: {
+                        draftFilterOptions = FandomListFilterOptions()
+                        draftSort = .alphabetical
+                        draftGroupsVariants = true
+                    }
                 )
                 .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
             }
             .onChange(of: showingFilters) { _, isOpen in
-                if isOpen { draftFilterOptions = filterOptions }
+                if isOpen {
+                    draftFilterOptions = filterOptions
+                    draftSort = sort
+                    draftGroupsVariants = groupsVariants
+                }
             }
             .task { if fandoms.isEmpty { await load() } }
             .screenTint(palette)
@@ -159,37 +174,49 @@ struct FandomListView: View {
         !query.trimmingCharacters(in: .whitespaces).isEmpty || filterOptions.hasActiveFilters
     }
 
-    /// Spec 1al's header line: how big the category is and in what order, or —
-    /// once a search or filter narrows it — how much of it is showing (1an).
-    private var headerTally: String {
-        FandomListTally.text(
-            totalTags: FandomFamilyFilters.tagCount(in: families),
-            families: familiesAreGrouped ? families.count : nil,
-            shownTags: FandomFamilyFilters.tagCount(in: filtered),
-            isFiltered: isFiltered,
-            sort: sort
+    private var totalCategoryWorks: Int {
+        families.reduce(0) { $0 + $1.displayedWorkCount }
+    }
+
+    private var totalCategoryDownloaded: Int {
+        var count = 0
+        for family in families {
+            for member in family.members {
+                count += libraryIndex.entry(for: member.originalName).downloadedWorkCount
+            }
+        }
+        return count
+    }
+
+    private var categorySubtitle: String? {
+        FandomSubtitle.text(
+            fandomsCount: families.count,
+            worksCount: totalCategoryWorks,
+            downloadedCount: totalCategoryDownloaded
         )
+    }
+
+    private var favouriteFamilies: [FandomFamily] {
+        displayedFamilies.filter { family in
+            family.members.contains { libraryIndex.isFavourited($0.originalName) }
+        }
+    }
+
+    private var nonFavouriteFamilies: [FandomFamily] {
+        displayedFamilies.filter { family in
+            !family.members.contains { libraryIndex.isFavourited($0.originalName) }
+        }
     }
 
     private var loadedList: some View {
         ScrollViewReader { proxy in
             List {
-                // The kicker / rule / hero as the list's first row, as every
-                // redesigned pushed page has it (1al); the wash below empties the
-                // navigation title so the name is not printed twice.
                 Section {
                     pageHeader
                 }
 
                 Section {
-                    FandomListSortRail(
-                        sort: $sort,
-                        groupsVariants: $groupsVariants,
-                        palette: palette
-                    )
-                    .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
+                    filterStateLine
                 }
 
                 // A search or filter that leaves nothing says so, with the way back.
@@ -211,7 +238,25 @@ struct FandomListView: View {
                 }
 
                 if sort == .alphabetical {
-                    ForEach(letterSections) { section in
+                    if !favouriteFamilies.isEmpty {
+                        Section {
+                            ForEach(favouriteFamilies) { family in
+                                familyRow(family)
+                            }
+                        } header: {
+                            FandomLetterHeader(
+                                letter: "Favourites",
+                                count: favouriteFamilies.count,
+                                palette: palette
+                            )
+                        }
+                        .id("Favourites")
+                        #if os(iOS)
+                        .sectionIndexLabel("★")
+                        #endif
+                    }
+
+                    ForEach(FandomFamily.letterSections(nonFavouriteFamilies)) { section in
                         Section {
                             ForEach(section.families) { family in
                                 familyRow(family)
@@ -224,6 +269,9 @@ struct FandomListView: View {
                             )
                         }
                         .id(section.id)
+                        #if os(iOS)
+                        .sectionIndexLabel(section.letter)
+                        #endif
                     }
                 } else {
                     ForEach(displayedFamilies) { family in
@@ -233,6 +281,9 @@ struct FandomListView: View {
             }
             .cardList()
             .subjectScreenWash(palette: palette)
+            #if os(iOS)
+            .listSectionIndexVisibility(showsLetterIndex ? .visible : .hidden)
+            #endif
             // Here rather than inside `refresh()`, which `load()` also calls:
             // the initial load has nothing to invalidate and would only evict
             // other screens' entries. `/media/<x>/fandoms` is
@@ -259,9 +310,11 @@ struct FandomListView: View {
                 filterOptions.groupsVariantsChanged(to: isOn)
                 Task { await rebuildFamilies() }
             }
+            #if os(macOS)
             .overlay(alignment: .trailing) {
                 if showsLetterIndex { letterIndex(proxy: proxy) }
             }
+            #endif
         }
     }
 
@@ -326,11 +379,67 @@ struct FandomListView: View {
         proxy.scrollTo(letter, anchor: .top)
     }
 
+    /// While a search or filter narrows the list, how much of it is showing (1an);
+    /// otherwise board 14's category subtitle.
+    private var headerText: String? {
+        guard isFiltered else { return categorySubtitle }
+        return FandomListTally.text(
+            totalTags: FandomFamilyFilters.tagCount(in: families),
+            families: familiesAreGrouped ? families.count : nil,
+            shownTags: FandomFamilyFilters.tagCount(in: filtered),
+            isFiltered: true,
+            sort: sort
+        )
+    }
+
     private var pageHeader: some View {
-        SubjectPageFact(headerTally)
-            .listRowInsets(EdgeInsets(top: 12, leading: 0, bottom: 4, trailing: 0))
-            .listRowBackground(Color.clear)
-            .listRowSeparator(.hidden)
+        Group {
+            if let headerText {
+                SubjectPageFact(headerText)
+                    .listRowInsets(EdgeInsets(top: 12, leading: 0, bottom: 4, trailing: 0))
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+            }
+        }
+    }
+
+    private var filterStateLine: some View {
+        HStack(spacing: 4) {
+            Text(FandomFilterState.text(
+                groupsVariants: groupsVariants,
+                sort: sort,
+                options: filterOptions
+            ))
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+
+            if FandomFilterState.hasDiffFromDefaults(
+                groupsVariants: groupsVariants,
+                sort: sort,
+                options: filterOptions
+            ) {
+                Text("·")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                Button("Reset") {
+                    resetToDefaults()
+                }
+                .font(.footnote.weight(.medium))
+                .foregroundStyle(themeManager.accentInk)
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 4)
+        .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
+    }
+
+    private func resetToDefaults() {
+        filterOptions = FandomListFilterOptions()
+        groupsVariants = true
+        sort = .alphabetical
     }
 
     private func failureList(message: String, systemImage: String) -> some View {
@@ -363,7 +472,7 @@ struct FandomListView: View {
             }
             .buttonStyle(.plain)
             .workCardZoomSource(BrowseZoomKey.fandom(member.originalName), in: zoomNamespace)
-            .cardRow()
+            .cardRow(chrome: .plain)
         } else {
             FandomFamilyBlock(
                 family: family,
@@ -377,7 +486,7 @@ struct FandomListView: View {
                     onSelect([member.originalName], member.originalName)
                 }
             )
-            .cardRow()
+            .cardRow(chrome: .plain)
         }
     }
 
@@ -845,7 +954,6 @@ private struct FandomListRow: View {
     @Environment(ThemeManager.self) private var theme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .caption) private var starSize = 14.5
-    @ScaledMetric(relativeTo: .caption2) private var downloadFontSize = 11.5
 
     /// At the accessibility sizes the count beside the name took the row: it does
     /// not shrink, so the name was left a column one syllable wide ("Su- / per- /
@@ -853,46 +961,37 @@ private struct FandomListRow: View {
     /// under the title.
     private var rowLayout: AnyLayout {
         dynamicTypeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
-            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 12))
-    }
-
-    private var titleLayout: AnyLayout {
-        dynamicTypeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
-            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 7))
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 6))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: 10))
     }
 
     var body: some View {
-        rowLayout {
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
-                if libraryEntry.isFavourite {
-                    Image(systemName: "star.fill")
-                        .font(.system(size: starSize))
-                        .foregroundStyle(Color.subjectFavoriteGold)
-                        .accessibilityLabel("Favorite")
-                }
+        VStack(spacing: 0) {
+            rowLayout {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(CoverArt.workGradient(fandoms: [fandom.name], title: ""))
+                    .frame(width: 28, height: 40)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5)
+                    )
+                    .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    // Three tiers, each on its own line and each a step quieter than
-                    // the one above. The title used to carry its qualifier inline to
-                    // save a line, but that let a long name wrap mid-qualifier —
-                    // "My Hero Academia (Anime" / "& Manga)" — which is the worst
-                    // thing a row can do to a name you are trying to read.
-                    titleLayout {
+                    HStack(alignment: .firstTextBaseline, spacing: 5) {
                         Text(splitName.title)
                             .font(.body)
                             .foregroundStyle(.primary)
                             .fixedSize(horizontal: false, vertical: true)
-                            .layoutPriority(1)
-                        if libraryEntry.downloadedWorkCount > 0 {
-                            downloadBadge(count: libraryEntry.downloadedWorkCount)
+
+                        if libraryEntry.isFavourite {
+                            Image(systemName: "star.fill")
+                                .font(.system(size: starSize))
+                                .foregroundStyle(Color.subjectFavoriteGold)
+                                .accessibilityLabel("Favorite")
                         }
                     }
 
-                    // The disambiguation. Below rather than beside, so the title
-                    // owns its line; also lines the qualifiers up in a column, which
-                    // is how you tell 23 versions of Les Misérables apart.
                     if !splitName.qualifier.isEmpty {
                         Text(splitName.qualifier)
                             .font(.footnote)
@@ -900,77 +999,37 @@ private struct FandomListRow: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
-                    // The other names this fandom is tagged under. A tier below the
-                    // qualifier rather than level with it: 13% of rows show both, and
-                    // in matching styles they read as one blurred block instead of
-                    // "what this is" followed by "what else it is called".
-                    //
-                    // One per line. These were joined with a middot to keep a row
-                    // short, but a stack is what a list of names wants: each is a
-                    // whole name, and reading them off a column beats picking them
-                    // out of a run separated by a character that also appears inside
-                    // titles. It costs a line on the 2,371 tags carrying two aliases
-                    // and nothing on the 140,537 carrying one or none.
                     ForEach(Array(aliases.enumerated()), id: \.offset) { _, alias in
                         aliasText(alias)
                             .font(.caption)
-                            // Size carries the tier, not colour. `.tertiary` here was
-                            // ~3:1 against every card surface — under WCAG AA, and
-                            // worst on dense CJK, where 12pt kanji strokes blur
-                            // together at that contrast.
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    // A row keeps its exact count (the board's "about N" is the category's).
+                    if let subtitle = FandomSubtitle.text(
+                        fandomsCount: 1,
+                        worksCount: fandom.workCount,
+                        downloadedCount: libraryEntry.downloadedWorkCount,
+                        exactWorks: true
+                    ) {
+                        Text(subtitle)
+                            .font(.footnote)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
 
-            if let count = fandom.workCount {
-                HStack(spacing: 4) {
-                    Text(count.formatted())
-                        .monospacedDigit()
-                        // Fixed column, trailing-aligned. The digits are what the
-                        // eye compares down the list, so they need a straight
-                        // right edge; the column also keeps the block one width,
-                        // which is what stops the name beside it ending in a
-                        // different place on every row. Wide enough for AO3's
-                        // largest fandoms (~700k) at this size.
-                        .frame(minWidth: 58, alignment: .trailing)
-                    // Trailing the number, and secondary rather than tinted: the
-                    // glyph is the same on every row, so in accent red it competed
-                    // with the name for attention while carrying no per-row
-                    // information.
-                    Image(systemName: "doc.text")
-                        .font(.caption.weight(.semibold))
-                }
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .fixedSize()
-                .accessibilityLabel("\(count.formatted()) works")
-            }
+            Rectangle()
+                .fill(Color.primary.opacity(0.12))
+                .frame(height: 0.5)
+                .padding(.leading, 54)
         }
-        .padding(.vertical, 4)
         .contentShape(Rectangle())
-    }
-
-    private func downloadBadge(count: Int) -> some View {
-        HStack(spacing: 3) {
-            Image(systemName: "arrow.down.circle")
-            Text(count.compactCount)
-        }
-        .font(.system(size: downloadFontSize, weight: .medium, design: .monospaced))
-        .foregroundStyle(downloadTint)
-        .fixedSize()
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(count.formatted()) downloaded works")
-    }
-
-    private var downloadTint: Color {
-        guard let mint = SubjectHueSwatches.all.first(where: { $0.name == "Mint" }) else {
-            return theme.appTheme.statusSuccessColor
-        }
-        return theme.appTheme.subjectPalette(hue: mint.hue).accent
     }
 
     /// AO3 writes a multilingual fandom tag as `original | romanization |
