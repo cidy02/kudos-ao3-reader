@@ -21,8 +21,9 @@ struct CommentPolishTests {
         #expect(!CommentComposerSheet.confirmationAction(isEdit: false, isReply: true).contains("Reply"))
     }
 
-    @Test func theFooterSaysTheSheetDragsTaller() {
-        #expect(CommentComposerSheet.dragTallerFooter == "Drag the sheet taller")
+    @Test func theExpandButtonTogglesTheDetents() {
+        #expect(CommentComposerSheet.toggledDetent(.medium) == .large)
+        #expect(CommentComposerSheet.toggledDetent(.large) == .medium)
     }
 
     // MARK: - Tray (1bf)
