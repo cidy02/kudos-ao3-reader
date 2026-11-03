@@ -381,10 +381,12 @@ struct AO3ProvenanceBadge: View {
     /// less the card's 12pt content padding, plus 4pt of air.
     static let clearance: CGFloat = 32
 
+    @ScaledMetric(relativeTo: .caption2) private var fontSize: CGFloat = 8
+
     var body: some View {
         Text("AO3")
-            .font(.system(size: 8, weight: .bold))
-            .tracking(8 * 0.08)
+            .font(.system(size: fontSize, weight: .bold))
+            .tracking(fontSize * 0.08)
             .foregroundStyle(Color.white.opacity(0.8))
             .padding(.vertical, 3)
             .padding(.horizontal, 6)
@@ -627,6 +629,7 @@ private struct CoverProgressBar: View {
                     Capsule()
                         .fill(.accentFill)
                         .frame(width: geometry.size.width * fraction)
+                        .animation(unlessReduced: .smooth, value: fraction)
                 }
         }
         .frame(height: 3)

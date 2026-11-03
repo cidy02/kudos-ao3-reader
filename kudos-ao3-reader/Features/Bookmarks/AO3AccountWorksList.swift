@@ -571,6 +571,7 @@ struct AO3AccountWorksList: View {
                     isLoading: phase == .loading,
                     filter: $historyProgressFilter,
                     onPage: { page in Task { await load(page: page) } },
+                    onRefresh: { await load(page: currentPage) },
                     onDelete: { pendingHistoryDelete = $0 }
                 )
             } else if kind == .markedForLater {
@@ -589,6 +590,7 @@ struct AO3AccountWorksList: View {
                     filter: $markedForLaterFilter,
                     isUnmarking: markedForLaterWriteInFlight,
                     onPage: { page in Task { await load(page: page) } },
+                    onRefresh: { await load(page: currentPage) },
                     onUnmark: startUnmark
                 )
                 .onDisappear { persistMarkedForLaterLook() }
@@ -604,7 +606,8 @@ struct AO3AccountWorksList: View {
                     totalPages: totalPages,
                     isLoading: phase == .loading,
                     filter: $bookmarksFilter,
-                    onPage: { page in Task { await load(page: page) } }
+                    onPage: { page in Task { await load(page: page) } },
+                    onRefresh: { await load(page: currentPage) }
                 )
             } else if kind == .subscriptions {
                 AO3SubscriptionsWorksBrowser(
@@ -622,6 +625,7 @@ struct AO3AccountWorksList: View {
                     filter: $subscriptionsFilter,
                     scope: $subscriptionsScope,
                     onPage: { page in Task { await load(page: page) } },
+                    onRefresh: { await load(page: currentPage) },
                     onUnsubscribe: { pendingUnsubscribe = $0 },
                     onEnriched: noteEnrichedSubscription
                 )

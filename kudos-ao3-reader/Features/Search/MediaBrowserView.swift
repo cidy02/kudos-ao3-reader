@@ -220,7 +220,7 @@ struct MediaBrowserView: View {
                         }
                         .foregroundStyle(Color.white)
                         .padding(.horizontal, 8)
-                        .frame(height: 22)
+                        .frame(minHeight: 22)
                         .background(Color.white.opacity(0.22), in: Capsule())
                         .accessibilityLabel("\(saved) downloaded")
                     }

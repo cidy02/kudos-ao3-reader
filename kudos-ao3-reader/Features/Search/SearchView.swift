@@ -13,6 +13,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     @Environment(AppRouter.self) private var router
     @Environment(AO3AuthService.self) private var auth
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
 
     // Local-first search sources (Global Search, Phase 2): matched on-device, live.
@@ -730,7 +731,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 }
                 if SearchCombinedResultsLogic.showsSeeAllRow(total: localWorks.count, isExpanded: isLibraryExpanded) {
                     Button {
-                        withAnimation { isLibraryExpanded = true }
+                        withAnimationUnlessReduced(reduceMotion: reduceMotion) { isLibraryExpanded = true }
                     } label: {
                         HStack {
                             Text(SearchCombinedResultsLogic.seeAllRowTitle(total: localWorks.count))

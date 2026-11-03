@@ -95,7 +95,7 @@ struct ReaderPositionCard<MiniPlayer: View>: View {
         VStack(spacing: 0) {
             if showsMiniPlayer {
                 miniPlayer()
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, SubjectMetrics.gutter)
                     .padding(.top, 12)
                     .padding(.bottom, 10)
 
@@ -104,7 +104,7 @@ struct ReaderPositionCard<MiniPlayer: View>: View {
                 Rectangle()
                     .fill(Color.primary.opacity(0.12))
                     .frame(height: 1)
-                    .padding(.horizontal, 18)
+                    .padding(.horizontal, SubjectMetrics.gutter)
             }
 
             VStack(spacing: 8) {
@@ -144,7 +144,7 @@ struct ReaderPositionCard<MiniPlayer: View>: View {
                     // readout must not clip or truncate as text scales).
                     .minimumScaleFactor(0.75)
             }
-            .padding(.horizontal, 18)
+            .padding(.horizontal, SubjectMetrics.gutter)
             .padding(.top, showsMiniPlayer ? 12 : 13)
             .padding(.bottom, 15)
         }

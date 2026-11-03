@@ -288,7 +288,7 @@ struct ReaderPageSkeleton: View {
                     }
                 }
             }
-            .padding(.horizontal, 28)
+            .padding(.horizontal, SubjectMetrics.gutter)
             .padding(.top, topPad)
             .padding(.bottom, bottomPad)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -396,7 +396,7 @@ struct ReaderPositionCardSkeleton: View {
             SkeletonTextLine(height: 12, width: 200)
                 .frame(maxWidth: .infinity)
         }
-        .padding(.horizontal, 18)
+        .padding(.horizontal, SubjectMetrics.gutter)
         .padding(.top, 13)
         .padding(.bottom, 15)
         .frame(maxWidth: .infinity)

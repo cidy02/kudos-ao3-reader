@@ -26,7 +26,7 @@ struct ReaderChromeTopBar: View {
                 // The navigation bar's own back mark at its size: the reader's was a
                 // third smaller than the one on the page before it.
                 Image(systemName: "chevron.backward")
-                    .font(.system(size: 21.5, weight: .medium))
+                    .font(.title2.weight(.medium))
                     // Neutral, not the theme tint — Close has no active state to
                     // signal, same reasoning as the fan menu's own controls.
                     .foregroundStyle(Color.primary)
@@ -77,7 +77,6 @@ struct ReaderChromeTopBar: View {
         // 44pt pill cut the title to "Sodium…" and pushed the author out underneath it. The
         // whole title is one tap away, in the work's details.
         .frame(minHeight: 44)
-        .frame(maxWidth: 260)
         .dynamicTypeSize(...DynamicTypeSize.accessibility1)
         .glassEffect(.regular, in: .capsule)
         .contentShape(.capsule)

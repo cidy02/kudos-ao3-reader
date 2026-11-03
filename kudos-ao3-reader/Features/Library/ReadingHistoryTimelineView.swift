@@ -154,6 +154,7 @@ struct ReadingHistoryTimelineList<Header: View, OffTimelineRow: View>: View {
                     Text(ReadingInsights.durationLabel(timeline.totalSeconds))
                         .font(.title.bold())
                         .monospacedDigit()
+                        .contentTransition(.numericText())
                     Text(summaryLine(timeline))
                         .font(.footnote)
                         .foregroundStyle(.secondary)

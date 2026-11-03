@@ -5,6 +5,7 @@ import SwiftUI
 struct AboutView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var showingBugReport = false
+    @ScaledMetric(relativeTo: .largeTitle) private var iconSize: CGFloat = 42
 
     var body: some View {
         Form {
@@ -12,7 +13,7 @@ struct AboutView: View {
                 Section {
                     VStack(spacing: 6) {
                         Image(systemName: "book.closed.fill")
-                            .font(.system(size: 42))
+                            .font(.system(size: iconSize))
                             .foregroundStyle(.tint)
                         Text("Kudos").font(.title2.bold())
                         Text("Version \(Self.versionString)")

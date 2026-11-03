@@ -18,6 +18,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     @Environment(AO3AuthService.self) private var auth
     @Environment(PrivacyGate.self) private var gate
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }, sort: \SavedWork.dateAdded, order: .reverse)
     private var works: [SavedWork]
     @Query(sort: \Tag.name) private var tags: [Tag]
@@ -900,7 +901,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                     }
                     if filters.hasActiveFilters {
                         Button {
-                            withAnimation(.snappy) { filters = LibraryFilters() }
+                            withAnimationUnlessReduced(.snappy, reduceMotion: reduceMotion) { filters = LibraryFilters() }
                         } label: {
                             // Quieter than the filter pills beside it — spec 1c
                             // drops its fill to 6% and its text to 50%, because

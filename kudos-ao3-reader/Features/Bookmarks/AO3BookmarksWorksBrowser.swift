@@ -88,6 +88,7 @@ struct AO3BookmarksWorksBrowser: View {
     let isLoading: Bool
     @Binding var filter: AO3BookmarksFilter
     let onPage: (Int) -> Void
+    var onRefresh: (() async -> Void)? = nil
 
     @Environment(PrivacyGate.self) private var gate
     @AppStorage("hideMatureContent") private var hideMature = true
@@ -114,6 +115,9 @@ struct AO3BookmarksWorksBrowser: View {
             } else {
                 detailedBody
             }
+        }
+        .refreshable {
+            await onRefresh?()
         }
     }
 
