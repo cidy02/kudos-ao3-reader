@@ -401,11 +401,10 @@ private struct FilterTagChip: View {
         .padding(.vertical, 5)
         .foregroundStyle(color)
         .background(color.opacity(0.15), in: Capsule())
-        .contentShape(Capsule())
         // A nested Button inside a Form/List row is coalesced with the row's
         // primary Button on iOS, which made tag-chip taps open the picker instead
         // of cycling. A direct tap gesture keeps the chip's action independent.
-        .onTapGesture(perform: onCycle)
+        .layoutFreeHitTarget(action: onCycle)
         .accessibilityAddTraits(.isButton)
         .accessibilityLabel("\(state == .excluded ? "Excluded" : "Included"): \(tag)")
         .accessibilityHint("Tap to \(state.nextActionLabel.lowercased()) this tag")

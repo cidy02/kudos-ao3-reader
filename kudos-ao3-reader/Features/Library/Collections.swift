@@ -745,6 +745,7 @@ struct AddToCollectionView: View {
     }
 
     private func toggle(_ collection: WorkCollection) {
+        Haptics.selection()
         let now = Date()
         if isMember(collection) {
             for work in works {

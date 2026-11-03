@@ -716,6 +716,7 @@ struct SectionRuleHeader: View {
                 .foregroundStyle(.accentInk)
         }
         .buttonStyle(.plain)
+        .layoutFreeHitTarget(action: action)
         .accessibilityLabel("\(actionTitle ?? "See all") \(title)")
     }
 }

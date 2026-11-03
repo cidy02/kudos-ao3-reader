@@ -228,7 +228,10 @@ struct HomeSectionListView: View {
                 title: "Delete this work?",
                 confirmLabel: "Delete",
                 message: { PreservedWorkService.deleteConfirmationMessage(for: $0) },
-                perform: { PreservedWorkService.softDelete($0, in: context) }
+                perform: {
+                    PreservedWorkService.softDelete($0, in: context)
+                    Haptics.deleted()
+                }
             )
     }
 
@@ -283,6 +286,7 @@ struct HomeSectionListView: View {
                                         pendingDelete = work
                                     } else {
                                         PreservedWorkService.softDelete(work, in: context)
+                                        Haptics.deleted()
                                     }
                                 } label: {
                                     Label("Delete", systemImage: "trash")

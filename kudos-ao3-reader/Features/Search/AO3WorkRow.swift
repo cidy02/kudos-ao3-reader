@@ -494,7 +494,7 @@ struct AO3WorkRow: View {
                 .buttonStyle(.plain)
                 .foregroundStyle(themeManager.accentInk)
                 .frame(width: 20, height: 20)
-                .minimumHitTarget(30)
+                .layoutFreeHitTarget(30) { expandedBinding.wrappedValue.toggle() }
                 .accessibilityLabel(expanded ? "Show less" : "Show more")
         } else {
             button

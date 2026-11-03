@@ -187,7 +187,9 @@ struct AccountView: View {
                 }
                 .ao3AuthorNavigation(path: $path, tab: .account)
                 .toolbar {
-                    ToolbarItem(placement: .confirmationAction) {
+                    // `.primaryAction`, not `.confirmationAction`: iOS 26 fills a
+                    // confirmation button with the tint; board 35 shows the plain glass check.
+                    ToolbarItem(placement: .primaryAction) {
                         Button(action: dismissAccount) {
                             Label("Done", systemImage: "checkmark")
                                 .labelStyle(.iconOnly)
@@ -567,7 +569,7 @@ struct AccountView: View {
                     SectionRuleHeader(title: "Your Latest")
                         .pageBodyRow(top: 18, gutter: 0)
                     SensitiveRemoteWorkCard(work: work) {
-                        AuthorProfileLatestCard(work: work)
+                        AuthorProfileLatestCard(work: work, discSymbol: "chevron.right")
                     }
                     .pageBodyRow(top: 10, gutter: SubjectMetrics.accountGutter)
                 }

@@ -259,6 +259,7 @@ struct MediaBrowserView: View {
                         .background(Color.white.opacity(0.18), in: Capsule())
                     }
                     .buttonStyle(.plain)
+                    .layoutFreeHitTarget { onSelectFandom(chip.names, chip.title) }
                     .accessibilityLabel("\(chip.title), \(compact(chip.workCount)) works" + (chip.isFamiliar ? ", you have read from this fandom" : ""))
                 }
 

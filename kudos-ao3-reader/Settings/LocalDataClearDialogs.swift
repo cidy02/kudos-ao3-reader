@@ -45,6 +45,7 @@ struct LocalDataClearDialogs: ViewModifier {
                     for work in freedHistory {
                         PreservedWorkService.softDelete(work, in: context)
                     }
+                    Haptics.deleted()
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {

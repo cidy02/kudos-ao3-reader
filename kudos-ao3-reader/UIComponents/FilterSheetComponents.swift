@@ -256,6 +256,7 @@ struct ActiveFilterChipView: View {
             .clipShape(Capsule())
         }
         .buttonStyle(.plain)
+        .layoutFreeHitTarget(action: item.onRemove)
         .accessibilityLabel("\(item.label)\(accessibilitySuffix)")
         .accessibilityHint("Removes this filter")
     }
