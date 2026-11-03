@@ -96,11 +96,40 @@ struct WritingView: View {
             .ao3AuthorNavigation(path: $path, tab: .writing)
             .toolbar {
                 if auth.isLoggedIn {
-                    ToolbarItem(placement: .primaryAction) {
+                    ToolbarItemGroup(placement: .primaryAction) {
                         NavigationLink {
                             WritingWorkDestination(workID: nil) { draftsReload += 1 }
                         } label: {
-                            Label("New Work", systemImage: "plus")
+                            Label("New Work", systemImage: "square.and.pencil")
+                        }
+                        Menu {
+                            Button {
+                                path.append(Destination.stats)
+                            } label: {
+                                Label("Stats", systemImage: "chart.bar")
+                            }
+                            Button {
+                                path.append(WritingRoute.drafts)
+                            } label: {
+                                Label("Drafts", systemImage: "doc.badge.clock")
+                            }
+                            Button {
+                                path.append(WritingRoute.works)
+                            } label: {
+                                Label("Your Works", systemImage: "books.vertical")
+                            }
+                            Button {
+                                path.append(WritingRoute.series)
+                            } label: {
+                                Label("Series", systemImage: "square.stack.3d.up")
+                            }
+                            Button {
+                                path.append(WritingRoute.collectionsAndChallenges)
+                            } label: {
+                                Label("Collections & Challenges", systemImage: "person.3.sequence")
+                            }
+                        } label: {
+                            Label("More", systemImage: "ellipsis")
                         }
                     }
                 }
@@ -131,6 +160,7 @@ struct WritingView: View {
         "\(router.selection == .writing)|\(auth.sessionGeneration)|\(auth.username ?? "")|\(draftsReload)"
     }
 
+    @ViewBuilder
     private var identitySection: some View {
         Section {
             WritingPseudMenu(
@@ -139,8 +169,12 @@ struct WritingView: View {
             )
             .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
         } header: {
-            SectionRuleHeader(title: auth.username ?? "AO3 Account")
-                .pageBodyRow(top: 14, gutter: 0)
+            if let username = auth.username,
+               let pseud = postingPseudName,
+               pseud.localizedCaseInsensitiveCompare(username) != .orderedSame {
+                SectionRuleHeader(title: username)
+                    .pageBodyRow(top: 14, gutter: 0)
+            }
         }
     }
 
@@ -302,7 +336,7 @@ struct WritingView: View {
     @ViewBuilder
     private func writingDestination(_ route: WritingRoute) -> some View {
         switch route {
-        case .works: ownProfile(title: "Works", tab: .works)
+        case .works: ownProfile(title: "Your Works", tab: .works)
         case .drafts: WritingDraftsView()
         case .series: ownProfile(title: "Series", tab: .series)
         case .collectionsAndChallenges: AO3CollectionsList()
@@ -506,6 +540,7 @@ private extension WritingView {
             SectionRuleHeader(
                 title: "Stats",
                 countText: "All Years",
+                actionTitle: "By Work",
                 onSeeAll: { path.append(Destination.stats) }
             )
             .pageBodyRow(top: 18, gutter: 0)
@@ -549,7 +584,7 @@ private struct WritingDraftHero: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
             SubjectKicker(
-                text: "Continue",
+                text: "Draft",
                 palette: theme.appTheme.subjectPalette(
                     hue: CoverArt.workHue(fandoms: work.fandoms, title: work.title)
                 ),
@@ -566,14 +601,30 @@ private struct WritingDraftHero: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
             }
-            HStack(spacing: 12) {
-                if !work.dateUpdated.isEmpty { Label(work.dateUpdated, systemImage: "clock") }
-                if let words = work.words { Text("\(words.formatted()) words") }
-                Spacer(minLength: 0)
-                Image(systemName: "arrow.right.circle.fill").foregroundStyle(.tint)
+            HStack(alignment: .center, spacing: 12) {
+                VStack(alignment: .leading, spacing: 3) {
+                    if !work.dateUpdated.isEmpty {
+                        Label(work.dateUpdated, systemImage: "clock")
+                    }
+                    if let words = work.words {
+                        Text("\(words.formatted()) words")
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                Spacer(minLength: 8)
+                let isDark = theme.appTheme.isDarkFamily
+                Text("Continue")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(isDark ? Color.white : theme.effectiveTint)
+                    .padding(.horizontal, 16)
+                    .frame(minHeight: 34)
+                    .background(isDark ? Color.white.opacity(0.18) : Color.white, in: Capsule())
+                    .overlay(
+                        Capsule().strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
+                    )
+                    .shadow(color: Color.black.opacity(isDark ? 0 : 0.08), radius: 3, x: 0, y: 1)
             }
-            .font(.caption)
-            .foregroundStyle(.secondary)
         }
         .padding(.vertical, 4)
     }
@@ -616,41 +667,44 @@ private struct WritingPseudMenu: View {
     @Environment(AO3AuthService.self) private var auth
 
     var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "person.crop.circle")
-                .font(.title2)
-                .foregroundStyle(.tint)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Posting as").font(.caption).foregroundStyle(.secondary)
-                Menu {
-                    Button {
-                        setPseud(nil)
-                    } label: {
-                        Label("Account Default", systemImage: postingPseudName == nil ? "checkmark" : "person")
-                    }
-                    ForEach(availablePseuds) { pseud in
-                        Button {
-                            setPseud(pseud.name)
-                        } label: {
-                            Label(
-                                pseud.name,
-                                systemImage: postingPseudName == pseud.name ? "checkmark" : "person"
-                            )
-                        }
-                    }
+        HStack(spacing: 4) {
+            Text("Posting as")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Menu {
+                Button {
+                    setPseud(nil)
                 } label: {
-                    HStack(spacing: 5) {
-                        Text(postingPseudName ?? auth.username ?? "Account Default")
-                            .font(.headline)
-                        Image(systemName: "chevron.down").font(.caption2)
-                    }
-                    .foregroundStyle(.primary)
+                    Label(
+                        auth.username ?? "Account Default",
+                        systemImage: postingPseudName == nil ? "checkmark" : "person"
+                    )
                 }
-                .buttonStyle(.plain)
+                ForEach(availablePseuds) { pseud in
+                    Button {
+                        setPseud(pseud.name)
+                    } label: {
+                        Label(
+                            pseud.name,
+                            systemImage: postingPseudName == pseud.name ? "checkmark" : "person"
+                        )
+                    }
+                }
+            } label: {
+                HStack(spacing: 3) {
+                    Text(postingPseudName ?? auth.username ?? "Account Default")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
             }
+            .buttonStyle(.plain)
             Spacer()
         }
         .accessibilityElement(children: .contain)
+        .accessibilityLabel("Posting as \(postingPseudName ?? auth.username ?? "Account Default"). Change pseud")
     }
 
     private var availablePseuds: [AO3AuthorPseud] {
