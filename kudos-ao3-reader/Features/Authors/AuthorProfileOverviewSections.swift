@@ -253,7 +253,8 @@ struct AuthorProfileCountStrip: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
                     }
-                    .buttonStyle(.cardPress)
+                    .buttonStyle(.plain)
+                    .listCardPressFeedback()
                     .accessibilityLabel(countLabel(item))
                     .overlay(alignment: .leading) {
                         // An explicit vertical hairline: a bare Divider outside an

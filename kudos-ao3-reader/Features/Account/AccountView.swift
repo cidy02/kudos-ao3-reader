@@ -996,7 +996,8 @@ struct AccountView: View {
                 opensExternally: opensExternally
             )
         }
-        .buttonStyle(.cardPress)
+        .buttonStyle(.plain)
+        .listCardPressFeedback()
         .disabled(opensExternally && auth.username == nil)
     }
 
@@ -1032,7 +1033,8 @@ struct AccountView: View {
         } label: {
             AccountNavCardLabel(title: title, systemImage: systemImage, count: count)
         }
-        .buttonStyle(.cardPress)
+        .buttonStyle(.plain)
+        .listCardPressFeedback()
         .accountControlCardRow()
     }
 

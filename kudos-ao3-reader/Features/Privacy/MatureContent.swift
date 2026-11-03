@@ -447,7 +447,8 @@ struct SensitiveWorkRow: View {
             } label: {
                 content
             }
-            .buttonStyle(.cardPress)
+            .buttonStyle(.plain)
+            .listCardPressFeedback()
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Hidden mature work")
             .accessibilityValue(isSelected ? "Selected" : "Not selected")
@@ -458,7 +459,8 @@ struct SensitiveWorkRow: View {
             } label: {
                 content
             }
-            .buttonStyle(.cardPress)
+            .buttonStyle(.plain)
+            .listCardPressFeedback()
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Hidden mature work")
             .accessibilityHint("Activate to reveal.")
@@ -500,9 +502,13 @@ struct SensitiveWorkRow: View {
                 if usesInlineNavigation {
                     switch openMode {
                     case .detail:
-                        NavigationLink(value: work) { row }.buttonStyle(.cardPress)
+                        NavigationLink(value: work) { row }
+                            .buttonStyle(.plain)
+                            .listCardPressFeedback()
                     case .reader:
-                        NavigationLink(value: LocalWorkDestination.reader(work)) { row }.buttonStyle(.cardPress)
+                        NavigationLink(value: LocalWorkDestination.reader(work)) { row }
+                            .buttonStyle(.plain)
+                            .listCardPressFeedback()
                     }
                 } else {
                     switch openMode {
@@ -535,7 +541,9 @@ struct SensitiveWorkRow: View {
             .contentShape(Rectangle())
             selectingOrNavigating(for: row, title: work.title) {
                 if usesInlineNavigation {
-                    NavigationLink(value: work) { row }.buttonStyle(.cardPress)
+                    NavigationLink(value: work) { row }
+                        .buttonStyle(.plain)
+                        .listCardPressFeedback()
                 } else {
                     row.cardNavigation(to: work, accessibilityLabel: work.title)
                 }
@@ -555,7 +563,8 @@ struct SensitiveWorkRow: View {
             } label: {
                 row.environment(\.ao3AuthorNavigationEnabled, false)
             }
-            .buttonStyle(.cardPress)
+            .buttonStyle(.plain)
+            .listCardPressFeedback()
             .accessibilityLabel(title)
             .accessibilityValue(isSelected ? "Selected" : "Not selected")
             .accessibilityHint("Double-tap to \(isSelected ? "deselect" : "select") this work.")
@@ -831,7 +840,8 @@ struct SensitiveRemoteWorkCard<Content: View>: View {
                     .overlay { MatureRevealCapsule() }
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.cardPress)
+            .buttonStyle(.plain)
+            .listCardPressFeedback()
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Hidden mature work")
             .accessibilityHint("Activate to reveal.")

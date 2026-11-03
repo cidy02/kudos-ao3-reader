@@ -66,7 +66,8 @@ struct FavoriteAffinityRow: View {
             } label: {
                 card
             }
-            .buttonStyle(.cardPress)
+            .buttonStyle(.plain)
+            .listCardPressFeedback()
             .accessibilityHint("Shows these works in your Library")
         } else {
             card

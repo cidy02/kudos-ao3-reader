@@ -346,7 +346,8 @@ private struct WritingStatsWorkRow: View {
             .padding(12)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.cardPress)
+        .buttonStyle(.plain)
+        .listCardPressFeedback()
         .accessibilityLabel(accessibilityLabel)
     }
 

@@ -79,7 +79,9 @@ struct AccountExternalNavCard: View {
             button.buttonStyle(.plain)
         } else if let footnote {
             VStack(alignment: .leading, spacing: 6) {
-                button.buttonStyle(.cardPress)
+                button
+                    .buttonStyle(.plain)
+                    .listCardPressFeedback()
                 Text(footnote)
                     .font(.system(size: footnoteSize))
                     .foregroundStyle(.secondary)
@@ -88,7 +90,10 @@ struct AccountExternalNavCard: View {
             }
             .accountControlCardRow()
         } else {
-            button.buttonStyle(.cardPress).accountControlCardRow()
+            button
+                .buttonStyle(.plain)
+                .listCardPressFeedback()
+                .accountControlCardRow()
         }
     }
 
