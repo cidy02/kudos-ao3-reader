@@ -12,6 +12,7 @@ import SwiftUI
 /// hideable inspector sidebar.
 struct ReaderView: View {
     @Bindable var work: SavedWork
+    var initialSpineIndex: Int? = nil
 
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var themeManager
@@ -164,7 +165,13 @@ struct ReaderView: View {
         // window while reading) — independent of the app theme when they're unlinked.
         // A custom paper follows its own luminance instead of the preset's scheme.
         .preferredColorScheme(pageColors.colorScheme)
-        .ao3WorkActions(workActions, workID: WorkTags.ao3WorkID(from: work.sourceURL) ?? 0, auth: auth)
+        .ao3WorkActions(
+            workActions,
+            workID: WorkTags.ao3WorkID(from: work.sourceURL) ?? 0,
+            auth: auth,
+            readerSections: sections,
+            onOpenReaderChapter: { jump(to: $0) }
+        )
         .navigationTitle(work.title)
             .toolbar {
                 ActionToolbar(items: [
@@ -605,10 +612,16 @@ struct ReaderView: View {
                 spineHrefs: parsed.spineURLs.map(\.absoluteString)
             )
             readRoot = directory
-            currentIndex = min(max(work.lastSpineIndex, 0), parsed.spineURLs.count - 1)
-            // Seed the persisted intra-chapter position so reopening restores
-            // the exact saved spot in the saved chapter.
-            progressBridge.seed(spine: currentIndex, fraction: work.lastScrollFraction)
+            currentIndex = min(
+                max(initialSpineIndex ?? work.lastSpineIndex, 0),
+                parsed.spineURLs.count - 1
+            )
+            if initialSpineIndex == nil {
+                // Ordinary entry resumes exactly. A comment deep link deliberately
+                // starts at the target chapter and keeps this saved pair untouched
+                // until the reader actually moves.
+                progressBridge.seed(spine: currentIndex, fraction: work.lastScrollFraction)
+            }
             Log.epub.info("Opened EPUB: \(parsed.chapters.count) chapters")
         } catch {
             document = nil
@@ -640,18 +653,21 @@ private extension ReaderView {
         )
         // Chapter transitions persist the position pair together, so the saved
         // spine + fraction always describe the same chapter.
-        work.lastSpineIndex = currentIndex
-        persist(fraction: restore)
+        if initialSpineIndex == nil || progressBridge.hasMovedFromOpening {
+            persist(fraction: restore)
+        }
         landNextChapterOnLastPage = false
     }
 
     func persist(fraction: Double) {
+        work.lastSpineIndex = progressBridge.currentSpine ?? currentIndex
         progressBridge.persist(fraction, to: work, resourceLengths: document?.spineEntryLengths ?? [])
     }
 
     /// Ordinary streamed update: writes only when the bridge's debounce allows,
     /// keeping SwiftData writes rare while the user scrolls.
     func persistProgressIfDue() {
+        guard initialSpineIndex == nil || progressBridge.hasMovedFromOpening else { return }
         guard let fraction = progressBridge.fractionForDebouncedWrite() else { return }
         persist(fraction: fraction)
     }
@@ -659,6 +675,7 @@ private extension ReaderView {
     /// Flush point (dismissal, mode/layout transition, app termination): always
     /// writes the latest position, bypassing the debounce window.
     func flushProgress() {
+        guard initialSpineIndex == nil || progressBridge.hasMovedFromOpening else { return }
         guard let fraction = progressBridge.fractionForFlush() else { return }
         persist(fraction: fraction)
     }

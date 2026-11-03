@@ -19,6 +19,9 @@ struct BookReaderView: View {
     let work: SavedWork
     /// Home's speaker button: start Read Aloud once the book is ready (iOS only).
     var startsReadAloud = false
+    /// A comment deep link starts this reading-order item instead of resuming.
+    /// The saved locator remains untouched until the navigator reports movement.
+    var initialSpineIndex: Int? = nil
     @Environment(ThemeManager.self) private var theme
 
     var body: some View {
@@ -28,9 +31,13 @@ struct BookReaderView: View {
 
     @ViewBuilder private var reader: some View {
         #if os(iOS)
-        ReadiumReaderView(work: work, startsReadAloud: startsReadAloud)
+        ReadiumReaderView(
+            work: work,
+            startsReadAloud: startsReadAloud,
+            initialSpineIndex: initialSpineIndex
+        )
         #else
-        ReaderView(work: work)
+        ReaderView(work: work, initialSpineIndex: initialSpineIndex)
         #endif
     }
 }
@@ -77,6 +84,7 @@ private struct ReaderPageSkeletonFill: View {
 struct ReadiumReaderView: View {
     @Bindable var work: SavedWork
     var startsReadAloud = false
+    var initialSpineIndex: Int? = nil
 
     @Environment(\.layoutDirection) private var layoutDirection
     @Environment(AppRouter.self) private var router
@@ -120,6 +128,10 @@ struct ReadiumReaderView: View {
     /// Debounces SwiftData writes for the Readium locator stream (see
     /// `ReadiumProgressPersistence`). UI locator / progress pill stay live.
     @State private var progressPersistence = ReadiumProgressPersistence()
+    /// Chapter-targeted opens preserve the prior resume locator until the live
+    /// navigator settles somewhere other than its opening landing.
+    @State private var initialPositionPersistence =
+        ReadiumInitialPositionPersistenceGate(protectsOpeningPosition: false)
     /// Native comments sheet over the reader (only for AO3-backed works).
     @State private var showingComments = false
     /// Non-nil while the archived original is being previewed by QuickLook.
@@ -272,7 +284,9 @@ struct ReadiumReaderView: View {
                 workID: ao3WorkID ?? 0,
                 context: .init(savedWork: work),
                 initialChapterPosition: currentAO3Chapter,
-                undimmed: true
+                undimmed: true,
+                readerSections: book.sections,
+                onOpenReaderChapter: { book.go(toSpineIndex: $0) }
             )
             // `onDismiss` is what makes the Speed slider in this sheet reach
             // the running engine: `setRate` is only ever called from
@@ -955,11 +969,12 @@ struct ReadiumReaderView: View {
         dismiss()
     }
 
-    /// Flush point (dismiss / background / disappear): always persist the latest
-    /// locator when it differs from disk, and refresh Continue Reading order.
-    /// Bypasses the debounce window — a flush must never be dropped.
+    /// Flush point (dismiss / background / disappear): persist the latest locator
+    /// when it differs from disk, once a chapter-targeted open has actually moved.
+    /// Bypasses the debounce window — an eligible flush must never be dropped.
     private func flushProgress(shelfStamp: Bool) {
         progressPersistence.cancelTrailingWrite()
+        guard initialPositionPersistence.allowsPersistence else { return }
         // Prefer the live navigator locator; fall back to the last noted string.
         // After exit has committed (swipe peel or close/edge), never re-record a
         // live locator — freeze release / late TTS can still mutate `currentLocator`
@@ -1424,6 +1439,9 @@ struct ReadiumReaderView: View {
         progressPersistence.seed(
             persistedLocatorString: work.readiumLocator.isEmpty ? nil : work.readiumLocator
         )
+        initialPositionPersistence = ReadiumInitialPositionPersistenceGate(
+            protectsOpeningPosition: initialSpineIndex != nil
+        )
         ReadiumSessionStamp.noteOpened(work, at: Date())
         try? context.save()
 
@@ -1434,8 +1452,13 @@ struct ReadiumReaderView: View {
             // syncUp (that still waits for flush/close/background or launch).
             FolderSyncService.markDirty()
         }
+        book.onLocatorSettled = { locator in
+            guard let string = locator.persistenceString else { return }
+            initialPositionPersistence.observeSettledLocator(string)
+        }
         book.onLocatorChange = { locator in
             guard let string = locator.persistenceString else { return }
+            guard initialPositionPersistence.allowsPersistence else { return }
             // note() may call onDebouncedWrite immediately or schedule a trailing write.
             progressPersistence.note(
                 locatorString: string,
@@ -1449,7 +1472,8 @@ struct ReadiumReaderView: View {
         book.onReachedPublicationEnd = {
             // Keep locator + progressModifiedAt in sync for merge; full shelf stamp
             // only when we actually auto-finish (below).
-            if let string = book.currentLocator?.persistenceString {
+            if initialPositionPersistence.allowsPersistence,
+               let string = book.currentLocator?.persistenceString {
                 writePosition(string)
                 progressPersistence.markPersisted(
                     locatorString: string,
@@ -1472,10 +1496,12 @@ struct ReadiumReaderView: View {
             // native screen where one exists; everything else opens the in-app web view.
             router.openAO3Link(url)
         }
-        let initialLocator = Locator(persistenceString: work.readiumLocator)
+        let initialLocator = initialSpineIndex == nil
+            ? Locator(persistenceString: work.readiumLocator)
+            : nil
         // No Readium progress yet but a legacy position exists → resume at that chapter.
-        let fallbackSpineIndex = initialLocator == nil && work.lastSpineIndex > 0
-            ? work.lastSpineIndex : nil
+        let fallbackSpineIndex = initialSpineIndex
+            ?? (initialLocator == nil && work.lastSpineIndex > 0 ? work.lastSpineIndex : nil)
         let config = EPUBNavigatorViewController.Configuration(
             preferences: preferences,
             // Adds Highlight / Add Note to the system selection menu next to

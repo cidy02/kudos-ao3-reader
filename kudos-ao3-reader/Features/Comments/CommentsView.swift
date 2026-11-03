@@ -20,6 +20,15 @@ nonisolated struct AO3CommentsRoute: Hashable {
     var composes = false
 }
 
+/// A local downloaded work plus the EPUB section a comment named. Kept separate
+/// from `LocalWorkDestination`: ordinary reader entry resumes, while this route
+/// deliberately starts at a specific story chapter without changing saved progress.
+private struct CommentReaderDestination: Identifiable {
+    let work: SavedWork
+    let spineIndex: Int
+    var id: String { "\(work.id.uuidString):\(spineIndex)" }
+}
+
 /// Ordinary sizes keep the floating pill in a bottom safe-area inset (or the system
 /// bottom accessory beside the minimised tab when pushed on iOS). Accessibility
 /// sizes pin the same control under the list so it cannot cover a row.
@@ -63,6 +72,9 @@ struct CommentsView: View {
     /// to a `fullScreenCover` (see `commentsSheet(...)` below) — for long threads
     /// or composing, where the pop-up card feels cramped.
     var onRequestExpand: (() -> Void)?
+    /// Modal presenters use this to dismiss Comments before opening/moving the
+    /// reader. A pushed Comments screen leaves it nil and pushes its own reader.
+    var onOpenReaderChapter: ((SavedWork, Int) -> Void)?
     /// Inbox can retain canonical work metadata learned by this navigation, so
     /// returning to the feed corrects sibling badges and summary cards together.
     var onResolveWorkContext: ((AO3CommentsWorkContext) -> Void)?
@@ -101,6 +113,8 @@ struct CommentsView: View {
     /// The thread being pushed, if any. AO3 gives Thread / Parent Thread their own
     /// isolated-thread pages, so these navigate rather than scrolling in place.
     @State private var pushedThread: CommentThreadRoute?
+    @State private var readerSections: [ReaderSection]
+    @State private var readerDestination: CommentReaderDestination?
     #if DEBUG
     @State private var didApplyDebugThreadRoute = false
     #endif
@@ -112,13 +126,17 @@ struct CommentsView: View {
         initialReplyCommentID: Int? = nil,
         requiredSessionGeneration: Int? = nil,
         isModal: Bool = false, onRequestExpand: (() -> Void)? = nil,
+        readerSections: [ReaderSection] = [],
+        onOpenReaderChapter: ((SavedWork, Int) -> Void)? = nil,
         onResolveWorkContext: ((AO3CommentsWorkContext) -> Void)? = nil
     ) {
         self.workID = workID
         self.workContext = context
         self.isModal = isModal
         self.onRequestExpand = onRequestExpand
+        self.onOpenReaderChapter = onOpenReaderChapter
         self.onResolveWorkContext = onResolveWorkContext
+        _readerSections = State(initialValue: readerSections)
         _model = State(initialValue: CommentsModel(
             workID: workID,
             workContext: context,
@@ -219,6 +237,12 @@ struct CommentsView: View {
             .navigationDestination(for: AO3WorkSummary.self) { summary in
                 WorkDetailView(remote: summary)
             }
+            .navigationDestination(item: $readerDestination) { destination in
+                BookReaderView(
+                    work: destination.work,
+                    initialSpineIndex: destination.spineIndex
+                )
+            }
             // At accessibility sizes the inset did not keep the list clear of the
             // pill, and the pill covered "All comments". The bar then sits under
             // the list, full width, on its own ground. Pushed at standard sizes on iOS,
@@ -239,6 +263,7 @@ struct CommentsView: View {
             }
             #endif
             .refreshable { await model.load(auth: auth, forceRefresh: true) }
+            .task(id: readableWork?.id) { await loadReaderSectionsIfNeeded() }
             .task {
                 await model.loadInitial(auth: auth)
                 reportResolvedWorkContext()
@@ -415,6 +440,56 @@ struct CommentsView: View {
         URL(string: "https://archiveofourown.org/works/\(model.workID)")
     }
 
+    /// The exact local copy represented by this Comments screen, when it is still
+    /// readable. This is the same file-existence gate used by every reader entry.
+    private var readableWork: SavedWork? {
+        allWorks.first { work in
+            (work.ao3WorkID ?? WorkTags.ao3WorkID(from: work.sourceURL)) == workID
+                && WorkReaderPreparation.hasReadableEPUB(for: work)
+        }
+    }
+
+    private func chapterSpineIndex(for comment: AO3Comment) -> Int? {
+        guard readableWork != nil, let chapter = comment.storyChapterPosition else { return nil }
+        return readerSections.spineIndex(forStoryChapter: chapter)
+    }
+
+    private func openReader(atChapterFor comment: AO3Comment) {
+        guard let work = readableWork,
+              let spineIndex = chapterSpineIndex(for: comment)
+        else { return }
+        if let onOpenReaderChapter {
+            onOpenReaderChapter(work, spineIndex)
+        } else {
+            readerDestination = CommentReaderDestination(work: work, spineIndex: spineIndex)
+        }
+    }
+
+    /// Outside an already-open reader, derive the chapter map from the installed
+    /// EPUB only. Reader callers pass their already-built sections and skip this.
+    private func loadReaderSectionsIfNeeded() async {
+        guard readerSections.isEmpty, let work = readableWork else { return }
+        let fileURL = work.fileURL
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("comment-chapters-\(UUID().uuidString)", isDirectory: true)
+        let sections: [ReaderSection]? = try? await Task.detached(priority: .userInitiated) {
+            try FileManager.default.createDirectory(
+                at: directory,
+                withIntermediateDirectories: true
+            )
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let document = try EPUBDocument.open(epubURL: fileURL, into: directory)
+            return ReaderSectionBuilder.build(
+                tocEntries: document.chapters.map {
+                    ReaderSectionBuilder.RawTOCEntry(title: $0.title, spineIndex: $0.spineIndex)
+                },
+                spineHrefs: document.spineURLs.map(\.absoluteString)
+            )
+        }.value
+        guard readableWork?.id == work.id, let sections else { return }
+        readerSections = sections
+    }
+
     private func reportResolvedWorkContext() {
         guard !model.workAuthors.isEmpty || !model.workAuthorIdentities.isEmpty else { return }
         onResolveWorkContext?(model.workContext)
@@ -495,6 +570,8 @@ struct CommentsView: View {
             },
             onCopyLink: { copyLink($0) },
             onFocusThread: { openThread($0) },
+            chapterSpineIndex: { chapterSpineIndex(for: $0) },
+            onGoToChapter: { openReader(atChapterFor: $0) },
             onRequestLogin: { showingLogin = true },
             onOpenAuthor: openAuthor
         )
@@ -1364,11 +1441,15 @@ private struct CommentsSheetModifier: ViewModifier {
     let workID: Int
     let context: AO3CommentsWorkContext
     var initialChapterPosition: Int?
+    var readerSections: [ReaderSection] = []
+    var onOpenReaderChapter: ((Int) -> Void)?
     /// The reader keeps the page undimmed under this sheet. Every other caller
     /// leaves the system scrim, so a comments sheet over the library still dims.
     var undimmed = false
 
     @Environment(AppRouter.self) private var router
+    @State private var pendingReaderDestination: CommentReaderDestination?
+    @State private var readerDestination: CommentReaderDestination?
 
     #if !os(macOS)
     @State private var isFullScreen = false
@@ -1380,6 +1461,7 @@ private struct CommentsSheetModifier: ViewModifier {
         // macOS has no fullScreenCover concept (sheets already resize to the
         // window); present as a plain sheet with no expand affordance.
         content.sheet(isPresented: $isPresented, onDismiss: {
+            finishReaderOpenIfNeeded()
             // Real completion signal for an author byline/reply-quote tap queued by
             // the presented CommentsView — see `requestAuthorProfileAfterDismiss`.
             router.openPendingAuthorProfileAfterDismiss()
@@ -1387,9 +1469,13 @@ private struct CommentsSheetModifier: ViewModifier {
             NavigationStack {
                 CommentsView(
                     workID: workID, context: context, initialChapterPosition: initialChapterPosition,
-                    isModal: true
+                    isModal: true, readerSections: readerSections,
+                    onOpenReaderChapter: requestReaderOpen
                 )
             }
+        }
+        .navigationDestination(item: $readerDestination) { destination in
+            BookReaderView(work: destination.work, initialSpineIndex: destination.spineIndex)
         }
         .onChange(of: isPresented) { _, presented in
             // Rising edge only: a route can only ever be queued on the way *out* of a
@@ -1408,6 +1494,7 @@ private struct CommentsSheetModifier: ViewModifier {
                     pendingExpand = false
                     isFullScreen = true
                 }
+                finishReaderOpenIfNeeded()
                 // Real completion signal for an author byline/reply-quote tap queued
                 // by the presented CommentsView — see `requestAuthorProfileAfterDismiss`.
                 // No-ops during an expand handoff (nothing queued in that flow).
@@ -1420,20 +1507,27 @@ private struct CommentsSheetModifier: ViewModifier {
                         onRequestExpand: {
                             pendingExpand = true
                             isPresented = false
-                        }
+                        },
+                        readerSections: readerSections,
+                        onOpenReaderChapter: requestReaderOpen
                     )
                 }
                 .presentationBackgroundInteraction(undimmed ? .enabled(upThrough: .large) : .automatic)
             }
             .fullScreenCover(isPresented: $isFullScreen, onDismiss: {
+                finishReaderOpenIfNeeded()
                 router.openPendingAuthorProfileAfterDismiss()
             }) {
                 NavigationStack {
                     CommentsView(
                         workID: workID, context: context, initialChapterPosition: initialChapterPosition,
-                        isModal: true
+                        isModal: true, readerSections: readerSections,
+                        onOpenReaderChapter: requestReaderOpen
                     )
                 }
+            }
+            .navigationDestination(item: $readerDestination) { destination in
+                BookReaderView(work: destination.work, initialSpineIndex: destination.spineIndex)
             }
             .onChange(of: isPresented) { _, presented in
                 // Rising edge only: a route can only ever be queued on the way *out* of
@@ -1446,6 +1540,29 @@ private struct CommentsSheetModifier: ViewModifier {
             }
         #endif
     }
+
+    private func requestReaderOpen(_ work: SavedWork, _ spineIndex: Int) {
+        pendingReaderDestination = CommentReaderDestination(work: work, spineIndex: spineIndex)
+        #if os(macOS)
+        isPresented = false
+        #else
+        if isFullScreen {
+            isFullScreen = false
+        } else {
+            isPresented = false
+        }
+        #endif
+    }
+
+    private func finishReaderOpenIfNeeded() {
+        guard let destination = pendingReaderDestination else { return }
+        pendingReaderDestination = nil
+        if let onOpenReaderChapter {
+            onOpenReaderChapter(destination.spineIndex)
+        } else {
+            readerDestination = destination
+        }
+    }
 }
 
 extension View {
@@ -1454,11 +1571,15 @@ extension View {
     func commentsSheet(
         isPresented: Binding<Bool>, workID: Int, context: AO3CommentsWorkContext,
         initialChapterPosition: Int? = nil,
-        undimmed: Bool = false
+        undimmed: Bool = false,
+        readerSections: [ReaderSection] = [],
+        onOpenReaderChapter: ((Int) -> Void)? = nil
     ) -> some View {
         modifier(CommentsSheetModifier(
             isPresented: isPresented, workID: workID, context: context,
             initialChapterPosition: initialChapterPosition,
+            readerSections: readerSections,
+            onOpenReaderChapter: onOpenReaderChapter,
             undimmed: undimmed
         ))
     }

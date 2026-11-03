@@ -422,6 +422,10 @@ struct CommentThreadHandlers {
     var onDelete: (AO3Comment) -> Void
     var onCopyLink: (AO3Comment) -> Void
     var onFocusThread: (Int) -> Void
+    /// Resolves the comment's AO3 chapter against the downloaded EPUB. nil keeps
+    /// the menu honest when the copy or that story chapter is unavailable.
+    var chapterSpineIndex: (AO3Comment) -> Int?
+    var onGoToChapter: (AO3Comment) -> Void
     var onRequestLogin: () -> Void
     /// Opens a commenter's native profile (Works/Series/Bookmarks/About). nil is
     /// a valid, common default — `AO3AuthorBylineView` renders plain, untappable
@@ -437,6 +441,8 @@ struct CommentThreadHandlers {
         onDelete: { _ in },
         onCopyLink: { _ in },
         onFocusThread: { _ in },
+        chapterSpineIndex: { _ in nil },
+        onGoToChapter: { _ in },
         onRequestLogin: {}
     )
 }
@@ -1543,6 +1549,12 @@ private struct CommentPostRow: View {
         if let parentID = comment.parentCommentID {
             Button { handlers.onFocusThread(parentID) } label: {
                 Label("Parent Thread", systemImage: "arrowshape.turn.up.backward")
+            }
+        }
+        if handlers.chapterSpineIndex(comment) != nil,
+           let chapter = comment.storyChapterPosition {
+            Button { handlers.onGoToChapter(comment) } label: {
+                Label("Go to Chapter \(chapter)", systemImage: "book")
             }
         }
         if comment.editPath != nil {

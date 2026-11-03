@@ -233,6 +233,16 @@ nonisolated struct AO3Comment: Identifiable, Equatable, Sendable {
     var parentThreadURL: URL? { Self.ao3URL(for: parentThreadPath) }
     var cutoffThreadURL: URL? { Self.ao3URL(for: cutoffThreadPath) }
 
+    /// AO3 renders chapter bylines as "Chapter N". Keep the parsed story position
+    /// beside that source value so comment actions and focused-thread routing use
+    /// the same number without inventing a chapter from the unrelated database id.
+    var storyChapterPosition: Int? {
+        chapterLabel?
+            .split(whereSeparator: { !$0.isNumber })
+            .compactMap { Int($0) }
+            .first
+    }
+
     /// The immediate parent's id, parsed from AO3's own "Parent Thread" link —
     /// nil for a top-level comment, or when AO3 didn't render the link. Drives
     /// scrolling to the parent natively (`CommentsView`'s focus-thread action)
