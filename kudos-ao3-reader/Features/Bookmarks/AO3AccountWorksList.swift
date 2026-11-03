@@ -633,7 +633,9 @@ struct AO3AccountWorksList: View {
                 ScrollView {
                     VStack(spacing: 12) {
                         subjectHeader.padding(.top, 12)
-                        if showPagination { paginationBar }
+                        if showPagination, SearchPaginationBar.showsTopPager(rowCount: visibleEntries.count) {
+                            paginationBar
+                        }
                         AccountWorksCompactGrid(entries: visibleEntries)
                         if showPagination { paginationBar }
                     }
@@ -645,7 +647,7 @@ struct AO3AccountWorksList: View {
             } else {
                 List {
                     subjectHeaderSection
-                    if showPagination {
+                    if showPagination, SearchPaginationBar.showsTopPager(rowCount: visibleEntries.count) {
                         Section { paginationRow }
                     }
                     Section {

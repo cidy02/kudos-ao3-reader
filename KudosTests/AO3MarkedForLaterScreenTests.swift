@@ -173,7 +173,7 @@ struct AO3MarkedForLaterScreenTests {
         #expect(
             AO3MarkedForLaterCopy.footer(currentPage: 1, totalPages: 1)
                 == "Your Marked for Later list is stored on AO3. Unmarking a work here also removes it "
-                + "from that list on AO3. You're viewing 1 of 1 page."
+                + "from that list on AO3."
         )
     }
 

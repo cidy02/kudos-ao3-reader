@@ -503,3 +503,9 @@ private struct PageJumpSheet: View {
     SearchPaginationBar(currentPage: 1, totalPages: 1) { _ in }
         .padding()
 }
+
+extension SearchPaginationBar {
+    /// A second pager above a list only helps when the page is long enough to push the bottom
+    /// one off screen; above a short page it floats mid-screen as clutter.
+    nonisolated static func showsTopPager(rowCount: Int) -> Bool { rowCount > 8 }
+}
