@@ -1580,7 +1580,6 @@ private struct ExpandableCommentBody: View {
     @State private var isExpanded = false
     @State private var clampedHeight: CGFloat = 0
     @State private var fullHeight: CGFloat = 0
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ScaledMetric(relativeTo: .body) private var bodySize: CGFloat = 14
 
     /// Truncation is a layout fact. A character budget can't know the reader's
@@ -1592,14 +1591,17 @@ private struct ExpandableCommentBody: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            visibleBodyText
+            bodyText
+                .lineLimit(isExpanded ? nil : CommentThreadGeometry.collapsedBodyLineLimit)
+                .fixedSize(horizontal: false, vertical: true)
+                .animation(nil, value: isExpanded)
                 .background(alignment: .top) { truncationProbes }
 
             if needsExpansion {
                 Button {
-                    withAnimationUnlessReduced(.snappy(duration: 0.3), reduceMotion: reduceMotion) {
-                        isExpanded.toggle()
-                    }
+                    // List snapshots both cell layouts when its height animates, causing
+                    // row/header ghosting (filmed 2026-11-03); keep relayout instant.
+                    isExpanded.toggle()
                 } label: {
                     Text(isExpanded ? "Show less" : "Read more")
                         .font(.caption.weight(.semibold))
@@ -1611,22 +1613,6 @@ private struct ExpandableCommentBody: View {
                         : "Expands the full comment"
                 )
             }
-        }
-        .clipped()
-    }
-
-    @ViewBuilder
-    private var visibleBodyText: some View {
-        if isExpanded {
-            bodyText
-                .lineLimit(nil)
-                .fixedSize(horizontal: false, vertical: true)
-                .transition(.opacity.combined(with: .move(edge: .top)))
-        } else {
-            bodyText
-                .lineLimit(CommentThreadGeometry.collapsedBodyLineLimit)
-                .fixedSize(horizontal: false, vertical: true)
-                .transition(.opacity.combined(with: .move(edge: .top)))
         }
     }
 

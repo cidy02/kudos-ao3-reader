@@ -103,7 +103,11 @@ struct WorkRow: View {
             }
         }
         .downloadDimmed(work)
-        .onChange(of: expandAll, initial: true) { _, value in expandedBinding.wrappedValue = value }
+        .onChange(of: expandAll, initial: true) { _, value in
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) { expandedBinding.wrappedValue = value }
+        }
     }
 
     // MARK: - Ledger
@@ -221,7 +225,6 @@ struct WorkRow: View {
         } remainder: {
             standardRemainder(summaryText: summaryText)
         }
-        .clipped()
     }
 
     @ViewBuilder
@@ -245,22 +248,27 @@ struct WorkRow: View {
                 freeforms: work.hasCategorizedWorkTags ? work.workFreeforms : work.workTags,
                 onTap: { tag, field in router.searchAO3(field, tag) }
             )
-            .transition(.opacity.combined(with: .move(edge: .top)))
         }
         if !summaryText.isEmpty {
-            summary(summaryText)
+            Text(summaryText)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .lineLimit(expandedBinding.wrappedValue || dynamicTypeSize.isAccessibilitySize ? nil : 3)
+                .multilineTextAlignment(.leading)
+                .animation(nil, value: expandedBinding.wrappedValue)
         }
         if expandedBinding.wrappedValue {
-            VStack(alignment: .leading, spacing: 12) {
-                if work.hasCategorizedWorkTags {
-                    chipGroup("Relationships", work.workRelationships, field: .relationship)
-                    chipGroup("Characters", work.workCharacters, field: .character)
-                    chipGroup("Additional Tags", work.workFreeforms, field: .freeform)
-                } else {
-                    chipGroup("Tags", work.workTags, field: .freeform)
+            WorkRowExpandedDetails(animate: !expandAll) {
+                VStack(alignment: .leading, spacing: 12) {
+                    if work.hasCategorizedWorkTags {
+                        chipGroup("Relationships", work.workRelationships, field: .relationship)
+                        chipGroup("Characters", work.workCharacters, field: .character)
+                        chipGroup("Additional Tags", work.workFreeforms, field: .freeform)
+                    } else {
+                        chipGroup("Tags", work.workTags, field: .freeform)
+                    }
                 }
             }
-            .transition(.opacity.combined(with: .move(edge: .top)))
         }
         WorkListStatsRow(
             rating: work.rating.isEmpty ? nil : work.rating,
@@ -280,26 +288,6 @@ struct WorkRow: View {
         if let standardProgress {
             WorkReadProgressBar(progress: standardProgress)
         }
-    }
-
-    @ViewBuilder
-    private func summary(_ text: String) -> some View {
-        if expandedBinding.wrappedValue || dynamicTypeSize.isAccessibilitySize {
-            summaryText(text, lineLimit: nil)
-                .transition(.opacity.combined(with: .move(edge: .top)))
-        } else {
-            summaryText(text, lineLimit: 3)
-                .transition(.opacity.combined(with: .move(edge: .top)))
-        }
-    }
-
-    private func summaryText(_ text: String, lineLimit: Int?) -> some View {
-        Text(text)
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-            .lineLimit(lineLimit)
-            .multilineTextAlignment(.leading)
-            .fixedSize(horizontal: false, vertical: true)
     }
 
     private var statusGrid: some View {
@@ -375,28 +363,14 @@ struct WorkRow: View {
                     .foregroundStyle(.tertiary)
             }
             if !nonemptyFandomNames.isEmpty {
-                fandomNames
+                Text(nonemptyFandomNames.joined(separator: ", "))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(expandedBinding.wrappedValue || dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                    .animation(nil, value: expandedBinding.wrappedValue)
             }
         }
         .fixedSize(horizontal: false, vertical: true)
-    }
-
-    @ViewBuilder
-    private var fandomNames: some View {
-        if expandedBinding.wrappedValue || dynamicTypeSize.isAccessibilitySize {
-            fandomNamesText(lineLimit: nil)
-                .transition(.opacity.combined(with: .move(edge: .top)))
-        } else {
-            fandomNamesText(lineLimit: 1)
-                .transition(.opacity.combined(with: .move(edge: .top)))
-        }
-    }
-
-    private func fandomNamesText(lineLimit: Int?) -> some View {
-        Text(nonemptyFandomNames.joined(separator: ", "))
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-            .lineLimit(lineLimit)
     }
 
     private var expandButton: some View {
@@ -431,19 +405,44 @@ struct WorkRow: View {
 /// `Binding` rather than owning its own state).
 struct WorkRowExpandButton: View {
     @Binding var expanded: Bool
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Button {
-            withAnimationUnlessReduced(.snappy(duration: 0.3), reduceMotion: reduceMotion) {
-                expanded.toggle()
-            }
+            // List snapshots both cell layouts when its height animates, causing
+            // row/header ghosting (filmed 2026-11-03); keep relayout instant.
+            expanded.toggle()
         } label: {
-            Image(systemName: expanded ? "chevron.up" : "chevron.down")
+            Image(systemName: "chevron.down")
                 .font(.caption.weight(.semibold))
+                .rotationEffect(.degrees(expanded ? 180 : 0))
+                .animation(unlessReduced: .easeInOut(duration: 0.2), value: expanded)
         }
         .buttonStyle(.kudosSecondaryCircle)
         .minimumHitTarget()
         .accessibilityLabel(expanded ? "Show less" : "Show more")
+    }
+}
+
+/// Fades only content whose insertion does not change during the animation. The
+/// parent row has already completed its instant List relayout before this appears.
+struct WorkRowExpandedDetails<Content: View>: View {
+    var animate: Bool
+    @ViewBuilder var content: () -> Content
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isVisible = false
+
+    var body: some View {
+        content()
+            .opacity(isVisible || reduceMotion || !animate ? 1 : 0)
+            .onAppear {
+                guard animate else {
+                    isVisible = true
+                    return
+                }
+                withAnimationUnlessReduced(.easeOut(duration: 0.2), reduceMotion: reduceMotion) {
+                    isVisible = true
+                }
+            }
     }
 }
