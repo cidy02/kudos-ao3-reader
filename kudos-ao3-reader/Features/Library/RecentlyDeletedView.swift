@@ -14,11 +14,9 @@ struct RecentlyDeletedDestination: Hashable {}
 /// was; Delete Permanently skips the rest of the window. Hidden entirely from
 /// navigation when empty — see `RecentlyDeletedEntryRow` in `LibraryView`.
 ///
-/// **Grouped by how long is left, not by type.** The spec's sections are Expiring
-/// soon and Later, which is the only grouping that answers the question this screen
-/// exists for: what am I about to lose? Nothing is lost by regrouping, because each
-/// row names its own kind in its kicker — a queue no longer needs a section header to
-/// say it is a queue.
+/// Deleted records and finished, un-kept copies have separate sections; each is
+/// sorted soonest to expire first. Work rows carry their required-tag symbols,
+/// while collections and queues name their kind above the title.
 ///
 /// The reassurance line at the top is the spec's and is the most important sentence
 /// here: readers reach this screen worried they have deleted something off AO3.
@@ -231,8 +229,8 @@ struct RecentlyDeletedView: View {
                     SectionRuleHeader(title: "Deleted", count: deleted.count)
                         .pageBodyRow(top: 18, gutter: 0)
                     sectionNote("Kept for \(Self.windowDays) days, then removed for good.")
-                    ForEach(deleted) { entry in
-                        row(entry)
+                    ForEach(Array(deleted.enumerated()), id: \.element.id) { index, entry in
+                        row(entry, showsSeparator: index < deleted.count - 1)
                     }
                 }
             }
@@ -244,8 +242,8 @@ struct RecentlyDeletedView: View {
                     sectionNote("Works you finished without downloading, favoriting or queuing them. "
                         + "Their copies stay here for \(Self.heldWindowDays) days so you can still read them "
                         + "offline, then they're removed. The works stay in your reading history.")
-                    ForEach(held) { entry in
-                        row(entry)
+                    ForEach(Array(held.enumerated()), id: \.element.id) { index, entry in
+                        row(entry, showsSeparator: index < held.count - 1)
                     }
                 }
             }
@@ -265,10 +263,11 @@ struct RecentlyDeletedView: View {
         }
     }
 
-    private func row(_ entry: RecentlyDeletedEntry) -> some View {
+    private func row(_ entry: RecentlyDeletedEntry, showsSeparator: Bool) -> some View {
         RecentlyDeletedRow(
             entry: entry,
             palette: palette,
+            showsSeparator: showsSeparator,
             isSelecting: isSelecting,
             isSelected: selection.contains(entry.id),
             onToggleSelection: {
@@ -283,7 +282,10 @@ struct RecentlyDeletedView: View {
             },
             onDeletePermanently: { pendingPermanent = entry }
         )
-        .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
+        .pageBodyRow(
+            top: entry.savedWork == nil ? 8 : 0,
+            gutter: entry.savedWork == nil ? SubjectMetrics.accountGutter : 0
+        )
     }
 
     private func sectionNote(_ text: String) -> some View {
@@ -459,14 +461,15 @@ struct RecentlyDeletedView: View {
 /// the record's own per-kind restore and permanent delete.
 struct RecentlyDeletedEntry: Identifiable {
     let id: UUID
-    /// What kind of thing this is — the spec puts it above the title, which is what
-    /// lets the list group by expiry instead of by type.
+    /// What kind of non-work item this is. Work rows use their symbol tile instead.
     let kicker: String
     /// "work", "collection", "reading queue" — for the restore-failure copy.
     let noun: String
     let title: String
     let detail: String
     var authorIdentities: [AO3AuthorIdentity] = []
+    /// Present only for work rows, whose required-tag symbols come from the work.
+    var savedWork: SavedWork? = nil
     let daysRemaining: Int
     /// `PreservedWorkService.restore` for this kind; false when it did not persist.
     let restore: () -> Bool
@@ -497,6 +500,7 @@ extension RecentlyDeletedEntry {
             title: work.title,
             detail: workDetail(work),
             authorIdentities: work.verifiedAuthorIdentities,
+            savedWork: work,
             daysRemaining: RecentlyDeletedView.daysRemaining(work.permanentDeletionScheduledAt),
             restore: { PreservedWorkService.restore(work, in: context) },
             deletionMessage: { workDeletionMessage(work, in: context) },
@@ -517,6 +521,7 @@ extension RecentlyDeletedEntry {
             title: work.title,
             detail: workDetail(work),
             authorIdentities: work.verifiedAuthorIdentities,
+            savedWork: work,
             daysRemaining: RecentlyDeletedView.daysRemaining(expires),
             restore: {
                 WorkLifecycle.restoreHeldCopy(work, in: context)
@@ -567,12 +572,10 @@ extension RecentlyDeletedEntry {
             + deletedAt.formatted(.dateTime.day().month(.abbreviated).locale(locale))
     }
 
-    /// Spec 1bj: "sprawl_ghost · 66,410 words · unread". The last fact is the state
-    /// the record was in when it was deleted, which is what tells a reader whether
-    /// restoring gets them back something they had got partway through.
+    /// The facts below the author/fandom line. The last is the state the record was
+    /// in when it was deleted, which tells a reader what restoring gets them back.
     private static func workDetail(_ work: SavedWork) -> String {
         var parts: [String] = []
-        if !work.author.isEmpty { parts.append(work.author) }
         if work.wordCount > 0 { parts.append("\(work.wordCount.formatted()) words") }
         parts.append(stateWord(work.readingState))
         return parts.joined(separator: " · ")
@@ -625,26 +628,29 @@ extension RecentlyDeletedEntry {
     }
 }
 
-/// A single Recently Deleted row on the subject card. Spec 1bj: "Swipe gives
+/// A single Recently Deleted row. Works use the flat Library-row grammar;
+/// collections and queues keep their kind-labelled subject cards. Spec 1bj: "Swipe gives
 /// Restore and Delete in that order", both on the trailing edge. The same two
 /// actions live in a context menu — swipes are invisible until tried, and on
 /// macOS they only exist for trackpad users, so the menu is the discoverable path.
 /// While selecting, a tap toggles the row and neither is offered.
 private struct RecentlyDeletedRow: View {
-    /// Title, detail and the days figure scale with the kicker above them; at AX
-    /// sizes the kicker alone grew and the title under it stayed at 16.5.
+    /// Title, detail and the days figure scale together at AX sizes.
     @ScaledMetric(relativeTo: .headline) private var titleSize: CGFloat = 16.5
     @ScaledMetric(relativeTo: .caption) private var detailSize: CGFloat = 11.5
     @ScaledMetric(relativeTo: .footnote) private var daysSize: CGFloat = 13
 
     let entry: RecentlyDeletedEntry
     let palette: SubjectPalette
+    let showsSeparator: Bool
     var isSelecting = false
     var isSelected = false
     var onToggleSelection: () -> Void = {}
     let onRestore: () -> Void
     /// Asks for the alert; never deletes by itself.
     let onDeletePermanently: () -> Void
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         if isSelecting {
@@ -661,8 +667,8 @@ private struct RecentlyDeletedRow: View {
     }
 
     private var idleRow: some View {
-        // authorIdentities.isEmpty: the detail line is a plain, non-interactive Text,
-        // so the whole row safely combines into one VoiceOver stop instead of three
+        // authorIdentities.isEmpty: the content is plain, non-interactive text, so
+        // the whole row safely combines into one VoiceOver stop instead of three
         // (HIG audit UI-2). Otherwise it is an AO3AuthorBylineView, whose author names
         // can be individually VoiceOver-focusable (AO3AuthorNavigation) — combining
         // would sweep those into one non-interactive element and silently remove that
@@ -697,7 +703,60 @@ private struct RecentlyDeletedRow: View {
         }
     }
 
+    @ViewBuilder
     private var rowContent: some View {
+        if let work = entry.savedWork {
+            workRowContent(work)
+        } else {
+            containerRowContent
+        }
+    }
+
+    private func workRowContent(_ work: SavedWork) -> some View {
+        WorkPlainRow(showsSeparator: showsSeparator) {
+            WorkStatusIconGrid(
+                rating: work.rating.isEmpty ? nil : work.rating,
+                categories: work.workCategories,
+                warnings: work.workWarnings,
+                completion: work.completionStatus,
+                tileSize: WorkRow.ledgerTileSize,
+                announcesToVoiceOver: true
+            )
+        } heading: {
+            HStack(alignment: .top, spacing: 6) {
+                VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(entry.title)
+                            .font(.system(size: titleSize, weight: .semibold))
+                            .lineLimit(2)
+                        authorAndFandoms(work)
+                        if !entry.detail.isEmpty {
+                            Text(entry.detail)
+                                .font(.system(size: detailSize))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                        }
+                    }
+                    remaining
+                    warningNote
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                if isSelecting {
+                    WorkSelectionBubble(isSelected: isSelected)
+                }
+            }
+        } remainder: {
+            EmptyView()
+        }
+        .background {
+            if isSelected {
+                Rectangle().fill(.tint).opacity(0.08)
+            }
+        }
+    }
+
+    private var containerRowContent: some View {
         HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 6) {
                 VStack(alignment: .leading, spacing: 3) {
@@ -711,14 +770,14 @@ private struct RecentlyDeletedRow: View {
                         .font(.system(size: titleSize, weight: .semibold))
                         .lineLimit(2)
                     if !entry.detail.isEmpty {
-                        detailLine
+                        Text(entry.detail)
+                            .font(.system(size: detailSize))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
                     }
                 }
                 remaining
-                if let title = entry.redownloadability.rowTitle,
-                   let body = entry.redownloadability.rowBody {
-                    RedownloadWarningNote(title: title, message: body)
-                }
+                warningNote
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -738,20 +797,51 @@ private struct RecentlyDeletedRow: View {
     }
 
     @ViewBuilder
-    private var detailLine: some View {
-        if entry.authorIdentities.isEmpty {
-            Text(entry.detail)
-                .font(.system(size: detailSize))
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
-        } else {
-            AO3AuthorBylineView(
-                displayText: entry.detail,
-                identities: entry.authorIdentities,
-                includesBy: false,
-                font: .caption,
-                compact: true
-            )
+    private func authorAndFandoms(_ work: SavedWork) -> some View {
+        let fandoms = work.workFandoms.filter {
+            !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        if !work.author.isEmpty || !fandoms.isEmpty {
+            ViewThatFits(in: .horizontal) {
+                workByline(work, fandoms: fandoms, wraps: false)
+                workByline(work, fandoms: fandoms, wraps: true)
+            }
+        }
+    }
+
+    private func workByline(_ work: SavedWork, fandoms: [String], wraps: Bool) -> some View {
+        let layout = wraps
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 4))
+        return layout {
+            if !work.author.isEmpty {
+                AO3AuthorBylineView(
+                    displayText: work.author,
+                    identities: entry.authorIdentities,
+                    font: .caption,
+                    compact: !dynamicTypeSize.isAccessibilitySize
+                )
+            }
+            if !wraps, !work.author.isEmpty, !fandoms.isEmpty {
+                Text("·")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            if !fandoms.isEmpty {
+                Text(fandoms.joined(separator: ", "))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+            }
+        }
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    @ViewBuilder
+    private var warningNote: some View {
+        if let title = entry.redownloadability.rowTitle,
+           let body = entry.redownloadability.rowBody {
+            RedownloadWarningNote(title: title, message: body)
         }
     }
 
