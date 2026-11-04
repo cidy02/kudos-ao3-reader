@@ -11,6 +11,7 @@ struct ReaderNoteEditor: View {
     let onDelete: () -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(ThemeManager.self) private var themeManager
     @State private var draft: String = ""
     /// The raw colour on open, including a well colour's `#RRGGBB`. Cancel
     /// writes this back; going through `color` would turn a custom colour yellow.
@@ -72,7 +73,7 @@ struct ReaderNoteEditor: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
+                    Button {
                         finished = true
                         // Drop an unfinished drag so the well's disappear flush
                         // cannot write back a colour Cancel just threw away.
@@ -84,7 +85,10 @@ struct ReaderNoteEditor: View {
                             onCommit()
                         }
                         dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
                     }
+                    .accessibilityLabel("Cancel")
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button {
@@ -100,6 +104,10 @@ struct ReaderNoteEditor: View {
             }
         }
         .environment(\.customColorWellSession, colorWellSession)
+        .presentationBackground {
+            themeManager.appTheme.cardBackdrop
+                .ignoresSafeArea()
+        }
         .onAppear {
             draft = annotation.note
             colorRawOnOpen = annotation.colorRaw
