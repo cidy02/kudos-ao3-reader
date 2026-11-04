@@ -258,7 +258,7 @@ struct ChapterBars: View {
     var height: CGFloat?
     var accessibilityLabel: String?
 
-    @Environment(\.accentFill) private var accentFill
+    @Environment(\.accentInk) private var accentInk
     @ScaledMetric(relativeTo: .caption) private var trackHeight: CGFloat = 16
 
     private var resolvedHeight: CGFloat {
@@ -294,7 +294,7 @@ struct ChapterBars: View {
     }
 
     private var readColor: Color {
-        onGradient ? .white : accentFill
+        onGradient ? .white : accentInk
     }
 
     private var faint: Color {
@@ -320,7 +320,7 @@ struct ChapterBars: View {
                     .fill(faint)
             case .newChapter:
                 RoundedRectangle(cornerRadius: metrics.radius, style: .continuous)
-                    .fill(accentFill)
+                    .fill(accentInk)
             }
         }
         .frame(width: metrics.width, height: barHeight)

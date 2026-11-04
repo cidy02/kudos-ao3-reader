@@ -148,7 +148,7 @@ struct WordsPerDayCard: View {
                                 }
 
                                 RoundedRectangle(cornerRadius: 3)
-                                    .fill(day.words > 0 ? theme.effectiveTint : Color.primary.opacity(0.08))
+                                    .fill(day.words > 0 ? theme.accentInk : Color.primary.opacity(0.08))
                                     .frame(height: height)
                             }
                             .frame(maxWidth: .infinity)
@@ -913,7 +913,7 @@ struct TasteTagsCard: View {
                                 .fill(Color.primary.opacity(0.08))
                                 .overlay(alignment: .leading) {
                                     Capsule()
-                                        .fill(theme.effectiveTint)
+                                        .fill(theme.accentInk)
                                         .frame(width: proxy.size.width * ratio)
                                 }
                         }
@@ -993,7 +993,7 @@ struct TasteRatingsCategoriesWarningsCard: View {
                                 .fill(Color.primary.opacity(0.08))
                                 .overlay(alignment: .leading) {
                                     Capsule()
-                                        .fill(theme.effectiveTint)
+                                        .fill(theme.accentInk)
                                         .frame(width: proxy.size.width * ratio)
                                 }
                         }
@@ -1156,7 +1156,7 @@ struct HabitsTimeOfDayCard: View {
                         let height = max(3.0, (item.seconds / maxSeconds) * 86.0)
                         let isLateNight = item.hour >= 1 && item.hour < 5
                         RoundedRectangle(cornerRadius: 2)
-                            .fill(item.seconds > 0 ? (isLateNight ? theme.effectiveTint.opacity(0.6) : theme.effectiveTint) : Color.primary.opacity(0.08))
+                            .fill(item.seconds > 0 ? (isLateNight ? theme.accentInk.opacity(0.6) : theme.accentInk) : Color.primary.opacity(0.08))
                             .frame(height: height)
                             .frame(maxWidth: .infinity)
                     }
@@ -1233,7 +1233,7 @@ struct HabitsCalendarCard: View {
                         Text("\(day.dayNumber)")
                             .font(.system(size: 10, weight: .medium))
                             .monospacedDigit()
-                            .foregroundStyle(day.words > 10_000 ? Color.white : Color.secondary)
+                            .foregroundStyle(day.words > 10_000 ? ThemeManager.label(on: theme.accentInk) : Color.secondary)
                             .padding(4)
                     }
                 }
@@ -1279,10 +1279,10 @@ struct HabitsCalendarCard: View {
 
     private func heatColor(for words: Int) -> Color {
         if words == 0 { return Color.primary.opacity(0.06) }
-        if words < 5_000 { return theme.effectiveTint.opacity(0.25) }
-        if words < 10_000 { return theme.effectiveTint.opacity(0.50) }
-        if words < 20_000 { return theme.effectiveTint.opacity(0.75) }
-        return theme.effectiveTint
+        if words < 5_000 { return theme.accentInk.opacity(0.55) }
+        if words < 10_000 { return theme.accentInk.opacity(0.70) }
+        if words < 20_000 { return theme.accentInk.opacity(0.85) }
+        return theme.accentInk
     }
 }
 
@@ -1317,7 +1317,7 @@ struct HabitsSittingsCard: View {
                             .font(.system(size: 11, weight: .semibold))
                             .foregroundStyle(sit.count > 0 ? Color.primary : Color.secondary)
                         RoundedRectangle(cornerRadius: 3)
-                            .fill(sit.count > 0 ? theme.effectiveTint : Color.primary.opacity(0.08))
+                            .fill(sit.count > 0 ? theme.accentInk : Color.primary.opacity(0.08))
                             .frame(height: height)
                         Text(sit.label)
                             .font(.system(size: 10))
@@ -1378,13 +1378,13 @@ struct HabitsSavedToFinishedCard: View {
                     .fill(Color.secondary.opacity(0.3))
                     .frame(height: 2)
                 Circle()
-                    .fill(theme.effectiveTint.opacity(0.5))
+                    .fill(theme.accentInk.opacity(0.55))
                     .frame(width: 12, height: 12)
                 Rectangle()
-                    .fill(theme.effectiveTint)
+                    .fill(theme.accentInk)
                     .frame(height: 2)
                 Circle()
-                    .fill(theme.effectiveTint)
+                    .fill(theme.accentInk)
                     .frame(width: 12, height: 12)
             }
 
@@ -1474,7 +1474,7 @@ struct HabitsRereadsCard: View {
 
                             Text("×\(work.finishCount)")
                                 .font(.subheadline.weight(.bold))
-                                .foregroundStyle(theme.effectiveTint)
+                                .foregroundStyle(theme.accentInk)
                         }
                         .padding(.horizontal, 16)
                         .padding(.vertical, 10)
@@ -1645,7 +1645,7 @@ struct LibraryUnreadCard: View {
             VStack(spacing: 6) {
                 let maxW = max(1, max(addedWords, readWords))
                 barRow(label: "Added", words: addedWords, color: Color.secondary, maxVal: maxW)
-                barRow(label: "Read", words: readWords, color: theme.effectiveTint, maxVal: maxW)
+                barRow(label: "Read", words: readWords, color: theme.accentInk, maxVal: maxW)
             }
         }
         .padding(16)
@@ -1981,7 +1981,7 @@ struct LibraryFeedbackCard: View {
                     .fill(Color.primary.opacity(0.08))
                     .overlay(alignment: .leading) {
                         Capsule()
-                            .fill(theme.effectiveTint)
+                            .fill(theme.accentInk)
                             .frame(width: proxy.size.width * CGFloat(percent) / 100.0)
                     }
             }
