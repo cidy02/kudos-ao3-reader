@@ -314,7 +314,9 @@ struct AllReadingQueuesGridView: View {
         }
         #if DEBUG
         .task {
-            if DebugLaunchRoute.takeSheet("newqueue") || DebugLaunchRoute.value == "queues" {
+            // Only the "newqueue" shot opens this. The bare "queues" route has to
+            // stay the organizer root, or that screen can never be shot again.
+            if DebugLaunchRoute.takeSheet("newqueue") {
                 showingNewQueue = true
             }
         }
