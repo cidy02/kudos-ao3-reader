@@ -324,7 +324,7 @@ struct ReadiumReaderView: View {
                     deleteAnnotation(annotation)
                     refreshHighlightDecorations()
                 }
-                .presentationDetents([.medium, .large])
+                .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
                 .presentationBackgroundInteraction(.enabled(upThrough: .large))
                 .preferredColorScheme(readerPageColors.colorScheme)
@@ -1076,6 +1076,8 @@ struct ReadiumReaderView: View {
         // window safe area the page box uses. Nothing more: a navigation bar's
         // buttons start on the safe area's edge, and these line up with them.
         .padding(.top, book.pageBoxChromeSafeTop)
+        .padding(.bottom, 2)
+        .background(readerPageColors.background.ignoresSafeArea(edges: .top))
         .allowsHitTesting(chromeVisible)
         .opacity(chromeVisible ? 1 : 0)
     }
@@ -1146,8 +1148,10 @@ struct ReadiumReaderView: View {
                 standaloneMiniPlayer
             }
         }
+        .padding(.top, chromeVisible && atEnd ? 18 : 0)
         .padding(.horizontal, Self.chromeInset)
         .padding(.bottom, book.pageBoxChromeSafeBottom + Self.chromeInset)
+        .background { if chromeVisible, atEnd { readerPageColors.background.ignoresSafeArea() } }
         .allowsHitTesting(chromeVisible || speechActive)
     }
 
@@ -1795,7 +1799,7 @@ extension ReadiumReaderView {
                 }
             }
         }
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.large])
         .presentationDragIndicator(.visible)
         .presentationContentInteraction(.scrolls)
         // No dim over the page (board 27). The fan's own backdrop is already clear.

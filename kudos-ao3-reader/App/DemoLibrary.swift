@@ -19,6 +19,13 @@ enum DemoLibrary {
             applyWorkTags(from: sample, to: work)
             try? context.save()
         }
+        for sample in samples where sample.ao3WorkID != nil {
+            if let work = existing.first(where: { $0.title == sample.title && $0.author == sample.author }),
+               work.ao3WorkID != sample.ao3WorkID {
+                work.ao3WorkID = sample.ao3WorkID
+                try? context.save()
+            }
+        }
         guard !existing.contains(where: { $0.title == samples[0].title }) else {
             seedRecentlyDeleted(in: context)
             return
@@ -48,6 +55,7 @@ enum DemoLibrary {
                 work.lastSpineIndex = 1
             }
             work.isFinished = sample.finished
+            work.ao3WorkID = sample.ao3WorkID
             if let seen = sample.seenChapters { work.knownChapterCount = seen }
             applyWorkTags(from: sample, to: work)
             context.insert(work)
@@ -177,6 +185,7 @@ enum DemoLibrary {
         var onDevice = true
         /// The chapter count last seen; lower than posted means "new chapters".
         var seenChapters: Int?
+        var ao3WorkID: Int?
     }
 
     private static func applyWorkTags(from sample: Sample, to work: SavedWork) {
@@ -226,7 +235,8 @@ enum DemoLibrary {
                words: 18_020, chapters: "4/6", progress: 0.71, favorite: true, seenChapters: 3),
         Sample(title: "What the River Keeps", author: "undertow",
                fandoms: ["Les Misérables - Victor Hugo"], rating: "Teen And Up Audiences",
-               words: 132_500, chapters: "30/30", finished: true, kept: true),
+               words: 132_500, chapters: "30/30", finished: true, kept: true,
+               ao3WorkID: 999_000_002),
         Sample(title: "Static on Channel Nine", author: "lowfreq",
                fandoms: ["Supernatural"], rating: "Mature", words: 27_600, chapters: "3/?",
                onDevice: false),
@@ -277,6 +287,7 @@ enum DebugShots {
     private static let neonDetails = "queue-details:Neon reread"
     private static let sodium = "work:Sodium Lights"
     private static let readSodium = "read:Sodium Lights"
+    private static let readRiver = "read:What the River Keeps"
     private static let winter = "acct:ao3collection:winter_exchange"
     private static let posted = "acct:workedit:1001"
     private static let starSearch = "tagsearch:Star Wars"
@@ -367,7 +378,7 @@ enum DebugShots {
         ("collectionaddworks", DebugShot(route: "collection:Comfort reads", sheets: ["collectionaddworks"])),
         ("libedit", DebugShot(route: "library", sheets: ["libedit"])),
         ("sortby", DebugShot(route: starSearch, pushes: ["sortby"])),
-        ("readerend", DebugShot(route: readSodium, sheets: ["readerend"])),
+        ("readerend", DebugShot(route: readRiver, sheets: ["readerend"])),
         ("welcome", DebugShot(route: "welcome")),
         ("protectlibrary", DebugShot(route: "protectlibrary")),
     ]

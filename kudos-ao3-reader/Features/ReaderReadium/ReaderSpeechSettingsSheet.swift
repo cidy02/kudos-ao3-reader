@@ -44,10 +44,9 @@ struct ReaderSpeechSettingsSheet: View {
                 }
             }
         }
-        // Medium first so the book stays partly visible — this is a tweak-while-
-        // listening surface, not a destination. Large is there because the
-        // section is long once a pack is installed.
-        .presentationDetents([.medium, .large])
+        // Full height so voice, pack and Delivery sliders all fit without
+        // clipping (board 33).
+        .presentationDetents([.large])
         .presentationDragIndicator(.visible)
         .presentationBackgroundInteraction(.enabled(upThrough: .large))
     }
