@@ -499,20 +499,21 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     /// A purely local section carousel (Reading Now / Finished / Downloaded).
     /// Reads pre-filtered slices from `sectionCache`.
     private func localCarousel(
-        _ kind: LibrarySectionKind,
-        title: String,
+        _ shelf: LibraryShelfID,
+        kind: LibrarySectionKind,
         countText: String? = nil,
         emptyMessage: String? = nil
     ) -> some View {
         let sectionWorks = cachedWorks(for: kind)
         return WorkCarouselSection(
-            title: title,
+            title: shelf.title,
             hasItems: !sectionWorks.isEmpty,
             itemCount: sectionWorks.count,
             countText: countText,
             visibleCount: min(sectionWorks.count, 12),
+            actionTitle: "See All",
             onSeeAll: !sectionWorks.isEmpty
-                ? { path.append(LibrarySectionRoute(kind: kind, originKicker: "Library")) }
+                ? { openShelf(shelf) }
                 : nil
         ) {
             ForEach(sectionWorks.prefix(12)) { work in
@@ -529,15 +530,15 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     }
 
     private var collectionsCarousel: some View {
-        let kind = LibrarySectionKind.collections
-        return WorkCarouselSection(
-            title: kind.title,
+        WorkCarouselSection(
+            title: LibraryShelfID.collections.title,
             hasItems: !collections.isEmpty,
             itemCount: collections.count,
             cardSpacing: CarouselCardMetrics.coverStackSpacing,
             cardWidth: CarouselCardMetrics.stackWidth,
             visibleCount: min(collections.count, 12),
-            onSeeAll: !collections.isEmpty ? { path.append(AllCollectionsDestination()) } : nil
+            actionTitle: "See All",
+            onSeeAll: !collections.isEmpty ? { openShelf(.collections) } : nil
         ) {
             // The "New collection" card is the toolbar's "+" now (owner,
             // 2026-10-01: global actions live in the top-right chrome).
@@ -578,8 +579,8 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                     workListSection(section.id, kind: kind)
                 } else {
                     localCarousel(
-                        kind,
-                        title: section.id.title,
+                        section.id,
+                        kind: kind,
                         countText: downloadedCountText(for: section.id),
                         emptyMessage: emptyCopy(for: section.id)
                     )
@@ -682,18 +683,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
     }
 
     private func openShelf(_ shelf: LibraryShelfID) {
-        switch shelf {
-        case .collections:
-            path.append(AllCollectionsDestination())
-        case .queues:
-            path.append(AllReadingQueuesDestination(initialQueueID: nil))
-        case .imported:
-            path.append(LibraryCatalogueDestination(kind: .imported))
-        default:
-            if let kind = shelfKind(shelf) {
-                path.append(LibrarySectionRoute(kind: kind, originKicker: "Library"))
-            }
-        }
+        path.append(LibraryShelfDestination.destination(for: shelf))
     }
 
     private func workListSection(_ shelf: LibraryShelfID, kind: LibrarySectionKind) -> some View {
@@ -702,9 +692,10 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             title: shelf.title,
             count: sectionWorks.count,
             countText: downloadedCountText(for: shelf),
+            actionTitle: "See All",
             onSeeAll: sectionWorks.isEmpty
                 ? nil
-                : { path.append(LibrarySectionRoute(kind: kind, originKicker: "Library")) }
+                : { openShelf(shelf) }
         ) {
             if sectionWorks.isEmpty {
                 SectionEmptyState(message: emptyCopy(for: shelf), systemImage: kind.emptyIcon)
@@ -725,9 +716,10 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         return LibraryCollapsingShelf(
             title: LibraryShelfID.imported.title,
             count: sectionWorks.count,
+            actionTitle: "See All",
             onSeeAll: sectionWorks.isEmpty
                 ? nil
-                : { path.append(LibraryCatalogueDestination(kind: .imported)) }
+                : { openShelf(.imported) }
         ) {
             if sectionWorks.isEmpty {
                 SectionEmptyState(message: emptyCopy(for: .imported), systemImage: "doc")
@@ -783,7 +775,8 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         LibraryCollapsingShelf(
             title: LibraryShelfID.collections.title,
             count: collections.count,
-            onSeeAll: collections.isEmpty ? nil : { path.append(AllCollectionsDestination()) }
+            actionTitle: "See All",
+            onSeeAll: collections.isEmpty ? nil : { openShelf(.collections) }
         ) {
             if collections.isEmpty {
                 Text(emptyCopy(for: .collections))
@@ -822,8 +815,8 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             cardSpacing: ReadingQueueCard.spacing,
             cardWidth: ReadingQueueCard.width,
             visibleCount: min(shelfQueues.count, 12),
-            actionTitle: "Organise",
-            onSeeAll: !shelfQueues.isEmpty ? { path.append(AllReadingQueuesDestination(initialQueueID: nil)) } : nil
+            actionTitle: "See All",
+            onSeeAll: !shelfQueues.isEmpty ? { openShelf(.queues) } : nil
         ) {
             ForEach(shelfQueues.prefix(12)) { queue in
                 NavigationLink(value: AllReadingQueuesDestination(initialQueueID: queue.id)) {
@@ -849,7 +842,8 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         LibraryCollapsingShelf(
             title: LibraryShelfID.queues.title,
             count: shelfQueues.count,
-            onSeeAll: { path.append(AllReadingQueuesDestination(initialQueueID: nil)) }
+            actionTitle: "See All",
+            onSeeAll: shelfQueues.isEmpty ? nil : { openShelf(.queues) }
         ) {
             if shelfQueues.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
