@@ -111,12 +111,16 @@ struct LibraryEditShelvesSheet: View {
                 }
                 .padding(.vertical, 4)
             } else {
-                HStack(alignment: .center, spacing: 10) {
+                // Board 10 puts the name and the Carousel/List picker on one line.
+                // Both only fit if the row is tight: at spacing 10 the picker was
+                // ~20 pt short and truncated its own segments to "Carou…".
+                HStack(alignment: .center, spacing: 6) {
                     removeButton(section, title: title)
                     LibraryShelfGlyph(shelf: section.id)
                     Text(title)
                         .lineLimit(1)
-                    Spacer(minLength: 8)
+                        .layoutPriority(1)
+                    Spacer(minLength: 4)
                     picker(section, title: title)
                         .fixedSize()
                 }
@@ -140,7 +144,9 @@ struct LibraryEditShelvesSheet: View {
     private func picker(_ section: LibraryPageSection, title: String) -> some View {
         Picker("\(title) layout", selection: styleBinding(section.id)) {
             ForEach(LibrarySectionStyle.allCases, id: \.self) { style in
-                Text(style.title).tag(style)
+                Image(systemName: style.symbolName)
+                    .accessibilityLabel(style.title)
+                    .tag(style)
             }
         }
         .pickerStyle(.segmented)

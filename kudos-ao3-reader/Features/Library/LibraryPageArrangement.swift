@@ -88,6 +88,17 @@ nonisolated enum LibrarySectionStyle: String, Codable, CaseIterable, Sendable {
         case .list: "List"
         }
     }
+
+    /// The Edit Shelves picker draws these instead of the words: a shelf name and
+    /// two full labels do not fit on one row at body size (board 10 draws both,
+    /// but at metrics a 393 pt phone does not have). The title stays the
+    /// accessibility label, so nothing is lost.
+    var symbolName: String {
+        switch self {
+        case .carousel: "rectangle.stack"
+        case .list: "list.bullet"
+        }
+    }
 }
 
 nonisolated struct LibraryPageSection: Codable, Equatable, Identifiable, Sendable {
