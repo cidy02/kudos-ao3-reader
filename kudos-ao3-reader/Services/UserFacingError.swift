@@ -19,6 +19,9 @@ enum UserFacingError {
         if let ao3 = error as? AO3Error, case .network = ao3 {
             return "wifi.slash"
         }
+        if let ao3 = error as? AO3Error, case .maintenance = ao3 {
+            return "wrench.and.screwdriver"
+        }
         return "exclamationmark.triangle"
     }
 

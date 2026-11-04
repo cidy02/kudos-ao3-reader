@@ -149,6 +149,9 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     /// anyway, and closing it means holding this actor across the fetch.
     func invalidateCachedResponses() {
         session.configuration.urlCache?.removeAllCachedResponses()
+        // A pull to refresh is the reader asking AO3 again: one probe, which
+        // starts a new hold if AO3 is still down.
+        maintenanceHoldUntil = nil
     }
 
     /// The live session's response cache. Internal purely as a test seam: without
@@ -207,12 +210,21 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     /// callers are in flight.
     private var nextAllowedRequestAt = Date.distantPast
     private var nextAllowedRankTop100RequestAt = Date.distantPast
+    /// While set and in the future, every request fails fast with `.maintenance`
+    /// instead of reaching AO3 (batch refreshes would otherwise each knock on a
+    /// site that just said it is down).
+    private var maintenanceHoldUntil: Date?
+    /// ponytail: one fixed 60 s hold, then the next request probes again; no
+    /// backoff or status-page polling until maintenance windows prove to need it.
+    static let maintenanceHold: TimeInterval = 60
     private let minRequestInterval: TimeInterval = 0.6
 
     private func pace() async throws {
         // Before the claim: a cancelled caller must not book a slot it will never
         // use — the next real request would wait it out (T-255).
         try Task.checkCancellation()
+        // Before the slot claim too: a held request books no pacer time.
+        try throwIfHeldForMaintenance()
         let step = Self.paceStep(now: Date(), nextAllowed: nextAllowedRequestAt, minInterval: minRequestInterval)
         nextAllowedRequestAt = step.nextAllowed
         if step.wait > 5 {
@@ -220,6 +232,15 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         }
         if step.wait > 0 {
             try await paceSleep(step.wait)
+            // A request that waited here must not go out after another one met
+            // the maintenance page meanwhile.
+            try throwIfHeldForMaintenance()
+        }
+    }
+
+    private func throwIfHeldForMaintenance() throws {
+        if let until = maintenanceHoldUntil, Date() < until {
+            throw AO3Error.maintenance
         }
     }
 
@@ -228,6 +249,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     /// URLSession starts below three seconds.
     private func paceRankTop100() async throws {
         try Task.checkCancellation()
+        try throwIfHeldForMaintenance()
         let step = Self.paceStep(
             now: Date(),
             nextAllowed: nextAllowedRankTop100RequestAt,
@@ -317,23 +339,55 @@ actor AO3Client { // swiftlint:disable:this type_body_length
             // round-trip and may have set a cookie, so the purge must run
             // regardless of whether the status throws.
             defer { Self.purgeSessionCookie(from: session.configuration.httpCookieStorage, url: url) }
-            try Self.check(response)
+            try checkStatus(response) { data }
             return data
         }
     }
 
-    private static func check(_ response: URLResponse) throws {
+    /// `check` for a response this client sent: AO3's maintenance page also
+    /// starts the `maintenanceHold`. `body` is read only for a non-2xx answer.
+    private func checkStatus(_ response: URLResponse, body: () -> Data?) throws {
+        do {
+            try Self.check(response, body: body)
+        } catch AO3Error.maintenance {
+            holdForMaintenance()
+            throw AO3Error.maintenance
+        }
+    }
+
+    private func holdForMaintenance() {
+        maintenanceHoldUntil = Date().addingTimeInterval(Self.maintenanceHold)
+        Log.network.notice("AO3 is down for maintenance; holding requests for \(Self.maintenanceHold, privacy: .public)s")
+    }
+
+    private static func check(_ response: URLResponse, body: () -> Data?) throws {
         guard let http = response as? HTTPURLResponse else {
             throw AO3Error.network("No response from AO3.")
         }
+        if (200 ... 299).contains(http.statusCode) { return }
+        // Only a failed answer is read: a work's own text may say the words.
+        if let body = body(), isMaintenancePage(body) {
+            throw AO3Error.maintenance
+        }
         switch http.statusCode {
-        case 200 ... 299: return
         case 429: throw AO3Error.rateLimited(retryAfter: retryAfter(from: http))
         case 403: throw AO3Error.forbidden
         case 404: throw AO3Error.notFound
         case 500 ... 599: throw AO3Error.server(status: http.statusCode)
         default: throw AO3Error.http(status: http.statusCode)
         }
+    }
+
+    /// AO3's own maintenance page: `<h2>The archive is down for maintenance.</h2>`
+    /// under a generic "Request temporarily denied." title (captured 2026-11-03,
+    /// `KudosTests/Fixtures/ao3_maintenance.html`). Matched as the page's own `<h2>`:
+    /// a rejected form that echoes the reader's text back has it escaped, never as
+    /// markup. Internal for tests.
+    static func isMaintenancePage(_ body: Data) -> Bool {
+        String(decoding: body.prefix(64 * 1024), as: UTF8.self).range(
+            of: #"<h2[^>]*>\s*the archive is down for maintenance"#,
+            options: [.regularExpression, .caseInsensitive]
+        ) != nil
     }
 
     /// Parses a `Retry-After` header (seconds, or an HTTP-date) into a delay.
@@ -486,7 +540,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
             request.httpShouldHandleCookies = false
             let (body, response) = try await session.data(for: request, delegate: redirectCookieRelay)
             defer { evictFromSharedCache(request, responseURL: response.url) }
-            try Self.check(response)
+            try checkStatus(response) { body }
             if Self.isLoginRedirect(path: response.url?.path) {
                 throw AO3Error.authenticationRequired
             }
@@ -499,7 +553,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
                     url: pageRequest.url
                 )
             }
-            try Self.check(response)
+            try checkStatus(response) { body }
             data = body
         }
         return try Self.parseSearchPage(Self.htmlString(from: data), page: pageRequest.page)
@@ -900,7 +954,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
             // a body `URLCache` may have stored, so the eviction runs regardless of
             // status — same reasoning as `purgeSessionCookie` on the anonymous path.
             defer { evictFromSharedCache(request, responseURL: response.url) }
-            try Self.check(response)
+            try checkStatus(response) { data }
             return (data, response.url?.path)
         }
     }
@@ -984,6 +1038,12 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         }
         if Self.isLoginRedirect(path: http.url?.path) {
             throw AO3Error.authenticationRequired
+        }
+        // The maintenance page answers at the edge: the write never reached AO3.
+        // Before 429, as in `check`.
+        if !(200 ... 299).contains(http.statusCode), Self.isMaintenancePage(data) {
+            holdForMaintenance()
+            throw AO3Error.maintenance
         }
         if http.statusCode == 429 {
             throw AO3Error.rateLimited(retryAfter: Self.retryAfter(from: http))
@@ -1412,7 +1472,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
                 from: url, delegate: onProgress.map(DownloadProgressDelegate.init)
             )
             defer { Self.purgeSessionCookie(from: session.configuration.httpCookieStorage, url: url) }
-            try Self.check(response)
+            try checkStatus(response) { try? Data(contentsOf: tempURL) }
             return tempURL
         }
         let destination = Storage.tempDownloadURL(suggestedName: "\(workID).epub")

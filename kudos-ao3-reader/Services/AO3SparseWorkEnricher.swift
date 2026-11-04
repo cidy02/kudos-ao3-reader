@@ -27,6 +27,9 @@ actor AO3SparseWorkEnricher {
     /// Work ids whose fetch failed. Kept so a work that 404s (deleted, or locked to
     /// registered users) is not retried on every scroll — the sparse card stands.
     private var failed: Set<Int> = []
+
+    private func markFailed(_ id: Int) { failed.insert(id) }
+
     /// In-flight fetches, so two rows appearing at once share one request rather
     /// than racing. `RequestCoalescer` would also merge them at the transport, but
     /// this avoids even queuing the second one behind a `pace()` slot.
@@ -57,6 +60,10 @@ actor AO3SparseWorkEnricher {
                 Log.network.notice(
                     "Sparse work \(work.id, privacy: .private(mask: .hash)) could not be enriched: \(error.localizedDescription, privacy: .public)"
                 )
+                // Only AO3's own answer about this work is final. Unreachable,
+                // throttled or down for maintenance: the next appearance asks again.
+                let isTransient = (error as? AO3Error)?.allowsStalePage ?? (error is URLError)
+                if !isTransient { await self.markFailed(work.id) }
                 return nil
             }
         }
@@ -64,10 +71,7 @@ actor AO3SparseWorkEnricher {
         let result = await task.value
         inFlight[work.id] = nil
 
-        guard let result else {
-            failed.insert(work.id)
-            return nil
-        }
+        guard let result else { return nil }
         // AO3's subscriptions listing is the only place the *title* is authoritative
         // for a subscription — the work page's title is the same string, but keeping
         // the listing's avoids a card visibly re-titling itself as it fills in.
