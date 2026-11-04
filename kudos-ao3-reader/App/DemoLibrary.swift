@@ -5,12 +5,38 @@ import SwiftUI
 
 /// Simulator-only sample library for design review: launch with
 /// `-KudosDemoLibrary YES -hasCompletedOnboarding YES` and Home, Library,
-/// Queues and Collections have something to draw. Every work is local only —
-/// no AO3 id, no source URL — so nothing here can reach the network, and each
-/// gets a placeholder file so the on-device checks treat it as downloaded.
+/// Queues and Collections have something to draw. Each gets a placeholder file
+/// so the on-device checks treat it as downloaded.
+///
+/// Two seeded works carry a FABRICATED AO3 id (`sentinelWorkIDs`) so the
+/// end-of-work card and the Recently Deleted row can be photographed. Those ids
+/// belong to no real work, and this store is the same one a non-demo launch
+/// opens, so `clearSentinelIDs` strips them whenever the demo flag is off —
+/// otherwise Library's `backfillFilterMetadata` would refresh them against AO3,
+/// get a 404, and mark them unavailable.
 /// Seeds once per install; a work titled like the first sample means done.
 @MainActor
 enum DemoLibrary {
+    /// AO3 work ids that exist only in this demo seed. AO3's real ids are ~7×10^7,
+    /// so these cannot collide.
+    /// shortcut: matches on the id alone, no source-URL check — revisit if AO3 ever reaches 999M works.
+    static let sentinelWorkIDs: Set<Int> = [999_000_001, 999_000_002]
+
+    /// Strips the fabricated ids when the demo flag is off. The demo seeds into the
+    /// same on-disk store a normal debug launch opens, so without this a developer
+    /// who runs demo mode once leaves two works that later refresh against AO3 —
+    /// `DemoNetworkBlock` only intercepts while the flag is on.
+    static func clearSentinelIDs(in context: ModelContext) {
+        guard !UserDefaults.standard.bool(forKey: "KudosDemoLibrary") else { return }
+        let works = (try? context.fetch(FetchDescriptor<SavedWork>())) ?? []
+        var changed = false
+        for work in works where work.ao3WorkID.map(sentinelWorkIDs.contains) == true {
+            work.ao3WorkID = nil
+            changed = true
+        }
+        if changed { try? context.save() }
+    }
+
     static func seedIfRequested(in context: ModelContext) {
         guard UserDefaults.standard.bool(forKey: "KudosDemoLibrary") else { return }
         let existing = (try? context.fetch(FetchDescriptor<SavedWork>())) ?? []
