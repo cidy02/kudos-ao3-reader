@@ -453,8 +453,26 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
                             }
                         }
                     } else {
-                        NavigationLink(value: LocalWorkDestination.reader(work)) {
-                            Label("Read", systemImage: "book")
+                        // Board 20: a work menu leads with its icon row.
+                        MenuTopRow {
+                            NavigationLink(value: LocalWorkDestination.reader(work)) {
+                                Label("Read", systemImage: "book")
+                            }
+                            let fav = MenuTopRowRules.favorite(isFavorite: work.isFavorite)
+                            Button(action: toggleFavorite) {
+                                Label(fav.title, systemImage: fav.systemImage)
+                            }
+                            .accessibilityLabel(fav.accessibilityLabel)
+                            let later = MenuTopRowRules.wantToRead(isQueued: work.isInSavedForLaterQueue)
+                            Button(action: toggleSavedForLater) {
+                                Label(later.title, systemImage: later.systemImage)
+                            }
+                            .accessibilityLabel(later.accessibilityLabel)
+                            if let share = WorkShareLink.url(for: work) {
+                                ShareLink(item: share) {
+                                    Label("Share", systemImage: "square.and.arrow.up")
+                                }
+                            }
                         }
                     }
 
@@ -480,18 +498,21 @@ private struct LocalWorkContextMenuModifier: ViewModifier {
                     // action belongs.
                     WorkDownloadButton(work: work)
 
-                    Button {
-                        toggleFavorite()
-                    } label: {
-                        let labels = WorkActionLabels.favorite(isFavorite: work.isFavorite)
-                        Label(labels.title, systemImage: labels.systemImage)
-                    }
+                    // Outside a queue these two lead the icon row above.
+                    if queueMenu != nil {
+                        Button {
+                            toggleFavorite()
+                        } label: {
+                            let labels = WorkActionLabels.favorite(isFavorite: work.isFavorite)
+                            Label(labels.title, systemImage: labels.systemImage)
+                        }
 
-                    Button {
-                        toggleSavedForLater()
-                    } label: {
-                        let labels = WorkActionLabels.savedForLater(isQueued: work.isInSavedForLaterQueue)
-                        Label(labels.title, systemImage: labels.systemImage)
+                        Button {
+                            toggleSavedForLater()
+                        } label: {
+                            let labels = WorkActionLabels.savedForLater(isQueued: work.isInSavedForLaterQueue)
+                            Label(labels.title, systemImage: labels.systemImage)
+                        }
                     }
 
                     Button {
@@ -731,17 +752,35 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
                 .disabled(working)
             }
             .contextMenu {
-                Button {
-                    read()
-                } label: {
-                    Label("Read", systemImage: "book")
-                }
-                .disabled(working)
+                // Board 20: a work menu leads with its icon row.
+                MenuTopRow {
+                    Button {
+                        read()
+                    } label: {
+                        Label("Read", systemImage: "book")
+                    }
+                    .disabled(working)
 
-                Button {
-                    showingComments = true
-                } label: {
-                    Label("Comments", systemImage: "bubble.left.and.bubble.right")
+                    Button {
+                        showingComments = true
+                    } label: {
+                        Label("Comments", systemImage: "bubble.left.and.bubble.right")
+                    }
+
+                    let later = MenuTopRowRules.wantToRead(
+                        isQueued: existingLocalWork?.isInSavedForLaterQueue == true
+                    )
+                    Button {
+                        toggleSavedForLater()
+                    } label: {
+                        Label(later.title, systemImage: later.systemImage)
+                    }
+                    .accessibilityLabel(later.accessibilityLabel)
+                    .disabled(working)
+
+                    ShareLink(item: AO3AuthService.workURL(work.id)) {
+                        Label("Share", systemImage: "square.and.arrow.up")
+                    }
                 }
 
                 if let existingLocalWork, existingLocalWork.isSaved {
@@ -773,16 +812,6 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
                     }
                     .disabled(working)
                 }
-
-                Button {
-                    toggleSavedForLater()
-                } label: {
-                    let labels = WorkActionLabels.savedForLater(
-                        isQueued: existingLocalWork?.isInSavedForLaterQueue == true
-                    )
-                    Label(labels.title, systemImage: labels.systemImage)
-                }
-                .disabled(working)
 
                 Button {
                     addToQueue()

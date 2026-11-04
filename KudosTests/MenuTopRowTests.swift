@@ -51,4 +51,15 @@ struct MenuTopRowTests {
         #expect(source.contains("PreservedWorkService.shouldConfirmDelete"))
         #expect(source.contains(".deleteConfirmation("))
     }
+
+    @Test func libraryTogglesKeepShortTitlesAndFullVoiceOverLabels() {
+        #expect(MenuTopRowRules.wantToRead(isQueued: false)
+            == .init(title: "Want to Read", systemImage: "clock", accessibilityLabel: "Want to Read"))
+        #expect(MenuTopRowRules.wantToRead(isQueued: true)
+            == .init(title: "Want to Read", systemImage: "clock.fill", accessibilityLabel: "Remove from Want to Read"))
+        #expect(MenuTopRowRules.favorite(isFavorite: true).systemImage == "star.fill")
+        #expect(MenuTopRowRules.favorite(isFavorite: true).accessibilityLabel == "Unfavorite")
+        #expect(MenuTopRowRules.finished(isFinished: false).accessibilityLabel == "Mark as Finished")
+        #expect(MenuTopRowRules.finished(isFinished: true).systemImage == "checkmark.circle.fill")
+    }
 }

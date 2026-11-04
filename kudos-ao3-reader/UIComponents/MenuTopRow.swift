@@ -43,4 +43,28 @@ enum MenuTopRowRules: Sendable {
     static func readAloudSymbol(isActive: Bool) -> String {
         isActive ? "waveform.circle.fill" : "waveform"
     }
+
+    /// Library toggles in a top row: a short title under the icon, "on" shown by the
+    /// filled symbol, the full action for VoiceOver ("Remove from Want to Read" does not
+    /// fit under an icon).
+    struct Toggle: Equatable, Sendable {
+        let title: String
+        let systemImage: String
+        let accessibilityLabel: String
+    }
+
+    static func wantToRead(isQueued: Bool) -> Toggle {
+        Toggle(title: "Want to Read", systemImage: isQueued ? "clock.fill" : "clock",
+               accessibilityLabel: isQueued ? "Remove from Want to Read" : "Want to Read")
+    }
+
+    static func favorite(isFavorite: Bool) -> Toggle {
+        Toggle(title: "Favorite", systemImage: isFavorite ? "star.fill" : "star",
+               accessibilityLabel: isFavorite ? "Unfavorite" : "Favorite")
+    }
+
+    static func finished(isFinished: Bool) -> Toggle {
+        Toggle(title: "Finished", systemImage: isFinished ? "checkmark.circle.fill" : "checkmark.circle",
+               accessibilityLabel: isFinished ? "Mark as Still Reading" : "Mark as Finished")
+    }
 }

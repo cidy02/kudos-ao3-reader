@@ -581,16 +581,12 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                             shareURL: ao3URL,
                             hasGivenKudos: localWork?.hasGivenKudos ?? false
                         )
-                    } else if let share = ao3URL ?? (localWork.flatMap { WorkShareLink.url(for: $0) }) {
-                        MenuTopRow {
-                            ShareLink(item: share) {
-                                Label("Share", systemImage: "square.and.arrow.up")
-                            }
-                        }
+                    } else {
+                        localWorkTopRow(share: ao3URL ?? localWork.flatMap { WorkShareLink.url(for: $0) })
                     }
 
                     Section("Library") {
-                        localWorkMenuItems
+                        localWorkMenuItems(includesQuickToggles: ao3WorkID != nil)
                     }
 
                     if let id = ao3WorkID {

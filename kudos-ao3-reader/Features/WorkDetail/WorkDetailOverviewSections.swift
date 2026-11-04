@@ -65,36 +65,30 @@ extension WorkDetailView {
 
     // MARK: Quick actions
 
-    /// Spec board 20: Library section rows in the Work Detail "…" menu.
+    /// Spec board 20: Library section rows in the Work Detail "…" menu. When the work is
+    /// not on AO3 its icon row holds Want to Read, Favorite and Finished instead, so they
+    /// are left out here (`includesQuickToggles: false`).
     @ViewBuilder
-    var localWorkMenuItems: some View {
-        let queued = localWork?.isInSavedForLaterQueue ?? false
-        let later = WorkActionLabels.savedForLater(isQueued: queued)
-        Button {
-            if queued { removeFromSavedForLater() } else { saveForLater() }
-        } label: {
-            Label(later.title, systemImage: later.systemImage)
-        }
-        .disabled(working || preservingStatusIsBusy)
-
-        let fav = localWork?.isFavorite ?? false
-        let favLabels = WorkActionLabels.favorite(isFavorite: fav)
-        Button {
-            withLocalWork { work in
-                work.isFavorite.toggle()
-                work.markModified()
-                context.saveBestEffort(reason: "Saving favorite state failed")
+    func localWorkMenuItems(includesQuickToggles: Bool = true) -> some View {
+        if includesQuickToggles {
+            let queued = localWork?.isInSavedForLaterQueue ?? false
+            let later = WorkActionLabels.savedForLater(isQueued: queued)
+            Button(action: toggleWantToRead) {
+                Label(later.title, systemImage: later.systemImage)
             }
-        } label: {
-            Label(favLabels.title, systemImage: favLabels.systemImage)
-        }
+            .disabled(working || preservingStatusIsBusy)
 
-        let finished = localWork?.isFinished ?? false
-        let finishedLabels = WorkActionLabels.finished(isFinished: finished)
-        Button(action: toggleFinished) {
-            Label(finishedLabels.title, systemImage: finishedLabels.systemImage)
+            let favLabels = WorkActionLabels.favorite(isFavorite: localWork?.isFavorite ?? false)
+            Button(action: toggleFavorite) {
+                Label(favLabels.title, systemImage: favLabels.systemImage)
+            }
+
+            let finishedLabels = WorkActionLabels.finished(isFinished: localWork?.isFinished ?? false)
+            Button(action: toggleFinished) {
+                Label(finishedLabels.title, systemImage: finishedLabels.systemImage)
+            }
+            .disabled(working)
         }
-        .disabled(working)
 
         Button {
             withLocalWork { _ in showingAddToQueue = true }
@@ -116,6 +110,51 @@ extension WorkDetailView {
             Label(downloadLabel.title, systemImage: downloadLabel.systemImage)
         }
         .disabled(working || download?.isInformational == true)
+    }
+
+    /// Board 20's icon row for a work that is not on AO3 (no Kudos / Bookmark /
+    /// Subscribe to offer): the library toggles, then Share when there is a link.
+    @ViewBuilder
+    func localWorkTopRow(share: URL?) -> some View {
+        MenuTopRow {
+            let later = MenuTopRowRules.wantToRead(isQueued: localWork?.isInSavedForLaterQueue ?? false)
+            Button(action: toggleWantToRead) {
+                Label(later.title, systemImage: later.systemImage)
+            }
+            .accessibilityLabel(later.accessibilityLabel)
+            .disabled(working || preservingStatusIsBusy)
+
+            let fav = MenuTopRowRules.favorite(isFavorite: localWork?.isFavorite ?? false)
+            Button(action: toggleFavorite) {
+                Label(fav.title, systemImage: fav.systemImage)
+            }
+            .accessibilityLabel(fav.accessibilityLabel)
+
+            let finished = MenuTopRowRules.finished(isFinished: localWork?.isFinished ?? false)
+            Button(action: toggleFinished) {
+                Label(finished.title, systemImage: finished.systemImage)
+            }
+            .accessibilityLabel(finished.accessibilityLabel)
+            .disabled(working)
+
+            if let share {
+                ShareLink(item: share) {
+                    Label("Share", systemImage: "square.and.arrow.up")
+                }
+            }
+        }
+    }
+
+    private func toggleWantToRead() {
+        if localWork?.isInSavedForLaterQueue ?? false { removeFromSavedForLater() } else { saveForLater() }
+    }
+
+    private func toggleFavorite() {
+        withLocalWork { work in
+            work.isFavorite.toggle()
+            work.markModified()
+            context.saveBestEffort(reason: "Saving favorite state failed")
+        }
     }
 
     // MARK: Series
