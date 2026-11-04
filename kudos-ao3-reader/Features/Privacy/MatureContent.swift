@@ -424,6 +424,9 @@ struct SensitiveWorkRow: View {
             let content = AO3WorkRow(
                 work: work,
                 expandAll: expandAll,
+                isSelecting: isSelecting,
+                isSelected: isSelected,
+                showsSelectionIndicator: false,
                 presentation: remotePresentation,
                 showsPerformance: showsPerformance,
                 bookmark: bookmark,
@@ -449,17 +452,20 @@ struct SensitiveWorkRow: View {
             }
             .contentShape(Rectangle())
             .overlay(alignment: .topTrailing) {
-                HStack(spacing: 6) {
-                    if isExpandableWork {
-                        WorkRowExpandButton(expanded: $blurredExpanded)
-                    }
-                    if isSelecting {
-                        WorkSelectionBubble(isSelected: isSelected)
-                    }
+                if isExpandableWork {
+                    WorkRowExpandButton(expanded: $blurredExpanded)
+                        // The unblurred row's controls sit inside its gutter; 8 pt left them out of line.
+                        .padding(.top, 8)
+                        .padding(.trailing, SubjectMetrics.gutter + contentInsets.trailing)
                 }
-                // The unblurred row's controls sit inside its gutter; 8 pt left them out of line.
-                .padding(.top, 8)
-                .padding(.trailing, SubjectMetrics.gutter + contentInsets.trailing)
+            }
+            .overlay(alignment: .topLeading) {
+                if isSelecting {
+                    WorkLeadingSelectionCheck(isSelected: isSelected)
+                        .frame(height: WorkRowMetrics.gridColumn)
+                        .padding(.top, WorkRowMetrics.verticalPadding + contentInsets.top)
+                        .padding(.leading, WorkRowMetrics.horizontalPadding + contentInsets.leading)
+                }
             }
             sensitiveActionContainer(for: content)
         }

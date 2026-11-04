@@ -46,7 +46,8 @@ struct SearchLocalResultsList: View {
                             onSelect: { isSelecting = true; selection = [work.id] },
                             isSelecting: isSelecting,
                             isSelected: isSelected,
-                            onToggleSelection: { toggle(work) }
+                            onToggleSelection: { toggle(work) },
+                            leadingSelection: isSelecting
                         )
                         .cardRow(isSelected: isSelecting && isSelected, chrome: .plain)
                         // Any kind but History takes the swipes' default branch.

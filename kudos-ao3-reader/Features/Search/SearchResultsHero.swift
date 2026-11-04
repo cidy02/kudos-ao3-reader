@@ -211,7 +211,8 @@ struct SearchResultsHero: View {
                                     .font(.footnote.weight(.semibold))
                             }
                             .padding(.horizontal, 10)
-                            .frame(height: 30)
+                            .padding(.vertical, 5)
+                            .frame(minHeight: 30)
                             .background(themeManager.appTheme.glassFill(0.12))
                             .foregroundStyle(Color.primary)
                             .clipShape(SubjectMetrics.controlShape(dynamicTypeSize))
@@ -271,10 +272,11 @@ struct SearchResultsHero: View {
                         .foregroundStyle(.secondary)
                 }
                 .padding(.horizontal, 12)
-                .frame(height: 32)
+                .padding(.vertical, 6)
+                .frame(minHeight: 32)
                 .background(themeManager.appTheme.glassFill(0.12))
                 .foregroundStyle(Color.primary)
-                .clipShape(Capsule())
+                .clipShape(SubjectMetrics.controlShape(dynamicTypeSize))
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Sort by: \(sortLabelText)")
@@ -285,10 +287,11 @@ struct SearchResultsHero: View {
                     .lineLimit(1)
             }
             .padding(.horizontal, 12)
-            .frame(height: 32)
+            .padding(.vertical, 6)
+            .frame(minHeight: 32)
             .background(themeManager.appTheme.glassFill(0.12))
             .foregroundStyle(Color.primary)
-            .clipShape(Capsule())
+            .clipShape(SubjectMetrics.controlShape(dynamicTypeSize))
         }
     }
 
@@ -303,10 +306,11 @@ struct SearchResultsHero: View {
                     .font(.subheadline.weight(count > 0 ? .semibold : .regular))
             }
             .padding(.horizontal, 12)
-            .frame(height: 32)
+            .padding(.vertical, 6)
+            .frame(minHeight: 32)
             .background(count > 0 ? themeManager.effectiveTint : themeManager.appTheme.glassFill(0.12))
             .foregroundStyle(count > 0 ? ThemeManager.label(on: themeManager.effectiveTint) : Color.primary)
-            .clipShape(Capsule())
+            .clipShape(SubjectMetrics.controlShape(dynamicTypeSize))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(count > 0 ? "Filters, \(count) active" : "Filters")

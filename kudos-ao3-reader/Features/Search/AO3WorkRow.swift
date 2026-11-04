@@ -14,10 +14,13 @@ struct AO3WorkRow: View {
     /// Driven by the list's "expand/collapse all" toggle; each card follows it
     /// (and can still be toggled individually afterwards).
     var expandAll: Bool = false
-    /// When true, a selection bubble takes the top-right corner (mirrors `WorkRow`)
+    /// When true, a leading selection circle sits beside the status grid (mirrors `WorkRow`)
     /// and the caller is expected to route taps to selection instead of navigation.
     var isSelecting: Bool = false
     var isSelected: Bool = false
+    /// False reserves the 24pt leading selection column without drawing the circle, so
+    /// `SensitiveWorkRow` can overlay an unblurred `WorkLeadingSelectionCheck` in the exact slot.
+    var showsSelectionIndicator = true
     /// Search opts into the redesign without changing the shared row in Browse,
     /// Account, Authors, or Library before those screens receive their own pass.
     var presentation: Presentation = .standard
@@ -141,7 +144,7 @@ struct AO3WorkRow: View {
     /// 1q keeps the bookmark's note where the summary would be. The rest of the
     /// ledger — fandom, title, author, every stat, chapter bars — stays.
     private var bookmarkCard: some View {
-        WorkPlainRow(wide: wide, showsSeparator: showsSeparator) {
+        WorkPlainRow(wide: wide, showsSeparator: showsSeparator, separatorInset: rowSeparatorInset) {
             statusGrid
         } heading: {
             searchLedgerIdentity
@@ -160,7 +163,7 @@ struct AO3WorkRow: View {
     }
 
     private var standardCard: some View {
-        WorkPlainRow(wide: wide, showsSeparator: showsSeparator) {
+        WorkPlainRow(wide: wide, showsSeparator: showsSeparator, separatorInset: rowSeparatorInset) {
             statusGrid
         } heading: {
             standardHeading
@@ -205,7 +208,7 @@ struct AO3WorkRow: View {
     /// Fandom label, title, author, summary, every stat, and equal chapter bars.
     /// A remote work has no downloaded lengths and no reading progress.
     private var searchLedgerCard: some View {
-        WorkPlainRow(wide: wide, showsSeparator: showsSeparator) {
+        WorkPlainRow(wide: wide, showsSeparator: showsSeparator, separatorInset: rowSeparatorInset) {
             statusGrid
         } heading: {
             searchLedgerIdentity
@@ -267,7 +270,6 @@ struct AO3WorkRow: View {
                     WorkUpdatedDateBadge(dateUpdated: work.dateUpdated)
                 }
                 if isExpandable && showsExpandButton { expandButton }
-                if isSelecting { WorkSelectionBubble(isSelected: isSelected) }
             }
             if presentation == .fandomTop {
                 authorByline
@@ -340,14 +342,23 @@ struct AO3WorkRow: View {
     }
 
     private var statusGrid: some View {
-        WorkStatusIconGrid(
-            rating: work.rating.isEmpty ? nil : work.rating,
-            categories: work.categories,
-            warnings: work.warnings,
-            completion: WorkCompletionStatus(isComplete: work.isComplete),
-            tileSize: 24,
-            announcesToVoiceOver: true
-        )
+        HStack(alignment: .center, spacing: 12) {
+            if Self.selectionEdge(isSelecting: isSelecting) == .leading {
+                if showsSelectionIndicator {
+                    WorkLeadingSelectionCheck(isSelected: isSelected)
+                } else {
+                    Color.clear.frame(width: 24, height: 24)
+                }
+            }
+            WorkStatusIconGrid(
+                rating: work.rating.isEmpty ? nil : work.rating,
+                categories: work.categories,
+                warnings: work.warnings,
+                completion: WorkCompletionStatus(isComplete: work.isComplete),
+                tileSize: 24,
+                announcesToVoiceOver: true
+            )
+        }
     }
 
     private var remoteFigures: WorkStat.LedgerFigures {
@@ -582,6 +593,23 @@ struct AO3WorkRow: View {
 
 // Its own extension so the type body stays within the lint limit.
 extension AO3WorkRow {
+    enum SelectionEdge: Equatable {
+        case none
+        case leading
+    }
+
+    static func selectionEdge(isSelecting: Bool) -> SelectionEdge {
+        isSelecting ? .leading : .none
+    }
+
+    static func separatorInset(isSelecting: Bool) -> CGFloat? {
+        isSelecting ? 115 : nil
+    }
+
+    private var rowSeparatorInset: CGFloat? {
+        Self.separatorInset(isSelecting: isSelecting)
+    }
+
     private var searchLedgerIdentity: some View {
         VStack(alignment: .leading, spacing: 5) {
             if primaryFandom != nil || isExpandable || hasLedgerBadges {
@@ -644,9 +672,6 @@ extension AO3WorkRow {
                     SubjectStateBadge(title: badgeTitle, color: themeManager.effectiveTint)
                 }
                 Spacer(minLength: 4)
-                if isSelecting {
-                    WorkSelectionBubble(isSelected: isSelected)
-                }
             }
             AO3AuthorBylineView(
                 names: work.authors,

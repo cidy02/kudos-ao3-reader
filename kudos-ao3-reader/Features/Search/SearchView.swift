@@ -206,6 +206,9 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                         ToolbarItem(placement: .principal) {
                             Text(WorkSelectionTitle.text(selectedCount: selectedLocalWorks.count))
                                 .font(.headline)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                                .dynamicTypeSize(...DynamicTypeSize.xxLarge)
                         }
                         ToolbarItem(placement: .confirmationAction) {
                             SelectAllButton(
