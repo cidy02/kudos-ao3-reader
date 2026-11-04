@@ -11,6 +11,12 @@ sealed interface AO3Error {
     data object AuthenticationRequired : AO3Error
     data object Forbidden : AO3Error
     data object NotFound : AO3Error
+    /**
+     * AO3 answered with its "The archive is down for maintenance." page (any
+     * non-2xx status; Cloudflare served it as 418 on 2026-11-03). Not retried;
+     * [AO3Client] holds further requests briefly.
+     */
+    data object Maintenance : AO3Error
     data class RateLimited(val retryAfterMillis: Long?) : AO3Error
     data class Server(val statusCode: Int) : AO3Error
     data class Http(val statusCode: Int) : AO3Error
@@ -91,6 +97,7 @@ fun AO3Error.displayMessage(): String = when (this) {
     AO3Error.AuthenticationRequired -> "AO3 requires login."
     AO3Error.Forbidden -> "AO3 denied access."
     AO3Error.NotFound -> "AO3 could not find that page."
+    AO3Error.Maintenance -> "AO3 is down for maintenance. Your saved works still open. Try AO3 again later."
     is AO3Error.Http -> "AO3 returned HTTP $statusCode."
     is AO3Error.Network -> if (offline) AO3Error.OFFLINE_MESSAGE else message
     is AO3Error.Overloaded -> "AO3 is busy. Try again shortly."

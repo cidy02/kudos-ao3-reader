@@ -40,6 +40,7 @@ class AO3ErrorDisplayMessageTest {
             AO3Error.AuthenticationRequired,
             AO3Error.Forbidden,
             AO3Error.NotFound,
+            AO3Error.Maintenance,
             AO3Error.RateLimited(null),
             AO3Error.Server(503),
             AO3Error.Http(418),
@@ -64,9 +65,19 @@ class AO3ErrorDisplayMessageTest {
                     error is AO3Error.BadRequest ||
                     error is AO3Error.AuthenticationRequired ||
                     error is AO3Error.Forbidden ||
-                    error is AO3Error.NotFound
+                    error is AO3Error.NotFound ||
+                    error is AO3Error.Maintenance
             )
         }
+    }
+
+    @Test
+    fun maintenanceDisplaysExpectedMessage() {
+        val error = AO3Error.Maintenance
+        assertEquals(
+            "AO3 is down for maintenance. Your saved works still open. Try AO3 again later.",
+            error.displayMessage()
+        )
     }
 
     @Test

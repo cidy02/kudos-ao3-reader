@@ -452,6 +452,7 @@ internal fun workFormFailure(error: AO3Error): String = when (error) {
     AO3Error.AuthenticationRequired -> "Your AO3 session expired. Please log in again."
     AO3Error.Forbidden -> "AO3 refused the request (HTTP 403). Wait a while before trying again."
     AO3Error.NotFound -> "That work or page couldn't be found (it may be restricted)."
+    AO3Error.Maintenance -> "AO3 is down for maintenance. Your saved works still open. Try AO3 again later."
     is AO3Error.Parse -> "AO3's page format wasn't what the app expected."
     is AO3Error.Server -> "AO3 had a server problem (HTTP ${error.statusCode}). Try again shortly."
     is AO3Error.Overloaded -> when (error.statusCode) {

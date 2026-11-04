@@ -23,6 +23,7 @@ internal fun AO3Error.moderationMessage(): String = when (this) {
     AO3Error.NotFound -> "That work or page couldn't be found (it may be restricted)."
     AO3Error.AuthenticationRequired -> "Your AO3 session expired. Please log in again."
     AO3Error.BadRequest -> "AO3 returned an unexpected response (HTTP 400)."
+    AO3Error.Maintenance -> displayMessage()
     is AO3Error.RateLimited -> "AO3 is rate-limiting requests. Wait a moment and try again."
     is AO3Error.Server -> "AO3 had a server problem (HTTP $statusCode). Try again shortly."
     is AO3Error.Http -> "AO3 returned an unexpected response (HTTP $statusCode)."

@@ -188,7 +188,7 @@ class AO3PageCache(
 }
 
 internal fun AO3Error.allowsPageFallback(): Boolean = when (this) {
-    is AO3Error.Network, is AO3Error.Overloaded -> true
+    is AO3Error.Network, is AO3Error.Overloaded, AO3Error.Maintenance -> true
     is AO3Error.Server -> statusCode in 500..599
     is AO3Error.Http -> statusCode in 500..599
     else -> false

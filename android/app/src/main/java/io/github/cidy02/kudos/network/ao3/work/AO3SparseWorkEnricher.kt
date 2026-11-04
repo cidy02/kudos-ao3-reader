@@ -1,6 +1,7 @@
 package io.github.cidy02.kudos.network.ao3.work
 
 import io.github.cidy02.kudos.network.ao3.AO3Result
+import io.github.cidy02.kudos.network.ao3.allowsPageFallback
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.CoroutineScope
@@ -39,7 +40,7 @@ class AO3SparseWorkEnricher(
      */
     private val failed = mutableSetOf<Long>()
     /** In-flight fetches, so two rows appearing together share one request. */
-    private val inFlight = mutableMapOf<Long, Deferred<AO3WorkMetadata?>>()
+    private val inFlight = mutableMapOf<Long, Deferred<AO3Result<AO3WorkMetadata>>>()
 
     /**
      * A fuller version of [work], or null when there is nothing to add or the fetch
@@ -53,41 +54,51 @@ class AO3SparseWorkEnricher(
             if (work.id in failed) return null
             inFlight.getOrPut(work.id) {
                 scope.async {
-                    when (val result = repository.fetch(work.id)) {
-                        is AO3Result.Success -> result.value
-                        is AO3Result.Failure -> null
-                    }
+                    repository.fetch(work.id)
                 }
             }
         }
 
-        val metadata = pending.await()
+        val result = pending.await()
         return mutex.withLock {
             inFlight.remove(work.id)
             // Re-check: another caller may have completed the same fetch while this
             // one awaited, and two rows must not disagree about the same work.
             enriched[work.id]?.let { return@withLock it }
-            if (metadata == null || metadata.isEmpty) {
-                failed += work.id
-                return@withLock null
+            when (result) {
+                is AO3Result.Failure -> {
+                    // Only AO3's own answer about this work is final. Unreachable,
+                    // throttled or down for maintenance: the next appearance asks again.
+                    if (!result.error.allowsPageFallback()) {
+                        failed += work.id
+                    }
+                    return@withLock null
+                }
+                is AO3Result.Success -> {
+                    val metadata = result.value
+                    if (metadata.isEmpty) {
+                        failed += work.id
+                        return@withLock null
+                    }
+                    val merged = work.copy(
+                        fandoms = metadata.fandoms,
+                        rating = metadata.rating,
+                        warnings = metadata.warnings,
+                        categories = metadata.categories,
+                        relationships = metadata.relationships,
+                        characters = metadata.characters,
+                        freeforms = metadata.freeforms,
+                        language = metadata.language,
+                        wordCount = metadata.words,
+                        chapters = metadata.chapters,
+                        kudos = metadata.kudos,
+                        comments = metadata.comments,
+                        hits = metadata.hits
+                    )
+                    enriched[work.id] = merged
+                    merged
+                }
             }
-            val merged = work.copy(
-                fandoms = metadata.fandoms,
-                rating = metadata.rating,
-                warnings = metadata.warnings,
-                categories = metadata.categories,
-                relationships = metadata.relationships,
-                characters = metadata.characters,
-                freeforms = metadata.freeforms,
-                language = metadata.language,
-                wordCount = metadata.words,
-                chapters = metadata.chapters,
-                kudos = metadata.kudos,
-                comments = metadata.comments,
-                hits = metadata.hits
-            )
-            enriched[work.id] = merged
-            merged
         }
     }
 

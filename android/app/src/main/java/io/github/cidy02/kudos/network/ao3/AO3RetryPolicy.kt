@@ -27,6 +27,7 @@ class AO3RetryPolicy(
             AO3Error.AuthenticationRequired,
             AO3Error.Forbidden,
             AO3Error.NotFound,
+            AO3Error.Maintenance,
             is AO3Error.Http,
             is AO3Error.Parse,
             is AO3Error.Validation -> false

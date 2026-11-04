@@ -107,4 +107,22 @@ class AO3SparseWorkEnricherTest {
         assertNull(enricher.enrich(sparse()))
         assertEquals(1, repo.calls)
     }
+
+    @Test
+    fun transientErrorsLikeMaintenanceOrNetworkAreNotPermanentlyMarkedFailed() = runTest {
+        // Only AO3's own answer about this work is final. Unreachable,
+        // throttled or down for maintenance: the next appearance asks again.
+        for (transient in listOf(
+            AO3Error.Maintenance,
+            AO3Error.Network("offline", offline = true),
+            AO3Error.Overloaded(503, null),
+            AO3Error.Server(500)
+        )) {
+            val repo = FakeRepository(AO3Result.Failure(transient))
+            val enricher = AO3SparseWorkEnricher(repo, CoroutineScope(UnconfinedTestDispatcher(testScheduler)))
+            assertNull(enricher.enrich(sparse(100L)))
+            assertNull(enricher.enrich(sparse(100L)))
+            assertEquals(2, repo.calls)
+        }
+    }
 }

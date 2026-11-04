@@ -23,6 +23,9 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 
 interface AO3Client {
+    /** Pull to refresh is the reader asking AO3 again: lifts a maintenance hold for one probe. */
+    fun invalidateCachedResponses() {}
+
     /** Clients without a task fraction still work; the queue supplies its pacing creep. */
     suspend fun getBytesWithProgress(
         url: String,
@@ -48,6 +51,29 @@ interface AO3Client {
                     body = result.value.body.toByteArray()
                 )
             )
+        }
+    }
+
+    companion object {
+        private val MAINTENANCE_H2_REGEX = Regex(
+            """<h2[^>]*>\s*the archive is down for maintenance""",
+            RegexOption.IGNORE_CASE
+        )
+
+        /**
+         * AO3's own maintenance page: `<h2>The archive is down for maintenance.</h2>`
+         * under a generic "Request temporarily denied." title (captured 2026-11-03,
+         * `ao3_maintenance.html`). Matched as the page's own `<h2>`: a rejected form
+         * that echoes the reader's text back has it escaped, never as markup.
+         */
+        fun isMaintenancePage(body: String): Boolean {
+            val prefix = if (body.length > 64 * 1024) body.substring(0, 64 * 1024) else body
+            return MAINTENANCE_H2_REGEX.containsMatchIn(prefix)
+        }
+
+        fun isMaintenancePage(body: ByteArray): Boolean {
+            val prefix = body.decodeToString(endIndex = minOf(body.size, 64 * 1024))
+            return MAINTENANCE_H2_REGEX.containsMatchIn(prefix)
         }
     }
 }
@@ -115,7 +141,24 @@ class OkHttpAO3Client(
                 .addInterceptor(AO3RedirectCookieRelayInterceptor())
                 .build()
         }
+
+        fun isMaintenancePage(body: String): Boolean = AO3Client.isMaintenancePage(body)
+        fun isMaintenancePage(body: ByteArray): Boolean = AO3Client.isMaintenancePage(body)
     }
+
+    override fun invalidateCachedResponses() {
+        coordinator.liftMaintenanceHold()
+    }
+
+    fun holdForMaintenance(durationMillis: Long = AO3RequestCoordinator.MAINTENANCE_HOLD_MILLIS) {
+        coordinator.holdForMaintenance(durationMillis)
+    }
+
+    fun liftMaintenanceHold() {
+        coordinator.liftMaintenanceHold()
+    }
+
+    fun isHeldForMaintenance(): Boolean = coordinator.isHeldForMaintenance()
 
     override suspend fun get(
         url: String,
@@ -220,10 +263,17 @@ class OkHttpAO3Client(
         var retryNumber = 0
         while (true) {
             currentCoroutineContext().ensureActive()
-            val result = coordinator.coordinate {
-                currentCoroutineContext().ensureActive()
-                beforeSend()
-                performOnce(method, url, headers, formBody)
+            if (currentCoroutineContext()[AO3UncoalescedRead] != null) {
+                coordinator.liftMaintenanceHold()
+            }
+            val result = try {
+                coordinator.coordinate {
+                    currentCoroutineContext().ensureActive()
+                    beforeSend()
+                    performOnce(method, url, headers, formBody)
+                }
+            } catch (e: AO3MaintenanceException) {
+                return AO3Result.Failure(AO3Error.Maintenance)
             }
             if (result is AO3Result.Success) return result
 
@@ -269,9 +319,16 @@ class OkHttpAO3Client(
         var retryNumber = 0
         while (true) {
             currentCoroutineContext().ensureActive()
-            val result = coordinator.coordinate {
-                currentCoroutineContext().ensureActive()
-                performBinaryOnce(method, url, headers, onProgress)
+            if (currentCoroutineContext()[AO3UncoalescedRead] != null) {
+                coordinator.liftMaintenanceHold()
+            }
+            val result = try {
+                coordinator.coordinate {
+                    currentCoroutineContext().ensureActive()
+                    performBinaryOnce(method, url, headers, onProgress)
+                }
+            } catch (e: AO3MaintenanceException) {
+                return AO3Result.Failure(AO3Error.Maintenance)
             }
             if (result is AO3Result.Success) return result
 
@@ -342,6 +399,13 @@ class OkHttpAO3Client(
             return AO3Result.Failure(AO3Error.AuthenticationRequired)
         }
 
+        // The maintenance page answers at the edge: the write never reached AO3.
+        // Before 429, as in check.
+        if (statusCode !in 200..299 && AO3Client.isMaintenancePage(body)) {
+            holdForMaintenance()
+            return AO3Result.Failure(AO3Error.Maintenance)
+        }
+
         if (AO3OverloadDetector.isOverloadPage(body)) {
             return AO3Result.Failure(AO3Error.Overloaded(statusCode, retryAfterMillis))
         }
@@ -379,6 +443,13 @@ class OkHttpAO3Client(
             !AO3Constants.isLoginUrl(originalUrl)
         ) {
             return AO3Result.Failure(AO3Error.AuthenticationRequired)
+        }
+
+        // The maintenance page answers at the edge: the write never reached AO3.
+        // Before 429, as in check.
+        if (statusCode !in 200..299 && AO3Client.isMaintenancePage(body)) {
+            holdForMaintenance()
+            return AO3Result.Failure(AO3Error.Maintenance)
         }
 
         if (AO3OverloadDetector.isOverloadPage(body)) {
@@ -433,6 +504,12 @@ class OkHttpAO3Client(
             !AO3Constants.isLoginUrl(originalUrl)
         ) {
             return AO3Result.Failure(AO3Error.AuthenticationRequired)
+        }
+
+        // Only a failed answer is read: a work's own text may say the words.
+        if (statusCode !in 200..299 && AO3Client.isMaintenancePage(bytes)) {
+            holdForMaintenance()
+            return AO3Result.Failure(AO3Error.Maintenance)
         }
 
         val textPreview = bytes.decodeToString(endIndex = minOf(bytes.size, 8192))
