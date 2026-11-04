@@ -93,7 +93,7 @@ struct LoadedWorksRanking: Equatable {
 }
 
 /// One loaded work in ranked position.
-struct RankedWork: Identifiable {
+struct RankedWork: Identifiable, Equatable {
     let work: AO3WorkSummary
     /// The figure the order was decided on (shrunk when ranking cautiously). nil when
     /// the work's figures cannot give one — no hits, no kudos, no earlier sighting.
@@ -101,8 +101,19 @@ struct RankedWork: Identifiable {
     let isSetAside: Bool
     /// What "Show the signal on each result" prints under the row's figures.
     let signal: String?
+    var toneSignal: WorkSignal? = nil
+    var prior: Double? = nil
+    var rankPosition: Int? = nil
+    var totalLoaded: Int? = nil
+    var rankTitle: String? = nil
 
     var id: Int { work.id }
+}
+
+/// The result of partitioning loaded works into ranked and unranked sections (FID40).
+struct RankedWorkPartition: Equatable {
+    let ranked: [RankedWork]
+    let unranked: [RankedWork]
 }
 
 enum LoadedWorksRanker {
@@ -117,19 +128,33 @@ enum LoadedWorksRanker {
     /// fewer than one bookmark per hundred.
     static let unusualKudosFloor = 1_000
 
-    /// Orders `works` by `settings`. AO3's order is returned untouched.
+    /// Partitions `works` into ranked and unranked results by `settings` (FID40).
     ///
-    /// Works with a figure come first, highest or lowest first as asked; ties keep
-    /// AO3's order. Works with no figure follow in AO3's order, then any set-aside
-    /// works, also in AO3's order.
-    static func rank(
+    /// When ranking is inactive, all works are placed in `ranked` in AO3's order and
+    /// `unranked` is empty. When ranking is active, works with valid scores that are not
+    /// set aside are ordered by score in `ranked`, while unranked works (set aside or
+    /// missing figures) are placed in `unranked` in their original AO3 order.
+    static func partition(
         _ works: [AO3WorkSummary],
         by settings: LoadedWorksRanking,
         previousKudos: [Int: Int] = [:],
         now: Date = Date()
-    ) -> [RankedWork] {
+    ) -> RankedWorkPartition {
         guard settings.isActive else {
-            return works.map { RankedWork(work: $0, score: nil, isSetAside: false, signal: nil) }
+            let entries = works.map {
+                RankedWork(
+                    work: $0,
+                    score: nil,
+                    isSetAside: false,
+                    signal: nil,
+                    toneSignal: nil,
+                    prior: nil,
+                    rankPosition: nil,
+                    totalLoaded: works.count,
+                    rankTitle: nil
+                )
+            }
+            return RankedWorkPartition(ranked: entries, unranked: [])
         }
         let figures = works.map { Figures($0, now: now) }
         let setAside = figures.map { settings.setsAsideUnusual && isUnusual($0) }
@@ -163,17 +188,34 @@ enum LoadedWorksRanker {
                 score = shrunk
                 shown = value
             }
+            let sigText = signal(
+                settings.rank,
+                shown: shown,
+                setAside: setAside[index],
+                hasPrevious: previousKudos[works[index].id] != nil
+            )
+            let toneSig = QualitySignalTones.chooseTone(
+                rank: settings.rank,
+                shown: shown,
+                figures: figures[index],
+                setAside: setAside[index],
+                hasPrevious: previousKudos[works[index].id] != nil
+            )
             entries.append((index: index, entry: RankedWork(
                 work: works[index],
                 score: score,
                 isSetAside: setAside[index],
-                signal: signal(settings.rank, shown: shown, setAside: setAside[index],
-                               hasPrevious: previousKudos[works[index].id] != nil)
+                signal: sigText,
+                toneSignal: toneSig,
+                prior: prior,
+                rankPosition: nil,
+                totalLoaded: works.count,
+                rankTitle: settings.rank.title
             )))
         }
 
         let highestFirst = settings.order == .highestFirst
-        let ranked = entries
+        let rankedEntries = entries
             .filter { !$0.entry.isSetAside && $0.entry.score != nil }
             .sorted { lhs, rhs in
                 let left = lhs.entry.score ?? 0
@@ -181,9 +223,33 @@ enum LoadedWorksRanker {
                 if left != right { return highestFirst ? left > right : left < right }
                 return lhs.index < rhs.index
             }
+
+        let rankedWithPositions = rankedEntries.enumerated().map { pos, item in
+            var updated = item.entry
+            updated.rankPosition = pos + 1
+            return updated
+        }
+
         let unscored = entries.filter { !$0.entry.isSetAside && $0.entry.score == nil }
         let aside = entries.filter { $0.entry.isSetAside }
-        return (ranked + unscored + aside).map { $0.entry }
+        let unranked = (unscored + aside).map { $0.entry }
+
+        return RankedWorkPartition(ranked: rankedWithPositions, unranked: unranked)
+    }
+
+    /// Orders `works` by `settings`. AO3's order is returned untouched.
+    ///
+    /// Works with a figure come first, highest or lowest first as asked; ties keep
+    /// AO3's order. Works with no figure follow in AO3's order, then any set-aside
+    /// works, also in AO3's order.
+    static func rank(
+        _ works: [AO3WorkSummary],
+        by settings: LoadedWorksRanking,
+        previousKudos: [Int: Int] = [:],
+        now: Date = Date()
+    ) -> [RankedWork] {
+        let partition = self.partition(works, by: settings, previousKudos: previousKudos, now: now)
+        return partition.ranked + partition.unranked
     }
 
     // MARK: - Figures
@@ -350,9 +416,19 @@ struct SearchRankingSession {
         LoadedWorksRanker.rank(works, by: settings, previousKudos: sightings.previousKudos)
     }
 
+    /// `works` partitioned into ranked and unranked sections (FID40).
+    func partitioned(_ works: [AO3WorkSummary]) -> RankedWorkPartition {
+        LoadedWorksRanker.partition(works, by: settings, previousKudos: sightings.previousKudos)
+    }
+
     /// The figure a row shows, when the reader has "Show the signal" on.
     func signal(for entry: RankedWork) -> String? {
         settings.showsSignal ? entry.signal : nil
+    }
+
+    /// The structured tone chip and note a row shows, when the reader has "Show the signal" on (FID40).
+    func qualitySignal(for entry: RankedWork) -> WorkSignal? {
+        settings.showsSignal ? entry.toneSignal : nil
     }
 
     /// Notes a loaded page in Momentum's record and hands it back. Every page is

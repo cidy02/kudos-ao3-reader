@@ -223,6 +223,8 @@ struct SensitiveWorkRow: View {
     var showsPerformance = false
     var bookmark: AO3AuthorBookmark?
     var signal: String?
+    var qualitySignal: WorkSignal? = nil
+    var rankedContext: RankedWork? = nil
     var remoteBadgeTitle: String?
     var showsSummary = true
     var badgeCount = 0
@@ -294,6 +296,8 @@ struct SensitiveWorkRow: View {
         showsPerformance: Bool = false,
         bookmark: AO3AuthorBookmark? = nil,
         signal: String? = nil,
+        qualitySignal: WorkSignal? = nil,
+        rankedContext: RankedWork? = nil,
         badgeTitle: String? = nil,
         showsSummary: Bool = true,
         badgeCount: Int = 0,
@@ -312,6 +316,8 @@ struct SensitiveWorkRow: View {
         self.showsPerformance = showsPerformance
         self.bookmark = bookmark
         self.signal = signal
+        self.qualitySignal = qualitySignal
+        self.rankedContext = rankedContext
         self.remoteBadgeTitle = badgeTitle
         self.showsSummary = showsSummary
         self.badgeCount = badgeCount
@@ -404,6 +410,8 @@ struct SensitiveWorkRow: View {
                 showsPerformance: showsPerformance,
                 bookmark: bookmark,
                 signal: signal,
+                qualitySignal: qualitySignal,
+                rankedContext: rankedContext,
                 badgeTitle: remoteBadgeTitle,
                 showsSummary: showsSummary,
                 badgeCount: badgeCount,
@@ -524,6 +532,8 @@ struct SensitiveWorkRow: View {
                 showsPerformance: showsPerformance,
                 bookmark: bookmark,
                 signal: signal,
+                qualitySignal: qualitySignal,
+                rankedContext: rankedContext,
                 badgeTitle: remoteBadgeTitle,
                 showsSummary: showsSummary,
                 badgeCount: badgeCount,
