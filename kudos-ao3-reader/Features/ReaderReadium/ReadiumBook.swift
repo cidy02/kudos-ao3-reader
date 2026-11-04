@@ -641,6 +641,23 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         go(to: readingOrder[index])
     }
 
+    #if DEBUG
+    func goToPublicationEndForDebug() {
+        isAtPublicationEnd = true
+        guard let last = readingOrder.last else { return }
+        Task { @MainActor in
+            if let base = await publication?.locate(last) {
+                let target = base.copy(locations: {
+                    $0.progression = 1.0
+                    $0.totalProgression = 1.0
+                    $0.position = nil
+                })
+                await navigator?.go(to: target, options: NavigatorGoOptions())
+            }
+        }
+    }
+    #endif
+
     /// Resolves `toc`'s `Link`s to spine indices (by href, fragment/path-insensitive)
     /// and reconciles them against the full `readingOrder` into normalized sections.
     /// Internal (not `private`) so `ReadiumReaderTests` can exercise the nested-TOC

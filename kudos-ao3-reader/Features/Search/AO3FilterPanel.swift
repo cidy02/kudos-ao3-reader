@@ -56,6 +56,7 @@ struct AO3FilterPanel: View {
     #if DEBUG
     @State private var debugLanguage = false
     @State private var debugTagPicker = false
+    @State private var debugSortBy = false
     #endif
 
     init(
@@ -242,6 +243,7 @@ struct AO3FilterPanel: View {
         #if DEBUG
         .task {
             if DebugLaunchRoute.takePush("languagepicker") { debugLanguage = true }
+            if DebugLaunchRoute.takePush("sortby") { debugSortBy = true }
             if DebugLaunchRoute.takeSheet("tagpicker") {
                 try? await Task.sleep(for: .seconds(1))
                 debugTagPicker = true
@@ -249,6 +251,13 @@ struct AO3FilterPanel: View {
         }
         .navigationDestination(isPresented: $debugLanguage) {
             FilterLanguagePicker(selection: $filters.language)
+        }
+        .navigationDestination(isPresented: $debugSortBy) {
+            SearchSortByView(
+                filters: $filters,
+                ranking: ranking,
+                allowsRelevanceSort: allowsRelevanceSort
+            )
         }
         .sheet(isPresented: $debugTagPicker) {
             TagPickerView(

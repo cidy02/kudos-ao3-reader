@@ -239,6 +239,13 @@ struct ReaderView: View {
             }
             // `onDisappear` doesn't run when the whole app quits with the reader
             // open — flush on termination so that close path can't lose position.
+            #if DEBUG
+            .task {
+                if DebugLaunchRoute.takeSheet("readerend") {
+                    isAtEnd = true
+                }
+            }
+            #endif
             .onReceive(NotificationCenter.default.publisher(
                 for: NSApplication.willTerminateNotification)) { _ in
                 flushProgress()

@@ -37,6 +37,8 @@ struct ContentView: View {
     @State private var showingBugReport = false
     #if DEBUG
     @State private var showingDebugLogin = false
+    @State private var debugDismissedWelcome = false
+    @State private var debugDismissedProtectLibrary = false
     #endif
     /// Changelog entries this device hasn't seen yet — empty means no "What's New"
     /// sheet. Populated once onboarding is done (a fresh install has nothing to
@@ -198,6 +200,11 @@ struct ContentView: View {
                 #endif
             }
             .onAppear {
+                #if DEBUG
+                if DebugLaunchRoute.pageRoute == "welcome" || DebugLaunchRoute.pageRoute == "protectlibrary" {
+                    return
+                }
+                #endif
                 if hasCompletedOnboarding {
                     whatsNewEntries = Changelog.unseenEntries()
                 }
@@ -244,8 +251,21 @@ struct ContentView: View {
     /// Presents onboarding until the user completes it (persisted via `@AppStorage`).
     private var onboardingPresented: Binding<Bool> {
         Binding(
-            get: { !hasCompletedOnboarding },
-            set: { if !$0 { hasCompletedOnboarding = true } }
+            get: {
+                #if DEBUG
+                if DebugLaunchRoute.pageRoute == "welcome" { return !debugDismissedWelcome }
+                if DebugLaunchRoute.pageRoute == "protectlibrary" { return false }
+                #endif
+                return !hasCompletedOnboarding
+            },
+            set: { isPresented in
+                #if DEBUG
+                if DebugLaunchRoute.pageRoute == "welcome" && !isPresented {
+                    debugDismissedWelcome = true
+                }
+                #endif
+                if !isPresented { hasCompletedOnboarding = true }
+            }
         )
     }
 
@@ -264,13 +284,22 @@ struct ContentView: View {
     private var syncFolderOnboardingPresented: Binding<Bool> {
         Binding(
             get: {
-                hasCompletedOnboarding
+                #if DEBUG
+                if DebugLaunchRoute.pageRoute == "protectlibrary" { return !debugDismissedProtectLibrary }
+                if DebugLaunchRoute.pageRoute == "welcome" { return false }
+                #endif
+                return hasCompletedOnboarding
                     && !hasConfiguredSyncFolder
                     && !FolderSyncService.snapshot().isConnected
                     && !syncOnboardingDismissedPermanently
                     && !dismissedSyncFolderOnboardingThisSession
             },
             set: { isPresented in
+                #if DEBUG
+                if DebugLaunchRoute.pageRoute == "protectlibrary" && !isPresented {
+                    debugDismissedProtectLibrary = true
+                }
+                #endif
                 if !isPresented { dismissedSyncFolderOnboardingThisSession = true }
             }
         )

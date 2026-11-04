@@ -21,9 +21,10 @@ struct DebugShotRouteTests {
             "bulkedit", "bulktagstate", "bulknames", "prefhelp", "privacydata",
             "availability", "pairing", "revokedevice", "backupimport", "aboutkudos",
             "authorbookmarks", "readerspeech", "libfilter", "libselect", "remoteselect",
-            "expandrow", "searchfilters",
+            "expandrow", "searchfilters", "collectionaddworks", "libedit", "sortby",
+            "readerend", "welcome", "protectlibrary",
         ]
-        #expect(names.count == 77)
+        #expect(names.count == 83)
         for name in names {
             #expect(DebugShots.byName[name] != nil)
             #expect(!DebugShots.byName[name]!.route.isEmpty)

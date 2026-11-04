@@ -264,6 +264,11 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                         path.append(route)
                     } else if let work = DebugLaunchRoute.homeWork(in: works) {
                         DebugLaunchRoute.installFixtureEPUBs(in: works)
+                        if DebugLaunchRoute.wantsSheet("readerend") {
+                            work.lastSpineIndex = 1
+                            work.readiumLocator = #"{"href":"ch2.xhtml","locations":{"progression":1.0,"totalProgression":1.0}}"#
+                            work.isFinished = true
+                        }
                         path.append(DebugLaunchRoute.opensReader ? .reader(work) : LocalWorkDestination.detail(work))
                         if let comments = DebugLaunchRoute.commentsRoute(for: work) { path.append(comments) }
                     }

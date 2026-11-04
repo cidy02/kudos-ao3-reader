@@ -566,6 +566,9 @@ struct CollectionDetailView: View {
             .task {
                 if DebugLaunchRoute.takeSheet("collectiondetails") { showingDetails = true }
                 if DebugLaunchRoute.takeSheet("collectionreorder") { showingReorder = true }
+                if DebugLaunchRoute.takeSheet("collectionaddworks") || DebugLaunchRoute.takeSheet("addworks") {
+                    showingAddWorks = true
+                }
             }
             #endif
             .sheet(isPresented: $showingReorder) {
