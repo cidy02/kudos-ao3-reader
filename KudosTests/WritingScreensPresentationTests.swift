@@ -202,6 +202,30 @@ struct WritingScreensPresentationTests {
         #expect(OwnWorksBulkBar.deleteMessage([work(7)]).hasPrefix("This permanently removes the work"))
     }
 
+    /// Board 42 (FID51): the work editor's header exposes circular `xmark` dismiss,
+    /// circular `eye` preview, and the primary `Save` action; preview and save disable
+    /// together while a write or refresh is in flight.
+    @Test func workEditHeaderIncludesDismissPreviewAndSaveActions() {
+        let actions = WorkEditView.headerActions()
+        #expect(actions == [
+            WorkEditView.HeaderAction(kind: .cancel, title: "Cancel", systemImage: "xmark", isEnabled: true),
+            WorkEditView.HeaderAction(kind: .preview, title: "Preview", systemImage: "eye", isEnabled: true),
+            WorkEditView.HeaderAction(kind: .save, title: "Save", systemImage: nil, isEnabled: true)
+        ])
+        let preview = WorkEditView.headerAction(.preview)
+        #expect(preview?.title == "Preview")
+        #expect(preview?.systemImage == "eye")
+        #expect(preview?.isEnabled == true)
+
+        #expect(WorkEditView.headerAction(.preview, isSaving: true)?.isEnabled == false)
+        #expect(WorkEditView.headerAction(.save, isSaving: true)?.isEnabled == false)
+        #expect(WorkEditView.headerAction(.cancel, isSaving: true)?.isEnabled == false)
+
+        #expect(WorkEditView.headerAction(.preview, needsTagRefresh: true)?.isEnabled == false)
+        #expect(WorkEditView.headerAction(.save, needsTagRefresh: true)?.isEnabled == false)
+        #expect(WorkEditView.headerAction(.cancel, needsTagRefresh: true)?.isEnabled == true)
+    }
+
     // MARK: Fixtures
 
     private func work(_ id: Int, isComplete: Bool? = nil) -> AO3WorkSummary {
