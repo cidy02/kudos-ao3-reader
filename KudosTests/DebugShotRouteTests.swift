@@ -128,7 +128,8 @@ struct DebugShotRouteTests {
 
         let publication = try await ReadiumPublicationLoader.openEPUB(at: epubURL)
         let model = ReaderSearchModel()
-        let query = try #require(DebugLaunchRoute.findInWorkQuery)
+        // Not `findInWorkQuery`: that reads launch state this host does not have.
+        let query = DebugLaunchRoute.defaultFindQuery
         #expect(!query.isEmpty)
 
         model.search(query, in: publication)

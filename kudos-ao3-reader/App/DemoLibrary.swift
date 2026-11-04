@@ -531,9 +531,14 @@ enum DebugLaunchRoute {
     }
 
     /// Active search term for `shot:readerfind`.
+    /// The query `shot:readerfind` seeds. A constant so a test can pin the same
+    /// string the route uses — reading `findInWorkQuery` itself returns nil in a
+    /// test host, which has no launch route.
+    static let defaultFindQuery = "lights"
+
     static var findInWorkQuery: String? {
         if let query = shot?.query { return query }
-        if shotName == "readerfind" { return "lights" }
+        if shotName == "readerfind" { return defaultFindQuery }
         return nil
     }
 
