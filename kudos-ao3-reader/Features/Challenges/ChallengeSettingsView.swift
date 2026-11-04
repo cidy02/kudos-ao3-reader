@@ -138,8 +138,8 @@ struct ChallengeSettingsView: View {
         // the edit form (1cf) is theirs as well.
         if AO3CollectionOwnerControls.areVisible(viewerIsOwner: viewerIsOwner) {
             Section {
-                SubjectFormRow(label: "Edit settings", showsDisclosure: true) { EmptyView() }
-                    .subjectRowNavigation(accessibilityLabel: "Edit settings") {
+                SubjectFormRow(label: "Edit Settings", showsDisclosure: true) { EmptyView() }
+                    .subjectRowNavigation(accessibilityLabel: "Edit Settings") {
                         ChallengeSettingsEditView(
                             collectionSlug: collectionSlug,
                             collectionTitle: effectiveTitle,
@@ -166,14 +166,14 @@ struct ChallengeSettingsView: View {
         }
 
         Section {
-            SectionRuleHeader(title: isPromptMeme ? "Prompt requirements" : "Sign-up requirements")
+            SectionRuleHeader(title: isPromptMeme ? "Prompt Requirements" : "Sign-Up Requirements")
                 .pageBodyRow(top: 18, gutter: selfGuttered)
             requirementsPanel.pageBodyRow(top: 8, gutter: gutter)
         }
 
         if !tagSetLinks.isEmpty {
             Section {
-                SectionRuleHeader(title: tagSetLinks.count == 1 ? "Tag set" : "Tag sets")
+                SectionRuleHeader(title: tagSetLinks.count == 1 ? "Tag Set" : "Tag Sets")
                     .pageBodyRow(top: 18, gutter: selfGuttered)
                 tagSetsPanel.pageBodyRow(top: 8, gutter: gutter)
             }
@@ -220,7 +220,7 @@ struct ChallengeSettingsView: View {
                 )
             }
             .panelSegment(0, of: 2, gutter: gutter)
-        SubjectFormRow(label: "Prompts posted anonymously", value: settings.isAnonymous ? "Yes" : "No")
+        SubjectFormRow(label: "Prompts Posted Anonymously", value: settings.isAnonymous ? "Yes" : "No")
             .panelSegment(1, of: 2, gutter: gutter)
     }
 
@@ -338,7 +338,7 @@ struct ChallengeSettingsView: View {
         return VStack(spacing: 0) {
             if isPromptMeme {
                 SubjectFormRow(
-                    label: "Prompts per sign-up",
+                    label: "Prompts per Sign-Up",
                     value: "\(limits.requestsRequired) to \(limits.requestsAllowed)"
                 )
 
@@ -367,13 +367,13 @@ struct ChallengeSettingsView: View {
             SubjectRowSeparator()
 
             SubjectFormRow(
-                label: "Additional tags",
+                label: "Additional Tags",
                 value: restriction.optionalTagsAllowed ? "Optional" : "Not allowed"
             )
 
             SubjectRowSeparator()
 
-            SubjectFormRow(label: "Allow any prompt", arrangement: .control) {
+            SubjectFormRow(label: "Allow Any Prompt", arrangement: .control) {
                 Toggle("", isOn: .constant(restriction.allowsAnyTag))
                     .labelsHidden()
                     .disabled(true)
@@ -383,7 +383,7 @@ struct ChallengeSettingsView: View {
             if !isPromptMeme {
                 SubjectRowSeparator()
 
-                SubjectFormRow(label: "Require a fandom match", arrangement: .control) {
+                SubjectFormRow(label: "Require a Fandom Match", arrangement: .control) {
                     Toggle("", isOn: .constant(!restriction.allowAnyFandom))
                         .labelsHidden()
                         .disabled(true)
@@ -424,11 +424,11 @@ struct ChallengeSettingsView: View {
     private var assignmentsPanel: some View {
         VStack(spacing: 0) {
             SubjectFormRow(
-                label: "Sign-ups",
+                label: "Sign-Ups",
                 value: signUpTotal.map(String.init) ?? "Couldn't load",
                 showsDisclosure: true
             )
-            .subjectRowNavigation(accessibilityLabel: "Sign-ups") {
+            .subjectRowNavigation(accessibilityLabel: "Sign-Ups") {
                 ChallengeSignUpsView(
                     collectionSlug: collectionSlug,
                     collectionTitle: effectiveTitle,

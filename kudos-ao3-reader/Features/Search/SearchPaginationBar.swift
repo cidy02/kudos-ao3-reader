@@ -194,7 +194,7 @@ struct SearchPaginationBar: View {
         let endPage = Self.navigationPage(
             direction, longPress: true, currentPage: currentPage, totalPages: totalPages
         )
-        let endLabel = isBackward ? "First page" : "Last page"
+        let endLabel = isBackward ? "First Page" : "Last Page"
         let isAccentedForward = !isBackward && enabled
         let isDark = themeManager.appTheme.isDarkFamily
 
@@ -391,7 +391,7 @@ private struct PageJumpSheet: View {
 
     private var fieldSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            sectionLabel("Page number")
+            sectionLabel("Page Number")
             HStack(spacing: 8) {
                 TextField("Page", text: $draftText)
                     .font(.system(size: fieldInputSize))
@@ -467,7 +467,7 @@ private struct PageJumpSheet: View {
     /// this sheet to find out.
     private var endsRow: some View {
         HStack(spacing: 8) {
-            endButton("First page") { draftText = "1" }
+            endButton("First Page") { draftText = "1" }
                 .disabled(draftPage <= 1)
             endButton("Last (\(totalPages.formatted()))") { draftText = String(max(totalPages, 1)) }
                 .disabled(draftPage >= totalPages)

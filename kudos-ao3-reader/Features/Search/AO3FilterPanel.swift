@@ -122,7 +122,7 @@ struct AO3FilterPanel: View {
                 refineMatchLine
                 form
             }
-            .navigationTitle(worksSort == nil ? (mode == .refine ? "Refine" : "Filters") : "Sort and filter")
+            .navigationTitle(worksSort == nil ? (mode == .refine ? "Refine" : "Filters") : "Sort and Filter")
             #if os(iOS)
                 .navigationBarTitleDisplayMode(.inline)
             #endif
@@ -277,7 +277,7 @@ extension AO3FilterPanel {
                         color: Color(red: 0x1E / 255.0, green: 0x63 / 255.0, blue: 0xC8 / 255.0),
                         systemImage: "arrow.up.arrow.down"
                     )
-                    Text("Sort by")
+                    Text("Sort By")
                     Spacer()
                     Text(SearchSortBySummary.value(filters: filters, ranking: ranking?.wrappedValue))
                         .foregroundStyle(.secondary)
@@ -431,7 +431,7 @@ extension AO3FilterPanel {
                             color: Color(red: 0x6C / 255.0, green: 0x6C / 255.0, blue: 0x70 / 255.0),
                             systemImage: "text.quote"
                         )
-                        Text("Title & creator")
+                        Text("Title & Creator")
                         Spacer()
                         Text(titleAndCreatorSummary)
                             .foregroundStyle(.secondary)
@@ -439,7 +439,7 @@ extension AO3FilterPanel {
                 }
             }
         } header: {
-            groupLabel("Tags and text")
+            groupLabel("Tags and Text")
         }
     }
 
@@ -498,7 +498,7 @@ extension AO3FilterPanel {
 
             FilterLengthSection(wordsFrom: $filters.wordsFrom, wordsTo: $filters.wordsTo)
         } header: {
-            groupLabel("Length and status")
+            groupLabel("Length and Status")
         }
     }
 
@@ -589,7 +589,7 @@ extension AO3FilterPanel {
             Button(role: .destructive, action: onReset) {
                 HStack {
                     Spacer()
-                    Text("Reset all filters")
+                    Text("Reset All Filters")
                         .foregroundStyle(
                             canReset
                                 ? theme.appTheme.errorColor
@@ -1007,7 +1007,7 @@ extension AO3FilterPanel {
         if worksSort != nil {
             Section {
                 Menu {
-                    Picker("Sort by", selection: worksColumnBinding) {
+                    Picker("Sort By", selection: worksColumnBinding) {
                         ForEach(AO3WorksSort.allColumns) { column in
                             Text(column.title).tag(column)
                         }
@@ -1018,7 +1018,7 @@ extension AO3FilterPanel {
                             color: Color(red: 0x1E / 255.0, green: 0x63 / 255.0, blue: 0xC8 / 255.0),
                             systemImage: "arrow.up.arrow.down"
                         )
-                        Text("Sort by")
+                        Text("Sort By")
                         Spacer()
                         VStack(alignment: .trailing, spacing: 2) {
                             Text(sortPresentation.draft.column.title)

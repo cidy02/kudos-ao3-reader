@@ -137,12 +137,12 @@ struct NewReadingQueueSheet: View {
 
                 if !isEditing {
                     Section {
-                        groupLabel("Start from")
+                        groupLabel("Start From")
                         seedPanel.pageBodyRow(top: 8, gutter: gutter)
                     }
 
                     Section {
-                        groupLabel("Add works")
+                        groupLabel("Add Works")
                         addWorksRow.pageBodyRow(top: 8, gutter: gutter)
                         footnote("Chosen from your library. They are added when you create the queue.")
                     }
@@ -151,7 +151,7 @@ struct NewReadingQueueSheet: View {
             .cardList()
             // Rows at their own padding, not the List minimum (L3-FORM-1).
             .environment(\.defaultMinListRowHeight, 0)
-            .navigationTitle(isEditing ? "Edit queue" : "New queue")
+            .navigationTitle(isEditing ? "Edit Queue" : "New Queue")
             #if !os(macOS)
                 .navigationBarTitleDisplayMode(.inline)
             #endif
@@ -212,7 +212,7 @@ struct NewReadingQueueSheet: View {
     /// Placeholder until a name is typed. Create stays disabled while it is empty.
     /// The colour follows `ReadingQueue.displayHue`: the swatch, or a hue of the name.
     private var previewName: String {
-        trimmedName.isEmpty ? "New queue" : trimmedName
+        trimmedName.isEmpty ? "New Queue" : trimmedName
     }
 
     private var previewHue: Double {
@@ -260,7 +260,7 @@ struct NewReadingQueueSheet: View {
         } label: {
             HStack(spacing: 12) {
                 Text(options.seedWorkIDs.isEmpty
-                    ? "Choose works"
+                    ? "Choose Works"
                     : "\(options.seedWorkIDs.count) selected")
                     .font(.system(size: seedTitleSize))
                     .foregroundStyle(.primary)
@@ -306,7 +306,7 @@ struct NewReadingQueueSheet: View {
                 newTagName = ""
                 showingNewTag = true
             } label: {
-                SubjectChip(text: "+ New tag", style: .dashed)
+                SubjectChip(text: "+ New Tag", style: .dashed)
             }
             .buttonStyle(.plain)
         }
@@ -352,11 +352,11 @@ struct NewReadingQueueSheet: View {
     }
 
     private var offlinePanel: some View {
-        SubjectFormRow(label: "Keep works offline", arrangement: .control) {
+        SubjectFormRow(label: "Keep Works Offline", arrangement: .control) {
             // Titled even though the title is hidden: `labelsHidden` hides it
             // from the eye, not from VoiceOver, and an empty title left the
             // switch announcing only "switch button, off".
-            Toggle("Keep works offline", isOn: $options.keepsWorksOffline).labelsHidden().accentFill()
+            Toggle("Keep Works Offline", isOn: $options.keepsWorksOffline).labelsHidden().accentFill()
         }
         .subjectPanel()
     }

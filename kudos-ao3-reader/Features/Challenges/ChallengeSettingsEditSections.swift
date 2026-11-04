@@ -28,7 +28,7 @@ extension ChallengeSettingsEditView {
     /// byline is left out: the edit page carries owner pseud ids, not names.
     private var basicsFacts: [(label: String, value: String)] {
         guard let collection = collectionForm else {
-            return [("Collection settings", collectionLoadFailed ? "Couldn't load" : "Loading…")]
+            return [("Collection Settings", collectionLoadFailed ? "Couldn't load" : "Loading…")]
         }
         return [
             ("Name", collection.title),
@@ -56,14 +56,14 @@ extension ChallengeSettingsEditView {
         if let match = settings.matchSettings {
             VStack(spacing: 0) {
                 SubjectFormRow(
-                    label: "Match on",
+                    label: "Match On",
                     value: match.matchOn.isEmpty
                         ? "Nothing required"
                         : match.matchOn.map { AO3PotentialMatchSettings.label($0) }.joined(separator: ", ")
                 )
                 SubjectRowSeparator()
                 optionRow(
-                    "Requests that must match", value: match.numRequiredPrompts,
+                    "Requests That Must Match", value: match.numRequiredPrompts,
                     options: AO3PotentialMatchSettings.requestOptions
                 ) { form?.settings.matchSettings?.numRequiredPrompts = $0 }
                 ForEach(AO3PotentialMatchSettings.tagTypes, id: \.self) { type in
@@ -77,7 +77,7 @@ extension ChallengeSettingsEditView {
             .subjectPanel()
             .pageBodyRow(top: 8, gutter: gutter)
 
-            SubjectFieldLabel(text: "Count optional tags for", style: .formGroup)
+            SubjectFieldLabel(text: "Count Optional Tags For", style: .formGroup)
                 .pageBodyRow(top: 12, gutter: gutter)
             VStack(spacing: 0) {
                 ForEach(Array(AO3PotentialMatchSettings.tagTypes.enumerated()), id: \.offset) { index, type in
@@ -138,16 +138,16 @@ extension ChallengeSettingsEditView {
     /// has its own "anonymous prompts" setting on the challenge form.
     var moderationPanel: some View {
         VStack(spacing: 0) {
-            collectionToggle("Anonymous until reveal", \.isAnonymous)
+            collectionToggle("Anonymous Until Reveal", \.isAnonymous)
             SubjectRowSeparator()
-            collectionToggle("Unrevealed until reveal", \.isUnrevealed)
+            collectionToggle("Unrevealed Until Reveal", \.isUnrevealed)
             SubjectRowSeparator()
-            collectionToggle("Moderated sign-ups", \.isModerated)
+            collectionToggle("Moderated Sign-Ups", \.isModerated)
             SubjectRowSeparator()
-            collectionToggle("Closed to new sign-ups", \.isClosed)
+            collectionToggle("Closed to New Sign-Ups", \.isClosed)
             if settings.kind == .promptMeme {
                 SubjectRowSeparator()
-                SubjectFormRow(label: "Prompts posted anonymously", arrangement: .control) {
+                SubjectFormRow(label: "Prompts Posted Anonymously", arrangement: .control) {
                     Toggle("", isOn: Binding(
                         get: { form?.settings.isAnonymous ?? false },
                         set: { form?.settings.isAnonymous = $0 }

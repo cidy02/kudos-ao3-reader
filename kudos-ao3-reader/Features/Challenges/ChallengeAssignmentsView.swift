@@ -203,7 +203,7 @@ struct ChallengeAssignmentsView: View {
 
     private var pinchHitsSection: some View {
         Section {
-            SectionRuleHeader(title: "Pinch hits", count: pinchHitRows.count)
+            SectionRuleHeader(title: "Pinch Hits", count: pinchHitRows.count)
                 .pageBodyRow(top: 18, gutter: selfGuttered)
             if let error = loadErrors[.pinchHits] ?? loadErrors[.unmatched] {
                 failureCard(error, title: "Couldn't load pinch hits").pageBodyRow(top: 8, gutter: gutter)
@@ -224,7 +224,7 @@ struct ChallengeAssignmentsView: View {
 
     private var unmatchedSection: some View {
         Section {
-            SectionRuleHeader(title: "Unmatched sign-ups", count: unmatched.count)
+            SectionRuleHeader(title: "Unmatched Sign-Ups", count: unmatched.count)
                 .pageBodyRow(top: 18, gutter: selfGuttered)
             if let error = loadErrors[.unmatched] {
                 failureCard(error, title: "Couldn't load defaults").pageBodyRow(top: 8, gutter: gutter)

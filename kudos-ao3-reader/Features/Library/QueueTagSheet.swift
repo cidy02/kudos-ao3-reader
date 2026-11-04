@@ -74,7 +74,7 @@ struct QueueTagSheet: View {
                 }
 
                 Section {
-                    groupLabel("Your tags")
+                    groupLabel("Your Tags")
                     if allTags.isEmpty {
                         footnote("You have no tags yet. Add one above.")
                     } else {
@@ -129,7 +129,7 @@ struct QueueTagSheet: View {
                 .foregroundStyle(themeManager.accentInk)
                 .frame(width: 20)
                 .accessibilityHidden(true)
-            TextField("New tag", text: $newTagName)
+            TextField("New Tag", text: $newTagName)
                 .font(.system(size: inputSize))
                 .onSubmit(addTypedTag)
             Button("Add", action: addTypedTag)

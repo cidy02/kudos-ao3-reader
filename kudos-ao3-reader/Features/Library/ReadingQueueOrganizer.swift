@@ -263,7 +263,7 @@ struct AllReadingQueuesGridView: View {
             }
 
             Section {
-                SectionRuleHeader(title: "All queues", count: visibleQueueCount)
+                SectionRuleHeader(title: "All Queues", count: visibleQueueCount)
                     .pageBodyRow(top: 18, gutter: 0)
 
                 if let savedForLaterQueue {

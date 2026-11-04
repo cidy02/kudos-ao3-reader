@@ -223,7 +223,7 @@ struct CollectionDetailView: View {
     private var detailsBehaviourSection: some View {
         Section {
             Toggle(
-                "Keep downloads",
+                "Keep Downloads",
                 isOn: Binding(
                     get: { collection.keepsWorksOffline ?? false },
                     set: { newValue in
@@ -675,7 +675,7 @@ struct AddToCollectionView: View {
             Form {
                 Section {
                     HStack {
-                        TextField("New collection", text: $newName)
+                        TextField("New Collection", text: $newName)
                             .onSubmit(create)
                         Button("Add", action: create)
                             .disabled(newName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)

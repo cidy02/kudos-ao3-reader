@@ -120,7 +120,7 @@ struct WorkDetailBoard19Tests {
 
     @Test func myCopyRowsFollowTheBoardAndCarryTheirActions() {
         let all = rows()
-        #expect(all.map(\.label) == ["Progress", "Downloaded", "Your tags", "Collections", "Queues", "File"])
+        #expect(all.map(\.label) == ["Progress", "Downloaded", "Your Tags", "Collections", "Queues", "File"])
         #expect(all.map(\.action) == [nil, .edit, .add, .add, .add, nil])
     }
 

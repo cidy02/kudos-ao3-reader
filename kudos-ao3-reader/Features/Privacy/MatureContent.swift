@@ -34,7 +34,7 @@ extension AO3WorkSummary {
 /// One reveal affordance everywhere a mature item keeps its blurred footprint.
 struct MatureRevealCapsule: View {
     var body: some View {
-        Label("Tap to reveal", systemImage: "eye.slash")
+        Label("Tap to Reveal", systemImage: "eye.slash")
             .font(.caption.weight(.medium))
             .foregroundStyle(.primary)
             .padding(.horizontal, 12)
@@ -845,7 +845,7 @@ struct MatureRevealToggle: View {
         Button {
             gate.toggleRevealAll()
         } label: {
-            Label(gate.revealAll ? "Hide mature" : "Show mature",
+            Label(gate.revealAll ? "Hide Mature" : "Show Mature",
                   systemImage: gate.revealAll ? "eye.slash" : "eye")
         }
         // Matches FilterButton: neutral unless actively toggled on. .tint(), not

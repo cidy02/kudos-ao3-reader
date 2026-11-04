@@ -622,7 +622,7 @@ extension AO3CollectionDetailView {
         // 1bz is explicitly the moderator's read, so gate it on maintainer too,
         // not just signUpsURL's presence.
         if show.dashboard.signUpsURL != nil, show.isMaintainer {
-            entries.append(ManageEntry("Sign-ups") {
+            entries.append(ManageEntry("Sign-Ups") {
                 ChallengeSignUpsView(
                     collectionSlug: slug, collectionTitle: title, challengeKind: show.collection.challengeKind
                 )
@@ -651,7 +651,7 @@ extension AO3CollectionDetailView {
         // A maintainer can also be a participant, so this is independent of
         // `isMaintainer` above.
         if show.dashboard.signUpsURL != nil, auth.isLoggedIn {
-            entries.append(ManageEntry("Your Sign-up") {
+            entries.append(ManageEntry("Your Sign-Up") {
                 ChallengeSignUpView(collectionSlug: slug, collectionTitle: title)
             })
         }

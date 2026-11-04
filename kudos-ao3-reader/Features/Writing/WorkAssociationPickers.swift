@@ -52,7 +52,7 @@ struct WorkCollectionsGiftsView: View {
             }
 
             Section {
-                SectionRuleHeader(title: "Your collections", count: collections.count)
+                SectionRuleHeader(title: "Your Collections", count: collections.count)
                     .pageBodyRow(top: 14, gutter: 0)
                 collectionsPanel.pageBodyRow(top: 8, gutter: gutter)
                 footnote("A work submitted to a moderated collection waits for a maintainer's approval. "
@@ -61,7 +61,7 @@ struct WorkCollectionsGiftsView: View {
             }
 
             Section {
-                SectionRuleHeader(title: "Gift recipients", count: gifts.count)
+                SectionRuleHeader(title: "Gift Recipients", count: gifts.count)
                     .pageBodyRow(top: 18, gutter: 0)
                 giftsPanel.pageBodyRow(top: 8, gutter: gutter)
                 footnote("When you post, AO3 emails each gift recipient. You can't take back the gift, "
@@ -70,10 +70,10 @@ struct WorkCollectionsGiftsView: View {
 
             if parentWorkCount > 0 {
                 Section {
-                    SectionRuleHeader(title: "Also on this work")
+                    SectionRuleHeader(title: "Also on This Work")
                         .pageBodyRow(top: 18, gutter: 0)
                     SubjectFormRow(
-                        label: "Inspired by",
+                        label: "Inspired By",
                         value: parentWorkCount == 1 ? "1 work" : "\(parentWorkCount) works",
                         isDisabled: true
                     )
@@ -85,7 +85,7 @@ struct WorkCollectionsGiftsView: View {
         .cardList()
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
-        .subjectScreenWash(title: "Collections and gifts", palette: palette)
+        .subjectScreenWash(title: "Collections and Gifts", palette: palette)
         .task(id: query) { await search() }
     }
 
@@ -358,7 +358,7 @@ struct WorkSeriesPickerView: View {
             }
 
             Section {
-                SectionRuleHeader(title: "Your series", count: series.count)
+                SectionRuleHeader(title: "Your Series", count: series.count)
                     .pageBodyRow(top: 14, gutter: 0)
                 seriesPanel.pageBodyRow(top: 8, gutter: gutter)
                 footnote("Each save adds this work to one series. Saving doesn't remove it from another "
@@ -370,7 +370,7 @@ struct WorkSeriesPickerView: View {
                     SectionRuleHeader(title: "Position in \(ordered.title)")
                         .pageBodyRow(top: 18, gutter: 0)
                     SubjectFormRow(
-                        label: "Reorder the series",
+                        label: "Reorder the Series",
                         value: ordered.workCount.map { "\($0) work\($0 == 1 ? "" : "s")" } ?? "",
                         showsDisclosure: true
                     )
@@ -385,7 +385,7 @@ struct WorkSeriesPickerView: View {
             }
 
             Section {
-                SectionRuleHeader(title: "New series")
+                SectionRuleHeader(title: "New Series")
                     .pageBodyRow(top: 18, gutter: 0)
                 SubjectFormRow(label: "Create a series from this work", arrangement: .control) {
                     TextField("Title", text: $newSeriesTitle)
@@ -514,13 +514,13 @@ struct WorkCreatorsPickerView: View {
             }
 
             Section {
-                SectionRuleHeader(title: "Your pseuds", count: creators.availablePseuds.count)
+                SectionRuleHeader(title: "Your Pseuds", count: creators.availablePseuds.count)
                     .pageBodyRow(top: 14, gutter: 0)
                 pseudsPanel.pageBodyRow(top: 8, gutter: gutter)
             }
 
             Section {
-                SectionRuleHeader(title: "Invite a co-creator")
+                SectionRuleHeader(title: "Invite a Co-Creator")
                     .pageBodyRow(top: 18, gutter: 0)
                 bylinePanel.pageBodyRow(top: 8, gutter: gutter)
                 Text("AO3 invites a co-creator, and the work stays unchanged until they accept. "
@@ -622,7 +622,7 @@ struct WorkParentWorkPickerView: View {
             }
 
             Section {
-                SectionRuleHeader(title: "Source work")
+                SectionRuleHeader(title: "Source Work")
                     .pageBodyRow(top: 14, gutter: 0)
                 sourcePanel.pageBodyRow(top: 8, gutter: gutter)
                 Text("For a work on AO3, enter its web address. For a work from elsewhere, enter its "
@@ -644,7 +644,7 @@ struct WorkParentWorkPickerView: View {
         .cardList()
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
-        .subjectScreenWash(title: "Inspired by", palette: palette)
+        .subjectScreenWash(title: "Inspired By", palette: palette)
     }
 
     private var sourcePanel: some View {
@@ -693,7 +693,7 @@ struct WorkParentWorkPickerView: View {
             }
             SubjectRowSeparator()
             WritingChoiceRow(
-                title: "Language of the source",
+                title: "Language of the Source",
                 value: $parentWork.languageID,
                 options: languageOptions
             )

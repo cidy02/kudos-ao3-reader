@@ -127,12 +127,12 @@ struct ChallengeSettingsEditView: View {
         .cardList()
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
-        .subjectScreenWash(title: "Challenge settings", palette: palette)
+        .subjectScreenWash(title: "Challenge Settings", palette: palette)
         .safeAreaBar(edge: .bottom, spacing: 0) { bottomActionBar }
         .task(id: auth.sessionGeneration) { await load() }
         .refreshable { await load() }
         .alert("Reveal now?", isPresented: $confirmReveal) {
-            Button("Save and reveal", role: .destructive) {
+            Button("Save and Reveal", role: .destructive) {
                 Task { await save() }
             }
             Button("Cancel", role: .cancel) {}
@@ -176,13 +176,13 @@ struct ChallengeSettingsEditView: View {
         }
 
         Section {
-            SectionRuleHeader(title: "Sign-up limits")
+            SectionRuleHeader(title: "Sign-Up Limits")
                 .pageBodyRow(top: 18, gutter: selfGuttered)
             ForEach(limitsErrors, id: \.self) { message in
                 errorCard(message).pageBodyRow(top: 6, gutter: gutter)
             }
             limitsPanel.pageBodyRow(top: 8, gutter: gutter)
-            SubjectFieldLabel(text: "Request restrictions", style: .formGroup)
+            SubjectFieldLabel(text: "Request Restrictions", style: .formGroup)
                 .pageBodyRow(top: 12, gutter: gutter)
             requestRestrictionTogglesPanel.pageBodyRow(top: 8, gutter: gutter)
             if restrictionControlsLocked {
@@ -192,7 +192,7 @@ struct ChallengeSettingsEditView: View {
 
         if !tagSetLinks.isEmpty {
             Section {
-                SectionRuleHeader(title: tagSetLinks.count == 1 ? "Tag set" : "Tag sets")
+                SectionRuleHeader(title: tagSetLinks.count == 1 ? "Tag Set" : "Tag Sets")
                     .pageBodyRow(top: 18, gutter: selfGuttered)
                 tagSetsPanel.pageBodyRow(top: 8, gutter: gutter)
             }
@@ -202,14 +202,14 @@ struct ChallengeSettingsEditView: View {
             SectionRuleHeader(title: "Matching")
                 .pageBodyRow(top: 18, gutter: selfGuttered)
             matchSettingsPanels
-            SubjectFieldLabel(text: "Request fandoms", style: .formGroup)
+            SubjectFieldLabel(text: "Request Fandoms", style: .formGroup)
                 .pageBodyRow(top: 12, gutter: gutter)
             matchingPanel.pageBodyRow(top: 8, gutter: gutter)
             matchingFootnote.pageBodyRow(top: 8, gutter: gutter)
         }
 
         Section {
-            SectionRuleHeader(title: "Anonymity and moderation")
+            SectionRuleHeader(title: "Anonymity and Moderation")
                 .pageBodyRow(top: 18, gutter: selfGuttered)
             moderationPanel.pageBodyRow(top: 8, gutter: gutter)
         }
@@ -235,7 +235,7 @@ struct ChallengeSettingsEditView: View {
     /// different field, shown in the rows above.
     private var instructionsCard: some View {
         VStack(alignment: .leading, spacing: 7) {
-            SubjectFieldLabel(text: "Sign-up instructions", style: .formGroup)
+            SubjectFieldLabel(text: "Sign-Up Instructions", style: .formGroup)
 
             ZStack(alignment: .topLeading) {
                 if instructionsBinding.wrappedValue.isEmpty {
@@ -326,7 +326,7 @@ struct ChallengeSettingsEditView: View {
             }
             SubjectRowSeparator()
             SubjectFormRow(
-                label: "Time zone",
+                label: "Time Zone",
                 value: settings.scheduleIsEditable ? settings.timeZoneName : "Unavailable"
             )
         }
@@ -390,11 +390,11 @@ struct ChallengeSettingsEditView: View {
         allowed: WritableKeyPath<AO3ChallengeSignUpLimits, Int>
     ) -> some View {
         SubjectFormRow(label: label, arrangement: .control) {
-            countMenu("\(label) required", required)
+            countMenu("\(label) Required", required)
             Text("to")
                 .font(.system(size: bodySize))
                 .foregroundStyle(.secondary)
-            countMenu("\(label) allowed", allowed)
+            countMenu("\(label) Allowed", allowed)
         }
     }
 
@@ -416,21 +416,21 @@ struct ChallengeSettingsEditView: View {
 
     private var requestRestrictionTogglesPanel: some View {
         VStack(spacing: 0) {
-            SubjectFormRow(label: "URL allowed in a request", arrangement: .control) {
+            SubjectFormRow(label: "URL Allowed in a Request", arrangement: .control) {
                 Toggle("", isOn: requestRestrictionToggleBinding(\.urlAllowed))
                     .labelsHidden()
                     .tint(palette.tint)
                     .disabled(!restrictionIsEditable("url_allowed"))
             }
             SubjectRowSeparator()
-            SubjectFormRow(label: "Description required", arrangement: .control) {
+            SubjectFormRow(label: "Description Required", arrangement: .control) {
                 Toggle("", isOn: requestRestrictionToggleBinding(\.descriptionRequired))
                     .labelsHidden()
                     .tint(palette.tint)
                     .disabled(!restrictionIsEditable("description_required"))
             }
             SubjectRowSeparator()
-            SubjectFormRow(label: "Optional tags allowed", arrangement: .control) {
+            SubjectFormRow(label: "Optional Tags Allowed", arrangement: .control) {
                 Toggle("", isOn: requestRestrictionToggleBinding(\.optionalTagsAllowed))
                     .labelsHidden()
                     .tint(palette.tint)
@@ -498,7 +498,7 @@ struct ChallengeSettingsEditView: View {
     private var matchingPanel: some View {
         VStack(spacing: 0) {
             stepperRow(
-                label: "Fandoms required per request",
+                label: "Fandoms Required per Request",
                 value: settings.requestRestriction.fandomRequired,
                 range: 0...10,
                 isDisabled: !restrictionIsEditable("fandom_num_required")
@@ -507,7 +507,7 @@ struct ChallengeSettingsEditView: View {
             }
             SubjectRowSeparator()
             stepperRow(
-                label: "Fandoms allowed per request",
+                label: "Fandoms Allowed per Request",
                 value: settings.requestRestriction.fandomAllowed,
                 range: 0...10,
                 isDisabled: !restrictionIsEditable("fandom_num_allowed")
@@ -518,7 +518,7 @@ struct ChallengeSettingsEditView: View {
             // The spec's caption; the caption is the toggle's own label.
             Toggle(isOn: requestRestrictionToggleBinding(\.allowAnyFandom)) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Allow any fandom")
+                    Text("Allow Any Fandom")
                         .font(.system(size: toggleTitleSize))
                         .foregroundStyle(.primary)
                     Text("Choosing “any” can match you with anything in the tag set.")
@@ -559,11 +559,11 @@ struct ChallengeSettingsEditView: View {
 
     private var atAO3Panel: some View {
         VStack(spacing: 0) {
-            SubjectFormRow(label: "Run matching", value: "Opens AO3", showsDisclosure: true) {
+            SubjectFormRow(label: "Run Matching", value: "Opens AO3", showsDisclosure: true) {
                 router.open(settings.matchingOpenOnAO3)
             }
             SubjectRowSeparator()
-            SubjectFormRow(label: "Delete challenge", value: "Opens AO3", showsDisclosure: true) {
+            SubjectFormRow(label: "Delete Challenge", value: "Opens AO3", showsDisclosure: true) {
                 router.open(deleteChallengeURL)
             }
         }
@@ -582,7 +582,7 @@ struct ChallengeSettingsEditView: View {
                         .controlSize(.small)
                         .tint(theme.onEffectiveTint)
                 }
-                Text("Save changes")
+                Text("Save Changes")
                     .font(.system(size: saveButtonSize, weight: .semibold))
                     .foregroundStyle(theme.onEffectiveTint)
             }

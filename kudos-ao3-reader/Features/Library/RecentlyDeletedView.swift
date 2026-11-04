@@ -237,7 +237,7 @@ struct RecentlyDeletedView: View {
 
             if !held.isEmpty {
                 Section {
-                    SectionRuleHeader(title: "Finished, not kept", count: held.count)
+                    SectionRuleHeader(title: "Finished, Not Kept", count: held.count)
                         .pageBodyRow(top: 18, gutter: 0)
                     sectionNote("Works you finished without downloading, favoriting or queuing them. "
                         + "Their copies stay here for \(Self.heldWindowDays) days so you can still read them "

@@ -73,7 +73,7 @@ struct SaveSearchSheet: View {
                     }
                     .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
                 } header: {
-                    SectionRuleHeader(title: "What gets saved")
+                    SectionRuleHeader(title: "What Gets Saved")
                         .pageBodyRow(top: 20, gutter: 0)
                 }
             }

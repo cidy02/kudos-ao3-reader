@@ -42,7 +42,7 @@ struct PromptTagsEditorView: View {
                 }
 
                 Section {
-                    SectionRuleHeader(title: "Additional tags")
+                    SectionRuleHeader(title: "Additional Tags")
                         .pageBodyRow(top: 18, gutter: 0)
                     tagInputField("slow burn, domestic", text: $freeformsText)
                         .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)

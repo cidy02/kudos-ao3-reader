@@ -115,7 +115,7 @@ struct ChallengeSignUpView: View {
         .cardList()
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
-        .subjectScreenWash(title: "Your sign-up", palette: palette)
+        .subjectScreenWash(title: "Your Sign-Up", palette: palette)
         .safeAreaBar(edge: .bottom, spacing: 0) { bottomActionBar }
         .task { await loadSignUpIfNeeded() }
         #if DEBUG
@@ -127,7 +127,7 @@ struct ChallengeSignUpView: View {
             isPresented: $confirmWithdraw,
             titleVisibility: .visible
         ) {
-            Button("Withdraw Sign-up", role: .destructive) {
+            Button("Withdraw Sign-Up", role: .destructive) {
                 Task { await performWithdraw() }
             }
             Button("Cancel", role: .cancel) {}
@@ -281,7 +281,7 @@ extension ChallengeSignUpView {
             SubjectRowSeparator()
 
             SubjectFormRow(
-                label: "Additional tags",
+                label: "Additional Tags",
                 value: prompt.freeforms.isEmpty
                     ? "Optional"
                     : "\(prompt.freeforms.count) chosen",
@@ -415,7 +415,7 @@ extension ChallengeSignUpView {
                             .font(.system(size: 15))
                             .foregroundStyle(theme.accentInk)
 
-                        Text("Add an offer")
+                        Text("Add an Offer")
                             .font(.system(size: rowTitleSize))
                             .foregroundStyle(.primary)
 
@@ -463,7 +463,7 @@ extension ChallengeSignUpView {
                         .foregroundStyle(Color.red)
                         .frame(width: 20)
 
-                    Text("Withdraw sign-up")
+                    Text("Withdraw Sign-Up")
                         .font(.system(size: rowTitleSize))
                         .foregroundStyle(Color.red)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -489,7 +489,7 @@ extension ChallengeSignUpView {
             Button {
                 addNewRequest()
             } label: {
-                Text("Add request")
+                Text("Add Request")
                     .font(.system(size: buttonLabelSize, weight: .semibold))
                     .foregroundStyle(.primary)
                     .frame(maxWidth: .infinity)
@@ -516,7 +516,7 @@ extension ChallengeSignUpView {
                             .controlSize(.small)
                             .tint(theme.onEffectiveTint)
                     }
-                    Text("Submit sign-up")
+                    Text("Submit Sign-Up")
                         .font(.system(size: buttonLabelSize, weight: .semibold))
                         .foregroundStyle(theme.onEffectiveTint)
                 }

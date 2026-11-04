@@ -207,7 +207,7 @@ struct ReadingQueueSettingsView: View {
                     }
                 }
                 Divider()
-                Button("From queue name") { setHue(nil) }
+                Button("From Queue Name") { setHue(nil) }
             } label: {
                 SubjectFormRow(label: "Colour", showsDisclosure: true) {
                     Circle()
@@ -223,17 +223,17 @@ struct ReadingQueueSettingsView: View {
             SubjectRowSeparator()
             // The menu lists the presets; this is the colour well that ends them
             // for any other colour, stored as `colorHex` like New Queue's.
-            SubjectFormRow(label: "Custom colour") {
+            SubjectFormRow(label: "Custom Colour") {
                 CustomColorWell(
-                    label: "Custom colour",
+                    label: "Custom Colour",
                     current: queue.colorHex.flatMap(Color.init(hex:)),
                     fallback: themeManager.appTheme.subjectPalette(hue: queue.displayHue).accent,
                     onPick: setCustomColour
                 )
             }
             SubjectRowSeparator()
-            SubjectFormRow(label: "Keep works offline", arrangement: .control) {
-                Toggle("Keep works offline", isOn: Binding(
+            SubjectFormRow(label: "Keep Works Offline", arrangement: .control) {
+                Toggle("Keep Works Offline", isOn: Binding(
                     // nil is "never asked", and a never-asked queue keeps its
                     // works downloaded as queues always did (`KeepOffline`).
                     get: { KeepOffline.queueKeeps(queue.keepsWorksOffline) },
@@ -251,7 +251,7 @@ struct ReadingQueueSettingsView: View {
             SubjectFormRow(label: "Order", value: "Manual")
             SubjectRowSeparator()
             SubjectFormRow(
-                label: "Last read",
+                label: "Last Read",
                 value: ReadingQueueFacts.lastRead(works.map(\.lastReadDate))?
                     .formatted(.relative(presentation: .named)) ?? "Never"
             )
@@ -260,9 +260,9 @@ struct ReadingQueueSettingsView: View {
     }
 
     private var manageTagsPanel: some View {
-        SubjectFormRow(label: "Manage all tags", value: "\(allTags.count)", showsDisclosure: true)
+        SubjectFormRow(label: "Manage All Tags", value: "\(allTags.count)", showsDisclosure: true)
             .subjectPanel()
-            .subjectRowNavigation(accessibilityLabel: "Manage all tags") {
+            .subjectRowNavigation(accessibilityLabel: "Manage All Tags") {
                 QueueTagManagerView(queue: queue, onShowOnlyTag: onShowOnlyTag)
             }
     }

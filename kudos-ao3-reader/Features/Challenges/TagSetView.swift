@@ -122,7 +122,7 @@ struct TagSetView: View {
         .cardList()
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
-        .subjectScreenWash(title: "Tag set", palette: palette)
+        .subjectScreenWash(title: "Tag Set", palette: palette)
         .task { await loadTagSetIfNeeded() }
         #if DEBUG
         .task { if DebugLaunchRoute.takePush("tagseteditor") { debugTagEditor = true } }
@@ -192,7 +192,7 @@ struct TagSetView: View {
 
             SubjectRowSeparator()
 
-            SubjectFormRow(label: "Visible to everyone", arrangement: .control) {
+            SubjectFormRow(label: "Visible to Everyone", arrangement: .control) {
                 Toggle("", isOn: .constant(tagSet?.isVisible ?? true))
                     .labelsHidden()
                     .disabled(true)
@@ -218,7 +218,7 @@ struct TagSetView: View {
 
             SubjectRowSeparator()
 
-            tagCountRow("Additional tags", count: tagSet?.freeformCount ?? 0)
+            tagCountRow("Additional Tags", count: tagSet?.freeformCount ?? 0)
         }
         .subjectPanel()
     }
@@ -237,25 +237,25 @@ struct TagSetView: View {
                     .pageBodyRow(top: 12, gutter: selfGuttered)
 
                 tagFieldEditor(
-                    title: "Fandom tags to add",
+                    title: "Fandom Tags to Add",
                     placeholder: "Comma-separated fandom names…",
                     text: $fandomTagnames
                 ).pageBodyRow(top: 14, gutter: gutter)
 
                 tagFieldEditor(
-                    title: "Character tags to add",
+                    title: "Character Tags to Add",
                     placeholder: "Comma-separated character names…",
                     text: $characterTagnames
                 ).pageBodyRow(top: 8, gutter: gutter)
 
                 tagFieldEditor(
-                    title: "Relationship tags to add",
+                    title: "Relationship Tags to Add",
                     placeholder: "Comma-separated relationships…",
                     text: $relationshipTagnames
                 ).pageBodyRow(top: 8, gutter: gutter)
 
                 tagFieldEditor(
-                    title: "Additional tags to add",
+                    title: "Additional Tags to Add",
                     placeholder: "Comma-separated additional tags…",
                     text: $freeformTagnames
                 ).pageBodyRow(top: 8, gutter: gutter)
@@ -267,7 +267,7 @@ struct TagSetView: View {
         }
         .cardList()
         .environment(\.defaultMinListRowHeight, 0)
-        .subjectScreenWash(title: "Add tags", palette: palette)
+        .subjectScreenWash(title: "Add Tags", palette: palette)
         .screenTint(palette)
     }
 
@@ -354,7 +354,7 @@ struct TagSetView: View {
 
     private var nominationsPanel: some View {
         VStack(spacing: 0) {
-            SubjectFormRow(label: "Nominations open", arrangement: .control) {
+            SubjectFormRow(label: "Nominations Open", arrangement: .control) {
                 Toggle("", isOn: .constant(tagSet?.isNominated ?? false))
                     .labelsHidden()
                     .disabled(true)
@@ -364,28 +364,28 @@ struct TagSetView: View {
             SubjectRowSeparator()
 
             SubjectFormRow(
-                label: "Fandoms per person",
+                label: "Fandoms per Person",
                 value: "\(tagSet?.fandomNominationLimit ?? 0)"
             )
 
             SubjectRowSeparator()
 
             SubjectFormRow(
-                label: "Characters per person",
+                label: "Characters per Person",
                 value: "\(tagSet?.characterNominationLimit ?? 0)"
             )
 
             SubjectRowSeparator()
 
             SubjectFormRow(
-                label: "Relationships per person",
+                label: "Relationships per Person",
                 value: "\(tagSet?.relationshipNominationLimit ?? 0)"
             )
 
             SubjectRowSeparator()
 
             SubjectFormRow(
-                label: "Additional tags per person",
+                label: "Additional Tags per Person",
                 value: "\(tagSet?.freeformNominationLimit ?? 0)"
             )
         }
@@ -397,7 +397,7 @@ struct TagSetView: View {
     private var reviewCountsPanel: some View {
         VStack(spacing: 0) {
             SubjectFormRow(
-                label: "Awaiting review",
+                label: "Awaiting Review",
                 value: "\(reviewQueue.filter { $0.state == .unreviewed }.count)"
             )
 
@@ -563,7 +563,7 @@ struct TagSetView: View {
     private var atAO3Panel: some View {
         VStack(spacing: 0) {
             SubjectFormRow(
-                label: "Associate nominations",
+                label: "Associate Nominations",
                 value: "Opens AO3",
                 showsDisclosure: true
             ) {
@@ -573,7 +573,7 @@ struct TagSetView: View {
             SubjectRowSeparator()
 
             SubjectFormRow(
-                label: "Delete tag set",
+                label: "Delete Tag Set",
                 value: "Opens AO3",
                 showsDisclosure: true,
                 isDestructive: true

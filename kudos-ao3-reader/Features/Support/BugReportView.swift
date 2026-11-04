@@ -81,7 +81,7 @@ struct BugReportView: View {
                         }
                         if let issues = URL(string: AppLinks.issues) {
                             Link(destination: issues) {
-                                Label("Browse existing issues", systemImage: "list.bullet")
+                                Label("Browse Existing Issues", systemImage: "list.bullet")
                             }
                             .font(.subheadline)
                         }

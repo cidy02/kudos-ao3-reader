@@ -119,7 +119,7 @@ struct AddChapterView: View {
         .environment(\.defaultMinListRowHeight, 0)
         .onAppear { if editingGeneration == nil { editingGeneration = auth.sessionGeneration } }
         .subjectScreenWash(
-            title: form.chapterID == nil ? "Add chapter" : "Edit chapter",
+            title: form.chapterID == nil ? "Add Chapter" : "Edit Chapter",
             palette: accountPalette
         )
         .alert("AO3 could not save the chapter", isPresented: Binding(
@@ -134,7 +134,7 @@ struct AddChapterView: View {
                 WritingPreviewView(
                     preview: preview,
                     subtitle: Self.subtitle(workTitle: workTitle, chapterTitle: form.title, position: form.position),
-                    postTitle: posts ? "Post chapter" : "Update",
+                    postTitle: posts ? "Post Chapter" : "Update",
                     // AO3's preview page names its buttons `post_button` /
                     // `update_button`; `chapters#update` takes either post name.
                     post: { try await perform(submit: posts ? .post : .update) }
@@ -153,7 +153,7 @@ struct AddChapterView: View {
         // 1bq's "13 of 13", the way Edit work's "Chapters posted" row reads:
         // the number is the position, the total stays the writer's to type.
         let number = form.includePosition ? Self.chapterNumber(form.position) : nil
-        SubjectFormRow(label: number == nil ? "Expected chapter total" : "Chapter number", arrangement: .control) {
+        SubjectFormRow(label: number == nil ? "Expected Chapter Total" : "Chapter Number", arrangement: .control) {
             HStack(spacing: 6) {
                 if let number {
                     Text("\(number) of").foregroundStyle(.secondary)
@@ -224,7 +224,7 @@ struct AddChapterView: View {
     @ViewBuilder
     private var textRows: some View {
         WritingTextEditorRow(
-            title: "Chapter text", text: $form.content, target: recoveryTarget, field: "content",
+            title: "Chapter Text", text: $form.content, target: recoveryTarget, field: "content",
             emptyHint: "opens the editor with plain text, AO3’s HTML tags, or a paste from elsewhere.",
             ruleTitle: Self.chapterNumber(form.position).map { "Chapter \($0)" },
             chapterActions: WritingChapterEditorActions(
@@ -237,9 +237,9 @@ struct AddChapterView: View {
         .panelSegment(0, of: 4, gutter: gutter)
         WritingTextEditorRow(title: "Summary", text: $form.summary, target: recoveryTarget, field: "summary")
             .panelSegment(1, of: 4, gutter: gutter)
-        WritingTextEditorRow(title: "Beginning notes", text: $form.notes, target: recoveryTarget, field: "notes")
+        WritingTextEditorRow(title: "Beginning Notes", text: $form.notes, target: recoveryTarget, field: "notes")
             .panelSegment(2, of: 4, gutter: gutter)
-        WritingTextEditorRow(title: "End notes", text: $form.endnotes, target: recoveryTarget, field: "endnotes")
+        WritingTextEditorRow(title: "End Notes", text: $form.endnotes, target: recoveryTarget, field: "endnotes")
             .panelSegment(3, of: 4, gutter: gutter)
     }
 
@@ -299,7 +299,7 @@ struct AddChapterView: View {
     private var postPanel: some View {
         VStack(spacing: 0) {
             if chapterSaved {
-                Button("Retry updating the work total") { save(submit: .update) }
+                Button("Retry Updating the Work Total") { save(submit: .update) }
                     .padding().disabled(isSaving || isPosting)
                 Text("The chapter was saved. Only the work total will be retried.")
                     .font(.caption).foregroundStyle(.secondary).padding()
@@ -314,7 +314,7 @@ struct AddChapterView: View {
                 HStack(spacing: 10) {
                     Image(systemName: "arrow.up.circle.fill")
                         .frame(width: 20)
-                    Text(form.chapterID != nil && !form.isDraft ? "Save chapter changes" : "Post chapter now")
+                    Text(form.chapterID != nil && !form.isDraft ? "Save Chapter Changes" : "Post Chapter Now")
                         .font(.system(size: actionTitleSize))
                     Spacer()
                 }
@@ -335,7 +335,7 @@ struct AddChapterView: View {
                 HStack(spacing: 10) {
                     Image(systemName: "doc.text.fill")
                         .frame(width: 20)
-                    Text("Save as draft")
+                    Text("Save as Draft")
                         .font(.system(size: actionTitleSize))
                     Spacer()
                 }

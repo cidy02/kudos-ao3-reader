@@ -42,7 +42,7 @@ struct EditMultipleWorksView: View {
     }
 
     private var headerTitle: String {
-        form.workIDs.count == 1 ? "Edit 1 work" : "Edit \(form.workIDs.count) works"
+        form.workIDs.count == 1 ? "Edit 1 Work" : "Edit \(form.workIDs.count) Works"
     }
 
     private var gutter: CGFloat { SubjectMetrics.accountGutter }
@@ -113,13 +113,13 @@ struct EditMultipleWorksView: View {
             // pickers, and Remove from collections pushed Add to collections
             // too. Cards without links are converted so the screen keeps one
             // card style.
-            groupHeader("Tags to add")
+            groupHeader("Tags to Add")
             Section { tagRows($changes.tagsToAdd) }
 
-            groupHeader("Tags to remove")
+            groupHeader("Tags to Remove")
             Section { tagRows($changes.tagsToRemove) }
 
-            groupHeader("Change on all")
+            groupHeader("Change on All")
             Section {
                 changeOnAllRows
                 Text("Changing the rating or language replaces that value on every selected work. "
@@ -133,10 +133,10 @@ struct EditMultipleWorksView: View {
                     .pageBodyRow(top: 8, gutter: gutter)
             }
 
-            groupHeader("Collections and gifts")
+            groupHeader("Collections and Gifts")
             Section { collectionsRows }
 
-            groupHeader("Comments and visibility")
+            groupHeader("Comments and Visibility")
             Section { commentsRows }
 
             groupHeader("Creators")
@@ -187,7 +187,7 @@ struct EditMultipleWorksView: View {
     /// without filtering gave each menu two `""` options — a duplicate id, and
     /// an untitled item VoiceOver could not name.
     private func leaveAsIsOptions(_ options: [AO3FormOption]) -> [AO3FormOption] {
-        [AO3FormOption(value: "", title: "Leave as is")] + options.filter { !$0.value.isEmpty }
+        [AO3FormOption(value: "", title: "Leave as Is")] + options.filter { !$0.value.isEmpty }
     }
 
     private func leaveAsIsBinding(
@@ -230,7 +230,7 @@ struct EditMultipleWorksView: View {
         )
         .panelSegment(2, of: 4, gutter: gutter)
         WritingTagsRow(
-            title: "Additional tags",
+            title: "Additional Tags",
             values: tags.additionalTags,
             kind: .freeform
         )
@@ -246,7 +246,7 @@ struct EditMultipleWorksView: View {
         )
         .panelSegment(0, of: 4, gutter: gutter)
         bulkStateRow(
-            title: "Archive warnings",
+            title: "Archive Warnings",
             options: form.warningOptions,
             added: $changes.tagsToAdd.warnings,
             removed: $changes.tagsToRemove.warnings
@@ -270,7 +270,7 @@ struct EditMultipleWorksView: View {
     @ViewBuilder
     private var collectionsRows: some View {
         BulkNameListRow(
-            title: "Add to collections",
+            title: "Add to Collections",
             placeholder: "Collection name",
             names: $changes.collectionsToAdd
         )
@@ -279,7 +279,7 @@ struct EditMultipleWorksView: View {
         // `bulkStateRow` does: with none, the chevron opened an empty list.
         if form.currentCollections.isEmpty {
             SubjectFormRow(
-                label: "Remove from collections",
+                label: "Remove from Collections",
                 value: "None",
                 showsDisclosure: false,
                 isDisabled: true
@@ -287,7 +287,7 @@ struct EditMultipleWorksView: View {
             .panelSegment(1, of: 3, gutter: gutter)
         } else {
             WritingTagsRow(
-                title: "Remove from collections",
+                title: "Remove from Collections",
                 values: $changes.collectionsToRemove,
                 options: form.currentCollections
             )
@@ -327,7 +327,7 @@ struct EditMultipleWorksView: View {
         )
         .panelSegment(1, of: 3, gutter: gutter)
         WritingChoiceRow(
-            title: "Who can comment",
+            title: "Who Can Comment",
             value: leaveAsIsBinding(\.commentPermissions),
             options: leaveAsIsOptions(form.commentPermissionOptions)
         )
@@ -341,7 +341,7 @@ struct EditMultipleWorksView: View {
 
     @ViewBuilder
     private var creatorsRows: some View {
-        SubjectFormRow(label: "Add co-creators", arrangement: .control) {
+        SubjectFormRow(label: "Add Co-Creators", arrangement: .control) {
             TextField("Pseud", text: $changes.pseudsToAdd)
                 #if os(iOS)
                 .textInputAutocapitalization(.never)
@@ -388,7 +388,7 @@ struct EditMultipleWorksView: View {
     }
 
     private func listLabel(added: Int, removed: Int) -> String {
-        if added == 0 && removed == 0 { return "Leave as is" }
+        if added == 0 && removed == 0 { return "Leave as Is" }
         return "+\(added), -\(removed)"
     }
 

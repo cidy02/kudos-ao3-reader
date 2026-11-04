@@ -54,7 +54,7 @@ extension WorkDetailView {
                     }
                     SubjectRowSeparator()
                     SubjectFormRow(
-                        label: "Storage and history",
+                        label: "Storage and History",
                         value: "",
                         showsDisclosure: true,
                         action: { showingMyCopy = true }
@@ -86,7 +86,7 @@ extension WorkDetailView {
         .font(.footnote)
         .foregroundStyle(Color.secondary)
         .lineLimit(1)
-        let title = Text("My copy")
+        let title = Text("My Copy")
             .font(.title3.weight(.bold))
             .foregroundStyle(Color.primary)
             .accessibilityAddTraits(.isHeader)

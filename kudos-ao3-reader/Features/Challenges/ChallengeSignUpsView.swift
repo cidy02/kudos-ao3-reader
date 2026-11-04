@@ -117,7 +117,7 @@ struct ChallengeSignUpsView: View { // swiftlint:disable:this type_body_length
         .cardList()
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
-        .subjectScreenWash(title: "Sign-ups", palette: palette)
+        .subjectScreenWash(title: "Sign-Ups", palette: palette)
         .safeAreaBar(edge: .bottom, spacing: 0) { bottomActionBar }
         .task { await loadSignUpsIfNeeded() }
         #if DEBUG
@@ -170,7 +170,7 @@ struct ChallengeSignUpsView: View { // swiftlint:disable:this type_body_length
     @ViewBuilder
     private var contentSections: some View {
         Section {
-            SectionRuleHeader(title: "Sign-ups", count: filteredSignUps.count)
+            SectionRuleHeader(title: "Sign-Ups", count: filteredSignUps.count)
                 .padding(.bottom, 8)
                 .pageBodyRow(top: 18, gutter: selfGuttered)
 

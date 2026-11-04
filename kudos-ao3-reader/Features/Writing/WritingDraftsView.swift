@@ -358,7 +358,7 @@ struct WritingWorkDestination: View {
                 WorkEditView(form: form, onChanged: onChanged).id(auth.sessionGeneration)
             }
             else {
-                WritingLoaderPage(title: workID == nil ? "New work" : "Edit work", message: errorMessage) {
+                WritingLoaderPage(title: workID == nil ? "New Work" : "Edit Work", message: errorMessage) {
                     retry += 1
                 }
             }

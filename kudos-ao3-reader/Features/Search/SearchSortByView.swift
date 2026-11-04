@@ -61,7 +61,7 @@ struct SearchSortByView: View {
                 }
             }
         } header: {
-            SubjectFieldLabel(text: "Load from AO3 by", style: .formGroup)
+            SubjectFieldLabel(text: "Load from AO3 By", style: .formGroup)
         } footer: {
             if let preset = SearchWaysToFind.applied(in: filters) {
                 Text("\(preset.title) adds “\(preset.queryNote)” to the search AO3 runs.")
@@ -77,7 +77,7 @@ struct SearchSortByView: View {
                 }
             }
         } header: {
-            SubjectFieldLabel(text: "Then Rank Loaded Works by", style: .formGroup)
+            SubjectFieldLabel(text: "Then Rank Loaded Works By", style: .formGroup)
         } footer: {
             // Not yet the spec's "or up to 100 at once with Rank Top 100": the owner
             // has approved it in principle (2026-10-29), but how to load several
@@ -90,12 +90,12 @@ struct SearchSortByView: View {
         let isRanked = ranking.wrappedValue.isActive
         return Section {
             Toggle(isOn: ranking.ranksCautiously) {
-                titled("Rank cautiously", "Works with few readers need more kudos to rank high")
+                titled("Rank Cautiously", "Works with few readers need more kudos to rank high")
             }
             .accentFill()
             .disabled(!isRanked)
             Toggle(isOn: ranking.setsAsideUnusual) {
-                titled("Set aside unusual stats", "More kudos than hits, or thousands of kudos and almost no bookmarks")
+                titled("Set Aside Unusual Stats", "More kudos than hits, or thousands of kudos and almost no bookmarks")
             }
             .accentFill()
             .disabled(!isRanked)
@@ -115,7 +115,7 @@ struct SearchSortByView: View {
                 Text(SearchWaysToFind.minimumHitsTitle(value)).tag(value)
             }
         } label: {
-            titled("Leave out works under", "Sent to AO3 with the search, so pages stay full")
+            titled("Leave Out Works Under", "Sent to AO3 with the search, so pages stay full")
         }
     }
 

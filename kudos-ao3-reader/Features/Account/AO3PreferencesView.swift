@@ -139,7 +139,7 @@ struct AO3PreferencesView: View {
 
             if !snapshot.selects.isEmpty || !snapshot.textFields.isEmpty {
                 Section {
-                    SubjectFieldLabel(text: "Display options", style: .formGroup)
+                    SubjectFieldLabel(text: "Display Options", style: .formGroup)
                         .pageBodyRow(top: 18, gutter: gutter)
                     VStack(spacing: 0) {
                         ForEach(Array(snapshot.selects.enumerated()), id: \.element.id) { index, select in
