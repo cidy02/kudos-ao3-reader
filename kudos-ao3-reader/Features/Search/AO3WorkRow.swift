@@ -30,6 +30,10 @@ struct AO3WorkRow: View {
     /// Search's computed-sort figure (T-473 "Show the signal on each result"),
     /// drawn under the ledger's figures in their style. Nil draws nothing.
     var signal: String?
+    /// Structured reader-response signal (FID40, Quality-Results board).
+    var qualitySignal: WorkSignal? = nil
+    /// Ranked work context for the Quality-Response sheet.
+    var rankedContext: RankedWork? = nil
     /// Search-only local state shown beside the title, such as "In Library".
     var badgeTitle: String? = nil
     /// Detailed surfaces. Off hides the summary paragraph only; tags, the stat
@@ -60,6 +64,7 @@ struct AO3WorkRow: View {
     @AppStorage("showsZeroStats") private var showsZeroStats = true
     @ScaledMetric(relativeTo: .title3) private var bookmarkTitleSize: CGFloat = 19
     @State private var internalExpanded = false
+    @State private var showingResponseSheet = false
 
     private var expandedBinding: Binding<Bool> {
         externalExpanded ?? $internalExpanded
@@ -405,15 +410,26 @@ struct AO3WorkRow: View {
         )
     }
 
-    /// One more figure, so it reads as the row's stats do: same size, same grey.
+    private var effectiveSignal: WorkSignal? {
+        qualitySignal ?? signal.map { WorkSignal(label: $0, note: nil, tone: .neutral) }
+    }
+
+    /// Reader-response signal: tone chip + grey note (FID40, Quality-Results board).
+    /// Tapping opens the Reader Response sheet (Quality-Response board).
     @ViewBuilder
     private var searchLedgerSignal: some View {
-        if let signal {
-            Text(signal)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityLabel("Ranking: \(signal)")
+        if let sig = effectiveSignal {
+            WorkSignalRow(signal: sig) {
+                showingResponseSheet = true
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .sheet(isPresented: $showingResponseSheet) {
+                QualityResponseSheet(
+                    work: work,
+                    rankedEntry: rankedContext,
+                    signal: sig
+                )
+            }
         }
     }
 

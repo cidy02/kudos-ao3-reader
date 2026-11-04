@@ -236,14 +236,17 @@ struct FandomWorksView: View {
                             .bareListRow()
                         }
                     }
+                    let partition = ranking.partitioned(results)
                     Section {
-                        ForEach(ranking.ranked(results)) { entry in
+                        ForEach(partition.ranked) { entry in
                             SelectableAO3WorkRow(
                                 work: entry.work,
                                 expandAll: expandAll,
                                 controller: bulkSelection,
                                 presentation: .fandomTop,
                                 signal: ranking.signal(for: entry),
+                                qualitySignal: ranking.qualitySignal(for: entry),
+                                rankedContext: entry,
                                 showsSummary: showSummaries
                             )
                             .cardRow(
@@ -251,6 +254,30 @@ struct FandomWorksView: View {
                                     && bulkSelection.selection.contains(entry.id),
                                 chrome: .plain
                             )
+                        }
+                    }
+                    if !partition.unranked.isEmpty {
+                        Section {
+                            ForEach(partition.unranked) { entry in
+                                SelectableAO3WorkRow(
+                                    work: entry.work,
+                                    expandAll: expandAll,
+                                    controller: bulkSelection,
+                                    presentation: .fandomTop,
+                                    signal: ranking.signal(for: entry),
+                                    qualitySignal: ranking.qualitySignal(for: entry),
+                                    rankedContext: entry,
+                                    showsSummary: showSummaries
+                                )
+                                .cardRow(
+                                    isSelected: bulkSelection.isSelecting
+                                        && bulkSelection.selection.contains(entry.id),
+                                    chrome: .plain
+                                )
+                            }
+                        } header: {
+                            NotRankedSectionHeader(count: partition.unranked.count)
+                                .listRowInsets(EdgeInsets())
                         }
                     }
                     if totalPages > 1 {
@@ -718,14 +745,17 @@ struct TagWorksView: View {
                             .bareListRow()
                         }
                     }
+                    let partition = ranking.partitioned(results)
                     Section {
-                        ForEach(ranking.ranked(results)) { entry in
+                        ForEach(partition.ranked) { entry in
                             SelectableAO3WorkRow(
                                 work: entry.work,
                                 expandAll: expandAll,
                                 controller: bulkSelection,
                                 presentation: .searchLedger,
                                 signal: ranking.signal(for: entry),
+                                qualitySignal: ranking.qualitySignal(for: entry),
+                                rankedContext: entry,
                                 showsSummary: showSummaries,
                                 wide: true
                             )
@@ -734,6 +764,31 @@ struct TagWorksView: View {
                                     && bulkSelection.selection.contains(entry.id),
                                 chrome: .plain
                             )
+                        }
+                    }
+                    if !partition.unranked.isEmpty {
+                        Section {
+                            ForEach(partition.unranked) { entry in
+                                SelectableAO3WorkRow(
+                                    work: entry.work,
+                                    expandAll: expandAll,
+                                    controller: bulkSelection,
+                                    presentation: .searchLedger,
+                                    signal: ranking.signal(for: entry),
+                                    qualitySignal: ranking.qualitySignal(for: entry),
+                                    rankedContext: entry,
+                                    showsSummary: showSummaries,
+                                    wide: true
+                                )
+                                .cardRow(
+                                    isSelected: bulkSelection.isSelecting
+                                        && bulkSelection.selection.contains(entry.id),
+                                    chrome: .plain
+                                )
+                            }
+                        } header: {
+                            NotRankedSectionHeader(count: partition.unranked.count)
+                                .listRowInsets(EdgeInsets())
                         }
                     }
                     if totalPages > 1 {

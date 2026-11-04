@@ -155,6 +155,11 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                     try? await Task.sleep(for: .seconds(2))
                     if DebugLaunchRoute.opensSearchFilters { router.panel = .searchFilters }
                     if let query = DebugLaunchRoute.searchQuery, filters.query.isEmpty {
+                        // `-KudosDebugRank <LoadedWorksRank>`: shots of ranked results (FID40).
+                        if let raw = UserDefaults.standard.string(forKey: "KudosDebugRank"),
+                           let rank = LoadedWorksRank(rawValue: raw) {
+                            ranking.settings.rank = rank
+                        }
                         filters.query = query
                         runSearch()
                     }
@@ -452,15 +457,19 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                         }
                     }
 
+                    let partition = ranking.partitioned(results)
+
                     Section {
                         // Ranked from whatever is loaded, so it re-ranks as `results` changes.
-                        ForEach(ranking.ranked(results)) { entry in
+                        ForEach(partition.ranked) { entry in
                             SelectableAO3WorkRow(
                                 work: entry.work,
                                 expandAll: expandAllCards,
                                 controller: bulkSelection,
                                 presentation: .searchLedger,
                                 signal: ranking.signal(for: entry),
+                                qualitySignal: ranking.qualitySignal(for: entry),
+                                rankedContext: entry,
                                 badgeTitle: libraryIDs.contains(entry.id) ? "In Library" : nil,
                                 showsSummary: showSummaries,
                                 wide: true
@@ -469,6 +478,31 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                                 isSelected: bulkSelection.isSelecting && bulkSelection.selection.contains(entry.id),
                                 chrome: .plain
                             )
+                        }
+                    }
+
+                    if !partition.unranked.isEmpty {
+                        Section {
+                            ForEach(partition.unranked) { entry in
+                                SelectableAO3WorkRow(
+                                    work: entry.work,
+                                    expandAll: expandAllCards,
+                                    controller: bulkSelection,
+                                    presentation: .searchLedger,
+                                    signal: ranking.signal(for: entry),
+                                    qualitySignal: ranking.qualitySignal(for: entry),
+                                    rankedContext: entry,
+                                    badgeTitle: libraryIDs.contains(entry.id) ? "In Library" : nil,
+                                    showsSummary: showSummaries,
+                                    wide: true
+                                )
+                                .cardRow(
+                                    isSelected: bulkSelection.isSelecting && bulkSelection.selection.contains(entry.id),
+                                    chrome: .plain
+                                )
+                            }
+                        } header: {
+                            combinedHeader("Not Ranked", count: partition.unranked.count)
                         }
                     }
 
