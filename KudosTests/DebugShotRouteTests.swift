@@ -1,3 +1,5 @@
+import Foundation
+import SwiftData
 import Testing
 @testable import Kudos
 
@@ -30,5 +32,37 @@ struct DebugShotRouteTests {
             #expect(!DebugShots.byName[name]!.route.isEmpty)
         }
         #expect(Set(DebugShots.names) == Set(names))
+    }
+
+    @MainActor
+    @Test func readerEndShotTargetsWorkWithAO3ID() throws {
+        let defaults = UserDefaults.standard
+        let oldDemo = defaults.object(forKey: "KudosDemoLibrary")
+        let oldRoute = defaults.object(forKey: "KudosDebugRoute")
+        defer {
+            if let oldDemo {
+                defaults.set(oldDemo, forKey: "KudosDemoLibrary")
+            } else {
+                defaults.removeObject(forKey: "KudosDemoLibrary")
+            }
+            if let oldRoute {
+                defaults.set(oldRoute, forKey: "KudosDebugRoute")
+            } else {
+                defaults.removeObject(forKey: "KudosDebugRoute")
+            }
+        }
+
+        defaults.set(true, forKey: "KudosDemoLibrary")
+        defaults.set("shot:readerend", forKey: "KudosDebugRoute")
+
+        let schema = Schema([SavedWork.self, ReadingQueue.self, WorkCollection.self, Tag.self])
+        let container = try ModelContainer(
+            for: schema,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+        DemoLibrary.seedIfRequested(in: container.mainContext)
+        let works = try container.mainContext.fetch(FetchDescriptor<SavedWork>())
+        let target = try #require(DebugLaunchRoute.homeWork(in: works))
+        #expect(target.ao3WorkID != nil)
     }
 }
