@@ -21,10 +21,23 @@ HOUSE='Kudos house rules (each one exists because an agent broke it):
 6. Say plainly what you could not verify. An honest gap is worth more than a confident wrong claim.
 7. You have the context7 MCP tools. Before relying on how a SwiftUI API behaves, look it up — guessing has cost this project real build cycles (.controlSize does nothing to a segmented Picker on iOS).'
 
-export HOUSE
+# Where this worktree actually is, so a fresh session starts oriented instead of
+# asking. Cheap, and the orchestrator no longer has to put it in every brief.
+STATE=$(
+  b=$(git rev-parse --abbrev-ref HEAD 2>/dev/null) || exit 0
+  t=$(git log --oneline -1 2>/dev/null)
+  d=$(git status --porcelain 2>/dev/null | wc -l | tr -d ' ')
+  printf 'Where this worktree is right now:\n- branch: %s\n- tip: %s\n- uncommitted files: %s\n- recent: %s' \
+    "$b" "$t" "$d" "$(git log --oneline -4 2>/dev/null | tail -3 | tr '\n' ';')"
+)
+
+export HOUSE STATE
 python3 -c '
 import json, os, glob
 parts = [os.environ["HOUSE"]]
+state = os.environ.get("STATE", "").strip()
+if state:
+    parts.append(state)
 for f in sorted(glob.glob("rules/*.md")):
     try:
         t = open(f, encoding="utf-8").read().strip()
