@@ -814,11 +814,12 @@ struct LibrarySectionListView: View {
                     showsFavoriteStar: showsShelfLedgerFacts,
                     showsFullLedgerStats: showsShelfLedgerFacts,
                     showsSummary: false,
+                    leadingSelection: true,
                     showsSeparator: false
                 )
                 .environment(\.ledgerKickerMuted, isAbandonedRow(work))
                 factsStrip(work, summary: summary)
-                WorkRowSeparator()
+                WorkRowSeparator(inset: WorkRow.separatorInset(isSelecting: true) ?? WorkRowMetrics.textColumnInset)
             }
         } else {
             swipeableRow(work, summary: summary)

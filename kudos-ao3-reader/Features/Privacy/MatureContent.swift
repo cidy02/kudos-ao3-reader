@@ -229,7 +229,7 @@ struct SensitiveWorkRow: View {
     var showsSummary = true
     var showsTags = true
     var showsProgress = true
-    var leadingSelection = false
+    var leadingSelection = true
     var badgeCount = 0
     var wide = false
     var showsSeparator = true
@@ -260,7 +260,7 @@ struct SensitiveWorkRow: View {
         showsSummary: Bool = true,
         showsTags: Bool = true,
         showsProgress: Bool = true,
-        leadingSelection: Bool = false,
+        leadingSelection: Bool = true,
         badgeCount: Int = 0,
         wide: Bool = false,
         showsSeparator: Bool = true,
@@ -375,6 +375,9 @@ struct SensitiveWorkRow: View {
             let content = WorkRow(
                 work: work,
                 expandAll: expandAll,
+                isSelecting: isSelecting,
+                isSelected: isSelected,
+                showsSelectionIndicator: false,
                 showsExpandButton: false,
                 externalExpanded: $blurredExpanded,
                 presentation: savedPresentation,
@@ -398,22 +401,19 @@ struct SensitiveWorkRow: View {
             }
             .contentShape(Rectangle())
             .overlay(alignment: .topTrailing) {
-                HStack(spacing: 6) {
-                    if isExpandableWork {
-                        WorkRowExpandButton(expanded: $blurredExpanded)
-                    }
-                    if isSelecting && !leadingSelection {
-                        WorkSelectionBubble(isSelected: isSelected)
-                    }
+                if isExpandableWork {
+                    WorkRowExpandButton(expanded: $blurredExpanded)
+                        // The unblurred row's controls sit inside its gutter; 8 pt left them out of line.
+                        .padding(.top, 8)
+                        .padding(.trailing, SubjectMetrics.gutter + contentInsets.trailing)
                 }
-                // The unblurred row's controls sit inside its gutter; 8 pt left them out of line.
-                .padding(.top, 8)
-                .padding(.trailing, SubjectMetrics.gutter + contentInsets.trailing)
             }
-            .overlay(alignment: .leading) {
-                if isSelecting && leadingSelection {
+            .overlay(alignment: .topLeading) {
+                if isSelecting {
                     WorkLeadingSelectionCheck(isSelected: isSelected)
-                        .padding(.leading, WorkRowMetrics.horizontalPadding)
+                        .frame(height: WorkRowMetrics.gridColumn)
+                        .padding(.top, WorkRowMetrics.verticalPadding + contentInsets.top)
+                        .padding(.leading, WorkRowMetrics.horizontalPadding + contentInsets.leading)
                 }
             }
             sensitiveActionContainer(for: content)
