@@ -22,14 +22,11 @@ struct WorkSelectionTitleTests {
 
     @Test func libraryAndRecentlyDeletedRowsUseLeadingSelectionCheckNotBubble() {
         #expect(WorkRow.selectionEdge(isSelecting: false) == .none)
+        // Recently Deleted shares these with WorkRow rather than keeping its own
+        // copy, so the two cannot drift apart.
         #expect(WorkRow.selectionEdge(isSelecting: true) == .leading)
-        #expect(WorkRow.separatorInset(isSelecting: true) == 115)
+        #expect(WorkRow.separatorInset(isSelecting: true) == WorkRow.selectingSeparatorInset)
         #expect(WorkRow.separatorInset(isSelecting: false) == nil)
-
-        #expect(RecentlyDeletedRow.selectionEdge(isSelecting: false) == .none)
-        #expect(RecentlyDeletedRow.selectionEdge(isSelecting: true) == .leading)
-        #expect(RecentlyDeletedRow.separatorInset(isSelecting: true) == 115)
-        #expect(RecentlyDeletedRow.separatorInset(isSelecting: false) == nil)
 
         let entry = RecentlyDeletedEntry(
             id: UUID(),

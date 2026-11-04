@@ -202,8 +202,14 @@ struct WorkRow: View {
         isSelecting ? .leading : .none
     }
 
+    /// Where the text column starts once the leading check is in the row: screen
+    /// padding, the 22 pt check, the status-icon grid, and the gaps either side.
+    /// Set by eye against boards 08/09 rather than derived, so re-check it if the
+    /// check's size or `WorkRowMetrics.gridColumn` changes.
+    static let selectingSeparatorInset: CGFloat = 115
+
     static func separatorInset(isSelecting: Bool) -> CGFloat? {
-        isSelecting ? 115 : nil
+        isSelecting ? selectingSeparatorInset : nil
     }
 
     private var ledgerRow: some View {

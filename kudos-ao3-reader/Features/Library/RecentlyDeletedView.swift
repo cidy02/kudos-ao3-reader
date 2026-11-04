@@ -649,18 +649,6 @@ extension RecentlyDeletedEntry {
 /// macOS they only exist for trackpad users, so the menu is the discoverable path.
 /// While selecting, a tap toggles the row and neither is offered.
 struct RecentlyDeletedRow: View {
-    enum SelectionEdge: Equatable {
-        case none
-        case leading
-    }
-
-    static func selectionEdge(isSelecting: Bool) -> SelectionEdge {
-        isSelecting ? .leading : .none
-    }
-
-    static func separatorInset(isSelecting: Bool) -> CGFloat? {
-        isSelecting ? 115 : nil
-    }
 
     /// Title, detail and the days figure scale together at AX sizes.
     @ScaledMetric(relativeTo: .headline) private var titleSize: CGFloat = 16.5
@@ -742,10 +730,10 @@ struct RecentlyDeletedRow: View {
     private func workRowContent(_ work: SavedWork) -> some View {
         WorkPlainRow(
             showsSeparator: showsSeparator,
-            separatorInset: Self.separatorInset(isSelecting: isSelecting)
+            separatorInset: WorkRow.separatorInset(isSelecting: isSelecting)
         ) {
             HStack(alignment: .center, spacing: 12) {
-                if Self.selectionEdge(isSelecting: isSelecting) == .leading {
+                if WorkRow.selectionEdge(isSelecting: isSelecting) == .leading {
                     WorkLeadingSelectionCheck(isSelected: isSelected)
                 }
                 WorkStatusIconGrid(
@@ -789,7 +777,7 @@ struct RecentlyDeletedRow: View {
 
     private var containerRowContent: some View {
         HStack(alignment: .center, spacing: 12) {
-            if Self.selectionEdge(isSelecting: isSelecting) == .leading {
+            if WorkRow.selectionEdge(isSelecting: isSelecting) == .leading {
                 WorkLeadingSelectionCheck(isSelected: isSelected)
             }
 
