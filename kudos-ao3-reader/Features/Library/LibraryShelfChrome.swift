@@ -231,6 +231,7 @@ struct LibraryCollapsingShelf<Content: View>: View {
     var title: String
     var count: Int
     var countText: String?
+    var actionTitle: String?
     var onSeeAll: (() -> Void)?
     @ViewBuilder var content: () -> Content
 
@@ -238,12 +239,14 @@ struct LibraryCollapsingShelf<Content: View>: View {
         title: String,
         count: Int,
         countText: String? = nil,
+        actionTitle: String? = nil,
         onSeeAll: (() -> Void)? = nil,
         @ViewBuilder content: @escaping () -> Content
     ) {
         self.title = title
         self.count = count
         self.countText = countText
+        self.actionTitle = actionTitle
         self.onSeeAll = onSeeAll
         self.content = content
     }
@@ -254,6 +257,7 @@ struct LibraryCollapsingShelf<Content: View>: View {
                 title: title,
                 count: count,
                 countText: countText,
+                actionTitle: actionTitle ?? (onSeeAll != nil ? "See All" : nil),
                 onSeeAll: onSeeAll
             )
             content()

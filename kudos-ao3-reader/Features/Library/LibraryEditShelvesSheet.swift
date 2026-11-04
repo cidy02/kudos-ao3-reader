@@ -8,6 +8,7 @@ struct LibraryEditShelvesSheet: View {
     var allWorksCount: Int
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         NavigationStack {
@@ -74,6 +75,12 @@ struct LibraryEditShelvesSheet: View {
                 .navigationBarTitleDisplayMode(.inline)
             #endif
                 .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button { dismiss() } label: {
+                            Image(systemName: "xmark")
+                        }
+                        .accessibilityLabel("Close")
+                    }
                     ToolbarItem(placement: .confirmationAction) {
                         Button { dismiss() } label: {
                             Image(systemName: "checkmark")
@@ -91,34 +98,54 @@ struct LibraryEditShelvesSheet: View {
 
     private func sectionRow(_ section: LibraryPageSection) -> some View {
         let title = section.id.title
-        return HStack(alignment: .center, spacing: 10) {
-            Button {
-                arrangement = arrangement.removingFromPage(section.id)
-            } label: {
-                Image(systemName: "minus.circle.fill")
-                    .font(.title3)
-                    .symbolRenderingMode(.palette)
-                    .foregroundStyle(.white, Color.red)
-            }
-            .buttonStyle(.borderless)
-            .accessibilityLabel("Remove \(title) from the Library page")
-
-            LibraryShelfGlyph(shelf: section.id)
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text(title)
-                    .fixedSize(horizontal: false, vertical: true)
-                Picker("\(title) layout", selection: styleBinding(section.id)) {
-                    ForEach(LibrarySectionStyle.allCases, id: \.self) { style in
-                        Text(style.title).tag(style)
+        return Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .center, spacing: 10) {
+                        removeButton(section, title: title)
+                        LibraryShelfGlyph(shelf: section.id)
+                        Text(title)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
+                    picker(section, title: title)
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .accessibilityLabel("\(title) layout")
+                .padding(.vertical, 4)
+            } else {
+                HStack(alignment: .center, spacing: 10) {
+                    removeButton(section, title: title)
+                    LibraryShelfGlyph(shelf: section.id)
+                    Text(title)
+                        .lineLimit(1)
+                    Spacer(minLength: 8)
+                    picker(section, title: title)
+                        .fixedSize()
+                }
             }
         }
-        .padding(.vertical, 4)
+    }
+
+    private func removeButton(_ section: LibraryPageSection, title: String) -> some View {
+        Button {
+            arrangement = arrangement.removingFromPage(section.id)
+        } label: {
+            Image(systemName: "minus.circle.fill")
+                .font(.title3)
+                .symbolRenderingMode(.palette)
+                .foregroundStyle(.white, Color.red)
+        }
+        .buttonStyle(.borderless)
+        .accessibilityLabel("Remove \(title) from the Library page")
+    }
+
+    private func picker(_ section: LibraryPageSection, title: String) -> some View {
+        Picker("\(title) layout", selection: styleBinding(section.id)) {
+            ForEach(LibrarySectionStyle.allCases, id: \.self) { style in
+                Text(style.title).tag(style)
+            }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .accessibilityLabel("\(title) layout")
     }
 
     private func buttonRow(_ shelf: LibraryShelfID) -> some View {
