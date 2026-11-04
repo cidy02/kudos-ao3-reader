@@ -183,9 +183,13 @@ Short list, all of it scar tissue. Antigravity (agy/Gemini) also gets these inje
    Give Kudos for a work with no AO3 page; the right fix was a fixture with an AO3 id, not removing the guard.
 5. **Run the build check before handing back** (`build-check.sh <worktree>`) and never write "BUILD OK" unless
    you saw it print that. Agents never run `xcodebuild` directly — one heavy job at a time.
-6. **Stay in the files your brief names.** If the real fix lives elsewhere, say so instead of reaching for it:
+6. **`build-check.sh` compiles; it does not run the tests.** So "BUILD OK" says your code builds, never that
+   a test you added passes. A test can compile and still be impossible to pass — FID48's required a launch
+   route that no test host has, and it failed in the gate after the lane reported green. If you add a test,
+   say in your handback that it is unrun, and make sure it depends only on what a plain test host provides.
+7. **Stay in the files your brief names.** If the real fix lives elsewhere, say so instead of reaching for it:
    another lane may own that file right now.
-7. **Say what you could not verify.** An honest gap is worth more than a confident wrong claim, and the
+8. **Say what you could not verify.** An honest gap is worth more than a confident wrong claim, and the
    orchestrator checks anyway.
 
 ## Future Agent Checklist (before writing any code)
