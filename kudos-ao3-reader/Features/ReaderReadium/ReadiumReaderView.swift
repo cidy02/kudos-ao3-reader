@@ -1516,6 +1516,11 @@ struct ReadiumReaderView: View {
         )
         await book.open(fileURL: work.fileURL, initialLocator: initialLocator,
                         fallbackSpineIndex: fallbackSpineIndex, config: config)
+        #if DEBUG
+        if DebugLaunchRoute.takeSheet("readerend") {
+            book.goToPublicationEndForDebug()
+        }
+        #endif
     }
 }
 

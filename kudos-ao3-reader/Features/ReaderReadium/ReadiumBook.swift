@@ -585,6 +585,11 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
             // Single owner of open pageCount: delayed WKWebView measures.
             schedulePageBarRemeasure()
             scheduleFirstPagePresentationTimeout(generation: presentationGeneration)
+            #if DEBUG
+            if pendingDebugGoToEnd {
+                goToPublicationEndForDebug()
+            }
+            #endif
             Log.epub.info("Opened EPUB (Readium): \(self.toc.count) TOC entries")
         } catch {
             // Nothing to wait for — drop the skeleton so the failure UI can show.
@@ -642,9 +647,17 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
     }
 
     #if DEBUG
+    private var pendingDebugGoToEnd = false
+
     func goToPublicationEndForDebug() {
+        chromeHidden = false
+        markFirstPagePresentedIfNeeded()
         isAtPublicationEnd = true
-        guard let last = readingOrder.last else { return }
+        guard let last = readingOrder.last, navigator != nil else {
+            pendingDebugGoToEnd = true
+            return
+        }
+        pendingDebugGoToEnd = false
         Task { @MainActor in
             if let base = await publication?.locate(last) {
                 let target = base.copy(locations: {
@@ -653,6 +666,9 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
                     $0.position = nil
                 })
                 await navigator?.go(to: target, options: NavigatorGoOptions())
+                chromeHidden = false
+                markFirstPagePresentedIfNeeded()
+                isAtPublicationEnd = true
             }
         }
     }
