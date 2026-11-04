@@ -369,7 +369,7 @@ struct ReadingHistoryTimelineList<Header: View, OffTimelineRow: View>: View {
 
     /// Filled for a sitting that finished the work, a ring otherwise.
     private func railDot(finished: Bool) -> some View {
-        let tint = themeManager.effectiveTint
+        let tint = themeManager.accentInk
         return Circle()
             .fill(finished ? tint : themeManager.appTheme.cardSurface)
             .overlay(Circle().strokeBorder(tint, lineWidth: 2))
@@ -391,7 +391,7 @@ struct ReadingHistoryTimelineList<Header: View, OffTimelineRow: View>: View {
         ]
         return VStack(alignment: .leading, spacing: 6) {
             if let chapters = sitting.chapters {
-                ChapterCells(span: chapters, current: themeManager.effectiveTint)
+                ChapterCells(span: chapters, current: themeManager.accentInk)
             }
             layout {
                 Text(sitting.detailLine)
@@ -502,7 +502,7 @@ private struct ReadingHistoryChart: View {
 
     /// Board 02: a bar a day, the latest day solid, and the average as a dashed rule.
     private var weekChart: some View {
-        let tint = themeManager.effectiveTint
+        let tint = themeManager.accentInk
         let latest = timeline.buckets.last { !$0.isFuture }?.start
         let average = timeline.averageBucketSeconds
         return Chart {
@@ -511,7 +511,7 @@ private struct ReadingHistoryChart: View {
                     x: .value("Day", bucket.start, unit: .day),
                     y: .value("Minutes", bucket.seconds / 60)
                 )
-                .foregroundStyle(bucket.start == latest ? tint : tint.opacity(0.35))
+                .foregroundStyle(bucket.start == latest ? tint : tint.opacity(0.55))
                 .cornerRadius(4)
             }
             RuleMark(y: .value("Baseline", 0.0))
@@ -582,11 +582,11 @@ private struct ReadingHistoryChart: View {
             Text("\(calendar.component(.day, from: bucket.start))")
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(bucket.isFuture ? AnyShapeStyle(.tertiary) : AnyShapeStyle(strong
-                    ? themeManager.onEffectiveTint : Color.primary))
+                    ? ThemeManager.label(on: themeManager.accentInk) : Color.primary))
             if bucket.seconds > 0, !dynamicTypeSize.isAccessibilitySize {
                 Text("\(Int((bucket.seconds / 60).rounded()))m")
                     .font(.caption2)
-                    .foregroundStyle(strong ? themeManager.onEffectiveTint.opacity(0.85) : Color.secondary)
+                    .foregroundStyle(strong ? ThemeManager.label(on: themeManager.accentInk).opacity(0.85) : Color.secondary)
             }
         }
         .lineLimit(1)
@@ -599,19 +599,19 @@ private struct ReadingHistoryChart: View {
         .overlay {
             if isToday {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(themeManager.effectiveTint, lineWidth: 2)
+                    .strokeBorder(themeManager.accentInk, lineWidth: 2)
             }
         }
     }
 
     /// History-Month's four steps: none, under half an hour, under an hour, more.
     private func dayShade(_ seconds: Double) -> Color {
-        let tint = themeManager.effectiveTint
+        let tint = themeManager.accentInk
         switch seconds {
         case ..<1: return themeManager.appTheme.glassFill(0.08)
-        case ..<1_800: return tint.opacity(0.18)
-        case ..<3_600: return tint.opacity(0.42)
-        default: return tint.opacity(0.75)
+        case ..<1_800: return tint.opacity(0.55)
+        case ..<3_600: return tint.opacity(0.7)
+        default: return tint.opacity(0.9)
         }
     }
 
@@ -620,7 +620,7 @@ private struct ReadingHistoryChart: View {
     /// The board stacks finished works *inside* the hours bar, two units on one
     /// scale; here the bar is hours alone and the finish count is its label.
     private var yearChart: some View {
-        let tint = themeManager.effectiveTint
+        let tint = themeManager.accentInk
         let latest = timeline.buckets.last { !$0.isFuture }?.start
         return VStack(alignment: .leading, spacing: 8) {
             Chart {
@@ -629,7 +629,7 @@ private struct ReadingHistoryChart: View {
                         x: .value("Month", bucket.start, unit: .month),
                         y: .value("Hours", bucket.seconds / 3_600)
                     )
-                    .foregroundStyle(bucket.start == latest ? tint : tint.opacity(0.35))
+                    .foregroundStyle(bucket.start == latest ? tint : tint.opacity(0.55))
                     .cornerRadius(3)
                     .annotation(position: .top, spacing: 2) {
                         if bucket.finishedCount > 0 {
@@ -654,7 +654,7 @@ private struct ReadingHistoryChart: View {
             HStack(spacing: 14) {
                 HStack(spacing: 4) {
                     RoundedRectangle(cornerRadius: 3, style: .continuous)
-                        .fill(tint.opacity(0.35))
+                        .fill(tint.opacity(0.55))
                         .frame(width: 10, height: 10)
                     Text("Hours read")
                 }

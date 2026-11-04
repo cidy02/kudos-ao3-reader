@@ -627,7 +627,7 @@ private struct CoverProgressBar: View {
                 .fill(themeManager.appTheme.glassFill(0.14))
                 .overlay(alignment: .leading) {
                     Capsule()
-                        .fill(.accentFill)
+                        .fill(.accentInk)
                         .frame(width: geometry.size.width * fraction)
                         .animation(unlessReduced: .smooth, value: fraction)
                 }

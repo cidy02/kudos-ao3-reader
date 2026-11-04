@@ -442,7 +442,7 @@ struct WorkChapterBarLine: View {
 struct WorkReadProgressBar: View {
     var progress: Double
 
-    @Environment(\.accentFill) private var accentFill
+    @Environment(\.accentInk) private var accentInk
 
     var body: some View {
         let fraction = min(max(progress, 0), 1)
@@ -452,7 +452,7 @@ struct WorkReadProgressBar: View {
                 ZStack(alignment: .leading) {
                     Capsule().fill(Color.primary.opacity(0.14))
                     Capsule()
-                        .fill(accentFill)
+                        .fill(accentInk)
                         .frame(width: max(fraction > 0 ? 2 : 0, geo.size.width * fraction))
                 }
             }

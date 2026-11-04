@@ -37,12 +37,12 @@ enum StorageBreakdown {
 /// Board 50's "Kudos on this iPhone": the measured total, a stacked bar and a
 /// legend. Replaces the old single "Storage used" row, which showed the same total.
 struct StorageSummaryRow: View {
-    @Environment(\.accentFill) private var accentFill
+    @Environment(\.accentInk) private var accentInk
     @State private var footprint: LocalStorageFootprint?
 
     private func color(_ kind: StorageBreakdown.Kind) -> Color {
         switch kind {
-        case .works: accentFill
+        case .works: accentInk
         case .originals: .orange
         case .other: .gray
         }
