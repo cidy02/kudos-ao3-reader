@@ -122,6 +122,7 @@ struct AddChapterView: View {
             title: form.chapterID == nil ? "Add Chapter" : "Edit Chapter",
             palette: accountPalette
         )
+        .hidesFloatingTabBarInEditor()
         .alert("AO3 could not save the chapter", isPresented: Binding(
             get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } }
         )) {

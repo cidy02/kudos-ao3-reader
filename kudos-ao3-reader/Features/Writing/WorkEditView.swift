@@ -55,6 +55,11 @@ struct WorkEditView: View {
     private var gutter: CGFloat { SubjectMetrics.accountGutter }
     private var isDarkTheme: Bool { theme.appTheme == .dark || theme.appTheme == .oled }
 
+    /// Board 42 draws no tab bar on the full-screen work editor.
+    static var hidesTabBar: Bool {
+        FloatingTabBarPolicy.hidesTabBar(isEditor: true)
+    }
+
     var body: some View {
         List {
             Section {
@@ -130,6 +135,7 @@ struct WorkEditView: View {
         .disabled(isSaving || isPosting)
         .onAppear { if editingGeneration == nil { editingGeneration = auth.sessionGeneration } }
         .subjectScreenWash(title: screenTitle, palette: accountPalette)
+        .hidesFloatingTabBarInEditor()
         .task(id: "\(needsPublicationRefresh):\(publicationRetry)") {
             guard needsPublicationRefresh, let workID = form.workID else { return }
             let generation = auth.sessionGeneration

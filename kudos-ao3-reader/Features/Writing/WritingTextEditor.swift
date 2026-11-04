@@ -122,6 +122,7 @@ struct WritingTextEditor: View {
         }
         .navigationTitle(title)
         .subjectScreenWash(palette: theme.scopePalette)
+        .hidesFloatingTabBarInEditor()
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 #if os(macOS)

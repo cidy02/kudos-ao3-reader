@@ -88,6 +88,7 @@ struct WritingTagsEditor: View {
         }
         .cardList()
         .subjectScreenWash(title: title, palette: palette)
+        .hidesFloatingTabBarInEditor()
     }
 
     @ViewBuilder

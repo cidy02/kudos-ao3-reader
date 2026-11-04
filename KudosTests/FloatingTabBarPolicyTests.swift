@@ -15,6 +15,10 @@ struct FloatingTabBarPolicyTests {
 
         // Selection mode hides the bar.
         #expect(FloatingTabBarPolicy.hidesTabBar(isModal: false, isReader: false, isSelecting: true))
+
+        // Full-screen editors (Board 42 work editor, chapter editor) hide the bar.
+        #expect(FloatingTabBarPolicy.hidesTabBar(isEditor: true))
+        #expect(WorkEditView.hidesTabBar)
     }
 
     @Test func commentsUsesBottomAccessoryOnlyWhenPushedAndNonAccessibility() {

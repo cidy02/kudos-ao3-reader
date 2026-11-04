@@ -156,6 +156,7 @@ struct EditMultipleWorksView: View {
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
         .subjectScreenWash(title: headerTitle, palette: accountPalette)
+        .hidesFloatingTabBarInEditor()
         // The error was set and never shown, so a failed save only re-enabled
         // Save and looked like nothing had happened.
         .alert("AO3 could not save the change", isPresented: Binding(

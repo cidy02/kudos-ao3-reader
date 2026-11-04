@@ -86,6 +86,7 @@ struct WorkCollectionsGiftsView: View {
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
         .subjectScreenWash(title: "Collections and Gifts", palette: palette)
+        .hidesFloatingTabBarInEditor()
         .task(id: query) { await search() }
     }
 
@@ -407,6 +408,7 @@ struct WorkSeriesPickerView: View {
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
         .subjectScreenWash(title: "Series", palette: palette)
+        .hidesFloatingTabBarInEditor()
     }
 
     private var seriesPanel: some View {
@@ -537,6 +539,7 @@ struct WorkCreatorsPickerView: View {
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
         .subjectScreenWash(title: "Co-creators", palette: palette)
+        .hidesFloatingTabBarInEditor()
     }
 
     @ViewBuilder
@@ -645,6 +648,7 @@ struct WorkParentWorkPickerView: View {
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
         .subjectScreenWash(title: "Inspired By", palette: palette)
+        .hidesFloatingTabBarInEditor()
     }
 
     private var sourcePanel: some View {

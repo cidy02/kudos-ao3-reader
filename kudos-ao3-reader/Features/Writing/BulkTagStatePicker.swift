@@ -34,6 +34,7 @@ struct BulkTagStatePicker: View {
         #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
         #endif
+            .hidesFloatingTabBarInEditor()
     }
 
     private func row(_ option: AO3FormOption) -> some View {
@@ -208,6 +209,7 @@ private struct BulkNameListEditor: View {
         .cardList()
         .navigationTitle(title)
         .subjectScreenWash(palette: theme.scopePalette)
+        .hidesFloatingTabBarInEditor()
     }
 
     private var trimmed: String {

@@ -107,6 +107,7 @@ struct EditTagsView: View {
         .environment(\.defaultMinListRowHeight, 0)
         .environment(\.writingEditedWorkID, form.workID)
         .subjectScreenWash(title: "Edit Tags", palette: accountPalette)
+        .hidesFloatingTabBarInEditor()
         #if DEBUG
         .task { if DebugLaunchRoute.takePush("tagseditor") { addingKind = .fandom } }
         #endif
