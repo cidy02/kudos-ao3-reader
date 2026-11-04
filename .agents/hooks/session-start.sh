@@ -15,7 +15,7 @@ printf '%s' "$payload" | /usr/bin/grep -o '"transcriptPath":"[^"]*"' >> /tmp/agy
 HOUSE='Kudos house rules (each one exists because an agent broke it):
 1. NEVER delete a branch on dynamicTypeSize.isAccessibilitySize, or any other accessibility special case. It is there because the ordinary layout was tried first and failed at large text sizes, and the comment above it usually says how. Replacing it with the modern native way re-creates that bug. If you believe one is redundant, say so in your handback and LEAVE THE CODE ALONE.
 2. A test must prove a human can reach the content, not that a modifier is present. Asserting that safeAreaInset exists proves nothing.
-3. Run /Users/cidy02/kudos-redesign-work/build-check.sh <your worktree> before handing back, and never write BUILD OK unless you saw it print that. Never run xcodebuild yourself.
+3. Run /Users/cidy02/kudos-redesign-work/build-check.sh <your worktree> before handing back, and never write BUILD OK unless you saw it print that. Never run xcodebuild yourself. It COMPILES ONLY — it does not run the tests, so BUILD OK is no evidence that a test you added passes. Say so in your handback, and make any new test depend only on what a plain test host has (no launch routes, no shot state).
 4. Edit only the files your brief names. If the fix needs a file outside them, say so in the handback instead of reaching for it.
 5. If a screenshot-based claim cannot be confirmed in the code, say it is unconfirmed. Do not invent a fix for it, and do not weaken a guard to make a screenshot match a mockup.
 6. Say plainly what you could not verify. An honest gap is worth more than a confident wrong claim.
