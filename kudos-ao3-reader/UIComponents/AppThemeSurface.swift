@@ -274,6 +274,7 @@ private struct CardList: ViewModifier {
             .environment(\.subjectWashScroll, nil)
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
+            .contentMargins(.bottom, CardListMetrics.interCardSpacing, for: .scrollContent)
             // A washed screen has already declared what its backdrop is, and it
             // is painted behind this modifier. Filling it flat here would hide
             // the wash completely — see `EnvironmentValues.isOnSubjectWash`.

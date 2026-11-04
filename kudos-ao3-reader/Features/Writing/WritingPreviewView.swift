@@ -58,6 +58,7 @@ struct WritingPreviewView: View {
         .environment(\.defaultMinListRowHeight, 0)
         .disabled(isPosting)
         .subjectScreenWash(title: "Preview", palette: theme.scopePalette)
+        .hidesFloatingTabBarInEditor()
         .alert("AO3 could not post this", isPresented: Binding(
             get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } }
         )) {

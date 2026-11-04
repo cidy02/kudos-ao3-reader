@@ -33,25 +33,14 @@ private struct CommentReaderDestination: Identifiable, Hashable {
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
 }
 
-/// Ordinary sizes keep the floating pill in a bottom safe-area inset (or the system
-/// bottom accessory beside the minimised tab when pushed on iOS). Accessibility
-/// sizes pin the same control under the list so it cannot cover a row.
+/// Reserves the write bar's exact height in the scroll container's bottom safe area
+/// so it sits above the persistent floating tab bar when pushed (and above the home
+/// indicator when modal) at both standard and accessibility Dynamic Type sizes.
 private struct CommentWriteBarPlacement<Bar: View>: ViewModifier {
-    var isAccessoryActive: Bool
-    var accessibilitySize: Bool
     @ViewBuilder var bar: () -> Bar
 
     func body(content: Content) -> some View {
-        if accessibilitySize {
-            VStack(spacing: 0) {
-                content
-                bar()
-            }
-        } else if !isAccessoryActive {
-            content.safeAreaInset(edge: .bottom) { bar() }
-        } else {
-            content
-        }
+        content.safeAreaInset(edge: .bottom, spacing: 0) { bar() }
     }
 }
 
@@ -247,25 +236,9 @@ struct CommentsView: View {
                     initialSpineIndex: destination.spineIndex
                 )
             }
-            // At accessibility sizes the inset did not keep the list clear of the
-            // pill, and the pill covered "All comments". The bar then sits under
-            // the list, full width, on its own ground. Pushed at standard sizes on iOS,
-            // Comments uses the system bottom accessory beside the minimised tab (T-482).
-            .modifier(
-                CommentWriteBarPlacement(
-                    isAccessoryActive: usesTabViewBottomAccessory,
-                    accessibilitySize: dynamicTypeSize.isAccessibilitySize
-                ) {
-                    writeCommentBar
-                }
-            )
-            #if os(iOS)
-            .tabViewBottomAccessory {
-                if usesTabViewBottomAccessory, case .loaded = model.phase {
-                    commentAccessoryBar
-                }
-            }
-            #endif
+            // Reserves the write bar's exact height in the bottom safe area above
+            // the floating tab bar (or modal home indicator) at all Dynamic Type sizes.
+            .modifier(CommentWriteBarPlacement { writeCommentBar })
             .refreshable { await model.load(auth: auth, forceRefresh: true) }
             .task(id: readableWork?.id) { await loadReaderSectionsIfNeeded() }
             .task {
@@ -1113,7 +1086,18 @@ struct CommentsView: View {
             if dynamicTypeSize.isAccessibilitySize {
                 accessibleWriteCommentBar
             } else {
+                #if os(iOS)
+                if usesTabViewBottomAccessory {
+                    commentAccessoryBar
+                        .padding(.horizontal, 16)
+                        .padding(.top, 2)
+                        .padding(.bottom, 6)
+                } else {
+                    floatingWriteCommentBar
+                }
+                #else
                 floatingWriteCommentBar
+                #endif
             }
         }
     }
@@ -1153,7 +1137,7 @@ struct CommentsView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
         .frame(maxWidth: .infinity)
-        .background(theme.appTheme.cardSurface.ignoresSafeArea(edges: .bottom))
+        .background(theme.appTheme.cardSurface.ignoresSafeArea(edges: isModal ? .bottom : []))
         .accessibilityLabel(title)
     }
 

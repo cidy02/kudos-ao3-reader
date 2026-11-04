@@ -138,6 +138,7 @@ struct SeriesEditView: View {
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
         .subjectScreenWash(title: "Edit Series", palette: accountPalette)
+        .hidesFloatingTabBarInEditor()
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Save") { save() }
@@ -368,6 +369,7 @@ struct SeriesReorderView: View {
         }
         .cardList()
         .subjectScreenWash(title: "Reorder", palette: accountPalette)
+        .hidesFloatingTabBarInEditor()
         #if os(iOS)
         .environment(\.editMode, .constant(.active))
         #endif
@@ -519,6 +521,7 @@ struct SeriesRemoveWorksView: View {
         .cardList()
         .disabled(isRemoving)
         .subjectScreenWash(title: "Remove Works", palette: palette)
+        .hidesFloatingTabBarInEditor()
         .onAppear { if openedGeneration == nil { openedGeneration = auth.sessionGeneration } }
         .alert(
             "Remove “\(Self.title(removing, concealed: isConcealed(removing)))” from \(seriesTitle)?",

@@ -50,6 +50,7 @@ struct WritingChaptersView: View {
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
         .subjectScreenWash(title: "Chapters", palette: theme.scopePalette)
+        .hidesFloatingTabBarInEditor()
         .task(id: "\(auth.sessionGeneration):\(reload)") { await load() }
     }
 

@@ -363,6 +363,7 @@ struct WritingWorkDestination: View {
                 }
             }
         }
+        .hidesFloatingTabBarInEditor()
         .task(id: "\(auth.sessionGeneration):\(retry)") {
             // `.task` re-runs every time this view reappears — including on
             // Back from any editor it pushed — and resetting `form` here threw
@@ -424,6 +425,7 @@ struct WritingTagsDestination: View {
                 ProgressView("Loading tags…").accentFill()
             }
         }
+        .hidesFloatingTabBarInEditor()
         .task(id: "\(auth.sessionGeneration):\(retry)") {
             // Kept across reappearance — see `WritingWorkDestination`.
             if form != nil, loadedGeneration == auth.sessionGeneration { return }
@@ -475,6 +477,7 @@ struct WritingBulkEditDestination: View {
                 ProgressView("Loading \(workIDs.count) works…").accentFill()
             }
         }
+        .hidesFloatingTabBarInEditor()
         .task(id: "\(auth.sessionGeneration):\(retry)") {
             // Kept across reappearance — see `WritingWorkDestination`.
             if form != nil, loadedGeneration == auth.sessionGeneration { return }
@@ -516,6 +519,7 @@ struct WritingChapterDestination: View {
             }
             else { WritingLoaderPage(title: "Edit chapter", message: errorMessage) { retry += 1 } }
         }
+        .hidesFloatingTabBarInEditor()
         .task(id: "\(auth.sessionGeneration):\(retry)") {
             // Kept across reappearance — see `WritingWorkDestination`.
             if form != nil, loadedGeneration == auth.sessionGeneration { return }
@@ -566,5 +570,6 @@ struct WritingLoaderPage: View {
             .padding(.top, 60)
         }
         .subjectScreenWash(title: title, palette: theme.scopePalette)
+        .hidesFloatingTabBarInEditor()
     }
 }
