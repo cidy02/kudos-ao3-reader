@@ -4,6 +4,10 @@ import SwiftUI
 /// the primary text. Single-tag families keep `FandomListRow` and never reach
 /// this view — no tint, no "All N tags" marker.
 struct FandomFamilyBlock: View {
+    static let leadingInset: CGFloat = 16
+    /// Clears the iOS `List` section index column (`★ G S`) on the right edge (Board 14).
+    static let trailingInset: CGFloat = 32
+
     let family: FandomFamily
     let sort: FandomFamilySort
     let library: FandomLibraryIndex
@@ -38,12 +42,13 @@ struct FandomFamilyBlock: View {
             }
             .buttonStyle(.plain)
             .workCardZoomSource(BrowseZoomKey.fandom(family.zoomKey), in: zoomNamespace)
-            .padding(.horizontal, 16)
+            .padding(.leading, Self.leadingInset)
+            .padding(.trailing, Self.trailingInset)
             .padding(.vertical, 8)
 
             memberList
                 .padding(.leading, 54)
-                .padding(.trailing, 16)
+                .padding(.trailing, Self.trailingInset)
                 .overlay(alignment: .leading) {
                     Rectangle()
                         .fill(palette.accent.opacity(0.32))
@@ -55,6 +60,7 @@ struct FandomFamilyBlock: View {
                 .fill(Color.primary.opacity(0.12))
                 .frame(height: 0.5)
                 .padding(.leading, 54)
+                .padding(.trailing, Self.trailingInset)
         }
     }
 
@@ -229,10 +235,18 @@ struct FandomFamilyBlock: View {
     }
 }
 
-/// A–Z section header: letter, family count, hairline. Uses the category
-/// palette rather than a hardcoded wash colour so Light / Sepia / OLED keep
-/// contrast.
+/// A–Z section header: letter, family count, hairline. Uses ordinary header ink
+/// (`Color.primary`, matching `SectionRuleHeader` and Board 14) rather than an
+/// identity hue, and insets the trailing edge to clear the section index column.
 struct FandomLetterHeader: View {
+    static let titleColor = Color.primary
+    static let rowInsets = EdgeInsets(
+        top: 14,
+        leading: FandomFamilyBlock.leadingInset,
+        bottom: 8,
+        trailing: FandomFamilyBlock.trailingInset
+    )
+
     let letter: String
     let count: Int
     var palette: SubjectPalette
@@ -241,7 +255,7 @@ struct FandomLetterHeader: View {
         HStack(spacing: 8) {
             Text(letter)
                 .font(.subheadline.weight(.bold))
-                .foregroundStyle(palette.accent)
+                .foregroundStyle(Self.titleColor)
             Text("\(count)")
                 .font(.caption.weight(.medium).monospaced())
                 .foregroundStyle(.tertiary)
@@ -250,6 +264,6 @@ struct FandomLetterHeader: View {
                 .frame(height: 0.5)
         }
         .textCase(nil)
-        .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 8, trailing: 16))
+        .listRowInsets(Self.rowInsets)
     }
 }

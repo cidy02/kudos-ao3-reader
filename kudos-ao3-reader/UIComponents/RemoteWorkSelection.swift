@@ -103,9 +103,12 @@ final class RemoteWorkSelectionController {
     }
 }
 
-/// The selecting-mode toolbar: "Done" plus the bulk-action bar (bottom bar on
-/// iOS, primary action on macOS).
+/// The selecting-mode toolbar: "Done" plus the bulk-action menu in the top bar
+/// (Board 15 — no floating bottom bar over the list's pagination footer on iOS;
+/// primary action on macOS).
 struct RemoteWorkSelectionToolbar: ToolbarContent {
+    static let usesBottomBar = false
+
     let controller: RemoteWorkSelectionController
     /// The works Select All covers (the loaded results). Nil leaves Select All to the caller.
     var selectable: (() -> [AO3WorkSummary])?
@@ -117,6 +120,9 @@ struct RemoteWorkSelectionToolbar: ToolbarContent {
         ToolbarItem(placement: .principal) {
             Text(WorkSelectionTitle.text(selectedCount: controller.selection.count))
                 .font(.headline)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .dynamicTypeSize(...DynamicTypeSize.xxLarge)
                 .contentTransition(.numericText())
         }
         if let selectable {
@@ -126,17 +132,32 @@ struct RemoteWorkSelectionToolbar: ToolbarContent {
             ToolbarItem(placement: .primaryAction) { selectAllButton(selectable) }
             #endif
         }
+        #if os(iOS)
+        ToolbarItemGroup(placement: .topBarTrailing) {
+            if controller.isProcessingBatch {
+                ProgressView()
+                    .controlSize(.small)
+                    .accentFill()
+            } else {
+                Menu {
+                    RemoteWorkBulkActionBar(controller: controller, selectedSummaries: selectedSummaries)
+                } label: {
+                    Label("Actions", systemImage: "ellipsis.circle")
+                }
+                .disabled(controller.selection.isEmpty)
+            }
+            Button { controller.exitSelectMode() } label: {
+                Image(systemName: "checkmark")
+            }
+            .accessibilityLabel("Done")
+        }
+        #else
         ToolbarItem(placement: .confirmationAction) {
             Button { controller.exitSelectMode() } label: {
                 Image(systemName: "checkmark")
             }
             .accessibilityLabel("Done")
         }
-        #if os(iOS)
-        ToolbarItemGroup(placement: .bottomBar) {
-            RemoteWorkBulkActionBar(controller: controller, selectedSummaries: selectedSummaries)
-        }
-        #else
         ToolbarItemGroup(placement: .primaryAction) {
             RemoteWorkBulkActionBar(controller: controller, selectedSummaries: selectedSummaries)
         }
@@ -171,8 +192,6 @@ struct RemoteWorkBulkActionBar: View {
         }
         .disabled(controller.selection.isEmpty || controller.isProcessingBatch)
 
-        Spacer()
-
         Button {
             run { await controller.bulkSaveForLater(selectedSummaries(), in: context) }
         } label: {
@@ -183,16 +202,12 @@ struct RemoteWorkBulkActionBar: View {
         }
         .disabled(controller.selection.isEmpty || controller.isProcessingBatch)
 
-        Spacer()
-
         Button {
             run { await controller.bulkAddToCollection(selectedSummaries(), in: context) }
         } label: {
             Label("Add to Collection", systemImage: "square.stack")
         }
         .disabled(controller.selection.isEmpty || controller.isProcessingBatch)
-
-        Spacer()
 
         Button {
             run { await controller.bulkAddToQueue(selectedSummaries(), in: context) }

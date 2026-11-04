@@ -10,4 +10,12 @@ struct WorkSelectionTitleTests {
         #expect(WorkSelectionTitle.text(selectedCount: 1) == "1 Selected")
         #expect(WorkSelectionTitle.text(selectedCount: 12) == "12 Selected")
     }
+
+    @Test func remoteResultsSelectionPlacesCheckLeadingAndAvoidsBottomBarOverlap() {
+        #expect(RemoteWorkSelectionToolbar.usesBottomBar == false)
+        #expect(AO3WorkRow.selectionEdge(isSelecting: false) == .none)
+        #expect(AO3WorkRow.selectionEdge(isSelecting: true) == .leading)
+        #expect(AO3WorkRow.separatorInset(isSelecting: true) == 115)
+        #expect(AO3WorkRow.separatorInset(isSelecting: false) == nil)
+    }
 }

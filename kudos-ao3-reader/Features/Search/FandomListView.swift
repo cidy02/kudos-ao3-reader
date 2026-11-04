@@ -1027,13 +1027,15 @@ private struct FandomListRow: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.horizontal, 16)
+            .padding(.leading, FandomFamilyBlock.leadingInset)
+            .padding(.trailing, FandomFamilyBlock.trailingInset)
             .padding(.vertical, 8)
 
             Rectangle()
                 .fill(Color.primary.opacity(0.12))
                 .frame(height: 0.5)
                 .padding(.leading, 54)
+                .padding(.trailing, FandomFamilyBlock.trailingInset)
         }
         .contentShape(Rectangle())
     }

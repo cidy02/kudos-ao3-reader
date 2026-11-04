@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 import Testing
 @testable import Kudos
 
@@ -213,5 +214,15 @@ struct FandomIndexTests {
             sort: sort,
             options: options
         ) == "Grouped by family")
+    }
+
+    // MARK: - Board 14 index gutter clearance & header colour (FID47)
+
+    @Test @MainActor func fandomRowsClearSectionIndexAndHeaderUsesPrimaryInk() {
+        #expect(FandomFamilyBlock.leadingInset == 16)
+        #expect(FandomFamilyBlock.trailingInset >= 30)
+        #expect(FandomLetterHeader.rowInsets.leading == FandomFamilyBlock.leadingInset)
+        #expect(FandomLetterHeader.rowInsets.trailing == FandomFamilyBlock.trailingInset)
+        #expect(FandomLetterHeader.titleColor == Color.primary)
     }
 }
