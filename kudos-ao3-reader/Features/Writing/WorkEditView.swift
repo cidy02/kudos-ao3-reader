@@ -135,6 +135,10 @@ struct WorkEditView: View {
         .disabled(isSaving || isPosting)
         .onAppear { if editingGeneration == nil { editingGeneration = auth.sessionGeneration } }
         .subjectScreenWash(title: screenTitle, palette: accountPalette)
+        .wrappingInlineTitle(screenTitle, isActive: dynamicTypeSize.isAccessibilitySize)
+        #if os(iOS)
+        .navigationBarBackButtonHidden(true)
+        #endif
         .hidesFloatingTabBarInEditor()
         .task(id: "\(needsPublicationRefresh):\(publicationRetry)") {
             guard needsPublicationRefresh, let workID = form.workID else { return }
@@ -174,14 +178,7 @@ struct WorkEditView: View {
                 errorMessage = "Reload tags before saving this work. " + UserFacingError.message(for: error)
             }
         }
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button("Save") {
-                    save(submit: form.isPosted ? .update : .saveDraft)
-                }
-                .disabled(isSaving || isPosting || needsPublicationRefresh || needsTagRefresh)
-            }
-        }
+        .toolbar { headerToolbar }
         .alert("AO3 could not save the change", isPresented: Binding(
             get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } }
         )) {
@@ -1042,6 +1039,126 @@ extension WorkEditView {
         case .new: "New Work"
         case .draft: "Draft"
         case .edit, .editTags: "Edit Work"
+        }
+    }
+
+    enum HeaderActionKind: Equatable, Sendable {
+        case cancel
+        case preview
+        case save
+    }
+
+    struct HeaderAction: Equatable, Sendable {
+        let kind: HeaderActionKind
+        let title: String
+        let systemImage: String?
+        let isEnabled: Bool
+    }
+
+    /// Board 42's header chrome: circular `xmark` dismiss on the leading edge,
+    /// circular `eye` preview button, and the filled primary action pill.
+    static func headerActions(
+        isSaving: Bool = false,
+        isPosting: Bool = false,
+        needsPublicationRefresh: Bool = false,
+        needsTagRefresh: Bool = false
+    ) -> [HeaderAction] {
+        let canAct = !(isSaving || isPosting || needsPublicationRefresh || needsTagRefresh)
+        return [
+            HeaderAction(
+                kind: .cancel,
+                title: "Cancel",
+                systemImage: "xmark",
+                isEnabled: !(isSaving || isPosting)
+            ),
+            HeaderAction(
+                kind: .preview,
+                title: "Preview",
+                systemImage: "eye",
+                isEnabled: canAct
+            ),
+            HeaderAction(
+                kind: .save,
+                title: "Save",
+                systemImage: nil,
+                isEnabled: canAct
+            )
+        ]
+    }
+
+    static func headerAction(
+        _ kind: HeaderActionKind,
+        isSaving: Bool = false,
+        isPosting: Bool = false,
+        needsPublicationRefresh: Bool = false,
+        needsTagRefresh: Bool = false
+    ) -> HeaderAction? {
+        headerActions(
+            isSaving: isSaving,
+            isPosting: isPosting,
+            needsPublicationRefresh: needsPublicationRefresh,
+            needsTagRefresh: needsTagRefresh
+        ).first { $0.kind == kind }
+    }
+
+    @ToolbarContentBuilder
+    private var headerToolbar: some ToolbarContent {
+        let cancelAction = Self.headerAction(
+            .cancel,
+            isSaving: isSaving,
+            isPosting: isPosting,
+            needsPublicationRefresh: needsPublicationRefresh,
+            needsTagRefresh: needsTagRefresh
+        )
+        let previewAction = Self.headerAction(
+            .preview,
+            isSaving: isSaving,
+            isPosting: isPosting,
+            needsPublicationRefresh: needsPublicationRefresh,
+            needsTagRefresh: needsTagRefresh
+        )
+        let saveAction = Self.headerAction(
+            .save,
+            isSaving: isSaving,
+            isPosting: isPosting,
+            needsPublicationRefresh: needsPublicationRefresh,
+            needsTagRefresh: needsTagRefresh
+        )
+        if let cancelAction, let systemImage = cancelAction.systemImage {
+            ToolbarItem(placement: .cancellationAction) {
+                ToolbarIconButton(
+                    title: cancelAction.title,
+                    systemImage: systemImage,
+                    tint: .primary,
+                    isDisabled: !cancelAction.isEnabled
+                ) {
+                    dismiss()
+                }
+                .labelStyle(.iconOnly)
+            }
+        }
+        if let previewAction, let systemImage = previewAction.systemImage {
+            ActionToolbar(items: [
+                AnyView(
+                    ToolbarIconButton(
+                        title: previewAction.title,
+                        systemImage: systemImage,
+                        tint: .primary,
+                        isDisabled: !previewAction.isEnabled
+                    ) {
+                        openPreview()
+                    }
+                )
+            ])
+        }
+        if let saveAction {
+            ToolbarItem(placement: .confirmationAction) {
+                Button(saveAction.title) {
+                    save(submit: form.isPosted ? .update : .saveDraft)
+                }
+                .sheetConfirmStyle()
+                .disabled(!saveAction.isEnabled)
+            }
         }
     }
 
