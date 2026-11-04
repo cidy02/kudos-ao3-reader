@@ -251,6 +251,11 @@ struct ReaderSearchView: View {
             model.reset()
             return
         }
+        #if DEBUG
+        if text == DebugLaunchRoute.findInWorkQuery && (model.phase == .searching || !model.results.isEmpty) {
+            return
+        }
+        #endif
         debounceTask = Task {
             try? await Task.sleep(for: .milliseconds(350))
             guard !Task.isCancelled else { return }
@@ -279,13 +284,10 @@ struct ReaderSearchView: View {
         }
         .onAppear { isFieldFocused = true }
         #if DEBUG
-        .task {
+        .task(id: publication != nil) {
             guard let seeded = DebugLaunchRoute.findInWorkQuery else { return }
             query = seeded
-            for _ in 0..<20 {
-                if publication != nil { break }
-                try? await Task.sleep(for: .milliseconds(100))
-            }
+            guard publication != nil else { return }
             runSearch(seeded)
         }
         #endif

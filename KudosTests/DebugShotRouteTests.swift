@@ -1,6 +1,9 @@
 import Foundation
 import SwiftData
 import Testing
+#if os(iOS)
+import ReadiumShared
+#endif
 @testable import Kudos
 
 /// Every screen A82 names is a `shot:<name>` the debug map knows.
@@ -115,4 +118,32 @@ struct DebugShotRouteTests {
         let target = try #require(DebugLaunchRoute.homeWork(in: works))
         #expect(target.ao3WorkID != nil)
     }
+
+    #if os(iOS)
+    @MainActor
+    @Test func readerFindSeededQueryMatchesDemoWorkFixture() async throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        let epubURL = root.appending(path: "KudosTests/Fixtures/demo_work.epub")
+        guard FileManager.default.fileExists(atPath: epubURL.path) else { return }
+
+        let publication = try await ReadiumPublicationLoader.openEPUB(at: epubURL)
+        let model = ReaderSearchModel()
+        let query = try #require(DebugLaunchRoute.findInWorkQuery)
+        #expect(!query.isEmpty)
+
+        model.search(query, in: publication)
+
+        for _ in 0..<50 {
+            if case .done = model.phase { break }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+
+        guard case let .done(isEmpty) = model.phase else {
+            Issue.record("Search did not finish in time; phase is \(model.phase)")
+            return
+        }
+        #expect(!isEmpty)
+        #expect(!model.results.isEmpty)
+    }
+    #endif
 }
