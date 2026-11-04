@@ -278,6 +278,17 @@ struct ReaderSearchView: View {
             content
         }
         .onAppear { isFieldFocused = true }
+        #if DEBUG
+        .task {
+            guard let seeded = DebugLaunchRoute.findInWorkQuery else { return }
+            query = seeded
+            for _ in 0..<20 {
+                if publication != nil { break }
+                try? await Task.sleep(for: .milliseconds(100))
+            }
+            runSearch(seeded)
+        }
+        #endif
     }
 
     private var searchField: some View {

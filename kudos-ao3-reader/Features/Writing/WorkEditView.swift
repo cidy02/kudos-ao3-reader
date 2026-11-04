@@ -810,8 +810,29 @@ extension WorkEditView {
             }
         case "texteditor":
             WritingTextEditor(
-                text: $form.summary, title: "Summary",
-                account: auth.username ?? "", target: recoveryTarget, field: "summary"
+                text: Binding(
+                    get: {
+                        let text = form.chapter?.content ?? ""
+                        if text.isEmpty {
+                            return "<p>The lantern drifted past the mill. 星 &amp; water.</p>"
+                        }
+                        return text
+                    },
+                    set: { value in
+                        if form.chapter == nil { form.chapter = AO3WorkChapterDraft() }
+                        form.chapter?.content = value
+                    }
+                ),
+                title: "Chapter text",
+                ruleTitle: "Chapter 1",
+                account: auth.username ?? "",
+                target: recoveryTarget,
+                field: "content",
+                chapterActions: WritingChapterEditorActions(
+                    preview: { openPreview() },
+                    deleteName: nil,
+                    delete: {}
+                )
             )
         case "recovery":
             WritingTextEditor(
