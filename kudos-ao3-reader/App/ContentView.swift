@@ -117,6 +117,7 @@ struct ContentView: View {
                 await auth.restoreSession()
                 ReadingQueueService.ensureSavedForLaterQueue(in: modelContext)
                 #if DEBUG
+                DemoLibrary.clearSentinelIDs(in: modelContext)
                 DemoLibrary.seedIfRequested(in: modelContext)
                 DebugLaunchRoute.prepareShot()
                 DebugLaunchRoute.applyTab(router)
