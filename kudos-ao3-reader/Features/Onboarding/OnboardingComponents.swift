@@ -9,28 +9,19 @@ struct OnboardingScaffold<Content: View, Footer: View>: View {
     @ViewBuilder var footer: Footer
 
     @Environment(ThemeManager.self) private var theme
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    /// Whether the scaffold uses a native bottom safe-area inset to pin the footer
+    /// and inset the scrolling intro, ensuring all rows scroll clear of the footer.
+    static var usesBottomSafeAreaInset: Bool { true }
 
     var body: some View {
-        if dynamicTypeSize.isAccessibilitySize {
-            // Pinned under the header, the footer filled the phone and the feature
-            // rows never came on screen (AX5). The actions scroll after the rows.
-            ScrollView {
-                VStack(spacing: 0) {
-                    scrollingIntro
-                    pinnedFooter
-                }
-            }
-            .background(backgroundColor.ignoresSafeArea())
-        } else {
-            VStack(spacing: 0) {
-                ScrollView {
-                    scrollingIntro
-                }
-                pinnedFooter
-            }
-            .background(backgroundColor.ignoresSafeArea())
+        ScrollView {
+            scrollingIntro
         }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            pinnedFooter
+        }
+        .background(backgroundColor.ignoresSafeArea())
     }
 
     private var scrollingIntro: some View {
@@ -60,11 +51,8 @@ struct OnboardingScaffold<Content: View, Footer: View>: View {
             // popovers" — and it keeps the same one-step lift over
             // `backgroundColor` that `.bar` provided, while falling back to
             // `secondarySystemGroupedBackground`/`controlBackgroundColor` on
-            // Light/Dark where no custom theme colour exists. Nothing is lost
-            // by dropping the material: this footer is a sibling *below* the
-            // ScrollView in the VStack, never an overlay, so no content ever
-            // scrolls behind it for the blur to reveal.
-            .background(theme.appTheme.cardSurface)
+            // Light/Dark where no custom theme colour exists.
+            .background(theme.appTheme.cardSurface.ignoresSafeArea(edges: .bottom))
     }
 
     /// The themed app background, falling back to the platform's default surface
