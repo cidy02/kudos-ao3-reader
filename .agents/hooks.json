@@ -1,0 +1,7 @@
+{
+  "kudos-house-rules": {
+    "SessionStart": [
+      { "type": "command", "command": "./hooks/session-start.sh", "timeout": 10 }
+    ]
+  }
+}
