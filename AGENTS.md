@@ -162,6 +162,32 @@ The next agent should continue from `TASKS.md` + your commit with **zero archaeo
   - UI modernization must preserve or improve information density, a visually cleaner design that reduces scanability or hides metadata is considered a regression unless explicitly approved.
     - New UI elements should be consistent with existing elements, unless explicitly approved.
 
+## Rules that exist because an agent broke them
+
+Short list, all of it scar tissue. Antigravity (agy/Gemini) also gets these injected at session start by
+`.agents/hooks.json`; Claude and Codex should read them here.
+
+1. **Never delete an accessibility branch.** A branch on `dynamicTypeSize.isAccessibilitySize` (or any other
+   accessibility special case) is there because the ordinary layout was tried first and failed at large text
+   sizes — the comment above it usually says exactly how. Replacing it with "the modern native way" re-creates
+   the bug it exists to prevent. On 2026-11-04 two different agents did this within an hour; one reinstated,
+   word for word, the failure its own deleted comment described. If you think a branch is now redundant, say so
+   in your handback and leave the code alone.
+2. **A test must prove a human can reach the content**, not that a modifier is present. Both of those agents
+   shipped passing tests: they asserted a `safeAreaInset` existed, which says nothing about whether the last
+   row can be scrolled into view.
+3. **A screenshot is one scroll position.** Before calling something missing, check whether it is simply below
+   the fold, or absent from the fixture. "Home's Reading Now carousel is missing" and "the All Works card is
+   missing" were both false for this reason.
+4. **Never weaken a guard to make a screenshot match a mockup.** `showsAO3Actions: ao3WorkID != nil` hides
+   Give Kudos for a work with no AO3 page; the right fix was a fixture with an AO3 id, not removing the guard.
+5. **Run the build check before handing back** (`build-check.sh <worktree>`) and never write "BUILD OK" unless
+   you saw it print that. Agents never run `xcodebuild` directly — one heavy job at a time.
+6. **Stay in the files your brief names.** If the real fix lives elsewhere, say so instead of reaching for it:
+   another lane may own that file right now.
+7. **Say what you could not verify.** An honest gap is worth more than a confident wrong claim, and the
+   orchestrator checks anyway.
+
 ## Future Agent Checklist (before writing any code)
 
 1. `git status` + `git branch --show-current` — clean tree, correct branch (feature branch off the stack's tip; **never `main`**).
