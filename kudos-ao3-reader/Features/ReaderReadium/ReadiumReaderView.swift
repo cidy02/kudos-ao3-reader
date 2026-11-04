@@ -376,6 +376,11 @@ struct ReadiumReaderView: View {
                     author: work.author,
                     totalPositions: book.positionsByReadingOrder.reduce(0) { $0 + $1.count }
                 )
+                #if DEBUG
+                if DebugLaunchRoute.takeSheet("readerfind") {
+                    router.panel = .readerFind
+                }
+                #endif
                 // Keep the page with the voice as it moves between utterances.
                 // Blocked during dismiss freeze / successful-exit latch so TTS
                 // cannot seek the navigator (or corrupt the flushed locator).
@@ -1524,6 +1529,9 @@ struct ReadiumReaderView: View {
         if DebugLaunchRoute.takeSheet("readerend") {
             book.goToPublicationEndForDebug()
         }
+        if DebugLaunchRoute.takeSheet("readerfind") {
+            router.panel = .readerFind
+        }
         #endif
     }
 }
@@ -1618,7 +1626,7 @@ extension ReadiumReaderView {
     #if DEBUG
     private func applyDebugShot() {
         if DebugLaunchRoute.takeSheet("readercontents") { router.panel = .readerChapters }
-        if DebugLaunchRoute.takeSheet("readerfind") { router.panel = .readerFind }
+        if book.phase == .ready, DebugLaunchRoute.takeSheet("readerfind") { router.panel = .readerFind }
         if DebugLaunchRoute.takeSheet("readerdisplay") { router.panel = .readerDisplay }
         if DebugLaunchRoute.takeSheet("readerspeech") { showingSpeechSettings = true }
         if DebugLaunchRoute.takeSheet("readerend") { book.goToPublicationEndForDebug() }
@@ -1776,7 +1784,7 @@ extension ReadiumReaderView {
                         // Readium positions is absent from it), so the two "chapter
                         // index" spaces can silently drift apart after such a gap.
                         // This was why "This Chapter" only pinned first sometimes.
-                        currentSpineIndex: currentSpineIndex,
+                        currentSpineIndex: currentSpineIndex ?? work.lastSpineIndex,
                         onSelect: { locator in
                             book.go(to: locator)
                             router.panel = .none
