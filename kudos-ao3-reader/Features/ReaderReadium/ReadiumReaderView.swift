@@ -1612,6 +1612,7 @@ extension ReadiumReaderView {
         if DebugLaunchRoute.takeSheet("readerfind") { router.panel = .readerFind }
         if DebugLaunchRoute.takeSheet("readerdisplay") { router.panel = .readerDisplay }
         if DebugLaunchRoute.takeSheet("readerspeech") { showingSpeechSettings = true }
+        if DebugLaunchRoute.takeSheet("readerend") { book.goToPublicationEndForDebug() }
         if DebugLaunchRoute.takeSheet("readernote") {
             let note = ReadingAnnotation(
                 work: work,

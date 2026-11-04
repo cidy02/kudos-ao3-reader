@@ -364,6 +364,12 @@ enum DebugShots {
         ("remoteselect", DebugShot(route: "tagsearch:Star Wars", sheets: ["remoteselect"])),
         ("expandrow", DebugShot(route: "query:Winter Garden")),
         ("searchfilters", DebugShot(route: "search", sheets: ["searchfilters"])),
+        ("collectionaddworks", DebugShot(route: "collection:Comfort reads", sheets: ["collectionaddworks"])),
+        ("libedit", DebugShot(route: "library", sheets: ["libedit"])),
+        ("sortby", DebugShot(route: starSearch, pushes: ["sortby"])),
+        ("readerend", DebugShot(route: readSodium, sheets: ["readerend"])),
+        ("welcome", DebugShot(route: "welcome")),
+        ("protectlibrary", DebugShot(route: "protectlibrary")),
     ]
 
     static var names: [String] { ordered.map(\.name) }
@@ -481,7 +487,8 @@ enum DebugLaunchRoute {
     }
 
     static var wantsSearchFilters: Bool {
-        wantsSheet("savesearch") || wantsSheet("tagpicker") || wantsPush("languagepicker") || wantsSheet("searchfilters")
+        wantsSheet("savesearch") || wantsSheet("tagpicker") || wantsPush("languagepicker") || wantsPush("sortby")
+            || wantsSheet("searchfilters")
     }
 
     /// A recovery copy for the notes field of work 1001, only for `shot:recovery`.

@@ -164,6 +164,9 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                     DebugLaunchRoute.applyLibrary(to: &path, collections: collections)
                     if DebugLaunchRoute.wantsSheet("libpicker") { router.panel = .libraryFilters }
                     if DebugLaunchRoute.takeSheet("newcollection") { showingNewCollection = true }
+                    if DebugLaunchRoute.takeSheet("libedit") || DebugLaunchRoute.takeSheet("editshelves") {
+                        showingEditShelves = true
+                    }
                     if DebugLaunchRoute.wantsSheet("bulktag") {
                         for work in works.filter({ !$0.isQueueOnlyWork }).prefix(2) {
                             selection.insert(work.id)
