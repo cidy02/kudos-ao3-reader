@@ -30,7 +30,7 @@ struct WelcomeView: View {
                 .accessibilityHidden(true)
 
             VStack(spacing: 8) {
-                Text("Welcome to Kudos")
+                Text("\(Text("Welcome to").foregroundStyle(.primary))\n\(Text("Kudos").foregroundStyle(.accentInk))")
                     .font(.largeTitle.bold())
                     .multilineTextAlignment(.center)
                 Text("Free to use • Ad-free • Built by fans")

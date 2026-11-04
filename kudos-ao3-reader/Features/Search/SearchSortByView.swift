@@ -40,7 +40,12 @@ struct SearchSortByView: View {
     private var waysToFindSection: some View {
         Section {
             ForEach(SearchWaysToFind.allCases) { preset in
-                checkRow(preset.title, subtitle: preset.subtitle, isOn: preset.isApplied(in: filters)) {
+                checkRow(
+                    icon: iconTile(for: preset),
+                    preset.title,
+                    subtitle: preset.subtitle,
+                    isOn: preset.isApplied(in: filters)
+                ) {
                     SearchWaysToFind.toggle(preset, in: &filters, defaultSort: defaultSort)
                 }
             }
@@ -52,7 +57,11 @@ struct SearchSortByView: View {
     private var loadSection: some View {
         Section {
             ForEach(columns) { column in
-                checkRow(column.title, isOn: filters.sort == column) {
+                checkRow(
+                    icon: iconTile(for: column),
+                    column.title,
+                    isOn: filters.sort == column
+                ) {
                     guard filters.sort != column else { return }
                     filters.sort = column
                     // A rank owns the Order control; AO3 then loads in the column's
@@ -72,7 +81,12 @@ struct SearchSortByView: View {
     private func rankSection(_ ranking: Binding<LoadedWorksRanking>) -> some View {
         Section {
             ForEach(LoadedWorksRank.allCases) { rank in
-                checkRow(rank.title, subtitle: rank.subtitle, isOn: ranking.wrappedValue.rank == rank) {
+                checkRow(
+                    icon: iconTile(for: rank),
+                    rank.title,
+                    subtitle: rank.subtitle,
+                    isOn: ranking.wrappedValue.rank == rank
+                ) {
                     ranking.wrappedValue.select(rank, filters: &filters)
                 }
             }
@@ -147,6 +161,7 @@ struct SearchSortByView: View {
     // MARK: - Rows
 
     private func checkRow(
+        icon: SettingsIconTile,
         _ title: String,
         subtitle: String? = nil,
         isOn: Bool,
@@ -154,6 +169,7 @@ struct SearchSortByView: View {
     ) -> some View {
         Button(action: action) {
             HStack(spacing: 12) {
+                icon
                 titled(title, subtitle)
                 Spacer(minLength: 0)
                 if isOn {
@@ -178,6 +194,63 @@ struct SearchSortByView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
+        }
+    }
+
+    // MARK: - Icons
+
+    private func iconTile(for preset: SearchWaysToFind) -> SettingsIconTile {
+        switch preset {
+        case .readerFavourites:
+            SettingsIconTile(hex: "#821019", systemImage: "heart")
+        case .newAndLoved:
+            SettingsIconTile(hex: "#E07000", systemImage: "calendar")
+        case .hiddenGems:
+            SettingsIconTile(hex: "#5856D6", systemImage: "sparkles")
+        case .activeWIPs:
+            SettingsIconTile(hex: "#2F8F3A", systemImage: "clock")
+        }
+    }
+
+    private func iconTile(for column: AO3SearchFilters.Sort) -> SettingsIconTile {
+        switch column {
+        case .relevance:
+            SettingsIconTile(hex: "#1E63C8", systemImage: "sparkles")
+        case .dateUpdated:
+            SettingsIconTile(hex: "#E07000", systemImage: "clock.arrow.circlepath")
+        case .datePosted:
+            SettingsIconTile(hex: "#E07000", systemImage: "calendar")
+        case .workTitle:
+            SettingsIconTile(hex: "#6C6C70", systemImage: "textformat")
+        case .creator:
+            SettingsIconTile(hex: "#6C6C70", systemImage: "person")
+        case .words:
+            SettingsIconTile(hex: "#7B3FA0", systemImage: "text.alignleft")
+        case .hits:
+            SettingsIconTile(hex: "#5856D6", systemImage: "eye")
+        case .kudos:
+            SettingsIconTile(hex: "#821019", systemImage: "heart")
+        case .comments:
+            SettingsIconTile(hex: "#2F8F3A", systemImage: "bubble.left")
+        case .bookmarks:
+            SettingsIconTile(hex: "#C25E00", systemImage: "bookmark")
+        }
+    }
+
+    private func iconTile(for rank: LoadedWorksRank) -> SettingsIconTile {
+        switch rank {
+        case .ao3Order:
+            SettingsIconTile(hex: "#6C6C70", systemImage: "line.3.horizontal")
+        case .kudosPerHitAdjusted:
+            SettingsIconTile(hex: "#821019", systemImage: "heart")
+        case .savesPerKudos:
+            SettingsIconTile(hex: "#C25E00", systemImage: "bookmark")
+        case .commentsPerKudos:
+            SettingsIconTile(hex: "#2F8F3A", systemImage: "bubble.left")
+        case .momentum:
+            SettingsIconTile(hex: "#1E63C8", systemImage: "chart.line.uptrend.xyaxis")
+        case .kudosPerThousandWords:
+            SettingsIconTile(hex: "#7B3FA0", systemImage: "text.alignleft")
         }
     }
 
