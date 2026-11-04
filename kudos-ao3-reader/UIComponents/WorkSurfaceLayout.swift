@@ -184,38 +184,3 @@ enum WorkListLayoutMigration {
     }
 }
 
-/// What a long-press preview may say. Pure so the blur rule is testable: a
-/// hidden work has a title and nothing else.
-struct WorkLongPressFacts: Equatable, Sendable {
-    var title: String
-    var summary: String
-    var tags: [String]
-
-    static let hiddenTitle = "Hidden work"
-
-    static func hidden() -> Self {
-        Self(title: hiddenTitle, summary: "", tags: [])
-    }
-
-    /// Summary is stripped of HTML. Tag groups are fandoms, then warnings,
-    /// relationships, characters and freeforms. Names are trimmed, empties
-    /// drop, and the first spelling of a repeated name wins.
-    static func visible(title: String, summaryHTML: String, tagGroups: [[String]]) -> Self {
-        Self(
-            title: title,
-            summary: summaryHTML.strippingHTML().trimmingCharacters(in: .whitespacesAndNewlines),
-            tags: tags(groups: tagGroups)
-        )
-    }
-
-    static func tags(groups: [[String]]) -> [String] {
-        var seen = Set<String>()
-        var result: [String] = []
-        for name in groups.joined() {
-            let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty, seen.insert(trimmed).inserted else { continue }
-            result.append(trimmed)
-        }
-        return result
-    }
-}

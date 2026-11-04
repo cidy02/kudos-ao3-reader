@@ -137,21 +137,6 @@ struct WorkSurfaceLayoutTests {
         #expect(known.contains("0 kudos"))
     }
 
-    @Test func longPressPreviewKeepsSummaryAndFandomsAndHidesABlurredWork() {
-        let hidden = WorkLongPressFacts.hidden()
-        #expect(hidden.title == WorkLongPressFacts.hiddenTitle)
-        #expect(hidden.summary.isEmpty)
-        #expect(hidden.tags.isEmpty)
-
-        let visible = WorkLongPressFacts.visible(
-            title: "Title",
-            summaryHTML: "<p>Hello &amp; welcome</p>",
-            tagGroups: [["Fandom"], ["Fandom", " "], ["Romance"]]
-        )
-        #expect(visible.summary == "Hello & welcome")
-        #expect(visible.tags == ["Fandom", "Romance"])
-    }
-
     @Test func ledgerFiguresNamesEveryStatAndSpeaksKudos() {
         let figures = WorkStat.ledgerFigures(
             language: "English",
