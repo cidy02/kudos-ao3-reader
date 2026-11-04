@@ -46,7 +46,9 @@ nonisolated enum ReaderTimeEstimate {
     /// calibration this file already documents (~200 wpm × `secondsPerPosition`
     /// seconds ≈ 1 KB of content), so the two models agree on "how much text is
     /// in a position" and differ only in how fast that text is consumed.
-    private static let wordsPerPosition = 200.0 * secondsPerPosition / 60.0
+    private static let wordsPerPosition = readingWordsPerMinute * secondsPerPosition / 60.0
+    /// Silent reading speed behind every "time left" label.
+    static let readingWordsPerMinute = 200.0
 
     /// Seconds to *speak* one position at read-aloud `rate` (the app's 0.5–1.5
     /// multiplier on `AVSpeechUtteranceDefaultSpeechRate`, see

@@ -36,7 +36,11 @@ struct ReaderSpeechSettingsSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
+                    Button { dismiss() } label: {
+                        Image(systemName: "checkmark")
+                    }
+                    .sheetConfirmStyle()
+                    .accessibilityLabel("Done")
                 }
             }
         }

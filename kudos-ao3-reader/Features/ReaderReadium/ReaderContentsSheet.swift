@@ -47,6 +47,13 @@ nonisolated enum ReaderContentsSegment: String, CaseIterable, Identifiable {
 
 /// Copy shared by the segmented control and the reader's live-place line.
 nonisolated enum ReaderContentsLabels {
+    struct ChapterRowPresentation: Equatable, Sendable {
+        let number: String
+        let isCurrent: Bool
+        let state: String
+        let accessibilityLabel: String
+    }
+
     static func segmentTitle(_ segment: ReaderContentsSegment, count: Int) -> String {
         guard segment != .chapters, count > 0 else { return segment.title }
         return "\(segment.title) · \(count)"
@@ -60,6 +67,67 @@ nonisolated enum ReaderContentsLabels {
         }
         return "\(place) · about \(ReaderTimeEstimate.workRemainingLabel(positions: remainingPositions))"
     }
+
+    static func chapterRow(
+        section: ReaderSection,
+        currentSpineIndex: Int?,
+        currentChapterProgression: Double?,
+        storyChapterWords: [Int]?
+    ) -> ChapterRowPresentation {
+        let isCurrent = currentSpineIndex != nil && section.spineIndex == currentSpineIndex
+        let number: String
+        if section.kind == .chapter, let storyIndex = section.storyChapterIndex {
+            number = "\(storyIndex)"
+        } else {
+            number = ""
+        }
+
+        let state: String
+        if isCurrent {
+            if let progression = currentChapterProgression {
+                let percent = max(0, min(100, Int((progression * 100).rounded())))
+                state = "\(percent)% · reading"
+            } else {
+                state = "0% · reading"
+            }
+        } else if let currentSpineIndex {
+            if section.spineIndex < currentSpineIndex {
+                state = section.kind == .chapter ? "read" : ""
+            } else {
+                if section.kind == .chapter,
+                   let storyIndex = section.storyChapterIndex,
+                   let words = storyChapterWords,
+                   words.indices.contains(storyIndex - 1),
+                   words[storyIndex - 1] > 0 {
+                    let wordCount = words[storyIndex - 1]
+                    let minutes = max(1, Int((Double(wordCount) / ReaderTimeEstimate.readingWordsPerMinute).rounded()))
+                    state = ReaderTimeEstimate.durationLabel(minutes: minutes)
+                } else {
+                    state = ""
+                }
+            }
+        } else {
+            state = ""
+        }
+
+        let accessibilityLabel: String
+        var parts: [String] = []
+        if !number.isEmpty {
+            parts.append(number)
+        }
+        parts.append(section.title)
+        if !state.isEmpty {
+            parts.append(state)
+        }
+        accessibilityLabel = parts.joined(separator: ", ")
+
+        return ChapterRowPresentation(
+            number: number,
+            isCurrent: isCurrent,
+            state: state,
+            accessibilityLabel: accessibilityLabel
+        )
+    }
 }
 
 /// Contents / Bookmarks / Highlights, segmented. All three navigate by tapping a
@@ -69,6 +137,9 @@ struct ReaderContentsSheet: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Binding var segment: ReaderContentsSegment
     let sections: [ReaderSection]
+    var currentSpineIndex: Int? = nil
+    var currentChapterProgression: Double? = nil
+    var chapterLengths: ChapterLengths? = nil
     let bookmarks: [ReadingAnnotation]
     let notes: [ReadingAnnotation]
     let progressLabel: String?
@@ -149,33 +220,19 @@ struct ReaderContentsSheet: View {
     private var chapterList: some View {
         List {
             ForEach(sections.filter { $0.kind != .other }) { section in
+                let presentation = ReaderContentsLabels.chapterRow(
+                    section: section,
+                    currentSpineIndex: currentSpineIndex,
+                    currentChapterProgression: currentChapterProgression,
+                    storyChapterWords: chapterLengths?.words
+                )
                 Button {
                     onSelectChapter(section)
                 } label: {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text(section.title)
-                            .foregroundStyle(.primary)
-                            // Two lines hold about two words at the accessibility sizes
-                            // ("Chapter 2: Nine Min…").
-                            .lineLimit(dynamicTypeSize.isAccessibilitySize ? 5 : 2)
-                        Spacer(minLength: 8)
-                        if let percent = chapterStartPercent(section) {
-                            Text("\(percent)%")
-                                .font(.caption)
-                                .monospacedDigit()
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    // `.buttonStyle(.plain)` keeps the label `.primary` instead
-                    // of accent-tinted, but it also draws no background — so
-                    // without claiming the full width and an explicit shape,
-                    // only the glyphs themselves are tappable and the rest of
-                    // the row does nothing. Same pitfall the reader chrome
-                    // documents for every one of its buttons.
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
+                    chapterRowContent(section: section, presentation: presentation)
                 }
                 .buttonStyle(.plain)
+                .listRowBackground(presentation.isCurrent ? theme.effectiveTint.opacity(0.08) : nil)
                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                     // Full swipe takes the first action — Go, matching the tap.
                     // Go only needs the spine index, so it always works.
@@ -213,6 +270,66 @@ struct ReaderContentsSheet: View {
             }
         }
         .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+    }
+
+    @ViewBuilder
+    private func chapterRowContent(
+        section: ReaderSection,
+        presentation: ReaderContentsLabels.ChapterRowPresentation
+    ) -> some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    if !presentation.number.isEmpty {
+                        Text(presentation.number)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    Text(section.title)
+                        .font(.body.weight(presentation.isCurrent ? .semibold : .regular))
+                        .foregroundStyle(presentation.isCurrent ? theme.accentInk : Color.primary)
+                        .lineLimit(5)
+                }
+                if !presentation.state.isEmpty {
+                    Text(presentation.state)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(presentation.accessibilityLabel)
+        } else {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text(presentation.number.isEmpty ? " " : presentation.number)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                    .frame(minWidth: 26, alignment: .leading)
+
+                Text(section.title)
+                    .font(.body.weight(presentation.isCurrent ? .semibold : .regular))
+                    .foregroundStyle(presentation.isCurrent ? theme.accentInk : Color.primary)
+                    .lineLimit(2)
+
+                Spacer(minLength: 8)
+
+                if !presentation.state.isEmpty {
+                    Text(presentation.state)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+            }
+            .padding(.vertical, 4)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(presentation.accessibilityLabel)
+        }
     }
 
     @ViewBuilder
@@ -243,6 +360,7 @@ struct ReaderContentsSheet: View {
                 }
             }
             .listStyle(.plain)
+            .scrollContentBackground(.hidden)
         }
     }
 }

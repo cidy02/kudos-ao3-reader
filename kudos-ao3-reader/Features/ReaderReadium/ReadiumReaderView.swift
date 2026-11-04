@@ -125,6 +125,7 @@ struct ReadiumReaderView: View {
     private var orientationLock: ReaderOrientationLock { .shared }
 
     @State private var book = ReadiumBook()
+    @State private var chapterLengths: ChapterLengths?
     /// Debounces SwiftData writes for the Readium locator stream (see
     /// `ReadiumProgressPersistence`). UI locator / progress pill stay live.
     @State private var progressPersistence = ReadiumProgressPersistence()
@@ -435,6 +436,9 @@ struct ReadiumReaderView: View {
                 book.renderedLineHeightPoints = textStyle.fontSizePt * textStyle.lineHeight
                 book.renderedPageMarginPoints = max(0, textStyle.margin)
                 await openBook()
+            }
+            .task(id: ChapterLengthCache.taskKey(for: work)) {
+                chapterLengths = await ChapterLengthCache.lengths(for: work)
             }
             .onChange(of: preferencesToken) { _, _ in applyReaderPreferences() }
             // The Display / Customize controls live in a sheet over the reader; a
@@ -1717,6 +1721,9 @@ extension ReadiumReaderView {
                     ReaderContentsSheet(
                         segment: $contentsSegment,
                         sections: book.sections,
+                        currentSpineIndex: currentSpineIndex ?? work.lastSpineIndex,
+                        currentChapterProgression: book.currentLocator?.locations.progression ?? (work.lastScrollFraction > 0 ? work.lastScrollFraction : 0),
+                        chapterLengths: chapterLengths,
                         bookmarks: bookmarkAnnotations,
                         notes: noteAnnotations,
                         progressLabel: contentsProgressLabel,
@@ -1787,6 +1794,10 @@ extension ReadiumReaderView {
         .presentationContentInteraction(.scrolls)
         // No dim over the page (board 27). The fan's own backdrop is already clear.
         .presentationBackgroundInteraction(.enabled(upThrough: .large))
+        .presentationBackground {
+            themeManager.appTheme.cardBackdrop
+                .ignoresSafeArea()
+        }
         // Annotation rows and the segmented control tint from the theme, not the
         // raw accent, so Sepia keeps its warm brown.
         .accentTint(themeManager.effectiveTint, on: themeManager.readerChromeTheme)
