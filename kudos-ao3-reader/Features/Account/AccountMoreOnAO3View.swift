@@ -80,7 +80,7 @@ struct AccountMoreOnAO3View: View {
     var body: some View {
         List {
             Section {
-                SectionRuleHeader(title: "Post and manage")
+                SectionRuleHeader(title: "Post and Manage")
                     .pageBodyRow(top: 14, gutter: selfGuttered)
                 postAndManagePanel.pageBodyRow(top: 8, gutter: gutter)
                 creatorToolsFootnote.pageBodyRow(top: 8, gutter: gutter)
@@ -93,13 +93,13 @@ struct AccountMoreOnAO3View: View {
             }
 
             Section {
-                SectionRuleHeader(title: "Your account")
+                SectionRuleHeader(title: "Your Account")
                     .pageBodyRow(top: 18, gutter: selfGuttered)
                 yourAccountPanel.pageBodyRow(top: 8, gutter: gutter)
             }
 
             Section {
-                SectionRuleHeader(title: "The archive")
+                SectionRuleHeader(title: "The Archive")
                     .pageBodyRow(top: 18, gutter: selfGuttered)
                 archivePanel.pageBodyRow(top: 8, gutter: gutter)
                 archiveFootnote.pageBodyRow(top: 8, gutter: gutter)
@@ -239,7 +239,7 @@ struct AccountMoreOnAO3View: View {
     private var challengesPanel: some View {
         VStack(spacing: 0) {
             AccountExternalNavCard(
-                title: "Sign-ups",
+                title: "Sign-Ups",
                 systemImage: "pencil.and.list.clipboard",
                 pathSuffix: "signups",
                 isFormRow: true

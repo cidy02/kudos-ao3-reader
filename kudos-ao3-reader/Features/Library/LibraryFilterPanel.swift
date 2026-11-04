@@ -90,7 +90,7 @@ struct LibraryFilterPanel: View {
                             color: Color(red: 0x1E / 255.0, green: 0x63 / 255.0, blue: 0xC8 / 255.0),
                             systemImage: "arrow.up.arrow.down"
                         )
-                        Picker("Sort by", selection: $filters.sort) {
+                        Picker("Sort By", selection: $filters.sort) {
                             ForEach(LibrarySort.allCases) { Text($0.title).tag($0) }
                         }
                     }
@@ -194,7 +194,7 @@ struct LibraryFilterPanel: View {
                         selection: $filters.excludeTags
                     )
                 } header: {
-                    groupLabel("Tags and creators")
+                    groupLabel("Tags and Creators")
                 }
 
                 // MARK: Length and Status
@@ -215,7 +215,7 @@ struct LibraryFilterPanel: View {
                                 systemImage: "globe"
                             )
                             Picker("Language", selection: $filters.language) {
-                                Text("Any language").tag("")
+                                Text("Any Language").tag("")
                                 ForEach(languageOptions, id: \.self) { Text($0).tag($0) }
                             }
                         }
@@ -223,7 +223,7 @@ struct LibraryFilterPanel: View {
 
                     FilterLengthSection(wordsFrom: $filters.wordsFrom, wordsTo: $filters.wordsTo)
                 } header: {
-                    groupLabel("Length and status")
+                    groupLabel("Length and Status")
                 }
 
                 // MARK: Reset row
@@ -233,7 +233,7 @@ struct LibraryFilterPanel: View {
                     } label: {
                         HStack {
                             Spacer()
-                            Text("Reset all filters")
+                            Text("Reset All Filters")
                                 .foregroundStyle(
                                     filters.hasActiveFilters
                                         ? theme.appTheme.errorColor

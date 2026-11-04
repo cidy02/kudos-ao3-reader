@@ -70,8 +70,10 @@ struct SubjectPanelSegmentRow: ViewModifier {
     /// then the trailing inset is the card's edge, not room for a drag handle.
     var padsContent: Bool = true
     var cornerRadius: CGFloat = SubjectMetrics.cornerRadius
+    var fill: Color? = nil
 
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(\.subjectScreenRole) private var screenRole
 
     func body(content: Content) -> some View {
         let theme = themeManager.appTheme
@@ -89,6 +91,7 @@ struct SubjectPanelSegmentRow: ViewModifier {
         // With padded content the trailing inset is wider than the card's own
         // edge so the system's drag handle sits inside the card, not on its rim.
         let trailing: CGFloat = padsContent ? gutter + 8 : gutter
+        let rowFill = fill ?? (screenRole == .grouped ? theme.cardSurface : theme.glassFill(0.09))
         return content
             .padding(.leading, contentInset)
             .padding(.vertical, verticalInset)
@@ -96,7 +99,7 @@ struct SubjectPanelSegmentRow: ViewModifier {
             .listRowSeparator(.hidden)
             .listRowBackground(
                 shape
-                    .fill(theme.glassFill(0.09))
+                    .fill(rowFill)
                     .overlay(alignment: .bottom) {
                         if !isLast { SubjectRowSeparator() }
                     }
@@ -131,9 +134,9 @@ extension View {
     /// One segment of a panel card, for a `List` row that has to stay a row.
     /// A `SubjectFormRow` as segment `index` of a `count`-row card — the
     /// shape every multi-link card needs so each link gets its own `List` row.
-    func panelSegment(_ index: Int, of count: Int, gutter: CGFloat) -> some View {
+    func panelSegment(_ index: Int, of count: Int, gutter: CGFloat, fill: Color? = nil) -> some View {
         subjectPanelSegmentRow(
-            isFirst: index == 0, isLast: index == count - 1, gutter: gutter, padsContent: false
+            isFirst: index == 0, isLast: index == count - 1, gutter: gutter, padsContent: false, fill: fill
         )
     }
 
@@ -141,10 +144,11 @@ extension View {
         isFirst: Bool,
         isLast: Bool,
         gutter: CGFloat,
-        padsContent: Bool = true
+        padsContent: Bool = true,
+        fill: Color? = nil
     ) -> some View {
         modifier(SubjectPanelSegmentRow(
-            isFirst: isFirst, isLast: isLast, gutter: gutter, padsContent: padsContent
+            isFirst: isFirst, isLast: isLast, gutter: gutter, padsContent: padsContent, fill: fill
         ))
     }
 }

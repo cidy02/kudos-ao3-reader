@@ -39,7 +39,7 @@ struct FandomListFilterSheet: View {
                     spacer
                     minimumWorksBlock
                     spacer
-                    sectionLabel("Tag kinds")
+                    sectionLabel("Tag Kinds")
                     toggleRow(
                         title: "Hide RPF tags",
                         detail: tagCountLabel(tallies.rpfTags),
@@ -60,7 +60,7 @@ struct FandomListFilterSheet: View {
                     spacer
                     sectionLabel("Yours")
                     toggleRow(
-                        title: "Favourited only",
+                        title: "Favourited Only",
                         detail: tagCountLabel(tallies.favouritedTags),
                         isOn: $options.favouritedOnly
                     )
@@ -73,7 +73,7 @@ struct FandomListFilterSheet: View {
                     spacer
                     sectionLabel("Grouping")
                     toggleRow(
-                        title: "Group variants",
+                        title: "Group Variants",
                         detail: "Group sibling tags sharing a title",
                         isOn: $groupsVariants
                     )
@@ -82,7 +82,7 @@ struct FandomListFilterSheet: View {
                         title: "Only fandoms with more than one tag",
                         detail: groupsVariants
                             ? familyCountLabel(tallies.multiTagFamilies)
-                            : "Turn on Group variants to use this filter",
+                            : "Turn on Group Variants to use this filter",
                         isOn: $options.multiTagOnly
                     )
                     .disabled(!groupsVariants)
@@ -126,7 +126,7 @@ struct FandomListFilterSheet: View {
 
     private var sortBlock: some View {
         VStack(alignment: .leading, spacing: 8) {
-            sectionLabel("Sort by")
+            sectionLabel("Sort By")
             SubjectSegmentedControl(
                 options: FandomFamilySort.allCases,
                 title: { $0.title },
@@ -137,7 +137,7 @@ struct FandomListFilterSheet: View {
 
     private var minimumWorksBlock: some View {
         VStack(alignment: .leading, spacing: 8) {
-            sectionLabel("Minimum works")
+            sectionLabel("Minimum Works")
             SubjectSegmentedControl(
                 options: FandomListFilterOptions.MinimumWorks.allCases,
                 title: { $0.title },

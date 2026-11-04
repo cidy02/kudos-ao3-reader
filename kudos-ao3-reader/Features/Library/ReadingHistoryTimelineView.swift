@@ -217,7 +217,7 @@ struct ReadingHistoryTimelineList<Header: View, OffTimelineRow: View>: View {
             .filter { entry in byID[entry.workID].map { !gate.isConcealed($0, enabled: hideMature) } ?? false }
             .prefix(3))
         if !entries.isEmpty {
-            SectionRuleHeader(title: "Most read", count: entries.count)
+            SectionRuleHeader(title: "Most Read", count: entries.count)
                 .pageBodyRow(top: 22, gutter: 0)
             ForEach(Array(entries.enumerated()), id: \.element.id) { rank, entry in
                 if let work = byID[entry.workID] {

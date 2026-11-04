@@ -52,7 +52,7 @@ struct LibraryFilterCollisionCard: View {
                     .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Drop one filter")
+                    Text("Drop One Filter")
                         .font(.system(size: 8.5, weight: .bold))
                         .tracking(0.85)
                         .textCase(.uppercase)
@@ -94,7 +94,7 @@ struct LibraryFilterCollisionCard: View {
                 Button {
                     filters = LibraryFilters()
                 } label: {
-                    Text("Clear all filters")
+                    Text("Clear All Filters")
                         .font(.system(size: buttonLabelSize, weight: .semibold))
                         .frame(maxWidth: .infinity)
                         .frame(minHeight: 42)

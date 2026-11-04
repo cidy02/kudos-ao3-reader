@@ -73,7 +73,7 @@ struct NewCollectionSheet: View {
             .cardList()
             // Rows at their own padding, not the List minimum (L3-FORM-1).
             .environment(\.defaultMinListRowHeight, 0)
-            .navigationTitle("New collection")
+            .navigationTitle("New Collection")
             #if os(iOS)
                 .navigationBarTitleDisplayMode(.inline)
             #endif
@@ -131,8 +131,8 @@ struct NewCollectionSheet: View {
 
     private var behaviourPanel: some View {
         VStack(spacing: 0) {
-            SubjectFormRow(label: "Keep downloads", arrangement: .control) {
-                Toggle("Keep downloads", isOn: $keepsWorksOffline).labelsHidden().accentFill()
+            SubjectFormRow(label: "Keep Downloads", arrangement: .control) {
+                Toggle("Keep Downloads", isOn: $keepsWorksOffline).labelsHidden().accentFill()
             }
             SubjectRowSeparator()
             SubjectFormRow(label: "Show on Home", arrangement: .control) {
@@ -234,7 +234,7 @@ struct CollectionReorderSheet: View {
                 }
 
                 Section {
-                    SubjectFieldLabel(text: "Reading order", style: .formGroup)
+                    SubjectFieldLabel(text: "Reading Order", style: .formGroup)
                         .pageBodyRow(top: 18, gutter: gutter)
                 }
 
@@ -281,7 +281,7 @@ struct CollectionReorderSheet: View {
             .cardList()
             // Rows at their own padding, not the List minimum (L3-FORM-1).
             .environment(\.defaultMinListRowHeight, 0)
-            .navigationTitle("Reorder works")
+            .navigationTitle("Reorder Works")
             #if os(iOS)
                 .navigationBarTitleDisplayMode(.inline)
             #endif

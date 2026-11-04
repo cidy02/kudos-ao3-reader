@@ -56,7 +56,7 @@ struct QueueTagManagerView: View {
 
             if !used.isEmpty {
                 Section {
-                    groupLabel("In this queue")
+                    groupLabel("In This Queue")
                     tagPanel(used, counts: counts).pageBodyRow(top: 8, gutter: gutter)
                 }
             }
@@ -83,7 +83,7 @@ struct QueueTagManagerView: View {
         .cardList()
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
-        .subjectScreenWash(title: "Manage tags", palette: palette)
+        .subjectScreenWash(title: "Manage Tags", palette: palette)
         #if DEBUG
         .task {
             if DebugLaunchRoute.takePush("queuetagedit") {
@@ -183,20 +183,20 @@ struct QueueTagManagerView: View {
         Button {
             editing = tag
         } label: {
-            Label("Merge into…", systemImage: "arrow.triangle.merge")
+            Label("Merge Into…", systemImage: "arrow.triangle.merge")
         }
         Button {
             dismiss()
             onShowOnlyTag(tag)
         } label: {
-            Label("Show only this tag", systemImage: "line.3.horizontal.decrease.circle")
+            Label("Show Only This Tag", systemImage: "line.3.horizontal.decrease.circle")
         }
         Menu {
             ForEach(otherQueues) { destination in
                 Button(destination.displayName) { copy(tag, to: destination) }
             }
         } label: {
-            Label("Copy tag to another queue", systemImage: "square.on.square")
+            Label("Copy Tag to Another Queue", systemImage: "square.on.square")
         }
         .disabled(otherQueues.isEmpty)
         Divider()
@@ -204,7 +204,7 @@ struct QueueTagManagerView: View {
             pendingRemoval = tag
         } label: {
             Label(
-                "Remove from \(workCount.compactCount) work\(workCount == 1 ? "" : "s")",
+                "Remove from \(workCount.compactCount) \(workCount == 1 ? "Work" : "Works")",
                 systemImage: "trash"
             )
         }
@@ -226,7 +226,7 @@ struct QueueTagManagerView: View {
                 .foregroundStyle(themeManager.accentInk)
                 .frame(width: 20)
                 .accessibilityHidden(true)
-            TextField("New tag", text: $newTagName)
+            TextField("New Tag", text: $newTagName)
                 .font(.system(size: inputSize))
                 .onSubmit(addTypedTag)
             // Always present, dimmed while empty, as the old screen had it —
@@ -371,7 +371,7 @@ struct QueueTagEditSheet: View {
 
                 if !siblings.isEmpty {
                     Section {
-                        groupLabel("Merge into another tag")
+                        groupLabel("Merge into Another Tag")
                         mergePanel(counts: counts).pageBodyRow(top: 8, gutter: gutter)
                         footnote(mergeNote(workCount: workCount))
                     }
@@ -381,8 +381,8 @@ struct QueueTagEditSheet: View {
                     groupLabel("Remove")
                     SubjectFormRow(
                         label: workCount == 0
-                            ? "Remove from this queue"
-                            : "Remove tag from \(workCount) work\(workCount == 1 ? "" : "s")",
+                            ? "Remove from This Queue"
+                            : "Remove Tag from \(workCount) \(workCount == 1 ? "Work" : "Works")",
                         isDestructive: true,
                         action: { confirmStrip = true }
                     ) { EmptyView() }
@@ -393,7 +393,7 @@ struct QueueTagEditSheet: View {
             .cardList()
             // Rows at their own padding, not the List minimum (L3-FORM-1).
             .environment(\.defaultMinListRowHeight, 0)
-            .navigationTitle("Edit tag")
+            .navigationTitle("Edit Tag")
             #if os(iOS)
                 .navigationBarTitleDisplayMode(.inline)
             #endif

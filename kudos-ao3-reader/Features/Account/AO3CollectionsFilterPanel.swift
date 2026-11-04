@@ -42,7 +42,7 @@ struct AO3CollectionsFilterPanel: View {
             .safeAreaInset(edge: .bottom) { resetBar }
             // No `.appThemedScroll()`: its opaque theme ground sat in front of the wash
             // below, which then showed only in Light (A102). The wash paints the ground.
-            .navigationTitle("Sort and filter")
+            .navigationTitle("Sort and Filter")
             #if os(iOS)
                 .navigationBarTitleDisplayMode(.inline)
             #endif
@@ -74,13 +74,13 @@ struct AO3CollectionsFilterPanel: View {
 
     private var sortGroup: some View {
         VStack(alignment: .leading, spacing: 8) {
-            SubjectFieldLabel(text: "Sort by", style: .formGroup)
+            SubjectFieldLabel(text: "Sort By", style: .formGroup)
             VStack(spacing: 0) {
                 SubjectFormRow(
-                    label: "Order by",
+                    label: "Order By",
                     arrangement: .control,
                     trailing: {
-                        Picker("Order by", selection: $editor.draft.sort) {
+                        Picker("Order By", selection: $editor.draft.sort) {
                             ForEach(AO3CollectionsFilter.Sort.allCases, id: \.self) { sort in
                                 Text(sort.title).tag(sort)
                             }
@@ -117,11 +117,11 @@ struct AO3CollectionsFilterPanel: View {
 
     private var showOnlyGroup: some View {
         VStack(alignment: .leading, spacing: 8) {
-            SubjectFieldLabel(text: "Show only", style: .formGroup)
+            SubjectFieldLabel(text: "Show Only", style: .formGroup)
             VStack(spacing: 0) {
-                toggleRow("Open to new works", isOn: $editor.draft.showsOpenOnly)
+                toggleRow("Open to New Works", isOn: $editor.draft.showsOpenOnly)
                 SubjectRowSeparator()
-                toggleRow("Has works", isOn: $editor.draft.showsWithWorksOnly)
+                toggleRow("Has Works", isOn: $editor.draft.showsWithWorksOnly)
                 SubjectRowSeparator()
                 toggleRow("Moderated", isOn: $editor.draft.showsModeratedOnly)
                 SubjectRowSeparator()

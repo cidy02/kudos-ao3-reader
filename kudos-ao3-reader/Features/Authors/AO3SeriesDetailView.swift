@@ -123,7 +123,7 @@ struct AO3SeriesDetailView: View {
                             }
                             if canEditSeries {
                                 Button { isEditingSeries = true } label: {
-                                    Label("Edit series", systemImage: "square.and.pencil")
+                                    Label("Edit Series", systemImage: "square.and.pencil")
                                 }
                             }
                             Button { router.open(series.url) } label: {

@@ -170,7 +170,7 @@ struct AO3CollectionItemsView: View {
             }
         }
         .cardList()
-        .subjectScreenWash(title: "Collection items", palette: palette, role: .content)
+        .subjectScreenWash(title: "Collection Items", palette: palette, role: .content)
         .toolbar {
             if pendingCount > 0 {
                 ToolbarItem(placement: .primaryAction) {
@@ -629,22 +629,22 @@ struct AO3CollectionItemCard: View {
         VStack(spacing: 0) {
             if item.creatorApprovalIsEditable {
                 approvalRow(
-                    "Approved by creator",
+                    "Approved by Creator",
                     value: staging.creatorApproval(for: item),
                     set: { staging.setCreatorApproval($0, for: item) }
                 )
             } else {
-                readOnlyApproval("Approved by creator", value: item.creatorApproval)
+                readOnlyApproval("Approved by Creator", value: item.creatorApproval)
             }
             SubjectRowSeparator(inset: 0)
             if item.moderatorApprovalIsEditable {
                 approvalRow(
-                    "Approved by moderators",
+                    "Approved by Moderators",
                     value: staging.moderatorApproval(for: item),
                     set: { staging.setModeratorApproval($0, for: item) }
                 )
             } else {
-                readOnlyApproval("Approved by moderators", value: item.moderatorApproval)
+                readOnlyApproval("Approved by Moderators", value: item.moderatorApproval)
             }
             SubjectRowSeparator(inset: 0)
             flagRow(

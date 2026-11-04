@@ -47,7 +47,7 @@ struct DownloadDateImportConfirmation: View {
             Form {
                 if imports.count > 1 {
                     Section {
-                        Picker("Download date", selection: $batchChoice) {
+                        Picker("Download Date", selection: $batchChoice) {
                             Text("Use each file's download date").tag(BatchChoice.detected)
                             Text("Use today").tag(BatchChoice.today)
                         }

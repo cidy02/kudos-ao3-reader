@@ -85,7 +85,7 @@ struct PrivacyDataView: View {
             }
 
             Section {
-                SectionRuleHeader(title: "Stored on this device")
+                SectionRuleHeader(title: "Stored on This Device")
                     .pageBodyRow(top: 18, gutter: selfGuttered)
                 storedPanel.pageBodyRow(top: 8, gutter: gutter)
                 storedFootnote.pageBodyRow(top: 8, gutter: gutter)
@@ -99,13 +99,13 @@ struct PrivacyDataView: View {
             }
 
             Section {
-                SectionRuleHeader(title: "AO3 session")
+                SectionRuleHeader(title: "AO3 Session")
                     .pageBodyRow(top: 18, gutter: selfGuttered)
                 sessionPanel.pageBodyRow(top: 8, gutter: gutter)
             }
 
             Section {
-                SectionRuleHeader(title: "Read Aloud downloads")
+                SectionRuleHeader(title: "Read Aloud Downloads")
                     .pageBodyRow(top: 18, gutter: selfGuttered)
                 voicePackPanel.pageBodyRow(top: 8, gutter: gutter)
             }
@@ -192,14 +192,14 @@ struct PrivacyDataView: View {
     @ViewBuilder
     private var storedSizeRows: some View {
         SubjectFormRow(
-            label: "Downloaded works",
+            label: "Downloaded Works",
             value: byteLabel(footprint.downloadedWorkBytes),
             isMonospaced: true
         )
         if footprint.readingCopyBytes > 0 {
             SubjectRowSeparator()
             SubjectFormRow(
-                label: "Works you're reading",
+                label: "Works You're Reading",
                 value: byteLabel(footprint.readingCopyBytes),
                 isMonospaced: true
             )
@@ -207,7 +207,7 @@ struct PrivacyDataView: View {
         if footprint.preservedOriginalBytes > 0 {
             SubjectRowSeparator()
             SubjectFormRow(
-                label: "Original files kept",
+                label: "Original Files Kept",
                 value: byteLabel(footprint.preservedOriginalBytes),
                 isMonospaced: true
             )
@@ -215,14 +215,14 @@ struct PrivacyDataView: View {
         if footprint.importedFontBytes > 0 {
             SubjectRowSeparator()
             SubjectFormRow(
-                label: "Imported fonts",
+                label: "Imported Fonts",
                 value: byteLabel(footprint.importedFontBytes),
                 isMonospaced: true
             )
         }
         SubjectRowSeparator()
         SubjectFormRow(
-            label: "Draft recovery",
+            label: "Draft Recovery",
             value: byteLabel(footprint.draftRecoveryBytes),
             isMonospaced: true
         )
@@ -237,24 +237,24 @@ struct PrivacyDataView: View {
     @ViewBuilder
     private var storedCountRows: some View {
         SubjectFormRow(
-            label: "Reading positions",
+            label: "Reading Positions",
             value: countLabel(positionedWorks.count, "work"),
             isMonospaced: true
         )
         SubjectRowSeparator()
         SubjectFormRow(
-            label: "Local collections",
+            label: "Local Collections",
             value: "\(collections.count)",
             isMonospaced: true
         )
         SubjectRowSeparator()
         SubjectFormRow(
-            label: "Saved searches",
+            label: "Saved Searches",
             value: "\(savedSearches.count)",
             isMonospaced: true
         )
         SubjectRowSeparator()
-        SubjectFormRow(label: "Search history", value: "Not recorded")
+        SubjectFormRow(label: "Search History", value: "Not recorded")
     }
 
     private var storedFootnote: some View {
@@ -268,7 +268,7 @@ struct PrivacyDataView: View {
     private var clearPanel: some View {
         VStack(spacing: 0) {
             SubjectFormRow(
-                label: "Free up space",
+                label: "Free Up Space",
                 value: countLabel(freeableDownloads.count, "file"),
                 showsDisclosure: true,
                 isDisabled: freeableDownloads.isEmpty,
@@ -278,7 +278,7 @@ struct PrivacyDataView: View {
             )
             SubjectRowSeparator()
             SubjectFormRow(
-                label: "Clear reading positions",
+                label: "Clear Reading Positions",
                 value: countLabel(positionedWorks.count, "work"),
                 showsDisclosure: true,
                 isDisabled: positionedWorks.isEmpty,
@@ -288,7 +288,7 @@ struct PrivacyDataView: View {
             )
             SubjectRowSeparator()
             SubjectFormRow(
-                label: "Clear reading history",
+                label: "Clear Reading History",
                 value: countLabel(freedHistory.count, "work"),
                 showsDisclosure: true,
                 isDisabled: freedHistory.isEmpty,
@@ -298,7 +298,7 @@ struct PrivacyDataView: View {
             )
             SubjectRowSeparator()
             SubjectFormRow(
-                label: browseCacheCleared ? "Browse cache cleared" : "Clear browse cache",
+                label: browseCacheCleared ? "Browse Cache Cleared" : "Clear Browse Cache",
                 value: byteLabel(footprint.cacheBytes),
                 showsDisclosure: !browseCacheCleared,
                 isDisabled: browseCacheCleared,
@@ -326,17 +326,17 @@ struct PrivacyDataView: View {
             VStack(spacing: 0) {
                 switch auth.status {
                 case let .signedIn(username):
-                    SubjectFormRow(label: "Signed in", value: username)
+                    SubjectFormRow(label: "Signed In", value: username)
                     SubjectRowSeparator()
                     SubjectFormRow(
-                        label: "Remove AO3 session",
+                        label: "Remove AO3 Session",
                         value: "",
                         isDestructive: true,
                         action: { confirmingLogOut = true }
                     )
                     .logOutConfirmation(isPresented: $confirmingLogOut) { Task { await auth.logout() } }
                 default:
-                    SubjectFormRow(label: "AO3 account", value: "Not signed in")
+                    SubjectFormRow(label: "AO3 Account", value: "Not signed in")
                 }
             }
             .subjectPanel()

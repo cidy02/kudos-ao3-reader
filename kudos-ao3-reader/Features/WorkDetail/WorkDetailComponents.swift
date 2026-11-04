@@ -208,7 +208,7 @@ enum WorkDetailPresentation {
                 value: downloadedAt?.formatted(date: .abbreviated, time: .omitted) ?? "Not recorded",
                 action: .edit
             ),
-            MyCopyRow(kind: .tags, label: "Your tags", value: listed(tags), action: .add),
+            MyCopyRow(kind: .tags, label: "Your Tags", value: listed(tags), action: .add),
             MyCopyRow(kind: .collections, label: "Collections", value: listed(collections), action: .add),
             MyCopyRow(kind: .queues, label: "Queues", value: listed(queues), action: .add),
             MyCopyRow(kind: .file, label: "File", value: fileValue, action: nil)

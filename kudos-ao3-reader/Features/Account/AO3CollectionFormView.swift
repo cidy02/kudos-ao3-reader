@@ -89,7 +89,7 @@ struct AO3CollectionFormView: View {
                 if form != nil { formBody } else { EmptyView() }
             }
         }
-        .subjectScreenWash(title: isNew ? "New collection" : "Edit collection", palette: palette)
+        .subjectScreenWash(title: isNew ? "New Collection" : "Edit Collection", palette: palette)
         .task { if phase == .idle { await loadForm() } }
         .onDisappear { nameCheckTask?.cancel() }
         // 1bl: the alert says what AO3 actually does — including to other
@@ -136,15 +136,15 @@ struct AO3CollectionFormView: View {
             }
 
             group("Header", note: nameNote) {
-                textRow("Display title", text: binding.title,
+                textRow("Display Title", text: binding.title,
                         placeholder: "Required", errorKey: AO3CollectionParam.title)
                 SubjectRowSeparator()
                 nameRow(binding)
                 SubjectRowSeparator()
-                textRow("Parent collection", text: binding.parentName,
+                textRow("Parent Collection", text: binding.parentName,
                         placeholder: "None", errorKey: AO3CollectionParam.parentName)
                 SubjectRowSeparator()
-                textRow("Contact email", text: binding.email,
+                textRow("Contact Email", text: binding.email,
                         placeholder: "Optional", errorKey: AO3CollectionParam.email)
                 SubjectRowSeparator()
                 textRow("Tagline", text: binding.description,
@@ -152,21 +152,21 @@ struct AO3CollectionFormView: View {
             }
 
             group("Images", note: nil) {
-                textRow("Header image URL", text: binding.headerImageURL,
+                textRow("Header Image URL", text: binding.headerImageURL,
                         placeholder: "Optional", errorKey: AO3CollectionParam.headerImageURL)
                 SubjectRowSeparator()
-                textRow("Header image alt text", text: binding.headerImageAlt,
+                textRow("Header Image Alt Text", text: binding.headerImageAlt,
                         placeholder: "Optional", errorKey: nil)
                 SubjectRowSeparator()
-                textRow("Icon alt text", text: binding.iconAlt,
+                textRow("Icon Alt Text", text: binding.iconAlt,
                         placeholder: "Optional", errorKey: AO3CollectionParam.iconAlt)
                 SubjectRowSeparator()
-                textRow("Icon comment", text: binding.iconComment,
+                textRow("Icon Comment", text: binding.iconComment,
                         placeholder: "Optional", errorKey: AO3CollectionParam.iconComment)
             }
 
             group("Preferences", note: preferencesNote) {
-                toggleRow("Closed to new items", isOn: binding.isClosed)
+                toggleRow("Closed to New Items", isOn: binding.isClosed)
                 SubjectRowSeparator()
                 toggleRow("Moderated", isOn: binding.isModerated)
                 SubjectRowSeparator()
@@ -176,17 +176,17 @@ struct AO3CollectionFormView: View {
                 SubjectRowSeparator()
                 // AO3's `email_notify` mails the contact email when an item is
                 // added (CollectionMailer#item_added_notification), not members.
-                toggleRow("Email new items", isOn: binding.emailNotify)
+                toggleRow("Email New Items", isOn: binding.emailNotify)
             }
 
             // AO3 prints the select only while it offers one; no field, no row.
             if !binding.wrappedValue.challengeOptions.isEmpty {
                 group("Challenge", note: nil) {
                     SubjectFormRow(
-                        label: "Set up a challenge",
+                        label: "Set Up a Challenge",
                         arrangement: .control,
                         trailing: {
-                            Picker("Set up a challenge", selection: binding.challengeType) {
+                            Picker("Set Up a Challenge", selection: binding.challengeType) {
                                 ForEach(binding.wrappedValue.challengeOptions) { option in
                                     // AO3's blank option may print no text.
                                     Text(option.title.isEmpty ? "None" : option.title)
@@ -293,7 +293,7 @@ struct AO3CollectionFormView: View {
     private func nameRow(_ binding: Binding<AO3CollectionForm>) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             SubjectFormRow(
-                label: "Collection name",
+                label: "Collection Name",
                 arrangement: .control,
                 isDisabled: form?.nameIsLocked == true,
                 trailing: {
@@ -412,7 +412,7 @@ struct AO3CollectionFormView: View {
     /// AO3's owner-only delete control.
     private var openOnAO3Card: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Collection actions")
+            Text("Collection Actions")
                 .font(.system(size: actionTitleSize, weight: .semibold))
             Text("Open AO3 to close this collection. Deleting the collection leaves its works on AO3.")
                 .font(.system(size: noticeCardSize))

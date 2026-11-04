@@ -332,8 +332,8 @@ enum DebugShots {
         ("colitems", DebugShot(route: "acct:collections", sheets: ["colitems"])),
         ("colsfilter", DebugShot(route: "acct:collections", sheets: ["colsfilter"])),
         ("chsettingsedit", DebugShot(route: winter, pushes: ["chsettingsedit"], manageRow: "Challenge Settings")),
-        ("chsignupdetail", DebugShot(route: winter, pushes: ["chsignupdetail"], manageRow: "Sign-ups")),
-        ("prompttags", DebugShot(route: winter, sheets: ["prompttags"], manageRow: "Your Sign-up")),
+        ("chsignupdetail", DebugShot(route: winter, pushes: ["chsignupdetail"], manageRow: "Sign-Ups")),
+        ("prompttags", DebugShot(route: winter, sheets: ["prompttags"], manageRow: "Your Sign-Up")),
         ("tagset", DebugShot(route: winter, pushes: ["tagset"], manageRow: "Challenge Settings")),
         ("tagseteditor", DebugShot(
             route: winter, pushes: ["tagset", "tagseteditor"], manageRow: "Challenge Settings"
@@ -821,7 +821,7 @@ final class DemoNetworkBlock: URLProtocol {
         ("^/series/\\d+/manage", "ao3_demo_series_manage"),
         ("^/series/\\d+/?$", "ao3_demo_dawn_series"),
         ("^/collections/[^/]+/signups/\\d+", "ao3_challenge_signup"),
-        // "Your Sign-up" with none yet asks for the blank form; it got the list, and said
+        // "Your Sign-Up" with none yet asks for the blank form; it got the list, and said
         // "Couldn't load sign-up".
         ("^/collections/[^/]+/signups/new", "ao3_challenge_signup"),
         ("^/collections/[^/]+/signups", "ao3_challenge_signups"),

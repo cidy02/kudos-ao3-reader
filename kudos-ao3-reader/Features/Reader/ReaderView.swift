@@ -198,7 +198,7 @@ struct ReaderView: View {
                                 }
                             }
                         } label: {
-                            Label("More actions", systemImage: "ellipsis")
+                            Label("More Actions", systemImage: "ellipsis")
                         }
                         .disabled(WorkShareLink.url(for: work) == nil)
                     )

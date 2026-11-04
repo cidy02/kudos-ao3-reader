@@ -1154,7 +1154,7 @@ private extension AccountView {
             )
             .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
         } header: {
-            SectionRuleHeader(title: "What is waiting")
+            SectionRuleHeader(title: "What Is Waiting")
                 .pageBodyRow(top: 22, gutter: 0)
         }
     }

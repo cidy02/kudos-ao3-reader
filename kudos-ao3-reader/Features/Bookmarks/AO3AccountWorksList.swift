@@ -537,10 +537,10 @@ struct AO3AccountWorksList: View {
             if reading.isMarkedForLater || reading.isFlaggedToSkip {
                 HStack(spacing: 6) {
                     if reading.isMarkedForLater {
-                        Label("Marked for later", systemImage: "clock.badge")
+                        Label("Marked for Later", systemImage: "clock.badge")
                     }
                     if reading.isFlaggedToSkip {
-                        Label("Flagged to skip", systemImage: "eye.slash")
+                        Label("Flagged to Skip", systemImage: "eye.slash")
                     }
                 }
                 .font(.system(size: smallCaptionSize))

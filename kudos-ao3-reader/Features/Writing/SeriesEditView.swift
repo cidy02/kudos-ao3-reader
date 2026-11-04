@@ -137,7 +137,7 @@ struct SeriesEditView: View {
         }
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
-        .subjectScreenWash(title: "Edit series", palette: accountPalette)
+        .subjectScreenWash(title: "Edit Series", palette: accountPalette)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Save") { save() }
@@ -178,11 +178,11 @@ struct SeriesEditView: View {
         }
         .panelSegment(1, of: 4, gutter: gutter)
         WritingTextEditorRow(
-            title: "Series summary", text: $form.summary, target: recoveryTarget, field: "summary",
+            title: "Series Summary", text: $form.summary, target: recoveryTarget, field: "summary",
             previewsText: true
         )
         .panelSegment(2, of: 4, gutter: gutter)
-        WritingTextEditorRow(title: "Series notes", text: $form.notes, target: recoveryTarget, field: "notes")
+        WritingTextEditorRow(title: "Series Notes", text: $form.notes, target: recoveryTarget, field: "notes")
             .panelSegment(3, of: 4, gutter: gutter)
     }
 
@@ -196,7 +196,7 @@ struct SeriesEditView: View {
     private var worksPanel: some View {
         VStack(spacing: 0) {
             SubjectFormRow(
-                label: "Reorder works",
+                label: "Reorder Works",
                 value: "\(form.works.count)",
                 showsDisclosure: true,
                 isDisabled: form.works.count < 2
@@ -209,7 +209,7 @@ struct SeriesEditView: View {
                 ) { form.works = $0 }
             }
             SubjectRowSeparator()
-            SubjectFormRow(label: "Remove works", value: "\(form.works.count)", showsDisclosure: true)
+            SubjectFormRow(label: "Remove Works", value: "\(form.works.count)", showsDisclosure: true)
                 .subjectRowNavigation(accessibilityLabel: "Remove works") {
                     SeriesRemoveWorksView(
                         seriesID: form.seriesID ?? series.id,
@@ -222,7 +222,7 @@ struct SeriesEditView: View {
     }
 
     private var deletePanel: some View {
-        SubjectFormRow(label: "Delete series on AO3", value: "", showsDisclosure: true) {
+        SubjectFormRow(label: "Delete Series on AO3", value: "", showsDisclosure: true) {
             openURL(series.url)
         }
         .subjectPanel()
@@ -518,13 +518,13 @@ struct SeriesRemoveWorksView: View {
         }
         .cardList()
         .disabled(isRemoving)
-        .subjectScreenWash(title: "Remove works", palette: palette)
+        .subjectScreenWash(title: "Remove Works", palette: palette)
         .onAppear { if openedGeneration == nil { openedGeneration = auth.sessionGeneration } }
         .alert(
             "Remove “\(Self.title(removing, concealed: isConcealed(removing)))” from \(seriesTitle)?",
             isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })
         ) {
-            Button("Remove from series", role: .destructive) {
+            Button("Remove from Series", role: .destructive) {
                 if let removing { remove(removing) }
             }
             Button("Cancel", role: .cancel) {}
@@ -634,7 +634,7 @@ struct SeriesEditDestination: View {
             if let form, loadedGeneration == auth.sessionGeneration {
                 SeriesEditView(series: series, form: form).id(auth.sessionGeneration)
             } else {
-                WritingLoaderPage(title: "Edit series", message: errorMessage) { retry += 1 }
+                WritingLoaderPage(title: "Edit Series", message: errorMessage) { retry += 1 }
             }
         }
         .task(id: "\(auth.sessionGeneration):\(retry)") {

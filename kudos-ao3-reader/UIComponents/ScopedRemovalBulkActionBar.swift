@@ -84,7 +84,7 @@ struct ScopedRemovalBulkActionBar: View {
                 Button {
                     Task { await bulkDownload() }
                 } label: {
-                    Label("Download missing copies", systemImage: WorkActionLabels.downloadEmptySymbol)
+                    Label("Download Missing Copies", systemImage: WorkActionLabels.downloadEmptySymbol)
                 }
                 .disabled(isDownloading || missingCopies.isEmpty)
                 finishedAction
@@ -155,7 +155,7 @@ struct ScopedRemovalBulkActionBar: View {
         .disabled(isDownloading || missingCopies.isEmpty)
         Spacer()
         Button(action: startMove) {
-            Label("Move to", systemImage: "arrow.right.square")
+            Label("Move To", systemImage: "arrow.right.square")
         }
         .disabled(selectedWorks.isEmpty)
         Spacer()

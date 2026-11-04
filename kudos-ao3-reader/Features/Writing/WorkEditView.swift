@@ -70,13 +70,13 @@ struct WorkEditView: View {
                 }
             }
 
-            Section { sectionHeader("Required tags") }
+            Section { sectionHeader("Required Tags") }
             Section { requiredRows }
 
             Section {
                 sectionHeader("Tags")
                 if needsTagRefresh {
-                    Button("Reload tags") { tagRetry += 1 }
+                    Button("Reload Tags") { tagRetry += 1 }
                         .pageBodyRow(top: 4, gutter: gutter)
                 }
             }
@@ -91,14 +91,14 @@ struct WorkEditView: View {
             Section { sectionHeader("Associations") }
             Section { associationRows }
 
-            Section { sectionHeader("Chapters and publishing") }
+            Section { sectionHeader("Chapters and Publishing") }
             Section { chapterRows }
             Section {
                 // Rows only, no links — converted so the screen keeps one card
                 // style rather than because this card could misfire.
                 Group { publicationRows }.disabled(needsPublicationRefresh)
                 if needsPublicationRefresh {
-                    Button("Reload chapter totals") { publicationRetry += 1 }
+                    Button("Reload Chapter Totals") { publicationRetry += 1 }
                         .pageBodyRow(top: 8, gutter: gutter)
                 }
                 if form.isPosted {
@@ -186,7 +186,7 @@ struct WorkEditView: View {
         // the confirm button is replaced by the board's "Fill in what is missing".
         .alert("Post this work?", isPresented: $showPostConfirmation) {
             if form.missingRequiredFields().isEmpty {
-                Button("Post work") { save(submit: Self.postSubmit) }
+                Button("Post Work") { save(submit: Self.postSubmit) }
             } else {
                 Button("Fill in what is missing") {}
             }
@@ -230,7 +230,7 @@ struct WorkEditView: View {
                 WritingPreviewView(
                     preview: preview,
                     subtitle: Self.subtitle(for: form),
-                    postTitle: form.isPosted ? "Update" : "Post work",
+                    postTitle: form.isPosted ? "Update" : "Post Work",
                     confirmation: form.isPosted ? nil : (
                         "Post this work?", Self.postConfirmationMessage(missing: form.missingRequiredFields())
                     ),
@@ -426,7 +426,7 @@ struct WorkEditView: View {
         )
         .panelSegment(0, of: 4, gutter: gutter)
         symbolDisclosureRow(
-            title: "Archive warnings",
+            title: "Archive Warnings",
             value: form.warnings.isEmpty ? "None" : form.warnings.joined(separator: ", "),
             symbol: WorkSymbolTile.warnings(WorkWarningStatus(rawWarnings: form.warnings), dark: isDarkTheme),
             isRequired: true
@@ -478,10 +478,10 @@ struct WorkEditView: View {
                 WritingTagsEditor(title: "Characters", values: $form.characters, options: [], kind: .character)
             }
             .panelSegment(1, of: 3, gutter: gutter)
-        tagChipsRow(title: "Additional tags", values: $form.additionalTags)
+        tagChipsRow(title: "Additional Tags", values: $form.additionalTags)
             .subjectRowNavigation(accessibilityLabel: "Add Additional tags") {
                 WritingTagsEditor(
-                    title: "Additional tags", values: $form.additionalTags, options: [], kind: .freeform
+                    title: "Additional Tags", values: $form.additionalTags, options: [], kind: .freeform
                 )
             }
             .panelSegment(2, of: 3, gutter: gutter)
@@ -502,12 +502,12 @@ struct WorkEditView: View {
             title: "Summary", text: $form.summary, target: recoveryTarget, field: "summary", previewsText: true
         )
         .panelSegment(2, of: 6, gutter: gutter)
-        WritingTextEditorRow(title: "Beginning notes", text: $form.notes, target: recoveryTarget, field: "notes")
+        WritingTextEditorRow(title: "Beginning Notes", text: $form.notes, target: recoveryTarget, field: "notes")
             .panelSegment(3, of: 6, gutter: gutter)
-        WritingTextEditorRow(title: "End notes", text: $form.endnotes, target: recoveryTarget, field: "endnotes")
+        WritingTextEditorRow(title: "End Notes", text: $form.endnotes, target: recoveryTarget, field: "endnotes")
             .panelSegment(4, of: 6, gutter: gutter)
         choiceRow(
-            title: "Work skin",
+            title: "Work Skin",
             value: $form.workSkinID,
             options: defaultFirst(form.workSkinOptions, label: "Default")
         )
@@ -533,7 +533,7 @@ struct WorkEditView: View {
                 )
             }
             .panelSegment(0, of: 5, gutter: gutter)
-        SubjectFormRow(label: "Collections and gifts", value: collectionsValue, showsDisclosure: true)
+        SubjectFormRow(label: "Collections and Gifts", value: collectionsValue, showsDisclosure: true)
             .subjectRowNavigation(accessibilityLabel: "Collections and gifts") {
                 collectionsAndGifts
             }
@@ -548,7 +548,7 @@ struct WorkEditView: View {
         }
         .panelSegment(2, of: 5, gutter: gutter)
         SubjectFormRow(
-            label: "Inspired by",
+            label: "Inspired By",
             value: form.parentWork.url.isEmpty ? "None" : "1",
             showsDisclosure: true
         )
@@ -661,7 +661,7 @@ struct WorkEditView: View {
                 WritingChaptersView(workID: workID, workTitle: form.title) { needsPublicationRefresh = true }
             }
             .panelSegment(afterText, of: count, gutter: gutter)
-            SubjectFormRow(label: "Add chapter", value: "", showsDisclosure: true)
+            SubjectFormRow(label: "Add Chapter", value: "", showsDisclosure: true)
                 .subjectRowNavigation(accessibilityLabel: "Add chapter") {
                     WritingChapterDestination(workID: workID, workTitle: form.title) {
                         needsPublicationRefresh = true
@@ -672,7 +672,7 @@ struct WorkEditView: View {
             // rather than on `workID` alone: AO3 keeps `/works/<id>/edit_tags`
             // for a work that exists publicly, and a draft's tags are already
             // editable in the form above this row.
-            SubjectFormRow(label: "Edit tags", value: "", showsDisclosure: true)
+            SubjectFormRow(label: "Edit Tags", value: "", showsDisclosure: true)
                 .subjectRowNavigation(accessibilityLabel: "Edit tags") {
                     WritingTagsDestination(workID: workID, workTitle: form.title) {
                         needsTagRefresh = true
@@ -702,9 +702,9 @@ struct WorkEditView: View {
         }
         .panelSegment(first, of: count, gutter: gutter)
         if showsDate {
-            SubjectFormRow(label: "Publication date", arrangement: .control) {
+            SubjectFormRow(label: "Publication Date", arrangement: .control) {
                 DatePicker(
-                    "Publication date",
+                    "Publication Date",
                     selection: publicationDate,
                     in: AO3PublicationDate.allowedRange,
                     displayedComponents: .date
@@ -727,7 +727,7 @@ struct WorkEditView: View {
         }
         .panelSegment(afterDate + 1, of: count, gutter: gutter)
         choiceRow(
-            title: "Who can comment",
+            title: "Who Can Comment",
             value: $form.commentPermissions,
             options: form.commentPermissionOptions
         )
@@ -736,7 +736,7 @@ struct WorkEditView: View {
 
     private var deletePanel: some View {
         VStack(spacing: 0) {
-            SubjectFormRow(label: "Delete work on AO3", value: "", isDestructive: true) { confirmDelete() }
+            SubjectFormRow(label: "Delete Work on AO3", value: "", isDestructive: true) { confirmDelete() }
         }
         .subjectPanel()
     }
@@ -898,7 +898,7 @@ extension WorkEditView {
         // 1bo: "setting a total above what is posted is what marks a work in
         // progress". The posted count is AO3's to report, the total is the
         // writer's to set — so only one half of this row is editable.
-        SubjectFormRow(label: "Chapters posted", arrangement: .control) {
+        SubjectFormRow(label: "Chapters Posted", arrangement: .control) {
             HStack(spacing: 6) {
                 Text("\(form.chaptersPosted ?? 1) of")
                     .foregroundStyle(.secondary)
@@ -965,14 +965,14 @@ extension WorkEditView {
     /// once AO3 has the draft. Post asks first (`showPostConfirmation`).
     private var postPanel: some View {
         VStack(spacing: 0) {
-            postPanelRow("Post work", icon: "arrow.up.circle.fill", color: theme.accentInk) {
+            postPanelRow("Post Work", icon: "arrow.up.circle.fill", color: theme.accentInk) {
                 showPostConfirmation = true
             }
             SubjectRowSeparator()
             postPanelRow("Preview on AO3", icon: "eye", color: theme.accentInk) { openPreview() }
             if form.workID != nil {
                 SubjectRowSeparator()
-                postPanelRow("Delete draft", icon: "trash.fill", color: .red) { confirmDelete() }
+                postPanelRow("Delete Draft", icon: "trash.fill", color: .red) { confirmDelete() }
             }
         }
         .subjectPanel()
@@ -1014,7 +1014,7 @@ extension WorkEditView {
         switch form.kind {
         case .new: "New Work"
         case .draft: "Draft"
-        case .edit, .editTags: "Edit work"
+        case .edit, .editTags: "Edit Work"
         }
     }
 

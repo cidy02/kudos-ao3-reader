@@ -210,14 +210,14 @@ struct WritingTextEditor: View {
         Menu("More", systemImage: "ellipsis.circle") {
             // ⌥⇧⌘V, the platform's own "paste and match style": plain ⌘V is
             // the text view's paste.
-            Button("Paste as plain text", systemImage: "doc.on.clipboard") { controller?.pastePlainText() }
+            Button("Paste as Plain Text", systemImage: "doc.on.clipboard") { controller?.pastePlainText() }
                 .keyboardShortcut("v", modifiers: [.command, .option, .shift])
             if let chapterActions {
                 Button("Preview on AO3", systemImage: "arrow.up.forward.square") {
                     close(then: chapterActions.preview)
                 }
                 if chapterActions.deleteName != nil {
-                    Button("Delete chapter", systemImage: "trash", role: .destructive) {
+                    Button("Delete Chapter", systemImage: "trash", role: .destructive) {
                         showDeleteChapter = true
                     }
                 }
@@ -283,13 +283,13 @@ struct WritingTextEditor: View {
             }
             .horizontalScrollViewport().disabled(isPreviewing)
             if dynamicTypeSize.isAccessibilitySize {
-                Button("Editor help", systemImage: "info.circle") { showEditorHelp = true }
+                Button("Editor Help", systemImage: "info.circle") { showEditorHelp = true }
                 .font(.caption2)
                 .lineLimit(1)
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
                 .minimumHitTarget()
-                .alert("Editor help", isPresented: $showEditorHelp) {
+                .alert("Editor Help", isPresented: $showEditorHelp) {
                     Button("OK", role: .cancel) {}
                 } message: {
                     Text("\(recoveryNotice)\n\n\(formattingNotice)")

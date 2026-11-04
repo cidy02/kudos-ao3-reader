@@ -634,7 +634,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                         }
                     }
                 } label: {
-                    Label("More actions", systemImage: "ellipsis")
+                    Label("More Actions", systemImage: "ellipsis")
                 }
                 // Neutral, as every other "…" in the app (`WorkListMoreMenu`).
                 .tint(Color.primary)

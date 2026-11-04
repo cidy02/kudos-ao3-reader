@@ -292,7 +292,7 @@ struct CollectionMaintainersView: View {
     private var invitationRows: some View {
         let username = inviteUsername.trimmingCharacters(in: .whitespacesAndNewlines)
         let count = username.isEmpty ? 2 : 3
-        SubjectFormRow(label: "Invite by username", arrangement: .control) {
+        SubjectFormRow(label: "Invite by Username", arrangement: .control) {
             TextField("Add a username", text: $inviteUsername)
                 .font(.system(size: rowTitleSize))
                 .foregroundStyle(.primary)
@@ -305,7 +305,7 @@ struct CollectionMaintainersView: View {
         .panelSegment(0, of: count, gutter: gutter)
 
         WritingChoiceRow(
-            title: "Invite as",
+            title: "Invite As",
             value: Binding(
                 get: { inviteRole.rawValue },
                 set: { inviteRole = AO3CollectionParticipantRole(rawValue: $0) ?? .moderator }

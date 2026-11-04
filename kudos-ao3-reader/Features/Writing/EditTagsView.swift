@@ -54,7 +54,7 @@ struct EditTagsView: View {
             }
 
             Section {
-                SectionRuleHeader(title: "Archive warnings")
+                SectionRuleHeader(title: "Archive Warnings")
                     .padding(.bottom, 8)
                     .pageBodyRow(top: 18, gutter: selfGuttered)
             }
@@ -106,7 +106,7 @@ struct EditTagsView: View {
         // Rows at their own padding, not the List minimum (L3-FORM-1).
         .environment(\.defaultMinListRowHeight, 0)
         .environment(\.writingEditedWorkID, form.workID)
-        .subjectScreenWash(title: "Edit tags", palette: accountPalette)
+        .subjectScreenWash(title: "Edit Tags", palette: accountPalette)
         #if DEBUG
         .task { if DebugLaunchRoute.takePush("tagseditor") { addingKind = .fandom } }
         #endif
@@ -217,7 +217,7 @@ struct EditTagsView: View {
             .panelSegment(1, of: 4, gutter: gutter)
         inlineTags("Characters", values: $form.tags.characters, kind: .character)
             .panelSegment(2, of: 4, gutter: gutter)
-        inlineTags("Additional tags", values: $form.tags.additionalTags, kind: .freeform)
+        inlineTags("Additional Tags", values: $form.tags.additionalTags, kind: .freeform)
             .panelSegment(3, of: 4, gutter: gutter)
     }
 

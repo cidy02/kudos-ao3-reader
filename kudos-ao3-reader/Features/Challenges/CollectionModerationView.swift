@@ -192,7 +192,7 @@ struct CollectionModerationView: View {
         }
 
         Section {
-            SectionRuleHeader(title: "Awaiting review", count: awaitingReview.count)
+            SectionRuleHeader(title: "Awaiting Review", count: awaitingReview.count)
                 .pageBodyRow(top: 18, gutter: selfGuttered)
 
             if awaitingReview.isEmpty {
@@ -218,8 +218,8 @@ struct CollectionModerationView: View {
         // "recently decided" lives here. AO3 pages approved and rejected items
         // with no totals, so this opens those lists rather than counting page one.
         Section {
-            SubjectFormRow(label: "Recently decided", value: "Approved and rejected", showsDisclosure: true)
-            .subjectRowNavigation(accessibilityLabel: "Recently decided") {
+            SubjectFormRow(label: "Recently Decided", value: "Approved and Rejected", showsDisclosure: true)
+            .subjectRowNavigation(accessibilityLabel: "Recently Decided") {
                 AO3CollectionItemsView(slug: collectionSlug, title: effectiveTitle, initialTab: .approved)
             }
             .subjectPanel()
@@ -227,7 +227,7 @@ struct CollectionModerationView: View {
         }
 
         Section {
-            SectionRuleHeader(title: "Membership requests", count: membershipRequests.count)
+            SectionRuleHeader(title: "Membership Requests", count: membershipRequests.count)
                 .pageBodyRow(top: 18, gutter: selfGuttered)
 
             if membershipRequests.isEmpty {
@@ -248,7 +248,7 @@ struct CollectionModerationView: View {
         }
 
         Section {
-            SectionRuleHeader(title: "Reveal and anonymity")
+            SectionRuleHeader(title: "Reveal and Anonymity")
                 .pageBodyRow(top: 18, gutter: selfGuttered)
             revealInfoPanel.pageBodyRow(top: 8, gutter: gutter)
             if isUnrevealed || isAnonymous,
@@ -551,18 +551,18 @@ struct CollectionModerationView: View {
     @ViewBuilder
     private var maintainersRows: some View {
         SubjectFormRow(
-            label: "Owners and moderators",
+            label: "Owners and Moderators",
             value: "\(maintainers.count)",
             showsDisclosure: true,
             isMonospaced: true
         )
-        .subjectRowNavigation(accessibilityLabel: "Owners and moderators") {
+        .subjectRowNavigation(accessibilityLabel: "Owners and Moderators") {
             CollectionMaintainersView(collectionSlug: collectionSlug, collectionTitle: effectiveTitle)
         }
         .panelSegment(0, of: 2, gutter: gutter)
 
-        SubjectFormRow(label: "Invite a maintainer", showsDisclosure: true) { EmptyView() }
-            .subjectRowNavigation(accessibilityLabel: "Invite a maintainer") {
+        SubjectFormRow(label: "Invite a Maintainer", showsDisclosure: true) { EmptyView() }
+            .subjectRowNavigation(accessibilityLabel: "Invite a Maintainer") {
                 CollectionMaintainersView(collectionSlug: collectionSlug, collectionTitle: effectiveTitle)
             }
             .panelSegment(1, of: 2, gutter: gutter)
@@ -587,14 +587,14 @@ struct CollectionModerationView: View {
         VStack(spacing: 0) {
             SubjectFormRow(
                 label: "Works",
-                value: isUnrevealed ? "Unrevealed until reveal" : "Revealed"
+                value: isUnrevealed ? "Unrevealed Until Reveal" : "Revealed"
             )
 
             SubjectRowSeparator()
 
             SubjectFormRow(
                 label: "Creators",
-                value: isAnonymous ? "Anonymous until reveal" : "Credited"
+                value: isAnonymous ? "Anonymous Until Reveal" : "Credited"
             )
 
             if isAnonymous {
