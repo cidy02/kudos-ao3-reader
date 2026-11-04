@@ -648,7 +648,20 @@ extension RecentlyDeletedEntry {
 /// actions live in a context menu — swipes are invisible until tried, and on
 /// macOS they only exist for trackpad users, so the menu is the discoverable path.
 /// While selecting, a tap toggles the row and neither is offered.
-private struct RecentlyDeletedRow: View {
+struct RecentlyDeletedRow: View {
+    enum SelectionEdge: Equatable {
+        case none
+        case leading
+    }
+
+    static func selectionEdge(isSelecting: Bool) -> SelectionEdge {
+        isSelecting ? .leading : .none
+    }
+
+    static func separatorInset(isSelecting: Bool) -> CGFloat? {
+        isSelecting ? 115 : nil
+    }
+
     /// Title, detail and the days figure scale together at AX sizes.
     @ScaledMetric(relativeTo: .headline) private var titleSize: CGFloat = 16.5
     @ScaledMetric(relativeTo: .caption) private var detailSize: CGFloat = 11.5
@@ -727,39 +740,43 @@ private struct RecentlyDeletedRow: View {
     }
 
     private func workRowContent(_ work: SavedWork) -> some View {
-        WorkPlainRow(showsSeparator: showsSeparator) {
-            WorkStatusIconGrid(
-                rating: work.rating.isEmpty ? nil : work.rating,
-                categories: work.workCategories,
-                warnings: work.workWarnings,
-                completion: work.completionStatus,
-                tileSize: WorkRow.ledgerTileSize,
-                announcesToVoiceOver: true
-            )
-        } heading: {
-            HStack(alignment: .top, spacing: 6) {
-                VStack(alignment: .leading, spacing: 6) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(entry.title)
-                            .font(.system(size: titleSize, weight: .semibold))
-                            .lineLimit(2)
-                        authorAndFandoms(work)
-                        if !entry.detail.isEmpty {
-                            Text(entry.detail)
-                                .font(.system(size: detailSize))
-                                .foregroundStyle(.secondary)
-                                .lineLimit(2)
-                        }
-                    }
-                    remaining
-                    warningNote
+        WorkPlainRow(
+            showsSeparator: showsSeparator,
+            separatorInset: Self.separatorInset(isSelecting: isSelecting)
+        ) {
+            HStack(alignment: .center, spacing: 12) {
+                if Self.selectionEdge(isSelecting: isSelecting) == .leading {
+                    WorkLeadingSelectionCheck(isSelected: isSelected)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                if isSelecting {
-                    WorkSelectionBubble(isSelected: isSelected)
-                }
+                WorkStatusIconGrid(
+                    rating: work.rating.isEmpty ? nil : work.rating,
+                    categories: work.workCategories,
+                    warnings: work.workWarnings,
+                    completion: work.completionStatus,
+                    tileSize: WorkRow.ledgerTileSize,
+                    announcesToVoiceOver: true
+                )
             }
+        } heading: {
+            VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(entry.title)
+                        .font(.system(size: titleSize, weight: .semibold))
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                        .fixedSize(horizontal: false, vertical: true)
+                    authorAndFandoms(work)
+                    if !entry.detail.isEmpty {
+                        Text(entry.detail)
+                            .font(.system(size: detailSize))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                remaining
+                warningNote
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         } remainder: {
             EmptyView()
         }
@@ -771,7 +788,11 @@ private struct RecentlyDeletedRow: View {
     }
 
     private var containerRowContent: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .center, spacing: 12) {
+            if Self.selectionEdge(isSelecting: isSelecting) == .leading {
+                WorkLeadingSelectionCheck(isSelected: isSelected)
+            }
+
             VStack(alignment: .leading, spacing: 6) {
                 VStack(alignment: .leading, spacing: 3) {
                     SubjectKicker(
@@ -782,30 +803,29 @@ private struct RecentlyDeletedRow: View {
                     )
                     Text(entry.title)
                         .font(.system(size: titleSize, weight: .semibold))
-                        .lineLimit(2)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                        .fixedSize(horizontal: false, vertical: true)
                     if !entry.detail.isEmpty {
                         Text(entry.detail)
                             .font(.system(size: detailSize))
                             .foregroundStyle(.secondary)
-                            .lineLimit(2)
+                            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 remaining
                 warningNote
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-
-            if isSelecting {
-                WorkSelectionBubble(isSelected: isSelected)
-            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
         .subjectCard(palette: palette)
         .overlay {
             if isSelected {
-                RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
-                    .strokeBorder(.tint, lineWidth: 2)
+                let shape = RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
+                shape.fill(.tint.opacity(0.08))
+                    .overlay(shape.strokeBorder(.tint, lineWidth: 2))
             }
         }
     }

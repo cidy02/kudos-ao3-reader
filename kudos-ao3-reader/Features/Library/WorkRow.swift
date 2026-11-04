@@ -42,11 +42,13 @@ struct WorkRow: View {
     /// Driven by a list's "expand/collapse all" toggle; each card follows it and can
     /// still be toggled individually afterwards. Mirrors `AO3WorkRow`.
     var expandAll: Bool = false
-    /// When true, a selection bubble takes the top-right corner (where the expand
-    /// control normally sits) and the expand control shifts to its left instead of
-    /// disappearing.
+    /// When true, a leading selection circle sits beside the status grid
+    /// and the caller is expected to route taps to selection instead of navigation.
     var isSelecting: Bool = false
     var isSelected: Bool = false
+    /// False reserves the 24pt leading selection column without drawing the circle, so
+    /// `SensitiveWorkRow` can overlay an unblurred `WorkLeadingSelectionCheck` in the exact slot.
+    var showsSelectionIndicator: Bool = true
     /// False suppresses the row's own expand/collapse button — used when a caller
     /// (SensitiveWorkRow's blurred branch) renders its own copy externally instead,
     /// so the two don't compete for the same top-trailing corner.
@@ -73,8 +75,8 @@ struct WorkRow: View {
     var showsTags = true
     /// When false, skips the reading progress bar in the remainder.
     var showsProgress = true
-    /// When true, renders selection circle leading (beside symbols) rather than trailing bubble.
-    var leadingSelection = false
+    /// Kept so existing call sites compile; selection in `WorkRow` is always leading.
+    var leadingSelection = true
     /// New chapters since the reader last looked. Draws the "+N" badge and marks
     /// those bars. Only Subscriptions has a count today.
     var badgeCount = 0
@@ -191,11 +193,24 @@ struct WorkRow: View {
         )
     }
 
+    enum SelectionEdge: Equatable {
+        case none
+        case leading
+    }
+
+    static func selectionEdge(isSelecting: Bool) -> SelectionEdge {
+        isSelecting ? .leading : .none
+    }
+
+    static func separatorInset(isSelecting: Bool) -> CGFloat? {
+        isSelecting ? 115 : nil
+    }
+
     private var ledgerRow: some View {
         WorkPlainRow(
             wide: wide,
             showsSeparator: showsSeparator,
-            separatorInset: leadingSelection ? 115 : nil
+            separatorInset: Self.separatorInset(isSelecting: isSelecting)
         ) {
             statusGrid
         } heading: {
@@ -253,7 +268,7 @@ struct WorkRow: View {
         WorkPlainRow(
             wide: wide,
             showsSeparator: showsSeparator,
-            separatorInset: leadingSelection ? 115 : nil
+            separatorInset: Self.separatorInset(isSelecting: isSelecting)
         ) {
             statusGrid
         } heading: {
@@ -328,10 +343,12 @@ struct WorkRow: View {
 
     private var statusGrid: some View {
         HStack(alignment: .center, spacing: 12) {
-            if isSelecting && leadingSelection {
-                WorkLeadingSelectionCheck(isSelected: isSelected)
-            } else if leadingSelection {
-                Color.clear.frame(width: 24, height: 24)
+            if Self.selectionEdge(isSelecting: isSelecting) == .leading {
+                if showsSelectionIndicator {
+                    WorkLeadingSelectionCheck(isSelected: isSelected)
+                } else {
+                    Color.clear.frame(width: 24, height: 24)
+                }
             }
             WorkStatusIconGrid(
                 rating: work.rating.isEmpty ? nil : work.rating,
@@ -370,9 +387,6 @@ struct WorkRow: View {
                 WorkUpdatedDateBadge(dateUpdated: dateUpdated, datePublished: datePublished)
             }
             if showsExpand { expandButton }
-            if isSelecting && !leadingSelection {
-                WorkSelectionBubble(isSelected: isSelected)
-            }
         }
     }
 
