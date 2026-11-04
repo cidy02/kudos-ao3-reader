@@ -227,6 +227,9 @@ struct SensitiveWorkRow: View {
     var rankedContext: RankedWork? = nil
     var remoteBadgeTitle: String?
     var showsSummary = true
+    var showsTags = true
+    var showsProgress = true
+    var leadingSelection = false
     var badgeCount = 0
     var wide = false
     var showsSeparator = true
@@ -255,6 +258,9 @@ struct SensitiveWorkRow: View {
         showsFavoriteStar: Bool = false,
         showsFullLedgerStats: Bool = false,
         showsSummary: Bool = true,
+        showsTags: Bool = true,
+        showsProgress: Bool = true,
+        leadingSelection: Bool = false,
         badgeCount: Int = 0,
         wide: Bool = false,
         showsSeparator: Bool = true,
@@ -276,6 +282,9 @@ struct SensitiveWorkRow: View {
         self.showsFavoriteStar = showsFavoriteStar
         self.showsFullLedgerStats = showsFullLedgerStats
         self.showsSummary = showsSummary
+        self.showsTags = showsTags
+        self.showsProgress = showsProgress
+        self.leadingSelection = leadingSelection
         self.badgeCount = badgeCount
         self.wide = wide
         self.showsSeparator = showsSeparator
@@ -372,6 +381,9 @@ struct SensitiveWorkRow: View {
                 showsFavoriteStar: showsFavoriteStar,
                 showsFullLedgerStats: showsFullLedgerStats,
                 showsSummary: showsSummary,
+                showsTags: showsTags,
+                showsProgress: showsProgress,
+                leadingSelection: leadingSelection,
                 badgeCount: badgeCount,
                 wide: wide,
                 showsSeparator: showsSeparator
@@ -390,13 +402,19 @@ struct SensitiveWorkRow: View {
                     if isExpandableWork {
                         WorkRowExpandButton(expanded: $blurredExpanded)
                     }
-                    if isSelecting {
+                    if isSelecting && !leadingSelection {
                         WorkSelectionBubble(isSelected: isSelected)
                     }
                 }
                 // The unblurred row's controls sit inside its gutter; 8 pt left them out of line.
                 .padding(.top, 8)
                 .padding(.trailing, SubjectMetrics.gutter + contentInsets.trailing)
+            }
+            .overlay(alignment: .leading) {
+                if isSelecting && leadingSelection {
+                    WorkLeadingSelectionCheck(isSelected: isSelected)
+                        .padding(.leading, WorkRowMetrics.horizontalPadding)
+                }
             }
             sensitiveActionContainer(for: content)
 
@@ -495,6 +513,9 @@ struct SensitiveWorkRow: View {
                 showsFavoriteStar: showsFavoriteStar,
                 showsFullLedgerStats: showsFullLedgerStats,
                 showsSummary: showsSummary,
+                showsTags: showsTags,
+                showsProgress: showsProgress,
+                leadingSelection: leadingSelection,
                 badgeCount: badgeCount,
                 wide: wide,
                 showsSeparator: showsSeparator

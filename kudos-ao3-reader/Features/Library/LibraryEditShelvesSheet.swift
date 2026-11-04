@@ -75,7 +75,11 @@ struct LibraryEditShelvesSheet: View {
             #endif
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) {
-                        Button("Done") { dismiss() }
+                        Button { dismiss() } label: {
+                            Image(systemName: "checkmark")
+                        }
+                        .sheetConfirmStyle()
+                        .accessibilityLabel("Done")
                     }
                 }
         }
@@ -93,7 +97,8 @@ struct LibraryEditShelvesSheet: View {
             } label: {
                 Image(systemName: "minus.circle.fill")
                     .font(.title3)
-                    .foregroundStyle(.accentFill)
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(.white, Color.red)
             }
             .buttonStyle(.borderless)
             .accessibilityLabel("Remove \(title) from the Library page")
@@ -123,7 +128,8 @@ struct LibraryEditShelvesSheet: View {
             } label: {
                 Image(systemName: "plus.circle.fill")
                     .font(.title3)
-                    .foregroundStyle(.accentFill)
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(.white, Color.green)
             }
             .buttonStyle(.borderless)
             .accessibilityLabel("Show \(shelf.title) on the Library page")
