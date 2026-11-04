@@ -272,6 +272,7 @@ struct DebugShot {
     var pushes: [String] = []
     var manageRow: String?
     var browse: [DebugBrowseStep] = []
+    var query: String? = nil
 }
 
 /// The A82 names, in that audit's order. One map; views only ask `takeSheet` / `takePush`.
@@ -320,7 +321,7 @@ enum DebugShots {
         ("seriespreserve", DebugShot(route: sodium, sheets: ["seriespreserve"])),
         ("bookmarkform", DebugShot(route: sodium, sheets: ["bookmarkform"])),
         ("readercontents", DebugShot(route: readSodium, sheets: ["readercontents"])),
-        ("readerfind", DebugShot(route: readSodium, sheets: ["readerfind"])),
+        ("readerfind", DebugShot(route: readSodium, sheets: ["readerfind"], query: "lights")),
         ("readerdisplay", DebugShot(route: readSodium, sheets: ["readerdisplay"])),
         ("readernote", DebugShot(route: readSodium, sheets: ["readernote"])),
         ("pronunciations", DebugShot(route: "acct:settings:listening", pushes: ["pronunciations"])),
@@ -371,7 +372,7 @@ enum DebugShots {
         ("backupimport", DebugShot(route: "acct:settings:backup", sheets: ["backupimport"])),
         ("aboutkudos", DebugShot(route: "acct:settings:about", sheets: ["aboutkudos"])),
         ("libfilter", DebugShot(route: "library", sheets: ["libfilter"])),
-        ("libselect", DebugShot(route: "library", sheets: ["libselect"])),
+        ("libselect", DebugShot(route: "section:readingNow", sheets: ["libselect"])),
         ("remoteselect", DebugShot(route: "tagsearch:Star Wars", sheets: ["remoteselect"])),
         ("expandrow", DebugShot(route: "query:Winter Garden")),
         ("searchfilters", DebugShot(route: "search", sheets: ["searchfilters"])),
@@ -381,6 +382,7 @@ enum DebugShots {
         ("readerend", DebugShot(route: readRiver, sheets: ["readerend"])),
         ("welcome", DebugShot(route: "welcome")),
         ("protectlibrary", DebugShot(route: "protectlibrary")),
+        ("recentlydeleted", DebugShot(route: "recentlyDeleted", sheets: ["recentlydeleted"])),
     ]
 
     static var names: [String] { ordered.map(\.name) }
@@ -502,8 +504,15 @@ enum DebugLaunchRoute {
             || wantsSheet("searchfilters")
     }
 
+    /// Active search term for `shot:readerfind`.
+    static var findInWorkQuery: String? {
+        if let query = shot?.query { return query }
+        if shotName == "readerfind" { return "lights" }
+        return nil
+    }
+
     /// A recovery copy for the notes field of work 1001, only for `shot:recovery`.
-    /// The summary editor (`shot:texteditor`) finds nothing. Both account keys:
+    /// The chapter text editor (`shot:texteditor`) finds nothing. Both account keys:
     /// the editor uses `auth.username ?? ""`.
     static func prepareShot() {
         guard shotName == "recovery" else { return }

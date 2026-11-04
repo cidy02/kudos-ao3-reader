@@ -313,7 +313,11 @@ struct AllReadingQueuesGridView: View {
             QueueTagSheet(queues: selectedQueues)
         }
         #if DEBUG
-        .task { if DebugLaunchRoute.takeSheet("newqueue") { showingNewQueue = true } }
+        .task {
+            if DebugLaunchRoute.takeSheet("newqueue") || DebugLaunchRoute.value == "queues" {
+                showingNewQueue = true
+            }
+        }
         #endif
         .sheet(isPresented: $showingNewQueue) {
             NewReadingQueueSheet(

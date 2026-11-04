@@ -24,14 +24,64 @@ struct DebugShotRouteTests {
             "availability", "pairing", "revokedevice", "backupimport", "aboutkudos",
             "authorbookmarks", "readerspeech", "libfilter", "libselect", "remoteselect",
             "expandrow", "searchfilters", "collectionaddworks", "libedit", "sortby",
-            "readerend", "welcome", "protectlibrary",
+            "readerend", "welcome", "protectlibrary", "recentlydeleted",
         ]
-        #expect(names.count == 83)
+        #expect(names.count == 84)
         for name in names {
             #expect(DebugShots.byName[name] != nil)
             #expect(!DebugShots.byName[name]!.route.isEmpty)
         }
         #expect(Set(DebugShots.names) == Set(names))
+    }
+
+    @MainActor
+    @Test func fid48RoutesPinWantedScreenAndState() throws {
+        // Board 05: newqueue opens the "New Queue" modal sheet over the queues organizer
+        let newQueue = try #require(DebugShots.byName["newqueue"])
+        #expect(newQueue.route == "queues")
+        #expect(newQueue.sheets.contains("newqueue"))
+
+        // Board 08: recentlydeleted routes to recentlyDeleted in select mode
+        let recentlyDeleted = try #require(DebugShots.byName["recentlydeleted"])
+        #expect(recentlyDeleted.route == "recentlyDeleted")
+        #expect(recentlyDeleted.sheets.contains("recentlydeleted"))
+
+        // Board 09: libselect routes to "Reading Now" shelf list in select mode
+        let libSelect = try #require(DebugShots.byName["libselect"])
+        #expect(libSelect.route == "section:readingNow")
+        #expect(libSelect.sheets.contains("libselect"))
+
+        // Board 29: readerfind has an active search query for chapter snippet results
+        let readerFind = try #require(DebugShots.byName["readerfind"])
+        #expect(readerFind.route == "read:Sodium Lights")
+        #expect(readerFind.sheets.contains("readerfind"))
+        #expect(readerFind.query == "lights")
+
+        // Board 43: texteditor pushes the chapter text editor for posted work
+        let textEditor = try #require(DebugShots.byName["texteditor"])
+        #expect(textEditor.route == "acct:workedit:1001")
+        #expect(textEditor.pushes.contains("texteditor"))
+
+        // Verify runtime route resolution for readerfind query
+        let defaults = UserDefaults.standard
+        let oldRoute = defaults.object(forKey: "KudosDebugRoute")
+        defer {
+            if let oldRoute {
+                defaults.set(oldRoute, forKey: "KudosDebugRoute")
+            } else {
+                defaults.removeObject(forKey: "KudosDebugRoute")
+            }
+        }
+        defaults.set("shot:readerfind", forKey: "KudosDebugRoute")
+        #expect(DebugLaunchRoute.findInWorkQuery == "lights")
+
+        defaults.set("shot:recentlydeleted", forKey: "KudosDebugRoute")
+        #expect(DebugLaunchRoute.pageRoute == "recentlyDeleted")
+        #expect(DebugLaunchRoute.wantsSheet("recentlydeleted"))
+
+        defaults.set("shot:libselect", forKey: "KudosDebugRoute")
+        #expect(DebugLaunchRoute.pageRoute == "section:readingNow")
+        #expect(DebugLaunchRoute.wantsSheet("libselect"))
     }
 
     @MainActor

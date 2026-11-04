@@ -84,6 +84,20 @@ struct RecentlyDeletedView: View {
         .onChange(of: entries.isEmpty) { _, isEmpty in
             if isEmpty { exitSelectMode() }
         }
+        #if DEBUG
+        .task {
+            for _ in 0..<10 {
+                if !entries.isEmpty { break }
+                try? await Task.sleep(for: .milliseconds(100))
+            }
+            if DebugLaunchRoute.takeSheet("recentlydeleted") || DebugLaunchRoute.takeSheet("libselect") || DebugLaunchRoute.value == "recentlyDeleted" {
+                if let first = entries.first {
+                    selection = [first.id]
+                    isSelecting = true
+                }
+            }
+        }
+        #endif
         // 1bj draws an alert, not a sheet, and "repeats it per item with the real
         // numbers" — the title names the record and the message says what goes.
         .alert(

@@ -246,6 +246,12 @@ struct LibrarySectionListView: View {
             .task {
                 try? await Task.sleep(for: .seconds(1))
                 if DebugLaunchRoute.opensFilters { showingFilters = true }
+                if DebugLaunchRoute.takeSheet("libselect") {
+                    for work in visibleItems.prefix(2) {
+                        selection.insert(work.id)
+                    }
+                    if !selection.isEmpty { isSelecting = true }
+                }
             }
             #endif
             .filterPanelPresentation(isPresented: $showingFilters) {
