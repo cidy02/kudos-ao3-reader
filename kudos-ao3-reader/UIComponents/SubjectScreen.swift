@@ -364,6 +364,7 @@ struct WorkFandomLabel: View {
 struct WorkPlainRow<Leading: View, Heading: View, Remainder: View>: View {
     var wide = false
     var showsSeparator = true
+    var separatorInset: CGFloat? = nil
     @ViewBuilder var leading: () -> Leading
     @ViewBuilder var heading: () -> Heading
     @ViewBuilder var remainder: () -> Remainder
@@ -403,7 +404,7 @@ struct WorkPlainRow<Leading: View, Heading: View, Remainder: View>: View {
 
             if showsSeparator {
                 WorkRowSeparator(
-                    inset: stacked || wide ? WorkRowMetrics.screenInset : WorkRowMetrics.textColumnInset
+                    inset: separatorInset ?? (stacked || wide ? WorkRowMetrics.screenInset : WorkRowMetrics.textColumnInset)
                 )
             }
         }

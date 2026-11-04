@@ -23,6 +23,7 @@ struct AddLibraryWorksSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(AppRouter.self) private var router
     @Environment(PrivacyGate.self) private var gate
+    @Environment(ThemeManager.self) private var themeManager
     @AppStorage("hideMatureContent") private var hideMature = true
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -82,12 +83,6 @@ struct AddLibraryWorksSheet: View {
         let hiddenOnly = eligible.isEmpty && !candidates(allWorks).isEmpty
         NavigationStack {
             List {
-                Text("Add to \(destinationName)")
-                    .font(.title2.bold())
-                    .lineLimit(nil)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityAddTraits(.isHeader)
-                    .appThemedRows()
                 Group {
                     if hiddenOnly {
                         ContentUnavailableView {
@@ -101,12 +96,30 @@ struct AddLibraryWorksSheet: View {
                         ContentUnavailableView {
                             Label("No works to add", systemImage: "square.stack")
                         } description: {
-                            Text("Your Library has no works you can add to this \(scopeName).")
+                            Text("Your Library has no works you can add to \(destinationName).")
                         }
                     } else {
                         ForEach(matches) { work in
-                            Button { toggle(work) } label: { row(work) }
-                                .buttonStyle(.plain)
+                            SensitiveWorkRow(
+                                work: work,
+                                isSelecting: true,
+                                isSelected: selection.contains(work.id),
+                                onToggleSelection: { toggle(work) },
+                                showsSummary: false,
+                                showsTags: false,
+                                showsProgress: false,
+                                leadingSelection: true,
+                                showsSeparator: work.id != matches.last?.id
+                            )
+                            .cardRow(isSelected: selection.contains(work.id), chrome: .plain)
+                            .listRowBackground(
+                                ZStack {
+                                    themeManager.appTheme.cardSurface
+                                    if selection.contains(work.id) {
+                                        themeManager.effectiveTint.opacity(0.08)
+                                    }
+                                }
+                            )
                         }
                         if matches.isEmpty {
                             ContentUnavailableView {
@@ -122,17 +135,34 @@ struct AddLibraryWorksSheet: View {
                 .appThemedRows()
             }
             .appThemedScroll()
+            #if os(iOS)
+            .searchable(
+                text: $query,
+                placement: .navigationBarDrawer(displayMode: .always),
+                prompt: "Search your library"
+            )
+            #else
             .searchable(text: $query, prompt: "Search your library")
-            .wrappingInlineTitle("Add Works", accessibilityHidden: true)
+            #endif
+            .wrappingInlineTitle(
+                chosen.count > 0 ? "Add Works · \(chosen.count) selected" : "Add Works",
+                accessibilityHidden: false
+            )
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .accessibilityLabel("Cancel")
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(Self.confirmationTitle(count: chosen.count)) {
+                    Button("Add") {
                         if !chosen.isEmpty { onAdd(chosen) }
                         dismiss()
                     }
+                    .sheetConfirmStyle()
                     .disabled(chosen.isEmpty)
                 }
                 // Every works list offers the reveal while Hide Mature is on.
@@ -142,43 +172,6 @@ struct AddLibraryWorksSheet: View {
             }
         }
         .presentationDragIndicator(.visible)
-    }
-
-    private func row(_ work: SavedWork) -> some View {
-        // The circle under the text at the accessibility sizes: beside it the byline's
-        // column was too narrow for one AO3 name, which broke mid-word and was cut
-        // ("by un- / cle_iroh…"). Full width, it reads whole, as the other work rows do.
-        let layout = dynamicTypeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8)) : AnyLayout(HStackLayout(spacing: 12))
-        return layout {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(work.title)
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.primary)
-                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
-                if !work.author.isEmpty {
-                    AO3AuthorBylineView(
-                        displayText: work.author,
-                        identities: work.verifiedAuthorIdentities,
-                        font: .caption,
-                        compact: !dynamicTypeSize.isAccessibilitySize,
-                        onOpenRoute: { route in
-                            dismiss()
-                            router.openAuthorProfile(route)
-                        }
-                    )
-                }
-            }
-            if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 8) }
-            Image(systemName: selection.contains(work.id) ? "checkmark.circle.fill" : "circle")
-                .foregroundStyle(selection.contains(work.id) ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
-                .imageScale(.large)
-                .accessibilityHidden(true)
-        }
-        .contentShape(Rectangle())
-        .accessibilityElement(children: .combine)
-        .accessibilityValue(selection.contains(work.id) ? "Selected" : "Not selected")
-        .accessibilityHint("Double-tap to \(selection.contains(work.id) ? "deselect" : "select") this work.")
     }
 
     private func toggle(_ work: SavedWork) {

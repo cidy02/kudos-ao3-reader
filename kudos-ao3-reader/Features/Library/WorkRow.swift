@@ -1,6 +1,28 @@
 import SwiftData
 import SwiftUI
 
+/// Leading checkmark circle for multi-select work rows (e.g. Add Works sheet, board 06).
+struct WorkLeadingSelectionCheck: View {
+    var isSelected: Bool
+
+    var body: some View {
+        Group {
+            if isSelected {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 22))
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(.white, .accentFill)
+            } else {
+                Image(systemName: "circle")
+                    .font(.system(size: 22))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(width: 24, height: 24)
+        .accessibilityHidden(true)
+    }
+}
+
 /// One row representing a saved work, reused across Library and Bookmarks. Mirrors
 /// the Search result row (`AO3WorkRow`) — title, author, fandoms, summary, and a
 /// stats line — so the two lists read consistently, plus a Library-specific
@@ -47,6 +69,12 @@ struct WorkRow: View {
     /// Detailed rows only. Off hides the summary paragraph; tags still expand.
     /// A ledger row still shows a two-line summary when the work has one.
     var showsSummary = true
+    /// When false, skips tag lines and tag groups in the remainder.
+    var showsTags = true
+    /// When false, skips the reading progress bar in the remainder.
+    var showsProgress = true
+    /// When true, renders selection circle leading (beside symbols) rather than trailing bubble.
+    var leadingSelection = false
     /// New chapters since the reader last looked. Draws the "+N" badge and marks
     /// those bars. Only Subscriptions has a count today.
     var badgeCount = 0
@@ -164,7 +192,11 @@ struct WorkRow: View {
     }
 
     private var ledgerRow: some View {
-        WorkPlainRow(wide: wide, showsSeparator: showsSeparator) {
+        WorkPlainRow(
+            wide: wide,
+            showsSeparator: showsSeparator,
+            separatorInset: leadingSelection ? 115 : nil
+        ) {
             statusGrid
         } heading: {
             ledgerHeading
@@ -218,7 +250,11 @@ struct WorkRow: View {
         let isExpandable = Self.isExpandable(
             strippedSummary: summaryText, for: work, showsSummary: showsSummary
         )
-        WorkPlainRow(wide: wide, showsSeparator: showsSeparator) {
+        WorkPlainRow(
+            wide: wide,
+            showsSeparator: showsSeparator,
+            separatorInset: leadingSelection ? 115 : nil
+        ) {
             statusGrid
         } heading: {
             standardHeading(isExpandable: isExpandable)
@@ -234,14 +270,14 @@ struct WorkRow: View {
             favoriteTint: theme.appTheme.favoriteColor,
             dateUpdated: work.dateUpdated,
             datePublished: work.datePublished,
-            showsExpand: isExpandable && showsExpandButton
+            showsExpand: isExpandable && showsExpandButton && showsTags
         )
         authorAndFandoms
     }
 
     @ViewBuilder
     private func standardRemainder(summaryText: String) -> some View {
-        if !expandedBinding.wrappedValue {
+        if showsTags && !expandedBinding.wrappedValue {
             WorkTagLineView(
                 relationships: work.workRelationships,
                 characters: work.workCharacters,
@@ -257,7 +293,7 @@ struct WorkRow: View {
                 .multilineTextAlignment(.leading)
                 .animation(nil, value: expandedBinding.wrappedValue)
         }
-        if expandedBinding.wrappedValue {
+        if showsTags && expandedBinding.wrappedValue {
             WorkRowExpandedDetails(animate: !expandAll) {
                 VStack(alignment: .leading, spacing: 12) {
                     if work.hasCategorizedWorkTags {
@@ -285,20 +321,27 @@ struct WorkRow: View {
             datePublished: work.datePublished.isEmpty ? nil : work.datePublished,
             isExpanded: expandedBinding.wrappedValue
         )
-        if let standardProgress {
+        if showsProgress, let standardProgress {
             WorkReadProgressBar(progress: standardProgress)
         }
     }
 
     private var statusGrid: some View {
-        WorkStatusIconGrid(
-            rating: work.rating.isEmpty ? nil : work.rating,
-            categories: work.workCategories,
-            warnings: work.workWarnings,
-            completion: work.completionStatus,
-            tileSize: Self.ledgerTileSize,
-            announcesToVoiceOver: true
-        )
+        HStack(alignment: .center, spacing: 12) {
+            if isSelecting && leadingSelection {
+                WorkLeadingSelectionCheck(isSelected: isSelected)
+            } else if leadingSelection {
+                Color.clear.frame(width: 24, height: 24)
+            }
+            WorkStatusIconGrid(
+                rating: work.rating.isEmpty ? nil : work.rating,
+                categories: work.workCategories,
+                warnings: work.workWarnings,
+                completion: work.completionStatus,
+                tileSize: Self.ledgerTileSize,
+                announcesToVoiceOver: true
+            )
+        }
     }
 
     private func titleLine(
@@ -327,7 +370,7 @@ struct WorkRow: View {
                 WorkUpdatedDateBadge(dateUpdated: dateUpdated, datePublished: datePublished)
             }
             if showsExpand { expandButton }
-            if isSelecting {
+            if isSelecting && !leadingSelection {
                 WorkSelectionBubble(isSelected: isSelected)
             }
         }
