@@ -10,6 +10,7 @@ struct WordsReadHeroCard: View {
     let hideReadingTime: Bool
     let totalDaysElapsed: Int
     let palette: SubjectPalette
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(ThemeManager.self) private var theme
 
     var body: some View {
@@ -48,13 +49,17 @@ struct WordsReadHeroCard: View {
                 .overlay(theme.appTheme.cardBorder)
                 .padding(.vertical, 4)
 
-            HStack(alignment: .top, spacing: 12) {
+            // Three columns until accessibility sizes, where bold title3 values would break mid-figure.
+            let statsLayout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 10))
+                : AnyLayout(HStackLayout(alignment: .top, spacing: 12))
+            statsLayout {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Time reading")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                     Text(hideReadingTime ? "—" : ReadingInsights.durationLabel(insights.totalSeconds))
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(.title3.bold())
                         .monospacedDigit()
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -64,7 +69,7 @@ struct WordsReadHeroCard: View {
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                     Text(insights.finishedWorksCount.formatted())
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(.title3.bold())
                         .monospacedDigit()
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -74,7 +79,7 @@ struct WordsReadHeroCard: View {
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                     Text("\(insights.readingDaysCount) of \(totalDaysElapsed)")
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(.title3.bold())
                         .monospacedDigit()
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

@@ -394,7 +394,10 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                 Group {
                     HomeProfileAvatar(
                         url: accountAvatarURL,
-                        username: auth.username
+                        username: auth.username,
+                        identity: auth.username.map {
+                            themeManager.appTheme.subjectPalette(hue: CoverArt.hue(for: $0))
+                        }
                     )
                 }
                 .frame(width: 30, height: 30)
@@ -858,8 +861,11 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
 private struct HomeProfileAvatar: View {
     let url: URL?
     let username: String?
+    /// The account's identity colour (board 56: a solid circle). Nil keeps the tinted fallback.
+    let identity: SubjectPalette?
 
     @Environment(\.accentFill) private var accentFill
+    @Environment(\.accentInk) private var accentInk
     @State private var cachedImage: Image?
 
     var body: some View {
@@ -871,7 +877,7 @@ private struct HomeProfileAvatar: View {
             }
         }
         .frame(width: 30, height: 30)
-        .background(accentFill.opacity(0.16))
+        .background(identity?.accent ?? accentFill.opacity(0.16))
         .clipShape(Circle())
         .task(id: url) { cachedImage = Self.cachedImage(for: url) }
     }
@@ -896,7 +902,8 @@ private struct HomeProfileAvatar: View {
         if let initial = username?.first {
             Text(String(initial).uppercased())
                 .font(.system(size: 15, weight: .bold, design: .rounded))
-                .foregroundStyle(.accentInk)
+                // Black or white by contrast: Dark/OLED's identity accent is a light tint.
+                .foregroundStyle(identity?.labelOnAccent ?? accentInk)
         } else {
             Image(systemName: "person.crop.circle")
                 .font(.system(size: 27, weight: .regular))

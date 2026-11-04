@@ -32,6 +32,18 @@ struct CoverAndResumeArtTests {
         #expect(who.shade == holmes.shade)
     }
 
+    @Test func mediaCategoryHuesMatchTheBoardAndStayDistinct() {
+        let names = [
+            "Anime & Manga", "Books & Literature", "Cartoons & Comics & Graphic Novels",
+            "Celebrities & Real People", "Movies", "Music & Bands", "Theater", "TV Shows",
+            "Video Games"
+        ]
+        let hues = names.map { CoverArt.mediaCategoryArt(for: $0).hue }
+
+        #expect(hues == [119, 208, 22, 193, 18, 122, 2, 295, 349])
+        #expect(Set(hues).count == names.count)
+    }
+
     @Test func readingMetaNamesTheChapterBeingRead() {
         // Posted and current differ: 0.4 of 30 equal chapters is chapter 13,
         // because the boundary belongs to the chapter it enters.
