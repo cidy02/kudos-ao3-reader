@@ -24,6 +24,14 @@ enum CoverArt {
         Double(hueDegrees(for: string)) / 360
     }
 
+    /// Board 13's category cards use the design export's UTF-16 seed so adjacent
+    /// AO3 media categories do not collapse into one hue family.
+    static func mediaCategoryArt(for string: String) -> WorkArt {
+        let seedName = string == "Cartoons & Comics & Graphic Novels" ? "Cartoons & Comics" : string
+        let hue = Int(coverSeed(seedName) % 360)
+        return WorkArt(familyHue: hue, shade: 0, hue: hue, layout: 0)
+    }
+
     /// One deterministic art choice for every generated surface of a work. The
     /// hue family is `hue(for:)` of the primary fandom — the same function a
     /// fandom page uses for its wash. The title supplies only a ±12° shade and
@@ -72,7 +80,7 @@ enum CoverArt {
     }
 
     /// The component export hashes JavaScript UTF-16 code units. Matching that
-    /// here keeps non-BMP titles stable between the design fixtures and Swift.
+    /// here keeps non-BMP strings stable between the design fixtures and Swift.
     private static func coverSeed(_ text: String) -> UInt32 {
         text.utf16.reduce(UInt32(7)) { seed, value in
             seed &* 31 &+ UInt32(value)

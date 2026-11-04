@@ -126,7 +126,8 @@ struct MediaBrowserView: View {
     }
 
     private func categoryPalette(_ category: AO3MediaCategory) -> SubjectPalette {
-        themeManager.appTheme.subjectPalette(hue: CoverArt.hue(for: category.name))
+        let art = CoverArt.mediaCategoryArt(for: category.name)
+        return themeManager.appTheme.subjectPalette(hue: Double(art.hue) / 360)
     }
 
     private var categoryList: some View {
@@ -289,7 +290,7 @@ struct MediaBrowserView: View {
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .background(
             RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
-                .fill(CoverArt.workGradient(fandoms: [category.name], title: ""))
+                .fill(CoverArt.workGradient(for: CoverArt.mediaCategoryArt(for: category.name)))
         )
         .overlay(alignment: .topTrailing) {
             Image(systemName: category.symbol)

@@ -94,43 +94,44 @@ struct AO3SeriesDetailView: View {
                         bulkSelection.selected(in: works)
                     }
                 } else {
-                    ActionToolbar(items: [
+                    ToolbarItemGroup(placement: .primaryAction) {
+                        ShareLink(item: series.url) {
+                            Label("Share Series", systemImage: "square.and.arrow.up")
+                        }
+                        .labelStyle(.iconOnly)
+
                         // The app's one "…" order (pass2-1): Mature, Select, Reorder,
                         // Expand, then the page's own items.
-                        AnyView(
-                            WorkListMoreMenu {
-                                if hideMature {
-                                    MatureRevealToggle()
-                                }
-                                if !works.isEmpty {
-                                    Button { bulkSelection.isSelecting = true } label: {
-                                        Label("Select", systemImage: "checklist")
-                                    }
-                                }
-                                if canEditSeries, works.count > 1 {
-                                    Button { isReorderingSeries = true } label: {
-                                        Label("Reorder", systemImage: "arrow.up.arrow.down")
-                                    }
-                                }
-                                if !works.isEmpty {
-                                    ShowSummariesMenuItem(isOn: $showSummaries)
-                                    ExpandAllMenuItem(expandAll: $expandAll)
-                                    Divider()
-                                }
-                                if canEditSeries {
-                                    Button { isEditingSeries = true } label: {
-                                        Label("Edit series", systemImage: "square.and.pencil")
-                                    }
-                                }
-                                Button { router.open(series.url) } label: {
-                                    Label("Open on AO3", systemImage: "safari")
-                                }
-                                ShareLink(item: series.url) {
-                                    Label("Share Series", systemImage: "square.and.arrow.up")
+                        WorkListMoreMenu {
+                            if hideMature {
+                                MatureRevealToggle()
+                            }
+                            if !works.isEmpty {
+                                Button { bulkSelection.isSelecting = true } label: {
+                                    Label("Select", systemImage: "checklist")
                                 }
                             }
-                        )
-                    ])
+                            if canEditSeries, works.count > 1 {
+                                Button { isReorderingSeries = true } label: {
+                                    Label("Reorder", systemImage: "arrow.up.arrow.down")
+                                }
+                            }
+                            if !works.isEmpty {
+                                ShowSummariesMenuItem(isOn: $showSummaries)
+                                ExpandAllMenuItem(expandAll: $expandAll)
+                                Divider()
+                            }
+                            if canEditSeries {
+                                Button { isEditingSeries = true } label: {
+                                    Label("Edit series", systemImage: "square.and.pencil")
+                                }
+                            }
+                            Button { router.open(series.url) } label: {
+                                Label("Open on AO3", systemImage: "safari")
+                            }
+                        }
+                        .labelStyle(.iconOnly)
+                    }
                 }
             }
             .remoteWorkSelectionChrome(bulkSelection)
