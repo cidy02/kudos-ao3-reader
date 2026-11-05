@@ -156,6 +156,13 @@ fn dkim_passes_for_ao3(results: &str) -> bool {
         if !rest.split_whitespace().next().unwrap_or("").eq_ignore_ascii_case("pass") {
             continue;
         }
+        if !is_well_formed_clause(rest) {
+            // Everything after `dkim=pass` must be a `key=value` property. Prose
+            // there means the clause was assembled out of something that escaped
+            // a comment — a stray `)` in an address a provider reflected, say —
+            // and a clause we cannot read cleanly is not one to believe.
+            continue;
+        }
         let domains = identity_domains(clause);
         // Every identity the clause names must be AO3's. One that disagrees
         // means the clause is not telling us one thing, so we believe none of it.
@@ -166,6 +173,14 @@ fn dkim_passes_for_ao3(results: &str) -> bool {
         }
     }
     false
+}
+
+/// True when every token after the result keyword is a `key=value` property.
+fn is_well_formed_clause(after_keyword: &str) -> bool {
+    after_keyword
+        .split_whitespace()
+        .skip(1) // the outcome itself: `pass`
+        .all(|token| token.contains('='))
 }
 
 /// Every `header.d=` / `header.i=` domain named in one clause.

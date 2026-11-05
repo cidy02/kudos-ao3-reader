@@ -27,6 +27,7 @@
 
 pub mod gate;
 pub mod parser;
+mod structure;
 
 pub use gate::{Attestor, Verdict};
 pub use parser::{Ao3Event, Ao3EventKind, ParseError, Subscription};
