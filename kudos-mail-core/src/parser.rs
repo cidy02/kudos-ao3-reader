@@ -86,10 +86,21 @@ pub enum ParseError {
     NoWorkLink,
     #[error("not a subscription notification")]
     NotASubscriptionEvent,
+    #[error("message is larger than we will decode")]
+    TooLarge,
 }
+
+/// Largest message we will decode. AO3's notifications run to a few tens of
+/// kilobytes; anything far larger is not one, and quoted-printable or base64
+/// can expand well beyond its encoded size, so the cap is applied before the
+/// MIME parser is handed the bytes.
+pub const MAX_MESSAGE_BYTES: usize = 1024 * 1024;
 
 /// Parse one message. The caller must have run [`crate::gate::check`] first.
 pub fn parse(raw: &[u8]) -> Result<Ao3Event, ParseError> {
+    if raw.len() > MAX_MESSAGE_BYTES {
+        return Err(ParseError::TooLarge);
+    }
     let message = MessageParser::default().parse(raw).ok_or(ParseError::NotMail)?;
     parse_message(&message)
 }
@@ -144,14 +155,18 @@ fn chapter_number(subject: &str) -> Option<u32> {
     digits.parse().ok().filter(|n| *n <= MAX_CHAPTERS)
 }
 
-/// The first AO3 work link in the body, as ids.
+/// The work link, read only from a line that *begins* with it.
 ///
-/// Only a link under AO3's own `/works/` path counts, and only digits are
-/// accepted after it — so `…/works/12?next=https://evil.test` yields 12, and a
-/// link on any other host yields nothing at all.
+/// Not the first occurrence anywhere: an AO3 author may put a URL in their work
+/// title, and the title is printed above the real link. Searching the whole body
+/// let a title like `https://archiveofourown.org/works/111` decide the work id
+/// of a genuine, correctly signed message — a confusion attack needing no forged
+/// mail at all. AO3's template always puts the link alone on its own line, so
+/// that is the only place we read it.
 fn work_and_chapter_ids(body: &str) -> Option<(u64, Option<u64>)> {
-    let at = body.find(WORKS_PREFIX)?;
-    let rest = body.get(at + WORKS_PREFIX.len()..)?;
+    let rest = body
+        .lines()
+        .find_map(|line| line.trim().strip_prefix(WORKS_PREFIX))?;
     let work_id = leading_u64(rest)?;
 
     let after_id = rest.trim_start_matches(|c: char| c.is_ascii_digit());
@@ -169,9 +184,15 @@ fn leading_u64(s: &str) -> Option<u64> {
     digits.parse().ok()
 }
 
-/// The username before the pseud link on the first line.
+/// The username AO3 prints before the pseud link on its "posted a new …" line.
+///
+/// The line must be that one. A `/users/` URL can appear in a summary or a
+/// title too, and taking the first line that merely contains one let a work's
+/// own text choose the author shown beside it.
 fn author(body: &str) -> Option<String> {
-    let line = body.lines().find(|l| l.contains("https://archiveofourown.org/users/"))?;
+    let line = body.lines().find(|l| {
+        l.contains("https://archiveofourown.org/users/") && l.contains("posted a new")
+    })?;
     let name = line.split_whitespace().next()?;
     (!name.is_empty()).then(|| capped(name, MAX_AUTHOR))
 }
@@ -497,5 +518,45 @@ mod tests {
         ] {
             let _ = parse(raw);
         }
+    }
+
+    /// An AO3 author may put a URL in their own work title. That arrives as a
+    /// genuine, correctly signed message, so the gate cannot help — the parser
+    /// must not let the title decide which work the mail is about.
+    #[test]
+    fn a_url_in_the_title_cannot_hijack_the_work_id() {
+        let mail = chapter_mail().replace(
+            "\"Linger Around the Light\"",
+            "\"https://archiveofourown.org/works/111 \"",
+        );
+        let e = parse(mail.as_bytes()).unwrap();
+        assert_eq!(e.work_id, 83_701_926, "the link line wins, not the title");
+    }
+
+    #[test]
+    fn a_url_in_the_summary_cannot_hijack_the_work_id() {
+        let mail = chapter_mail().replace(
+            "A lighthouse keeper writes letters she never sends.",
+            "Read my other fic https://archiveofourown.org/works/222",
+        );
+        let e = parse(mail.as_bytes()).unwrap();
+        assert_eq!(e.work_id, 83_701_926);
+    }
+
+    #[test]
+    fn a_users_url_in_the_summary_cannot_rename_the_author() {
+        let mail = chapter_mail().replace(
+            "A lighthouse keeper writes letters she never sends.",
+            "impostor (https://archiveofourown.org/users/impostor) wrote this",
+        );
+        let e = parse(mail.as_bytes()).unwrap();
+        assert_eq!(e.author, "lamplighter");
+    }
+
+    #[test]
+    fn an_oversized_message_is_refused_before_decoding() {
+        let mut mail = chapter_mail().into_bytes();
+        mail.extend(std::iter::repeat_n(b'x', MAX_MESSAGE_BYTES));
+        assert_eq!(parse(&mail), Err(ParseError::TooLarge));
     }
 }
