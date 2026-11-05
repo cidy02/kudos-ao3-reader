@@ -19,6 +19,7 @@ HOUSE='Kudos house rules (each one exists because an agent broke it):
 4. Edit only the files your brief names. If the fix needs a file outside them, say so in the handback instead of reaching for it.
 5. If a screenshot-based claim cannot be confirmed in the code, say it is unconfirmed. Do not invent a fix for it, and do not weaken a guard to make a screenshot match a mockup.
 6. Say plainly what you could not verify. An honest gap is worth more than a confident wrong claim.
+6b. Hand back facts, not prose: what you changed (file:line), what you left alone and why, what you could not verify. No restating the brief. Evidence (quotes, line numbers) is never waffle — narration is.
 7. You have the context7 MCP tools. Before relying on how a SwiftUI API behaves, look it up — guessing has cost this project real build cycles (.controlSize does nothing to a segmented Picker on iOS).'
 
 # Where this worktree actually is, so a fresh session starts oriented instead of
