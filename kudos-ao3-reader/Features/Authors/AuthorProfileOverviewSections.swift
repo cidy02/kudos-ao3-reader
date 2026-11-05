@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// Left-aligned identity header: author-colour wash lives on the screen, not
-/// on these controls. Subscribe / Mute / Block stay AO3 red (`accentFill`).
+/// on these controls. Subscribe stays AO3 red (`accentFill`); Mute and Block
+/// render as neutral pills with dark text (board 23, matching FID55 on board 35).
 struct AuthorProfileOverviewHeader: View {
     var model: AO3AuthorProfileModel
     let isOwnProfile: Bool
@@ -200,7 +201,9 @@ struct AuthorProfileOverviewHeader: View {
             }
             .frame(maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : nil)
         }
-        .buttonStyle(.kudosSecondary)
+        .buttonStyle(.bordered)
+        .buttonBorderShape(.capsule)
+        .tint(.primary)
         .disabled(actionsBusy)
         .accessibilityLabel(action.label)
     }

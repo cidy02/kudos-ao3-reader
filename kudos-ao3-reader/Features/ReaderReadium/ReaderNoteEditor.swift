@@ -30,12 +30,14 @@ struct ReaderNoteEditor: View {
                         Section("Highlighted") {
                             Text(annotation.selectedText)
                                 .font(.callout)
-                                .padding(.leading, 10)
+                                .padding(.leading, 14)
                                 .overlay(alignment: .leading) {
                                     Capsule()
                                         .fill(annotation.displayTint)
-                                        .frame(width: 3)
+                                        .frame(width: 4)
+                                        .accessibilityHidden(true)
                                 }
+                                .listRowBackground(highlightedCardBackground)
                         }
                     }
 
@@ -124,6 +126,50 @@ struct ReaderNoteEditor: View {
         annotation.note = typed
         annotation.markModified()
         onCommit()
+    }
+
+    @ViewBuilder
+    private var highlightedCardBackground: some View {
+        let theme = themeManager.appTheme
+        let palette = SubjectPalette(color: annotation.displayTint, theme: theme)
+        if Self.canCarryReadableText(tint: annotation.displayTint, on: theme) {
+            ZStack {
+                theme.cardSurface
+                palette.rowWash
+            }
+        } else {
+            theme.cardSurface
+        }
+    }
+
+    /// Verifies that `tint` composited as a wash over `theme.cardSurface` retains
+    /// WCAG minimum contrast (4.5:1) for body text across all four themes.
+    /// If an edge-case colour cannot guarantee readable text, callers fall back
+    /// to the plain unwashed card.
+    static func canCarryReadableText(tint: Color, on theme: ReaderTheme) -> Bool {
+        let alpha = theme.isDarkFamily ? 0.30 : 0.18
+        let baseSurfaceColor: Color = {
+            switch theme {
+            case .light: Color(red: 1.0, green: 1.0, blue: 1.0)
+            case .sepia: Color(red: 0.984, green: 0.941, blue: 0.851)
+            case .dark: Color(red: 0.133, green: 0.133, blue: 0.157)
+            case .oled: Color(red: 0.110, green: 0.110, blue: 0.118)
+            }
+        }()
+        let platformSurface = UIColor(baseSurfaceColor)
+        let platformTint = UIColor(tint)
+        var surfaceRed: CGFloat = 0, surfaceGreen: CGFloat = 0, surfaceBlue: CGFloat = 0, surfaceAlpha: CGFloat = 0
+        var tintRed: CGFloat = 0, tintGreen: CGFloat = 0, tintBlue: CGFloat = 0, tintAlpha: CGFloat = 0
+        guard platformSurface.getRed(&surfaceRed, green: &surfaceGreen, blue: &surfaceBlue, alpha: &surfaceAlpha),
+              platformTint.getRed(&tintRed, green: &tintGreen, blue: &tintBlue, alpha: &tintAlpha) else {
+            return true
+        }
+        let blendedRed = surfaceRed * (1 - alpha) + tintRed * alpha
+        let blendedGreen = surfaceGreen * (1 - alpha) + tintGreen * alpha
+        let blendedBlue = surfaceBlue * (1 - alpha) + tintBlue * alpha
+        let blended = Color(red: Double(blendedRed), green: Double(blendedGreen), blue: Double(blendedBlue))
+        let textColor: Color = theme.isDarkFamily ? .white : .black
+        return textColor.contrastRatio(on: blended) >= 4.5
     }
 }
 #endif
