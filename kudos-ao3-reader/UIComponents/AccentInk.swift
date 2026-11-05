@@ -1,9 +1,18 @@
 import SwiftUI
 
 extension ReaderTheme {
-    /// Android uses this same page (Dark #0B0B0D, OLED black), not the reader's ground.
+    /// Mixes against `cardBackdrop` — the app's page, not the reader's ground.
     /// A named accent uses its one Dark/OLED step on both of those themes. A custom
     /// colour, and any legacy hex that is not a named fill, still mixes toward white.
+    ///
+    /// **Android parity is currently broken here.** Both platforms used to mix against
+    /// Dark #0B0B0D; `4ab92874` unified iOS's two dark page colours onto #16161B
+    /// (`appBaseBackground`) and Android's `WorkStats.kt` page was not moved with it.
+    /// The named accents' Dark steps are fixed hexes, so they are unaffected; only a
+    /// custom or legacy tint can now resolve to a different step on the two platforms.
+    /// `AccentInkTests.legacyRedMatchesAndroidsByteRoundedWhiteMix` still passes —
+    /// #C26666 clears 4.5:1 on both grounds — so the divergence is latent, not visible
+    /// today. Close it by moving Android's page, not by re-splitting iOS's.
     func accentInk(for tint: Color) -> Color {
         switch self {
         case .dark, .oled:

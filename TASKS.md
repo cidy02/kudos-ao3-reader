@@ -595,6 +595,17 @@ hand-rolling** — "as many dependencies as are necessary". PDF is explicitly *i
   again"). When the imported original file is still held, offer "Save the Original
   File…" (share sheet / Files) before a permanent delete. A work still on AO3 deletes
   without a question, as today. Never reachable from a network error path (policy).
+- **T-503 · Android: move the dark page to #16161B** 🅿️ *(Claude, 2026-11-05; from the
+  Dark theme sweep.)* iOS had two dark page colours — `cardBackdrop` special-cased Dark
+  to #0B0B0D while `appBaseBackground` returned #16161B — and `4ab92874` unified them on
+  #16161B. Android's `WorkStats.kt` page was not moved, so the two platforms now mix
+  custom and legacy accent tints against different grounds (`ReaderTheme.accentInk` →
+  `readable(on: cardBackdrop)`). Latent, not visible: the named accents' Dark steps are
+  fixed hexes, and #C26666 still clears 4.5:1 on both, so
+  `AccentInkTests.legacyRedMatchesAndroidsByteRoundedWhiteMix` passes either way. Close it
+  by moving Android, not by re-splitting iOS. Check Android's own dark surfaces read
+  against the new page before changing the constant.
+
 - **T-464 · Subscriptions: one Updates list; follow tags through AO3 feeds** 🅿️
   *(owner, 2026-10-28; canvas `Subscriptions`, `Subscriptions-Plan`).*
   Subscriptions opens on **Updates**: new chapters (work subscriptions), new parts
