@@ -54,6 +54,7 @@ enum DemoLibrary {
         }
         guard !existing.contains(where: { $0.title == samples[0].title }) else {
             seedRecentlyDeleted(in: context)
+            seedReadingHistory(in: context)
             return
         }
 
@@ -134,6 +135,7 @@ enum DemoLibrary {
 
         try? context.save()
         seedRecentlyDeleted(in: context)
+        seedReadingHistory(in: context)
     }
 
     /// One work and one collection in Recently Deleted, so that screen has rows.
@@ -275,6 +277,258 @@ enum DemoLibrary {
         Sample(title: "Stars Over Tatooine", author: "binarysun",
                fandoms: ["Star Wars - All Media Types"], rating: "General Audiences",
                words: 6_540, chapters: "1/1", onDevice: false)
+    ]
+}
+
+extension DemoLibrary {
+    /// Plausible reading history across the last 3-4 months so Reading Insights
+    /// (Overview, Habits, Taste) and Reading History timeline have realistic data.
+    static func seedReadingHistory(in context: ModelContext) {
+        guard context.container.schema.entities.contains(where: { $0.name == "ReadingSession" }) else { return }
+        let existingSessions = (try? context.fetch(FetchDescriptor<ReadingSession>())) ?? []
+        guard existingSessions.isEmpty else { return }
+
+        let works = (try? context.fetch(FetchDescriptor<SavedWork>())) ?? []
+        guard !works.isEmpty else { return }
+        let worksByTitle = Dictionary(works.map { ($0.title, $0) }, uniquingKeysWith: { first, _ in first })
+
+        let calendar = Calendar.current
+        let now = Date()
+
+        for spec in historySpecs {
+            guard let work = worksByTitle[spec.title] else { continue }
+            guard let startedAt = sessionDate(for: spec, now: now, calendar: calendar) else { continue }
+            let duration = Double(spec.duration * 60)
+            let endedAt = startedAt.addingTimeInterval(duration)
+            let session = ReadingSession(
+                id: UUID(),
+                workID: work.id,
+                ao3WorkID: work.ao3WorkID,
+                sourceURL: work.sourceURL,
+                workTitle: work.title,
+                startedAt: startedAt,
+                endedAt: endedAt,
+                durationSeconds: duration,
+                lastSpineIndex: spec.spine,
+                chapterTitle: spec.chapter,
+                endingProgress: spec.progress,
+                wordCount: work.wordCount,
+                chapterCountAtVisit: work.postedChapterCount,
+                didFinish: spec.finished,
+                lastModifiedAt: endedAt
+            )
+            context.insert(session)
+        }
+        try? context.save()
+    }
+
+    private static func sessionDate(
+        for spec: DemoSessionSpec,
+        now: Date,
+        calendar: Calendar
+    ) -> Date? {
+        if spec.monthOffset == 0 {
+            guard let monthInterval = calendar.dateInterval(of: .month, for: now) else { return nil }
+            let currentDay = calendar.component(.day, from: now)
+            let slotDays: [Int] = {
+                if currentDay <= 1 { return [1, 1, 1, 1] }
+                if currentDay == 2 { return [1, 1, 2, 2] }
+                if currentDay == 3 { return [1, 2, 3, 3] }
+                if currentDay == 4 { return [1, 2, 3, 4] }
+                return [
+                    max(1, currentDay / 5),
+                    max(2, (currentDay * 2) / 5),
+                    max(3, (currentDay * 4) / 5),
+                    currentDay
+                ]
+            }()
+            let targetDay = slotDays[min(slotDays.count - 1, max(0, spec.day - 1))]
+            guard let baseDate = calendar.date(byAdding: .day, value: targetDay - 1, to: monthInterval.start) else {
+                return nil
+            }
+            if targetDay == currentDay {
+                let offsetHours = Double(4 - spec.day) * 1.5 + 0.5
+                return now.addingTimeInterval(-Double(spec.duration * 60) - offsetHours * 3600)
+            } else {
+                return calendar.date(bySettingHour: spec.hour, minute: spec.minute, second: 0, of: baseDate) ?? baseDate
+            }
+        } else {
+            guard let targetMonth = calendar.date(byAdding: .month, value: spec.monthOffset, to: now),
+                  let monthInterval = calendar.dateInterval(of: .month, for: targetMonth) else { return nil }
+            let daysInMonth = calendar.range(of: .day, in: .month, for: targetMonth)?.count ?? 28
+            let targetDay = min(daysInMonth, max(1, spec.day))
+            guard let baseDate = calendar.date(byAdding: .day, value: targetDay - 1, to: monthInterval.start) else {
+                return nil
+            }
+            return calendar.date(bySettingHour: spec.hour, minute: spec.minute, second: 0, of: baseDate) ?? baseDate
+        }
+    }
+
+    private struct DemoSessionSpec {
+        let title: String
+        let monthOffset: Int
+        let day: Int
+        let hour: Int
+        let minute: Int
+        let duration: Int
+        let progress: Double
+        var spine: Int = 1
+        var chapter: String = ""
+        var finished: Bool = false
+    }
+
+    private static let historySpecs: [DemoSessionSpec] = [
+        // Month -3 (3 months ago)
+        DemoSessionSpec(
+            title: "What the River Keeps", monthOffset: -3, day: 2, hour: 19, minute: 30, duration: 75,
+            progress: 0.18, spine: 5, chapter: "Chapter 5: The Water Gate"
+        ),
+        DemoSessionSpec(
+            title: "Winter Garden", monthOffset: -3, day: 5, hour: 21, minute: 15, duration: 30,
+            progress: 0.30, spine: 2, chapter: "Chapter 2: Frost"
+        ),
+        DemoSessionSpec(
+            title: "What the River Keeps", monthOffset: -3, day: 8, hour: 20, minute: 15, duration: 80,
+            progress: 0.36, spine: 11, chapter: "Chapter 11: Rue Plumet"
+        ),
+        DemoSessionSpec(
+            title: "Winter Garden", monthOffset: -3, day: 11, hour: 20, minute: 45, duration: 35,
+            progress: 0.65, spine: 4, chapter: "Chapter 4: Thaw"
+        ),
+        DemoSessionSpec(
+            title: "The Long Way Down", monthOffset: -3, day: 12, hour: 22, minute: 30, duration: 46,
+            progress: 0.12, spine: 2, chapter: "Chapter 2: Neon Haze"
+        ),
+        DemoSessionSpec(
+            title: "Winter Garden", monthOffset: -3, day: 15, hour: 22, minute: 0, duration: 40,
+            progress: 1.0, spine: 6, chapter: "Chapter 6: Spring Bloom", finished: true
+        ),
+        DemoSessionSpec(
+            title: "What the River Keeps", monthOffset: -3, day: 17, hour: 21, minute: 0, duration: 90,
+            progress: 0.54, spine: 16, chapter: "Chapter 16: The Barricade"
+        ),
+        DemoSessionSpec(
+            title: "Burn my heart, heed my eyes", monthOffset: -3, day: 19, hour: 18, minute: 45, duration: 19,
+            progress: 1.0, finished: true
+        ),
+        DemoSessionSpec(
+            title: "The Long Way Down", monthOffset: -3, day: 22, hour: 20, minute: 0, duration: 51,
+            progress: 0.24, spine: 4, chapter: "Chapter 4: Chrome Dreams"
+        ),
+        DemoSessionSpec(
+            title: "Stars Over Tatooine", monthOffset: -3, day: 26, hour: 21, minute: 30, duration: 25,
+            progress: 1.0, finished: true
+        ),
+
+        // Month -2 (2 months ago)
+        DemoSessionSpec(
+            title: "What the River Keeps", monthOffset: -2, day: 3, hour: 20, minute: 0, duration: 70,
+            progress: 0.72, spine: 22, chapter: "Chapter 22: In the Shadows"
+        ),
+        DemoSessionSpec(
+            title: "Sodium Lights", monthOffset: -2, day: 6, hour: 22, minute: 0, duration: 45, progress: 0.15
+        ),
+        DemoSessionSpec(
+            title: "Ashfall", monthOffset: -2, day: 8, hour: 19, minute: 0, duration: 40,
+            progress: 0.22, spine: 2, chapter: "Chapter 2: Smoke"
+        ),
+        DemoSessionSpec(
+            title: "Lighthouse Hours", monthOffset: -2, day: 10, hour: 18, minute: 15, duration: 31,
+            progress: 0.45, spine: 2, chapter: "Chapter 2: The Fog"
+        ),
+        DemoSessionSpec(
+            title: "What the River Keeps", monthOffset: -2, day: 13, hour: 21, minute: 30, duration: 75,
+            progress: 0.88, spine: 26, chapter: "Chapter 26: Dawn"
+        ),
+        DemoSessionSpec(
+            title: "Lighthouse Hours", monthOffset: -2, day: 15, hour: 19, minute: 45, duration: 38,
+            progress: 1.0, spine: 5, chapter: "Chapter 5: Morning Light", finished: true
+        ),
+        DemoSessionSpec(
+            title: "Sodium Lights", monthOffset: -2, day: 17, hour: 20, minute: 30, duration: 40, progress: 0.28
+        ),
+        DemoSessionSpec(
+            title: "Ashfall", monthOffset: -2, day: 20, hour: 21, minute: 0, duration: 45,
+            progress: 0.44, spine: 4, chapter: "Chapter 4: The Citadel"
+        ),
+        DemoSessionSpec(
+            title: "Static on Channel Nine", monthOffset: -2, day: 22, hour: 22, minute: 15, duration: 35,
+            progress: 0.35, spine: 1, chapter: "Chapter 1: White Noise"
+        ),
+        DemoSessionSpec(
+            title: "What the River Keeps", monthOffset: -2, day: 24, hour: 19, minute: 0, duration: 60,
+            progress: 1.0, spine: 30, chapter: "Chapter 30: What the River Keeps", finished: true
+        ),
+        DemoSessionSpec(
+            title: "Static on Channel Nine", monthOffset: -2, day: 27, hour: 20, minute: 45, duration: 36,
+            progress: 0.70, spine: 2, chapter: "Chapter 2: Frequency"
+        ),
+
+        // Month -1 (previous month)
+        DemoSessionSpec(
+            title: "Paper Cranes", monthOffset: -1, day: 2, hour: 17, minute: 30, duration: 11,
+            progress: 1.0, finished: true
+        ),
+        DemoSessionSpec(
+            title: "Every Door in Hades", monthOffset: -1, day: 4, hour: 21, minute: 0, duration: 43,
+            progress: 0.18, spine: 4, chapter: "Chapter 4: Tartarus"
+        ),
+        DemoSessionSpec(
+            title: "Winter Garden", monthOffset: -1, day: 7, hour: 18, minute: 30, duration: 25,
+            progress: 0.35, spine: 2, chapter: "Chapter 2: Frost"
+        ),
+        DemoSessionSpec(
+            title: "Every Door in Hades", monthOffset: -1, day: 9, hour: 20, minute: 0, duration: 46,
+            progress: 0.38, spine: 8, chapter: "Chapter 8: Asphodel"
+        ),
+        DemoSessionSpec(
+            title: "Sodium Lights", monthOffset: -1, day: 11, hour: 21, minute: 15, duration: 35, progress: 0.36
+        ),
+        DemoSessionSpec(
+            title: "Ashfall", monthOffset: -1, day: 14, hour: 22, minute: 30, duration: 41,
+            progress: 0.63, spine: 6, chapter: "Chapter 6: Ember"
+        ),
+        DemoSessionSpec(
+            title: "Night Market", monthOffset: -1, day: 16, hour: 19, minute: 15, duration: 26,
+            progress: 0.60, spine: 2, chapter: "Chapter 2: Lanterns"
+        ),
+        DemoSessionSpec(
+            title: "Winter Garden", monthOffset: -1, day: 18, hour: 21, minute: 0, duration: 30,
+            progress: 0.55, spine: 3, chapter: "Chapter 3: Sun on Snow"
+        ),
+        DemoSessionSpec(
+            title: "The Long Way Down", monthOffset: -1, day: 21, hour: 20, minute: 30, duration: 48,
+            progress: 0.35, spine: 7, chapter: "Chapter 7: Night City Skyline"
+        ),
+        DemoSessionSpec(
+            title: "Every Door in Hades", monthOffset: -1, day: 23, hour: 22, minute: 0, duration: 41,
+            progress: 0.55, spine: 12, chapter: "Chapter 12: Elysium"
+        ),
+        DemoSessionSpec(
+            title: "Night Market", monthOffset: -1, day: 25, hour: 21, minute: 45, duration: 22,
+            progress: 1.0, spine: 3, chapter: "Chapter 3: Midnight", finished: true
+        ),
+        DemoSessionSpec(
+            title: "Happy Birthday Diya!!", monthOffset: -1, day: 28, hour: 16, minute: 30, duration: 14,
+            progress: 1.0, finished: true
+        ),
+
+        // Month 0 (current month)
+        DemoSessionSpec(
+            title: "Winter Garden", monthOffset: 0, day: 1, hour: 19, minute: 0, duration: 25,
+            progress: 0.71, spine: 4, chapter: "Chapter 4: Thaw"
+        ),
+        DemoSessionSpec(
+            title: "Sodium Lights", monthOffset: 0, day: 2, hour: 20, minute: 30, duration: 30, progress: 0.42
+        ),
+        DemoSessionSpec(
+            title: "Paper Cranes", monthOffset: 0, day: 3, hour: 14, minute: 15, duration: 10,
+            progress: 1.0, finished: true
+        ),
+        DemoSessionSpec(
+            title: "Unanswered Is Not Unread", monthOffset: 0, day: 4, hour: 21, minute: 45, duration: 14,
+            progress: 0.20, spine: 1, chapter: "Chapter 1: Letters"
+        )
     ]
 }
 
