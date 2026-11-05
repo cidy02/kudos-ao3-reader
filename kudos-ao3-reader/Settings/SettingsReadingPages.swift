@@ -49,6 +49,12 @@ struct SettingsAppearancePage: View {
                     ThemePreviewTilePicker(selection: readerThemeBinding)
                 }
                 #if os(iOS)
+                // Labelled like "Reader Theme" above: this slider is bound to
+                // `readerFontPt`, so it sizes the reader's text, not the app's.
+                // Unlabelled under a "Theme" header it read as app-wide.
+                Text("Reader Text Size")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
                 TextSizeSlider()
                 #endif
             } header: {
