@@ -10,7 +10,7 @@
 # Also logs the transcript path, so a future PreToolUse guard can be built
 # against agy's real tool names rather than guessed ones.
 payload=$(cat)
-printf '%s' "$payload" | /usr/bin/grep -o '"transcriptPath":"[^"]*"' >> /tmp/agy-transcripts.log 2>/dev/null
+printf '%s' "$payload" | /usr/bin/grep -o '"transcriptPath":"[^"]*"' >> /Users/cidy02/kudos-redesign-work/out/agy-transcripts.log 2>/dev/null
 
 HOUSE='Kudos house rules (each one exists because an agent broke it):
 1. NEVER delete a branch on dynamicTypeSize.isAccessibilitySize, or any other accessibility special case. It is there because the ordinary layout was tried first and failed at large text sizes, and the comment above it usually says how. Replacing it with the modern native way re-creates that bug. If you believe one is redundant, say so in your handback and LEAVE THE CODE ALONE.
