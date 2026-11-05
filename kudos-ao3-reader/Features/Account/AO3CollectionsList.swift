@@ -86,13 +86,6 @@ struct AO3CollectionsList: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .toolbar {
-            if auth.isLoggedIn {
-                ToolbarItem(placement: .primaryAction) {
-                    NavigationLink(value: AO3CollectionFormDestination(slug: nil)) {
-                        Label("New Collection", systemImage: "plus")
-                    }
-                }
-            }
             if phase == .loaded, !collections.isEmpty || hasCurrentWholeIndex {
                 ToolbarItem(placement: .primaryAction) {
                     FilterButton(
@@ -100,6 +93,13 @@ struct AO3CollectionsList: View {
                         showingFilters: $showingFilters,
                         onClearFilters: { filters = AO3CollectionsFilter() }
                     )
+                }
+            }
+            if auth.isLoggedIn {
+                ToolbarItem(placement: .primaryAction) {
+                    NavigationLink(value: AO3CollectionFormDestination(slug: nil)) {
+                        Label("New Collection", systemImage: "plus")
+                    }
                 }
             }
         }

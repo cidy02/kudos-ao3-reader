@@ -73,7 +73,7 @@ struct SyncFolderOnboardingView: View {
                     + "aren't instant."
             )
             OnboardingPointRow(
-                symbol: "signature", title: "Using More Than One Device?",
+                symbol: "ipad.and.iphone", title: "Using More Than One Device?",
                 message: "To let another device remove items from your library, pair it in Settings "
                     + "→ Sync Folder → Deletion signing. Pairing takes a few seconds."
             )
