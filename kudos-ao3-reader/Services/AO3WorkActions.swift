@@ -111,7 +111,13 @@ extension AO3AuthService {
         guard let username, let url = AO3Client.myDraftsURL(username: username, page: page)
         else { throw AO3WorkWriteError.notSignedIn }
         let request = try authenticatedRequest(for: url)
-        return try await AO3Client.shared.draftsPage(for: request, page: page)
+        let drafts = try await AO3Client.shared.draftsPage(for: request, page: page)
+        AO3AccountListCountsCache.shared.record(
+            page: drafts.page,
+            kind: .drafts,
+            authenticationScope: AO3AuthorProfileFetcher.sessionScopedCacheScope(for: self)
+        )
+        return drafts
     }
 
     // MARK: Work writes

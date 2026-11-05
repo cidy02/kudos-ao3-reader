@@ -9,6 +9,7 @@ nonisolated enum AO3AccountListKind: String, Hashable, Sendable {
     case markedForLater
     case history
     case collections
+    case drafts
 }
 
 /// A cached size for one account list: exact when the whole list fit on one page
@@ -156,6 +157,7 @@ final class AO3AccountListCountsCache {
             case "series": kind = .series
             case "bookmarks": kind = .bookmarks
             case "collections": kind = .collections
+            case "drafts", "works/drafts": kind = .drafts
             default: continue
             }
             guard let count = action.listCount else { continue }

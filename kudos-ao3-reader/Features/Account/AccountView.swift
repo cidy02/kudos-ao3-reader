@@ -515,7 +515,9 @@ struct AccountView: View {
                         .lineLimit(1)
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.kudos(variant: .secondary, dense: true))
+                .buttonStyle(.bordered)
+                .buttonBorderShape(.capsule)
+                .tint(.primary)
 
                 Button {
                     if let url = profileEditURL { router.open(url) }
@@ -525,7 +527,9 @@ struct AccountView: View {
                         .lineLimit(1)
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.kudos(variant: .secondary, dense: true))
+                .buttonStyle(.bordered)
+                .buttonBorderShape(.capsule)
+                .tint(.primary)
                 .disabled(profileEditURL == nil)
             }
             // Board 35: 15 pt semibold labels, so the three fit one row.
@@ -594,7 +598,8 @@ struct AccountView: View {
                 panelNavRow(
                     title: "Inbox",
                     systemImage: "tray",
-                    count: inboxModel.unreadCount.map(String.init),
+                    count: inboxModel.unreadCount.flatMap { $0 > 0 ? String($0) : nil },
+                    hasAccentBadge: true,
                     value: Route.inbox
                 )
                 SubjectRowSeparator()
@@ -646,7 +651,8 @@ struct AccountView: View {
                 panelNavRow(
                     title: "Inbox",
                     systemImage: "tray",
-                    count: inboxModel.unreadCount.map(String.init),
+                    count: inboxModel.unreadCount.flatMap { $0 > 0 ? String($0) : nil },
+                    hasAccentBadge: true,
                     value: Route.inbox
                 )
                 SubjectRowSeparator()
@@ -1003,13 +1009,22 @@ struct AccountView: View {
     /// A row *inside* a `subjectPanel`, as 1m's Account group draws them — the
     /// panel owns the background, so the row only owns its own padding.
     private func panelNavRow(
-        title: String, systemImage: String, count: String? = nil, value: some Hashable
+        title: String,
+        systemImage: String,
+        count: String? = nil,
+        hasAccentBadge: Bool = false,
+        value: some Hashable
     ) -> some View {
         Button {
             path.append(value)
         } label: {
-            AccountNavCardLabel(title: title, systemImage: systemImage, count: count)
-                .padding(.horizontal, 14)
+            AccountNavCardLabel(
+                title: title,
+                systemImage: systemImage,
+                count: count,
+                hasAccentBadge: hasAccentBadge
+            )
+            .padding(.horizontal, 14)
         }
         .buttonStyle(.plain)
     }
@@ -1298,7 +1313,7 @@ private extension AccountView {
             switch tab {
             case .works: return writingDestination(.works, count: .myWorks)
             case .series: return writingDestination(.series, count: .series)
-            case .drafts: return writingDestination(.drafts, count: nil, subtitle: "Deleted by AO3 after 30 days")
+            case .drafts: return writingDestination(.drafts, count: .drafts, subtitle: "Deleted by AO3 after 30 days")
             }
         })
     }

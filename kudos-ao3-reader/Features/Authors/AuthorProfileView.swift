@@ -485,7 +485,7 @@ private extension AuthorProfileView {
         if let cached = AO3AccountListCountsCache.shared.count(for: .myWorks, authenticationScope: scope)?.displayText {
             return cached
         }
-        if model.selectedTab == .works, !model.works.isEmpty {
+        if !model.works.isEmpty {
             return model.works.count.formatted()
         }
         return nil
@@ -499,14 +499,24 @@ private extension AuthorProfileView {
         if let cached = AO3AccountListCountsCache.shared.count(for: .series, authenticationScope: scope)?.displayText {
             return cached
         }
-        if model.selectedTab == .series, !model.series.isEmpty {
+        if !model.series.isEmpty {
             return model.series.count.formatted()
+        }
+        if let count = model.header?.recentSeries?.count, count > 0 {
+            return count.formatted()
         }
         return nil
     }
 
     private var yourDraftsCountText: String? {
-        nil
+        if let count = model.header?.draftsListCount() {
+            return count.formatted()
+        }
+        let scope = AO3AuthorProfileFetcher.sessionScopedCacheScope(for: auth)
+        if let cached = AO3AccountListCountsCache.shared.count(for: .drafts, authenticationScope: scope)?.displayText {
+            return cached
+        }
+        return nil
     }
 
     private var accountSubtitle: String? {
@@ -1033,14 +1043,23 @@ private extension AuthorProfileView {
                 }
                 profileMenu.labelStyle(.iconOnly)
             }
+            if showsNewWork {
+                ToolbarSpacer(.fixed, placement: .primaryAction)
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        isCreatingWork = true
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                    .sheetConfirmStyle()
+                    .accessibilityLabel("New Work")
+                }
+            }
         }
     }
 
     private var leadingToolbarItems: [AnyView] {
         [
-            showsNewWork
-                ? AnyView(ToolbarIconButton(title: "New Work", systemImage: "plus") { isCreatingWork = true })
-                : nil,
             showsWorksFilter ? AnyView(worksFilterButton) : nil,
             showsSelectButton ? AnyView(selectButton) : nil
         ].compactMap { $0 }
