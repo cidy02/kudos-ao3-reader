@@ -1,0 +1,3 @@
+# Real mail is never committed: it carries the reader's address and reading history.
+tests/fixtures/real/
+*.real.eml
