@@ -135,11 +135,24 @@ pub(crate) fn parse_message(message: &Message<'_>) -> Result<Ao3Event, ParseErro
         crate::structure::Preface::of(creation).ok_or(ParseError::NotASubscriptionEvent)?;
     let after_preface = creation.get(preface.ends_at..).unwrap_or("");
 
-    // The link is the first line after the preface. Because the preface runs to
-    // the line ending in a colon, a URL smuggled into a work title stays inside
-    // it and is never read here.
-    let link_line = after_preface.lines().find(|l| !l.trim().is_empty()).unwrap_or("");
-    let (work_id, chapter_id) = ids_from_link(link_line.trim()).ok_or(ParseError::NoWorkLink)?;
+    // Identity by ambiguity, not by position. "The line after the preface" is
+    // not a safe anchor: the preface ends at a line ending in a colon, and the
+    // work title is both author-controlled and interpolated into the preface, so
+    // a title of `Decoy:\n<url>` ended the preface early and made the author's
+    // URL the link line. A genuine creation region holds exactly one line that
+    // is entirely an AO3 works URL; a second one was typed by an author, and
+    // which is which cannot be told from the text — so the message is refused
+    // rather than guessed at, the rule `metadata_block` already follows.
+    let mut link = None;
+    for line in creation.lines() {
+        if let Some(ids) = ids_from_link(line.trim()) {
+            if link.is_some() {
+                return Err(ParseError::NoWorkLink);
+            }
+            link = Some(ids);
+        }
+    }
+    let (work_id, chapter_id) = link.ok_or(ParseError::NoWorkLink)?;
 
     // After the link: a blank line, then `"<title>" (N words)`.
     let titled = quoted_with_words(after_preface);

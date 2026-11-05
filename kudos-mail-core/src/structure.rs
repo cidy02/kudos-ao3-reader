@@ -154,12 +154,18 @@ impl<'a> Preface<'a> {
         let mut found: Option<(PrefaceKind, &str)> = None;
         for line in creation.split_inclusive('\n') {
             if found.is_none() {
+                // The LAST occurrence: a pseud may legitimately be called
+                // "Alice posted a new chapter of Bob", and taking the first
+                // reported the author as "Alice".
+                let mut best: Option<(PrefaceKind, &str)> = None;
                 for (phrase, kind) in PHRASES {
-                    if let Some(at) = line.find(phrase) {
-                        found = Some((kind, line.get(..at).unwrap_or("")));
-                        break;
+                    if let Some(at) = line.rfind(phrase) {
+                        if best.is_none_or(|(_, h): (PrefaceKind, &str)| h.len() < at) {
+                            best = Some((kind, line.get(..at).unwrap_or("")));
+                        }
                     }
                 }
+                found = best;
                 // A phrase must appear in the first non-empty line of the region,
                 // or it is somebody's prose rather than AO3's preface.
                 if found.is_none() && !line.trim().is_empty() {
