@@ -40,11 +40,9 @@ import SwiftUI
 /// created. Start from is left out — seeding only means something for a queue
 /// that does not exist yet.
 ///
-/// Chrome is `NewCollectionSheet`'s — text Cancel/Create in the navigation bar
-/// rather than 1j's 34pt circle pair. The two sheets do the same job minutes
-/// apart in the same tab, and one of them growing its own button vocabulary
-/// would read as a bug. `AO3FilterPanel` keeps the circles, where 1au draws
-/// them on a panel that has no navigation bar to put words in.
+/// Header chrome matches board 05 (and `WorkEditView` / board 42): circular
+/// `xmark` dismiss via `ToolbarIconButton` on the leading edge and a filled
+/// primary action pill styled with `sheetConfirmStyle()` on the confirmation edge.
 struct NewReadingQueueSheet: View {
     @Binding var name: String
     /// 1j: the colour is chosen before the name is typed, so it is committed with
@@ -62,6 +60,7 @@ struct NewReadingQueueSheet: View {
 
     @Environment(\.modelContext) private var context
     @Environment(ThemeManager.self) private var theme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Query(sort: \Tag.name) private var allTags: [Tag]
     @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }, sort: \SavedWork.title)
     private var libraryWorks: [SavedWork]
@@ -155,19 +154,29 @@ struct NewReadingQueueSheet: View {
             #if !os(macOS)
                 .navigationBarTitleDisplayMode(.inline)
             #endif
+                .wrappingInlineTitle(
+                    isEditing ? "Edit Queue" : "New Queue",
+                    isActive: dynamicTypeSize.isAccessibilitySize
+                )
                 .subjectScreenWash(palette: palette)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel") {
+                        ToolbarIconButton(
+                            title: "Cancel",
+                            systemImage: "xmark",
+                            tint: .primary
+                        ) {
                             colorWellSession.discard()
                             onCancel()
                         }
+                        .labelStyle(.iconOnly)
                     }
                     ToolbarItem(placement: .confirmationAction) {
                         Button(isEditing ? "Save" : "Create") {
                             colorWellSession.flush()
                             if !onCreate(options) { saveFailed = true }
                         }
+                        .sheetConfirmStyle()
                         .disabled(trimmedName.isEmpty)
                     }
                 }
