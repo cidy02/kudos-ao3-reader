@@ -235,25 +235,14 @@ struct MediaBrowserView: View {
                     Button {
                         onSelectFandom(chip.names, chip.title)
                     } label: {
-                        HStack(spacing: 6) {
-                            if chip.isFamiliar {
-                                Circle()
-                                    .fill(Color.white)
-                                    .frame(width: 6, height: 6)
-                                    .accessibilityHidden(true)
-                            }
-                            Text(chip.title)
-                                .font(.system(size: chipTitleSize, weight: .semibold))
-                                .foregroundStyle(Color.white)
-                                .lineLimit(1)
-                                .truncationMode(.tail)
-                            Spacer(minLength: 4)
-                            Text((chip.isApproximate ? "~" : "") + compact(chip.workCount))
-                                .font(.system(size: chipCountSize))
-                                .foregroundStyle(Color.white.opacity(0.8))
-                                .lineLimit(1)
-                                .layoutPriority(1)
-                        }
+                        BrowseCategoryFandomChipLabel(
+                            title: chip.title,
+                            workCount: chip.workCount,
+                            isApproximate: chip.isApproximate,
+                            isFamiliar: chip.isFamiliar,
+                            chipTitleSize: chipTitleSize,
+                            chipCountSize: chipCountSize
+                        )
                         .padding(.horizontal, 10)
                         .padding(.vertical, 4)
                         .frame(minHeight: 30)
@@ -261,7 +250,11 @@ struct MediaBrowserView: View {
                     }
                     .buttonStyle(.plain)
                     .layoutFreeHitTarget { onSelectFandom(chip.names, chip.title) }
-                    .accessibilityLabel("\(chip.title), \(compact(chip.workCount)) works" + (chip.isFamiliar ? ", you have read from this fandom" : ""))
+                    .accessibilityLabel(BrowseCategoryFandomChipLabel.accessibilityLabel(
+                        title: chip.title,
+                        workCount: chip.workCount,
+                        isFamiliar: chip.isFamiliar
+                    ))
                 }
 
                 NavigationLink(value: category) {
@@ -1078,5 +1071,111 @@ struct CappedFlowLayout: Layout {
             widest = max(widest, x - spacing)
         }
         return (origins, CGSize(width: widest, height: y + rowHeight))
+    }
+}
+
+/// The label inside a Browse category card's top-fandom capsule chip (Board 13).
+///
+/// Gives the fandom name priority over the count: the full name keeps its width
+/// and the other element gives way (same class of fix as `LibraryEditShelvesSheet`
+/// in 38d79a59). If both fit on one line, both are drawn with the count right-aligned.
+/// If space is tight, approximate counts drop the "~" first; if still tight, the count
+/// yields completely so the single-line name fits without truncation.
+/// For very long fandom names (e.g. "The Locked Tomb Series - Tamsyn Muir") or
+/// at Dynamic Type AX5, the name wraps across lines without clipping or truncation.
+/// VoiceOver always preserves the full name and work count via `accessibilityLabel`.
+struct BrowseCategoryFandomChipLabel: View {
+    let title: String
+    let workCount: Int
+    let isApproximate: Bool
+    let isFamiliar: Bool
+    var chipTitleSize: CGFloat = 13
+    var chipCountSize: CGFloat = 11
+
+    private var countText: String {
+        workCount.formatted(.number.notation(.compactName))
+    }
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            // 1. Both name and full count (e.g. "~144K") fit on one line.
+            // Name keeps its width; count yields if space is tight.
+            HStack(spacing: 0) {
+                familiarDot
+                Text(title)
+                    .font(.system(size: chipTitleSize, weight: .semibold))
+                    .foregroundStyle(Color.white)
+                    .lineLimit(1)
+                    .layoutPriority(1)
+                    .fixedSize()
+                Spacer(minLength: 4)
+                Text((isApproximate ? "~" : "") + countText)
+                    .font(.system(size: chipCountSize))
+                    .foregroundStyle(Color.white.opacity(0.8))
+                    .lineLimit(1)
+                    .fixedSize()
+            }
+
+            // 2. If approximate, try dropping the "~" to keep the number if tight.
+            if isApproximate {
+                HStack(spacing: 0) {
+                    familiarDot
+                    Text(title)
+                        .font(.system(size: chipTitleSize, weight: .semibold))
+                        .foregroundStyle(Color.white)
+                        .lineLimit(1)
+                        .layoutPriority(1)
+                        .fixedSize()
+                    Spacer(minLength: 4)
+                    Text(countText)
+                        .font(.system(size: chipCountSize))
+                        .foregroundStyle(Color.white.opacity(0.8))
+                        .lineLimit(1)
+                        .fixedSize()
+                }
+            }
+
+            // 3. Name fits on one line, but count cannot fit: drop the count.
+            // Fandom name keeps its full width; count yields completely.
+            HStack(spacing: 0) {
+                familiarDot
+                Text(title)
+                    .font(.system(size: chipTitleSize, weight: .semibold))
+                    .foregroundStyle(Color.white)
+                    .lineLimit(1)
+                    .layoutPriority(1)
+                    .fixedSize()
+                Spacer(minLength: 0)
+            }
+
+            // 4. Very long name (or Dynamic Type AX5) that exceeds the card width
+            // on a single line: wrap across lines so the name is never truncated.
+            HStack(alignment: .center, spacing: 0) {
+                familiarDot
+                Text(title)
+                    .font(.system(size: chipTitleSize, weight: .semibold))
+                    .foregroundStyle(Color.white)
+                    .lineLimit(nil)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var familiarDot: some View {
+        if isFamiliar {
+            Circle()
+                .fill(Color.white)
+                .frame(width: 6, height: 6)
+                .padding(.trailing, 6)
+                .accessibilityHidden(true)
+        }
+    }
+
+    static func accessibilityLabel(title: String, workCount: Int, isFamiliar: Bool) -> String {
+        let count = workCount.formatted(.number.notation(.compactName))
+        let familiarNote = isFamiliar ? ", you have read from this fandom" : ""
+        return "\(title), \(count) works\(familiarNote)"
     }
 }
