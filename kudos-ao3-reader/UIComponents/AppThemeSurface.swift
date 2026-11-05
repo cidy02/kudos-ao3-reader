@@ -130,9 +130,12 @@ extension ReaderTheme {
         #endif
     }
 
-    /// The page behind the cards.
+    /// The page behind the cards. Dark has no special case: it reads
+    /// `appBaseBackground` like Sepia and OLED, so the app has ONE dark page colour.
+    /// It used to return #0B0B0D, which left screens themed through `appThemedScroll`
+    /// (#16161B, the reader's own background) a visible step lighter — a seam across
+    /// Reading Insights, where a header on one ground met content on the other.
     var cardBackdrop: Color {
-        if self == .dark { return Color(red: 11 / 255, green: 11 / 255, blue: 13 / 255) }
         #if os(iOS)
         return appBaseBackground ?? Color(uiColor: .systemGroupedBackground)
         #else

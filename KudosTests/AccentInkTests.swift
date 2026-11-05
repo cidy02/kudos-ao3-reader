@@ -37,7 +37,10 @@ struct AccentInkTests {
         // Android readableOn: original RGB + (1 - original RGB) * step / 20f,
         // rounded to sRGB bytes by Compose Color. Dark stops at step 8; OLED at 7.
         // Named accents do not use this mix — AO3 Red's step is the fixed `#EE8A93`.
-        #expect(ReaderTheme.dark.cardBackdrop.hexString == "#0B0B0D")
+        // The dark page is now the one `appBaseBackground` colour (was #0B0B0D). The
+        // step below is unchanged by that: #C26666 still clears 4.5:1 on #16161B, so
+        // Android's step-8 parity holds.
+        #expect(ReaderTheme.dark.cardBackdrop.hexString == "#16161B")
         #expect(ReaderTheme.dark.accentInk(for: red).hexString == "#C26666")
         #expect(ReaderTheme.oled.accentInk(for: red).hexString == "#BD5959")
         let previousDarkStep = try #require(Color(hex: "#BD5959"))

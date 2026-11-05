@@ -26,9 +26,13 @@ struct SubjectScreenRoleTests {
         #expect(ReaderTheme.sepia.contentBackdrop == ReaderTheme.sepia.cardBackdrop)
         #expect(ReaderTheme.sepia.contentBackdrop == ReaderTheme.sepia.appBaseBackground)
 
+        // Dark reads `appBaseBackground` like Sepia and OLED — the app has ONE dark
+        // page colour. This line used to assert the opposite (and pin #0B0B0D), which
+        // is what let a screen themed via `appThemedScroll` sit a step lighter than
+        // one themed via `appScreenSurface`.
         #expect(ReaderTheme.dark.contentBackdrop == ReaderTheme.dark.cardBackdrop)
-        #expect(ReaderTheme.dark.contentBackdrop.hexString == "#0B0B0D")
-        #expect(ReaderTheme.dark.contentBackdrop != ReaderTheme.dark.appBaseBackground)
+        #expect(ReaderTheme.dark.contentBackdrop.hexString == "#16161B")
+        #expect(ReaderTheme.dark.contentBackdrop == ReaderTheme.dark.appBaseBackground)
 
         #expect(ReaderTheme.oled.contentBackdrop == ReaderTheme.oled.cardBackdrop)
         #expect(ReaderTheme.oled.contentBackdrop == .black)
