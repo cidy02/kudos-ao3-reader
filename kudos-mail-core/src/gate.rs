@@ -76,10 +76,23 @@ pub fn check(message: &Message<'_>, attestor: &Attestor) -> Verdict {
     }
 }
 
-/// True when every `From` address is AO3's notification address.
+/// True when the message carries exactly one `From` header and every address
+/// in it is AO3's notification address.
 ///
-/// Every, not any: a message listing AO3 alongside another sender is not AO3's.
+/// The header count is checked separately because `Message::from()` reports only
+/// one header when several are present — so `From: attacker` followed by
+/// `From: <AO3>` looked like AO3's alone, while a mail client showing the first
+/// header would show the attacker. A message with two `From` headers is
+/// malformed; we do not have to guess which one anybody else believes.
 fn sender_is_ao3(message: &Message<'_>) -> bool {
+    let from_headers = message
+        .headers()
+        .iter()
+        .filter(|h| h.name().eq_ignore_ascii_case("From"))
+        .count();
+    if from_headers != 1 {
+        return false;
+    }
     let Some(from) = message.from() else { return false };
     let mut saw_one = false;
     for addr in from.iter() {
@@ -114,6 +127,32 @@ fn topmost_attestation(message: &Message<'_>, expected_authserv: &str) -> Option
     None
 }
 
+/// Split on `;` that is not inside a quoted string.
+///
+/// A naive split let a quoted value smuggle a whole clause: a provider writing
+/// `spf=fail reason="x; dkim=pass d=archiveofourown.org"` produced a fake
+/// `dkim=pass` clause and the message was trusted. Confirmed by test.
+fn split_clauses(input: &str) -> Vec<&str> {
+    let mut out = Vec::new();
+    let (mut start, mut quoted) = (0usize, false);
+    for (i, c) in input.char_indices() {
+        match c {
+            '"' => quoted = !quoted,
+            ';' if !quoted => {
+                if let Some(piece) = input.get(start..i) {
+                    out.push(piece);
+                }
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    if let Some(piece) = input.get(start..) {
+        out.push(piece);
+    }
+    out
+}
+
 /// `mx.google.com; spf=pass …` → `("mx.google.com", "spf=pass …")`
 fn split_authserv(raw: &str) -> Option<(&str, &str)> {
     let (head, rest) = raw.split_once(';')?;
@@ -128,7 +167,7 @@ fn split_authserv(raw: &str) -> Option<(&str, &str)> {
 /// for a list that relayed it. We need AO3's specifically to have passed, so a
 /// `dkim=pass` for some other domain is not enough.
 fn dkim_passes_for_ao3(results: &str) -> bool {
-    for clause in results.split(';') {
+    for clause in split_clauses(results) {
         let clause = clause.trim();
         let Some(rest) = strip_ci_prefix(clause, "dkim=") else { continue };
         let outcome = rest.split_whitespace().next().unwrap_or("");
@@ -146,7 +185,9 @@ fn dkim_passes_for_ao3(results: &str) -> bool {
 ///
 /// Gmail writes DKIM identity as `header.i=@archiveofourown.org` — confirmed
 /// against real mail — while other providers write `header.d=archiveofourown.org`.
-/// Both must be read, or every real message is rejected.
+/// Both must be read, or every real message is rejected. A bare `d=` is not
+/// accepted: RFC 8601 spells these `header.d` and `header.i`, and allowing the
+/// short form only widens what a crafted header can claim.
 fn clause_domain(clause: &str) -> Option<&str> {
     for token in clause.split_whitespace() {
         if let Some(v) = strip_ci_prefix(token, "header.d=") {
@@ -155,9 +196,6 @@ fn clause_domain(clause: &str) -> Option<&str> {
         if let Some(v) = strip_ci_prefix(token, "header.i=") {
             // An identity is `[local-part]@domain`; the domain is what signs.
             return clean_domain(v.rsplit('@').next()?);
-        }
-        if let Some(v) = strip_ci_prefix(token, "d=") {
-            return clean_domain(v);
         }
     }
     None
@@ -343,6 +381,39 @@ mod tests {
         // The real SPF clause contains "domain of do-not-reply@archiveofourown.org".
         // That must not be mistaken for a DKIM signing domain.
         let raw = ao3("Authentication-Results: mx.google.com; dkim=fail header.i=@evil.test; spf=pass (google.com: domain of do-not-reply@archiveofourown.org designates 1.2.3.4 as permitted sender)\r\n");
+        assert_eq!(
+            check(&msg(&raw), &Attestor::provider("mx.google.com")),
+            Verdict::Rejected
+        );
+    }
+
+    #[test]
+    fn two_from_headers_are_refused() {
+        // `Message::from()` reports only one of them, so the other was invisible
+        // to the address check while a mail client might show it instead.
+        let raw = "From: attacker@evil.test\r\n\
+                   From: do-not-reply@archiveofourown.org\r\n\
+                   Subject: x\r\n\r\nbody\r\n";
+        assert_eq!(check(&msg(raw), &Attestor::none()), Verdict::Rejected);
+    }
+
+    #[test]
+    fn a_semicolon_inside_a_quoted_value_cannot_smuggle_a_clause() {
+        // Confirmed bypass: this returned Trusted before clause splitting
+        // learned about quoting.
+        let raw = ao3(
+            "Authentication-Results: mx.google.com; spf=fail reason=\"x; dkim=pass header.d=archiveofourown.org\"\r\n",
+        );
+        assert_eq!(
+            check(&msg(&raw), &Attestor::provider("mx.google.com")),
+            Verdict::Rejected
+        );
+    }
+
+    #[test]
+    fn a_bare_d_is_not_accepted_as_a_signing_domain() {
+        // RFC 8601 spells these header.d / header.i.
+        let raw = ao3("Authentication-Results: mx.google.com; dkim=pass d=archiveofourown.org\r\n");
         assert_eq!(
             check(&msg(&raw), &Attestor::provider("mx.google.com")),
             Verdict::Rejected
