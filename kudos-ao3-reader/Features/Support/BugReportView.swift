@@ -25,11 +25,23 @@ struct BugReportView: View {
             Form {
                 Group {
                     Section {
-                        Text("Found a bug? Describe what happened and Kudos will open a "
-                            + "prefilled GitHub issue you can review and post. Nothing is "
-                            + "sent automatically.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
+                        VStack(spacing: 10) {
+                            Image(systemName: "ladybug")
+                                .font(.system(size: 30))
+                                .foregroundStyle(ThemeManager.label(on: themeManager.effectiveTint))
+                                .frame(width: 56, height: 56)
+                                .background(themeManager.effectiveTint, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                                .accessibilityHidden(true)
+
+                            Text("Found a bug? Describe what happened and Kudos will open a "
+                                + "prefilled GitHub issue you can review and post. Nothing is "
+                                + "sent automatically.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 4)
                     }
 
                     Section("What went wrong?") {
@@ -100,7 +112,14 @@ struct BugReportView: View {
             #endif
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel") { dismiss() }
+                        ToolbarIconButton(
+                            title: "Cancel",
+                            systemImage: "xmark",
+                            tint: .primary
+                        ) {
+                            dismiss()
+                        }
+                        .labelStyle(.iconOnly)
                     }
                 }
         }

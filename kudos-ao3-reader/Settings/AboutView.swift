@@ -4,17 +4,22 @@ import SwiftUI
 /// the AO3/OTW disclaimer. Presented as a sheet from the Settings page.
 struct AboutView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(ThemeManager.self) private var themeManager
     @State private var showingBugReport = false
-    @ScaledMetric(relativeTo: .largeTitle) private var iconSize: CGFloat = 42
+    @State private var showingWhatsNew = false
 
     var body: some View {
         Form {
             Group {
                 Section {
-                    VStack(spacing: 6) {
-                        Image(systemName: "book.closed.fill")
-                            .font(.system(size: iconSize))
-                            .foregroundStyle(.tint)
+                    VStack(spacing: 8) {
+                        Image("AppIconArt")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 84, height: 84)
+                            .clipShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
+                            .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
+                            .accessibilityHidden(true)
                         Text("Kudos").font(.title2.bold())
                         Text("Version \(Self.versionString)")
                             .font(.footnote)
@@ -26,6 +31,14 @@ struct AboutView: View {
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 8)
+                }
+
+                Section {
+                    Button {
+                        showingWhatsNew = true
+                    } label: {
+                        Label("What's New", systemImage: "sparkles")
+                    }
                 }
 
                 // Board 55: what you came to About for sits right under the version.
@@ -93,7 +106,19 @@ struct AboutView: View {
                 }
             }
             .presentationDragIndicator(.visible)
-            .sheet(isPresented: $showingBugReport) { BugReportView() }
+            .sheet(isPresented: $showingBugReport) {
+                BugReportView()
+                    .environment(themeManager)
+                    .accentTint(themeManager.effectiveTint, on: themeManager.appTheme)
+            }
+            .sheet(isPresented: $showingWhatsNew) {
+                WhatsNewView(entries: Changelog.entries) {
+                    Changelog.markSeen()
+                    showingWhatsNew = false
+                }
+                .environment(themeManager)
+                .accentTint(themeManager.effectiveTint, on: themeManager.appTheme)
+            }
     }
 
     private func creditRow(_ name: String, license: String, detail: String, url: String) -> some View {
