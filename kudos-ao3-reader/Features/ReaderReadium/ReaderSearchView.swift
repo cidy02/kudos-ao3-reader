@@ -375,6 +375,7 @@ struct ReaderSearchView: View {
                         Text("Searching…")
                             .foregroundStyle(.secondary)
                     }
+                    .listRowBackground(Color.clear)
                 }
             }
             ForEach(groupedResults) { group in
@@ -387,6 +388,7 @@ struct ReaderSearchView: View {
                             // the end of what's loaded so far, regardless of which
                             // chapter section they land in.
                             .onAppear { model.loadMoreIfNeeded(currentItem: result) }
+                            .listRowBackground(Color.clear)
                     }
                 }
             }
@@ -396,9 +398,14 @@ struct ReaderSearchView: View {
                     ProgressView().accentFill()
                     Spacer()
                 }
+                .listRowBackground(Color.clear)
             }
         }
         .listStyle(.plain)
+        // A plain List paints `systemBackground`, which a sheet elevates to #1C1C1E —
+        // the system's grey, not the `cardBackdrop` this sheet sets as its own
+        // presentation background. Hide it and the sheet's theme colour shows through.
+        .scrollContentBackground(.hidden)
     }
 
     private func resultRow(_ result: ReaderSearchModel.Result) -> some View {
