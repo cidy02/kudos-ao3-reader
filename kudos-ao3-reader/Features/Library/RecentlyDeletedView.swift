@@ -76,6 +76,7 @@ struct RecentlyDeletedView: View {
         }
         .navigationTitle(isSelecting ? "\(selection.count) selected" : "Recently Deleted")
         .subjectScreenWash(palette: palette)
+        .navigationBarBackButtonHidden(isSelecting)
         .toolbar { toolbarContent(entries) }
         #if os(iOS)
         // Select mode owns the bottom edge with its action bar.
@@ -165,20 +166,102 @@ struct RecentlyDeletedView: View {
         }
     }
 
+    /// Select mode chrome contract (FID53 / Board 08): no bottom bar, actions live in top-bar menu.
+    static let usesBottomBarInSelectMode = false
+
+    enum SelectModeAction: String, CaseIterable, Equatable {
+        case selectAll
+        case restore
+        case deletePermanently
+        case done
+    }
+
+    static func selectModeActions() -> [SelectModeAction] {
+        SelectModeAction.allCases
+    }
+
     @ToolbarContentBuilder
     private func toolbarContent(_ entries: [RecentlyDeletedEntry]) -> some ToolbarContent {
         if isSelecting {
-            ToolbarItem(placement: .confirmationAction) {
-                let ids = Set(entries.map(\.id))
-                let allSelected = !ids.isEmpty && ids.isSubset(of: selection)
+            let ids = Set(entries.map(\.id))
+            let allSelected = !ids.isEmpty && ids.isSubset(of: selection)
+            let chosen = selection.intersection(entries.map(\.id))
+
+            ToolbarItem(placement: .principal) {
+                Text(WorkSelectionTitle.text(selectedCount: selection.count))
+                    .font(.headline)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+                    .contentTransition(.numericText())
+            }
+
+            #if os(iOS)
+            ToolbarItem(placement: .topBarLeading) {
                 SelectAllButton(allSelected: allSelected) {
                     selection = allSelected ? [] : ids
                 }
+                .disabled(entries.isEmpty)
             }
-            #if os(iOS)
-            ToolbarItemGroup(placement: .bottomBar) { selectionBar(entries) }
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                Menu {
+                    Button {
+                        let failed = Self.restore(chosen, in: entries)
+                        if !failed.isEmpty { restoreFailure = Self.restoreFailureMessage(failed) }
+                        if failed.count < chosen.count { restoreCount += 1 }
+                        exitSelectMode()
+                    } label: {
+                        Label("Restore", systemImage: "arrow.uturn.backward")
+                    }
+                    Button(role: .destructive) {
+                        pendingBulkDelete = chosen
+                    } label: {
+                        Label("Delete Permanently", systemImage: "trash")
+                    }
+                } label: {
+                    Label("Actions", systemImage: "ellipsis.circle")
+                }
+                .disabled(chosen.isEmpty)
+
+                Button("Done") {
+                    exitSelectMode()
+                }
+                .fontWeight(.semibold)
+                .buttonStyle(.borderedProminent)
+                .tint(theme.effectiveTint)
+                .prominentLabel()
+            }
             #else
-            ToolbarItemGroup(placement: .primaryAction) { selectionBar(entries) }
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Done") {
+                    exitSelectMode()
+                }
+                .fontWeight(.semibold)
+                .buttonStyle(.borderedProminent)
+            }
+            ToolbarItemGroup(placement: .primaryAction) {
+                SelectAllButton(allSelected: allSelected) {
+                    selection = allSelected ? [] : ids
+                }
+                .disabled(entries.isEmpty)
+
+                Button {
+                    let failed = Self.restore(chosen, in: entries)
+                    if !failed.isEmpty { restoreFailure = Self.restoreFailureMessage(failed) }
+                    if failed.count < chosen.count { restoreCount += 1 }
+                    exitSelectMode()
+                } label: {
+                    Label("Restore", systemImage: "arrow.uturn.backward")
+                }
+                .disabled(chosen.isEmpty)
+
+                Button(role: .destructive) {
+                    pendingBulkDelete = chosen
+                } label: {
+                    Label("Delete Permanently", systemImage: "trash")
+                }
+                .disabled(chosen.isEmpty)
+            }
             #endif
         } else if !entries.isEmpty {
             // Select lives in the "…", as on every other list (owner, 2026-10-01).
@@ -188,36 +271,6 @@ struct RecentlyDeletedView: View {
                 }
             })])
         }
-    }
-
-    /// Restore · Delete Permanently, then Done — the row's two swipe actions,
-    /// in the same order, over the selection.
-    @ViewBuilder
-    private func selectionBar(_ entries: [RecentlyDeletedEntry]) -> some View {
-        let chosen = selection.intersection(entries.map(\.id))
-        Button {
-            let failed = Self.restore(chosen, in: entries)
-            if !failed.isEmpty { restoreFailure = Self.restoreFailureMessage(failed) }
-            if failed.count < chosen.count { restoreCount += 1 }
-            exitSelectMode()
-        } label: {
-            Label("Restore", systemImage: "arrow.uturn.backward")
-        }
-        .disabled(chosen.isEmpty)
-        Spacer()
-        Button(role: .destructive) {
-            pendingBulkDelete = chosen
-        } label: {
-            Label("Delete Permanently", systemImage: "trash")
-        }
-        .disabled(chosen.isEmpty)
-        Spacer()
-        Button {
-            exitSelectMode()
-        } label: {
-            Image(systemName: "checkmark")
-        }
-        .accessibilityLabel("Done")
     }
 
     private func exitSelectMode() {
