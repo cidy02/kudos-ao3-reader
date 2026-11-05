@@ -1,0 +1,46 @@
+[package]
+name = "kudos-mail-core"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.82"
+license = "AGPL-3.0-or-later"
+description = "Reads AO3 subscription notifications out of a mailbox, and nothing else."
+
+[lib]
+crate-type = ["lib", "staticlib", "cdylib"]
+name = "kudos_mail_core"
+
+[dependencies]
+# RFC 5322 / MIME parsing. Hand-rolling header folding, encoded-words, charsets
+# and multipart boundaries is a well-known source of parser bugs, and this is the
+# component that meets hostile input first — so it is not ours to write.
+mail-parser = { version = "0.11", default-features = false }
+thiserror = "2"
+
+# IMAP transport arrives with the session module. Pinned here so the dependency
+# surface is reviewable before any network code exists:
+#   async-imap   default-features = false, features = ["runtime-tokio"].
+#                `compress` deliberately off, so async-compression never enters
+#                the tree — one fewer parser exposed to hostile input.
+#   tokio-rustls pure-Rust TLS, so iOS and Android negotiate identically and
+#                neither depends on a platform library we cannot pin.
+
+[dev-dependencies]
+mail-parser = { version = "0.11", default-features = false }
+
+[profile.release]
+# Abort rather than unwind: a panic must never cross the FFI boundary.
+panic = "abort"
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+indexing_slicing = "deny"
