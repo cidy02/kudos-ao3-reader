@@ -746,6 +746,7 @@ enum DebugShots {
         ("authorworksfilter", DebugShot(route: "acct:works", sheets: ["authorworksfilter"])),
         ("colitems", DebugShot(route: "acct:collections", sheets: ["colitems"])),
         ("colsfilter", DebugShot(route: "acct:collections", sheets: ["colsfilter"])),
+        ("chsettings", DebugShot(route: winter, manageRow: "Challenge Settings")),
         ("chsettingsedit", DebugShot(route: winter, pushes: ["chsettingsedit"], manageRow: "Challenge Settings")),
         ("chsignupdetail", DebugShot(route: winter, pushes: ["chsignupdetail"], manageRow: "Sign-Ups")),
         ("prompttags", DebugShot(route: winter, sheets: ["prompttags"], manageRow: "Your Sign-Up")),
@@ -753,6 +754,7 @@ enum DebugShots {
         ("tagseteditor", DebugShot(
             route: winter, pushes: ["tagset", "tagseteditor"], manageRow: "Challenge Settings"
         )),
+        ("challenge", DebugShot(route: winter, manageRow: "Challenge Settings")),
         ("writingpreview", DebugShot(route: "acct:workedit:1002", sheets: ["writingpreview"])),
         ("chapters", DebugShot(route: posted, pushes: ["chapters"])),
         ("chapterform", DebugShot(route: posted, pushes: ["chapterform"])),
@@ -1031,7 +1033,8 @@ enum DebugLaunchRoute {
         guard let value = pageRoute else { return }
         if value.hasPrefix("acct:ao3collection:") {
             let slug = String(value.dropFirst("acct:ao3collection:".count))
-            path.append(AO3CollectionDestination(slug: slug, title: slug))
+            let title = slug == "winter_exchange" ? "Winter Exchange 2026" : slug
+            path.append(AO3CollectionDestination(slug: slug, title: title))
         }
     }
 
