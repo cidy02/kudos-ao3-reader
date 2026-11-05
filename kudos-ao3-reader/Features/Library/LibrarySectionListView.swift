@@ -170,6 +170,9 @@ struct LibrarySectionListView: View {
         selection = allVisibleSelected ? [] : Set(visibleItems.map(\.id))
     }
 
+    /// Select mode chrome contract (FID53 / Board 09): no bottom bar, actions live in top-bar menu.
+    static let usesBottomBarInSelectMode = false
+
     var body: some View {
         content
             .background((themeManager.appTheme.appBaseBackground ?? Color.clear).ignoresSafeArea())
@@ -177,6 +180,7 @@ struct LibrarySectionListView: View {
         #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
         #endif
+            .navigationBarBackButtonHidden(isSelecting)
             .toolbar {
                 if isSelecting {
                     // The wash empties the navigation title, so the count takes the
@@ -184,17 +188,52 @@ struct LibrarySectionListView: View {
                     ToolbarItem(placement: .principal) {
                         Text(WorkSelectionTitle.text(selectedCount: selectedWorks.count))
                             .font(.headline)
-                    }
-                    ToolbarItem(placement: .confirmationAction) {
-                        SelectAllButton(allSelected: allVisibleSelected, action: toggleSelectAll)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                            .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+                            .contentTransition(.numericText())
                     }
                     #if os(iOS)
-                    ToolbarItemGroup(placement: .bottomBar) {
-                        WorkBulkActionBar(selectedWorks: selectedWorks, onDeleted: exitSelectMode, onDone: exitSelectMode)
+                    ToolbarItem(placement: .topBarLeading) {
+                        SelectAllButton(allSelected: allVisibleSelected, action: toggleSelectAll)
+                            .disabled(visibleItems.isEmpty)
+                    }
+                    ToolbarItemGroup(placement: .topBarTrailing) {
+                        Menu {
+                            WorkBulkActionBar(
+                                selectedWorks: selectedWorks,
+                                onDeleted: exitSelectMode,
+                                onDone: exitSelectMode
+                            )
+                        } label: {
+                            Label("Actions", systemImage: "ellipsis.circle")
+                        }
+                        .disabled(selectedWorks.isEmpty)
+
+                        Button("Done") {
+                            exitSelectMode()
+                        }
+                        .fontWeight(.semibold)
+                        .buttonStyle(.borderedProminent)
+                        .tint(themeManager.effectiveTint)
+                        .prominentLabel()
                     }
                     #else
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") {
+                            exitSelectMode()
+                        }
+                        .fontWeight(.semibold)
+                        .buttonStyle(.borderedProminent)
+                    }
                     ToolbarItemGroup(placement: .primaryAction) {
-                        WorkBulkActionBar(selectedWorks: selectedWorks, onDeleted: exitSelectMode, onDone: exitSelectMode)
+                        SelectAllButton(allSelected: allVisibleSelected, action: toggleSelectAll)
+                            .disabled(visibleItems.isEmpty)
+                        WorkBulkActionBar(
+                            selectedWorks: selectedWorks,
+                            onDeleted: exitSelectMode,
+                            onDone: exitSelectMode
+                        )
                     }
                     #endif
                 } else {
@@ -236,10 +275,7 @@ struct LibrarySectionListView: View {
                 }
             }
         #if os(iOS)
-            // Select mode owns the bottom edge with its bulk-action bar; the
-            // floating tab/search glass hides meanwhile, matching LibraryView's
-            // dashboard — this page is reached by pushing past it, and previously
-            // kept showing the tab bar underneath/instead of the bulk-action bar.
+            // Select mode hides the floating tab/search glass, matching LibraryView's dashboard.
             .toolbar(isSelecting ? .hidden : .automatic, for: .tabBar)
         #endif
             #if DEBUG
@@ -311,6 +347,13 @@ struct LibrarySectionListView: View {
     }
 
     private var headerTallyLine: String {
+        if isSelecting {
+            let total = visibleItems.count
+            let tally = "\(selectedWorks.count) of \(total) selected"
+            let order = kind.orderDescription
+            guard !filters.hasActiveFilters, !order.isEmpty else { return tally }
+            return "\(tally) · \(order)"
+        }
         if filters.hasActiveFilters, visibleItems.isEmpty, !items.isEmpty {
             let count = items.count
             return "\(count) \(count == 1 ? "work" : "works") · none match the current filters"
