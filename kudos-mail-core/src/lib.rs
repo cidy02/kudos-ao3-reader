@@ -52,20 +52,58 @@ pub enum ReadError {
     Parse(#[from] ParseError),
 }
 
-/// Read one message. Gates first, then parses; there is no way to do only the
-/// second.
+/// Headers we will look at. AO3's run well under this; the limit exists so the
+/// gate's own work is bounded before anything larger is considered.
+const MAX_HEADER_BYTES: usize = 64 * 1024;
+
+/// Read one message: gate first, then parse. There is no way to do only the second.
+///
+/// The gate runs against the **header block alone**, before the MIME parser is
+/// shown the body. That ordering is load-bearing rather than tidy: MIME boundary
+/// scanning is quadratic in the worst case, so a crafted multipart under the byte
+/// cap could burn the CPU of a message that was going to be refused anyway. The
+/// body is only parsed once the sender has been established.
 pub fn read(raw: &[u8], attestor: &Attestor) -> Result<Reading, ReadError> {
     if raw.len() > parser::MAX_MESSAGE_BYTES {
         return Err(ReadError::Parse(ParseError::TooLarge));
     }
+    let headers_only = header_block(raw).ok_or(ReadError::Parse(ParseError::NotMail))?;
+    let header_message = MessageParser::default()
+        .parse(headers_only)
+        .ok_or(ReadError::Parse(ParseError::NotMail))?;
+
+    let verdict = gate::check(&header_message, attestor);
+    if verdict == Verdict::Rejected {
+        return Err(ReadError::Refused);
+    }
+    drop(header_message);
+
     let message = MessageParser::default()
         .parse(raw)
         .ok_or(ReadError::Parse(ParseError::NotMail))?;
-
-    let verdict = gate::check(&message, attestor);
-    if verdict == Verdict::Rejected {
+    // The sender is re-established on the fully parsed message: the header block
+    // we gated on is a prefix, and we do not assume the two agree.
+    if gate::check(&message, attestor) != verdict {
         return Err(ReadError::Refused);
     }
     let event = parser::parse_message(&message)?;
     Ok(Reading { event, verdict })
+}
+
+/// The header block, up to and including the blank line that ends it.
+fn header_block(raw: &[u8]) -> Option<&[u8]> {
+    let limit = raw.len().min(MAX_HEADER_BYTES);
+    let window = raw.get(..limit)?;
+    for (i, w) in window.windows(4).enumerate() {
+        if w == b"\r\n\r\n" {
+            return raw.get(..i + 4);
+        }
+    }
+    for (i, w) in window.windows(2).enumerate() {
+        if w == b"\n\n" {
+            return raw.get(..i + 2);
+        }
+    }
+    // No body at all: headers may run to the end, if they fit the cap.
+    (raw.len() <= MAX_HEADER_BYTES).then_some(raw)
 }
