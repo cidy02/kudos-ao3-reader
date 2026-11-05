@@ -455,6 +455,18 @@ nonisolated struct AO3AuthorHeader: Hashable {
             .compactMap(\.listCount)
             .first
     }
+
+    /// Matches the dashboard nav's "Drafts (2)" link by path or label.
+    func draftsListCount() -> Int? {
+        actions.lazy
+            .filter {
+                let path = $0.url.path.lowercased()
+                return path.hasSuffix("/drafts") || path.contains("drafts") ||
+                    $0.label.localizedCaseInsensitiveContains("draft")
+            }
+            .compactMap(\.listCount)
+            .first
+    }
 }
 
 nonisolated struct AO3RichText: Hashable {

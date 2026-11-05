@@ -368,6 +368,8 @@ struct AccountNavCardLabel: View {
     var count: String?
     /// When true, shows the "open outside" glyph instead of a disclosure chevron.
     var opensExternally: Bool = false
+    /// When true, renders `count` as a solid accent pill badge (board 35 Inbox row).
+    var hasAccentBadge: Bool = false
 
     /// The spec's settings-row type (1m, Settings, More on AO3, Preferences):
     /// 15pt medium title, 13pt medium value — the same row the Settings pages
@@ -379,6 +381,7 @@ struct AccountNavCardLabel: View {
     /// accessibility sizes, over the panel's edge and into the title.
     @ScaledMetric(relativeTo: .body) private var iconWidth: CGFloat = 22
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accentFill) private var accentFill
 
     var body: some View {
         Group {
@@ -412,10 +415,20 @@ struct AccountNavCardLabel: View {
                 .fixedSize(horizontal: oneLine, vertical: false)
             Spacer(minLength: 8)
             if let count {
-                Text(count)
-                    .font(.system(size: valueSize, weight: .medium))
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
+                if hasAccentBadge {
+                    Text(count)
+                        .font(.caption.monospacedDigit().weight(.bold))
+                        .foregroundStyle(ThemeManager.label(on: accentFill))
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 2)
+                        .frame(minWidth: 22, minHeight: 22)
+                        .background(accentFill, in: Capsule())
+                } else {
+                    Text(count)
+                        .font(.system(size: valueSize, weight: .medium))
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
             }
             Image(systemName: opensExternally ? "arrow.up.forward.square" : "chevron.right")
                 .font(opensExternally ? .body : .caption.weight(.semibold))
