@@ -28,13 +28,26 @@ struct DebugShotRouteTests {
             "authorbookmarks", "readerspeech", "libfilter", "libselect", "remoteselect",
             "expandrow", "searchfilters", "collectionaddworks", "libedit", "sortby",
             "readerend", "welcome", "protectlibrary", "recentlydeleted",
+            "chsettings", "challenge",
         ]
-        #expect(names.count == 84)
+        #expect(names.count == 86)
         for name in names {
             #expect(DebugShots.byName[name] != nil)
             #expect(!DebugShots.byName[name]!.route.isEmpty)
         }
         #expect(Set(DebugShots.names) == Set(names))
+    }
+
+    @Test func fid60ChallengeRoutePinsChallengeSettings() throws {
+        let challenge = try #require(DebugShots.byName["challenge"])
+        #expect(challenge.route == "acct:ao3collection:winter_exchange")
+        #expect(challenge.manageRow == "Challenge Settings")
+        #expect(challenge.pushes.isEmpty)
+
+        let chsettings = try #require(DebugShots.byName["chsettings"])
+        #expect(chsettings.route == "acct:ao3collection:winter_exchange")
+        #expect(chsettings.manageRow == "Challenge Settings")
+        #expect(chsettings.pushes.isEmpty)
     }
 
     @MainActor
