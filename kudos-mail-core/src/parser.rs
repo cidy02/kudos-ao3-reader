@@ -48,6 +48,10 @@ pub enum Ao3EventKind {
 pub enum Subscription {
     Work(String),
     Author(String),
+    /// Not yet produced. AO3's footer names a work or a series by title with no
+    /// label distinguishing them, and no series notification appeared in the
+    /// mailbox this was measured against, so its wording is unverified. A series
+    /// subscription currently reads as [`Subscription::Work`].
     Series(String),
     Unknown,
 }
@@ -56,6 +60,11 @@ pub enum Subscription {
 pub struct Ao3Event {
     pub kind: Ao3EventKind,
     /// Unix seconds, from the `Date` header.
+    ///
+    /// **Not authenticated, even when the verdict is `Trusted`.** DKIM must sign
+    /// `From`, but signing `Date` is only recommended, so a replayed message can
+    /// carry a passing AO3 signature and an attacker's timestamp. Treat this as
+    /// ordering information to show, never as something to make a decision on.
     pub at: i64,
     pub work_id: u64,
     pub chapter_id: Option<u64>,
@@ -116,9 +125,15 @@ pub(crate) fn parse_message(message: &Message<'_>) -> Result<Ao3Event, ParseErro
     let body = plain_text_part(message).ok_or(ParseError::NoTextBody)?;
     let body = body.as_ref();
 
-    let kind = if body.contains("posted a new chapter of") {
+    // From AO3's own "posted a new …" line only. Scanning the whole body let an
+    // author put "posted a new chapter of" in a summary and change the kind of a
+    // genuine, signed new-work notification.
+    let template = body.lines().find(|l| {
+        l.contains("posted a new") && l.contains("https://archiveofourown.org/users/")
+    });
+    let kind = if template.is_some_and(|l| l.contains("posted a new chapter of")) {
         Ao3EventKind::NewChapter { number: chapter_number(message.subject().unwrap_or("")) }
-    } else if body.contains("posted a new work") {
+    } else if template.is_some_and(|l| l.contains("posted a new work")) {
         Ao3EventKind::NewWork
     } else {
         // Kudos notifications, comment replies and abuse reports all arrive from
@@ -320,7 +335,13 @@ fn summary(body: &str) -> Option<String> {
 /// AO3 states which subscription fired: a username, or a work or series title.
 fn subscription(body: &str) -> Subscription {
     const MARKER: &str = "because you've subscribed to ";
-    let Some(at) = body.find(MARKER) else { return Subscription::Unknown };
+    // Only below AO3's separator rule. The sentence is ordinary text, so an
+    // author could write it into a work summary and have the app state the
+    // wrong reason for a genuine, signed notification — confirmed by test.
+    let Some(sep) = body.find("\n---") else { return Subscription::Unknown };
+    let Some(footer) = body.get(sep..) else { return Subscription::Unknown };
+    let Some(rel) = footer.find(MARKER) else { return Subscription::Unknown };
+    let at = sep + rel;
     let Some(rest) = body.get(at + MARKER.len()..) else { return Subscription::Unknown };
     let end = rest.find(". Follow the link").unwrap_or(rest.len());
     let Some(name) = rest.get(..end) else { return Subscription::Unknown };

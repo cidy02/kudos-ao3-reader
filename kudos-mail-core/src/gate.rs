@@ -127,16 +127,114 @@ fn topmost_attestation(message: &Message<'_>, expected_authserv: &str) -> Option
     None
 }
 
-/// Split on `;` that is not inside a quoted string.
+/// `mx.google.com; spf=pass …` → `("mx.google.com", "spf=pass …")`
+fn split_authserv(raw: &str) -> Option<(&str, &str)> {
+    let (head, rest) = raw.split_once(';')?;
+    // An authserv-id may carry a version token: "mx.google.com 1".
+    let authserv = head.split_whitespace().next()?;
+    Some((authserv, rest))
+}
+
+/// True only for a `dkim=pass` clause whose identity is AO3's domain, and
+/// whose identities do not contradict each other.
 ///
-/// A naive split let a quoted value smuggle a whole clause: a provider writing
-/// `spf=fail reason="x; dkim=pass d=archiveofourown.org"` produced a fake
-/// `dkim=pass` clause and the message was trusted. Confirmed by test.
+/// RFC 8601 gives this header structured syntax: comments in parentheses, and
+/// quoted strings in which a backslash escapes the next character. A naive
+/// scanner let all three of these forge a pass, each confirmed by test:
+///
+/// * `reason="x\"; dkim=pass header.d=archiveofourown.org"` — the escaped quote
+///   flipped the quote state, exposing a fake clause;
+/// * `spf=fail (x; dkim=pass header.d=archiveofourown.org )` — a comment was
+///   split as though it were real syntax;
+/// * `dkim=pass header.i=@archiveofourown.org header.d=evil.test` — the first
+///   identity won and the contradicting one was never looked at.
+fn dkim_passes_for_ao3(results: &str) -> bool {
+    let plain = strip_comments(results);
+    for clause in split_clauses(&plain) {
+        let clause = clause.trim();
+        let Some(rest) = strip_ci_prefix(clause, "dkim=") else { continue };
+        if !rest.split_whitespace().next().unwrap_or("").eq_ignore_ascii_case("pass") {
+            continue;
+        }
+        let domains = identity_domains(clause);
+        // Every identity the clause names must be AO3's. One that disagrees
+        // means the clause is not telling us one thing, so we believe none of it.
+        if !domains.is_empty()
+            && domains.iter().all(|d| d.eq_ignore_ascii_case(AO3_DKIM_DOMAIN))
+        {
+            return true;
+        }
+    }
+    false
+}
+
+/// Every `header.d=` / `header.i=` domain named in one clause.
+fn identity_domains(clause: &str) -> Vec<&str> {
+    let mut out = Vec::new();
+    for token in clause.split_whitespace() {
+        let value = strip_ci_prefix(token, "header.d=")
+            .or_else(|| strip_ci_prefix(token, "header.i=").and_then(|v| v.rsplit('@').next()));
+        if let Some(d) = value.and_then(clean_domain) {
+            out.push(d);
+        }
+    }
+    out
+}
+
+fn clean_domain(raw: &str) -> Option<&str> {
+    let v = raw.trim_matches(|c: char| c == '"' || c == ';' || c == ',' || c.is_whitespace());
+    (!v.is_empty()).then_some(v)
+}
+
+/// Remove RFC 5322 comments — `(...)`, which nest — leaving a space behind.
+///
+/// Quoted strings are copied through untouched, and a backslash escapes the
+/// character after it in both contexts.
+fn strip_comments(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    let (mut depth, mut quoted, mut escaped) = (0usize, false, false);
+    for c in input.chars() {
+        if escaped {
+            escaped = false;
+            if depth == 0 {
+                out.push(c);
+            }
+            continue;
+        }
+        match c {
+            '\\' => {
+                escaped = true;
+                if depth == 0 {
+                    out.push(c);
+                }
+            }
+            '"' if depth == 0 => {
+                quoted = !quoted;
+                out.push(c);
+            }
+            '(' if !quoted => {
+                depth += 1;
+                out.push(' ');
+            }
+            ')' if !quoted && depth > 0 => depth -= 1,
+            _ if depth == 0 => out.push(c),
+            _ => {}
+        }
+    }
+    out
+}
+
+/// Split on `;` outside quoted strings, honouring backslash escapes.
 fn split_clauses(input: &str) -> Vec<&str> {
     let mut out = Vec::new();
-    let (mut start, mut quoted) = (0usize, false);
+    let (mut start, mut quoted, mut escaped) = (0usize, false, false);
     for (i, c) in input.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
         match c {
+            '\\' => escaped = true,
             '"' => quoted = !quoted,
             ';' if !quoted => {
                 if let Some(piece) = input.get(start..i) {
@@ -151,59 +249,6 @@ fn split_clauses(input: &str) -> Vec<&str> {
         out.push(piece);
     }
     out
-}
-
-/// `mx.google.com; spf=pass …` → `("mx.google.com", "spf=pass …")`
-fn split_authserv(raw: &str) -> Option<(&str, &str)> {
-    let (head, rest) = raw.split_once(';')?;
-    // An authserv-id may carry a version token: "mx.google.com 1".
-    let authserv = head.split_whitespace().next()?;
-    Some((authserv, rest))
-}
-
-/// True only for `dkim=pass` whose own `header.d`/`d=` is AO3's domain.
-///
-/// A message can legitimately carry several DKIM results — one for AO3 and one
-/// for a list that relayed it. We need AO3's specifically to have passed, so a
-/// `dkim=pass` for some other domain is not enough.
-fn dkim_passes_for_ao3(results: &str) -> bool {
-    for clause in split_clauses(results) {
-        let clause = clause.trim();
-        let Some(rest) = strip_ci_prefix(clause, "dkim=") else { continue };
-        let outcome = rest.split_whitespace().next().unwrap_or("");
-        if !outcome.eq_ignore_ascii_case("pass") {
-            continue;
-        }
-        if clause_domain(clause).is_some_and(|d| d.eq_ignore_ascii_case(AO3_DKIM_DOMAIN)) {
-            return true;
-        }
-    }
-    false
-}
-
-/// The signing domain named inside one result clause.
-///
-/// Gmail writes DKIM identity as `header.i=@archiveofourown.org` — confirmed
-/// against real mail — while other providers write `header.d=archiveofourown.org`.
-/// Both must be read, or every real message is rejected. A bare `d=` is not
-/// accepted: RFC 8601 spells these `header.d` and `header.i`, and allowing the
-/// short form only widens what a crafted header can claim.
-fn clause_domain(clause: &str) -> Option<&str> {
-    for token in clause.split_whitespace() {
-        if let Some(v) = strip_ci_prefix(token, "header.d=") {
-            return clean_domain(v);
-        }
-        if let Some(v) = strip_ci_prefix(token, "header.i=") {
-            // An identity is `[local-part]@domain`; the domain is what signs.
-            return clean_domain(v.rsplit('@').next()?);
-        }
-    }
-    None
-}
-
-fn clean_domain(raw: &str) -> Option<&str> {
-    let v = raw.trim_matches(|c: char| c == '"' || c == ';' || c == ',' || c.is_whitespace());
-    (!v.is_empty()).then_some(v)
 }
 
 fn strip_ci_prefix<'a>(haystack: &'a str, prefix: &str) -> Option<&'a str> {
