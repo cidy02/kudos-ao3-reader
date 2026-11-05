@@ -37,21 +37,37 @@ enum DemoLibrary {
         if changed { try? context.save() }
     }
 
+    private static func backfillDemoMetadata(existing: [SavedWork], in context: ModelContext) {
+        var changed = false
+        for sample in samples {
+            guard let work = existing.first(where: { $0.title == sample.title && $0.author == sample.author }) else {
+                continue
+            }
+            if work.summary.isEmpty && !sample.summary.isEmpty {
+                work.summary = sample.summary
+                changed = true
+            }
+            if work.seriesTitle.isEmpty && !sample.seriesTitle.isEmpty {
+                work.seriesTitle = sample.seriesTitle
+                work.seriesPosition = sample.seriesPosition
+                changed = true
+            }
+            if work.workRelationships.isEmpty && work.workCharacters.isEmpty && work.workFreeforms.isEmpty {
+                applyWorkTags(from: sample, to: work)
+                changed = true
+            }
+            if let ao3ID = sample.ao3WorkID, work.ao3WorkID != ao3ID {
+                work.ao3WorkID = ao3ID
+                changed = true
+            }
+        }
+        if changed { try? context.save() }
+    }
+
     static func seedIfRequested(in context: ModelContext) {
         guard UserDefaults.standard.bool(forKey: "KudosDemoLibrary") else { return }
         let existing = (try? context.fetch(FetchDescriptor<SavedWork>())) ?? []
-        if let sample = samples.first(where: { $0.title == "Winter Garden" }),
-           let work = existing.first(where: { $0.title == sample.title && $0.author == sample.author }) {
-            applyWorkTags(from: sample, to: work)
-            try? context.save()
-        }
-        for sample in samples where sample.ao3WorkID != nil {
-            if let work = existing.first(where: { $0.title == sample.title && $0.author == sample.author }),
-               work.ao3WorkID != sample.ao3WorkID {
-                work.ao3WorkID = sample.ao3WorkID
-                try? context.save()
-            }
-        }
+        backfillDemoMetadata(existing: existing, in: context)
         guard !existing.contains(where: { $0.title == samples[0].title }) else {
             seedRecentlyDeleted(in: context)
             seedReadingHistory(in: context)
@@ -84,6 +100,8 @@ enum DemoLibrary {
             work.isFinished = sample.finished
             work.ao3WorkID = sample.ao3WorkID
             if let seen = sample.seenChapters { work.knownChapterCount = seen }
+            work.seriesTitle = sample.seriesTitle
+            work.seriesPosition = sample.seriesPosition
             applyWorkTags(from: sample, to: work)
             context.insert(work)
             if sample.onDevice {
@@ -142,10 +160,16 @@ enum DemoLibrary {
     /// Separate from the main seed so an already-seeded simulator gets it too.
     private static func seedRecentlyDeleted(in context: ModelContext) {
         let title = "Lanterns Over Ba Sing Se"
+        let summary = "A festival night in the Lower Ring, where small paper lanterns float down the canal "
+            + "carrying wishes no one says aloud."
         let all = (try? context.fetch(FetchDescriptor<SavedWork>())) ?? []
         seedHeldCopy(in: context, existing: all)
+        if let work = all.first(where: { $0.title == title }), work.summary.isEmpty {
+            work.summary = summary
+            try? context.save()
+        }
         guard !all.contains(where: { $0.title == title }) else { return }
-        let work = SavedWork(title: title, author: "paperlantern", summary: "")
+        let work = SavedWork(title: title, author: "paperlantern", summary: summary)
         work.workFandoms = ["Avatar: The Last Airbender"]
         work.rating = "General Audiences"
         work.wordCount = 4_310
@@ -164,8 +188,14 @@ enum DemoLibrary {
     /// placeholder; the demo blocks AO3 anyway.
     private static func seedHeldCopy(in context: ModelContext, existing: [SavedWork]) {
         let title = "Tea in the Jasmine Dragon"
+        let summary = "Uncle Iroh brews ginseng tea on a rainy afternoon and listens to the troubles "
+            + "of anyone who walks through the door."
+        if let work = existing.first(where: { $0.title == title }), work.summary.isEmpty {
+            work.summary = summary
+            try? context.save()
+        }
         guard !existing.contains(where: { $0.title == title }) else { return }
-        let work = SavedWork(title: title, author: "uncle_iroh_fan", summary: "")
+        let work = SavedWork(title: title, author: "uncle_iroh_fan", summary: summary)
         work.workFandoms = ["Avatar: The Last Airbender"]
         work.rating = "General Audiences"
         work.wordCount = 8_120
@@ -204,6 +234,8 @@ enum DemoLibrary {
         var relationships: [String] = []
         var characters: [String] = []
         var additionalTags: [String] = []
+        var seriesTitle = ""
+        var seriesPosition = 0
         let words: Int
         let chapters: String
         var progress: Double?
@@ -232,50 +264,141 @@ enum DemoLibrary {
         Sample(title: "Sodium Lights", author: "nine_of_wands",
                summary: "The TARDIS lands in a city that never switches its streetlamps off.",
                fandoms: ["Doctor Who (2005)", "Doctor Who"], rating: "Teen And Up Audiences",
+               relationships: ["Tenth Doctor & Donna Noble"],
+               characters: ["Tenth Doctor", "Donna Noble"],
+               additionalTags: ["Atmospheric", "Sodium Vapor", "Night Walks", "Friendship", "No Beta"],
                words: 62_004, chapters: "1/1", progress: 0.42, favorite: true),
         Sample(title: "Unanswered Is Not Unread", author: "poknn",
+               summary: "A stack of letters sits beneath the floorboards in Republic City, tied with blue silk ribbon. "
+                   + "Zuko never burned a single one.",
                fandoms: ["Avatar: The Last Airbender", "The Legend of Korra"], rating: "Teen And Up Audiences",
-               categories: ["M/M"], words: 8_970, chapters: "2/?", progress: 0.2, seenChapters: 1),
+               categories: ["M/M"],
+               relationships: ["Sokka/Zuko (Avatar)"],
+               characters: ["Zuko (Avatar)", "Sokka (Avatar)", "Katara (Avatar)"],
+               additionalTags: ["Epistolary", "Slow Burn", "Post-Canon", "Found Family", "Correspondence"],
+               words: 8_970, chapters: "2/?", progress: 0.2, seenChapters: 1),
         Sample(title: "Burn my heart, heed my eyes", author: "Kuuakuu",
+               summary: "The Sharingan does not forget what the heart wishes to put down. Sasuke returns to Konoha in "
+                   + "the rain and finds the village has learned to breathe without him.",
                fandoms: ["NARUTO (Anime & Manga)"], rating: "Teen And Up Audiences",
+               characters: ["Uchiha Sasuke", "Uzumaki Naruto", "Haruno Sakura"],
+               additionalTags: ["Post-Canon", "Angst", "Homecoming", "Healing", "Rain"],
                words: 4_820, chapters: "1/?"),
         Sample(title: "Happy Birthday Diya!!", author: "runsonmatcha",
+               summary: "Gift fic for Diya! Bakugou gets dragged to an underground fighting ring on his night off and "
+                   + "runs into someone who doesn’t care about his temper. Rated E for a reason, mind the tags.",
                fandoms: ["僕のヒーローアカデミア | Boku no Hero Academia | My Hero Academia"],
                rating: "Explicit", warnings: ["Graphic Depictions Of Violence"], categories: ["F/M"],
+               relationships: ["Bakugou Katsuki/Original Female Character(s)"],
+               characters: ["Bakugou Katsuki", "Kirishima Eijirou", "Original Characters"],
+               additionalTags: [
+                   "Gift Fic", "Underground Fighting", "Enemies to Lovers", "Rough", "Established Bad Temper"
+               ],
                words: 3_150, chapters: "1/1", progress: 0.0),
         Sample(title: "Ashfall", author: "TempusFugit",
+               summary: "The 212th is pinned down in the burning ruins of the lower districts when the comms go dead. "
+                   + "Cody counts the men he has left and tries not to look at Obi-Wan’s hands.",
                fandoms: ["Star Wars - All Media Types", "Star Wars: The Clone Wars (2008) - All Media Types"],
-               rating: "Mature", categories: ["M/M"], words: 41_780, chapters: "9/?", progress: 0.63,
+               rating: "Mature", categories: ["M/M"],
+               relationships: ["CC-2224 | Cody/Obi-Wan Kenobi"],
+               characters: ["CC-2224 | Cody", "Obi-Wan Kenobi", "Rex (Star Wars)"],
+               additionalTags: ["War", "Hurt/Comfort", "Dust and Blood", "Canon Compliant", "Military Protocol"],
+               seriesTitle: "The Siege Chronicles", seriesPosition: 2,
+               words: 41_780, chapters: "9/?", progress: 0.63,
                kept: true, seenChapters: 7),
         Sample(title: "The Long Way Down", author: "velvetstatic",
-               fandoms: ["Cyberpunk 2077 (Video Game)"], rating: "Mature", words: 84_120,
-               chapters: "7/18", progress: 0.35),
+               summary: "Night City doesn’t give second chances; it just gives you more rope to hang yourself with. "
+                   + "When an extraction in Watson goes sideways, Valerie is left holding a shard with corporate "
+                   + "telemetry that half the badges in Heywood would kill to bury. River warns her to drop it down "
+                   + "the nearest incinerator chute. Instead, she rents a room above a noodle shop, counts her "
+                   + "remaining rounds, and waits for the rain to stop.",
+               fandoms: ["Cyberpunk 2077 (Video Game)"], rating: "Mature",
+               relationships: ["River Ward/Female V"],
+               characters: ["Female V (Cyberpunk)", "River Ward", "Johnny Silverhand", "Viktor Vektor"],
+               additionalTags: ["Night City", "Detective Work", "Corporate Intrigue", "Slow Burn", "Noir"],
+               words: 84_120, chapters: "7/18", progress: 0.35),
         Sample(title: "Lighthouse Hours", author: "keeper_of_lamps",
-               fandoms: ["Sherlock (TV)"], rating: "General Audiences", words: 12_400,
-               chapters: "5/5", finished: true),
+               summary: "John buys a keeper's cottage in Sussex with salt-stained windows and too many rooms. "
+                   + "Sherlock arrives three weeks later with three violins, no luggage, and an unconvincing "
+                   + "excuse about air quality.",
+               fandoms: ["Sherlock (TV)"], rating: "General Audiences",
+               relationships: ["Sherlock Holmes & John Watson"],
+               characters: ["Sherlock Holmes", "John Watson", "Mrs. Hudson"],
+               additionalTags: ["Retirement", "Beekeeping", "Sussex", "Domestic", "Comfort"],
+               words: 12_400, chapters: "5/5", finished: true),
         Sample(title: "Paper Cranes", author: "origamist",
-               fandoms: ["Haikyuu!!"], rating: "General Audiences", words: 2_210, chapters: "1/1"),
+               summary: "Paper cranes left on an empty gym bench.",
+               fandoms: ["Haikyuu!!"], rating: "General Audiences",
+               relationships: ["Kageyama Tobio & Hinata Shouyou"],
+               characters: ["Kageyama Tobio", "Hinata Shouyou"],
+               additionalTags: ["Drabble", "Quiet Mornings", "Teamwork", "Paper Cranes"],
+               words: 2_210, chapters: "1/1"),
         Sample(title: "Winter Garden", author: "frostbitten",
+               summary: "The Enchanted Forest does not obey the seasons of Arendelle, but the snowdrops push through "
+                   + "the permafrost anyway. Honeymaren teaches Elsa what grows when you stop freezing the ground "
+                   + "beneath your feet.",
                fandoms: ["Frozen (Disney Movies)"], rating: "General Audiences", categories: ["F/F"],
                relationships: ["Elsa/Honeymaren (Disney)"],
                characters: ["Elsa (Disney)", "Honeymaren (Disney)", "Anna (Disney)"],
                additionalTags: ["Post-Frozen II", "Slow Burn", "Magical Realism", "Gardening"],
                words: 18_020, chapters: "4/6", progress: 0.71, favorite: true, seenChapters: 3),
         Sample(title: "What the River Keeps", author: "undertow",
+               summary: "The Seine does not care whose blood it carries to the sea, nor does it ask what uniform a "
+                   + "drowned man wore before the barricades fell. In the damp cellar beneath the Rue de l'Homme Armé, "
+                   + "Jean Valjean tends to a boy whose breathing rattles like dry leaves in winter, while beyond the "
+                   + "shuttered window the National Guard marches through streets still smelling of gunpowder and "
+                   + "lime.\n\n"
+                   + "Across the river, Inspector Javert sits in his office at the Prefecture with a report he cannot "
+                   + "sign and a key to a cell he cannot lock. Some debts are paid in coin, others in silence, and the "
+                   + "rest belong to the water. An exhaustive study of the days following June 1832, the men who "
+                   + "survived the cobblestones, and the fragile peace built on things unsaid.",
                fandoms: ["Les Misérables - Victor Hugo"], rating: "Teen And Up Audiences",
+               characters: ["Jean Valjean", "Javert", "Marius Pontmercy", "Cosette"],
+               additionalTags: [
+                   "Post-Barricades", "Canon Divergence", "Historical Accuracy", "Redemption",
+                   "Whump", "Slow Healing", "Barricade Survival"
+               ],
                words: 132_500, chapters: "30/30", finished: true, kept: true,
                ao3WorkID: 999_000_002),
         Sample(title: "Static on Channel Nine", author: "lowfreq",
-               fandoms: ["Supernatural"], rating: "Mature", words: 27_600, chapters: "3/?",
-               onDevice: false),
+               summary: "A dead frequency in northern Indiana starts broadcasting weather reports from twenty years "
+                   + "ago. Dean wants to skip it, but Sam finds an obituary from next Thursday with their names on it.",
+               fandoms: ["Supernatural"], rating: "Mature",
+               relationships: ["Dean Winchester & Sam Winchester"],
+               characters: ["Dean Winchester", "Sam Winchester", "Castiel"],
+               additionalTags: ["Case Fic", "Motel Rooms", "Radio", "Time Travel", "Brothers", "Creepy"],
+               words: 27_600, chapters: "3/?", onDevice: false),
         Sample(title: "Every Door in Hades", author: "zagreus_fan",
-               fandoms: ["Hades (Video Game 2018)"], rating: "Teen And Up Audiences",
+               summary: "Dying is easy; it's the walk through the Great Hall past his father's ledger that takes the "
+                   + "wind out of Zagreus. Thanatos meets him at the riverbank with quiet fury and clean bandages.",
+               fandoms: ["Hades (Video Game 2018)"], rating: "Teen And Up Audiences", categories: ["M/M"],
+               relationships: ["Thanatos/Zagreus (Hades Video Game)"],
+               characters: [
+                   "Zagreus (Hades Video Game)", "Thanatos (Hades Video Game)",
+                   "Hades (Hades Video Game)", "Megaera (Hades Video Game)"
+               ],
+               additionalTags: [
+                   "Slow Burn", "Underworld Politics", "Canon Compliant", "Escape Attempts", "Blood and Darkness"
+               ],
+               seriesTitle: "Songs of the Underworld", seriesPosition: 1,
                words: 56_300, chapters: "12/20", progress: 0.55),
         Sample(title: "Night Market", author: "lanternlight",
+               summary: "Between the steamed bun stalls and the fishmongers in Sendai, Megumi tracks a curse that "
+                   + "smells like sweet incense and old burnt paper. Gojo shows up late with sour plum candy and "
+                   + "no plan.",
                fandoms: ["呪術廻戦 | Jujutsu Kaisen (Manga)"], rating: "Teen And Up Audiences",
+               relationships: ["Gojou Satoru & Fushiguro Megumi"],
+               characters: ["Fushiguro Megumi", "Gojou Satoru", "Itadori Yuuji"],
+               additionalTags: ["Curse Hunting", "Street Food", "Sendai", "Mentor and Student", "Humor and Angst"],
                words: 9_870, chapters: "2/3"),
         Sample(title: "Stars Over Tatooine", author: "binarysun",
+               summary: "The moisture vaporators hum in the dusk while Luke cleans the carbon scoring off the "
+                   + "skyhopper. Uncle Owen is quiet at dinner, and the twin suns sink like embers into the Dune Sea.",
                fandoms: ["Star Wars - All Media Types"], rating: "General Audiences",
+               relationships: ["Luke Skywalker & Owen Lars"],
+               characters: ["Luke Skywalker", "Owen Lars", "Beru Lars"],
+               additionalTags: ["Pre-Canon", "Tatooine", "Binary Sunset", "Growing Up", "Farm Life", "Quiet"],
+               seriesTitle: "The Siege Chronicles", seriesPosition: 1,
                words: 6_540, chapters: "1/1", onDevice: false)
     ]
 }
