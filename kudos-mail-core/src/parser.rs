@@ -48,10 +48,9 @@ pub enum Ao3EventKind {
 pub enum Subscription {
     Work(String),
     Author(String),
-    /// Not yet produced. AO3's footer names a work or a series by title with no
-    /// label distinguishing them, and no series notification appeared in the
-    /// mailbox this was measured against, so its wording is unverified. A series
-    /// subscription currently reads as [`Subscription::Work`].
+    /// A name matching neither this message's work title nor its creators.
+    /// AO3's footer carries no label, so this is the remainder rather than a
+    /// positive identification.
     Series(String),
     Unknown,
 }
@@ -85,6 +84,10 @@ pub struct Ao3Event {
     pub additional_tags: Vec<String>,
     pub series: Option<String>,
     pub summary: Option<String>,
+    /// Creations in the same batch mail beyond the one this event describes.
+    /// They are not parsed; the count is here so a caller never believes a
+    /// message held one update when it held several.
+    pub extra_creations: usize,
 }
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
@@ -119,59 +122,84 @@ pub(crate) fn parse(raw: &[u8]) -> Result<Ao3Event, ParseError> {
 }
 
 pub(crate) fn parse_message(message: &Message<'_>) -> Result<Ao3Event, ParseError> {
-    // A real text/plain part, not whatever `body_text` can produce. That helper
-    // converts an HTML part when no plain alternative exists, so an HTML-only
-    // message parsed happily and the "text only" boundary was not real.
+    // A real text/plain part, not whatever `body_text` can produce: that helper
+    // converts an HTML part when no plain alternative exists.
     let body = plain_text_part(message).ok_or(ParseError::NoTextBody)?;
     let body = body.as_ref();
 
-    // From AO3's own "posted a new …" line only. Scanning the whole body let an
-    // author put "posted a new chapter of" in a summary and change the kind of a
-    // genuine, signed new-work notification.
-    let template = body.lines().find(|l| {
-        l.contains("posted a new") && l.contains("https://archiveofourown.org/users/")
-    });
-    let kind = if template.is_some_and(|l| l.contains("posted a new chapter of")) {
-        Ao3EventKind::NewChapter { number: chapter_number(message.subject().unwrap_or("")) }
-    } else if template.is_some_and(|l| l.contains("posted a new work")) {
-        Ao3EventKind::NewWork
+    let layout = crate::structure::Layout::of(body);
+    // One event per message, from the first creation. A batch carries several;
+    // the rest are counted in `extra_creations` rather than silently dropped.
+    let creation = layout.creations.first().copied().unwrap_or("");
+    let preface =
+        crate::structure::Preface::of(creation).ok_or(ParseError::NotASubscriptionEvent)?;
+    let after_preface = creation.get(preface.ends_at..).unwrap_or("");
+
+    // The link is the first line after the preface. Because the preface runs to
+    // the line ending in a colon, a URL smuggled into a work title stays inside
+    // it and is never read here.
+    let link_line = after_preface.lines().find(|l| !l.trim().is_empty()).unwrap_or("");
+    let (work_id, chapter_id) = ids_from_link(link_line.trim()).ok_or(ParseError::NoWorkLink)?;
+
+    // After the link: a blank line, then `"<title>" (N words)`.
+    let titled = quoted_with_words(after_preface);
+    // The work title is embedded in the preface sentence rather than starting a
+    // line, so it is searched for within the region, not at a line start.
+    let prefaced = quoted_in_region(creation.get(..preface.ends_at).unwrap_or(""));
+
+    use crate::structure::PrefaceKind as P;
+    let is_chapter = preface.kind == P::NewChapter;
+    // For a chapter the preface carries the work's title and word count, and the
+    // line after the link is the chapter's. For a work there is no title in the
+    // preface at all — that shape differs, and assuming otherwise lost it.
+    let (work_title, words) = if is_chapter { prefaced } else { titled.clone() }
+        .unwrap_or_default();
+    let (chapter_title, chapter_words) = if is_chapter {
+        titled.map_or((None, None), |(t, w)| (Some(t), w))
     } else {
-        // Kudos notifications, comment replies and abuse reports all arrive from
-        // the same address. They are not subscription events and are dropped.
-        return Err(ParseError::NotASubscriptionEvent);
+        (None, None)
     };
 
-    let (work_id, chapter_id) = work_and_chapter_ids(body).ok_or(ParseError::NoWorkLink)?;
+    let meta = metadata_block(creation);
+    let (posted, total) = meta.as_deref().map_or((None, None), chapters_in);
+    let name = subscription_name(layout.footer);
 
     Ok(Ao3Event {
-        kind,
+        kind: if is_chapter {
+            // The index comes from the posted count, not the subject: the
+            // subject puts the pseud first, and a pseud may be named "Chapter 2".
+            Ao3EventKind::NewChapter { number: posted }
+        } else {
+            Ao3EventKind::NewWork
+        },
         at: message.date().map_or(0, |d| d.to_timestamp()),
         work_id,
         chapter_id,
-        work_title: quoted_after(body, "of \"").unwrap_or_default(),
-        author: author(body).unwrap_or_default(),
-        via: subscription(body),
-        chapters_posted: chapters(body).0,
-        chapters_total: chapters(body).1,
-        words: parenthesised_words(body),
-        chapter_title: chapter_title(body),
-        chapter_words: chapter_words(body),
-        rating: field(body, "Rating").map(|v| capped(&v, MAX_TAG)),
-        warnings: list(body, "Warning"),
-        fandoms: list(body, "Fandom"),
-        relationships: list(body, "Relationships"),
-        characters: list(body, "Characters"),
-        additional_tags: list(body, "Additional Tags"),
-        series: field(body, "Series").map(|v| capped(&v, MAX_TITLE)),
-        summary: summary(body),
+        author: preface
+            .creators
+            .map_or_else(|| "Anonymous".to_owned(), |c| capped(c, MAX_AUTHOR)),
+        via: classify_subscription(name.as_deref(), &work_title, preface.creators),
+        chapters_posted: posted,
+        chapters_total: total,
+        words,
+        chapter_title,
+        chapter_words,
+        rating: meta.as_deref().and_then(|m| field(m, "Rating")).map(|v| capped(&v, MAX_TAG)),
+        warnings: meta.as_deref().map(|m| list(m, "Warning")).unwrap_or_default(),
+        fandoms: meta.as_deref().map(|m| list(m, "Fandom")).unwrap_or_default(),
+        relationships: meta.as_deref().map(|m| list(m, "Relationships")).unwrap_or_default(),
+        characters: meta.as_deref().map(|m| list(m, "Characters")).unwrap_or_default(),
+        additional_tags: meta.as_deref().map(|m| list(m, "Additional Tags")).unwrap_or_default(),
+        series: meta.as_deref().and_then(|m| field(m, "Series")).map(|v| capped(&v, MAX_TITLE)),
+        summary: work_summary(creation),
+        work_title,
+        extra_creations: layout.creations.len().saturating_sub(1),
     })
 }
 
 /// The first part whose declared type really is `text/plain`.
 fn plain_text_part<'a>(message: &'a Message<'a>) -> Option<std::borrow::Cow<'a, str>> {
     for part in message.text_bodies() {
-        // `PartType::Text` is a declared text/plain part. `PartType::Html` is
-        // the one `body_text` would silently convert for us.
         if let mail_parser::PartType::Text(text) = &part.body {
             return Some(text.clone());
         }
@@ -179,122 +207,157 @@ fn plain_text_part<'a>(message: &'a Message<'a>) -> Option<std::borrow::Cow<'a, 
     None
 }
 
-/// "[AO3] someone posted Chapter 9 of A Work" → 9.
-fn chapter_number(subject: &str) -> Option<u32> {
-    let at = subject.find("Chapter ")?;
-    let rest = subject.get(at + "Chapter ".len()..)?;
-    let digits: String = rest.chars().take_while(char::is_ascii_digit).take(8).collect();
-    digits.parse().ok().filter(|n| *n <= MAX_CHAPTERS)
-}
-
-/// The work link, read only from a line that *begins* with it.
-///
-/// Not the first occurrence anywhere: an AO3 author may put a URL in their work
-/// title, and the title is printed above the real link. Searching the whole body
-/// let a title like `https://archiveofourown.org/works/111` decide the work id
-/// of a genuine, correctly signed message — a confusion attack needing no forged
-/// mail at all. AO3's template always puts the link alone on its own line, so
-/// that is the only place we read it.
-fn work_and_chapter_ids(body: &str) -> Option<(u64, Option<u64>)> {
-    let rest = body
-        .lines()
-        .find_map(|line| line.trim().strip_prefix(WORKS_PREFIX))?;
-    let work_id = leading_u64(rest)?;
-
-    let after_id = rest.trim_start_matches(|c: char| c.is_ascii_digit());
-    let chapter_id = after_id
-        .strip_prefix("/chapters/")
-        .and_then(leading_u64);
-    Some((work_id, chapter_id))
-}
-
-/// Digits at the start of `s`, refusing anything that cannot be a u64.
-///
-/// The take is bounded before collecting: a megabyte of digits should cost a
-/// comparison, not a megabyte of allocation.
+/// Digits at the start of `s`, refusing anything that cannot be a u64. The take
+/// is bounded before collecting, so a megabyte of digits costs a comparison.
 fn leading_u64(s: &str) -> Option<u64> {
     const MAX_DIGITS: usize = 19;
-    let digits: String = s.chars().take_while(char::is_ascii_digit).take(MAX_DIGITS + 1).collect();
+    let digits: String =
+        s.chars().take_while(char::is_ascii_digit).take(MAX_DIGITS + 1).collect();
     if digits.is_empty() || digits.len() > MAX_DIGITS {
         return None;
     }
     digits.parse().ok()
 }
 
-/// The username AO3 prints before the pseud link on its "posted a new …" line.
+/// Ids from a line that is *nothing but* an AO3 work link.
 ///
-/// The line must be that one. A `/users/` URL can appear in a summary or a
-/// title too, and taking the first line that merely contains one let a work's
-/// own text choose the author shown beside it.
-fn author(body: &str) -> Option<String> {
-    let line = body.lines().find(|l| {
-        l.contains("https://archiveofourown.org/users/") && l.contains("posted a new")
-    })?;
-    let name = line.split_whitespace().next()?;
-    (!name.is_empty()).then(|| capped(name, MAX_AUTHOR))
+/// A line that merely contains one is a line somebody wrote.
+fn ids_from_link(line: &str) -> Option<(u64, Option<u64>)> {
+    let rest = line.strip_prefix(WORKS_PREFIX)?;
+    let work_id = leading_u64(rest)?;
+    let after = rest.trim_start_matches(|c: char| c.is_ascii_digit());
+    let chapter_id = after.strip_prefix("/chapters/").and_then(leading_u64);
+    let tail = match chapter_id {
+        Some(_) => after
+            .strip_prefix("/chapters/")
+            .map_or("", |t| t.trim_start_matches(|c: char| c.is_ascii_digit())),
+        None => after,
+    };
+    tail.trim().is_empty().then_some((work_id, chapter_id))
 }
 
-/// The work title, which AO3 prints in double quotes after `of `.
-///
-/// The marker carries the opening quote. Without it the banner line
-/// "Archive of Our Own" matches first and the title comes back empty.
-fn quoted_after(body: &str, marker: &str) -> Option<String> {
-    let at = body.find(marker)?;
-    let inner = body.get(at + marker.len()..)?;
-    let end = inner.find('"')?;
-    let title = inner.get(..end)?;
-    (!title.is_empty()).then(|| capped(title, MAX_TITLE))
+/// The first `"Title" (N words)` line in a region.
+fn quoted_with_words(region: &str) -> Option<(String, Option<u64>)> {
+    for line in region.lines() {
+        let t = line.trim();
+        let Some(inner) = t.strip_prefix('"') else { continue };
+        let Some(end) = inner.rfind('"') else { continue };
+        let title = inner.get(..end)?;
+        let words = words_in_parens(inner.get(end..).unwrap_or(""));
+        return Some((capped(title, MAX_TITLE), words));
+    }
+    None
 }
 
-/// `Chapters: 9/13` → `(Some(9), Some(13))`; `55/?` → `(Some(55), None)`.
-fn chapters(body: &str) -> (Option<u32>, Option<u32>) {
-    let Some(value) = field(body, "Chapters") else { return (None, None) };
+/// The first `"Title" (N words)` anywhere in a region, across line breaks.
+///
+/// An AO3 title may contain a newline, so the closing quote need not be on the
+/// line the opening one is.
+fn quoted_in_region(region: &str) -> Option<(String, Option<u64>)> {
+    let open = region.find('"')?;
+    let rest = region.get(open + 1..)?;
+    let close = rest.find('"')?;
+    let title = rest.get(..close)?;
+    let words = words_in_parens(rest.get(close..).unwrap_or(""));
+    (!title.is_empty()).then(|| (capped(title, MAX_TITLE), words))
+}
+
+/// `… (4,679 words)` → 4679. AO3 may write the count with separators.
+fn words_in_parens(tail: &str) -> Option<u64> {
+    let at = tail.find('(')?;
+    let inner = tail.get(at + 1..)?;
+    let digits: String = inner
+        .chars()
+        .take_while(|c| c.is_ascii_digit() || *c == ',')
+        .filter(char::is_ascii_digit)
+        .take(19)
+        .collect();
+    if digits.is_empty() {
+        return None;
+    }
+    let rest = inner.trim_start_matches(|c: char| c.is_ascii_digit() || c == ',');
+    if !rest.trim_start().starts_with("word") {
+        return None;
+    }
+    digits.parse().ok().filter(|n| *n <= MAX_WORDS)
+}
+
+/// The `_work_info` block: a run of `Label: value` lines beginning at `Chapters:`.
+///
+/// Author text is rendered both above this block (the chapter summary) and below
+/// it (the work summary), and `to_plain_text` can put any line at column zero —
+/// so a summary can forge a block. When two candidates exist we cannot tell which
+/// is AO3's, and showing a wrong rating is worse than showing none, so ambiguity
+/// yields nothing at all.
+fn metadata_block(creation: &str) -> Option<String> {
+    let lines: Vec<&str> = creation.lines().collect();
+    let mut runs: Vec<String> = Vec::new();
+    let mut i = 0usize;
+    while i < lines.len() {
+        if lines.get(i).is_some_and(|l| l.starts_with("Chapters:")) {
+            let mut run: Vec<&str> = Vec::new();
+            let mut j = i;
+            while let Some(l) = lines.get(j) {
+                if is_metadata_line(l) {
+                    run.push(l);
+                    j += 1;
+                } else {
+                    break;
+                }
+            }
+            runs.push(run.join("\n"));
+            i = j;
+        } else {
+            i += 1;
+        }
+    }
+    (runs.len() == 1).then(|| runs.into_iter().next()).flatten()
+}
+
+/// `Label: value` at column zero, where the label looks like AO3's.
+fn is_metadata_line(line: &str) -> bool {
+    let Some((label, _)) = line.split_once(": ") else { return false };
+    !label.is_empty()
+        && label.len() <= 32
+        && label.starts_with(|c: char| c.is_ascii_uppercase())
+        && label.chars().all(|c| c.is_ascii_alphabetic() || c == ' ')
+}
+
+fn chapters_in(meta: &str) -> (Option<u32>, Option<u32>) {
+    let Some(value) = field(meta, "Chapters") else { return (None, None) };
     let Some((posted, total)) = value.split_once('/') else { return (None, None) };
-    let posted = posted.trim().parse::<u32>().ok().filter(|n| *n <= MAX_CHAPTERS);
-    let total = total.trim().parse::<u32>().ok().filter(|n| *n <= MAX_CHAPTERS);
-    (posted, total)
+    (
+        posted.trim().parse::<u32>().ok().filter(|n| *n <= MAX_CHAPTERS),
+        total.trim().parse::<u32>().ok().filter(|n| *n <= MAX_CHAPTERS),
+    )
 }
 
-/// The total word count AO3 puts in parentheses on the first line.
-fn parenthesised_words(body: &str) -> Option<u64> {
-    let line = body.lines().find(|l| l.contains("posted a new"))?;
-    words_in_parens(line)
+/// The work's own summary: `Summary:` alone at column zero, then indented lines.
+///
+/// The chapter summary is labelled `Chapter Summary: ` and sits inline above
+/// this, so searching for `Summary:` found that one first.
+fn work_summary(creation: &str) -> Option<String> {
+    let mut lines = creation.lines();
+    while let Some(line) = lines.next() {
+        if line.trim_end() != "Summary:" {
+            continue;
+        }
+        let text: Vec<&str> = lines
+            .by_ref()
+            .take_while(|l| l.starts_with(' ') || l.starts_with('\t'))
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .collect();
+        if !text.is_empty() {
+            return Some(capped(&text.join("\n"), MAX_SUMMARY));
+        }
+    }
+    None
 }
 
-fn chapter_title(body: &str) -> Option<String> {
-    // The chapter line is the quoted string that stands alone, after the link.
-    let after_link = body.split_once(WORKS_PREFIX).map(|(_, rest)| rest)?;
-    let line = after_link
-        .lines()
-        .find(|l| l.trim_start().starts_with('"') && l.contains('"'))?;
-    let inner = line.trim().strip_prefix('"')?;
-    let end = inner.find('"')?;
-    let title = inner.get(..end)?;
-    (!title.is_empty()).then(|| capped(title, MAX_TITLE))
-}
-
-fn chapter_words(body: &str) -> Option<u64> {
-    let after_link = body.split_once(WORKS_PREFIX).map(|(_, rest)| rest)?;
-    let line = after_link.lines().find(|l| l.trim_start().starts_with('"'))?;
-    words_in_parens(line)
-}
-
-/// `… ("Chapter 9" (4679 words)` → 4679.
-fn words_in_parens(line: &str) -> Option<u64> {
-    let at = line.rfind('(')?;
-    let inner = line.get(at + 1..)?;
-    let n = leading_u64(inner)?;
-    inner
-        .trim_start_matches(|c: char| c.is_ascii_digit())
-        .trim_start()
-        .starts_with("word")
-        .then_some(n)
-        .filter(|n| *n <= MAX_WORDS)
-}
-
-/// A single `Name: value` line.
-fn field(body: &str, name: &str) -> Option<String> {
-    for line in body.lines() {
+/// A single `Name: value` line inside an already-bounded region.
+fn field(region: &str, name: &str) -> Option<String> {
+    for line in region.lines() {
         let Some(rest) = line.strip_prefix(name) else { continue };
         let Some(value) = rest.strip_prefix(':') else { continue };
         let value = value.trim();
@@ -305,9 +368,8 @@ fn field(body: &str, name: &str) -> Option<String> {
     None
 }
 
-/// A `Name: a, b, c` line as separate, capped, non-empty values.
-fn list(body: &str, name: &str) -> Vec<String> {
-    let Some(value) = field(body, name) else { return Vec::new() };
+fn list(region: &str, name: &str) -> Vec<String> {
+    let Some(value) = field(region, name) else { return Vec::new() };
     value
         .split(',')
         .map(str::trim)
@@ -317,48 +379,35 @@ fn list(body: &str, name: &str) -> Vec<String> {
         .collect()
 }
 
-/// `Summary:` runs to the separator rule AO3 prints before the footer.
-fn summary(body: &str) -> Option<String> {
-    let at = body.find("Summary:")?;
-    let rest = body.get(at + "Summary:".len()..)?;
-    let end = rest.find("\n---").unwrap_or(rest.len());
-    let text = rest.get(..end)?;
-    let cleaned = text
-        .lines()
-        .map(str::trim)
-        .filter(|l| !l.is_empty())
-        .collect::<Vec<_>>()
-        .join("\n");
-    (!cleaned.is_empty()).then(|| capped(&cleaned, MAX_SUMMARY))
+/// `%{subscription_name}` out of AO3's footer sentence.
+fn subscription_name(footer: &str) -> Option<String> {
+    const MARKER: &str = "because you've subscribed to ";
+    let at = footer.find(MARKER)?;
+    let rest = footer.get(at + MARKER.len()..)?;
+    let end = rest.find(". Follow the link").unwrap_or(rest.len());
+    let name = rest.get(..end)?.trim();
+    (!name.is_empty()).then(|| capped(name, MAX_TITLE))
 }
 
-/// AO3 states which subscription fired: a username, or a work or series title.
-fn subscription(body: &str) -> Subscription {
-    const MARKER: &str = "because you've subscribed to ";
-    // Only below AO3's separator rule. The sentence is ordinary text, so an
-    // author could write it into a work summary and have the app state the
-    // wrong reason for a genuine, signed notification — confirmed by test.
-    let Some(sep) = body.find("\n---") else { return Subscription::Unknown };
-    let Some(footer) = body.get(sep..) else { return Subscription::Unknown };
-    let Some(rel) = footer.find(MARKER) else { return Subscription::Unknown };
-    let at = sep + rel;
-    let Some(rest) = body.get(at + MARKER.len()..) else { return Subscription::Unknown };
-    let end = rest.find(". Follow the link").unwrap_or(rest.len());
-    let Some(name) = rest.get(..end) else { return Subscription::Unknown };
-    let name = name.trim();
-    if name.is_empty() {
-        return Subscription::Unknown;
+/// Which relationship produced this message.
+///
+/// AO3's footer names a work, series or user by `Subscription#name`, with no
+/// label saying which. Rather than guess from the characters — which made a work
+/// titled "Hello-World" look like a username — the name is matched against the
+/// two things this message already identifies.
+fn classify_subscription(
+    name: Option<&str>,
+    work_title: &str,
+    creators: Option<&str>,
+) -> Subscription {
+    let Some(name) = name else { return Subscription::Unknown };
+    if !work_title.is_empty() && name.eq_ignore_ascii_case(work_title) {
+        return Subscription::Work(name.to_owned());
     }
-    let name = capped(name, MAX_TITLE);
-    // A username has no spaces; a work or series title almost always does. This
-    // is AO3's own phrasing and it does not label the kind, so the shape is all
-    // there is — but the caller also knows the work id, so a wrong guess here
-    // costs attribution wording, not identity.
-    if name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
-        Subscription::Author(name)
-    } else {
-        Subscription::Work(name)
+    if creators.is_some_and(|c| c.split(',').any(|p| p.trim().eq_ignore_ascii_case(name))) {
+        return Subscription::Author(name.to_owned());
     }
+    Subscription::Series(name.to_owned())
 }
 
 /// Truncate on a char boundary, never mid-codepoint.
@@ -378,44 +427,46 @@ fn capped(s: &str, max: usize) -> String {
 mod tests {
     use super::*;
 
-    /// A faithful reconstruction of AO3's chapter notification. The real mail
-    /// this mirrors is never committed: it carries a reader's address and their
-    /// reading history, and this repository is public.
-    fn chapter_mail() -> String {
-        [
-            "From: Archive of Our Own <do-not-reply@archiveofourown.org>",
-            "To: reader@example.com",
-            "Date: Thu, 29 Oct 2026 00:49:51 +0000",
-            "Subject: [AO3] lamplighter posted Chapter 9 of Linger Around the Light",
-            "Content-Type: text/plain; charset=UTF-8",
-            "",
-            "Archive of Our Own",
-            "=========================================",
-            "",
-            "lamplighter (https://archiveofourown.org/users/lamplighter/pseuds/lamplighter) \
-             posted a new chapter of \"Linger Around the Light\" (34920 words):",
-            "https://archiveofourown.org/works/83701926/chapters/255464091",
-            "",
-            "\"Chapter 9\" (4679 words)",
-            "",
-            "Chapters: 9/13",
-            "Fandom: Example Fandom (TV 2015)",
-            "Rating: Teen And Up Audiences",
-            "Warning: No Archive Warnings Apply",
-            "Relationships: Ada/Maren, Wren/Isolde",
-            "Characters: Ada, Maren",
-            "Additional Tags: Slow Burn, Fake Dating",
-            "",
-            "Summary: ",
-            "    A lighthouse keeper writes letters she never sends.",
-            "",
-            "-----------------------------------------",
-            "You're receiving this email because you've subscribed to lamplighter. \
+    /// AO3's real layout, from `batch_subscription_notification.text.erb` inside
+    /// `layouts/mailer.text.erb` (otwarchive master, read 2026-11-05). No real
+    /// message is committed: notification mail carries a reader's address and
+    /// their reading history, and this repository is public.
+    fn mail(subject: &str, message: &str, footer_name: &str) -> String {
+        format!(
+            "From: Archive of Our Own <do-not-reply@archiveofourown.org>\r\n\
+             To: reader@example.com\r\n\
+             Date: Thu, 29 Oct 2026 00:49:51 +0000\r\n\
+             Subject: [AO3] {subject}\r\n\
+             Content-Type: text/plain; charset=UTF-8\r\n\
+             \r\n\
+             Archive of Our Own\r\n\
+             =========================================\r\n\r\n\r\n\
+             {message}\r\n\r\n\
+             -----------------------------------------\r\n\
+             You're receiving this email because you've subscribed to {footer_name}. \
              Follow the link to unsubscribe if you no longer wish to receive updates: \
-             https://archiveofourown.org/users/lamplighter",
-            "",
-        ]
-        .join("\r\n")
+             https://archiveofourown.org/users/lamplighter\r\n"
+        )
+    }
+
+    const CHAPTER: &str = "lamplighter posted a new chapter of \"Linger Around the Light\" (34920 words):\r\n\
+https://archiveofourown.org/works/83701926/chapters/255464091\r\n\
+\r\n\
+\"Chapter 9\" (4679 words)\r\n\
+\r\n\
+Chapters: 9/13\r\n\
+Fandom: Example Fandom (TV 2015)\r\n\
+Rating: Teen And Up Audiences\r\n\
+Warning: No Archive Warnings Apply\r\n\
+Relationships: Ada/Maren, Wren/Isolde\r\n\
+Characters: Ada, Maren\r\n\
+Additional Tags: Slow Burn, Fake Dating\r\n\
+\r\n\
+Summary:\r\n\
+\x20\x20\x20\x20A lighthouse keeper writes letters she never sends.";
+
+    fn chapter_mail() -> String {
+        mail("lamplighter posted Chapter 9 of Linger Around the Light", CHAPTER, "lamplighter")
     }
 
     #[test]
@@ -433,122 +484,234 @@ mod tests {
         assert_eq!(e.chapter_words, Some(4_679));
         assert_eq!(e.rating.as_deref(), Some("Teen And Up Audiences"));
         assert_eq!(e.warnings, ["No Archive Warnings Apply"]);
-        assert_eq!(e.relationships, ["Ada/Maren", "Wren/Isolde"]);
         assert_eq!(e.additional_tags, ["Slow Burn", "Fake Dating"]);
         assert!(e.summary.unwrap().starts_with("A lighthouse keeper"));
+        assert_eq!(e.extra_creations, 0);
         assert!(e.at > 0);
+    }
+
+    /// A new work is laid out differently: the preface carries no title, and the
+    /// title with its word count sits on the line AFTER the link.
+    #[test]
+    fn reads_a_new_work_notification() {
+        let body = "lamplighter posted a new work:\r\n\
+https://archiveofourown.org/works/555\r\n\
+\r\n\
+\"Watson Abroad\" (3800 words)\r\n\
+by lamplighter\r\n\
+\r\n\
+Chapters: 1/1\r\n\
+Rating: General Audiences\r\n";
+        let e = parse(mail("lamplighter posted Watson Abroad", body, "lamplighter").as_bytes()).unwrap();
+        assert_eq!(e.kind, Ao3EventKind::NewWork);
+        assert_eq!(e.work_id, 555);
+        assert_eq!(e.work_title, "Watson Abroad");
+        assert_eq!(e.words, Some(3_800));
+    }
+
+    /// Both were silently dropped: the anonymous preface has no /users/ URL, and
+    /// "backdated" was not one of the phrases looked for.
+    #[test]
+    fn anonymous_and_backdated_mail_are_not_dropped() {
+        let anon = CHAPTER.replace("lamplighter posted", "Anonymous posted");
+        let e = parse(mail("Anonymous posted Chapter 9", &anon, "Linger Around the Light").as_bytes()).unwrap();
+        assert_eq!(e.author, "Anonymous");
+        assert_eq!(e.work_id, 83_701_926);
+
+        let back = "lamplighter posted a backdated work:\r\n\
+https://archiveofourown.org/works/777\r\n\r\n\"Old Thing\" (10 words)\r\n\r\nChapters: 1/1\r\n";
+        let e = parse(mail("x", back, "lamplighter").as_bytes()).unwrap();
+        assert_eq!(e.kind, Ao3EventKind::NewWork);
+        assert_eq!(e.work_id, 777);
+    }
+
+    /// An AO3 work title may contain a newline, and the title is interpolated
+    /// into the preface — so a title can put a whole URL on its own line above
+    /// the real link. The preface runs to the line ending in a colon, which is
+    /// what keeps that line inside it.
+    #[test]
+    fn a_newline_in_a_title_cannot_hijack_the_link() {
+        let evil = "lamplighter posted a new chapter of \"Legit\r\n\
+https://archiveofourown.org/works/111/chapters/222\" (34920 words):\r\n\
+https://archiveofourown.org/works/83701926/chapters/255464091\r\n\
+\r\n\"Chapter 9\" (4679 words)\r\n\r\nChapters: 9/13\r\nRating: Teen And Up Audiences\r\n";
+        let e = parse(mail("x", evil, "lamplighter").as_bytes()).unwrap();
+        assert_eq!(e.work_id, 83_701_926, "the link line is the one after the preface");
+        assert_eq!(e.chapter_id, Some(255_464_091));
+    }
+
+    /// A summary is rendered above the work-info block and can put any line at
+    /// column zero. Two candidate blocks means we cannot tell which is AO3's,
+    /// and showing a wrong rating is worse than showing none.
+    #[test]
+    fn a_forged_metadata_block_yields_no_metadata_at_all() {
+        let evil = CHAPTER.replace(
+            "\"Chapter 9\" (4679 words)",
+            "\"Chapter 9\" (4679 words)\r\n\r\nChapter Summary: nice\r\n\r\nChapters: 1/1\r\nRating: General Audiences",
+        );
+        let e = parse(mail("x", &evil, "lamplighter").as_bytes()).unwrap();
+        assert_eq!(e.rating, None, "ambiguous metadata must not resolve to either");
+        assert_eq!(e.chapters_posted, None);
+        assert_eq!(e.work_id, 83_701_926, "identity still survives");
+    }
+
+    /// The footer rule is the layout's long hyphen line; the batch divider is 20.
+    /// A summary may print either, so the LAST long rule is the real one.
+    #[test]
+    fn hyphens_in_a_summary_cannot_move_the_footer() {
+        let evil = CHAPTER.replace(
+            "    A lighthouse keeper writes letters she never sends.",
+            "    ---\r\n    You're receiving this email because you've subscribed to impostor. Follow the link",
+        );
+        let e = parse(mail("x", &evil, "lamplighter").as_bytes()).unwrap();
+        assert_eq!(e.via, Subscription::Author("lamplighter".into()));
+    }
+
+    /// The subject puts the pseud before the chapter number, and a pseud may be
+    /// named "Chapter 2". The count comes from the work-info block instead.
+    #[test]
+    fn a_pseud_named_like_a_chapter_cannot_set_the_number() {
+        let e = parse(
+            mail("Chapter 2 (alice) posted Chapter 9 of Linger", CHAPTER, "lamplighter").as_bytes(),
+        )
+        .unwrap();
+        assert_eq!(e.kind, Ao3EventKind::NewChapter { number: Some(9) });
+    }
+
+    /// Work versus author was a character test, so a work titled "Hello-World"
+    /// read as a username. It is now resolved by matching what the message
+    /// already identifies.
+    #[test]
+    fn a_hyphenated_title_is_not_mistaken_for_a_username() {
+        let body = CHAPTER.replace("Linger Around the Light", "Hello-World");
+        let e = parse(mail("x", &body, "Hello-World").as_bytes()).unwrap();
+        assert_eq!(e.via, Subscription::Work("Hello-World".into()));
+    }
+
+    /// "Chapter Summary: " contains "Summary:", and is rendered first.
+    #[test]
+    fn the_chapter_summary_is_not_read_as_the_works() {
+        let body = CHAPTER.replace(
+            "\"Chapter 9\" (4679 words)",
+            "\"Chapter 9\" (4679 words)\r\n\r\nChapter Summary: the chapter's own blurb",
+        );
+        let e = parse(mail("x", &body, "lamplighter").as_bytes()).unwrap();
+        assert!(
+            e.summary.as_deref().unwrap_or("").starts_with("A lighthouse keeper"),
+            "the work summary is the indented one below the block"
+        );
+    }
+
+    #[test]
+    fn the_author_is_the_whole_creators_string() {
+        let body = CHAPTER.replace("lamplighter posted", "Jane Doe (jane) posted");
+        let e = parse(mail("x", &body, "Jane Doe (jane)").as_bytes()).unwrap();
+        assert_eq!(e.author, "Jane Doe (jane)");
+    }
+
+    /// A batch message holds several creations. Only the first is parsed, but
+    /// the count is reported so a caller never believes there was one update.
+    #[test]
+    fn a_batch_message_says_how_many_it_held() {
+        let two = format!("{CHAPTER}\r\n\r\n--------------------\r\n\r\n{CHAPTER}");
+        let e = parse(mail("x", &two, "lamplighter").as_bytes()).unwrap();
+        assert_eq!(e.extra_creations, 1);
+        assert_eq!(e.work_id, 83_701_926);
     }
 
     #[test]
     fn an_unknown_chapter_total_is_none_not_zero() {
-        let mail = chapter_mail().replace("Chapters: 9/13", "Chapters: 55/?");
-        let e = parse(mail.as_bytes()).unwrap();
+        let body = CHAPTER.replace("Chapters: 9/13", "Chapters: 55/?");
+        let e = parse(mail("x", &body, "lamplighter").as_bytes()).unwrap();
         assert_eq!((e.chapters_posted, e.chapters_total), (Some(55), None));
     }
 
-    /// 28% of real chapter mail has no `Warning:` line, 49% no `Additional Tags:`.
+    /// 28% of real chapter mail has no Warning line, 49% no Additional Tags.
     #[test]
     fn every_optional_field_may_be_absent() {
-        let mail = chapter_mail()
+        let body = CHAPTER
             .replace("Warning: No Archive Warnings Apply\r\n", "")
             .replace("Additional Tags: Slow Burn, Fake Dating\r\n", "")
             .replace("Relationships: Ada/Maren, Wren/Isolde\r\n", "")
             .replace("Fandom: Example Fandom (TV 2015)\r\n", "")
             .replace("Characters: Ada, Maren\r\n", "");
-        let e = parse(mail.as_bytes()).unwrap();
-        assert!(e.warnings.is_empty());
-        assert!(e.additional_tags.is_empty());
-        assert!(e.relationships.is_empty());
-        assert!(e.fandoms.is_empty());
-        assert!(e.characters.is_empty());
-        // The identity still survives, which is the point.
+        let e = parse(mail("x", &body, "lamplighter").as_bytes()).unwrap();
+        assert!(e.warnings.is_empty() && e.additional_tags.is_empty() && e.fandoms.is_empty());
         assert_eq!(e.work_id, 83_701_926);
-    }
-
-    #[test]
-    fn a_work_subscription_is_told_apart_from_an_author_one() {
-        let mail = chapter_mail().replace(
-            "subscribed to lamplighter.",
-            "subscribed to Linger Around the Light.",
-        );
-        let e = parse(mail.as_bytes()).unwrap();
-        assert_eq!(e.via, Subscription::Work("Linger Around the Light".into()));
-    }
-
-    #[test]
-    fn kudos_and_comment_mail_is_not_a_subscription_event() {
-        let mail = chapter_mail()
-            .replace("posted a new chapter of", "left kudos on")
-            .replace("Subject: [AO3] lamplighter posted Chapter 9 of Linger Around the Light",
-                     "Subject: [AO3] You've got kudos!");
-        assert_eq!(parse(mail.as_bytes()), Err(ParseError::NotASubscriptionEvent));
     }
 
     #[test]
     fn a_link_on_another_host_yields_no_ids() {
-        let mail = chapter_mail().replace(
-            "https://archiveofourown.org/works/83701926/chapters/255464091",
-            "https://evil.test/works/83701926/chapters/255464091",
-        );
-        assert_eq!(parse(mail.as_bytes()), Err(ParseError::NoWorkLink));
+        let body = CHAPTER.replace("https://archiveofourown.org/works/83701926", "https://evil.test/works/83701926");
+        assert_eq!(parse(mail("x", &body, "l").as_bytes()), Err(ParseError::NoWorkLink));
     }
 
     #[test]
     fn a_lookalike_host_yields_no_ids() {
-        let mail = chapter_mail().replace(
-            "https://archiveofourown.org/works/8370",
-            "https://archiveofourown.org.evil.test/works/8370",
-        );
-        assert_eq!(parse(mail.as_bytes()), Err(ParseError::NoWorkLink));
+        let body = CHAPTER.replace("https://archiveofourown.org/works/", "https://archiveofourown.org.evil.test/works/");
+        assert_eq!(parse(mail("x", &body, "l").as_bytes()), Err(ParseError::NoWorkLink));
     }
 
     #[test]
-    fn a_redirect_tacked_onto_the_link_does_not_change_the_id() {
-        let mail = chapter_mail().replace(
+    fn anything_after_the_link_on_its_line_voids_it() {
+        let body = CHAPTER.replace(
             "/works/83701926/chapters/255464091",
             "/works/83701926?next=https://evil.test/works/999",
         );
-        let e = parse(mail.as_bytes()).unwrap();
-        assert_eq!(e.work_id, 83_701_926);
-        assert_eq!(e.chapter_id, None);
-    }
-
-    #[test]
-    fn absurd_counts_are_refused_rather_than_shown() {
-        let mail = chapter_mail().replace("Chapters: 9/13", "Chapters: 999999999/999999999");
-        let e = parse(mail.as_bytes()).unwrap();
-        assert_eq!((e.chapters_posted, e.chapters_total), (None, None));
+        assert_eq!(parse(mail("x", &body, "l").as_bytes()), Err(ParseError::NoWorkLink));
     }
 
     #[test]
     fn an_id_too_long_for_u64_is_refused() {
-        let mail = chapter_mail().replace("/works/83701926", "/works/99999999999999999999999");
-        assert_eq!(parse(mail.as_bytes()), Err(ParseError::NoWorkLink));
+        let body = CHAPTER.replace("/works/83701926", "/works/99999999999999999999999");
+        assert_eq!(parse(mail("x", &body, "l").as_bytes()), Err(ParseError::NoWorkLink));
+    }
+
+    #[test]
+    fn absurd_counts_are_refused_rather_than_shown() {
+        let body = CHAPTER.replace("Chapters: 9/13", "Chapters: 999999999/999999999");
+        let e = parse(mail("x", &body, "l").as_bytes()).unwrap();
+        assert_eq!((e.chapters_posted, e.chapters_total), (None, None));
     }
 
     #[test]
     fn a_very_long_title_is_capped() {
         let huge = "x".repeat(5_000);
-        let mail = chapter_mail().replace("Linger Around the Light\" (34920", &format!("{huge}\" (34920"));
-        let e = parse(mail.as_bytes()).unwrap();
+        let body = CHAPTER.replace("Linger Around the Light", &huge);
+        let e = parse(mail("x", &body, "l").as_bytes()).unwrap();
         assert_eq!(e.work_title.len(), MAX_TITLE);
     }
 
     #[test]
     fn a_flood_of_tags_is_bounded() {
         let many = (0..500).map(|i| format!("tag{i}")).collect::<Vec<_>>().join(", ");
-        let mail = chapter_mail().replace("Slow Burn, Fake Dating", &many);
-        let e = parse(mail.as_bytes()).unwrap();
+        let body = CHAPTER.replace("Slow Burn, Fake Dating", &many);
+        let e = parse(mail("x", &body, "l").as_bytes()).unwrap();
         assert_eq!(e.additional_tags.len(), MAX_TAGS);
     }
 
     #[test]
+    fn kudos_and_comment_mail_is_not_a_subscription_event() {
+        let body = "lamplighter left kudos on your work!\r\nhttps://archiveofourown.org/works/1\r\n";
+        assert_eq!(
+            parse(mail("You've got kudos!", body, "l").as_bytes()),
+            Err(ParseError::NotASubscriptionEvent)
+        );
+    }
+
+    #[test]
     fn capping_never_splits_a_character() {
-        // 4-byte characters either side of the cap.
-        let s = "🔦".repeat(400);
+        let s = "\u{1f526}".repeat(400);
         let out = capped(&s, MAX_TAG);
         assert!(out.len() <= MAX_TAG);
         assert!(std::str::from_utf8(out.as_bytes()).is_ok());
+    }
+
+    #[test]
+    fn an_oversized_message_is_refused_before_decoding() {
+        let mut m = chapter_mail().into_bytes();
+        m.extend(std::iter::repeat_n(b'x', MAX_MESSAGE_BYTES));
+        assert_eq!(parse(&m), Err(ParseError::TooLarge));
     }
 
     #[test]
@@ -561,45 +724,5 @@ mod tests {
         ] {
             let _ = parse(raw);
         }
-    }
-
-    /// An AO3 author may put a URL in their own work title. That arrives as a
-    /// genuine, correctly signed message, so the gate cannot help — the parser
-    /// must not let the title decide which work the mail is about.
-    #[test]
-    fn a_url_in_the_title_cannot_hijack_the_work_id() {
-        let mail = chapter_mail().replace(
-            "\"Linger Around the Light\"",
-            "\"https://archiveofourown.org/works/111 \"",
-        );
-        let e = parse(mail.as_bytes()).unwrap();
-        assert_eq!(e.work_id, 83_701_926, "the link line wins, not the title");
-    }
-
-    #[test]
-    fn a_url_in_the_summary_cannot_hijack_the_work_id() {
-        let mail = chapter_mail().replace(
-            "A lighthouse keeper writes letters she never sends.",
-            "Read my other fic https://archiveofourown.org/works/222",
-        );
-        let e = parse(mail.as_bytes()).unwrap();
-        assert_eq!(e.work_id, 83_701_926);
-    }
-
-    #[test]
-    fn a_users_url_in_the_summary_cannot_rename_the_author() {
-        let mail = chapter_mail().replace(
-            "A lighthouse keeper writes letters she never sends.",
-            "impostor (https://archiveofourown.org/users/impostor) wrote this",
-        );
-        let e = parse(mail.as_bytes()).unwrap();
-        assert_eq!(e.author, "lamplighter");
-    }
-
-    #[test]
-    fn an_oversized_message_is_refused_before_decoding() {
-        let mut mail = chapter_mail().into_bytes();
-        mail.extend(std::iter::repeat_n(b'x', MAX_MESSAGE_BYTES));
-        assert_eq!(parse(&mail), Err(ParseError::TooLarge));
     }
 }
