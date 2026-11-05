@@ -15,8 +15,7 @@
 // A test harness may panic: that is how it reports.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use kudos_mail_core::{gate, parser};
-use mail_parser::MessageParser;
+use kudos_mail_core::{gate, parser, read, ReadError};
 
 #[test]
 fn every_real_message_is_handled_without_panicking() {
@@ -37,29 +36,24 @@ fn every_real_message_is_handled_without_panicking() {
         let raw = std::fs::read(&path).expect("the file should be readable");
         seen += 1;
 
-        let message = MessageParser::default()
-            .parse(&raw)
-            .unwrap_or_else(|| panic!("{} did not parse as mail", path.display()));
-
-        let verdict = gate::check(&message, &attestor);
-        assert_ne!(
-            verdict,
-            gate::Verdict::Rejected,
-            "{} is real AO3 mail and must not be rejected",
-            path.display()
-        );
-        admitted += 1;
-
-        match parser::parse_message(&message) {
-            Ok(event) => {
+        match read(&raw, &attestor) {
+            Ok(reading) => {
+                admitted += 1;
                 events += 1;
+                let event = reading.event;
                 // Identity must survive, whatever else is missing.
                 assert!(event.work_id > 0, "{} parsed without a work id", path.display());
                 assert!(!event.work_title.is_empty(), "{} has no title", path.display());
                 assert!(event.at > 0, "{} has no timestamp", path.display());
             }
             // Kudos, comment replies and abuse reports share the sender.
-            Err(parser::ParseError::NotASubscriptionEvent) => not_events += 1,
+            Err(ReadError::Parse(parser::ParseError::NotASubscriptionEvent)) => {
+                admitted += 1;
+                not_events += 1;
+            }
+            Err(ReadError::Refused) => {
+                panic!("{} is real AO3 mail and must not be refused", path.display())
+            }
             Err(e) => panic!("{} failed to parse: {e}", path.display()),
         }
     }

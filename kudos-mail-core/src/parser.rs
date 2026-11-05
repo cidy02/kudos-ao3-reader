@@ -18,7 +18,9 @@
 //! chapter mail but only 8 of 14 new-work mails. A parser that requires any of
 //! them fails on real mail, so every one of them is an `Option` or a `Vec`.
 
-use mail_parser::{Message, MessageParser};
+use mail_parser::Message;
+#[cfg(test)]
+use mail_parser::MessageParser;
 
 /// Links we will read ids out of. Anything else is not AO3's and is ignored.
 const WORKS_PREFIX: &str = "https://archiveofourown.org/works/";
@@ -96,8 +98,10 @@ pub enum ParseError {
 /// MIME parser is handed the bytes.
 pub const MAX_MESSAGE_BYTES: usize = 1024 * 1024;
 
-/// Parse one message. The caller must have run [`crate::gate::check`] first.
-pub fn parse(raw: &[u8]) -> Result<Ao3Event, ParseError> {
+/// Parse raw bytes directly, skipping the gate. Tests only — production code
+/// goes through [`crate::read`], which cannot skip it.
+#[cfg(test)]
+pub(crate) fn parse(raw: &[u8]) -> Result<Ao3Event, ParseError> {
     if raw.len() > MAX_MESSAGE_BYTES {
         return Err(ParseError::TooLarge);
     }
@@ -105,10 +109,11 @@ pub fn parse(raw: &[u8]) -> Result<Ao3Event, ParseError> {
     parse_message(&message)
 }
 
-pub fn parse_message(message: &Message<'_>) -> Result<Ao3Event, ParseError> {
-    // text/plain only. The HTML alternative says the same thing and parsing it
-    // would mean running markup from a stranger through another parser.
-    let body = message.body_text(0).ok_or(ParseError::NoTextBody)?;
+pub(crate) fn parse_message(message: &Message<'_>) -> Result<Ao3Event, ParseError> {
+    // A real text/plain part, not whatever `body_text` can produce. That helper
+    // converts an HTML part when no plain alternative exists, so an HTML-only
+    // message parsed happily and the "text only" boundary was not real.
+    let body = plain_text_part(message).ok_or(ParseError::NoTextBody)?;
     let body = body.as_ref();
 
     let kind = if body.contains("posted a new chapter of") {
@@ -147,11 +152,23 @@ pub fn parse_message(message: &Message<'_>) -> Result<Ao3Event, ParseError> {
     })
 }
 
+/// The first part whose declared type really is `text/plain`.
+fn plain_text_part<'a>(message: &'a Message<'a>) -> Option<std::borrow::Cow<'a, str>> {
+    for part in message.text_bodies() {
+        // `PartType::Text` is a declared text/plain part. `PartType::Html` is
+        // the one `body_text` would silently convert for us.
+        if let mail_parser::PartType::Text(text) = &part.body {
+            return Some(text.clone());
+        }
+    }
+    None
+}
+
 /// "[AO3] someone posted Chapter 9 of A Work" → 9.
 fn chapter_number(subject: &str) -> Option<u32> {
     let at = subject.find("Chapter ")?;
     let rest = subject.get(at + "Chapter ".len()..)?;
-    let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
+    let digits: String = rest.chars().take_while(char::is_ascii_digit).take(8).collect();
     digits.parse().ok().filter(|n| *n <= MAX_CHAPTERS)
 }
 
@@ -176,9 +193,14 @@ fn work_and_chapter_ids(body: &str) -> Option<(u64, Option<u64>)> {
     Some((work_id, chapter_id))
 }
 
+/// Digits at the start of `s`, refusing anything that cannot be a u64.
+///
+/// The take is bounded before collecting: a megabyte of digits should cost a
+/// comparison, not a megabyte of allocation.
 fn leading_u64(s: &str) -> Option<u64> {
-    let digits: String = s.chars().take_while(char::is_ascii_digit).collect();
-    if digits.is_empty() || digits.len() > 19 {
+    const MAX_DIGITS: usize = 19;
+    let digits: String = s.chars().take_while(char::is_ascii_digit).take(MAX_DIGITS + 1).collect();
+    if digits.is_empty() || digits.len() > MAX_DIGITS {
         return None;
     }
     digits.parse().ok()
