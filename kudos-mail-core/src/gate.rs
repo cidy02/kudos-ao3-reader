@@ -122,7 +122,7 @@ fn topmost_attestation(message: &Message<'_>, expected_authserv: &str) -> Option
             // Somebody else's verdict, or a forgery. Keep looking outward.
             continue;
         }
-        return Some(dkim_passes_for_ao3(rest));
+        return dkim_verdict_for_ao3(rest);
     }
     None
 }
@@ -135,8 +135,17 @@ fn split_authserv(raw: &str) -> Option<(&str, &str)> {
     Some((authserv, rest))
 }
 
-/// True only for a `dkim=pass` clause whose identity is AO3's domain, and
-/// whose identities do not contradict each other.
+/// `Some(true)` for a `dkim=pass` clause whose identity is AO3's domain,
+/// `Some(false)` when a DKIM verdict is readable but is not that, and `None`
+/// when no DKIM verdict can be read here at all.
+///
+/// The third case is not pedantry. Only the clauses before the header's first
+/// comment are readable (see [`before_first_comment`]), so a provider that
+/// writes a comment ahead of its DKIM clause leaves us with nothing to go on —
+/// and "the provider said no" is a rejection, while "we could not tell" has to
+/// degrade to [`Verdict::SenderOnly`]. Collapsing the two would have rejected
+/// every message from such a provider, killing the feature silently instead of
+/// marking it unverified.
 ///
 /// RFC 8601 gives this header structured syntax: comments in parentheses, and
 /// quoted strings in which a backslash escapes the next character. A naive
@@ -148,11 +157,15 @@ fn split_authserv(raw: &str) -> Option<(&str, &str)> {
 ///   split as though it were real syntax;
 /// * `dkim=pass header.i=@archiveofourown.org header.d=evil.test` — the first
 ///   identity won and the contradicting one was never looked at.
-fn dkim_passes_for_ao3(results: &str) -> bool {
-    let plain = strip_comments(results);
+fn dkim_verdict_for_ao3(results: &str) -> Option<bool> {
+    // Only the clauses before the header's first comment are read. See
+    // `before_first_comment` for why nothing after it can be believed.
+    let plain = strip_comments(before_first_comment(results));
+    let mut saw_a_verdict = false;
     for clause in split_clauses(&plain) {
         let clause = clause.trim();
         let Some(rest) = strip_ci_prefix(clause, "dkim=") else { continue };
+        saw_a_verdict = true;
         if !rest.split_whitespace().next().unwrap_or("").eq_ignore_ascii_case("pass") {
             continue;
         }
@@ -169,10 +182,53 @@ fn dkim_passes_for_ao3(results: &str) -> bool {
         if !domains.is_empty()
             && domains.iter().all(|d| d.eq_ignore_ascii_case(AO3_DKIM_DOMAIN))
         {
-            return true;
+            return Some(true);
         }
     }
-    false
+    saw_a_verdict.then_some(false)
+}
+
+/// The header up to its first comment, ignoring parentheses inside quoted
+/// strings.
+///
+/// This is the one defence that cannot be done by parsing more carefully. A
+/// provider reflects sender-supplied text — an envelope-from address, a `From`
+/// display name — into its own `Authentication-Results`, inside a comment.
+/// Measured against the six real Gmail headers in the corpus (2026-11-05):
+///
+/// ```text
+/// mx.google.com; dkim=pass header.i=@archiveofourown.org header.s=… header.b=…;
+///                spf=pass (google.com: domain of <THE SENDER'S ADDRESS> designates …)
+/// ```
+///
+/// A local part may contain `)` when quoted, so a sender addressed
+/// `"x) ; dkim=pass header.d=archiveofourown.org x=y (@evil.test"` closes the
+/// comment, writes a whole clause of their own, and re-opens it. After comment
+/// stripping that clause is indistinguishable from a real one: the `)` that
+/// ended the comment was a real `)`, every token holds an `=`, and the only
+/// identity it names is AO3's. No scanner can tell them apart, so the forged
+/// clause must be kept out of reach instead.
+///
+/// It always is, because the injection needs the provider's `(` to sit before
+/// it. In all six real messages `dkim=pass` is the FIRST clause, at offset 15,
+/// while the reflected address begins at offset 105 — so stopping at the first
+/// comment loses nothing genuine. A provider that ordered them the other way
+/// would yield [`Verdict::SenderOnly`], which is the safe direction to fail.
+fn before_first_comment(results: &str) -> &str {
+    let (mut quoted, mut escaped) = (false, false);
+    for (i, c) in results.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        match c {
+            '\\' => escaped = true,
+            '"' => quoted = !quoted,
+            '(' if !quoted => return results.get(..i).unwrap_or(""),
+            _ => {}
+        }
+    }
+    results
 }
 
 /// True when every token after the result keyword is a `key=value` property.
@@ -336,6 +392,8 @@ mod tests {
     #[test]
     fn rejects_when_the_provider_says_dkim_failed() {
         let raw = ao3("Authentication-Results: mx.google.com; dkim=fail header.d=archiveofourown.org\r\n");
+        // A readable `dkim=fail` is the provider saying no, which is a rejection
+        // and not the "cannot tell" that degrades to SenderOnly.
         assert_eq!(
             check(&msg(&raw), &Attestor::provider("mx.google.com")),
             Verdict::Rejected
@@ -418,13 +476,27 @@ mod tests {
 
     #[test]
     fn a_truncated_attestation_is_not_trusted() {
-        // No dkim clause at all: the provider stamped something we cannot read
-        // as a pass, so it must not count as one.
+        // No dkim clause at all. Unreadable is not the same as "the provider
+        // said no", so this degrades to SenderOnly rather than being rejected —
+        // and that costs nothing, because a sender who wanted SenderOnly could
+        // simply omit the header, which already yields it. What must never
+        // happen is Trusted.
         let raw = ao3("Authentication-Results: mx.google.com;\r\n");
         assert_eq!(
             check(&msg(&raw), &Attestor::provider("mx.google.com")),
-            Verdict::Rejected
+            Verdict::SenderOnly
         );
+    }
+
+    /// A header we cannot read must land exactly where an absent one does, or
+    /// an attacker could choose between tiers by malforming it.
+    #[test]
+    fn an_unreadable_attestation_lands_where_an_absent_one_does() {
+        let unreadable = ao3("Authentication-Results: mx.google.com; (comment first) dkim=pass header.d=archiveofourown.org\r\n");
+        let absent = ao3("Subject: x\r\n");
+        let p = Attestor::provider("mx.google.com");
+        assert_eq!(check(&msg(&unreadable), &p), check(&msg(&absent), &p));
+        assert_eq!(check(&msg(&unreadable), &p), Verdict::SenderOnly);
     }
 
     #[test]
@@ -464,9 +536,12 @@ mod tests {
         let raw = ao3(
             "Authentication-Results: mx.google.com; spf=fail reason=\"x; dkim=pass header.d=archiveofourown.org\"\r\n",
         );
+        // The smuggled clause is inside a quoted string, so once splitting is
+        // quote-aware no DKIM verdict is readable at all — "cannot tell", not
+        // "said no". What this pins is that it is never Trusted.
         assert_eq!(
             check(&msg(&raw), &Attestor::provider("mx.google.com")),
-            Verdict::Rejected
+            Verdict::SenderOnly
         );
     }
 
