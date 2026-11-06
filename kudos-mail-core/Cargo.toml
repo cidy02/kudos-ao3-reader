@@ -1,3 +1,8 @@
+[workspace]
+members = ["ffi"]
+default-members = [".", "ffi"]
+resolver = "2"
+
 [package]
 name = "kudos-mail-core"
 version = "0.1.0"

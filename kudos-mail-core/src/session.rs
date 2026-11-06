@@ -160,6 +160,14 @@ pub struct Mailbox<T: Read + Write + Unpin + Debug + Send> {
     session: Session<T>,
 }
 
+/// The only `Mailbox` production code builds: TLS over TCP.
+///
+/// Named here so callers — the UniFFI boundary above all — need not spell out
+/// the transport types. `Mailbox` is generic purely so the protocol can be
+/// driven against a mock stream in tests; that genericity is an internal
+/// testing affordance, not something a host app should have to know about.
+pub type TlsMailbox = Mailbox<TlsStream<TcpStream>>;
+
 impl Mailbox<TlsStream<TcpStream>> {
     /// Connect over TLS and sign in.
     ///

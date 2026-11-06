@@ -44,7 +44,7 @@ mod structure;
 
 pub use gate::{Attestor, Verdict};
 pub use parser::{Ao3Event, Ao3EventKind, Identity, ParseError, Subscription};
-pub use session::{Credentials, Cursor, Harvest, MailError, Mailbox};
+pub use session::{Credentials, Cursor, Harvest, MailError, Mailbox, TlsMailbox};
 
 use mail_parser::MessageParser;
 
