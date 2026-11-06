@@ -134,29 +134,10 @@ struct ColdStartScanView: View {
                 .monospacedDigit()
                 .fixedSize(horizontal: false, vertical: true)
 
-            // FlowLayout wraps bounded labels rather than truncating them (matches WorkRow:138).
-            FlowLayout(spacing: 12, rowSpacing: 6) {
-                if !progress.username.isEmpty {
-                    // Truncating: an AO3 pseud runs to 40 characters; keep it from drawing past the card.
-                    WorkStatLabel(
-                        text: "Signed in as \(progress.username)",
-                        symbol: "person",
-                        truncates: true
-                    )
-                }
-                WorkStatLabel(
-                    text: "\(progress.total) \(progress.total == 1 ? "follow" : "follows")",
-                    symbol: "person.2"
-                )
-                WorkStatLabel(text: "\(progress.checked) checked", symbol: "checkmark")
-                if toGo > 0 {
-                    WorkStatLabel(text: "\(toGo) to go", symbol: "hourglass")
-                }
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(identityText)
+            Text(identityText)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
 
             if progress.phase == .running || progress.phase == .paused {
                 Text(
