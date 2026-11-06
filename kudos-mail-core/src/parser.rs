@@ -220,8 +220,16 @@ pub(crate) fn parse_message(message: &Message<'_>) -> Result<Ao3Event, ParseErro
     ));
     // The work title is embedded in the preface sentence rather than starting a
     // line, so it is searched for within the region, not at a line start.
-    let prefaced = quoted_in_region(creation.get(..preface.ends_at).unwrap_or(""))
-        .or_else(|| unquoted_title(creation.get(preface.title_from..preface.ends_at)));
+    // Which reader to try first is AO3's own closer, not a guess: an unquoted
+    // title may still contain a quote of its own, and the quoted reader then
+    // returned a fragment of it with the author's word count.
+    let preface_region = creation.get(..preface.ends_at).unwrap_or("");
+    let title_region_unquoted = creation.get(preface.title_from..preface.ends_at);
+    let prefaced = if preface.quoted_closer {
+        quoted_in_region(preface_region).or_else(|| unquoted_title(title_region_unquoted))
+    } else {
+        unquoted_title(title_region_unquoted).or_else(|| quoted_in_region(preface_region))
+    };
 
     use crate::structure::PrefaceKind as P;
     let is_chapter = preface.kind == P::NewChapter;
@@ -348,7 +356,26 @@ fn agrees(kind: crate::structure::PrefaceKind, chapter_id: Option<u64>) -> bool 
 /// refuse a whole series batch and drop every other author's work with it.
 fn subject_in<'a>(creation: &'a str, want: Option<u64>) -> Option<Subject<'a>> {
     let candidates = crate::structure::Preface::candidates(creation, preface_bound(creation));
-    for preface in candidates.iter().rev() {
+    // Three tiers, each bottom-up, because the chapter title and the chapter
+    // summary are author text AO3 prints between the link and the metadata —
+    // inside the preface bound, and so tried before AO3's own line.
+    //
+    //   1. AO3's phrase on the region's first line AND its quoted closer,
+    //   2. the phrase but no quote, which is every message before October 2025,
+    //   3. neither, which is what a forged divider leaves when it splits AO3's
+    //      own sentence across regions.
+    //
+    // A chapter summary rendering as `(1 word):` has the count and the colon
+    // but no quote, so it falls below AO3's line; one rendering as
+    // `posted a new work:` has neither and falls below everything.
+    let tier = |p: &&crate::structure::Preface<'_>| match (p.anchored, p.quoted_closer) {
+        (true, true) => 0u8,
+        (true, false) => 1,
+        (false, _) => 2,
+    };
+    let mut ordered: Vec<&crate::structure::Preface<'_>> = candidates.iter().rev().collect();
+    ordered.sort_by_key(tier);
+    for preface in ordered {
         let below = creation.get(preface.ends_at..).unwrap_or("");
         let mut found: Option<Subject<'a>> = None;
         let mut ambiguous = false;
@@ -372,7 +399,10 @@ fn subject_in<'a>(creation: &'a str, want: Option<u64>) -> Option<Subject<'a>> {
             });
         }
         if ambiguous {
-            return None;
+            // This candidate cannot be read; try the next rather than
+            // abandoning the region. Two links under a forged terminator used
+            // to drop a single-chapter notification outright.
+            continue;
         }
         if found.is_some() {
             return found;

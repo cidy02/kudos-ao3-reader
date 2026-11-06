@@ -167,6 +167,13 @@ pub(crate) struct Preface<'a> {
     /// Byte offset just past AO3's phrase, where the work title begins. Needed
     /// because AO3 did not always put the title in quotes.
     pub title_from: usize,
+    /// Whether this terminator's closer reads `" (<N> word[s]):` — AO3's
+    /// quoted form, used since October 2025.
+    pub quoted_closer: bool,
+    /// Whether this terminator's own kind of phrase is on the region's first
+    /// line, which is where AO3 puts it. False where a forged divider has split
+    /// AO3's sentence and the first line is somebody else's.
+    pub anchored: bool,
 }
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
@@ -225,6 +232,18 @@ pub(crate) fn pseud_url_len(line: &str, at: usize) -> usize {
         .iter()
         .find(|u| line.get(at..).is_some_and(|r| r.starts_with(*u)))
         .map_or(0, |u| u.len())
+}
+
+/// Does AO3's own closer on this line read `" (<N> word[s]):`?
+///
+/// AO3 began quoting the work title in October 2025; before that the same line
+/// reads `Title (<N> words):`. So the quote is how AO3's closer is told apart
+/// from a count an author wrote: a chapter summary rendering as `(1 word):` has
+/// the count and the colon but no closing quote, and it was being preferred
+/// over AO3's own line.
+fn closer_is_quoted(line: &str) -> bool {
+    let Some(at) = line.rfind('(') else { return false };
+    line.get(..at).is_some_and(|head| head.trim_end().ends_with('"'))
 }
 
 /// The creators that precede AO3's own `phrase` on this line.
@@ -306,13 +325,25 @@ impl<'a> Preface<'a> {
                 PrefaceKind::NewWork => "posted a new work:",
                 PrefaceKind::BackdatedWork => "posted a backdated work:",
             };
-            let head = first_line.and_then(|l| creators_before(l, phrase)).unwrap_or("");
+            // AO3 prints ONE preface sentence and its phrase is on the region's
+            // first line, so a terminator whose kind's phrase is missing there
+            // is probably not AO3's — a chapter summary rendering as
+            // `posted a new work:` turned a chapter notification into a new work
+            // by Anonymous, the creators having been looked for on a line that
+            // never held them. Ranked rather than discarded: a forged divider
+            // can split AO3's own sentence, leaving the real terminator in a
+            // region whose first line belongs to the author, and discarding it
+            // refused a message that was still recoverable.
+            let found = first_line.and_then(|l| creators_before(l, phrase));
+            let head = found.unwrap_or("");
             let creators = head.trim();
             out.push(Self {
                 kind: *kind,
                 creators: (!creators.is_empty() && creators != "Anonymous").then_some(creators),
                 ends_at: offset,
                 title_from: first_start + head.len() + phrase.len(),
+                quoted_closer: *kind == PrefaceKind::NewChapter && closer_is_quoted(trimmed),
+                anchored: found.is_some(),
             });
             if out.len() >= MAX_CANDIDATES {
                 return out;
