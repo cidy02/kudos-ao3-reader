@@ -110,14 +110,24 @@ struct SubscriptionUpdate: Equatable, Identifiable, Sendable {
         workTitle: String,
         author: String,
         at: Date,
-        source: Source
+        source: Source,
+        isAttested: Bool
     ) {
         self.uid = uid
         self.workID = workID
         self.at = at
         self.source = source
 
-        let trustworthy = !isContested && isAnchoredToWork && source == .work
+        // Attestation is the fourth condition, not a reason to discard. The crate
+        // returns Verdict.senderOnly for mail whose DKIM nobody vouched for — a
+        // file in a watched folder, or a provider header whose clause could not be
+        // read — and says it is usable but must not be shown as verified. Dropping
+        // those made a watched-folder import look like an empty mailbox.
+        //
+        // shortcut: unattested mail lands in `.workOnly` alongside a contested
+        // preface and an unpinned work, so the row's copy cannot say which doubt
+        // it is; give Certainty a third case if that distinction starts to matter.
+        let trustworthy = !isContested && isAnchoredToWork && source == .work && isAttested
         certainty = trustworthy ? .confirmed : .workOnly
 
         if trustworthy {
@@ -147,7 +157,10 @@ struct SubscriptionUpdate: Equatable, Identifiable, Sendable {
 #if os(iOS)
 extension SubscriptionUpdate {
     init?(reading: Reading) {
-        guard reading.verdict == .trusted else { return nil }
+        // `read` turns Verdict.rejected into an error, so only trusted and
+        // senderOnly reach a Reading. The guard is for a future crate that
+        // changes that: fail closed rather than trust an unknown verdict.
+        guard reading.verdict != .rejected else { return nil }
 
         let event = reading.event
         // Only the values AO3's unsubscribe URL supplies. `name` is the footer
@@ -198,7 +211,8 @@ extension SubscriptionUpdate {
             workTitle: event.workTitle,
             author: event.author,
             at: Date(timeIntervalSince1970: TimeInterval(event.at)),
-            source: source
+            source: source,
+            isAttested: reading.verdict == .trusted
         )
     }
 }
