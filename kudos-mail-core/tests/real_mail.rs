@@ -55,6 +55,8 @@ fn every_real_message_is_handled_without_panicking() {
                     path.display()
                 );
                 eprintln!("  {} -> {:?}", path.file_name().unwrap_or_default().to_string_lossy(), event.via);
+                eprintln!("     summary: {:?}", event.summary.as_deref().map(|s| (s.lines().count(), s.len())));
+                eprintln!("     tags: f={} r={} c={} t={}", event.fandoms.len(), event.relationships.len(), event.characters.len(), event.additional_tags.len());
             }
             // Kudos, comment replies and abuse reports share the sender.
             Err(ReadError::Parse(parser::ParseError::NotASubscriptionEvent)) => {

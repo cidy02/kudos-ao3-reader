@@ -122,6 +122,18 @@ impl<'a> Layout<'a> {
         if let Some(piece) = message.get(current_start..) {
             creations.push(piece);
         }
+
+        // Every creation AO3 prints carries its own work link. A region with
+        // none is a fragment, not a creation — which is what a divider and a
+        // preface phrase written inside an author's own summary produce. The
+        // first region is always kept: it is the one this message is about, and
+        // whether it has a link is the parser's question, not the layout's.
+        let mut i = 0usize;
+        creations.retain(|region| {
+            let keep = i == 0 || region.contains(crate::parser::WORKS_PREFIX);
+            i += 1;
+            keep
+        });
         Self { creations, footer }
     }
 }
