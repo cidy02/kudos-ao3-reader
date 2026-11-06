@@ -70,6 +70,13 @@ struct SubscriptionUpdate: Equatable, Identifiable, Sendable {
     let author: String
     let at: Date
     let source: Source
+    /// Creations in the same batch mail beyond the one this row describes. AO3
+    /// sends one email for several new chapters or works; the crate parses only
+    /// the first and reports this count precisely so a caller never presents one
+    /// row as the whole message. The extras are deliberately NOT parsed —
+    /// telling creations apart inside a body is the forgeable ground the parser
+    /// refuses to walk — so this is a prompt to go and look, not data.
+    let extraCreations: UInt64
 
     var id: String { "\(uid)-\(workID)" }
 
@@ -110,12 +117,14 @@ struct SubscriptionUpdate: Equatable, Identifiable, Sendable {
         workTitle: String,
         author: String,
         at: Date,
-        source: Source
+        source: Source,
+        extraCreations: UInt64 = 0
     ) {
         self.uid = uid
         self.workID = workID
         self.at = at
         self.source = source
+        self.extraCreations = extraCreations
 
         let trustworthy = !isContested && isAnchoredToWork && source == .work
         certainty = trustworthy ? .confirmed : .workOnly
@@ -234,7 +243,8 @@ extension SubscriptionUpdate {
             workTitle: event.workTitle,
             author: event.author,
             at: Date(timeIntervalSince1970: TimeInterval(event.at)),
-            source: source
+            source: source,
+            extraCreations: event.extraCreations
         )
     }
 }

@@ -180,6 +180,37 @@ struct SubscriptionUpdateTests {
         #expect(update.change == .unknown)
     }
 
+    /// Decision on the unpinned headline, recorded as a test so it is not
+    /// quietly reverted either way. An author or series notification pins no
+    /// work, so the body's title may not lead the row — but blanking it would
+    /// reduce every such row to "Work #83701926". It is kept and attributed.
+    @Test("An unpinned row keeps its title as a claim, not as the headline")
+    func unpinnedTitleIsAClaim() {
+        let unpinned = make(anchored: false, source: .author("marrowlight"))
+        #expect(!unpinned.pinsTheWork)
+        #expect(unpinned.workTitle == "Honest Work", "the title survives for the reader to judge")
+
+        let pinned = make()
+        #expect(pinned.pinsTheWork, "a work subscription's footer IS the work URL")
+    }
+
+    /// AO3 batches several creations into one email and the crate parses only the
+    /// first, so the count of the rest has to reach the screen — otherwise one row
+    /// silently stands in for several updates.
+    @Test("A batch email's unparsed creations are carried, not dropped")
+    func batchCountSurvives() {
+        #expect(make().extraCreations == 0)
+
+        let batch = SubscriptionUpdate(
+            uid: 9, workID: 83_701_926, chapterID: 255_464_091, chapterNumber: 9,
+            isNewWork: false, isContested: false, isAnchoredToWork: true,
+            workTitle: "Honest Work", author: "skydarius11", at: when,
+            source: .work, extraCreations: 2
+        )
+        #expect(batch.extraCreations == 2)
+        #expect(batch.certainty == .confirmed, "a batch is not itself a reason to doubt")
+    }
+
     #if os(iOS)
     @Test("A trusted UniFFI reading maps its UID and chapter")
     func mapsTrustedReading() throws {
