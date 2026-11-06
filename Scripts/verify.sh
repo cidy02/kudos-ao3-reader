@@ -7,15 +7,6 @@
 set -eu
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-# --allow-missing-cargo has to be peeled off before DEST. check-binding-drift.sh
-# documents that flag, but this script used to take $1 as the simulator
-# destination unconditionally, so passing it here silently became the xcodebuild
-# destination and broke the test step instead of relaxing the drift gate.
-DRIFT_ARGS=""
-if [ "${1:-}" = "--allow-missing-cargo" ]; then
-  DRIFT_ARGS="--allow-missing-cargo"
-  shift
-fi
 DEST="${1:-platform=iOS Simulator,name=iPhone 17,OS=26.5}"
 
 echo "== 1/6 invariants =="
@@ -23,7 +14,7 @@ echo "== 1/6 invariants =="
 
 echo "== 2/6 binding drift =="
 "$ROOT/Scripts/test-binding-drift.sh"
-"$ROOT/Scripts/check-binding-drift.sh" $DRIFT_ARGS
+"$ROOT/Scripts/check-binding-drift.sh"
 
 echo "== 3/6 lint =="
 "$ROOT/Scripts/lint.sh"
