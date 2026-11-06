@@ -17,6 +17,12 @@ import Testing
 struct SubscriptionUpdateTests {
     private let when = Date(timeIntervalSince1970: 1_762_000_000)
 
+    // The generated UniFFI binding is `#if os(iOS)`, so everything that names
+    // `Reading`, `Ao3Event` or `Subscription` has to be too. Nothing catches this
+    // today — Scripts/verify.sh runs the suite on the iOS simulator and only
+    // BUILDS the macOS app — but the test target does list macosx, so an
+    // unguarded reference breaks the first macOS test build anyone attempts.
+    #if os(iOS)
     private func reading(
         uid: UInt32 = 4_201,
         identity: Identity = .work,
@@ -53,6 +59,8 @@ struct SubscriptionUpdateTests {
             verdict: verdict
         )
     }
+
+    #endif
 
     private func make(
         uid: UInt32 = 4_201,
@@ -172,6 +180,7 @@ struct SubscriptionUpdateTests {
         #expect(update.change == .unknown)
     }
 
+    #if os(iOS)
     @Test("A trusted UniFFI reading maps its UID and chapter")
     func mapsTrustedReading() throws {
         let update = try #require(SubscriptionUpdate(reading: reading(uid: 77)))
@@ -215,9 +224,33 @@ struct SubscriptionUpdateTests {
         #expect(unknown == .unknown)
     }
 
+    /// The regression test for the bug this file previously let through:
+    /// `mapsSources` only ever passed `name: nil`, so it pinned the fallback and
+    /// never the preference, and the mapper preferred `name`.
+    ///
+    /// `name` is the footer SENTENCE. The crate's own fixture
+    /// `f4_title_in_footer_moves_the_rule` shows a work title can end the layout
+    /// rule early and plant a second sentence, producing
+    /// `Author { username: "lamplighter", name: Some("impostor") }` — inside
+    /// genuinely DKIM-signed mail. The username and the series id come from
+    /// `polymorphic_url` and cannot be moved, so only they may caption a row.
+    @Test("A forged footer name never becomes the subscription identity")
+    func forgedNameLosesToTheURL() throws {
+        let author = try #require(SubscriptionUpdate(
+            reading: reading(via: .author(username: "lamplighter", name: "impostor"))
+        )?.source)
+        #expect(author == .author("lamplighter"), "the URL's login wins, not the sentence")
+
+        let series = try #require(SubscriptionUpdate(
+            reading: reading(via: .series(id: 4021, name: "Totally Different Series"))
+        )?.source)
+        #expect(series == .series("Series #4021"), "the URL's id wins, not the sentence")
+    }
+
     @Test("A UniFFI new-work event stays a new work")
     func mapsNewWork() throws {
         let update = try #require(SubscriptionUpdate(reading: reading(kind: .newWork)))
         #expect(update.change == .newWork)
     }
+    #endif
 }

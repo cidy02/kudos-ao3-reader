@@ -126,9 +126,16 @@ struct SubscriptionUpdate: Equatable, Identifiable, Sendable {
             self.workTitle = workTitle
             self.author = author
         } else {
-            // Everything below the work id came out of the preface, so none of it
-            // survives. Dropping the title too is deliberate: a half-filled update
-            // reads as authoritative, and the point is that it is not.
+            // A contested preface loses everything read from it. An UNPINNED work
+            // (author or series subscription, `Identity::Body`) keeps its title
+            // and byline: the crate itself still returns them, and blanking them
+            // would reduce every author-subscription row to "Work #12345".
+            //
+            // That is a deliberate asymmetry, not an oversight, and it is the
+            // open question two reviewers have now raised: the subtitle and the
+            // "Check" badge hedge, but the HEADLINE is still preface text for a
+            // work nothing pinned. Awaiting the owner's call; do not silently
+            // change it either way.
             self.chapterID = nil
             change = isContested ? .unknown : (isNewWork ? .newWork : .newChapter(number: nil))
             self.workTitle = isContested ? "" : workTitle
@@ -143,10 +150,22 @@ extension SubscriptionUpdate {
         guard reading.verdict == .trusted else { return nil }
 
         let event = reading.event
+        // Only the values AO3's unsubscribe URL supplies. `name` is the footer
+        // SENTENCE, which an author can forge: the crate's own fixture
+        // `f4_title_in_footer_moves_the_rule` asserts a work title can end the
+        // layout rule early and plant a second sentence, yielding
+        // `Author { username: "lamplighter", name: Some("impostor") }`. Printing
+        // `name` would caption that row "Following impostor" for someone who
+        // follows lamplighter. The username and the series id come from
+        // `polymorphic_url` and cannot be moved.
+        //
+        // shortcut: a series therefore shows its id rather than its title,
+        // because the title only ever arrives in the forgeable sentence; resolve
+        // the real title from AO3 by id once the screen can fetch.
         let source: Source = switch event.via {
         case .work: .work
-        case let .series(id, name): .series(name ?? "Series #\(id)")
-        case let .author(username, name): .author(name ?? username)
+        case let .series(id, _): .series("Series #\(id)")
+        case let .author(username, _): .author(username)
         case .unknown: .unknown
         }
 
