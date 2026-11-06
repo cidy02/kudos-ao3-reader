@@ -22,33 +22,30 @@
 # Needs a Rust toolchain and both iOS targets, so it is NOT part of
 # check-invariants.sh (which is pure grep and expected to be instant).
 #
-# Without cargo it FAILS rather than skipping. An earlier version exited zero,
-# which let verify.sh go on to print ALL GREEN having never run its only check —
-# and with a cached xcframework the Swift tests pass against the old
-# binding/library pair while the Rust source has moved. A gate that announces
-# the definition of done must not pass when it did not run. Pass --allow-missing
-# -cargo to opt out explicitly, for a contributor without a Rust toolchain who
-# has changed no Rust.
+# Without cargo it FAILS, with no opt-out. An earlier version exited zero, which
+# let verify.sh go on to print ALL GREEN having never run its only check — and
+# with a cached xcframework the Swift tests pass against the old binding/library
+# pair while the Rust source has moved. A gate that announces the definition of
+# done must not pass when it did not run.
+#
+# There was briefly an --allow-missing-cargo escape hatch "for a contributor
+# without a Rust toolchain". That premise was wrong: README.md requires running
+# Scripts/build-mail-xcframework.sh — which needs cargo — before the project
+# builds at all, so no such contributor can run the rest of this gate either.
+# The flag had no legitimate user and was the last route to a false ALL GREEN,
+# since a cached xcframework would carry every later step.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BINDING="kudos-ao3-reader/Generated/KudosMail/kudos_mail_core.swift"
 
 export PATH="${KUDOS_RUST_PATH:-/opt/homebrew/opt/rustup/bin:$HOME/.cargo/bin}:$PATH"
-ALLOW_MISSING_CARGO=0
-[ "${1:-}" = "--allow-missing-cargo" ] && ALLOW_MISSING_CARGO=1
-
 if ! command -v cargo > /dev/null; then
-  if [ "$ALLOW_MISSING_CARGO" = "1" ]; then
-    echo "check-binding-drift: SKIPPED by --allow-missing-cargo (no cargo on PATH)"
-    echo "  The committed binding was NOT verified against the crate."
-    exit 0
-  fi
   echo "check-binding-drift: FAILED (no cargo on PATH)"
-  echo "  This gate cannot verify the committed binding without a Rust toolchain,"
-  echo "  and passing regardless would let verify.sh report ALL GREEN having"
-  echo "  checked nothing. Install rustup, or re-run with --allow-missing-cargo"
-  echo "  if you have changed nothing under kudos-mail-core/."
+  echo "  This gate cannot verify the committed binding without a Rust toolchain."
+  echo "  Install rustup; README.md's build instructions need it regardless, since"
+  echo "  the xcframework this binding links is built by"
+  echo "  Scripts/build-mail-xcframework.sh and is not committed."
   exit 1
 fi
 
