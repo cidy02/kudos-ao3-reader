@@ -27,6 +27,7 @@ excluded:
   - .build
   - DerivedData
   - Scripts
+  - kudos-ao3-reader/Generated
 
 # SwiftUI view bodies are naturally long; keep limits generous so warnings are signal.
 line_length:

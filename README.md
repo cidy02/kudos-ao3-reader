@@ -39,6 +39,14 @@ Kudos is an independent, unofficial personal project. **It is not affiliated wit
 
 ## Build from source
 
+The iOS app links the locally built `kudos-mail-core` UniFFI framework. Build
+that ignored artifact once (and again after changing the Rust boundary) before
+opening the project:
+
+```bash
+Scripts/build-mail-xcframework.sh
+```
+
 Open `AO3_App_OpenSource.xcodeproj` in Xcode and build the `AO3_App_OpenSource` scheme (product name: **Kudos**). The Readium reader runs on iOS/iPadOS; macOS uses the legacy reader. For Simulator builds from the command line, code signing can be disabled:
 
 ```bash

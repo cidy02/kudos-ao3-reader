@@ -7,18 +7,9 @@
 # library rather than a hand-copied subset, so this script is the only
 # supported way to produce it.
 #
-# Output is a build artifact and is deliberately not committed:
-#   build/KudosMail.xcframework      — device + simulator slices
-#   build/Generated/                 — the generated Swift
-#
-# The Swift deliberately lands in build/, NOT under kudos-ao3-reader/. Files
-# there are picked up automatically by the project's synchronized groups, and
-# the generated code references RustBuffer and ForeignBytes from the
-# xcframework's C module — so dropping it into the app sources before the
-# xcframework is linked breaks the build with "cannot find type 'RustBuffer'".
-# Wiring the xcframework into the target is a project-file change, and
-# project.pbxproj is this repo's top conflict source: one agent owns it at a
-# time. Until that is done, move or copy build/Generated/ in deliberately.
+# Output:
+#   build/KudosMail.xcframework — ignored device + simulator build artifact
+#   kudos-ao3-reader/Generated/KudosMail/kudos_mail_core.swift — tracked binding
 #
 # Usage: Scripts/build-mail-xcframework.sh
 set -euo pipefail
@@ -28,6 +19,7 @@ ROOT="$PWD"
 CRATE="$ROOT/kudos-mail-core"
 OUT="$ROOT/build"
 GENERATED="$ROOT/build/Generated"
+TRACKED_BINDING="$ROOT/kudos-ao3-reader/Generated/KudosMail/kudos_mail_core.swift"
 LIB=libkudos_mail_ffi.a
 
 # rustup's shims are not always on a GUI-launched PATH.
@@ -54,6 +46,16 @@ cargo run --quiet -p kudos-mail-ffi --features bindgen --bin uniffi-bindgen -- \
   generate --library "target/aarch64-apple-ios-sim/release/$LIB" \
   --language swift --out-dir "$GENERATED" --no-format
 
+# The app target is cross-platform, while this static library is iOS-only.
+# Normalize generator whitespace so the repository whitespace gate stays useful.
+mkdir -p "$(dirname "$TRACKED_BINDING")"
+awk '
+  BEGIN { print "#if os(iOS)\n" }
+  { sub(/[[:space:]]+$/, ""); print }
+  END { print "\n#endif" }
+' "$GENERATED/kudos_mail_core.swift" > "$TRACKED_BINDING.tmp"
+mv "$TRACKED_BINDING.tmp" "$TRACKED_BINDING"
+
 # UniFFI emits a modulemap whose name must match the framework's module. Xcode
 # compiles the .swift from the synchronized group and links the xcframework, so
 # the header and modulemap belong with the framework, not the app sources.
@@ -73,10 +75,4 @@ xcodebuild -create-xcframework \
 
 echo
 echo "xcframework: $OUT/KudosMail.xcframework"
-echo "swift bindings: $GENERATED"
-echo
-echo "Next, once (a project.pbxproj change, so one agent at a time):"
-echo "  1. add build/KudosMail.xcframework to the app target under"
-echo "     Frameworks, Libraries, and Embedded Content"
-echo "  2. move build/Generated/kudos_mail_core.swift into the app sources"
-echo "Doing 2 before 1 fails with \"cannot find type 'RustBuffer'\"."
+echo "swift binding: $TRACKED_BINDING"
