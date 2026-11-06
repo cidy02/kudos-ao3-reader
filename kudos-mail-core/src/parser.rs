@@ -60,8 +60,32 @@ pub enum Subscription {
     Unknown,
 }
 
+/// How far this event's identity could be established, which is not the same
+/// question as whether the message was genuine — see [`crate::Verdict`] for
+/// that. A correctly signed AO3 notification still carries author-written text
+/// in the places the layout is read from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Identity {
+    /// The work id is AO3's. The footer named a work through
+    /// `polymorphic_url`, and only a link to that work was read, so no title
+    /// can substitute a different work. The chapter id and the metadata were
+    /// still read from the body: an author can split their own notification
+    /// with a divider inside a title and present a complete-looking fragment,
+    /// which moves the chapter and the metadata within that one work.
+    Work,
+    /// Everything was read from the body, including which work it is. An author
+    /// subscription names a user and a series subscription names a series, so
+    /// neither pins the work — and any author whose creation appears in the
+    /// message can craft a title that makes their fragment look like AO3's
+    /// layout. Treat the identity as a hint: confirm against AO3 before
+    /// presenting it as fact or acting on it.
+    Body,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ao3Event {
+    /// How far the identity below could be established.
+    pub identity: Identity,
     pub kind: Ao3EventKind,
     /// Unix seconds, from the `Date` header.
     ///
@@ -140,8 +164,17 @@ pub(crate) fn parse_message(message: &Message<'_>) -> Result<Ao3Event, ParseErro
     // and abuse reports share the sender and reach here, and they have no
     // preface. Asked before the link, so they are reported as what they are
     // rather than as a notification with a missing link.
-    let first = layout.creations.first().copied().unwrap_or("");
-    crate::structure::Preface::of(first).ok_or(ParseError::NotASubscriptionEvent)?;
+    // ANY region, not the first. A divider inside a title splits the region
+    // before AO3's terminator, leaving a first region with the phrase but no
+    // terminator — and refusing there dropped every later creation with it, so
+    // one author could suppress a whole batch.
+    if !layout
+        .creations
+        .iter()
+        .any(|c| crate::structure::Preface::of(c).is_some())
+    {
+        return Err(ParseError::NotASubscriptionEvent);
+    }
 
     // Which creation this message is about, and where its link is.
     //
@@ -197,6 +230,7 @@ pub(crate) fn parse_message(message: &Message<'_>) -> Result<Ao3Event, ParseErro
     let (posted, total) = meta.as_deref().map_or((None, None), chapters_in);
 
     Ok(Ao3Event {
+        identity: if want.is_some() { Identity::Work } else { Identity::Body },
         kind: if is_chapter {
             // The index comes from the posted count, not the subject: the
             // subject puts the pseud first, and a pseud may be named "Chapter 2".
@@ -224,9 +258,19 @@ pub(crate) fn parse_message(message: &Message<'_>) -> Result<Ao3Event, ParseErro
         characters: meta.as_deref().map(|m| list(m, "Character")).unwrap_or_default(),
         additional_tags: meta.as_deref().map(|m| list(m, "Additional Tag")).unwrap_or_default(),
         series: meta.as_deref().and_then(|m| field(m, "Series")).map(|v| capped(&v, MAX_TITLE)),
-        // Only with an identified block: `meta_end` of zero is not a
-        // fallback anchor, it reopens every `Summary:` an author wrote above
-        // AO3's own — which is how a forged one became the work summary.
+        // Only with an identified block: `meta_end` of zero is not a fallback
+        // anchor, it reopens every `Summary:` an author wrote above AO3's own.
+        //
+        // One limit stands, deliberately unfixed. `Series:` is the last field
+        // of `_work_info` and its value is author text that `to_plain_text` can
+        // spread over flush-left lines, so a series title holding a blank line
+        // and a `Summary:` label is indistinguishable from AO3's own summary
+        // label — the rendering is identical, down to the four-space indent.
+        // Refusing to read a summary whenever a series is present was tried and
+        // costs every work in a series its summary, which is a common shape. The
+        // text at stake is the author's own, in their own work's summary slot,
+        // so the exchange is not worth it. No corpus message carries a series,
+        // so there is nothing yet to measure the real shape against.
         summary: meta.as_ref().and_then(|_| work_summary(creation, meta_end)),
         work_title,
         extra_creations: layout.creations.len().saturating_sub(1),
@@ -292,7 +336,7 @@ fn agrees(kind: crate::structure::PrefaceKind, chapter_id: Option<u64>) -> bool 
 /// skipped. It is not fatal to the message: one author's crafted title used to
 /// refuse a whole series batch and drop every other author's work with it.
 fn subject_in<'a>(creation: &'a str, want: Option<u64>) -> Option<Subject<'a>> {
-    let candidates = crate::structure::Preface::candidates(creation);
+    let candidates = crate::structure::Preface::candidates(creation, preface_bound(creation));
     for preface in candidates.iter().rev() {
         let below = creation.get(preface.ends_at..).unwrap_or("");
         let mut found: Option<Subject<'a>> = None;
@@ -324,6 +368,32 @@ fn subject_in<'a>(creation: &'a str, want: Option<u64>) -> Option<Subject<'a>> {
         }
     }
     None
+}
+
+/// Where AO3's own layout resumes below a preface: its metadata block if that
+/// can be identified, else the first author-text label. A preface cannot reach
+/// past this, and neither can the link scan.
+fn preface_bound(creation: &str) -> usize {
+    if let Some((_, start, _)) = metadata_block(creation) {
+        return line_offset(creation, start);
+    }
+    // No block: fall back to the first bare `Summary:`, which is the only label
+    // AO3 prints BELOW the preface in every shape. Not `Chapter Summary:` — a
+    // work title can contain that line above AO3's own terminator, and bounding
+    // there cut the real terminator out and refused the message.
+    //
+    // A title can hold a bare `Summary:` too, which would truncate this bound
+    // and lose the notification. That costs only a message whose metadata was
+    // already unreadable, which is the better of the two failures: the other is
+    // reading a work id out of a summary.
+    let mut offset = 0usize;
+    for line in creation.split_inclusive('\n') {
+        if line.trim_end() == "Summary:" {
+            return offset;
+        }
+        offset += line.len();
+    }
+    creation.len()
 }
 
 /// Whether this region carries what AO3 prints for every creation: the
