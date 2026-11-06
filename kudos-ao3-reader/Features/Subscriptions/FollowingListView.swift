@@ -3,9 +3,16 @@ import SwiftUI
 /// The Subscriptions "Following" list: the works you follow on AO3, grouped by whether
 /// they can still notify you. Renders what it is handed; the caller owns fetching.
 struct FollowingListView: View {
+    enum Scope: Equatable {
+        case following
+        case tidyUp
+    }
+
     let works: [AO3WorkSummary]
     /// Works AO3 no longer serves; the subscriptions page cannot say, so the caller does.
     var deletedIDs: Set<Int> = []
+    var scope: Scope = .following
+    var sourceNote: String?
 
     @Environment(AO3AuthService.self) private var auth
     @State private var sort = Sort.title
@@ -41,15 +48,22 @@ struct FollowingListView: View {
 
     private func isDeleted(_ work: AO3WorkSummary) -> Bool { deletedIDs.contains(work.id) }
 
-    // An unknown completion state (nil) still counts as going: only a known finish stops notifications.
     private func isFinished(_ work: AO3WorkSummary) -> Bool { work.isComplete == true && !isDeleted(work) }
 
     private var stillGoing: [AO3WorkSummary] {
-        visible.filter { !isFinished($0) && !isDeleted($0) }
+        visible.filter { $0.isComplete == false && !isDeleted($0) }
+    }
+
+    private var statusUnknown: [AO3WorkSummary] {
+        visible.filter { $0.isComplete == nil && !isDeleted($0) }
     }
 
     private var cannotNotify: [AO3WorkSummary] {
         visible.filter { isFinished($0) || isDeleted($0) }
+    }
+
+    private var hasVisibleRows: Bool {
+        scope == .following ? !visible.isEmpty : !cannotNotify.isEmpty
     }
 
     /// Keeps the spec's sentence shape; a clause with a zero count is left out entirely.
@@ -69,11 +83,30 @@ struct FollowingListView: View {
             // Group so .appThemedRows() reaches every section's rows — it doesn't
             // propagate from the List container, only from a Group/Section/ForEach.
             Group {
-                if !stillGoing.isEmpty {
+                if let sourceNote {
+                    Section {
+                        Text(sourceNote)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
+                if scope == .following, !stillGoing.isEmpty {
                     Section {
                         ForEach(stillGoing) { work in row(for: work) }
                     } header: {
                         FollowingGroupHeader(title: "Still going", count: stillGoing.count)
+                    }
+                }
+
+                if scope == .following, !statusUnknown.isEmpty {
+                    Section {
+                        ForEach(statusUnknown) { work in row(for: work) }
+                    } header: {
+                        FollowingGroupHeader(title: "Status unavailable", count: statusUnknown.count)
+                    } footer: {
+                        Text("AO3's subscriptions page doesn't include completion status.")
                     }
                 }
 
@@ -96,7 +129,18 @@ struct FollowingListView: View {
         .listStyle(.plain)
         .appThemedScroll()
         .overlay {
-            if visible.isEmpty {
+            if scope == .tidyUp, cannotNotify.isEmpty {
+                ContentUnavailableView(
+                    "Nothing to tidy up",
+                    systemImage: "checkmark.circle",
+                    description: Text(
+                        visible.isEmpty
+                            ? "There are no followed works on this AO3 page."
+                            : "AO3's subscriptions page doesn't include completion or deletion status, "
+                                + "so no works can be identified for cleanup yet."
+                    )
+                )
+            } else if visible.isEmpty {
                 ContentUnavailableView(
                     "No works followed",
                     systemImage: "bell",
@@ -104,12 +148,12 @@ struct FollowingListView: View {
                 )
             }
         }
-        .navigationTitle("Works you follow")
+        .navigationTitle(scope == .following ? "Works you follow" : "Tidy up")
         #if !os(macOS)
             .navigationBarTitleDisplayMode(.inline)
         #endif
             .toolbar {
-                if !visible.isEmpty {
+                if hasVisibleRows {
                     ToolbarItem(placement: .primaryAction) {
                         Menu {
                             Picker("Sort", selection: $sort) {

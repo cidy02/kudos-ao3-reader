@@ -13,6 +13,8 @@ struct WaitingListView: View {
     /// Scanning has no event times, so the gutter counts places instead of
     /// showing a clock.
     var showsPosition = false
+    /// A parent with more specific source state can supply its own honest empty view.
+    var showsEmptyState = true
 
     private struct Day: Identifiable {
         let start: Date
@@ -55,7 +57,7 @@ struct WaitingListView: View {
         .listStyle(.plain)
         .appThemedScroll()
         .overlay {
-            if updates.isEmpty {
+            if showsEmptyState, updates.isEmpty {
                 ContentUnavailableView("Nothing waiting", systemImage: "tray")
             }
         }

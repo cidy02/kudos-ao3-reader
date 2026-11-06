@@ -2,6 +2,8 @@ import SwiftUI
 
 /// Explains the ranked sources Kudos can use to learn what changed in a subscription.
 struct UpdateSourcesView: View {
+    var onScanAO3: (() -> Void)?
+
     var body: some View {
         Form {
             Group {
@@ -10,8 +12,8 @@ struct UpdateSourcesView: View {
                         Text("Where updates come from")
                             .font(.title2.bold())
                         Text("AO3's own subscriptions page lists what you follow, "
-                            + "but never says what changed or when. These add that back. "
-                            + "All three work; the first needs nothing from you.")
+                            + "but never says what changed or when. These are the sources Kudos can use. "
+                            + "Mail is not connected yet, and AO3 scanning still needs its paced driver.")
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -38,7 +40,8 @@ struct UpdateSourcesView: View {
                         systemImage: "magnifyingglass",
                         benefit: "Checks every follow directly against AO3.",
                         cost: "Slower; uses paged, paced AO3 requests.",
-                        actionTitle: "Scan AO3"
+                        actionTitle: "Scan AO3",
+                        action: onScanAO3
                     )
                 }
 
@@ -73,6 +76,7 @@ private struct UpdateSourceCard: View {
     let cost: String
     var detail: String?
     let actionTitle: String
+    var action: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -84,7 +88,7 @@ private struct UpdateSourceCard: View {
                     .padding(.vertical, 5)
                     .background(.quaternary, in: Capsule())
                 Image(systemName: systemImage)
-                    .foregroundStyle(.tint)
+                    .foregroundStyle(.secondary)
                     .accessibilityHidden(true)
                 Text(title)
                     .font(.headline)
@@ -107,13 +111,13 @@ private struct UpdateSourceCard: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            // shortcut: Setup destinations do not exist yet; enable these actions when they land.
-            Button(actionTitle) {}
+            // shortcut: mail and backup setup stay disabled here, enable them when their drivers land
+            Button(actionTitle) { action?() }
                 .font(.headline)
                 .frame(maxWidth: .infinity, minHeight: 44)
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
-                .disabled(true)
+                .disabled(action == nil)
         }
         .padding(.vertical, 4)
     }
