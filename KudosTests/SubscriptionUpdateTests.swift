@@ -17,6 +17,43 @@ import Testing
 struct SubscriptionUpdateTests {
     private let when = Date(timeIntervalSince1970: 1_762_000_000)
 
+    private func reading(
+        uid: UInt32 = 4_201,
+        identity: Identity = .work,
+        kind: Ao3EventKind = .newChapter(number: 9),
+        via: Subscription = .work(id: 83_701_926, name: "Honest Work"),
+        verdict: Verdict = .trusted
+    ) -> Reading {
+        Reading(
+            uid: uid,
+            event: Ao3Event(
+                identity: identity,
+                kind: kind,
+                at: Int64(when.timeIntervalSince1970),
+                workId: 83_701_926,
+                chapterId: 255_464_091,
+                workTitle: "Honest Work",
+                author: "skydarius11",
+                via: via,
+                chaptersPosted: 9,
+                chaptersTotal: 13,
+                words: 34_920,
+                chapterTitle: "Chapter 9",
+                chapterWords: 4_679,
+                rating: nil,
+                warnings: [],
+                fandoms: [],
+                relationships: [],
+                characters: [],
+                additionalTags: [],
+                series: nil,
+                summary: nil,
+                extraCreations: 0
+            ),
+            verdict: verdict
+        )
+    }
+
     private func make(
         uid: UInt32 = 4_201,
         contested: Bool = false,
@@ -75,6 +112,14 @@ struct SubscriptionUpdateTests {
         #expect(!update.pinsTheWork, "an author subscription's footer names a user, not a work")
     }
 
+    @Test("A non-work source can never become confirmed")
+    func nonWorkSourceFailsClosed() {
+        let update = make(anchored: true, source: .author("skydarius11"))
+        #expect(update.certainty == .workOnly)
+        #expect(update.chapterID == nil)
+        #expect(!update.canDeepLinkToChapter)
+    }
+
     /// A work subscription's footer *is* the work's own unsubscribe URL, so even a
     /// contested preface leaves the work itself AO3's. The screen needs the two
     /// cases apart: one may say "this work updated" and the other may not.
@@ -125,5 +170,54 @@ struct SubscriptionUpdateTests {
         #expect(update.certainty == .workOnly)
         #expect(update.chapterID == nil)
         #expect(update.change == .unknown)
+    }
+
+    @Test("A trusted UniFFI reading maps its UID and chapter")
+    func mapsTrustedReading() throws {
+        let update = try #require(SubscriptionUpdate(reading: reading(uid: 77)))
+        #expect(update.uid == 77)
+        #expect(update.chapterID == 255_464_091)
+        #expect(update.change == .newChapter(number: 9))
+        #expect(update.certainty == .confirmed)
+        #expect(update.at == when)
+    }
+
+    @Test("Sender-only and rejected readings never reach the screen")
+    func rejectsUntrustedReadings() {
+        #expect(SubscriptionUpdate(reading: reading(verdict: .senderOnly)) == nil)
+        #expect(SubscriptionUpdate(reading: reading(verdict: .rejected)) == nil)
+    }
+
+    @Test("Contested and body identities both drop the chapter")
+    func ffiDoubtFailsClosed() throws {
+        let contested = try #require(SubscriptionUpdate(reading: reading(kind: .contested)))
+        let body = try #require(SubscriptionUpdate(reading: reading(identity: .body)))
+        #expect(contested.change == .unknown)
+        #expect(contested.chapterID == nil)
+        #expect(body.certainty == .workOnly)
+        #expect(body.chapterID == nil)
+    }
+
+    @Test("Every UniFFI subscription kind maps without guessing work")
+    func mapsSources() throws {
+        let work = try #require(SubscriptionUpdate(reading: reading())?.source)
+        let series = try #require(SubscriptionUpdate(
+            reading: reading(via: .series(id: 4021, name: nil))
+        )?.source)
+        let author = try #require(SubscriptionUpdate(
+            reading: reading(via: .author(username: "marrowlight", name: nil))
+        )?.source)
+        let unknown = try #require(SubscriptionUpdate(reading: reading(via: .unknown))?.source)
+
+        #expect(work == .work)
+        #expect(series == .series("Series #4021"))
+        #expect(author == .author("marrowlight"))
+        #expect(unknown == .unknown)
+    }
+
+    @Test("A UniFFI new-work event stays a new work")
+    func mapsNewWork() throws {
+        let update = try #require(SubscriptionUpdate(reading: reading(kind: .newWork)))
+        #expect(update.change == .newWork)
     }
 }
