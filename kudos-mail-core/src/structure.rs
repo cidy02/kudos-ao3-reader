@@ -130,7 +130,10 @@ impl<'a> Layout<'a> {
         // whether it has a link is the parser's question, not the layout's.
         let mut i = 0usize;
         creations.retain(|region| {
-            let keep = i == 0 || region.contains(crate::parser::WORKS_PREFIX);
+            let keep = i == 0
+                || region
+                    .split_whitespace()
+                    .any(|t| crate::parser::ao3_path(t).is_some_and(|p| p.starts_with("works/")));
             i += 1;
             keep
         });
@@ -161,6 +164,9 @@ pub(crate) struct Preface<'a> {
     pub creators: Option<&'a str>,
     /// Byte offset just past the preface, where the URL line begins.
     pub ends_at: usize,
+    /// Byte offset just past AO3's phrase, where the work title begins. Needed
+    /// because AO3 did not always put the title in quotes.
+    pub title_from: usize,
 }
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
@@ -203,7 +209,23 @@ const TERMINATORS: [(&str, PrefaceKind); 4] = [
 /// and `creator_text` joins them with `to_sentence`. Every real message in the
 /// corpus opens
 /// `skydarius11 (https://archiveofourown.org/users/skydarius11/pseuds/skydarius11) posted a new chapter of …`.
-pub(crate) const PSEUD_URL: &str = "(https://archiveofourown.org/users/";
+pub(crate) const PSEUD_URLS: [&str; 2] = [
+    "(https://archiveofourown.org/users/",
+    "(http://archiveofourown.org/users/",
+];
+
+/// Byte offset of the first pseud-URL opening paren on this line, either scheme.
+pub(crate) fn pseud_url_at(line: &str) -> Option<usize> {
+    PSEUD_URLS.iter().filter_map(|u| line.find(u)).min()
+}
+
+/// Length of the pseud-URL prefix that starts at `at`.
+pub(crate) fn pseud_url_len(line: &str, at: usize) -> usize {
+    PSEUD_URLS
+        .iter()
+        .find(|u| line.get(at..).is_some_and(|r| r.starts_with(*u)))
+        .map_or(0, |u| u.len())
+}
 
 /// The creators that precede AO3's own `phrase` on this line.
 ///
@@ -221,7 +243,7 @@ fn creators_before<'a>(line: &'a str, phrase: &str) -> Option<&'a str> {
     while let Some(rel) = line.get(from..).and_then(|r| r.find(phrase)) {
         let at = from + rel;
         let head = line.get(..at)?;
-        if head.trim_end().ends_with(')') && head.contains(PSEUD_URL) {
+        if head.trim_end().ends_with(')') && pseud_url_at(head).is_some() {
             return Some(head);
         }
         from = at + phrase.len();
@@ -255,6 +277,7 @@ impl<'a> Preface<'a> {
         let mut out = Vec::new();
         let mut offset = 0usize;
         let mut first_line: Option<&str> = None;
+        let mut first_start = 0usize;
         for line in creation.split_inclusive('\n') {
             let trimmed = line.trim_end();
             if first_line.is_none() {
@@ -262,6 +285,7 @@ impl<'a> Preface<'a> {
                     offset += line.len();
                     continue;
                 }
+                first_start = offset;
                 // The creators lead the sentence, so AO3's phrase is on the
                 // region's first non-empty line or this is somebody's prose.
                 if !PHRASES.iter().any(|(p, _)| trimmed.contains(p)) {
@@ -288,6 +312,7 @@ impl<'a> Preface<'a> {
                 kind: *kind,
                 creators: (!creators.is_empty() && creators != "Anonymous").then_some(creators),
                 ends_at: offset,
+                title_from: first_start + head.len() + phrase.len(),
             });
             if out.len() >= MAX_CANDIDATES {
                 return out;

@@ -23,9 +23,19 @@ use mail_parser::Message;
 use mail_parser::MessageParser;
 
 /// Links we will read ids out of. Anything else is not AO3's and is ignored.
-pub(crate) const WORKS_PREFIX: &str = "https://archiveofourown.org/works/";
-/// Every AO3 URL starts here, including the footer's unsubscribe link.
-const AO3_ORIGIN: &str = "https://archiveofourown.org/";
+/// AO3's own origin, in both schemes it has used.
+///
+/// Mail from December 2024 in the corpus writes `http://archiveofourown.org/…`;
+/// today's writes `https://`. Requiring the current one failed every older
+/// message outright — and importing a mailbox's backlog is the whole feature,
+/// so the history is not an edge case. Only parsed, never generated.
+const AO3_ORIGINS: [&str; 2] =
+    ["https://archiveofourown.org/", "http://archiveofourown.org/"];
+
+/// The path after AO3's origin, whichever scheme was used.
+pub(crate) fn ao3_path(url: &str) -> Option<&str> {
+    AO3_ORIGINS.iter().find_map(|origin| url.strip_prefix(origin))
+}
 
 // Caps. Mail is attacker-controlled, so every string that reaches a UI is
 // bounded here rather than wherever it is eventually drawn.
@@ -210,7 +220,8 @@ pub(crate) fn parse_message(message: &Message<'_>) -> Result<Ao3Event, ParseErro
     ));
     // The work title is embedded in the preface sentence rather than starting a
     // line, so it is searched for within the region, not at a line start.
-    let prefaced = quoted_in_region(creation.get(..preface.ends_at).unwrap_or(""));
+    let prefaced = quoted_in_region(creation.get(..preface.ends_at).unwrap_or(""))
+        .or_else(|| unquoted_title(creation.get(preface.title_from..preface.ends_at)));
 
     use crate::structure::PrefaceKind as P;
     let is_chapter = preface.kind == P::NewChapter;
@@ -435,7 +446,7 @@ fn choose_subject<'a>(
 }
 
 fn ids_from_link(line: &str) -> Option<(u64, Option<u64>)> {
-    let rest = line.strip_prefix(WORKS_PREFIX)?;
+    let rest = ao3_path(line)?.strip_prefix("works/")?;
     let work_id = leading_u64(rest)?;
     let after = rest.trim_start_matches(|c: char| c.is_ascii_digit());
     let chapter_id = after.strip_prefix("/chapters/").and_then(leading_u64);
@@ -533,6 +544,30 @@ fn last_closer(rest: &str) -> Option<usize> {
         }
         search = search.get(..at)?;
     }
+}
+
+/// `Title (N words):` — AO3's preface before it began quoting the title.
+///
+/// Mail up to October 2025 in the corpus reads
+/// `… posted a new chapter of Burning Air (63338 words):`, with no quotes at
+/// all; from 21 October it reads `… of "Title" (N words):`. The quoted reader
+/// found nothing in the older shape, so twelve of thirty real messages arrived
+/// with an empty work title — a whole era of a reader's backlog.
+///
+/// The region starts just past AO3's phrase, so the title is everything before
+/// the count AO3 appended. The LAST such count, since a title may contain one.
+fn unquoted_title(region: Option<&str>) -> Option<(String, Option<u64>)> {
+    let region = region?;
+    let mut search = region;
+    let (at, words) = loop {
+        let at = search.rfind('(')?;
+        if let Some(words) = words_in_parens(search.get(at..)?) {
+            break (at, words);
+        }
+        search = search.get(..at)?;
+    };
+    let title = region.get(..at)?.trim();
+    (!title.is_empty()).then(|| (capped(title, MAX_TITLE), Some(words)))
 }
 
 /// `… (4,679 words)` → 4679. AO3 may write the count with separators.
@@ -714,9 +749,10 @@ fn line_offset(text: &str, line: usize) -> usize {
 fn without_pseud_urls(creators: &str) -> String {
     let mut out = String::with_capacity(creators.len());
     let mut rest = creators;
-    while let Some(at) = rest.find(crate::structure::PSEUD_URL) {
+    while let Some(at) = crate::structure::pseud_url_at(rest) {
         out.push_str(rest.get(..at).unwrap_or("").trim_end());
-        let after = rest.get(at + crate::structure::PSEUD_URL.len()..).unwrap_or("");
+        let skip = at + crate::structure::pseud_url_len(rest, at);
+        let after = rest.get(skip..).unwrap_or("");
         rest = after.find(')').and_then(|c| after.get(c + 1..)).unwrap_or("");
     }
     out.push_str(rest);
@@ -798,7 +834,7 @@ fn subscription_from(body: &str, name: Option<&str>) -> Subscription {
     // of concatenated `https://archiveofourown.org/` strings walked the rest of
     // the message once per copy.
     for token in body.split_whitespace() {
-        let Some(path) = token.strip_prefix(AO3_ORIGIN) else { continue };
+        let Some(path) = ao3_path(token) else { continue };
         let Some((kind, rest)) = path.split_once('/') else { continue };
         let ident = rest.split('/').next().unwrap_or("");
         let found = match kind {
