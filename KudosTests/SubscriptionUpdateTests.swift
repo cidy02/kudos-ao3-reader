@@ -182,6 +182,16 @@ struct SubscriptionUpdateTests {
         #expect(update.change == .unknown)
     }
 
+    /// Attestation is a separate axis from the preface and the anchor: a fully
+    /// readable, work-pinned notification is still not confirmed if nobody
+    /// vouched for its DKIM.
+    @Test("Attestation alone can hold a row back")
+    func unattestedIsNeverConfirmed() {
+        #expect(make().certainty == .confirmed)
+        #expect(make(attested: false).certainty == .workOnly)
+        #expect(make(attested: false).chapterID == nil)
+    }
+
     #if os(iOS)
     @Test("A trusted UniFFI reading maps its UID and chapter")
     func mapsTrustedReading() throws {
@@ -193,35 +203,19 @@ struct SubscriptionUpdateTests {
         #expect(update.at == when)
     }
 
-    /// Sender-only mail is kept and demoted, not deleted. The crate degrades to
-    /// `.senderOnly` for a watched folder or an unreadable DKIM clause precisely
-    /// so the feature is not killed without a trace, and discarding those made a
-    /// folder import indistinguishable from an empty mailbox.
-    @Test("Sender-only mail arrives, but never as confirmed")
-    func senderOnlyIsDemotedNotDropped() throws {
-        let update = try #require(SubscriptionUpdate(reading: reading(verdict: .senderOnly)))
-        #expect(update.certainty == .workOnly)
-        #expect(update.chapterID == nil, "nothing unattested may offer a chapter")
-        #expect(!update.canDeepLinkToChapter)
-        #expect(update.workID == 83_701_926)
-    }
-
-    /// `read` turns a rejected verdict into an error, so this cannot arrive from
-    /// the crate; the mapper still fails closed on it.
-    @Test("A rejected reading is refused outright")
-    func rejectsRejectedReadings() {
+    /// Nothing unattested becomes a row. `Verdict.senderOnly` means only that a
+    /// message claims to be from AO3, and a `From` address is trivially forged,
+    /// so its work id, title and byline are all choosable by the sender. It was
+    /// briefly admitted as a `.workOnly` row on the argument that refusing it
+    /// discarded a watched folder's mail silently; that cannot be told apart
+    /// from live mail with no provider to believe, because `read_new` yields
+    /// senderOnly for a nil `authserv_id` too.
+    @Test("Unattested readings never reach the screen")
+    func refusesUnattestedReadings() {
+        #expect(SubscriptionUpdate(reading: reading(verdict: .senderOnly)) == nil)
         #expect(SubscriptionUpdate(reading: reading(verdict: .rejected)) == nil)
     }
 
-    /// Attestation is a separate axis from the preface and the anchor: a fully
-    /// readable, work-pinned notification is still not confirmed if nobody
-    /// vouched for its DKIM.
-    @Test("Attestation alone can hold a row back")
-    func unattestedIsNeverConfirmed() {
-        #expect(make().certainty == .confirmed)
-        #expect(make(attested: false).certainty == .workOnly)
-        #expect(make(attested: false).chapterID == nil)
-    }
 
     @Test("Contested and body identities both drop the chapter")
     func ffiDoubtFailsClosed() throws {
