@@ -189,11 +189,45 @@ const PHRASES: [(&str, PrefaceKind); 3] = [
 /// turned a chapter notification into a new-work one, took the author's name
 /// from the middle of AO3's own sentence, and reported the chapter's word count
 /// as the work's.
-const TERMINATORS: [(&str, PrefaceKind); 3] = [
+/// AO3's word count is pluralised — `mailer.general.creation.word_count` has
+/// `one: "%{count} word"` — so a ONE-WORD work's chapter preface ends
+/// `(1 word):`. Requiring the plural rejected every such notification outright.
+const TERMINATORS: [(&str, PrefaceKind); 4] = [
     ("words):", PrefaceKind::NewChapter),
+    ("word):", PrefaceKind::NewChapter),
     ("posted a new work:", PrefaceKind::NewWork),
     ("posted a backdated work:", PrefaceKind::BackdatedWork),
 ];
+
+/// How AO3 renders each creator: `text_pseud` is `pseud.byline + " (<url>)"`,
+/// and `creator_text` joins them with `to_sentence`. Every real message in the
+/// corpus opens
+/// `skydarius11 (https://archiveofourown.org/users/skydarius11/pseuds/skydarius11) posted a new chapter of …`.
+pub(crate) const PSEUD_URL: &str = "(https://archiveofourown.org/users/";
+
+/// The creators that precede AO3's own `phrase` on this line.
+///
+/// A pseud cannot contain a terminator — `pseud.rb` allows only `[\p{Word} -]+`
+/// — but it CAN contain a phrase, and so can a work title. Taking the last
+/// occurrence read the author out of the middle of AO3's sentence when a title
+/// held the phrase; taking the first did the same when a pseud did.
+///
+/// Neither is needed: AO3's phrase is the first occurrence that follows the
+/// creators block, and that block ends with the paren closing a pseud URL. A
+/// title's copy sits inside the quotes, after it. Where there is no pseud URL at
+/// all the first occurrence is used, which is the best available guess.
+fn creators_before<'a>(line: &'a str, phrase: &str) -> Option<&'a str> {
+    let mut from = 0usize;
+    while let Some(rel) = line.get(from..).and_then(|r| r.find(phrase)) {
+        let at = from + rel;
+        let head = line.get(..at)?;
+        if head.trim_end().ends_with(')') && head.contains(PSEUD_URL) {
+            return Some(head);
+        }
+        from = at + phrase.len();
+    }
+    line.find(phrase).and_then(|at| line.get(..at))
+}
 
 /// At most this many candidate prefaces. A title can print any number of
 /// terminator-shaped lines; the real one is near the top.
@@ -237,12 +271,7 @@ impl<'a> Preface<'a> {
                 PrefaceKind::NewWork => "posted a new work:",
                 PrefaceKind::BackdatedWork => "posted a backdated work:",
             };
-            // The LAST occurrence on that first line: a pseud may legitimately
-            // be called "Alice posted a new chapter of Bob", and taking the
-            // first reported the author as "Alice".
-            let head = first_line
-                .and_then(|l| l.rfind(phrase).and_then(|at| l.get(..at)))
-                .unwrap_or("");
+            let head = first_line.and_then(|l| creators_before(l, phrase)).unwrap_or("");
             let creators = head.trim();
             out.push(Self {
                 kind: *kind,
