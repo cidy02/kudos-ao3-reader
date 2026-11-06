@@ -18,7 +18,7 @@ futures = { version = "0.3.34", default-features = false, features = ["std", "as
 # component that meets hostile input first — so it is not ours to write.
 mail-parser = { version = "0.11", default-features = false }
 thiserror = "2"
-tokio = { version = "1.53.3", default-features = false, features = ["rt", "net", "io-util", "time", "macros"] }
+tokio = { version = "1.53.3", default-features = false, features = ["rt", "net", "io-util", "time", "macros", "rt-multi-thread"] }
 tokio-rustls = { version = "0.26.6", default-features = false, features = ["ring", "logging", "tls12"] }
 webpki-roots = "1.0.11"
 zeroize = "1.8.2"

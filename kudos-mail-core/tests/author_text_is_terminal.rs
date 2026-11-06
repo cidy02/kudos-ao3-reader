@@ -102,8 +102,7 @@ fn singular_and_plural_labels_are_the_same_field() {
 /// metadata block) able to forge layout.
 #[test]
 fn a_work_with_no_summary_is_still_bounded() {
-    let evil = format!(
-        "From: Archive of Our Own <do-not-reply@archiveofourown.org>\r\n\
+    let evil = "From: Archive of Our Own <do-not-reply@archiveofourown.org>\r\n\
          Date: Thu, 29 Oct 2026 00:49:51 +0000\r\n\
          Subject: [AO3] x\r\n\
          Content-Type: text/plain; charset=UTF-8\r\n\r\n\
@@ -120,8 +119,7 @@ fn a_work_with_no_summary_is_still_bounded() {
          Rating: Teen\r\n\r\n\
          -----------------------------------------\r\n\
          You're receiving this email because you've subscribed to Linger. \
-         Follow the link to unsubscribe: https://archiveofourown.org/works/83701926\r\n"
-    );
+         Follow the link to unsubscribe: https://archiveofourown.org/works/83701926\r\n";
     let e = read(evil.as_bytes(), &Attestor::none()).unwrap().event;
 
     // The forged URL sits below `Chapter Summary:`, so the link scan never sees
