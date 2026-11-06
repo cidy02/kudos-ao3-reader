@@ -175,49 +175,73 @@ const PHRASES: [(&str, PrefaceKind); 3] = [
     ("posted a backdated work:", PrefaceKind::BackdatedWork),
 ];
 
+/// How AO3 CLOSES a preface, which is the only part of it an author cannot
+/// supply the shape of.
+///
+/// A chapter preface ends `… "<title>" (<N> words):` — AO3 appends the word
+/// count itself, so the line ends in `words):` whatever the title says. A work
+/// preface has no title at all and ends with its phrase.
+///
+/// Which terminator closed the preface is also what says *what happened*. The
+/// phrase alone cannot say: a work titled `x posted a new work:` put that
+/// phrase on a genuine chapter preface line, and reading the kind from it
+/// turned a chapter notification into a new-work one, took the author's name
+/// from the middle of AO3's own sentence, and reported the chapter's word count
+/// as the work's.
+const TERMINATORS: [(&str, PrefaceKind); 3] = [
+    ("words):", PrefaceKind::NewChapter),
+    ("posted a new work:", PrefaceKind::NewWork),
+    ("posted a backdated work:", PrefaceKind::BackdatedWork),
+];
+
 impl<'a> Preface<'a> {
     /// Read the preface of one creation region.
     ///
     /// The preface may wrap onto further lines, because a work title may contain
-    /// a newline and the title is interpolated into it. Every preface ends with a
-    /// colon, so the preface is everything up to the first line ending in one —
-    /// which is what keeps a URL smuggled into a title from being read as the
-    /// link line.
+    /// a newline and AO3 interpolates the title into it. It therefore ends at
+    /// the first line carrying one of AO3's own [`TERMINATORS`] — not at the
+    /// first line ending in a colon, which an author can produce at will: a
+    /// title of `Decoy:` ended the preface early and handed the next line, also
+    /// the author's, to the link scan as though it were AO3's.
     pub(crate) fn of(creation: &'a str) -> Option<Self> {
         let mut offset = 0usize;
-        let mut found: Option<(PrefaceKind, &str)> = None;
+        let mut first_line: Option<&str> = None;
         for line in creation.split_inclusive('\n') {
-            if found.is_none() {
-                // The LAST occurrence: a pseud may legitimately be called
-                // "Alice posted a new chapter of Bob", and taking the first
-                // reported the author as "Alice".
-                let mut best: Option<(PrefaceKind, &str)> = None;
-                for (phrase, kind) in PHRASES {
-                    if let Some(at) = line.rfind(phrase) {
-                        if best.is_none_or(|(_, h): (PrefaceKind, &str)| h.len() < at) {
-                            best = Some((kind, line.get(..at).unwrap_or("")));
-                        }
-                    }
+            let trimmed = line.trim_end();
+            if first_line.is_none() {
+                if trimmed.trim().is_empty() {
+                    offset += line.len();
+                    continue;
                 }
-                found = best;
-                // A phrase must appear in the first non-empty line of the region,
-                // or it is somebody's prose rather than AO3's preface.
-                if found.is_none() && !line.trim().is_empty() {
+                // The creators lead the sentence, so AO3's phrase is on the
+                // region's first non-empty line or this is somebody's prose.
+                if !PHRASES.iter().any(|(p, _)| trimmed.contains(p)) {
                     return None;
                 }
+                first_line = Some(trimmed);
             }
             offset += line.len();
-            if let Some((kind, head)) = found {
-                if line.trim_end().ends_with(':') {
-                    let creators = head.trim();
-                    return Some(Self {
-                        kind,
-                        creators: (!creators.is_empty() && creators != "Anonymous")
-                            .then_some(creators),
-                        ends_at: offset,
-                    });
-                }
-            }
+
+            let Some((_, kind)) = TERMINATORS.iter().find(|(t, _)| trimmed.ends_with(t)) else {
+                continue;
+            };
+            let phrase = match kind {
+                PrefaceKind::NewChapter => "posted a new chapter of ",
+                PrefaceKind::NewWork => "posted a new work:",
+                PrefaceKind::BackdatedWork => "posted a backdated work:",
+            };
+            // The LAST occurrence on that first line: a pseud may legitimately
+            // be called "Alice posted a new chapter of Bob", and taking the
+            // first reported the author as "Alice".
+            let head = first_line
+                .and_then(|l| l.rfind(phrase).and_then(|at| l.get(..at)))
+                .unwrap_or("");
+            let creators = head.trim();
+            return Some(Self {
+                kind: *kind,
+                creators: (!creators.is_empty() && creators != "Anonymous").then_some(creators),
+                ends_at: offset,
+            });
         }
         None
     }
