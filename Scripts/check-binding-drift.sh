@@ -52,6 +52,17 @@ if ! command -v cargo > /dev/null; then
   exit 1
 fi
 
+# `git diff HEAD -- <path>` says nothing about a path git is not tracking: it
+# exits 0, so an untracked binding used to sail through the check below and then
+# get overwritten by the regeneration, with the restore silently doing nothing.
+if ! git -C "$ROOT" ls-files --error-unmatch "$BINDING" > /dev/null 2>&1; then
+  echo "check-binding-drift: FAILED"
+  echo "  $BINDING is not tracked by git."
+  echo "  This check compares the COMMITTED binding against the crate, so an"
+  echo "  untracked file has nothing to compare and would just be overwritten."
+  exit 1
+fi
+
 # Refuse to run on a dirty binding: a pre-existing local edit would be reported
 # as drift, and the regeneration below would destroy it. Compare against HEAD,
 # not the index — `diff --quiet` alone ignores a STAGED edit, which the
