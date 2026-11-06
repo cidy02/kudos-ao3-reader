@@ -75,7 +75,11 @@ grep -q 'restored' "$failed/output" || fail "restore was not reported"
 
 drift="$(fixture drift)"
 run_check "$drift" drift
-[ "$CHECK_STATUS" -ne 0 ] || fail "binding drift passed"
+# Exit code AND message: a bare non-zero would also be satisfied by the script
+# dying for an unrelated reason, which is the failure mode this test exists to
+# catch.
+[ "$CHECK_STATUS" -eq 1 ] || fail "binding drift did not exit 1 (got $CHECK_STATUS)"
+grep -q 'does not match the crate' "$drift/output" || fail "drift was not reported as drift"
 grep -qx 'changed' "$drift/kudos-ao3-reader/Generated/KudosMail/kudos_mail_core.swift" \
   || fail "drift evidence was restored instead of preserved"
 
