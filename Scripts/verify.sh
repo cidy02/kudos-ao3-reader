@@ -13,6 +13,7 @@ echo "== 1/6 invariants =="
 "$ROOT/Scripts/check-invariants.sh"
 
 echo "== 2/6 binding drift =="
+"$ROOT/Scripts/test-binding-drift.sh"
 "$ROOT/Scripts/check-binding-drift.sh"
 
 echo "== 3/6 lint =="

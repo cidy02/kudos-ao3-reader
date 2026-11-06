@@ -52,7 +52,7 @@ Native SwiftUI + SwiftData reader for Archive of Our Own (iOS/iPadOS/macOS, AGPL
 
 ## Definition of done (all of it, before saying "done")
 
-1. **`Scripts/verify.sh`** — the whole gate in one command: mechanical invariants (`Scripts/check-invariants.sh`) → lint → full iOS suite → macOS build → `git diff --check`. All green, no exceptions. (iOS-only APIs must be `#if os(iOS)`-guarded or step 4 fails.)
+1. **`Scripts/verify.sh`** — the whole gate in one command: mechanical invariants (`Scripts/check-invariants.sh`) → UniFFI binding drift (`Scripts/check-binding-drift.sh`) → lint → full iOS suite → macOS build → `git diff --check`. All green, no exceptions. The drift check requires a Rust toolchain; an explicit skip is not a complete gate. (iOS-only APIs must be `#if os(iOS)`-guarded or the iOS test step fails.)
 2. New behavior has tests (see REGRESSION_TEST_MATRIX for suite placement). Suite count only goes up (216 tests / 29 suites as of T-74).
 3. If your change makes any statement in `docs/*.md` false, update that doc **in the same commit** — stale docs become hallucination sources (this file's own AGENTS.md predecessor rotted exactly that way).
 4. `TASKS.md` row updated with what was verified and what remains **manual** — honesty about unverified device/UI behavior is a project convention.

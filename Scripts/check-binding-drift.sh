@@ -2,11 +2,12 @@
 # Fail if the committed UniFFI binding no longer matches the Rust source.
 #
 # kudos-ao3-reader/Generated/KudosMail/kudos_mail_core.swift is generated code
-# that is deliberately tracked (the xcframework it binds is not, so a fresh
-# clone has to be able to compile the app without first installing a Rust
-# toolchain). That trade means the checked-in Swift can silently fall behind the
-# crate: change a `uniffi::Record` field or an exported signature, forget to
-# re-run Scripts/build-mail-xcframework.sh, and nothing in the build complains.
+# that is deliberately tracked while the xcframework it binds is not. A source
+# build still needs the Rust toolchain to produce that ignored artifact, but
+# tracking the binding makes its API changes reviewable. The trade is that the
+# checked-in Swift can silently fall behind: change a `uniffi::Record` field or
+# an exported signature, forget to re-run Scripts/build-mail-xcframework.sh,
+# and nothing in the Swift build complains.
 #
 # The generated file does embed UniFFI checksums and `fatalError`s on a
 # mismatch, but only at runtime, on the first call into the library — so the
@@ -33,7 +34,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BINDING="kudos-ao3-reader/Generated/KudosMail/kudos_mail_core.swift"
 
-export PATH="/opt/homebrew/opt/rustup/bin:$HOME/.cargo/bin:$PATH"
+export PATH="${KUDOS_RUST_PATH:-/opt/homebrew/opt/rustup/bin:$HOME/.cargo/bin}:$PATH"
 ALLOW_MISSING_CARGO=0
 [ "${1:-}" = "--allow-missing-cargo" ] && ALLOW_MISSING_CARGO=1
 
