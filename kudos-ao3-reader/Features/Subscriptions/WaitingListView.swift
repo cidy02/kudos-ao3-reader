@@ -116,7 +116,13 @@ private struct WaitingRow: View {
     }
 
     private var whatChanged: String {
-        guard isConfirmed else { return "This work updated. Open it to see what changed." }
+        guard isConfirmed else {
+            // "This work updated" asserts the work, which is the one thing an
+            // author or series notification does not pin — see `pinsTheWork`.
+            return update.pinsTheWork
+                ? "This work updated. Open it to see what changed."
+                : "Something new from this follow. Open it on AO3 to see what."
+        }
         switch update.change {
         case .newChapter: return chapter.map { "Chapter \($0) posted" } ?? "A new chapter was posted"
         case .newWork: return "A new work was posted"
@@ -125,7 +131,7 @@ private struct WaitingRow: View {
     }
 
     private var badge: String {
-        guard isConfirmed else { return "Updated" }
+        guard isConfirmed else { return update.pinsTheWork ? "Updated" : "Check" }
         switch update.change {
         case .newChapter: return chapter.map { "+1 · Ch. \($0)" } ?? "Updated"
         case .newWork: return "New"
@@ -133,68 +139,119 @@ private struct WaitingRow: View {
         }
     }
 
-    var body: some View {
-        HStack(alignment: .top, spacing: 0) {
-            Group {
-                if showsPosition {
-                    Text("\(position)")
-                } else {
-                    Text(update.at, format: .dateTime.hour().minute())
+    /// The 40pt gutter cannot scale — widening it with the text would leave the
+    /// content column too narrow to read on a phone — so at accessibility sizes
+    /// it goes away entirely and its value moves into the metadata strip, which
+    /// wraps. 54 fixed points of indent is affordable at the default size and is
+    /// most of a small screen at AX5.
+    @Environment(\.dynamicTypeSize) private var typeSize
+    private var isAccessibilitySize: Bool { typeSize.isAccessibilitySize }
+
+    /// The gutter's value has to live somewhere once the gutter is gone.
+    private var showsValueInStrip: Bool { showsPosition || isAccessibilitySize }
+
+    private var gutter: some View {
+        Group {
+            if showsPosition {
+                Text("\(position)")
+            } else {
+                Text(update.at, format: .dateTime.hour().minute())
+            }
+        }
+        .font(.caption2.monospacedDigit())
+        .foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(width: 40, alignment: .trailing)
+        .padding(.top, 12)
+    }
+
+    private var sourceLine: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(update.source.kind)
+                .font(.caption2.bold())
+                .foregroundStyle(.white)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(update.source.color, in: Capsule())
+            Text(update.source.line)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var badgeLabel: some View {
+        Text(badge)
+            .font(.caption.bold())
+            // Not `.tint`: that is the user's accent (AO3 red by default), a
+            // fixed hex rather than a colorScheme colour, and on `.quaternary`
+            // over the dark surface it falls under 2:1. `.primary` carries the
+            // emphasis instead.
+            .foregroundStyle(isConfirmed ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+            .padding(.horizontal, 9)
+            .padding(.vertical, 4)
+            .background(.quaternary, in: Capsule())
+            .fixedSize()
+    }
+
+    private var titleText: some View {
+        Text(title)
+            .font(.headline)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    /// The badge is `.fixedSize()`, so beside the title it wins the compression
+    /// and squeezes the title into a tall sliver. Stacked, both get the width.
+    @ViewBuilder private var titleAndBadge: some View {
+        if isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 4) {
+                titleText
+                badgeLabel
+            }
+        } else {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                titleText
+                Spacer(minLength: 0)
+                badgeLabel
+            }
+        }
+    }
+
+    /// Nothing here for a row whose byline could not be read and whose gutter
+    /// value is still in the gutter.
+    @ViewBuilder private var metadata: some View {
+        if !update.author.isEmpty || showsValueInStrip {
+            FlowLayout(spacing: 12, rowSpacing: 4) {
+                if !update.author.isEmpty {
+                    // Truncating: a pseud is free text, unlike the bounded stats
+                    // this label usually carries.
+                    WorkStatLabel(text: update.author, symbol: "person", truncates: true)
+                }
+                // Only once the gutter that would have shown it is gone.
+                if showsPosition, isAccessibilitySize {
+                    WorkStatLabel(text: "#\(position)", symbol: "number")
+                }
+                if showsValueInStrip {
+                    WorkStatLabel(text: update.at.formatted(.dateTime.hour().minute()), symbol: "clock")
                 }
             }
-            .font(.caption2.monospacedDigit())
+            .font(.caption)
             .foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(width: 40, alignment: .trailing)
-            .padding(.top, 12)
+        }
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 0) {
+            if !isAccessibilitySize {
+                gutter
+            }
 
             WaitingRail(isConfirmed: isConfirmed, isFirst: isFirst, isLast: isLast)
 
             VStack(alignment: .leading, spacing: 6) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(update.source.kind)
-                        .font(.caption2.bold())
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(update.source.color, in: Capsule())
-                    Text(update.source.line)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(title)
-                        .font(.headline)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Spacer(minLength: 0)
-                    Text(badge)
-                        .font(.caption.bold())
-                        .foregroundStyle(isConfirmed ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
-                        .padding(.horizontal, 9)
-                        .padding(.vertical, 4)
-                        .background(.quaternary, in: Capsule())
-                        .fixedSize()
-                }
-
-                // Nothing here for a row whose byline could not be read.
-                if !update.author.isEmpty || showsPosition {
-                    HStack(spacing: 12) {
-                        if !update.author.isEmpty {
-                            // Truncating: a pseud is free text, unlike the bounded
-                            // stats this label usually carries.
-                            WorkStatLabel(text: update.author, symbol: "person", truncates: true)
-                        }
-                        if showsPosition {
-                            WorkStatLabel(text: update.at.formatted(.dateTime.hour().minute()), symbol: "clock")
-                        }
-                        Spacer(minLength: 0)
-                    }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                }
-
+                sourceLine
+                titleAndBadge
+                metadata
                 Text(whatChanged)
                     .font(.subheadline)
                     .foregroundStyle(isConfirmed ? .primary : .secondary)
@@ -212,12 +269,15 @@ private struct WaitingRow: View {
 /// line never runs through it; the dot is solid for a confirmed update and an
 /// outline for a work-only one.
 ///
-/// The dot deliberately does not take the source colour. Those are saturated
-/// fills chosen to carry white chip text, and against the dark themes' card
-/// background the work red reads at about 1.35:1 — invisible. `.tint` and
-/// `.secondary` are `colorScheme`-dynamic, so the one distinction the dot
-/// actually carries survives on all five themes. The kind is still colour-coded,
-/// on the chip beside it, where the contrast holds.
+/// The dot deliberately takes no colour of its own. The source fills are
+/// saturated colours chosen to carry white chip text, and against the dark
+/// themes' card background the work red reads at about 1.35:1 — invisible. The
+/// app's `.tint` is no better: it resolves to the user's accent, a fixed hex
+/// defaulting to AO3 red, so it is not a `colorScheme` colour and lands near
+/// 1.6:1 on the same surface. `.primary` and `.secondary` are dynamic by
+/// construction, so the one distinction the dot actually carries — confirmed
+/// from work-only — survives on all four themes, whatever accent is set. The
+/// kind stays colour-coded on the chip beside it, where the contrast holds.
 private struct WaitingRail: View {
     @Environment(ThemeManager.self) private var theme
     let isConfirmed: Bool
@@ -235,7 +295,7 @@ private struct WaitingRail: View {
             line.frame(height: 12).opacity(isFirst ? 0 : 1)
             Group {
                 if isConfirmed {
-                    Circle().fill(.tint)
+                    Circle().fill(.primary)
                 } else {
                     Circle().strokeBorder(.secondary, lineWidth: 2)
                 }
@@ -254,6 +314,7 @@ private extension SubscriptionUpdate.Source {
         case .work: "Work"
         case .series: "Series"
         case .author: "Author"
+        case .unknown: "Update"
         }
     }
 
@@ -262,6 +323,7 @@ private extension SubscriptionUpdate.Source {
         case .work: "Following this work"
         case let .series(name): "Following \(name)"
         case let .author(name): "Following \(name)"
+        case .unknown: "From a subscription"
         }
     }
 
@@ -273,6 +335,9 @@ private extension SubscriptionUpdate.Source {
         case .work: Color(red: 0x82 / 255, green: 0x10 / 255, blue: 0x19 / 255)
         case .series: Color(red: 0x1E / 255, green: 0x63 / 255, blue: 0xC8 / 255)
         case .author: Color(red: 0x7B / 255, green: 0x3F / 255, blue: 0xA0 / 255)
+        // Neutral: there is no kind to signal, and the chip still needs to
+        // carry white text.
+        case .unknown: Color(red: 0x4A / 255, green: 0x4A / 255, blue: 0x4F / 255)
         }
     }
 }
@@ -287,7 +352,8 @@ private extension SubscriptionUpdate.Source {
         source: SubscriptionUpdate.Source = .work
     ) -> SubscriptionUpdate {
         SubscriptionUpdate(
-            workID: id, chapterID: id * 10, chapterNumber: chapter, isNewWork: isNew,
+            uid: UInt32(id), workID: id, chapterID: id * 10,
+            chapterNumber: chapter, isNewWork: isNew,
             isContested: contested, isAnchoredToWork: anchored,
             workTitle: title, author: author, at: at, source: source
         )

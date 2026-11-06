@@ -18,13 +18,16 @@ struct SubscriptionUpdateTests {
     private let when = Date(timeIntervalSince1970: 1_762_000_000)
 
     private func make(
+        uid: UInt32 = 4_201,
         contested: Bool = false,
         anchored: Bool = true,
         chapterID: UInt64? = 255_464_091,
         chapterNumber: Int? = 9,
-        isNewWork: Bool = false
+        isNewWork: Bool = false,
+        source: SubscriptionUpdate.Source = .work
     ) -> SubscriptionUpdate {
         SubscriptionUpdate(
+            uid: uid,
             workID: 83_701_926,
             chapterID: chapterID,
             chapterNumber: chapterNumber,
@@ -33,7 +36,8 @@ struct SubscriptionUpdateTests {
             isAnchoredToWork: anchored,
             workTitle: "Honest Work",
             author: "skydarius11",
-            at: when
+            at: when,
+            source: source
         )
     }
 
@@ -64,10 +68,37 @@ struct SubscriptionUpdateTests {
     /// a series, so which work changed was only ever read from the body.
     @Test("An unanchored event may not claim a chapter either")
     func unanchoredKeepsOnlyTheWork() {
-        let update = make(anchored: false)
+        let update = make(anchored: false, source: .author("skydarius11"))
         #expect(update.certainty == .workOnly)
         #expect(update.chapterID == nil)
         #expect(!update.canDeepLinkToChapter)
+        #expect(!update.pinsTheWork, "an author subscription's footer names a user, not a work")
+    }
+
+    /// A work subscription's footer *is* the work's own unsubscribe URL, so even a
+    /// contested preface leaves the work itself AO3's. The screen needs the two
+    /// cases apart: one may say "this work updated" and the other may not.
+    @Test("Only a work subscription pins the work")
+    func onlyAWorkSubscriptionPinsTheWork() {
+        #expect(make(contested: true, source: .work).pinsTheWork)
+        #expect(!make(anchored: false, source: .series("Winter Court")).pinsTheWork)
+        #expect(!make(anchored: false, source: .author("marrowlight")).pinsTheWork)
+        #expect(!make(anchored: false, source: .unknown).pinsTheWork,
+                "an unparsed footer pins nothing at all")
+    }
+
+    /// The identity has to come from the message, not from its contents. Two
+    /// contested notifications for one work in the same second agree on every
+    /// field the id used to be built from — and an author can send that pair.
+    @Test("Two contested updates for one work in the same second stay distinct")
+    func contestedUpdatesDoNotCollide() {
+        let first = make(uid: 1, contested: true)
+        let second = make(uid: 2, contested: true)
+        #expect(first.chapterID == nil)
+        #expect(second.chapterID == nil)
+        #expect(first.at == second.at)
+        #expect(first.workID == second.workID)
+        #expect(first.id != second.id, "duplicate ForEach ids are undefined behaviour in SwiftUI")
     }
 
     /// The nastiest shape: the crate read a chapter id, but the preface that

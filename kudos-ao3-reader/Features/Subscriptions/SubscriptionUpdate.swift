@@ -40,8 +40,24 @@ struct SubscriptionUpdate: Equatable, Identifiable, Sendable {
         case work
         case series(String)
         case author(String)
+        /// The footer's unsubscribe URL did not parse, so not even the kind is
+        /// known — the crate's `Subscription.unknown`. Present so the mapping
+        /// from the crate never has to pick a kind it cannot support: calling
+        /// this `.work` would report the work as pinned when nothing is.
+        case unknown
     }
 
+    /// The IMAP UID of the notification this was read from.
+    ///
+    /// This is what makes two otherwise identical updates distinct, and it has to
+    /// come from outside: a contested event drops its chapter id, so a work with
+    /// two unreadable notifications in the same second would otherwise produce the
+    /// same identity twice — and an author can send exactly that pair deliberately.
+    /// SwiftUI's behaviour on duplicate `ForEach` ids is undefined.
+    ///
+    /// shortcut: unique within one mailbox at one UIDVALIDITY, which is all the
+    /// single-account cursor tracks today; widen it if a second mailbox is ever read.
+    let uid: UInt32
     let workID: UInt64
     /// Nil whenever `certainty` is `.workOnly` — enforced by the initializer, not
     /// by convention, because a chapter id is what a deep link and an unread count
@@ -55,10 +71,25 @@ struct SubscriptionUpdate: Equatable, Identifiable, Sendable {
     let at: Date
     let source: Source
 
-    var id: String { "\(workID)-\(chapterID.map(String.init) ?? "work")-\(at.timeIntervalSince1970)" }
+    var id: String { "\(uid)-\(workID)" }
 
     /// True when the screen may offer to open a specific chapter.
     var canDeepLinkToChapter: Bool { certainty == .confirmed && chapterID != nil }
+
+    /// Whether AO3's own footer fixed *which work* this is.
+    ///
+    /// The footer's unsubscribe URL is built by Rails from the subscribed record,
+    /// so a work subscription pins the work; an author or series subscription
+    /// cannot — it names a user or a series, and which of their works changed was
+    /// only ever read from the body, where the author's own text also lives.
+    ///
+    /// So the source tells the screen which kind of doubt a `.workOnly` row is:
+    /// with a `.work` source the work is AO3's and the preface was contested, and
+    /// with any other source the work itself is a hint. The copy differs, because
+    /// "this work updated" asserts the very thing that is unpinned in the second
+    /// case. `source` therefore has no default — a wrong `.work` here would make
+    /// an unpinned update read as a definite one.
+    var pinsTheWork: Bool { source == .work }
 
     /// Build from the crate's own answer.
     ///
@@ -69,6 +100,7 @@ struct SubscriptionUpdate: Equatable, Identifiable, Sendable {
     /// than the generated UniFFI types so this rule is unit-testable before the
     /// binding is wired into the project.
     init(
+        uid: UInt32,
         workID: UInt64,
         chapterID: UInt64?,
         chapterNumber: Int?,
@@ -78,8 +110,9 @@ struct SubscriptionUpdate: Equatable, Identifiable, Sendable {
         workTitle: String,
         author: String,
         at: Date,
-        source: Source = .work
+        source: Source
     ) {
+        self.uid = uid
         self.workID = workID
         self.at = at
         self.source = source
