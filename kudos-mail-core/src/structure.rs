@@ -178,13 +178,17 @@ pub(crate) struct Preface<'a> {
     /// so every candidate in a genuine region inherited that and the test was
     /// nearly vacuous.
     pub anchored: bool,
-    /// Whether no line strictly between the region's first line and this
-    /// terminator is entirely an AO3 works URL.
+    /// Whether this terminator is followed by AO3's own layout: its link line,
+    /// then the creation title it always prints.
     ///
-    /// AO3 prints its link AFTER the preface, so a terminator below a link is
-    /// below the preface — which is where the chapter title and the chapter
-    /// summary live, both author text.
-    pub unbroken: bool,
+    /// This replaced a weaker test — "no works URL appears above this
+    /// terminator" — which was backwards in effect. A work title may contain a
+    /// URL, because titles are NOT run through `to_plain_text`:
+    /// `sanitize_value` strips tags and keeps a literal newline, and
+    /// `clean_and_validate_title` only trims the ends. So a title's URL made
+    /// AO3's own closer look "broken" and demoted it below a forged terminator
+    /// placed above that URL.
+    pub ao3_shaped: bool,
 }
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
@@ -243,6 +247,32 @@ pub(crate) fn pseud_url_len(line: &str, at: usize) -> usize {
         .iter()
         .find(|u| line.get(at..).is_some_and(|r| r.starts_with(*u)))
         .map_or(0, |u| u.len())
+}
+
+/// Is this terminator followed by AO3's own layout?
+///
+/// AO3 emits, invariably:
+///
+/// ```text
+/// <preface, ending in a terminator>
+/// <works URL, the whole line>
+/// (blank)
+/// "<creation title>" (<N> word[s])
+/// ```
+///
+/// `creation_title_with_word_count` is unconditional, so the pair is always
+/// there. A URL inside a work title is followed by more of the title instead,
+/// which is what separates the two — and the only thing that does, now that a
+/// title is known to carry literal newlines.
+fn followed_by_ao3_layout(below: &str) -> bool {
+    let mut lines = below.lines().filter(|l| !l.trim().is_empty());
+    let link = lines.next().unwrap_or("");
+    if !crate::parser::ao3_path(link.trim()).is_some_and(|p| p.starts_with("works/")) {
+        return false;
+    }
+    let title = lines.next().unwrap_or("").trim_end();
+    // AO3's creation title closes without a colon; a preface terminator has one.
+    title.ends_with("words)") || title.ends_with("word)")
 }
 
 /// Does AO3's own closer on this line read `" (<N> word[s]):`?
@@ -311,7 +341,6 @@ impl<'a> Preface<'a> {
         let mut offset = 0usize;
         let mut first_line: Option<&str> = None;
         let mut first_start = 0usize;
-        let mut saw_link = false;
         for line in creation.split_inclusive('\n') {
             let trimmed = line.trim_end();
             if first_line.is_none() {
@@ -332,13 +361,9 @@ impl<'a> Preface<'a> {
                 return out;
             }
 
-            let is_link = crate::parser::ao3_path(trimmed.trim())
-                .is_some_and(|p| p.starts_with("works/"));
             let Some((_, kind)) = TERMINATORS.iter().find(|(t, _)| trimmed.ends_with(t)) else {
-                saw_link |= is_link;
                 continue;
             };
-            saw_link |= is_link;
             let phrase = match kind {
                 PrefaceKind::NewChapter => "posted a new chapter of ",
                 PrefaceKind::NewWork => "posted a new work:",
@@ -371,7 +396,7 @@ impl<'a> Preface<'a> {
                     && opens_quoted
                     && closer_is_quoted(trimmed),
                 anchored,
-                unbroken: !saw_link,
+                ao3_shaped: followed_by_ao3_layout(creation.get(offset..).unwrap_or("")),
             });
             if out.len() >= MAX_CANDIDATES {
                 return out;
