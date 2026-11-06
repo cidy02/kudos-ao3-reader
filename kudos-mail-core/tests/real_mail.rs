@@ -45,6 +45,16 @@ fn every_real_message_is_handled_without_panicking() {
                 assert!(event.work_id > 0, "{} parsed without a work id", path.display());
                 assert!(!event.work_title.is_empty(), "{} has no title", path.display());
                 assert!(event.at > 0, "{} has no timestamp", path.display());
+                // The subscription's kind and id come from AO3's unsubscribe
+                // URL; printed so a template change shows up as wrong identity
+                // rather than as a silently plausible guess.
+                assert_ne!(
+                    event.via,
+                    kudos_mail_core::Subscription::Unknown,
+                    "{} has no readable unsubscribe link",
+                    path.display()
+                );
+                eprintln!("  {} -> {:?}", path.file_name().unwrap_or_default().to_string_lossy(), event.via);
             }
             // Kudos, comment replies and abuse reports share the sender.
             Err(ReadError::Parse(parser::ParseError::NotASubscriptionEvent)) => {
