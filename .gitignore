@@ -40,3 +40,4 @@ artifacts/
 *.log
 scratch/
 tmp/
+out/
