@@ -468,10 +468,21 @@ fn subject_in<'a>(creation: &'a str, want: Option<u64>) -> Option<(Subject<'a>, 
                 link_end: preface.ends_at + here + line.len(),
             };
             match &best {
-                // Reading the same creation twice is not a disagreement.
+                // Reading the same creation twice from the SAME preface is not
+                // a disagreement; two different prefaces always are, even when
+                // they agree on the link. `ends_at` is what separates them, and
+                // it has to be in this comparison: the title and the word count
+                // are read from the winning candidate's own preface region, so
+                // a forged closer in a chapter title that points at AO3's own
+                // link agreed on the work, the chapter and the kind — and still
+                // took the word count and the title with it.
                 Some((_, other)) => {
-                    if (other.work_id, other.chapter_id, other.preface.kind)
-                        != (work_id, chapter_id, preface.kind)
+                    if (
+                        other.work_id,
+                        other.chapter_id,
+                        other.preface.kind,
+                        other.preface.ends_at,
+                    ) != (work_id, chapter_id, preface.kind, preface.ends_at)
                     {
                         contested = true;
                     }

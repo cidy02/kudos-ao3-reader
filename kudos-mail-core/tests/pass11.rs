@@ -73,9 +73,15 @@ fn a_fake_closer_above_the_titles_url_does_not_win() {
          Rating: Teen And Up Audiences\r\n"
     );
     let e = ev(&body, "works/83701926").expect("notification");
-    assert_eq!(e.words, Some(576_402), "the author's count won");
-    assert_eq!(e.chapter_id, Some(255_464_091));
-    assert_ne!(e.work_title, "Ghost", "the title stopped at the fake closer");
+    // Two distinct terminators both reach a viable link, so where the preface
+    // ends is itself disputed — and the title and word count are read from
+    // whichever one wins. Contested, and neither is reported. Earlier this
+    // recovered AO3's 576402; that recovery depended on ranking, which pass
+    // twelve showed cannot be authenticated.
+    assert_eq!(e.kind, Ao3EventKind::Contested);
+    assert_eq!(e.words, None, "never the author's count");
+    assert!(e.work_title.is_empty(), "never a title cut at a fake closer");
+    assert_eq!(e.work_id, 83_701_926, "the work is still AO3's");
 }
 
 /// Finding 2b — The same, on an author subscription, where nothing pins the work id —
