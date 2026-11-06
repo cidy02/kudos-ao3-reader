@@ -18,6 +18,15 @@
 //! 3. [`parser`] treats every field as hostile — including fields a legitimate
 //!    AO3 author controls, which arrive inside correctly signed mail.
 //!
+//! Only the second of those authenticates anything, and only when a provider
+//! attested the message. Be plain about what the weaker tier is worth: a `From`
+//! address is trivially forged, so [`Verdict::SenderOnly`] means *this claims to
+//! be from AO3* and nothing more. Such a message still reaches the full MIME
+//! parser. The third defence is therefore not depth behind authentication, it is
+//! the only thing standing between unauthenticated input and the host app, which
+//! is why the parser refuses ambiguity instead of guessing and why `panic =
+//! "abort"` with bounded work is not optional here.
+//!
 //! `unsafe` is forbidden crate-wide. Note that `panic = "abort"` turns a panic
 //! into a process abort rather than undefined behaviour across the FFI boundary;
 //! it does not prevent the crash, so unbounded work is still a denial of service

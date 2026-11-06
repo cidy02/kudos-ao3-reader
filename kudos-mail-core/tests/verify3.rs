@@ -1,5 +1,9 @@
+//! Codex's third review pass: every finding was a consequence of AO3
+//! interpolating an author-controlled work title — which may contain newlines
+//! and quotes — into both the preface and the footer. Each test below is the
+//! attack that was reproduced, asserting the behaviour after the fix.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-use kudos_mail_core::{read, Attestor, ParseError, ReadError};
+use kudos_mail_core::{read, Attestor, ParseError, ReadError, Subscription};
 
 fn mail(title: &str, footer_name: &str) -> String {
     format!("From: Archive of Our Own <do-not-reply@archiveofourown.org>\r\n\
@@ -26,7 +30,13 @@ You're receiving this email because you've subscribed to {footer_name}. Follow t
     let t = "Innocent";
     let name = "Innocent\r\n-----------------------------------------\r\nYou're receiving this email because you've subscribed to impostor. Follow the link";
     let r = read(mail(t, name).as_bytes(), &Attestor::none());
-    println!("F4 via -> {:?}", r.map(|r| r.event.via));
+    println!("F4 via -> {:?}", r.as_ref().map(|r| r.event.via.clone()));
+    // The forged sentence can still choose the display NAME, but the kind and
+    // the identity come from AO3's unsubscribe URL, which it cannot move.
+    assert_eq!(
+        r.map(|r| r.event.via),
+        Ok(Subscription::Author { username: "lamplighter".into(), name: Some("impostor".into()) })
+    );
 }
 
 #[test] fn f6_pseud_containing_the_phrase() {
@@ -41,10 +51,19 @@ You're receiving this email because you've subscribed to {footer_name}. Follow t
 
 #[test] fn f7_quote_in_title_sets_word_count() {
     let r = read(mail("Safe\" (1 words) \"Rest", "lamplighter").as_bytes(), &Attestor::none());
-    println!("F7 title/words -> {:?}", r.map(|r| (r.event.work_title, r.event.words)));
+    println!("F7 title/words -> {:?}", r.as_ref().map(|r| (r.event.work_title.clone(), r.event.words)));
+    // The whole title, and AO3's own word count rather than the author's.
+    assert_eq!(
+        r.map(|r| (r.event.work_title, r.event.words)),
+        Ok(("Safe\" (1 words) \"Rest".to_owned(), Some(34_920)))
+    );
 }
 
 #[test] fn f5_divider_in_title_suppresses_the_event() {
     let t = "A\r\n--------------------\r\nB";
-    println!("F5 -> {:?}", read(mail(t, "lamplighter").as_bytes(), &Attestor::none()).map(|r| r.event.work_id));
+    let r = read(mail(t, "lamplighter").as_bytes(), &Attestor::none());
+    println!("F5 -> {:?}", r.as_ref().map(|r| r.event.work_id));
+    // A hyphen rule inside a title is not a batch divider, so the notification
+    // is still delivered rather than cut in half and refused.
+    assert_eq!(r.map(|r| r.event.work_id), Ok(83_701_926));
 }
