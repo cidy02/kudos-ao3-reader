@@ -50,6 +50,10 @@ const MAX_WORDS: u64 = 100_000_000;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Ao3EventKind {
+    /// The preface could not be told from an author's imitation of one, so
+    /// what happened is not reported. The work id still is: AO3's unsubscribe
+    /// URL fixes it. See [`Identity`].
+    Contested,
     NewChapter { number: Option<u32> },
     NewWork,
 }
@@ -200,8 +204,17 @@ pub(crate) fn parse_message(message: &Message<'_>) -> Result<Ao3Event, ParseErro
         Subscription::Work { id, .. } => Some(id),
         _ => None,
     };
-    let subject = choose_subject(&layout, want).ok_or(ParseError::NoWorkLink)?;
+    let (subject, contested) = choose_subject(&layout, want).ok_or(ParseError::NoWorkLink)?;
+    // Contested with no footer anchor leaves nothing trustworthy to report at
+    // all: which work it is was only ever going to come from the preface.
+    if contested && want.is_none() {
+        return Err(ParseError::NoWorkLink);
+    }
     let Subject { creation, preface, work_id, chapter_id, link_end } = subject;
+    // A contested preface yields nothing preface-derived. The work id stands,
+    // because AO3's own unsubscribe URL fixed it; everything else here was read
+    // from lines an author can reproduce, so none of it is reported.
+    let chapter_id = if contested { None } else { chapter_id };
 
     let found = metadata_block(creation);
     let meta = found.as_ref().map(|(m, _, _)| m.clone());
@@ -254,7 +267,9 @@ pub(crate) fn parse_message(message: &Message<'_>) -> Result<Ao3Event, ParseErro
 
     Ok(Ao3Event {
         identity: if want.is_some() { Identity::Work } else { Identity::Body },
-        kind: if is_chapter {
+        kind: if contested {
+            Ao3EventKind::Contested
+        } else if is_chapter {
             // The index comes from the posted count, not the subject: the
             // subject puts the pseud first, and a pseud may be named "Chapter 2".
             Ao3EventKind::NewChapter { number: posted }
@@ -264,16 +279,20 @@ pub(crate) fn parse_message(message: &Message<'_>) -> Result<Ao3Event, ParseErro
         at: message.date().map_or(0, |d| d.to_timestamp()),
         work_id,
         chapter_id,
-        author: preface.creators.map_or_else(
-            || "Anonymous".to_owned(),
-            |c| capped(&without_pseud_urls(c), MAX_AUTHOR),
-        ),
+        author: if contested {
+            String::new()
+        } else {
+            preface.creators.map_or_else(
+                || "Anonymous".to_owned(),
+                |c| capped(&without_pseud_urls(c), MAX_AUTHOR),
+            )
+        },
         via,
         chapters_posted: posted,
         chapters_total: total,
-        words,
-        chapter_title,
-        chapter_words,
+        words: if contested { None } else { words },
+        chapter_title: if contested { None } else { chapter_title },
+        chapter_words: if contested { None } else { chapter_words },
         // Each field is read only when its label occurs ONCE in the creation.
         // A second occurrence is author text out of a multiline tag value, and
         // since `Fandom:` precedes `Rating:` a multiline fandom could inject a
@@ -315,7 +334,7 @@ pub(crate) fn parse_message(message: &Message<'_>) -> Result<Ao3Event, ParseErro
         summary: once("Summary")
             .and(meta.as_ref())
             .and_then(|_| work_summary(creation, meta_end)),
-        work_title,
+        work_title: if contested { String::new() } else { work_title },
         extra_creations: layout.creations.len().saturating_sub(1),
     })
 }
@@ -378,7 +397,7 @@ fn agrees(kind: crate::structure::PrefaceKind, chapter_id: Option<u64>) -> bool 
 /// Two links under one candidate means the region cannot be read, so it is
 /// skipped. It is not fatal to the message: one author's crafted title used to
 /// refuse a whole series batch and drop every other author's work with it.
-fn subject_in<'a>(creation: &'a str, want: Option<u64>) -> Option<Subject<'a>> {
+fn subject_in<'a>(creation: &'a str, want: Option<u64>) -> Option<(Subject<'a>, bool)> {
     let candidates = crate::structure::Preface::candidates(creation, preface_bound(creation));
     // Four tiers, each bottom-up. The chapter title and the chapter summary are
     // author text AO3 prints between the link and the metadata, and a work
@@ -410,27 +429,33 @@ fn subject_in<'a>(creation: &'a str, want: Option<u64>) -> Option<Subject<'a>> {
     };
     let mut ordered: Vec<&crate::structure::Preface<'_>> = candidates.iter().rev().collect();
     ordered.sort_by_key(tier);
-    // An ambiguous candidate bars every LOWER tier. Letting it fall through let
-    // an author make AO3's own candidate ambiguous on purpose and so promote a
-    // forged one; refusing the region is the safer end of that trade.
-    let mut barred: Option<u8> = None;
+    // The parser no longer CHOOSES between candidates of the same rank.
+    //
+    // Twelve passes established that it cannot: every discriminator tried —
+    // what precedes a terminator, what follows it, whether a link sits on the
+    // next line — reads lines an AO3 author also controls. A chapter title is
+    // author text and may be multiline, so AO3's own terminator can fail the
+    // shape test while a forged one passes it. No textual fact authenticates
+    // one author-reproducible rendering over another.
+    //
+    // So: take the best tier that yields anything, and if a second outcome
+    // disagrees about which creation this is, the preface is CONTESTED. The
+    // caller then reports what AO3 itself fixed — the work id from the footer's
+    // unsubscribe URL — and nothing read out of the preface.
+    let mut best: Option<(u8, Subject<'a>)> = None;
+    let mut contested = false;
     for preface in ordered {
+        // Every candidate is considered, not just the best tier: a forged
+        // terminator that outranks AO3's own would otherwise win unopposed,
+        // with nothing left to disagree with it. `ordered` is sorted by tier,
+        // so the FIRST viable outcome is the best-ranked one; the rest exist
+        // only to dispute it.
         let here_tier = tier(&preface);
-        if barred.is_some_and(|b| here_tier > b) {
-            return None;
-        }
         let below = creation.get(preface.ends_at..).unwrap_or("");
-        let mut found: Option<Subject<'a>> = None;
-        let mut ambiguous = false;
         let mut offset = 0usize;
-        let mut first_nonblank = true;
         for line in link_region(below).split_inclusive('\n') {
             let here = offset;
             offset += line.len();
-            if line.trim().is_empty() {
-                continue;
-            }
-            let was_first = std::mem::take(&mut first_nonblank);
             let Some((work_id, chapter_id)) = ids_from_link(line.trim()) else { continue };
             if want.is_some_and(|w| w != work_id) || !agrees(preface.kind, chapter_id) {
                 continue;
@@ -442,31 +467,26 @@ fn subject_in<'a>(creation: &'a str, want: Option<u64>) -> Option<Subject<'a>> {
                 chapter_id,
                 link_end: preface.ends_at + here + line.len(),
             };
-            // AO3 prints its link on the line immediately after the preface,
-            // always. So a usable link THERE is AO3's, and a later one is
-            // inside the chapter title or summary below it — which is how a
-            // second link used to make AO3's own candidate look ambiguous and
-            // promote a forged one.
-            if was_first {
-                return Some(subject);
+            match &best {
+                // Reading the same creation twice is not a disagreement.
+                Some((_, other)) => {
+                    if (other.work_id, other.chapter_id, other.preface.kind)
+                        != (work_id, chapter_id, preface.kind)
+                    {
+                        contested = true;
+                    }
+                }
+                None => best = Some((here_tier, subject)),
             }
-            if found.is_some() {
-                ambiguous = true;
-            }
-            found = Some(subject);
-        }
-        if ambiguous {
-            // Try the next candidate in this tier, but go no lower: two links
-            // under a forged terminator used to drop a single-chapter
-            // notification outright, and descending promotes a forgery.
-            barred = Some(here_tier);
-            continue;
-        }
-        if found.is_some() {
-            return found;
+            // One outcome per candidate: AO3 prints its link below its own
+            // terminator, so the first usable one there is that candidate's
+            // answer. Reading further would let an author add a second link
+            // under AO3's OWN terminator — a URL in a chapter title does it —
+            // and make the message contest itself.
+            break;
         }
     }
-    None
+    best.map(|(_, subject)| (subject, contested))
 }
 
 /// Where AO3's own layout resumes below a preface: its metadata block if that
@@ -521,15 +541,15 @@ fn region_is_complete(creation: &str, link_end: usize) -> bool {
 fn choose_subject<'a>(
     layout: &crate::structure::Layout<'a>,
     want: Option<u64>,
-) -> Option<Subject<'a>> {
+) -> Option<(Subject<'a>, bool)> {
     let mut fallback = None;
     for creation in &layout.creations {
-        let Some(subject) = subject_in(creation, want) else { continue };
+        let Some((subject, contested)) = subject_in(creation, want) else { continue };
         if region_is_complete(subject.creation, subject.link_end) {
-            return Some(subject);
+            return Some((subject, contested));
         }
         if fallback.is_none() {
-            fallback = Some(subject);
+            fallback = Some((subject, contested));
         }
     }
     fallback

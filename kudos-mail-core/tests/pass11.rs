@@ -44,10 +44,15 @@ fn a_new_work_phrase_in_a_title_cannot_change_the_kind() {
          Rating: Teen And Up Audiences\r\n"
     );
     let e = ev(&body, "works/83701926").expect("notification");
-    assert_eq!(e.kind, Ao3EventKind::NewChapter { number: Some(9) });
-    assert_eq!(e.chapter_id, Some(255_464_091));
-    assert_eq!(e.author, "skydarius11");
-    assert_eq!(e.words, Some(576_402));
+    // Pass twelve retired the tiering these assertions relied on: AO3's own
+    // terminator can fail the shape test, so a forgery can outrank it and no
+    // textual fact says which is which. A disagreement now makes the preface
+    // contested and nothing read from it is reported. The work id stands.
+    assert_eq!(e.work_id, 83_701_926);
+    assert_eq!(e.kind, Ao3EventKind::Contested);
+    assert_eq!(e.chapter_id, None);
+    assert!(e.author.is_empty());
+    assert_eq!(e.words, None);
 }
 
 /// Finding 2 — The same demotion with a `(1 word):` closer replaces the work title and
@@ -90,9 +95,17 @@ fn an_author_subscription_does_not_take_the_titles_work() {
          Fandom: Original Work\r\n\
          Rating: Teen And Up Audiences\r\n"
     );
-    let e = ev(&body, "users/subscriber").expect("notification");
-    assert_eq!(e.identity, Identity::Body);
-    assert_eq!(e.work_id, 83_701_926, "took the work id out of a title");
+    // No footer anchor and a contested preface leaves nothing trustworthy to
+    // say about which work it is, so the message is refused outright. What must
+    // never happen is reporting work 111 as fact.
+    match ev(&body, "users/subscriber") {
+        Ok(e) => {
+            assert_eq!(e.identity, Identity::Body);
+            assert_eq!(e.work_id, 83_701_926, "took the work id out of a title");
+        }
+        Err(ReadError::Parse(_)) => {}
+        Err(other) => panic!("unexpected: {other:?}"),
+    }
 }
 
 /// Finding 3 — Two links under the fake closer bar every lower tier, so AO3's own
@@ -114,9 +127,14 @@ fn two_links_under_a_fake_closer_do_not_drop_the_update() {
          Fandom: Original Work\r\n\
          Rating: Teen And Up Audiences\r\n"
     );
-    let e = ev(&body, "works/83701926").expect("the real update must survive");
-    assert_eq!(e.chapter_id, Some(255_464_091));
-    assert_eq!(e.kind, Ao3EventKind::NewChapter { number: Some(9) });
+    let e = ev(&body, "works/83701926").expect("the subscriber must still learn the work updated");
+    // Pass twelve retired the tiering these assertions relied on: AO3's own
+    // terminator can fail the shape test, so a forgery can outrank it and no
+    // textual fact says which is which. A disagreement now makes the preface
+    // contested and nothing read from it is reported. The work id stands.
+    assert_eq!(e.work_id, 83_701_926);
+    assert_eq!(e.kind, Ao3EventKind::Contested);
+    assert_eq!(e.chapter_id, None, "never the author's chapter");
 }
 
 /// Finding 4 — A title holding both a URL and a `Summary:` arms the bound's fallback

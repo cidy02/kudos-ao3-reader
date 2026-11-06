@@ -52,15 +52,22 @@ Rating: Teen And Up Audiences\r\n\
 \r\n\
 Summary:\r\n\
     real summary";
-    let e = event(&mail(body, "https://archiveofourown.org/users/subscriber"));
-    assert_eq!(e.work_id, 83_701_926);
-    assert_eq!(e.chapter_id, Some(255_464_091));
-    assert_eq!(e.words, Some(34_920));
-    assert_eq!(e.kind, Ao3EventKind::NewChapter { number: Some(9) });
-    assert_eq!(
-        e.via,
-        Subscription::Author { username: "subscriber".into(), name: Some("Linger".into()) }
-    );
+    // Pass twelve: a disagreement between preface candidates is contested, and
+    // with no footer anchor there is nothing trustworthy to say about which
+    // work it is, so the message is refused. What must never happen is work
+    // 111 being reported as fact — which is what this test was written for.
+    match read(&mail(body, "https://archiveofourown.org/users/subscriber"), &Attestor::none()) {
+        Ok(r) => {
+            let e = r.event;
+            assert_eq!(e.work_id, 83_701_926);
+            assert_eq!(
+                e.via,
+                Subscription::Author { username: "subscriber".into(), name: Some("Linger".into()) }
+            );
+        }
+        Err(kudos_mail_core::ReadError::Parse(_)) => {}
+        Err(other) => panic!("unexpected: {other:?}"),
+    }
 }
 
 /// 2 (High). The work id matches, so the anchor is satisfied — but a leading

@@ -18,6 +18,9 @@ type CoreMailbox = core::TlsMailbox;
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum Ao3EventKind {
+    /// The preface could not be told from an author's imitation of one, so
+    /// what happened is not reported. The work id still is.
+    Contested,
     NewChapter { number: Option<u32> },
     NewWork,
 }
@@ -25,6 +28,7 @@ pub enum Ao3EventKind {
 impl From<core::Ao3EventKind> for Ao3EventKind {
     fn from(value: core::Ao3EventKind) -> Self {
         match value {
+            core::Ao3EventKind::Contested => Self::Contested,
             core::Ao3EventKind::NewChapter { number } => Self::NewChapter { number },
             core::Ao3EventKind::NewWork => Self::NewWork,
         }
