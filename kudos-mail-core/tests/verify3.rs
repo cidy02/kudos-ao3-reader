@@ -46,12 +46,19 @@ You're receiving this email because you've subscribed to {footer_name}. Follow t
 }
 
 #[test] fn f6_pseud_containing_the_phrase() {
-    let raw = mail("Work", "lamplighter")
-        .replace("lamplighter posted a new chapter of", "Alice posted a new chapter of Bob posted a new chapter of");
+    // AO3 renders every creator as `<byline> (<pseud url>)` (`text_pseud`), as
+    // all six real messages do, and prints its phrase after that block. So the
+    // pseud URL is what separates a pseud containing the phrase from AO3's own
+    // use of it — neither the first occurrence nor the last can, since a TITLE
+    // can hold the phrase too. Taking the last read the author out of the
+    // middle of AO3's sentence; this body is the real rendering.
+    let raw = mail("Work", "lamplighter").replace(
+        "lamplighter posted a new chapter of",
+        "Alice posted a new chapter of Bob          (https://archiveofourown.org/users/alice/pseuds/Alice) posted a new chapter of",
+    );
     let r = read(raw.as_bytes(), &Attestor::none());
     println!("F6 author -> {:?}", r.as_ref().map(|r| r.event.author.clone()));
-    // A pseud may legitimately contain AO3's own preface phrase; the creators
-    // string runs to the LAST occurrence, so it is no longer truncated.
+    // The pseud survives whole, and the URL AO3 appended is not part of it.
     assert_eq!(r.map(|r| r.event.author).as_deref(), Ok("Alice posted a new chapter of Bob"));
 }
 
