@@ -23,7 +23,7 @@ use mail_parser::Message;
 use mail_parser::MessageParser;
 
 /// Links we will read ids out of. Anything else is not AO3's and is ignored.
-const WORKS_PREFIX: &str = "https://archiveofourown.org/works/";
+pub(crate) const WORKS_PREFIX: &str = "https://archiveofourown.org/works/";
 /// Every AO3 URL starts here, including the footer's unsubscribe link.
 const AO3_ORIGIN: &str = "https://archiveofourown.org/";
 
@@ -149,7 +149,7 @@ pub(crate) fn parse_message(message: &Message<'_>) -> Result<Ao3Event, ParseErro
     let mut link = None;
     let mut link_end = 0usize;
     let mut offset = 0usize;
-    for line in creation.split_inclusive('\n') {
+    for line in trusted_region(creation).split_inclusive('\n') {
         if let Some(ids) = ids_from_link(line.trim()) {
             if link.is_some() {
                 return Err(ParseError::NoWorkLink);
@@ -181,7 +181,7 @@ pub(crate) fn parse_message(message: &Message<'_>) -> Result<Ao3Event, ParseErro
         (None, None)
     };
 
-    let meta = metadata_block(creation);
+    let meta = metadata_block(trusted_region(creation));
     let (posted, total) = meta.as_deref().map_or((None, None), chapters_in);
     let name = subscription_name(layout.footer);
     let via = subscription_from(body, name.as_deref());
@@ -209,9 +209,9 @@ pub(crate) fn parse_message(message: &Message<'_>) -> Result<Ao3Event, ParseErro
         rating: meta.as_deref().and_then(|m| field(m, "Rating")).map(|v| capped(&v, MAX_TAG)),
         warnings: meta.as_deref().map(|m| list(m, "Warning")).unwrap_or_default(),
         fandoms: meta.as_deref().map(|m| list(m, "Fandom")).unwrap_or_default(),
-        relationships: meta.as_deref().map(|m| list(m, "Relationships")).unwrap_or_default(),
-        characters: meta.as_deref().map(|m| list(m, "Characters")).unwrap_or_default(),
-        additional_tags: meta.as_deref().map(|m| list(m, "Additional Tags")).unwrap_or_default(),
+        relationships: meta.as_deref().map(|m| list(m, "Relationship")).unwrap_or_default(),
+        characters: meta.as_deref().map(|m| list(m, "Character")).unwrap_or_default(),
+        additional_tags: meta.as_deref().map(|m| list(m, "Additional Tag")).unwrap_or_default(),
         series: meta.as_deref().and_then(|m| field(m, "Series")).map(|v| capped(&v, MAX_TITLE)),
         summary: work_summary(creation),
         work_title,
@@ -375,42 +375,73 @@ fn chapters_in(meta: &str) -> (Option<u32>, Option<u32>) {
     )
 }
 
-/// The work's own summary: `Summary:` alone at column zero, then indented lines.
+/// The work's own summary: everything after `Summary:` to the end of the
+/// creation.
 ///
-/// The chapter summary is labelled `Chapter Summary: ` and sits inline above
-/// this, so searching for `Summary:` found that one first.
+/// Only the FIRST line of the value is indented. AO3 renders the summary
+/// through `to_plain_text`, which turns a paragraph break into a blank line and
+/// leaves every later paragraph flush left, so reading indented lines only
+/// truncated any multi-paragraph summary at its first paragraph — visible in the
+/// real corpus, where one message's summary ends mid-thought before `A familiar
+/// voice asks, "What if she does?"`.
+///
+/// Running to the end of the region is also what makes the rest of this parser
+/// safe. The summary is the last thing AO3 prints for a creation, so the
+/// author's free text is terminal: nothing after it needs to be read as
+/// structure, and [`trusted_region`] stops there.
 fn work_summary(creation: &str) -> Option<String> {
-    let mut found = None;
-    let mut lines = creation.lines();
-    while let Some(line) = lines.next() {
-        if line.trim_end() != "Summary:" {
-            continue;
-        }
-        let text: Vec<&str> = lines
-            .by_ref()
-            .take_while(|l| l.starts_with(' ') || l.starts_with('\t'))
-            .map(str::trim)
-            .filter(|l| !l.is_empty())
-            .collect();
-        if text.is_empty() {
-            continue;
-        }
-        // Author text is rendered above this block too, so a chapter summary of
-        // `Summary:` plus an indented line is indistinguishable from the real
-        // one. Two blocks means we cannot say which is AO3's, so neither is
-        // shown — the rule `metadata_block` follows for the same reason.
-        if found.is_some() {
-            return None;
-        }
-        found = Some(capped(&text.join("\n"), MAX_SUMMARY));
-    }
-    found
+    let (_, after) = split_at_summary(creation)?;
+    let text: Vec<&str> = after.lines().map(str::trim).filter(|l| !l.is_empty()).collect();
+    (!text.is_empty()).then(|| capped(&text.join("\n"), MAX_SUMMARY))
 }
 
-/// A single `Name: value` line inside an already-bounded region.
-fn field(region: &str, name: &str) -> Option<String> {
+/// Split a creation at its `Summary:` line into (before, after).
+///
+/// The chapter summary is labelled `Chapter Summary: ` with its value on the
+/// same line, so it is not this one. An author who writes a bare `Summary:`
+/// line of their own can only do so inside text that already follows AO3's, so
+/// the FIRST such line is AO3's.
+fn split_at_summary(creation: &str) -> Option<(&str, &str)> {
+    let mut offset = 0usize;
+    for line in creation.split_inclusive('\n') {
+        if line.trim_end() == "Summary:" {
+            return Some((
+                creation.get(..offset).unwrap_or(""),
+                creation.get(offset + line.len()..).unwrap_or(""),
+            ));
+        }
+        offset += line.len();
+    }
+    None
+}
+
+/// The part of a creation that AO3 laid out, ending where the author's summary
+/// begins.
+///
+/// Everything read as structure — the metadata block, the work link — is read
+/// from here. A summary's later paragraphs are flush-left author text that
+/// `to_plain_text` puts at column zero, so without this bound they could
+/// present a second `Chapters:` block, a bare AO3 work URL, or a hyphen rule,
+/// and each of those either moves a boundary or trips an ambiguity refusal and
+/// suppresses a genuine notification.
+fn trusted_region(creation: &str) -> &str {
+    split_at_summary(creation).map_or(creation, |(before, _)| before)
+}
+
+/// A single `Stem: value` or `Stems: value` line inside an already-bounded
+/// region.
+///
+/// AO3's metadata labels are locale strings pluralised on how many tags the
+/// field holds, so the same work prints `Fandom:` or `Fandoms:` and
+/// `Relationship:` or `Relationships:` depending on its own content. Matching
+/// fixed spellings read whichever half of the corpus happened to be looked at —
+/// the six real messages all have one fandom and one warning but several
+/// characters, which is exactly consistent with pluralisation and so could not
+/// refute it. The stem is matched with an optional `s`.
+fn field(region: &str, stem: &str) -> Option<String> {
     for line in region.lines() {
-        let Some(rest) = line.strip_prefix(name) else { continue };
+        let Some(rest) = line.strip_prefix(stem) else { continue };
+        let rest = rest.strip_prefix('s').unwrap_or(rest);
         let Some(value) = rest.strip_prefix(':') else { continue };
         let value = value.trim();
         if !value.is_empty() {
