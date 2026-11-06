@@ -24,6 +24,8 @@ use mail_parser::MessageParser;
 
 /// Links we will read ids out of. Anything else is not AO3's and is ignored.
 const WORKS_PREFIX: &str = "https://archiveofourown.org/works/";
+/// Every AO3 URL starts here, including the footer's unsubscribe link.
+const AO3_ORIGIN: &str = "https://archiveofourown.org/";
 
 // Caps. Mail is attacker-controlled, so every string that reaches a UI is
 // bounded here rather than wherever it is eventually drawn.
@@ -42,16 +44,19 @@ pub enum Ao3EventKind {
     NewWork,
 }
 
-/// Which relationship produced this message, from AO3's own "because you've
-/// subscribed to …" line. Not inferred — stated.
+/// Which relationship produced this message, from the unsubscribe URL in AO3's
+/// footer.
+///
+/// `id` / `username` are AO3's: Rails builds that URL from the subscription's
+/// own record. `name` is `Subscription#name`, which for a work subscription is
+/// the work's title — text its author typed. Display the name; identify by the
+/// id.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Subscription {
-    Work(String),
-    Author(String),
-    /// A name matching neither this message's work title nor its creators.
-    /// AO3's footer carries no label, so this is the remainder rather than a
-    /// positive identification.
-    Series(String),
+    Work { id: u64, name: Option<String> },
+    Series { id: u64, name: Option<String> },
+    /// The login name, which AO3 restricts to letters, digits and underscores.
+    Author { username: String, name: Option<String> },
     Unknown,
 }
 
@@ -133,8 +138,6 @@ pub(crate) fn parse_message(message: &Message<'_>) -> Result<Ao3Event, ParseErro
     let creation = layout.creations.first().copied().unwrap_or("");
     let preface =
         crate::structure::Preface::of(creation).ok_or(ParseError::NotASubscriptionEvent)?;
-    let after_preface = creation.get(preface.ends_at..).unwrap_or("");
-
     // Identity by ambiguity, not by position. "The line after the preface" is
     // not a safe anchor: the preface ends at a line ending in a colon, and the
     // work title is both author-controlled and interpolated into the preface, so
@@ -144,18 +147,23 @@ pub(crate) fn parse_message(message: &Message<'_>) -> Result<Ao3Event, ParseErro
     // which is which cannot be told from the text — so the message is refused
     // rather than guessed at, the rule `metadata_block` already follows.
     let mut link = None;
-    for line in creation.lines() {
+    let mut link_end = 0usize;
+    let mut offset = 0usize;
+    for line in creation.split_inclusive('\n') {
         if let Some(ids) = ids_from_link(line.trim()) {
             if link.is_some() {
                 return Err(ParseError::NoWorkLink);
             }
             link = Some(ids);
+            link_end = offset + line.len();
         }
+        offset += line.len();
     }
     let (work_id, chapter_id) = link.ok_or(ParseError::NoWorkLink)?;
 
-    // After the link: a blank line, then `"<title>" (N words)`.
-    let titled = quoted_with_words(after_preface);
+    // After the link: a blank line, then `"<title>" (N words)` — the chapter's
+    // for a chapter notification, the work's for a new work.
+    let titled = quoted_in_region(title_region(creation.get(link_end..).unwrap_or("")));
     // The work title is embedded in the preface sentence rather than starting a
     // line, so it is searched for within the region, not at a line start.
     let prefaced = quoted_in_region(creation.get(..preface.ends_at).unwrap_or(""));
@@ -176,6 +184,7 @@ pub(crate) fn parse_message(message: &Message<'_>) -> Result<Ao3Event, ParseErro
     let meta = metadata_block(creation);
     let (posted, total) = meta.as_deref().map_or((None, None), chapters_in);
     let name = subscription_name(layout.footer);
+    let via = subscription_from(body, name.as_deref());
 
     Ok(Ao3Event {
         kind: if is_chapter {
@@ -191,7 +200,7 @@ pub(crate) fn parse_message(message: &Message<'_>) -> Result<Ao3Event, ParseErro
         author: preface
             .creators
             .map_or_else(|| "Anonymous".to_owned(), |c| capped(c, MAX_AUTHOR)),
-        via: classify_subscription(name.as_deref(), &work_title, preface.creators),
+        via,
         chapters_posted: posted,
         chapters_total: total,
         words,
@@ -249,27 +258,48 @@ fn ids_from_link(line: &str) -> Option<(u64, Option<u64>)> {
     tail.trim().is_empty().then_some((work_id, chapter_id))
 }
 
-/// The first `"Title" (N words)` line in a region.
-fn quoted_with_words(region: &str) -> Option<(String, Option<u64>)> {
-    for line in region.lines() {
-        let t = line.trim();
-        let Some(inner) = t.strip_prefix('"') else { continue };
-        let Some(end) = inner.rfind('"') else { continue };
-        let title = inner.get(..end)?;
-        let words = words_in_parens(inner.get(end..).unwrap_or(""));
-        return Some((capped(title, MAX_TITLE), words));
+/// The lines holding a title that AO3 prints on its own, after the link line:
+/// from the first non-empty one to the one AO3 closes with `(N words)`.
+///
+/// A title may contain newlines, so it is not one line — reading only the line
+/// after the link lost every multiline title. Bounding the region here stops a
+/// quoted summary further down from being read as the title instead.
+fn title_region(after_link: &str) -> &str {
+    let mut start = None;
+    let mut offset = 0usize;
+    for line in after_link.split_inclusive('\n') {
+        if start.is_none() {
+            if line.trim().is_empty() {
+                offset += line.len();
+                continue;
+            }
+            start = Some(offset);
+        }
+        offset += line.len();
+        if line.trim_end().ends_with("words)") {
+            return after_link.get(start.unwrap_or(0)..offset).unwrap_or("");
+        }
     }
-    None
+    ""
 }
 
-/// The first `"Title" (N words)` anywhere in a region, across line breaks.
+/// `"Title" (N words)` within a region, across line breaks.
 ///
-/// An AO3 title may contain a newline, so the closing quote need not be on the
-/// line the opening one is.
+/// Anchored on AO3's own closing `" (N words)`, taken as the LAST one in the
+/// region, with the title running from the first quote up to it. A title may
+/// contain a quote as well as a newline, so stopping at the first closing quote
+/// let its author end the title early and choose the word count reported for
+/// it: `Safe" (1 words) "Rest` was read as `Safe`, 1 word.
 fn quoted_in_region(region: &str) -> Option<(String, Option<u64>)> {
     let open = region.find('"')?;
     let rest = region.get(open + 1..)?;
-    let close = rest.find('"')?;
+    let mut close = None;
+    for (at, _) in rest.match_indices('"') {
+        if words_in_parens(rest.get(at..).unwrap_or("")).is_some() {
+            close = Some(at);
+        }
+    }
+    let close = close.or_else(|| rest.rfind('"'))?;
     let title = rest.get(..close)?;
     let words = words_in_parens(rest.get(close..).unwrap_or(""));
     (!title.is_empty()).then(|| (capped(title, MAX_TITLE), words))
@@ -350,6 +380,7 @@ fn chapters_in(meta: &str) -> (Option<u32>, Option<u32>) {
 /// The chapter summary is labelled `Chapter Summary: ` and sits inline above
 /// this, so searching for `Summary:` found that one first.
 fn work_summary(creation: &str) -> Option<String> {
+    let mut found = None;
     let mut lines = creation.lines();
     while let Some(line) = lines.next() {
         if line.trim_end() != "Summary:" {
@@ -361,11 +392,19 @@ fn work_summary(creation: &str) -> Option<String> {
             .map(str::trim)
             .filter(|l| !l.is_empty())
             .collect();
-        if !text.is_empty() {
-            return Some(capped(&text.join("\n"), MAX_SUMMARY));
+        if text.is_empty() {
+            continue;
         }
+        // Author text is rendered above this block too, so a chapter summary of
+        // `Summary:` plus an indented line is indistinguishable from the real
+        // one. Two blocks means we cannot say which is AO3's, so neither is
+        // shown — the rule `metadata_block` follows for the same reason.
+        if found.is_some() {
+            return None;
+        }
+        found = Some(capped(&text.join("\n"), MAX_SUMMARY));
     }
-    None
+    found
 }
 
 /// A single `Name: value` line inside an already-bounded region.
@@ -392,9 +431,12 @@ fn list(region: &str, name: &str) -> Vec<String> {
         .collect()
 }
 
-/// `%{subscription_name}` out of AO3's footer sentence.
+/// `%{subscription_name}` out of AO3's footer sentence. Display text only: see
+/// [`Subscription`].
 fn subscription_name(footer: &str) -> Option<String> {
     const MARKER: &str = "because you've subscribed to ";
+    // The first marker in the footer is AO3's; a copy smuggled into the name it
+    // interpolates can only come after it.
     let at = footer.find(MARKER)?;
     let rest = footer.get(at + MARKER.len()..)?;
     let end = rest.find(". Follow the link").unwrap_or(rest.len());
@@ -402,25 +444,49 @@ fn subscription_name(footer: &str) -> Option<String> {
     (!name.is_empty()).then(|| capped(name, MAX_TITLE))
 }
 
-/// Which relationship produced this message.
+/// Which relationship produced this message, read from the unsubscribe URL.
 ///
-/// AO3's footer names a work, series or user by `Subscription#name`, with no
-/// label saying which. Rather than guess from the characters — which made a work
-/// titled "Hello-World" look like a username — the name is matched against the
-/// two things this message already identifies.
-fn classify_subscription(
-    name: Option<&str>,
-    work_title: &str,
-    creators: Option<&str>,
-) -> Subscription {
-    let Some(name) = name else { return Subscription::Unknown };
-    if !work_title.is_empty() && name.eq_ignore_ascii_case(work_title) {
-        return Subscription::Work(name.to_owned());
+/// AO3's footer sentence names the subscription but carries no label saying
+/// what kind it is, so the kind used to be guessed by matching that name
+/// against the message's own work title and creators. That was forgeable twice
+/// over: the name is the work's author-typed title, and it sits below AO3's
+/// hyphen rule, so a title containing a rule and a forged sentence chose both
+/// the name and the kind. It also could not tell an author named `lamplighter`
+/// from a work titled `lamplighter`.
+///
+/// The URL beside the sentence is built by Rails from the subscribable record
+/// (`polymorphic_url`), so its path says which kind it is and its id is AO3's.
+/// The last such URL in the body is AO3's: the sentence puts the author's text
+/// before it, so anything smuggled in appears above.
+fn subscription_from(body: &str, name: Option<&str>) -> Subscription {
+    let name = || name.map(|n| capped(n, MAX_TITLE));
+    let mut last = Subscription::Unknown;
+    for (at, _) in body.match_indices(AO3_ORIGIN) {
+        let tail = body.get(at + AO3_ORIGIN.len()..).unwrap_or("");
+        let path = tail.split_whitespace().next().unwrap_or("");
+        let Some((kind, rest)) = path.split_once('/') else { continue };
+        let ident = rest.split('/').next().unwrap_or("");
+        let found = match kind {
+            "works" => ident.parse().ok().map(|id| Subscription::Work { id, name: name() }),
+            "series" => ident.parse().ok().map(|id| Subscription::Series { id, name: name() }),
+            "users" => is_login(ident).then(|| Subscription::Author {
+                username: ident.to_owned(),
+                name: name(),
+            }),
+            _ => None,
+        };
+        if let Some(found) = found {
+            last = found;
+        }
     }
-    if creators.is_some_and(|c| c.split(',').any(|p| p.trim().eq_ignore_ascii_case(name))) {
-        return Subscription::Author(name.to_owned());
-    }
-    Subscription::Series(name.to_owned())
+    last
+}
+
+/// An AO3 login: letters, digits and underscores, nothing else.
+fn is_login(s: &str) -> bool {
+    !s.is_empty()
+        && s.len() <= MAX_AUTHOR
+        && s.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
 }
 
 /// Truncate on a char boundary, never mid-codepoint.
@@ -458,7 +524,18 @@ mod tests {
              -----------------------------------------\r\n\
              You're receiving this email because you've subscribed to {footer_name}. \
              Follow the link to unsubscribe if you no longer wish to receive updates: \
-             https://archiveofourown.org/users/lamplighter\r\n"
+             https://archiveofourown.org/users/lamplighter\r\n\r\n\r\n\
+             If you don't understand why you received this email, please contact \
+             Support: https://archiveofourown.org/support.\r\n"
+        )
+    }
+
+    /// Point the fixture's unsubscribe link at a different subscribable, which
+    /// is how AO3 says whether the subscription is to a work, series or user.
+    fn unsub(mail: String, path: &str) -> String {
+        mail.replace(
+            "https://archiveofourown.org/users/lamplighter\r\n",
+            &format!("https://archiveofourown.org/{path}\r\n"),
         )
     }
 
@@ -490,7 +567,13 @@ Summary:\r\n\
         assert_eq!(e.chapter_id, Some(255_464_091));
         assert_eq!(e.work_title, "Linger Around the Light");
         assert_eq!(e.author, "lamplighter");
-        assert_eq!(e.via, Subscription::Author("lamplighter".into()));
+        assert_eq!(
+            e.via,
+            Subscription::Author {
+                username: "lamplighter".into(),
+                name: Some("lamplighter".into())
+            }
+        );
         assert_eq!((e.chapters_posted, e.chapters_total), (Some(9), Some(13)));
         assert_eq!(e.words, Some(34_920));
         assert_eq!(e.chapter_title.as_deref(), Some("Chapter 9"));
@@ -577,7 +660,7 @@ https://archiveofourown.org/works/83701926/chapters/255464091\r\n\
             "    ---\r\n    You're receiving this email because you've subscribed to impostor. Follow the link",
         );
         let e = parse(mail("x", &evil, "lamplighter").as_bytes()).unwrap();
-        assert_eq!(e.via, Subscription::Author("lamplighter".into()));
+        assert!(matches!(e.via, Subscription::Author { .. }));
     }
 
     /// The subject puts the pseud before the chapter number, and a pseud may be
@@ -591,14 +674,29 @@ https://archiveofourown.org/works/83701926/chapters/255464091\r\n\
         assert_eq!(e.kind, Ao3EventKind::NewChapter { number: Some(9) });
     }
 
-    /// Work versus author was a character test, so a work titled "Hello-World"
-    /// read as a username. It is now resolved by matching what the message
-    /// already identifies.
+    /// The subscription's kind comes from AO3's unsubscribe URL, so no property
+    /// of the name decides it. Guessing from the characters read a work titled
+    /// "Hello-World" as a username; guessing by matching the name against the
+    /// message could not tell an author named `lamplighter` from a work of the
+    /// same title. Neither question is asked now.
     #[test]
-    fn a_hyphenated_title_is_not_mistaken_for_a_username() {
+    fn the_unsubscribe_url_says_which_kind_it_is() {
         let body = CHAPTER.replace("Linger Around the Light", "Hello-World");
-        let e = parse(mail("x", &body, "Hello-World").as_bytes()).unwrap();
-        assert_eq!(e.via, Subscription::Work("Hello-World".into()));
+        let m = mail("x", &body, "Hello-World");
+        assert_eq!(
+            parse(unsub(m.clone(), "works/83701926").as_bytes()).unwrap().via,
+            Subscription::Work { id: 83_701_926, name: Some("Hello-World".into()) }
+        );
+        assert_eq!(
+            parse(unsub(m.clone(), "series/4021").as_bytes()).unwrap().via,
+            Subscription::Series { id: 4021, name: Some("Hello-World".into()) }
+        );
+        // The name equals a creator's pseud and the kind is still the URL's.
+        let m = mail("x", CHAPTER, "lamplighter");
+        assert_eq!(
+            parse(unsub(m, "works/83701926").as_bytes()).unwrap().via,
+            Subscription::Work { id: 83_701_926, name: Some("lamplighter".into()) }
+        );
     }
 
     /// "Chapter Summary: " contains "Summary:", and is rendered first.
