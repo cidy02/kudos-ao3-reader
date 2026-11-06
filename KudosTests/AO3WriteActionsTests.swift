@@ -98,6 +98,41 @@ struct AO3WriteActionsTests {
         #expect(state.unsubscribePath == nil, "and there is no delete path to POST")
     }
 
+    /// The failure these two states are easy to confuse, and the reason
+    /// `unsubscribe` checks the session before reporting "not following".
+    ///
+    /// A work page is PUBLIC, so an expired session does not redirect to
+    /// /users/login and `authenticatedPageHTML` does not throw — it returns a
+    /// valid logged-out page. That page has no subscription controls at all, so
+    /// `parseSubscription` reports not-subscribed exactly as it does for a work
+    /// the user genuinely does not follow. Without the session check the list
+    /// would quietly drop a row the user still follows.
+    @Test("A logged-out work page is not evidence that the user stopped following")
+    func loggedOutPageIsNotProofOfNoSubscription() {
+        let loggedOut = """
+        <html><body class="works-show">
+          <div id="header"><a href="/users/login">Log In</a></div>
+          <div id="main"><h2 class="title">A Quiet Harbour</h2></div>
+        </body></html>
+        """
+        let signedIn = """
+        <html><body class="works-show logged-in">
+          <div id="header"><a href="/users/logout">Log Out</a></div>
+          <form action="/users/me/subscriptions" method="post">
+            <input type="submit" value="Subscribe">
+          </form>
+        </body></html>
+        """
+
+        // Indistinguishable on the subscription parse alone.
+        #expect(!AO3Client.parseSubscription(from: loggedOut).isSubscribed)
+        #expect(!AO3Client.parseSubscription(from: signedIn).isSubscribed)
+
+        // Separable on the session, which is what `unsubscribe` branches on.
+        #expect(!LiveAO3SessionValidator.isLoggedIn(html: loggedOut))
+        #expect(LiveAO3SessionValidator.isLoggedIn(html: signedIn))
+    }
+
     @Test func parsesCollectionsIndex() throws {
         let html = """
         <html><body>

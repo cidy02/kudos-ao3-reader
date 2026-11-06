@@ -144,7 +144,24 @@ extension AO3AuthService {
         guard state.isSubscribed,
               let path = state.unsubscribePath,
               let url = Self.absoluteURL(path)
-        else { return "You're not following this." }
+        else {
+            // "No subscribe form" and "no session" look identical here, and the
+            // difference matters: reporting success would have the list drop a row
+            // the user still follows. A work page is PUBLIC, so an expired session
+            // does not redirect to /users/login and `authenticatedPageHTML` does not
+            // throw — it returns the perfectly valid logged-out page, which has no
+            // subscription controls at all. Reuse the detector the auth service
+            // already keeps in sync with AO3's markup rather than sniffing for a
+            // second signal here.
+            // The detector lives on `LiveAO3SessionValidator`, not on
+            // `AO3AuthService` — which this file extends, and which has its own
+            // unrelated `isLoggedIn` cookie-presence property that shadows the
+            // name here.
+            guard LiveAO3SessionValidator.isLoggedIn(html: html) else {
+                throw AO3WriteError.notSignedIn
+            }
+            return "You're not following this."
+        }
 
         // AO3's unsubscribe form is a POST carrying `_method=delete`.
         let body = Self.formEncoded([("_method", "delete"), ("authenticity_token", token)])
