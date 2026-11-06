@@ -157,10 +157,36 @@ struct SubscriptionUpdate: Equatable, Identifiable, Sendable {
 #if os(iOS)
 extension SubscriptionUpdate {
     init?(reading: Reading) {
-        // `read` turns Verdict.rejected into an error, so only trusted and
-        // senderOnly reach a Reading. The guard is for a future crate that
-        // changes that: fail closed rather than trust an unknown verdict.
-        guard reading.verdict != .rejected else { return nil }
+        // Only provider-attested mail may become a row.
+        //
+        // This was briefly relaxed to admit `.senderOnly` as a `.workOnly` row,
+        // on the reasoning that refusing it silently discarded a watched
+        // folder's mail. That reasoning was wrong twice over. The crate's own
+        // module doc is blunt about what the weaker tier is worth — "a `From`
+        // address is trivially forged, so `Verdict::SenderOnly` means *this
+        // claims to be from AO3* and nothing more" — so such a message has no
+        // authenticated root, and its work id, title and byline are all
+        // choosable by whoever sent it. And the watched-folder case cannot be
+        // told apart anyway: `read_new` documents that a nil `authserv_id`
+        // yields SenderOnly, so a live IMAP session with no provider to believe
+        // produces exactly the same verdict as a file someone dropped in.
+        // `.workOnly` hedges which chapter changed; it cannot hedge "this
+        // message may be entirely fabricated".
+        //
+        // Exhaustive on purpose, with no `default`: a verdict added to the crate
+        // later becomes a compile error here rather than silently becoming a
+        // visible row. An earlier `!= .rejected` guard claimed to fail closed
+        // and did the opposite.
+        switch reading.verdict {
+        case .trusted: break
+        case .senderOnly, .rejected: return nil
+        }
+
+        // shortcut: refusing returns nil and nothing counts it, so a mailbox of
+        // unattested mail still looks empty rather than withheld. The driver
+        // must report the refusals — Harvest already carries `refused` and
+        // `otherAo3Mail` counts for its own rejects — and until it does, that
+        // gap is this initializer's only remaining dishonesty.
 
         let event = reading.event
         // Only the values AO3's unsubscribe URL supplies. `name` is the footer
@@ -212,7 +238,7 @@ extension SubscriptionUpdate {
             author: event.author,
             at: Date(timeIntervalSince1970: TimeInterval(event.at)),
             source: source,
-            isAttested: reading.verdict == .trusted
+            isAttested: true
         )
     }
 }
