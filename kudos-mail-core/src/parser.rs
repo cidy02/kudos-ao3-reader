@@ -246,7 +246,11 @@ pub(crate) fn parse_message(message: &Message<'_>) -> Result<Ao3Event, ParseErro
 
     // Read from the whole creation: the block is identified by carrying a
     // fandom, not by sitting above a cut an author can move.
-    let (posted, total) = meta.as_deref().map_or((None, None), chapters_in);
+    let once = |stem: &str| (label_count(creation, stem) == 1).then_some(());
+    let (posted, total) = match once("Chapters") {
+        Some(()) => meta.as_deref().map_or((None, None), chapters_in),
+        None => (None, None),
+    };
 
     Ok(Ao3Event {
         identity: if want.is_some() { Identity::Work } else { Identity::Body },
@@ -270,13 +274,31 @@ pub(crate) fn parse_message(message: &Message<'_>) -> Result<Ao3Event, ParseErro
         words,
         chapter_title,
         chapter_words,
-        rating: meta.as_deref().and_then(|m| field(m, "Rating")).map(|v| capped(&v, MAX_TAG)),
-        warnings: meta.as_deref().map(|m| list(m, "Warning")).unwrap_or_default(),
-        fandoms: meta.as_deref().map(|m| list(m, "Fandom")).unwrap_or_default(),
-        relationships: meta.as_deref().map(|m| list(m, "Relationship")).unwrap_or_default(),
-        characters: meta.as_deref().map(|m| list(m, "Character")).unwrap_or_default(),
-        additional_tags: meta.as_deref().map(|m| list(m, "Additional Tag")).unwrap_or_default(),
-        series: meta.as_deref().and_then(|m| field(m, "Series")).map(|v| capped(&v, MAX_TITLE)),
+        // Each field is read only when its label occurs ONCE in the creation.
+        // A second occurrence is author text out of a multiline tag value, and
+        // since `Fandom:` precedes `Rating:` a multiline fandom could inject a
+        // rating that `field` read first.
+        rating: once("Rating")
+            .and_then(|()| meta.as_deref().and_then(|m| field(m, "Rating")))
+            .map(|v| capped(&v, MAX_TAG)),
+        warnings: once("Warning")
+            .and_then(|()| meta.as_deref().map(|m| list(m, "Warning")))
+            .unwrap_or_default(),
+        fandoms: once("Fandom")
+            .and_then(|()| meta.as_deref().map(|m| list(m, "Fandom")))
+            .unwrap_or_default(),
+        relationships: once("Relationship")
+            .and_then(|()| meta.as_deref().map(|m| list(m, "Relationship")))
+            .unwrap_or_default(),
+        characters: once("Character")
+            .and_then(|()| meta.as_deref().map(|m| list(m, "Character")))
+            .unwrap_or_default(),
+        additional_tags: once("Additional Tag")
+            .and_then(|()| meta.as_deref().map(|m| list(m, "Additional Tag")))
+            .unwrap_or_default(),
+        series: once("Series")
+            .and_then(|()| meta.as_deref().and_then(|m| field(m, "Series")))
+            .map(|v| capped(&v, MAX_TITLE)),
         // Only with an identified block: `meta_end` of zero is not a fallback
         // anchor, it reopens every `Summary:` an author wrote above AO3's own.
         //
@@ -290,7 +312,9 @@ pub(crate) fn parse_message(message: &Message<'_>) -> Result<Ao3Event, ParseErro
         // text at stake is the author's own, in their own work's summary slot,
         // so the exchange is not worth it. No corpus message carries a series,
         // so there is nothing yet to measure the real shape against.
-        summary: meta.as_ref().and_then(|_| work_summary(creation, meta_end)),
+        summary: once("Summary")
+            .and(meta.as_ref())
+            .and_then(|_| work_summary(creation, meta_end)),
         work_title,
         extra_creations: layout.creations.len().saturating_sub(1),
     })
@@ -356,52 +380,83 @@ fn agrees(kind: crate::structure::PrefaceKind, chapter_id: Option<u64>) -> bool 
 /// refuse a whole series batch and drop every other author's work with it.
 fn subject_in<'a>(creation: &'a str, want: Option<u64>) -> Option<Subject<'a>> {
     let candidates = crate::structure::Preface::candidates(creation, preface_bound(creation));
-    // Three tiers, each bottom-up, because the chapter title and the chapter
-    // summary are author text AO3 prints between the link and the metadata —
-    // inside the preface bound, and so tried before AO3's own line.
+    // Four tiers, each bottom-up. The chapter title and the chapter summary are
+    // author text AO3 prints between the link and the metadata, so they sit
+    // inside the preface bound and are tried before AO3's own line unless
+    // something separates them. Two facts about AO3's sentence do:
     //
-    //   1. AO3's phrase on the region's first line AND its quoted closer,
-    //   2. the phrase but no quote, which is every message before October 2025,
-    //   3. neither, which is what a forged divider leaves when it splits AO3's
-    //      own sentence across regions.
+    //   `anchored`  — AO3's creators block, ending in the paren that closes a
+    //                 pseud URL, precedes this terminator's phrase. "The phrase
+    //                 is on the first line" was not enough: the first line IS
+    //                 AO3's, so every candidate inherited it.
+    //   `unbroken`  — no AO3 works URL lies between the region's first line and
+    //                 this terminator. AO3 prints its link after the preface,
+    //                 so a terminator below a link is below the preface.
     //
-    // A chapter summary rendering as `(1 word):` has the count and the colon
-    // but no quote, so it falls below AO3's line; one rendering as
-    // `posted a new work:` has neither and falls below everything.
-    let tier = |p: &&crate::structure::Preface<'_>| match (p.anchored, p.quoted_closer) {
-        (true, true) => 0u8,
-        (true, false) => 1,
-        (false, _) => 2,
+    //   0: anchored, unbroken, and AO3's quoted closer
+    //   1: anchored and unbroken
+    //   2: anchored only — the real terminator when a title smuggled a URL above it
+    //   3: neither, which is what a forged divider leaves when it splits AO3's
+    //      own sentence across regions
+    let tier = |p: &&crate::structure::Preface<'_>| match (p.anchored, p.unbroken, p.quoted_closer)
+    {
+        (true, true, true) => 0u8,
+        (true, true, false) => 1,
+        (true, false, _) => 2,
+        (false, _, _) => 3,
     };
     let mut ordered: Vec<&crate::structure::Preface<'_>> = candidates.iter().rev().collect();
     ordered.sort_by_key(tier);
+    // An ambiguous candidate bars every LOWER tier. Letting it fall through let
+    // an author make AO3's own candidate ambiguous on purpose and so promote a
+    // forged one; refusing the region is the safer end of that trade.
+    let mut barred: Option<u8> = None;
     for preface in ordered {
+        let here_tier = tier(&preface);
+        if barred.is_some_and(|b| here_tier > b) {
+            return None;
+        }
         let below = creation.get(preface.ends_at..).unwrap_or("");
         let mut found: Option<Subject<'a>> = None;
         let mut ambiguous = false;
         let mut offset = 0usize;
+        let mut first_nonblank = true;
         for line in link_region(below).split_inclusive('\n') {
             let here = offset;
             offset += line.len();
+            if line.trim().is_empty() {
+                continue;
+            }
+            let was_first = std::mem::take(&mut first_nonblank);
             let Some((work_id, chapter_id)) = ids_from_link(line.trim()) else { continue };
             if want.is_some_and(|w| w != work_id) || !agrees(preface.kind, chapter_id) {
                 continue;
             }
-            if found.is_some() {
-                ambiguous = true;
-            }
-            found = Some(Subject {
+            let subject = Subject {
                 creation,
                 preface: *preface,
                 work_id,
                 chapter_id,
                 link_end: preface.ends_at + here + line.len(),
-            });
+            };
+            // AO3 prints its link on the line immediately after the preface,
+            // always. So a usable link THERE is AO3's, and a later one is
+            // inside the chapter title or summary below it — which is how a
+            // second link used to make AO3's own candidate look ambiguous and
+            // promote a forged one.
+            if was_first {
+                return Some(subject);
+            }
+            if found.is_some() {
+                ambiguous = true;
+            }
+            found = Some(subject);
         }
         if ambiguous {
-            // This candidate cannot be read; try the next rather than
-            // abandoning the region. Two links under a forged terminator used
-            // to drop a single-chapter notification outright.
+            // Try the next candidate in this tier, but go no lower: two links
+            // under a forged terminator used to drop a single-chapter
+            // notification outright, and descending promotes a forgery.
+            barred = Some(here_tier);
             continue;
         }
         if found.is_some() {
@@ -418,23 +473,34 @@ fn preface_bound(creation: &str) -> usize {
     if let Some((_, start, _)) = metadata_block(creation) {
         return line_offset(creation, start);
     }
-    // No block: fall back to the first bare `Summary:`, which is the only label
-    // AO3 prints BELOW the preface in every shape. Not `Chapter Summary:` — a
-    // work title can contain that line above AO3's own terminator, and bounding
-    // there cut the real terminator out and refused the message.
-    //
-    // A title can hold a bare `Summary:` too, which would truncate this bound
-    // and lose the notification. That costs only a message whose metadata was
-    // already unreadable, which is the better of the two failures: the other is
-    // reading a work id out of a summary.
+    // No block: fall back to the first bare `Summary:` BELOW a works URL. AO3
+    // prints its summary after the link, so one above the link is inside the
+    // work title — and bounding there removed AO3's own terminator and denied
+    // the update. Not `Chapter Summary:` either, for the same reason.
     let mut offset = 0usize;
+    let mut saw_link = false;
     for line in creation.split_inclusive('\n') {
-        if line.trim_end() == "Summary:" {
+        let trimmed = line.trim_end();
+        if saw_link && trimmed == "Summary:" {
             return offset;
         }
+        saw_link |= ao3_path(trimmed.trim()).is_some_and(|p| p.starts_with("works/"));
         offset += line.len();
     }
     creation.len()
+}
+
+/// How many lines of the creation carry this label.
+///
+/// AO3 prints each `_work_info` field once per creation — measured across 258
+/// real messages, where `Chapters:`, `Rating:` and `Summary:` each appear
+/// exactly once. So a second occurrence is author text out of a multiline tag
+/// value, and the field cannot be told from it. `Fandom:` comes BEFORE
+/// `Rating:`, and fandom is mandatory, so a multiline fandom could inject a
+/// rating that `field` read first — which would defeat rating-based content
+/// handling, a worse outcome than showing none.
+fn label_count(creation: &str, stem: &str) -> usize {
+    creation.lines().filter(|l| has_label(l, stem)).count()
 }
 
 /// Whether this region carries what AO3 prints for every creation: the
@@ -1039,19 +1105,27 @@ https://archiveofourown.org/works/83701926/chapters/255464091\r\n\
     }
 
     /// A chapter summary is rendered above the work-info block and can put any
-    /// line at column zero, so it can present a whole forged block. AO3 renders
-    /// `_work_info` after it, so the real block is the last one — the forged one
-    /// is overridden rather than making the metadata ambiguous and dropping it.
+    /// line at column zero, so it can present a whole forged block.
+    ///
+    /// Earlier this recovered AO3's values, because the forged run carried no
+    /// fandom and so lost the block election. That is no longer relied on: a
+    /// label occurring twice in one creation means two candidates for the same
+    /// field, and since `Fandom:` precedes `Rating:` a MULTILINE FANDOM VALUE
+    /// can inject a rating into AO3's own run, where no election separates
+    /// them. A forged rating would defeat rating-based content handling, so the
+    /// field is dropped instead — the same trade this parser makes everywhere:
+    /// a wrong value is worse than none. Identity is unaffected.
     #[test]
-    fn a_forged_metadata_block_is_overridden_by_the_real_one() {
+    fn a_forged_metadata_block_suppresses_the_metadata() {
         let evil = CHAPTER.replace(
             "\"Chapter 9\" (4679 words)",
             "\"Chapter 9\" (4679 words)\r\n\r\nChapter Summary: nice\r\n\r\nChapters: 1/1\r\nRating: General Audiences",
         );
         let e = parse(mail("x", &evil, "lamplighter").as_bytes()).unwrap();
-        assert_eq!(e.rating.as_deref(), Some("Teen And Up Audiences"), "AO3's, not the author's");
-        assert_eq!((e.chapters_posted, e.chapters_total), (Some(9), Some(13)), "not 1/1");
+        assert_eq!(e.rating, None, "never the author's");
+        assert_eq!((e.chapters_posted, e.chapters_total), (None, None), "never 1/1");
         assert_eq!(e.work_id, 83_701_926, "identity still survives");
+        assert_eq!(e.chapter_id, Some(255_464_091));
     }
 
     /// The footer rule is the layout's long hyphen line; the batch divider is 20.

@@ -170,10 +170,21 @@ pub(crate) struct Preface<'a> {
     /// Whether this terminator's closer reads `" (<N> word[s]):` — AO3's
     /// quoted form, used since October 2025.
     pub quoted_closer: bool,
-    /// Whether this terminator's own kind of phrase is on the region's first
-    /// line, which is where AO3 puts it. False where a forged divider has split
-    /// AO3's sentence and the first line is somebody else's.
+    /// Whether AO3's own creators block precedes this terminator's phrase on
+    /// the region's first line — the block ends with the paren closing a pseud
+    /// URL, which is how `creators_before` identifies it.
+    ///
+    /// Not merely "the phrase is on the first line": the first line IS AO3's,
+    /// so every candidate in a genuine region inherited that and the test was
+    /// nearly vacuous.
     pub anchored: bool,
+    /// Whether no line strictly between the region's first line and this
+    /// terminator is entirely an AO3 works URL.
+    ///
+    /// AO3 prints its link AFTER the preface, so a terminator below a link is
+    /// below the preface — which is where the chapter title and the chapter
+    /// summary live, both author text.
+    pub unbroken: bool,
 }
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
@@ -257,17 +268,20 @@ fn closer_is_quoted(line: &str) -> bool {
 /// creators block, and that block ends with the paren closing a pseud URL. A
 /// title's copy sits inside the quotes, after it. Where there is no pseud URL at
 /// all the first occurrence is used, which is the best available guess.
-fn creators_before<'a>(line: &'a str, phrase: &str) -> Option<&'a str> {
+fn creators_before<'a>(line: &'a str, phrase: &str) -> Option<(&'a str, bool)> {
     let mut from = 0usize;
     while let Some(rel) = line.get(from..).and_then(|r| r.find(phrase)) {
         let at = from + rel;
         let head = line.get(..at)?;
         if head.trim_end().ends_with(')') && pseud_url_at(head).is_some() {
-            return Some(head);
+            return Some((head, true));
         }
         from = at + phrase.len();
     }
-    line.find(phrase).and_then(|at| line.get(..at))
+    // No creators block before any occurrence. Still usable — anonymous posts
+    // have none, and so do abbreviated test fixtures — but not anchored, and a
+    // title holding a phrase lands here rather than being taken for AO3's.
+    line.find(phrase).and_then(|at| line.get(..at)).map(|head| (head, false))
 }
 
 /// At most this many candidate prefaces. AO3 caps a work title at 255
@@ -297,6 +311,7 @@ impl<'a> Preface<'a> {
         let mut offset = 0usize;
         let mut first_line: Option<&str> = None;
         let mut first_start = 0usize;
+        let mut saw_link = false;
         for line in creation.split_inclusive('\n') {
             let trimmed = line.trim_end();
             if first_line.is_none() {
@@ -317,9 +332,13 @@ impl<'a> Preface<'a> {
                 return out;
             }
 
+            let is_link = crate::parser::ao3_path(trimmed.trim())
+                .is_some_and(|p| p.starts_with("works/"));
             let Some((_, kind)) = TERMINATORS.iter().find(|(t, _)| trimmed.ends_with(t)) else {
+                saw_link |= is_link;
                 continue;
             };
+            saw_link |= is_link;
             let phrase = match kind {
                 PrefaceKind::NewChapter => "posted a new chapter of ",
                 PrefaceKind::NewWork => "posted a new work:",
@@ -335,15 +354,24 @@ impl<'a> Preface<'a> {
             // region whose first line belongs to the author, and discarding it
             // refused a message that was still recoverable.
             let found = first_line.and_then(|l| creators_before(l, phrase));
-            let head = found.unwrap_or("");
+            let (head, anchored) = found.unwrap_or(("", false));
             let creators = head.trim();
+            // AO3 opens the quoted form immediately after its phrase. A closing
+            // quote alone cannot identify the era: an older unquoted title that
+            // merely ENDS in a quote was read as quoted-era mail.
+            let opens_quoted = first_line
+                .and_then(|l| l.get(head.len() + phrase.len()..))
+                .is_some_and(|rest| rest.starts_with('"'));
             out.push(Self {
                 kind: *kind,
                 creators: (!creators.is_empty() && creators != "Anonymous").then_some(creators),
                 ends_at: offset,
                 title_from: first_start + head.len() + phrase.len(),
-                quoted_closer: *kind == PrefaceKind::NewChapter && closer_is_quoted(trimmed),
-                anchored: found.is_some(),
+                quoted_closer: *kind == PrefaceKind::NewChapter
+                    && opens_quoted
+                    && closer_is_quoted(trimmed),
+                anchored,
+                unbroken: !saw_link,
             });
             if out.len() >= MAX_CANDIDATES {
                 return out;

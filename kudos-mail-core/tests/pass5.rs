@@ -141,9 +141,14 @@ Summary:\r\n\
     let e = event(&mail(body));
     assert_eq!(e.work_id, 83_701_926);
     assert_eq!(e.chapter_id, Some(255_464_091));
-    assert_eq!(e.kind, Ao3EventKind::NewChapter { number: Some(9) });
-    assert_eq!(e.rating.as_deref(), Some("Teen And Up Audiences"));
-    assert_eq!(e.summary.as_deref(), Some("the real work summary"));
+    // A label occurring twice in one creation means two candidates for the same
+    // field, and a multiline FANDOM value — fandom being mandatory — can inject
+    // one into AO3's own run, where no election separates them. So the field is
+    // dropped rather than chosen between: a wrong rating is worse than none.
+    // Identity is what had to survive, and does.
+    assert_eq!(e.kind, Ao3EventKind::NewChapter { number: None });
+    assert_eq!(e.rating, None);
+    assert_eq!(e.summary, None);
 }
 
 #[test]
@@ -165,10 +170,15 @@ Rating: Explicit\r\n\
 Summary:\r\n\
     the real work summary";
     let e = event(&mail(body));
-    assert_eq!(e.kind, Ao3EventKind::NewChapter { number: Some(9) });
-    assert_eq!(e.rating.as_deref(), Some("Teen And Up Audiences"));
-    assert_eq!(e.chapters_posted, Some(9));
-    assert_eq!(e.summary.as_deref(), Some("the real work summary"));
+    // A label occurring twice in one creation means two candidates for the same
+    // field, and a multiline FANDOM value — fandom being mandatory — can inject
+    // one into AO3's own run, where no election separates them. So the field is
+    // dropped rather than chosen between: a wrong rating is worse than none.
+    // Identity is what had to survive, and does.
+    assert_eq!(e.kind, Ao3EventKind::NewChapter { number: None });
+    assert_eq!(e.rating, None);
+    assert_eq!(e.chapters_posted, None);
+    assert_eq!(e.summary.as_deref(), Some("the real work summary"), "one Summary: here");
 }
 
 #[test]

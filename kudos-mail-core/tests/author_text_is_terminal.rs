@@ -62,8 +62,13 @@ fn a_summary_cannot_forge_the_layout() {
 
     assert_eq!(e.work_id, 83_701_926, "the real work, not the one in the summary");
     assert_eq!(e.chapter_id, Some(255_464_091));
-    assert_eq!(e.kind, Ao3EventKind::NewChapter { number: Some(9) }, "not 99");
-    assert_eq!(e.rating.as_deref(), Some("Teen"), "not Explicit");
+    // A label occurring twice in one creation means two candidates for the same
+    // field. Recovering AO3's used to work here because the forged run carried
+    // no fandom — but a MULTILINE FANDOM VALUE can inject a rating into AO3's
+    // own run, where nothing separates them, so the field is dropped instead.
+    // Never the author's value, which is what matters for a rating.
+    assert_eq!(e.kind, Ao3EventKind::NewChapter { number: None }, "never 99");
+    assert_eq!(e.rating, None, "never Explicit");
     assert_eq!(e.extra_creations, 0, "the summary's divider is not a creation");
     // Attribution comes from AO3's unsubscribe URL, so the forged footer
     // sentence cannot claim the subscription.
@@ -126,9 +131,9 @@ fn a_work_with_no_summary_is_still_bounded() {
     // it: no second link, hence no ambiguity refusal against a genuine message.
     assert_eq!(e.work_id, 83_701_926);
     assert_eq!(e.chapter_id, Some(255_464_091));
-    // AO3 renders the metadata block after the chapter summary, so the real
-    // block is the last one and the forged one above it loses.
-    assert_eq!(e.rating.as_deref(), Some("Teen"), "not Explicit");
-    assert_eq!(e.kind, Ao3EventKind::NewChapter { number: Some(9) }, "not 99");
+    // Two `Rating:` lines in one creation: dropped rather than chosen between.
+    // See `a_summary_cannot_forge_the_layout` for why recovery is not relied on.
+    assert_eq!(e.rating, None, "never Explicit");
+    assert_eq!(e.kind, Ao3EventKind::NewChapter { number: None }, "never 99");
     assert_eq!(e.summary, None, "this work has no summary");
 }
