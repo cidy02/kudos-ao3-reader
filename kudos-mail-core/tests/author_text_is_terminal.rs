@@ -94,3 +94,43 @@ fn singular_and_plural_labels_are_the_same_field() {
     assert_eq!(s.relationships, vec!["P/Q".to_owned()]);
     assert_eq!((s.characters, s.additional_tags), (vec!["C".to_owned()], vec!["T".to_owned()]));
 }
+
+/// Both author-text blocks are conditional. A work whose summary is blank gets
+/// no `Summary:` line at all — none of the six real messages has a chapter
+/// summary either — so a bound that relied on `Summary:` being present did not
+/// narrow anything, leaving the chapter summary (which AO3 renders ABOVE the
+/// metadata block) able to forge layout.
+#[test]
+fn a_work_with_no_summary_is_still_bounded() {
+    let evil = format!(
+        "From: Archive of Our Own <do-not-reply@archiveofourown.org>\r\n\
+         Date: Thu, 29 Oct 2026 00:49:51 +0000\r\n\
+         Subject: [AO3] x\r\n\
+         Content-Type: text/plain; charset=UTF-8\r\n\r\n\
+         Archive of Our Own\r\n=========================================\r\n\r\n\r\n\
+         lamplighter posted a new chapter of \"Linger\" (34920 words):\r\n\
+         https://archiveofourown.org/works/83701926/chapters/255464091\r\n\r\n\
+         \"Chapter 9\" (4679 words)\r\n\r\n\
+         Chapter Summary: mine\r\n\
+         https://archiveofourown.org/works/111/chapters/222\r\n\
+         Chapters: 99/99\r\n\
+         Rating: Explicit\r\n\r\n\
+         Chapters: 9/13\r\n\
+         Fandom: Original Work\r\n\
+         Rating: Teen\r\n\r\n\
+         -----------------------------------------\r\n\
+         You're receiving this email because you've subscribed to Linger. \
+         Follow the link to unsubscribe: https://archiveofourown.org/works/83701926\r\n"
+    );
+    let e = read(evil.as_bytes(), &Attestor::none()).unwrap().event;
+
+    // The forged URL sits below `Chapter Summary:`, so the link scan never sees
+    // it: no second link, hence no ambiguity refusal against a genuine message.
+    assert_eq!(e.work_id, 83_701_926);
+    assert_eq!(e.chapter_id, Some(255_464_091));
+    // AO3 renders the metadata block after the chapter summary, so the real
+    // block is the last one and the forged one above it loses.
+    assert_eq!(e.rating.as_deref(), Some("Teen"), "not Explicit");
+    assert_eq!(e.kind, Ao3EventKind::NewChapter { number: Some(9) }, "not 99");
+    assert_eq!(e.summary, None, "this work has no summary");
+}
