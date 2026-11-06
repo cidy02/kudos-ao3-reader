@@ -24,6 +24,8 @@ LIB=libkudos_mail_ffi.a
 
 # rustup's shims are not always on a GUI-launched PATH.
 export PATH="/opt/homebrew/opt/rustup/bin:$HOME/.cargo/bin:$PATH"
+# Match the app target instead of inheriting the currently installed SDK version.
+export IPHONEOS_DEPLOYMENT_TARGET=26.5
 
 for target in aarch64-apple-ios aarch64-apple-ios-sim; do
   if ! rustup target list --installed | grep -qx "$target"; then

@@ -152,15 +152,17 @@ impl From<core::Ao3Event> for Ao3Event {
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct Reading {
+    pub uid: u32,
     pub event: Ao3Event,
     pub verdict: Verdict,
 }
 
-impl From<core::Reading> for Reading {
-    fn from(value: core::Reading) -> Self {
+impl From<core::MailReading> for Reading {
+    fn from(value: core::MailReading) -> Self {
         Self {
-            event: value.event.into(),
-            verdict: value.verdict.into(),
+            uid: value.uid,
+            event: value.reading.event.into(),
+            verdict: value.reading.verdict.into(),
         }
     }
 }

@@ -112,10 +112,17 @@ pub struct Cursor {
     pub last_uid: u32,
 }
 
+/// One parsed notification with its mailbox identity.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MailReading {
+    pub uid: u32,
+    pub reading: Reading,
+}
+
 /// One run's result.
 #[derive(Debug, Default)]
 pub struct Harvest {
-    pub readings: Vec<Reading>,
+    pub readings: Vec<MailReading>,
     /// Where to resume. `None` when the server reported no `UIDVALIDITY`, in
     /// which case nothing may be stored: resuming from a UID without it is how
     /// a mailbox gets silently misread after a rebuild.
@@ -333,7 +340,7 @@ impl<T: Read + Write + Unpin + Debug + Send> Mailbox<T> {
                 let Some(raw) = body else { continue };
                 highest = highest.max(uid);
                 match crate::read(&raw, attestor) {
-                    Ok(reading) => harvest.readings.push(reading),
+                    Ok(reading) => harvest.readings.push(MailReading { uid, reading }),
                     // AO3's kudos, comment replies and abuse reports.
                     Err(ReadError::Parse(_)) => harvest.other_ao3_mail += 1,
                     // Matched the substring search but is not AO3's address.
@@ -484,6 +491,7 @@ mod tests {
 
         assert_eq!(harvest.too_large, 1);
         assert_eq!(harvest.readings.len(), 1);
+        assert_eq!(harvest.readings[0].uid, 10);
         assert_eq!(harvest.cursor, Some(Cursor { uid_validity: 7, last_uid: 11 }));
     }
 

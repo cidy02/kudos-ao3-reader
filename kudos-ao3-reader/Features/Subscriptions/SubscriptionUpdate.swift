@@ -4,7 +4,7 @@ import Foundation
 ///
 /// This is deliberately not a mirror of `kudos-mail-core`'s `Ao3Event`. The crate
 /// reports what it could establish and how far; this type reports what the screen
-/// is allowed to say. The translation between them is `init(readingA:)` below, and
+/// is allowed to say. The translation between them is `init(reading:)` below, and
 /// it is the single place where the crate's hard-won caution is either honoured or
 /// thrown away.
 ///
@@ -117,7 +117,7 @@ struct SubscriptionUpdate: Equatable, Identifiable, Sendable {
         self.at = at
         self.source = source
 
-        let trustworthy = !isContested && isAnchoredToWork
+        let trustworthy = !isContested && isAnchoredToWork && source == .work
         certainty = trustworthy ? .confirmed : .workOnly
 
         if trustworthy {
@@ -136,3 +136,51 @@ struct SubscriptionUpdate: Equatable, Identifiable, Sendable {
         }
     }
 }
+
+#if os(iOS)
+extension SubscriptionUpdate {
+    init?(reading: Reading) {
+        guard reading.verdict == .trusted else { return nil }
+
+        let event = reading.event
+        let source: Source = switch event.via {
+        case .work: .work
+        case let .series(id, name): .series(name ?? "Series #\(id)")
+        case let .author(username, name): .author(name ?? username)
+        case .unknown: .unknown
+        }
+
+        let chapterNumber: Int?
+        let isNewWork: Bool
+        let isContested: Bool
+        switch event.kind {
+        case .contested:
+            chapterNumber = nil
+            isNewWork = false
+            isContested = true
+        case let .newChapter(number):
+            chapterNumber = number.map(Int.init)
+            isNewWork = false
+            isContested = false
+        case .newWork:
+            chapterNumber = nil
+            isNewWork = true
+            isContested = false
+        }
+
+        self.init(
+            uid: reading.uid,
+            workID: event.workId,
+            chapterID: event.chapterId,
+            chapterNumber: chapterNumber,
+            isNewWork: isNewWork,
+            isContested: isContested,
+            isAnchoredToWork: event.identity == .work,
+            workTitle: event.workTitle,
+            author: event.author,
+            at: Date(timeIntervalSince1970: TimeInterval(event.at)),
+            source: source
+        )
+    }
+}
+#endif
