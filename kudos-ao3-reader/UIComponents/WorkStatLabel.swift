@@ -7,6 +7,12 @@ import SwiftUI
 struct WorkStatLabel: View {
     let text: String
     let symbol: String
+    /// Stats are bounded ("Mature", "12/24", "48K"), so by default the label takes
+    /// its ideal width and the surrounding `FlowLayout` wraps between labels.
+    /// Free text is not bounded — an AO3 pseud runs to 40 characters — and at its
+    /// ideal width it would draw past the row rather than truncate. Opt in for
+    /// those, and the value gets an ellipsis instead.
+    var truncates = false
 
     var body: some View {
         HStack(spacing: 3) {
@@ -16,7 +22,8 @@ struct WorkStatLabel: View {
             Text(text)
         }
         .lineLimit(1)
-        .fixedSize()
+        .truncationMode(.tail)
+        .fixedSize(horizontal: !truncates, vertical: true)
     }
 }
 

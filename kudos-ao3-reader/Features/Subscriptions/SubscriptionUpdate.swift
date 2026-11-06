@@ -34,6 +34,14 @@ struct SubscriptionUpdate: Equatable, Identifiable, Sendable {
         case unknown
     }
 
+    /// Which subscription brought this update in. The name is the series or author
+    /// followed, not the work.
+    enum Source: Equatable, Sendable {
+        case work
+        case series(String)
+        case author(String)
+    }
+
     let workID: UInt64
     /// Nil whenever `certainty` is `.workOnly` — enforced by the initializer, not
     /// by convention, because a chapter id is what a deep link and an unread count
@@ -45,6 +53,7 @@ struct SubscriptionUpdate: Equatable, Identifiable, Sendable {
     let workTitle: String
     let author: String
     let at: Date
+    let source: Source
 
     var id: String { "\(workID)-\(chapterID.map(String.init) ?? "work")-\(at.timeIntervalSince1970)" }
 
@@ -68,10 +77,12 @@ struct SubscriptionUpdate: Equatable, Identifiable, Sendable {
         isAnchoredToWork: Bool,
         workTitle: String,
         author: String,
-        at: Date
+        at: Date,
+        source: Source = .work
     ) {
         self.workID = workID
         self.at = at
+        self.source = source
 
         let trustworthy = !isContested && isAnchoredToWork
         certainty = trustworthy ? .confirmed : .workOnly
