@@ -75,6 +75,29 @@ struct AO3WriteActionsTests {
         #expect(result.unsubscribePath == nil)
     }
 
+    /// The state that makes `unsubscribe` and `toggleSubscribe` diverge, and the
+    /// reason the Following list must not use the toggle.
+    ///
+    /// `toggleSubscribe` reads the work page and SUBSCRIBES whenever it finds no
+    /// subscription — correct for a toggle on a work page. A row in the Following
+    /// list can be stale (unsubscribed on the website, or from another device), and
+    /// then the work page looks exactly like the fixture below: a plain subscribe
+    /// form, no `_method=delete`. Routed through the toggle, a tap labelled
+    /// "Unfollow" would subscribe the user instead. `unsubscribe` guards on this
+    /// same parse and returns without writing.
+    @Test("A stale Following row parses as not-subscribed, which is why Unfollow cannot use the toggle")
+    func notSubscribedIsTheStaleRowState() {
+        let staleRow = """
+        <form action="/users/me/subscriptions" method="post">
+          <input type="hidden" name="subscription[subscribable_type]" value="Work">
+          <input type="submit" value="Subscribe">
+        </form>
+        """
+        let state = AO3Client.parseSubscription(from: staleRow)
+        #expect(!state.isSubscribed, "the toggle would branch to subscribe here")
+        #expect(state.unsubscribePath == nil, "and there is no delete path to POST")
+    }
+
     @Test func parsesCollectionsIndex() throws {
         let html = """
         <html><body>
