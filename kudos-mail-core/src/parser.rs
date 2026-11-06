@@ -149,7 +149,7 @@ pub(crate) fn parse_message(message: &Message<'_>) -> Result<Ao3Event, ParseErro
     let mut link = None;
     let mut link_end = 0usize;
     let mut offset = 0usize;
-    for line in trusted_region(creation).split_inclusive('\n') {
+    for line in link_region(creation).split_inclusive('\n') {
         if let Some(ids) = ids_from_link(line.trim()) {
             if link.is_some() {
                 return Err(ParseError::NoWorkLink);
@@ -330,8 +330,15 @@ fn words_in_parens(tail: &str) -> Option<u64> {
 /// Author text is rendered both above this block (the chapter summary) and below
 /// it (the work summary), and `to_plain_text` can put any line at column zero —
 /// so a summary can forge a block. When two candidates exist we cannot tell which
-/// is AO3's, and showing a wrong rating is worse than showing none, so ambiguity
-/// yields nothing at all.
+/// is AO3's. Refusing on two was the first answer, but it turned an attack into
+/// a denial: a work with no summary has no `Summary:` line, so
+/// [`trusted_region`] does not narrow, and a `Chapters:` run forged in the
+/// chapter summary suppressed the real metadata entirely.
+///
+/// Position settles it instead. AO3 renders `_work_info` AFTER the chapter
+/// summary, and [`trusted_region`] has already removed the work summary below
+/// it, so within that region the real block is the LAST run. Author text can
+/// only ever appear above it.
 fn metadata_block(creation: &str) -> Option<String> {
     let lines: Vec<&str> = creation.lines().collect();
     let mut runs: Vec<String> = Vec::new();
@@ -354,7 +361,7 @@ fn metadata_block(creation: &str) -> Option<String> {
             i += 1;
         }
     }
-    (runs.len() == 1).then(|| runs.into_iter().next()).flatten()
+    runs.pop()
 }
 
 /// `Label: value` at column zero, where the label looks like AO3's.
@@ -413,6 +420,30 @@ fn split_at_summary(creation: &str) -> Option<(&str, &str)> {
         offset += line.len();
     }
     None
+}
+
+/// Where the first block of multi-line author text starts: the bare `Summary:`
+/// line, or `Chapter Summary:`, whichever comes first.
+///
+/// Both are conditional — AO3 prints the summary `unless work.summary.blank?`,
+/// and the chapter summary only when there is one; none of the six real
+/// messages has a chapter summary. That matters because a work with no summary
+/// has no `Summary:` line at all, so cutting only there left the chapter
+/// summary — which AO3 renders ABOVE the metadata block — inside the region the
+/// link is read from, where it could present a second AO3 work URL and trip the
+/// two-links refusal against a perfectly genuine notification.
+///
+/// The work link is printed on the line after the preface, above both blocks,
+/// so bounding the scan here never loses it.
+fn link_region(creation: &str) -> &str {
+    let mut offset = 0usize;
+    for line in creation.split_inclusive('\n') {
+        if line.trim_end() == "Summary:" || line.starts_with("Chapter Summary:") {
+            return creation.get(..offset).unwrap_or("");
+        }
+        offset += line.len();
+    }
+    creation
 }
 
 /// The part of a creation that AO3 laid out, ending where the author's summary
@@ -667,18 +698,19 @@ https://archiveofourown.org/works/83701926/chapters/255464091\r\n\
         assert_eq!(e.chapter_id, Some(255_464_091));
     }
 
-    /// A summary is rendered above the work-info block and can put any line at
-    /// column zero. Two candidate blocks means we cannot tell which is AO3's,
-    /// and showing a wrong rating is worse than showing none.
+    /// A chapter summary is rendered above the work-info block and can put any
+    /// line at column zero, so it can present a whole forged block. AO3 renders
+    /// `_work_info` after it, so the real block is the last one — the forged one
+    /// is overridden rather than making the metadata ambiguous and dropping it.
     #[test]
-    fn a_forged_metadata_block_yields_no_metadata_at_all() {
+    fn a_forged_metadata_block_is_overridden_by_the_real_one() {
         let evil = CHAPTER.replace(
             "\"Chapter 9\" (4679 words)",
             "\"Chapter 9\" (4679 words)\r\n\r\nChapter Summary: nice\r\n\r\nChapters: 1/1\r\nRating: General Audiences",
         );
         let e = parse(mail("x", &evil, "lamplighter").as_bytes()).unwrap();
-        assert_eq!(e.rating, None, "ambiguous metadata must not resolve to either");
-        assert_eq!(e.chapters_posted, None);
+        assert_eq!(e.rating.as_deref(), Some("Teen And Up Audiences"), "AO3's, not the author's");
+        assert_eq!((e.chapters_posted, e.chapters_total), (Some(9), Some(13)), "not 1/1");
         assert_eq!(e.work_id, 83_701_926, "identity still survives");
     }
 
