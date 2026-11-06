@@ -154,6 +154,7 @@ fn opens_with_preface(region: &str) -> bool {
 /// What AO3's preface says happened. These are the only six, from
 /// `config/locales/mailers/en.yml` under
 /// `batch_subscription_notification.preface`.
+#[derive(Clone, Copy)]
 pub(crate) struct Preface<'a> {
     pub kind: PrefaceKind,
     /// `%{creators}`, or `None` when the creation is anonymous.
@@ -194,16 +195,22 @@ const TERMINATORS: [(&str, PrefaceKind); 3] = [
     ("posted a backdated work:", PrefaceKind::BackdatedWork),
 ];
 
+/// At most this many candidate prefaces. A title can print any number of
+/// terminator-shaped lines; the real one is near the top.
+const MAX_CANDIDATES: usize = 16;
+
 impl<'a> Preface<'a> {
-    /// Read the preface of one creation region.
+    /// Every line that could close this region's preface, outermost first.
     ///
-    /// The preface may wrap onto further lines, because a work title may contain
-    /// a newline and AO3 interpolates the title into it. It therefore ends at
-    /// the first line carrying one of AO3's own [`TERMINATORS`] — not at the
-    /// first line ending in a colon, which an author can produce at will: a
-    /// title of `Decoy:` ended the preface early and handed the next line, also
-    /// the author's, to the link scan as though it were AO3's.
-    pub(crate) fn of(creation: &'a str) -> Option<Self> {
+    /// More than one is possible because a title may END a line with one of
+    /// AO3's own terminators — `"x posted a new work:` does it — so the first
+    /// terminator found is not necessarily AO3's. Taking it flipped a chapter
+    /// notification to a new-work one and read the author's name out of the
+    /// middle of AO3's sentence. The caller picks the candidate whose kind
+    /// agrees with the link line AO3 printed, which an author cannot reshape:
+    /// a chapter notification links `/works/N/chapters/M`, a work one `/works/N`.
+    pub(crate) fn candidates(creation: &'a str) -> Vec<Self> {
+        let mut out = Vec::new();
         let mut offset = 0usize;
         let mut first_line: Option<&str> = None;
         for line in creation.split_inclusive('\n') {
@@ -216,7 +223,7 @@ impl<'a> Preface<'a> {
                 // The creators lead the sentence, so AO3's phrase is on the
                 // region's first non-empty line or this is somebody's prose.
                 if !PHRASES.iter().any(|(p, _)| trimmed.contains(p)) {
-                    return None;
+                    return out;
                 }
                 first_line = Some(trimmed);
             }
@@ -237,12 +244,21 @@ impl<'a> Preface<'a> {
                 .and_then(|l| l.rfind(phrase).and_then(|at| l.get(..at)))
                 .unwrap_or("");
             let creators = head.trim();
-            return Some(Self {
+            out.push(Self {
                 kind: *kind,
                 creators: (!creators.is_empty() && creators != "Anonymous").then_some(creators),
                 ends_at: offset,
             });
+            if out.len() >= MAX_CANDIDATES {
+                return out;
+            }
         }
-        None
+        out
+    }
+
+    /// The outermost candidate. Enough to answer "is this a subscription
+    /// notification at all"; identity needs [`Self::candidates`].
+    pub(crate) fn of(creation: &'a str) -> Option<Self> {
+        Self::candidates(creation).into_iter().next()
     }
 }

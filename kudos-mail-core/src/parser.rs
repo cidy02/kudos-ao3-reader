@@ -151,19 +151,31 @@ pub(crate) fn parse_message(message: &Message<'_>) -> Result<Ao3Event, ParseErro
     // URLs. That anchor does not exist for an author or series subscription,
     // which falls back to reading the line after the preface.
     let subject = match via {
-        Subscription::Work { id, .. } => {
-            subject_by_work_id(&layout.creations, id).or_else(|| subject_by_position(&layout))
-        }
+        Subscription::Work { id, .. } => match subject_by_work_id(&layout.creations, id) {
+            Anchored::Found(subject) => Some(subject),
+            Anchored::Ambiguous => return Err(ParseError::NoWorkLink),
+            Anchored::Absent => subject_by_position(&layout),
+        },
         _ => subject_by_position(&layout),
     }
     .ok_or(ParseError::NoWorkLink)?;
-    let Subject { creation, work_id, chapter_id, link_end } = subject;
-    let preface =
-        crate::structure::Preface::of(creation).ok_or(ParseError::NotASubscriptionEvent)?;
+    let Subject { creation, preface, work_id, chapter_id, link_end } = subject;
+
+    let found = metadata_block(creation);
+    let meta = found.as_ref().map(|(m, _, _)| m.clone());
+    let meta_end = found.as_ref().map_or(0, |(_, _, end)| *end);
+    // The title sits between the link and AO3's metadata block, so that block
+    // is what bounds it — not the first structural-looking line, which an
+    // author can write inside a title.
+    let title_bound = found
+        .as_ref()
+        .map_or(creation.len(), |(_, start, _)| line_offset(creation, *start));
 
     // After the link: a blank line, then `"<title>" (N words)` — the chapter's
     // for a chapter notification, the work's for a new work.
-    let titled = quoted_in_region(title_region(creation.get(link_end..).unwrap_or("")));
+    let titled = quoted_in_region(title_region(
+        creation.get(link_end..title_bound.max(link_end)).unwrap_or(""),
+    ));
     // The work title is embedded in the preface sentence rather than starting a
     // line, so it is searched for within the region, not at a line start.
     let prefaced = quoted_in_region(creation.get(..preface.ends_at).unwrap_or(""));
@@ -183,9 +195,6 @@ pub(crate) fn parse_message(message: &Message<'_>) -> Result<Ao3Event, ParseErro
 
     // Read from the whole creation: the block is identified by carrying a
     // fandom, not by sitting above a cut an author can move.
-    let found = metadata_block(creation);
-    let meta = found.as_ref().map(|(m, _)| m.clone());
-    let meta_end = found.as_ref().map_or(0, |(_, end)| *end);
     let (posted, total) = meta.as_deref().map_or((None, None), chapters_in);
 
     Ok(Ao3Event {
@@ -215,7 +224,10 @@ pub(crate) fn parse_message(message: &Message<'_>) -> Result<Ao3Event, ParseErro
         characters: meta.as_deref().map(|m| list(m, "Character")).unwrap_or_default(),
         additional_tags: meta.as_deref().map(|m| list(m, "Additional Tag")).unwrap_or_default(),
         series: meta.as_deref().and_then(|m| field(m, "Series")).map(|v| capped(&v, MAX_TITLE)),
-        summary: work_summary(creation, meta_end),
+        // Only with an identified block: `meta_end` of zero is not a
+        // fallback anchor, it reopens every `Summary:` an author wrote above
+        // AO3's own — which is how a forged one became the work summary.
+        summary: meta.as_ref().and_then(|_| work_summary(creation, meta_end)),
         work_title,
         extra_creations: layout.creations.len().saturating_sub(1),
     })
@@ -249,10 +261,36 @@ fn leading_u64(s: &str) -> Option<u64> {
 /// Which creation a message is about, and where AO3 printed its link.
 struct Subject<'a> {
     creation: &'a str,
+    /// The candidate whose kind agrees with the link below it.
+    preface: crate::structure::Preface<'a>,
     work_id: u64,
     chapter_id: Option<u64>,
     /// Byte offset just past the link line, where the title follows.
     link_end: usize,
+}
+
+/// Does this preface agree with the link AO3 printed? A chapter notification
+/// links `/works/N/chapters/M`, a work one `/works/N`. AO3 generates both, so
+/// the shape is the one half of the pairing an author cannot restate.
+fn agrees(kind: crate::structure::PrefaceKind, chapter_id: Option<u64>) -> bool {
+    (kind == crate::structure::PrefaceKind::NewChapter) == chapter_id.is_some()
+}
+
+/// What the footer's work id could establish.
+enum Anchored<'a> {
+    /// Exactly one line across every creation is that work's URL.
+    Found(Subject<'a>),
+    /// No line is. The footer may name a work this message does not link.
+    Absent,
+    /// More than one line WITHIN a single creation is, so the anchor
+    /// distinguishes nothing there. Terminal: falling back to the positional
+    /// parser handed the message to the very code the anchor exists to replace,
+    /// and it then chose the author's work.
+    ///
+    /// Only within a region. Across regions two matches are ordinary — a batch
+    /// notification for two chapters of the same work has one link line each,
+    /// and treating that as ambiguous refused a real message from the corpus.
+    Ambiguous,
 }
 
 /// The creation whose own link line names `work_id`, taken from AO3's footer.
@@ -260,28 +298,52 @@ struct Subject<'a> {
 /// Returns `None` unless exactly one line across every creation is entirely an
 /// AO3 works URL for that work: more than one and the author has supplied a
 /// copy, so the anchor no longer distinguishes anything.
-fn subject_by_work_id<'a>(creations: &[&'a str], work_id: u64) -> Option<Subject<'a>> {
-    let mut found = None;
+fn subject_by_work_id<'a>(creations: &[&'a str], work_id: u64) -> Anchored<'a> {
+    let mut per_region: Vec<Subject<'a>> = Vec::new();
     for creation in creations {
+        let candidates = crate::structure::Preface::candidates(creation);
+        let mut here: Option<Subject<'a>> = None;
         let mut offset = 0usize;
         for line in creation.split_inclusive('\n') {
-            if let Some((w, chapter_id)) =
-                ids_from_link(line.trim()).filter(|(w, _)| *w == work_id)
-            {
-                if found.is_some() {
-                    return None;
-                }
-                found = Some(Subject {
-                    creation,
-                    work_id: w,
-                    chapter_id,
-                    link_end: offset + line.len(),
-                });
-            }
+            let line_start = offset;
             offset += line.len();
+            let Some((w, chapter_id)) =
+                ids_from_link(line.trim()).filter(|(w, _)| *w == work_id)
+            else {
+                continue;
+            };
+            // The preface must close above this line and agree with its shape.
+            let Some(preface) = candidates
+                .iter()
+                .find(|p| p.ends_at <= line_start && agrees(p.kind, chapter_id))
+            else {
+                continue;
+            };
+            if here.is_some() {
+                return Anchored::Ambiguous;
+            }
+            here = Some(Subject {
+                creation,
+                preface: *preface,
+                work_id: w,
+                chapter_id,
+                link_end: offset,
+            });
         }
+        per_region.extend(here);
     }
-    found
+    // AO3 prints `_work_info` for a work's first occurrence, so a region with no
+    // metadata block is a fragment — which is what a forged divider inside a
+    // title produces. In a genuine batch the first region is the one with the
+    // block, because `@seen` suppresses it on later creations of the same work.
+    let chosen = per_region
+        .iter()
+        .position(|s| metadata_block(s.creation).is_some())
+        .unwrap_or(0);
+    (chosen < per_region.len()).then(|| per_region.swap_remove(chosen)).map_or(
+        Anchored::Absent,
+        Anchored::Found,
+    )
 }
 
 /// The first creation's link, read positionally: the one line below the preface
@@ -293,25 +355,46 @@ fn subject_by_work_id<'a>(creations: &[&'a str], work_id: u64) -> Option<Subject
 /// handles the rest: a second was typed by an author and the text cannot say
 /// which is AO3's, so the message is refused rather than guessed at.
 fn subject_by_position<'a>(layout: &crate::structure::Layout<'a>) -> Option<Subject<'a>> {
-    let creation = layout.creations.first().copied().unwrap_or("");
-    let preface = crate::structure::Preface::of(creation)?;
-    let below = creation.get(preface.ends_at..).unwrap_or("");
+    // Which region. A forged divider inside a title splits one creation in two,
+    // and reading the first region always meant reading the author's fragment —
+    // for an author or series subscription, where no footer anchor exists, that
+    // chose the wrong work outright. AO3 prints `_work_info` for a work's first
+    // occurrence, so a leading region with no metadata block, where a later one
+    // has one, is a fragment rather than a creation.
+    let creation = layout
+        .creations
+        .iter()
+        .find(|c| metadata_block(c).is_some())
+        .or_else(|| layout.creations.first())
+        .copied()
+        .unwrap_or("");
 
+    let candidates = crate::structure::Preface::candidates(creation);
     let mut found: Option<Subject<'a>> = None;
-    let mut offset = 0usize;
-    for line in link_region(below).split_inclusive('\n') {
-        if let Some((work_id, chapter_id)) = ids_from_link(line.trim()) {
-            if found.is_some() {
-                return None;
+    for preface in &candidates {
+        let below = creation.get(preface.ends_at..).unwrap_or("");
+        let mut offset = 0usize;
+        for line in link_region(below).split_inclusive('\n') {
+            if let Some((work_id, chapter_id)) = ids_from_link(line.trim()) {
+                if !agrees(preface.kind, chapter_id) {
+                    continue;
+                }
+                if found.is_some() {
+                    return None;
+                }
+                found = Some(Subject {
+                    creation,
+                    preface: *preface,
+                    work_id,
+                    chapter_id,
+                    link_end: preface.ends_at + offset + line.len(),
+                });
             }
-            found = Some(Subject {
-                creation,
-                work_id,
-                chapter_id,
-                link_end: preface.ends_at + offset + line.len(),
-            });
+            offset += line.len();
         }
-        offset += line.len();
+        if found.is_some() {
+            break;
+        }
     }
     found
 }
@@ -348,12 +431,13 @@ fn title_region(after_link: &str) -> &str {
             }
             start = Some(offset);
         }
-        // AO3 prints the metadata block and both summaries after the title, so
-        // the title cannot reach past them.
-        if is_metadata_line(trimmed)
-            || trimmed == "Summary:"
-            || trimmed.starts_with("Chapter Summary:")
-        {
+        // Only AO3's chapter-summary label, which it prints between the title
+        // and the metadata block. A bare `Summary:` here is NOT AO3's — its own
+        // comes below the metadata — so stopping at one let an author put
+        // `Summary:` in a title and end the region before AO3's real closer,
+        // leaving the author's own closer as the last one. The far end of the
+        // region is bounded by the caller instead.
+        if trimmed.starts_with("Chapter Summary:") {
             break;
         }
         offset += line.len();
@@ -380,16 +464,32 @@ fn title_region(after_link: &str) -> &str {
 fn quoted_in_region(region: &str) -> Option<(String, Option<u64>)> {
     let open = region.find('"')?;
     let rest = region.get(open + 1..)?;
-    let mut close = None;
-    for (at, _) in rest.match_indices('"') {
-        if words_in_parens(rest.get(at..).unwrap_or("")).is_some() {
-            close = Some(at);
-        }
-    }
-    let close = close.or_else(|| rest.rfind('"'))?;
+    // One reverse scan, not a `words_in_parens` call per quote: a title holding
+    // 60,000 quotes made that quadratic, and the message cap bounds the input
+    // rather than the work done on it. AO3's closer is `" (<N> words)`, so find
+    // the last `words)` and step back over the count to the quote before it.
+    let close = last_closer(rest).or_else(|| rest.rfind('"'))?;
     let title = rest.get(..close)?;
     let words = words_in_parens(rest.get(close..).unwrap_or(""));
     (!title.is_empty()).then(|| (capped(title, MAX_TITLE), words))
+}
+
+/// Offset of the quote that opens AO3's last `" (<N> words)` closer.
+fn last_closer(rest: &str) -> Option<usize> {
+    let mut search = rest;
+    loop {
+        let at = search.rfind("words)")?;
+        // Back over ` (<digits> ` to the quote that should precede it.
+        let head = search.get(..at)?.trim_end();
+        let head = head.trim_end_matches(|c: char| c.is_ascii_digit() || c == ',');
+        if let Some(before) = head.strip_suffix('(') {
+            let before = before.trim_end();
+            if before.ends_with('"') {
+                return Some(before.len() - 1);
+            }
+        }
+        search = search.get(..at)?;
+    }
 }
 
 /// `… (4,679 words)` → 4679. AO3 may write the count with separators.
@@ -435,9 +535,9 @@ fn words_in_parens(tail: &str) -> Option<u64> {
 /// unconditional only because a work cannot have zero fandom tags — "No Fandom"
 /// is itself a tag. If that ever changes, metadata goes blank rather than
 /// wrong, which is the direction this is built to fail in.
-fn metadata_block(creation: &str) -> Option<(String, usize)> {
+fn metadata_block(creation: &str) -> Option<(String, usize, usize)> {
     let lines: Vec<&str> = creation.lines().collect();
-    let mut runs: Vec<(String, usize)> = Vec::new();
+    let mut runs: Vec<(String, usize, usize)> = Vec::new();
     let mut i = 0usize;
     while i < lines.len() {
         if lines.get(i).is_some_and(|l| l.starts_with("Chapters:")) {
@@ -453,20 +553,28 @@ fn metadata_block(creation: &str) -> Option<(String, usize)> {
             }
             // Where this run ends, as a line index, so the summary below it can
             // be found without trusting the first `Summary:` in the region.
-            runs.push((run.join("\n"), j));
+            runs.push((run.join("\n"), i, j));
             i = j;
         } else {
             i += 1;
         }
     }
-    runs.retain(|(run, _)| run.lines().any(|l| field(l, "Fandom").is_some()));
+    // The LABEL qualifies the run, not a non-empty value: an empty `Fandom:`
+    // on AO3's own run made it not count, which left a forged run as the only
+    // qualifying one and handed it the rating and the chapter index.
+    runs.retain(|(run, _, _)| run.lines().any(|l| has_label(l, "Fandom")));
     (runs.len() == 1).then(|| runs.pop()).flatten()
 }
 
 /// `Label: value` at column zero, where the label looks like AO3's.
 fn is_metadata_line(line: &str) -> bool {
-    let Some((label, _)) = line.split_once(": ") else { return false };
-    !label.is_empty()
+    // A label with no value is still one of AO3's lines: a work whose fandom
+    // tags render empty prints a bare `Fandom:`, and treating that as the end
+    // of the run dropped it out of the block it belongs to — which left a
+    // forged block as the only one carrying a fandom.
+    let Some((label, rest)) = line.split_once(':') else { return false };
+    (rest.is_empty() || rest.starts_with(' '))
+        && !label.is_empty()
         && label.len() <= 32
         && label.starts_with(|c: char| c.is_ascii_uppercase())
         && label.chars().all(|c| c.is_ascii_alphabetic() || c == ' ')
@@ -544,6 +652,24 @@ fn link_region(creation: &str) -> &str {
     creation
 }
 
+/// Byte offset of a line, by index. Lines are counted as `str::lines` does.
+fn line_offset(text: &str, line: usize) -> usize {
+    let mut offset = 0usize;
+    for (n, l) in text.split_inclusive('\n').enumerate() {
+        if n == line {
+            return offset;
+        }
+        offset += l.len();
+    }
+    text.len()
+}
+
+/// True when a line carries this label at all, value or no value.
+fn has_label(line: &str, stem: &str) -> bool {
+    let Some(rest) = line.strip_prefix(stem) else { return false };
+    rest.strip_prefix('s').unwrap_or(rest).starts_with(':')
+}
+
 /// A single `Stem: value` or `Stems: value` line inside an already-bounded
 /// region.
 ///
@@ -608,9 +734,12 @@ fn subscription_name(footer: &str) -> Option<String> {
 fn subscription_from(body: &str, name: Option<&str>) -> Subscription {
     let name = || name.map(|n| capped(n, MAX_TITLE));
     let mut last = Subscription::Unknown;
-    for (at, _) in body.match_indices(AO3_ORIGIN) {
-        let tail = body.get(at + AO3_ORIGIN.len()..).unwrap_or("");
-        let path = tail.split_whitespace().next().unwrap_or("");
+    // One pass over whitespace-delimited tokens. Scanning from every occurrence
+    // of the origin and re-splitting the remaining text was quadratic: a summary
+    // of concatenated `https://archiveofourown.org/` strings walked the rest of
+    // the message once per copy.
+    for token in body.split_whitespace() {
+        let Some(path) = token.strip_prefix(AO3_ORIGIN) else { continue };
         let Some((kind, rest)) = path.split_once('/') else { continue };
         let ident = rest.split('/').next().unwrap_or("");
         let found = match kind {
@@ -628,6 +757,7 @@ fn subscription_from(body: &str, name: Option<&str>) -> Subscription {
     }
     last
 }
+
 
 /// An AO3 login: letters, digits and underscores, nothing else.
 fn is_login(s: &str) -> bool {
