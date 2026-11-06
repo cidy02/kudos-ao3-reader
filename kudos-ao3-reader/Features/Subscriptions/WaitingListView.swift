@@ -111,8 +111,43 @@ private struct WaitingRow: View {
         return number
     }
 
-    private var title: String {
-        update.workTitle.isEmpty ? "Work #\(update.workID)" : update.workTitle
+    /// The headline, which must only ever state something AO3 established.
+    ///
+    /// A work subscription's footer IS the work's unsubscribe URL, so its title
+    /// is AO3's and leads the row. An author or series subscription pins no work
+    /// — the title was read from the body, where the author's own text lives — so
+    /// the headline falls back to the one thing the Rails-built URL did establish,
+    /// which is whose updates these are. The body's title still appears, as
+    /// `claimedTitle` below, attributed rather than asserted: blanking it outright
+    /// would reduce every author-subscription row to "Work #83701926", and the
+    /// reader needs something to decide on.
+    private var headline: String {
+        if update.pinsTheWork {
+            return update.workTitle.isEmpty ? "Work #\(update.workID)" : update.workTitle
+        }
+        switch update.source {
+        case let .author(name): return "New from \(name)"
+        case let .series(name): return "New in \(name)"
+        case .work, .unknown: return "New in a work you follow"
+        }
+    }
+
+    /// The body's own title on an unpinned row — shown in quotes, as the email's
+    /// claim. Nil when the work is pinned (the title is the headline already) or
+    /// when the preface was contested and nothing survived it.
+    private var claimedTitle: String? {
+        guard !update.pinsTheWork, !update.workTitle.isEmpty else { return nil }
+        return update.workTitle
+    }
+
+    /// AO3 batches several creations into one email. The crate counts the ones it
+    /// did not parse so this never reads as the whole message.
+    private var alsoInThisEmail: String? {
+        guard update.extraCreations > 0 else { return nil }
+        let extras = update.extraCreations
+        return extras == 1
+            ? "and 1 more update in this email"
+            : "and \(extras) more updates in this email"
     }
 
     private var whatChanged: String {
@@ -200,7 +235,7 @@ private struct WaitingRow: View {
     }
 
     private var titleText: some View {
-        Text(title)
+        Text(headline)
             .font(.headline)
             .fixedSize(horizontal: false, vertical: true)
     }
@@ -257,10 +292,25 @@ private struct WaitingRow: View {
                 sourceLine
                 titleAndBadge
                 metadata
+                if let claimedTitle {
+                    // Quoted and attributed: the email said this, AO3 did not.
+                    Text("The email names \u{201C}\(claimedTitle)\u{201D}")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
                 Text(whatChanged)
                     .font(.subheadline)
                     .foregroundStyle(isConfirmed ? .primary : .secondary)
                     .fixedSize(horizontal: false, vertical: true)
+
+                if let alsoInThisEmail {
+                    Text(alsoInThisEmail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             .padding(.vertical, 10)
             .padding(.leading, 10)
