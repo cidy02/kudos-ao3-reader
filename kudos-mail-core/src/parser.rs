@@ -381,29 +381,32 @@ fn agrees(kind: crate::structure::PrefaceKind, chapter_id: Option<u64>) -> bool 
 fn subject_in<'a>(creation: &'a str, want: Option<u64>) -> Option<Subject<'a>> {
     let candidates = crate::structure::Preface::candidates(creation, preface_bound(creation));
     // Four tiers, each bottom-up. The chapter title and the chapter summary are
-    // author text AO3 prints between the link and the metadata, so they sit
-    // inside the preface bound and are tried before AO3's own line unless
-    // something separates them. Two facts about AO3's sentence do:
+    // author text AO3 prints between the link and the metadata, and a work
+    // TITLE can hold whole lines of its own — titles are not run through
+    // `to_plain_text`, so a literal newline survives. Two facts about AO3's
+    // sentence separate its terminator from an author's:
     //
-    //   `anchored`  — AO3's creators block, ending in the paren that closes a
-    //                 pseud URL, precedes this terminator's phrase. "The phrase
-    //                 is on the first line" was not enough: the first line IS
-    //                 AO3's, so every candidate inherited it.
-    //   `unbroken`  — no AO3 works URL lies between the region's first line and
-    //                 this terminator. AO3 prints its link after the preface,
-    //                 so a terminator below a link is below the preface.
+    //   `ao3_shaped` — this terminator is followed by AO3's own layout: its
+    //                  link line, then the creation title it always prints. A
+    //                  URL inside a title is followed by more of the title.
+    //   `anchored`   — AO3's creators block, ending in the paren closing a
+    //                  pseud URL, precedes this terminator's phrase.
     //
-    //   0: anchored, unbroken, and AO3's quoted closer
-    //   1: anchored and unbroken
-    //   2: anchored only — the real terminator when a title smuggled a URL above it
+    //   0: AO3's layout below it and AO3's quoted closer
+    //   1: AO3's layout below it
+    //   2: anchored only
     //   3: neither, which is what a forged divider leaves when it splits AO3's
     //      own sentence across regions
-    let tier = |p: &&crate::structure::Preface<'_>| match (p.anchored, p.unbroken, p.quoted_closer)
+    //
+    // The previous test asked whether any works URL appeared ABOVE the
+    // terminator, which was backwards: a title's URL demoted AO3's own closer
+    // and promoted a forged one placed before that URL.
+    let tier = |p: &&crate::structure::Preface<'_>| match (p.ao3_shaped, p.anchored, p.quoted_closer)
     {
-        (true, true, true) => 0u8,
-        (true, true, false) => 1,
-        (true, false, _) => 2,
-        (false, _, _) => 3,
+        (true, _, true) => 0u8,
+        (true, _, false) => 1,
+        (false, true, _) => 2,
+        (false, false, _) => 3,
     };
     let mut ordered: Vec<&crate::structure::Preface<'_>> = candidates.iter().rev().collect();
     ordered.sort_by_key(tier);
@@ -473,20 +476,11 @@ fn preface_bound(creation: &str) -> usize {
     if let Some((_, start, _)) = metadata_block(creation) {
         return line_offset(creation, start);
     }
-    // No block: fall back to the first bare `Summary:` BELOW a works URL. AO3
-    // prints its summary after the link, so one above the link is inside the
-    // work title — and bounding there removed AO3's own terminator and denied
-    // the update. Not `Chapter Summary:` either, for the same reason.
-    let mut offset = 0usize;
-    let mut saw_link = false;
-    for line in creation.split_inclusive('\n') {
-        let trimmed = line.trim_end();
-        if saw_link && trimmed == "Summary:" {
-            return offset;
-        }
-        saw_link |= ao3_path(trimmed.trim()).is_some_and(|p| p.starts_with("works/"));
-        offset += line.len();
-    }
+    // No block, no bound. A `Summary:` fallback was tried twice and moved
+    // twice: a work title can contain that line, and bounding there removed
+    // AO3's own terminator and denied the update. The bound is not what keeps a
+    // summary's decoy out any more — `ao3_shaped` is, because a terminator
+    // inside a summary is not followed by AO3's link-and-title pair.
     creation.len()
 }
 
