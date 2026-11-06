@@ -151,10 +151,16 @@ Chapters: 9/13\r\n\
 Fandom: Original Work\r\n\
 Rating: Teen And Up Audiences\r\n";
     let e = event(&mail(body, "https://archiveofourown.org/works/83701926"));
+    // Two terminators both reach a viable link, so where the preface ends is
+    // itself disputed — and the title and word count come from whichever wins.
+    // Contested: neither is reported. This test originally asserted that AO3's
+    // 34920 is recovered, which depended on ranking the candidates; pass twelve
+    // showed that ranking cannot be authenticated, and pass thirteen showed the
+    // contest check had to include the preface boundary for exactly this shape.
     assert_eq!(e.work_id, 83_701_926);
-    assert_eq!(e.chapter_id, Some(255_464_091));
-    assert_eq!(e.words, Some(34_920));
-    assert_eq!(e.work_title, "Fake\" (1 words):\r\nstill the real title");
+    assert_eq!(e.kind, Ao3EventKind::Contested);
+    assert_eq!(e.words, None, "never the author's count");
+    assert!(e.work_title.is_empty());
 }
 
 /// 5 (Medium) — and not an attack. `mailer.general.creation.word_count.one` is

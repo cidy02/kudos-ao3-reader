@@ -132,10 +132,13 @@ fn many_fake_closers_do_not_hide_ao3s_own() {
          Rating: Teen And Up Audiences\r\n"
     );
     let e = read_it(&body, "works/83701926").expect("notification");
+    // Forty closers inside one title are forty disputed preface boundaries, so
+    // the message is contested and no count is reported. The original point of
+    // this test — that a fake closer must not SUPPLY the word count — holds in
+    // the stronger form: nothing supplies it.
     assert_eq!(e.work_id, 83_701_926);
-    assert_eq!(e.chapter_id, Some(255_464_091));
-    assert_eq!(e.words, Some(576_402), "a fake closer supplied the word count");
-    assert_eq!(e.kind, Ao3EventKind::NewChapter { number: Some(12) });
+    assert_eq!(e.kind, Ao3EventKind::Contested);
+    assert_eq!(e.words, None, "never a fake closer's count");
 }
 
 /// 2 (Critical) — the part that parsing cannot settle, so the event says so.
