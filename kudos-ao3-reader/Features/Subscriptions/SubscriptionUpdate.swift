@@ -110,24 +110,14 @@ struct SubscriptionUpdate: Equatable, Identifiable, Sendable {
         workTitle: String,
         author: String,
         at: Date,
-        source: Source,
-        isAttested: Bool
+        source: Source
     ) {
         self.uid = uid
         self.workID = workID
         self.at = at
         self.source = source
 
-        // Attestation is the fourth condition, not a reason to discard. The crate
-        // returns Verdict.senderOnly for mail whose DKIM nobody vouched for — a
-        // file in a watched folder, or a provider header whose clause could not be
-        // read — and says it is usable but must not be shown as verified. Dropping
-        // those made a watched-folder import look like an empty mailbox.
-        //
-        // shortcut: unattested mail lands in `.workOnly` alongside a contested
-        // preface and an unpinned work, so the row's copy cannot say which doubt
-        // it is; give Certainty a third case if that distinction starts to matter.
-        let trustworthy = !isContested && isAnchoredToWork && source == .work && isAttested
+        let trustworthy = !isContested && isAnchoredToWork && source == .work
         certainty = trustworthy ? .confirmed : .workOnly
 
         if trustworthy {
@@ -237,8 +227,7 @@ extension SubscriptionUpdate {
             workTitle: event.workTitle,
             author: event.author,
             at: Date(timeIntervalSince1970: TimeInterval(event.at)),
-            source: source,
-            isAttested: true
+            source: source
         )
     }
 }

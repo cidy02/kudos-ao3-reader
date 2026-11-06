@@ -354,14 +354,13 @@ private extension SubscriptionUpdate.Source {
     func update(
         _ id: UInt64, chapter: Int? = 9, isNew: Bool = false, contested: Bool = false,
         anchored: Bool = true, title: String, author: String, at: Date,
-        source: SubscriptionUpdate.Source = .work, attested: Bool = true
+        source: SubscriptionUpdate.Source = .work
     ) -> SubscriptionUpdate {
         SubscriptionUpdate(
             uid: UInt32(id), workID: id, chapterID: id * 10,
             chapterNumber: chapter, isNewWork: isNew,
             isContested: contested, isAnchoredToWork: anchored,
-            workTitle: title, author: author, at: at, source: source,
-            isAttested: attested
+            workTitle: title, author: author, at: at, source: source
         )
     }
 
@@ -373,8 +372,6 @@ private extension SubscriptionUpdate.Source {
             update(3, chapter: 3, title: "A Quiet Harbour", author: "marrowlight", at: now - 7_200,
                    source: .author("marrowlight")),
             update(4, contested: true, title: "", author: "", at: yesterday),
-            update(6, title: "Tideglass", author: "ashenquill", at: yesterday - 1_800,
-                   attested: false),
             update(5, chapter: nil, anchored: false, title: "Paper Boats", author: "wrenfield",
                    at: yesterday - 3_600, source: .author("wrenfield"))
         ])

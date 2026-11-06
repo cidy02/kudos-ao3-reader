@@ -69,8 +69,7 @@ struct SubscriptionUpdateTests {
         chapterID: UInt64? = 255_464_091,
         chapterNumber: Int? = 9,
         isNewWork: Bool = false,
-        source: SubscriptionUpdate.Source = .work,
-        attested: Bool = true
+        source: SubscriptionUpdate.Source = .work
     ) -> SubscriptionUpdate {
         SubscriptionUpdate(
             uid: uid,
@@ -83,8 +82,7 @@ struct SubscriptionUpdateTests {
             workTitle: "Honest Work",
             author: "skydarius11",
             at: when,
-            source: source,
-            isAttested: attested
+            source: source
         )
     }
 
@@ -182,16 +180,6 @@ struct SubscriptionUpdateTests {
         #expect(update.change == .unknown)
     }
 
-    /// Attestation is a separate axis from the preface and the anchor: a fully
-    /// readable, work-pinned notification is still not confirmed if nobody
-    /// vouched for its DKIM.
-    @Test("Attestation alone can hold a row back")
-    func unattestedIsNeverConfirmed() {
-        #expect(make().certainty == .confirmed)
-        #expect(make(attested: false).certainty == .workOnly)
-        #expect(make(attested: false).chapterID == nil)
-    }
-
     #if os(iOS)
     @Test("A trusted UniFFI reading maps its UID and chapter")
     func mapsTrustedReading() throws {
@@ -215,7 +203,6 @@ struct SubscriptionUpdateTests {
         #expect(SubscriptionUpdate(reading: reading(verdict: .senderOnly)) == nil)
         #expect(SubscriptionUpdate(reading: reading(verdict: .rejected)) == nil)
     }
-
 
     @Test("Contested and body identities both drop the chapter")
     func ffiDoubtFailsClosed() throws {
