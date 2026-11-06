@@ -426,6 +426,15 @@ fn words_in_parens(tail: &str) -> Option<u64> {
 /// so the real `_work_info` run always carries a `Fandom:` line, and all six
 /// real messages do. Exactly one run with a fandom is AO3's; zero or several is
 /// ambiguous, and a wrong rating is worse than none.
+///
+/// Read from otwarchive master (2026-11-05) rather than assumed, because the
+/// whole metadata path now rests on it. `_work_info.text.erb:3` prints the
+/// fandom with **no** `unless` guard, unlike Relationship, Character, Freeform
+/// and Series on lines 6–18. The guard is one level down: `work_tag_metadata`
+/// is `return if tags.empty?` (`mailer_helper.rb:179`). So the line is
+/// unconditional only because a work cannot have zero fandom tags — "No Fandom"
+/// is itself a tag. If that ever changes, metadata goes blank rather than
+/// wrong, which is the direction this is built to fail in.
 fn metadata_block(creation: &str) -> Option<(String, usize)> {
     let lines: Vec<&str> = creation.lines().collect();
     let mut runs: Vec<(String, usize)> = Vec::new();
