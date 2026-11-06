@@ -173,10 +173,17 @@ extension SubscriptionUpdate {
         }
 
         // shortcut: refusing returns nil and nothing counts it, so a mailbox of
-        // unattested mail still looks empty rather than withheld. The driver
-        // must report the refusals — Harvest already carries `refused` and
-        // `otherAo3Mail` counts for its own rejects — and until it does, that
-        // gap is this initializer's only remaining dishonesty.
+        // unattested mail still looks empty rather than withheld, which is this
+        // initializer's one remaining dishonesty.
+        //
+        // The driver has to count that itself. Do NOT look for it in `Harvest`:
+        // its `refused` and `otherAo3Mail` tally what the CRATE rejected, and a
+        // sender-only message is not rejected — it parses fine and arrives in
+        // `harvest.readings` with its verdict attached. So the count comes from
+        // the readings in hand (`verdict != .trusted`, or the nils this returns),
+        // and needs no crate change. An earlier version of this comment pointed
+        // at those two fields, which would have sent the next reader looking for
+        // a counter that does not exist, or adding one that is not needed.
 
         let event = reading.event
         // Only the values AO3's unsubscribe URL supplies. `name` is the footer
