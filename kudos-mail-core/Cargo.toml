@@ -11,11 +11,17 @@ crate-type = ["lib", "staticlib", "cdylib"]
 name = "kudos_mail_core"
 
 [dependencies]
+async-imap = { version = "0.11.3", default-features = false, features = ["runtime-tokio"] }
+futures = { version = "0.3.34", default-features = false, features = ["std", "async-await"] }
 # RFC 5322 / MIME parsing. Hand-rolling header folding, encoded-words, charsets
 # and multipart boundaries is a well-known source of parser bugs, and this is the
 # component that meets hostile input first — so it is not ours to write.
 mail-parser = { version = "0.11", default-features = false }
 thiserror = "2"
+tokio = { version = "1.53.3", default-features = false, features = ["rt", "net", "io-util", "time", "macros"] }
+tokio-rustls = { version = "0.26.6", default-features = false, features = ["ring", "logging", "tls12"] }
+webpki-roots = "1.0.11"
+zeroize = "1.8.2"
 
 # IMAP transport arrives with the session module. Pinned here so the dependency
 # surface is reviewable before any network code exists:

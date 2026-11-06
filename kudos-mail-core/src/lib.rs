@@ -36,10 +36,12 @@
 
 pub mod gate;
 pub mod parser;
+pub mod session;
 mod structure;
 
 pub use gate::{Attestor, Verdict};
 pub use parser::{Ao3Event, Ao3EventKind, ParseError, Subscription};
+pub use session::{Credentials, Cursor, Harvest, MailError, Mailbox};
 
 use mail_parser::MessageParser;
 
