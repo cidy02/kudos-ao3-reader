@@ -97,24 +97,46 @@ impl<'a> Layout<'a> {
             None => (body, ""),
         };
 
-        // Creations are separated by a line of exactly 20 hyphens.
+        // Creations are separated by a line of exactly 20 hyphens — but a work
+        // title may contain such a line, and splitting on every one of them let
+        // an author cut their own notification in half, so its preface lost the
+        // colon that ends it, or invent extra creations. It also dropped the
+        // notification of any work whose title or summary legitimately rules off
+        // with twenty hyphens. AO3 prints the divider only BETWEEN creations, so
+        // a divider is only a divider when a preface follows it.
         let mut creations = Vec::new();
         let mut current_start = 0usize;
         let mut offset = 0usize;
         for line in message.split_inclusive('\n') {
-            if hyphen_run(line) == Some(DIVIDER) {
+            let next = offset + line.len();
+            let divides = hyphen_run(line) == Some(DIVIDER)
+                && opens_with_preface(message.get(next..).unwrap_or(""));
+            if divides {
                 if let Some(piece) = message.get(current_start..offset) {
                     creations.push(piece);
                 }
-                current_start = offset + line.len();
+                current_start = next;
             }
-            offset += line.len();
+            offset = next;
         }
         if let Some(piece) = message.get(current_start..) {
             creations.push(piece);
         }
         Self { creations, footer }
     }
+}
+
+/// Does this region open with one of AO3's preface phrases?
+///
+/// Every genuine creation does; a fragment cut out of a work title by a forged
+/// divider does not. An author who prints both a divider and a preface phrase
+/// can still split their own notification, but only their own: the result is a
+/// refusal, never another work's identity.
+fn opens_with_preface(region: &str) -> bool {
+    region
+        .lines()
+        .find(|l| !l.trim().is_empty())
+        .is_some_and(|l| PHRASES.iter().any(|(phrase, _)| l.contains(phrase)))
 }
 
 /// What AO3's preface says happened. These are the only six, from
