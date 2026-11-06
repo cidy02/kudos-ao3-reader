@@ -28,6 +28,8 @@ struct SubscriptionsView: View {
 
     @State private var selectedTab = Tab.waiting
     @State private var works: [AO3WorkSummary] = []
+    /// Session-only. Not stored: a new visit loads the AO3 page again.
+    @State private var unfollowed = Set<Int>()
     @State private var phase = Phase.idle
     @State private var reloadToken = 0
     @State private var showingLogin = false
@@ -71,7 +73,21 @@ struct SubscriptionsView: View {
                             Label("Update sources", systemImage: "antenna.radiowaves.left.and.right")
                         }
                         NavigationLink {
-                            NewToYouCardsView(works: [])
+                            // An empty deck would read as "Nothing new to you", which is a loaded result.
+                            NewToYouCardsView(works: [], showsEmptyState: false)
+                                .overlay {
+                                    ContentUnavailableView {
+                                        Label("Source not connected", systemImage: "sparkles")
+                                    } description: {
+                                        Text(
+                                            "Kudos has no new works to show until a source is connected."
+                                        )
+                                    } actions: {
+                                        NavigationLink("Update sources") {
+                                            SubscriptionsSourcesView()
+                                        }
+                                    }
+                                }
                         } label: {
                             Label("New to you", systemImage: "sparkles")
                         }
@@ -147,7 +163,8 @@ struct SubscriptionsView: View {
                     works: works,
                     scope: scope,
                     sourceNote: "Showing the first AO3 page here. Use More → All AO3 subscriptions "
-                        + "to browse every page."
+                        + "to browse every page.",
+                    unfollowed: $unfollowed
                 )
             }
         }

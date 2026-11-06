@@ -13,10 +13,11 @@ struct FollowingListView: View {
     var deletedIDs: Set<Int> = []
     var scope: Scope = .following
     var sourceNote: String?
+    /// The parent owns this. A tab switch rebuilds this view, and a local set would bring the row back.
+    @Binding var unfollowed: Set<Int>
 
     @Environment(AO3AuthService.self) private var auth
     @State private var sort = Sort.title
-    @State private var unfollowed = Set<Int>()
     @State private var pendingUnfollow: AO3WorkSummary?
     @State private var confirmingUnfollow = false
     @State private var unfollowingID: Int?
@@ -131,8 +132,8 @@ struct FollowingListView: View {
         .overlay {
             if scope == .tidyUp, cannotNotify.isEmpty {
                 ContentUnavailableView(
-                    "Nothing to tidy up",
-                    systemImage: "checkmark.circle",
+                    visible.isEmpty ? "Nothing to tidy up" : "Status unavailable",
+                    systemImage: visible.isEmpty ? "checkmark.circle" : "questionmark.circle",
                     description: Text(
                         visible.isEmpty
                             ? "There are no followed works on this AO3 page."
@@ -326,11 +327,15 @@ private struct FollowingRow: View {
     let deleted = work(7, "Gone Dark", "someone")
 
     return TabView {
-        NavigationStack { FollowingListView(works: going + finished + [deleted], deletedIDs: [7]) }
-            .tabItem { Text("Both groups") }
-        NavigationStack { FollowingListView(works: going) }
+        NavigationStack {
+            FollowingListView(
+                works: going + finished + [deleted], deletedIDs: [7], unfollowed: .constant([])
+            )
+        }
+        .tabItem { Text("Both groups") }
+        NavigationStack { FollowingListView(works: going, unfollowed: .constant([])) }
             .tabItem { Text("Still going") }
-        NavigationStack { FollowingListView(works: []) }
+        NavigationStack { FollowingListView(works: [], unfollowed: .constant([])) }
             .tabItem { Text("Empty") }
     }
     .environment(ThemeManager())

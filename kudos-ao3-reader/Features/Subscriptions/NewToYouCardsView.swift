@@ -9,6 +9,8 @@ struct NewToYouCardsView: View {
     let works: [AO3WorkSummary]
     var onDecide: (AO3WorkSummary, Decision) -> Void = { _, _ in }
     var onFinished: () -> Void = {}
+    /// A parent with more specific source state can supply its own honest empty view.
+    var showsEmptyState = true
 
     @Environment(ThemeManager.self) private var theme
     @Environment(\.dynamicTypeSize) private var typeSize
@@ -53,12 +55,14 @@ struct NewToYouCardsView: View {
         Group {
             if let work = current {
                 deck(work)
-            } else if handled.isEmpty {
+            } else if showsEmptyState, handled.isEmpty {
                 ContentUnavailableView(
                     "Nothing new to you",
                     systemImage: "sparkles",
                     description: Text("Works you haven't seen before will show up here.")
                 )
+            } else if handled.isEmpty {
+                EmptyView()
             } else {
                 ContentUnavailableView(
                     "All caught up",
