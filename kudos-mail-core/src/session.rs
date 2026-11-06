@@ -206,11 +206,20 @@ impl<T: Read + Write + Unpin + Debug + Send> Mailbox<T> {
     /// sign-in rather than as an unreachable server.
     pub(crate) async fn sign_in(stream: T, user: &str, password: &str) -> Result<Self, MailError> {
         let mut client = async_imap::Client::new(stream);
-        timeout(Duration::from_secs(GREETING_SECS), client.read_response())
+        let greeting = timeout(Duration::from_secs(GREETING_SECS), client.read_response())
             .await
             .map_err(|_| MailError::TimedOut("greeting"))?
             .map_err(|_| MailError::Connect)?
             .ok_or(MailError::Connect)?;
+        // `* BYE` is the server refusing the connection outright — too many
+        // connections, a blocked address, maintenance. Reporting that as a
+        // rejected sign-in sent the user to check a password that is fine.
+        if matches!(
+            greeting.parsed(),
+            async_imap::imap_proto::Response::Data { status: async_imap::imap_proto::Status::Bye, .. }
+        ) {
+            return Err(MailError::Connect);
+        }
 
         // The error half carries the server's text, which can quote the command
         // it rejected — and that command is `LOGIN`. Dropped rather than
@@ -304,9 +313,13 @@ impl<T: Read + Write + Unpin + Debug + Send> Mailbox<T> {
                 continue;
             }
 
-            // PEEK, so the reader's unread state is not touched.
+            // PEEK, so the reader's unread state is not touched. The allow-list
+            // is what passed the size check, not the whole chunk: otherwise a
+            // server could volunteer a body for a UID already counted
+            // `too_large` and have it parsed anyway.
+            let allowed: HashSet<u32> = acceptable.iter().copied().collect();
             let bodies = self
-                .fetch(&acceptable, "(UID BODY.PEEK[])", &wanted)
+                .fetch(&acceptable, "(UID BODY.PEEK[])", &allowed)
                 .await?;
             for (uid, _, body) in bodies {
                 let Some(raw) = body else { continue };

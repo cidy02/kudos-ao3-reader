@@ -11,8 +11,11 @@
 //!
 //! Three defences, in order:
 //!
-//! 1. the IMAP `SEARCH` is scoped to AO3's sender, so the server never returns
-//!    anything else and nothing else is ever downloaded;
+//! 1. the IMAP `SEARCH` is scoped to AO3's sender, so only messages whose From
+//!    field contains that address are ever requested. Note the limit, which
+//!    [`session`] sets out in full: IMAP's `FROM` is a substring match, not an
+//!    address comparison, so a forged display name does get as far as being
+//!    fetched — it is the next step that rejects it;
 //! 2. [`gate`] re-checks the sender and, where a provider attested the message,
 //!    that DKIM passed for AO3's domain;
 //! 3. [`parser`] treats every field as hostile — including fields a legitimate

@@ -133,33 +133,33 @@ pub(crate) fn parse_message(message: &Message<'_>) -> Result<Ao3Event, ParseErro
     let body = body.as_ref();
 
     let layout = crate::structure::Layout::of(body);
-    // One event per message, from the first creation. A batch carries several;
-    // the rest are counted in `extra_creations` rather than silently dropped.
-    let creation = layout.creations.first().copied().unwrap_or("");
+    let name = subscription_name(layout.footer);
+    let via = subscription_from(body, name.as_deref());
+
+    // Is this a subscription notification at all? AO3's kudos, comment replies
+    // and abuse reports share the sender and reach here, and they have no
+    // preface. Asked before the link, so they are reported as what they are
+    // rather than as a notification with a missing link.
+    let first = layout.creations.first().copied().unwrap_or("");
+    crate::structure::Preface::of(first).ok_or(ParseError::NotASubscriptionEvent)?;
+
+    // Which creation this message is about, and where its link is.
+    //
+    // When the footer says the subscription is to a WORK, that work's id came
+    // from AO3's own unsubscribe URL and the notification is necessarily about
+    // it — so it names the right link line directly, wherever a title put other
+    // URLs. That anchor does not exist for an author or series subscription,
+    // which falls back to reading the line after the preface.
+    let subject = match via {
+        Subscription::Work { id, .. } => {
+            subject_by_work_id(&layout.creations, id).or_else(|| subject_by_position(&layout))
+        }
+        _ => subject_by_position(&layout),
+    }
+    .ok_or(ParseError::NoWorkLink)?;
+    let Subject { creation, work_id, chapter_id, link_end } = subject;
     let preface =
         crate::structure::Preface::of(creation).ok_or(ParseError::NotASubscriptionEvent)?;
-    // Identity by ambiguity, not by position. "The line after the preface" is
-    // not a safe anchor: the preface ends at a line ending in a colon, and the
-    // work title is both author-controlled and interpolated into the preface, so
-    // a title of `Decoy:\n<url>` ended the preface early and made the author's
-    // URL the link line. A genuine creation region holds exactly one line that
-    // is entirely an AO3 works URL; a second one was typed by an author, and
-    // which is which cannot be told from the text — so the message is refused
-    // rather than guessed at, the rule `metadata_block` already follows.
-    let mut link = None;
-    let mut link_end = 0usize;
-    let mut offset = 0usize;
-    for line in link_region(creation).split_inclusive('\n') {
-        if let Some(ids) = ids_from_link(line.trim()) {
-            if link.is_some() {
-                return Err(ParseError::NoWorkLink);
-            }
-            link = Some(ids);
-            link_end = offset + line.len();
-        }
-        offset += line.len();
-    }
-    let (work_id, chapter_id) = link.ok_or(ParseError::NoWorkLink)?;
 
     // After the link: a blank line, then `"<title>" (N words)` — the chapter's
     // for a chapter notification, the work's for a new work.
@@ -181,10 +181,12 @@ pub(crate) fn parse_message(message: &Message<'_>) -> Result<Ao3Event, ParseErro
         (None, None)
     };
 
-    let meta = metadata_block(trusted_region(creation));
+    // Read from the whole creation: the block is identified by carrying a
+    // fandom, not by sitting above a cut an author can move.
+    let found = metadata_block(creation);
+    let meta = found.as_ref().map(|(m, _)| m.clone());
+    let meta_end = found.as_ref().map_or(0, |(_, end)| *end);
     let (posted, total) = meta.as_deref().map_or((None, None), chapters_in);
-    let name = subscription_name(layout.footer);
-    let via = subscription_from(body, name.as_deref());
 
     Ok(Ao3Event {
         kind: if is_chapter {
@@ -213,7 +215,7 @@ pub(crate) fn parse_message(message: &Message<'_>) -> Result<Ao3Event, ParseErro
         characters: meta.as_deref().map(|m| list(m, "Character")).unwrap_or_default(),
         additional_tags: meta.as_deref().map(|m| list(m, "Additional Tag")).unwrap_or_default(),
         series: meta.as_deref().and_then(|m| field(m, "Series")).map(|v| capped(&v, MAX_TITLE)),
-        summary: work_summary(creation),
+        summary: work_summary(creation, meta_end),
         work_title,
         extra_creations: layout.creations.len().saturating_sub(1),
     })
@@ -244,6 +246,76 @@ fn leading_u64(s: &str) -> Option<u64> {
 /// Ids from a line that is *nothing but* an AO3 work link.
 ///
 /// A line that merely contains one is a line somebody wrote.
+/// Which creation a message is about, and where AO3 printed its link.
+struct Subject<'a> {
+    creation: &'a str,
+    work_id: u64,
+    chapter_id: Option<u64>,
+    /// Byte offset just past the link line, where the title follows.
+    link_end: usize,
+}
+
+/// The creation whose own link line names `work_id`, taken from AO3's footer.
+///
+/// Returns `None` unless exactly one line across every creation is entirely an
+/// AO3 works URL for that work: more than one and the author has supplied a
+/// copy, so the anchor no longer distinguishes anything.
+fn subject_by_work_id<'a>(creations: &[&'a str], work_id: u64) -> Option<Subject<'a>> {
+    let mut found = None;
+    for creation in creations {
+        let mut offset = 0usize;
+        for line in creation.split_inclusive('\n') {
+            if let Some((w, chapter_id)) =
+                ids_from_link(line.trim()).filter(|(w, _)| *w == work_id)
+            {
+                if found.is_some() {
+                    return None;
+                }
+                found = Some(Subject {
+                    creation,
+                    work_id: w,
+                    chapter_id,
+                    link_end: offset + line.len(),
+                });
+            }
+            offset += line.len();
+        }
+    }
+    found
+}
+
+/// The first creation's link, read positionally: the one line below the preface
+/// and above any author-text block that is entirely an AO3 works URL.
+///
+/// Starting below the preface is what keeps a URL smuggled into a work title
+/// out of reach, because AO3 prints the title — and so the author's newlines —
+/// ABOVE the link for a chapter notification. Requiring exactly one line
+/// handles the rest: a second was typed by an author and the text cannot say
+/// which is AO3's, so the message is refused rather than guessed at.
+fn subject_by_position<'a>(layout: &crate::structure::Layout<'a>) -> Option<Subject<'a>> {
+    let creation = layout.creations.first().copied().unwrap_or("");
+    let preface = crate::structure::Preface::of(creation)?;
+    let below = creation.get(preface.ends_at..).unwrap_or("");
+
+    let mut found: Option<Subject<'a>> = None;
+    let mut offset = 0usize;
+    for line in link_region(below).split_inclusive('\n') {
+        if let Some((work_id, chapter_id)) = ids_from_link(line.trim()) {
+            if found.is_some() {
+                return None;
+            }
+            found = Some(Subject {
+                creation,
+                work_id,
+                chapter_id,
+                link_end: preface.ends_at + offset + line.len(),
+            });
+        }
+        offset += line.len();
+    }
+    found
+}
+
 fn ids_from_link(line: &str) -> Option<(u64, Option<u64>)> {
     let rest = line.strip_prefix(WORKS_PREFIX)?;
     let work_id = leading_u64(rest)?;
@@ -265,22 +337,37 @@ fn ids_from_link(line: &str) -> Option<(u64, Option<u64>)> {
 /// after the link lost every multiline title. Bounding the region here stops a
 /// quoted summary further down from being read as the title instead.
 fn title_region(after_link: &str) -> &str {
-    let mut start = None;
+    let (mut start, mut end) = (None, None);
     let mut offset = 0usize;
     for line in after_link.split_inclusive('\n') {
+        let trimmed = line.trim_end();
         if start.is_none() {
-            if line.trim().is_empty() {
+            if trimmed.trim().is_empty() {
                 offset += line.len();
                 continue;
             }
             start = Some(offset);
         }
+        // AO3 prints the metadata block and both summaries after the title, so
+        // the title cannot reach past them.
+        if is_metadata_line(trimmed)
+            || trimmed == "Summary:"
+            || trimmed.starts_with("Chapter Summary:")
+        {
+            break;
+        }
         offset += line.len();
-        if line.trim_end().ends_with("words)") {
-            return after_link.get(start.unwrap_or(0)..offset).unwrap_or("");
+        // The LAST closer, not the first: AO3 appends the word count itself, so
+        // a title containing `" (1 words)` was otherwise able to end the region
+        // early and choose the count reported for the chapter.
+        if trimmed.ends_with("words)") {
+            end = Some(offset);
         }
     }
-    ""
+    match (start, end) {
+        (Some(s), Some(e)) if e > s => after_link.get(s..e).unwrap_or(""),
+        _ => "",
+    }
 }
 
 /// `"Title" (N words)` within a region, across line breaks.
@@ -330,18 +417,18 @@ fn words_in_parens(tail: &str) -> Option<u64> {
 /// Author text is rendered both above this block (the chapter summary) and below
 /// it (the work summary), and `to_plain_text` can put any line at column zero —
 /// so a summary can forge a block. When two candidates exist we cannot tell which
-/// is AO3's. Refusing on two was the first answer, but it turned an attack into
-/// a denial: a work with no summary has no `Summary:` line, so
-/// [`trusted_region`] does not narrow, and a `Chapters:` run forged in the
-/// chapter summary suppressed the real metadata entirely.
+/// is AO3's, and position cannot settle it: a run forged in a chapter summary
+/// sits ABOVE the real one, while a blank line in the series value — which is
+/// what `</p>` becomes — lets a forged run sit BELOW it. Neither "first" nor
+/// "last" is right.
 ///
-/// Position settles it instead. AO3 renders `_work_info` AFTER the chapter
-/// summary, and [`trusted_region`] has already removed the work summary below
-/// it, so within that region the real block is the LAST run. Author text can
-/// only ever appear above it.
-fn metadata_block(creation: &str) -> Option<String> {
+/// AO3's data model settles it. **Every work must have at least one fandom**,
+/// so the real `_work_info` run always carries a `Fandom:` line, and all six
+/// real messages do. Exactly one run with a fandom is AO3's; zero or several is
+/// ambiguous, and a wrong rating is worse than none.
+fn metadata_block(creation: &str) -> Option<(String, usize)> {
     let lines: Vec<&str> = creation.lines().collect();
-    let mut runs: Vec<String> = Vec::new();
+    let mut runs: Vec<(String, usize)> = Vec::new();
     let mut i = 0usize;
     while i < lines.len() {
         if lines.get(i).is_some_and(|l| l.starts_with("Chapters:")) {
@@ -355,13 +442,16 @@ fn metadata_block(creation: &str) -> Option<String> {
                     break;
                 }
             }
-            runs.push(run.join("\n"));
+            // Where this run ends, as a line index, so the summary below it can
+            // be found without trusting the first `Summary:` in the region.
+            runs.push((run.join("\n"), j));
             i = j;
         } else {
             i += 1;
         }
     }
-    runs.pop()
+    runs.retain(|(run, _)| run.lines().any(|l| field(l, "Fandom").is_some()));
+    (runs.len() == 1).then(|| runs.pop()).flatten()
 }
 
 /// `Label: value` at column zero, where the label looks like AO3's.
@@ -395,27 +485,26 @@ fn chapters_in(meta: &str) -> (Option<u32>, Option<u32>) {
 /// Running to the end of the region is also what makes the rest of this parser
 /// safe. The summary is the last thing AO3 prints for a creation, so the
 /// author's free text is terminal: nothing after it needs to be read as
-/// structure, and [`trusted_region`] stops there.
-fn work_summary(creation: &str) -> Option<String> {
-    let (_, after) = split_at_summary(creation)?;
+/// structure, and the metadata block and link scan stop short of it.
+fn work_summary(creation: &str, after_line: usize) -> Option<String> {
+    let after = summary_after(creation, after_line)?;
     let text: Vec<&str> = after.lines().map(str::trim).filter(|l| !l.is_empty()).collect();
     (!text.is_empty()).then(|| capped(&text.join("\n"), MAX_SUMMARY))
 }
 
-/// Split a creation at its `Summary:` line into (before, after).
+/// Everything below the first bare `Summary:` line at or after `after_line`.
 ///
-/// The chapter summary is labelled `Chapter Summary: ` with its value on the
-/// same line, so it is not this one. An author who writes a bare `Summary:`
-/// line of their own can only do so inside text that already follows AO3's, so
-/// the FIRST such line is AO3's.
-fn split_at_summary(creation: &str) -> Option<(&str, &str)> {
+/// The offset is not decoration. AO3 prints the chapter summary — author text,
+/// with `</p>` rendered as a blank line — ABOVE the metadata block, so an
+/// author can put a bare `Summary:` line of their own there and the first one
+/// in the region is not AO3's. Taking the first cut the region above AO3's real
+/// metadata, leaving only the author's forged copy of it to be read. Anchoring
+/// below the identified block removes the choice.
+fn summary_after(creation: &str, after_line: usize) -> Option<&str> {
     let mut offset = 0usize;
-    for line in creation.split_inclusive('\n') {
-        if line.trim_end() == "Summary:" {
-            return Some((
-                creation.get(..offset).unwrap_or(""),
-                creation.get(offset + line.len()..).unwrap_or(""),
-            ));
+    for (n, line) in creation.split_inclusive('\n').enumerate() {
+        if n >= after_line && line.trim_end() == "Summary:" {
+            return creation.get(offset + line.len()..);
         }
         offset += line.len();
     }
@@ -444,19 +533,6 @@ fn link_region(creation: &str) -> &str {
         offset += line.len();
     }
     creation
-}
-
-/// The part of a creation that AO3 laid out, ending where the author's summary
-/// begins.
-///
-/// Everything read as structure — the metadata block, the work link — is read
-/// from here. A summary's later paragraphs are flush-left author text that
-/// `to_plain_text` puts at column zero, so without this bound they could
-/// present a second `Chapters:` block, a bare AO3 work URL, or a hyphen rule,
-/// and each of those either moves a boundary or trips an ambiguity refusal and
-/// suppresses a genuine notification.
-fn trusted_region(creation: &str) -> &str {
-    split_at_summary(creation).map_or(creation, |(before, _)| before)
 }
 
 /// A single `Stem: value` or `Stems: value` line inside an already-bounded

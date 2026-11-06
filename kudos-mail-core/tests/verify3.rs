@@ -3,7 +3,7 @@
 //! and quotes — into both the preface and the footer. Each test below is the
 //! attack that was reproduced, asserting the behaviour after the fix.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-use kudos_mail_core::{read, Attestor, ParseError, ReadError, Subscription};
+use kudos_mail_core::{read, Attestor, Subscription};
 
 fn mail(title: &str, footer_name: &str) -> String {
     format!("From: Archive of Our Own <do-not-reply@archiveofourown.org>\r\n\
@@ -21,9 +21,15 @@ You're receiving this email because you've subscribed to {footer_name}. Follow t
     let t = "Decoy:\r\nhttps://archiveofourown.org/works/111/chapters/222\r\nrest";
     let r = read(mail(t, "lamplighter").as_bytes(), &Attestor::none());
     println!("F1 work_id -> {:?}", r.as_ref().map(|r| (r.event.work_id, r.event.chapter_id)));
-    // Two works URLs in one creation region: the second was typed by an author,
-    // and the text cannot say which is AO3's. Refused rather than guessed at.
-    assert!(matches!(r, Err(ReadError::Parse(ParseError::NoWorkLink))));
+    // Once the preface ends at AO3's own `words):` terminator rather than at any
+    // line ending in a colon, the decoy no longer ends it early — so the link
+    // scan starts below the whole title and finds AO3's own line. This used to
+    // report work 111; it then became a refusal; it is now simply correct, which
+    // is what the subscriber needs, since a refusal loses the real update.
+    assert_eq!(
+        r.map(|r| (r.event.work_id, r.event.chapter_id)),
+        Ok((83_701_926, Some(255_464_091)))
+    );
 }
 
 #[test] fn f4_title_in_footer_moves_the_rule() {
