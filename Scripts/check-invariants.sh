@@ -62,8 +62,8 @@ if grep -q "\.markModified(" "$APP/Services/WorkSearchIndex.swift"; then
     "Reindexing must not win sync merges. docs/DATA_AND_PERSISTENCE_INVARIANTS.md."
 fi
 
-# 6. No force-try / force-cast in app code (test code may use them).
-HITS=$(grep -rn "try! \|as! " --include="*.swift" "$APP" || true)
+# 6. No force-try / force-cast in app code (test and generated UniFFI code may use them).
+HITS=$(grep -rn "try! \|as! " --include="*.swift" --exclude="kudos_mail_core.swift" "$APP" || true)
 if [ -n "$HITS" ]; then
   fail "try!/as! in app code" "$HITS"
 fi

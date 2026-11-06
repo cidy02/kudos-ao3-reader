@@ -11,6 +11,7 @@
 		000000000000000311000000 /* ReadiumShared in Frameworks */ = {isa = PBXBuildFile; platformFilter = ios; productRef = 000000000000000310000000 /* ReadiumShared */; };
 		000000000000000321000000 /* ReadiumStreamer in Frameworks */ = {isa = PBXBuildFile; platformFilter = ios; productRef = 000000000000000320000000 /* ReadiumStreamer */; };
 		000000000000000331000000 /* ReadiumNavigator in Frameworks */ = {isa = PBXBuildFile; platformFilter = ios; productRef = 000000000000000330000000 /* ReadiumNavigator */; };
+		000000000000000591000000 /* KudosMail.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 000000000000000590000000 /* KudosMail.xcframework */; platformFilter = ios; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -26,6 +27,7 @@
 /* Begin PBXFileReference section */
 		000000000000000000000120 /* Kudos.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Kudos.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		000000000000000000000520 /* KudosTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = KudosTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		000000000000000590000000 /* KudosMail.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = KudosMail.xcframework; path = build/KudosMail.xcframework; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -46,6 +48,7 @@
 			isa = PBXFrameworksBuildPhase;
 			files = (
 				000000000000000220000000 /* SwiftSoup in Frameworks */,
+				000000000000000591000000 /* KudosMail.xcframework in Frameworks */,
 				000000000000000311000000 /* ReadiumShared in Frameworks */,
 				000000000000000321000000 /* ReadiumStreamer in Frameworks */,
 				000000000000000331000000 /* ReadiumNavigator in Frameworks */,
@@ -64,6 +67,7 @@
 			children = (
 				000000000000000000000010 /* kudos-ao3-reader */,
 				000000000000000000000510 /* KudosTests */,
+				000000000000000592000000 /* Frameworks */,
 				000000000000000000000020 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -75,6 +79,14 @@
 				000000000000000000000520 /* KudosTests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		000000000000000592000000 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				000000000000000590000000 /* KudosMail.xcframework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
