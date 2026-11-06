@@ -229,9 +229,11 @@ fn creators_before<'a>(line: &'a str, phrase: &str) -> Option<&'a str> {
     line.find(phrase).and_then(|at| line.get(..at))
 }
 
-/// At most this many candidate prefaces. A title can print any number of
-/// terminator-shaped lines; the real one is near the top.
-const MAX_CANDIDATES: usize = 16;
+/// At most this many candidate prefaces. AO3 caps a work title at 255
+/// characters, so a title can hold roughly twenty terminator-shaped lines; at
+/// sixteen the cap returned before AO3's own terminator — the last one — was
+/// ever recorded, and a fake closer then supplied the title and word count.
+const MAX_CANDIDATES: usize = 256;
 
 impl<'a> Preface<'a> {
     /// Every line that could close this region's preface, outermost first.
@@ -243,7 +245,13 @@ impl<'a> Preface<'a> {
     /// middle of AO3's sentence. The caller picks the candidate whose kind
     /// agrees with the link line AO3 printed, which an author cannot reshape:
     /// a chapter notification links `/works/N/chapters/M`, a work one `/works/N`.
-    pub(crate) fn candidates(creation: &'a str) -> Vec<Self> {
+    /// `bound` is the byte offset where AO3's own layout resumes — its metadata
+    /// block, or the first author-text label. Nothing below that is part of a
+    /// preface, and this is load-bearing rather than tidy: the work summary is
+    /// printed LAST and is author text, so a terminator-shaped line and a URL
+    /// inside it became the bottom-most candidate and, being tried first, were
+    /// read as AO3's own.
+    pub(crate) fn candidates(creation: &'a str, bound: usize) -> Vec<Self> {
         let mut out = Vec::new();
         let mut offset = 0usize;
         let mut first_line: Option<&str> = None;
@@ -262,6 +270,9 @@ impl<'a> Preface<'a> {
                 first_line = Some(trimmed);
             }
             offset += line.len();
+            if offset > bound {
+                return out;
+            }
 
             let Some((_, kind)) = TERMINATORS.iter().find(|(t, _)| trimmed.ends_with(t)) else {
                 continue;
@@ -288,6 +299,6 @@ impl<'a> Preface<'a> {
     /// The outermost candidate. Enough to answer "is this a subscription
     /// notification at all"; identity needs [`Self::candidates`].
     pub(crate) fn of(creation: &'a str) -> Option<Self> {
-        Self::candidates(creation).into_iter().next()
+        Self::candidates(creation, creation.len()).into_iter().next()
     }
 }
