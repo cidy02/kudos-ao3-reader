@@ -59,13 +59,17 @@ fn a_chapter_summary_cannot_rewrite_the_kind_or_author() {
          \x20   A lighthouse keeper writes letters she never sends."
     );
     let e = ev(&body, "works/83701926").expect("notification");
+    // Pass twelve: AO3's own terminator can fail the shape test, so a forgery
+    // can outrank it and nothing textual says which is which. A disagreement
+    // between candidates is contested and nothing preface-derived is reported.
+    // The work id stands, because AO3's unsubscribe URL fixes it.
     assert_eq!(e.identity, Identity::Work);
     assert_eq!(e.work_id, 83_701_926);
-    assert_eq!(e.kind, Ao3EventKind::NewChapter { number: Some(9) });
-    assert_eq!(e.chapter_id, Some(255_464_091));
-    assert_eq!(e.author, "skydarius11");
-    assert_eq!(e.work_title, "Honest Work");
-    assert_eq!(e.words, Some(576_402));
+    assert_eq!(e.kind, Ao3EventKind::Contested);
+    assert_eq!(e.chapter_id, None);
+    assert!(e.author.is_empty());
+    assert!(e.work_title.is_empty());
+    assert_eq!(e.words, None);
 }
 
 /// 2 (High). Two agreeing links under that same terminator abandoned the whole
@@ -91,10 +95,14 @@ fn two_links_under_a_chapter_summary_do_not_drop_the_update() {
          Summary:\r\n\
          \x20   A lighthouse keeper writes letters she never sends."
     );
-    let e = ev(&body, "works/83701926").expect("the real update must survive");
+    let e = ev(&body, "works/83701926").expect("the subscriber must still learn the work updated");
+    // Pass twelve: AO3's own terminator can fail the shape test, so a forgery
+    // can outrank it and nothing textual says which is which. A disagreement
+    // between candidates is contested and nothing preface-derived is reported.
+    // The work id stands, because AO3's unsubscribe URL fixes it.
     assert_eq!(e.work_id, 83_701_926);
-    assert_eq!(e.chapter_id, Some(255_464_091));
-    assert_eq!(e.kind, Ao3EventKind::NewChapter { number: Some(9) });
+    assert_eq!(e.kind, Ao3EventKind::Contested);
+    assert_eq!(e.chapter_id, None);
 }
 
 /// 3 (Medium). One such link keeps the author but moves the chapter id, and
@@ -118,9 +126,14 @@ fn one_link_under_a_chapter_summary_does_not_move_the_chapter() {
          \x20   A lighthouse keeper writes letters she never sends."
     );
     let e = ev(&body, "works/83701926").expect("notification");
-    assert_eq!(e.chapter_id, Some(255_464_091), "the chapter moved");
-    assert_eq!(e.work_title, "Honest Work");
-    assert_eq!(e.words, Some(576_402));
+    // Pass twelve: AO3's own terminator can fail the shape test, so a forgery
+    // can outrank it and nothing textual says which is which. A disagreement
+    // between candidates is contested and nothing preface-derived is reported.
+    // The work id stands, because AO3's unsubscribe URL fixes it.
+    assert_eq!(e.work_id, 83_701_926);
+    assert_eq!(e.kind, Ao3EventKind::Contested);
+    assert_eq!(e.chapter_id, None, "never the author's chapter");
+    assert!(e.work_title.is_empty());
 }
 
 /// 4 (Medium). Mail through 7 October 2025 does not quote the work title, so a

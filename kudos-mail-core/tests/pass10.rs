@@ -81,11 +81,18 @@ fn ambiguity_cannot_demote_to_a_forged_kind() {
          Rating: Teen And Up Audiences\r\n"
     );
     let e = ev(&body).expect("notification");
+    // Pass twelve retired the tiering this test relied on. AO3's own terminator
+    // can FAIL the shape test — a multiline chapter title does it — so a forged
+    // candidate can outrank the real one, and no textual fact says which is
+    // which. The parser no longer chooses: a disagreement between candidates
+    // makes the preface contested, and nothing read from it is reported. The
+    // work id stands, because AO3's unsubscribe URL fixes it.
     assert_eq!(e.identity, Identity::Work);
-    assert_eq!(e.kind, Ao3EventKind::NewChapter { number: Some(9) });
-    assert_eq!(e.chapter_id, Some(255_464_091));
-    assert_eq!(e.author, "skydarius11");
-    assert_eq!(e.words, Some(576_402));
+    assert_eq!(e.work_id, 83_701_926, "the work is still AO3's");
+    assert_eq!(e.kind, Ao3EventKind::Contested);
+    assert_eq!(e.chapter_id, None, "never the author's chapter");
+    assert!(e.author.is_empty());
+    assert_eq!(e.words, None);
 }
 
 /// 3 (High). `anchored` was inherited from the region's genuine first line, so
@@ -108,10 +115,17 @@ fn a_quoted_chapter_summary_cannot_reach_the_top_tier() {
          Rating: Teen And Up Audiences\r\n"
     );
     let e = ev(&body).expect("notification");
-    assert_eq!(e.chapter_id, Some(255_464_091));
-    assert_eq!(e.work_title, "Honest Work");
-    assert_eq!(e.words, Some(576_402));
-    assert_eq!(e.chapter_title.as_deref(), Some("Chapter 9: The Door"));
+    // Pass twelve retired the tiering this test relied on. AO3's own terminator
+    // can FAIL the shape test — a multiline chapter title does it — so a forged
+    // candidate can outrank the real one, and no textual fact says which is
+    // which. The parser no longer chooses: a disagreement between candidates
+    // makes the preface contested, and nothing read from it is reported. The
+    // work id stands, because AO3's unsubscribe URL fixes it.
+    assert_eq!(e.work_id, 83_701_926, "the work is still AO3's");
+    assert_eq!(e.kind, Ao3EventKind::Contested);
+    assert_eq!(e.chapter_id, None, "never chapter 1");
+    assert!(e.work_title.is_empty());
+    assert_eq!(e.words, None);
 }
 
 /// 4 (Medium). A closing quote alone cannot identify the era: an old unquoted

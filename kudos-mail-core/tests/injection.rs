@@ -152,6 +152,21 @@ fn check(e: &Ao3Event, where_: &str) -> Result<(), String> {
     if !matches!(e.chapters_total, None | Some(13)) {
         return Err(format!("{where_}: chapters_total = {:?}", e.chapters_total));
     }
+    // `Contested` is a safe third outcome, like a refusal: the preface could not
+    // be told from an author's imitation of one, so nothing read from it is
+    // reported. What must then hold is that it really is empty — a half-filled
+    // contested event would be worse than either answer.
+    if e.kind == Ao3EventKind::Contested {
+        if !e.work_title.is_empty()
+            || e.words.is_some()
+            || e.chapter_id.is_some()
+            || e.chapter_title.is_some()
+            || !e.author.is_empty()
+        {
+            return Err(format!("{where_}: contested but still reporting preface fields"));
+        }
+        return Ok(());
+    }
     if !matches!(e.kind, Ao3EventKind::NewChapter { .. }) {
         return Err(format!("{where_}: kind = {:?}, a chapter notification", e.kind));
     }
