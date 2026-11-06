@@ -28,11 +28,12 @@ struct ColdStartScanView: View {
     }
 
     let progress: Progress
+    var unavailableReason: String?
     var onStart: () -> Void = {}
     var onPause: () -> Void = {}
     var onResume: () -> Void = {}
     var onCancel: () -> Void = {}
-    var onChooseBackup: () -> Void = {}
+    var onChooseBackup: (() -> Void)?
 
     private var toGo: Int {
         max(0, progress.total - progress.checked)
@@ -89,7 +90,7 @@ struct ColdStartScanView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
                 Image(systemName: "archivebox")
-                    .foregroundStyle(.tint)
+                    .foregroundStyle(.secondary)
                     .accessibilityHidden(true)
                 Text("Restore from a backup first")
                     .font(.headline)
@@ -103,11 +104,13 @@ struct ColdStartScanView: View {
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
 
-            Button("Choose a backup", action: onChooseBackup)
+            // shortcut: subscription-snapshot restore is disabled here, connect it when that driver lands
+            Button("Choose a backup") { onChooseBackup?() }
                 .font(.headline)
                 .frame(maxWidth: .infinity, minHeight: 44)
                 .buttonStyle(.bordered)
                 .controlSize(.large)
+                .disabled(onChooseBackup == nil)
         }
         .padding(.vertical, 4)
     }
@@ -116,28 +119,35 @@ struct ColdStartScanView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
                 Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.tint)
+                    .foregroundStyle(.secondary)
                     .accessibilityHidden(true)
                 Text("Checking your subscriptions")
                     .font(.headline)
             }
 
-            ProgressView(
-                value: Double(progress.checked),
-                total: Double(max(progress.total, 1))
-            )
-            .tint(.accentColor)
+            if let unavailableReason {
+                Text(unavailableReason)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                ProgressView(
+                    value: Double(progress.checked),
+                    total: Double(max(progress.total, 1))
+                )
+                .tint(.accentColor)
 
-            Text(statusLineText)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
-                .fixedSize(horizontal: false, vertical: true)
+                Text(statusLineText)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                    .fixedSize(horizontal: false, vertical: true)
 
-            Text(identityText)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+                Text(identityText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             if progress.phase == .running || progress.phase == .paused {
                 Text(
@@ -163,6 +173,7 @@ struct ColdStartScanView: View {
                 .frame(maxWidth: .infinity, minHeight: 44)
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
+                .disabled(unavailableReason != nil)
         case .running:
             HStack(spacing: 12) {
                 Button("Pause", action: onPause)

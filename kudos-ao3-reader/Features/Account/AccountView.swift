@@ -43,6 +43,7 @@ struct AccountView: View {
 
     enum Route: Hashable {
         case myCollections
+        case subscriptions
         case preferences
         case moreOnAO3
         case settings
@@ -309,17 +310,7 @@ struct AccountView: View {
                     onRefine: { path.append(AO3AccountWorksList.Kind.markedForLater) }
                 )
             case .subscriptions:
-                AccountWorksInlineSection(
-                    kind: .subscriptions,
-                    expandAll: expandAll,
-                    displayMode: .compact,
-                    layout: .scroll,
-                    reloadToken: listReloadToken,
-                    onAdultContentVisibilityChange: adultContentVisibilityHandler(
-                        for: matureContentScope
-                    ),
-                    onRefine: { path.append(AO3AccountWorksList.Kind.subscriptions) }
-                )
+                EmptyView()
             case .bookmarks:
                 profileContentSections(
                     profileTab: .bookmarks,
@@ -431,8 +422,10 @@ struct AccountView: View {
             switch readingTab {
             case .bookmarks:
                 if let model = profileModel { await model.refresh(auth: auth) }
-            case .later, .subscriptions:
+            case .later:
                 listReloadToken += 1
+            case .subscriptions:
+                break
             case .collections:
                 // Collections is a push-only card (full list is `AO3CollectionsList`);
                 // nothing inline observes `listReloadToken`.
@@ -461,6 +454,7 @@ struct AccountView: View {
     private func destination(for route: Route) -> some View {
         switch route {
         case .myCollections: AO3CollectionsList()
+        case .subscriptions: SubscriptionsView()
         case .preferences: AO3PreferencesView()
         case .moreOnAO3: AccountMoreOnAO3View()
         case .settings: ReaderOptionsForm(includeAppSettings: true).navigationTitle("Settings")
@@ -492,7 +486,6 @@ struct AccountView: View {
             return writingTab == .works
         case .reading:
             return readingTab == .later
-                || readingTab == .subscriptions
                 || readingTab == .bookmarks
         case .activity:
             return activityTab == .history
@@ -605,8 +598,7 @@ struct AccountView: View {
                     systemImage: "bell",
                     count: cachedCount(.subscriptions)
                 ) {
-                    readingTab = .subscriptions
-                    selectedTab = .reading
+                    path.append(Route.subscriptions)
                 }
                 shortcutGridButton(
                     title: "My Works",
@@ -696,16 +688,16 @@ struct AccountView: View {
                 onRefine: { path.append(AO3AccountWorksList.Kind.markedForLater) }
             )
         case .subscriptions:
-            AccountWorksInlineSection(
-                kind: .subscriptions,
-                expandAll: expandAll,
-                displayMode: displayMode,
-                reloadToken: listReloadToken,
-                onAdultContentVisibilityChange: adultContentVisibilityHandler(
-                    for: matureContentScope
-                ),
-                onRefine: { path.append(AO3AccountWorksList.Kind.subscriptions) }
-            )
+            Section {
+                navCard(
+                    title: "Open Subscriptions",
+                    systemImage: "bell",
+                    count: cachedCount(.subscriptions),
+                    value: Route.subscriptions
+                )
+            } footer: {
+                Text("See what's waiting, manage followed works, and tidy completed works.")
+            }
         case .bookmarks:
             profileContentSections(profileTab: .bookmarks, sectionTitle: "Bookmarks")
         case .collections:
