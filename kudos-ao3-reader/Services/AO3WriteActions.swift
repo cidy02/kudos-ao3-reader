@@ -121,6 +121,41 @@ extension AO3AuthService {
     }
 
     /// Adds the work to the user's Marked-for-Later reading list.
+    /// Unsubscribe, and never subscribe.
+    ///
+    /// `toggleSubscribe` reads the work page and SUBSCRIBES when it finds no
+    /// subscription. That is correct for a toggle on a work page and wrong for an
+    /// "Unfollow" control in a list: a row that has gone stale — the user
+    /// unsubscribed on the website, or from another device, or the page simply
+    /// parses differently — would re-subscribe them on tap. A write that can do
+    /// the opposite of its own label is not something to mitigate by matching
+    /// strings in the response, so the list uses this instead.
+    ///
+    /// Finding no subscription is not an error here: the desired end state
+    /// already holds, and saying so is more useful than throwing.
+    func unsubscribe(workID: Int) async throws -> String {
+        guard isLoggedIn else { throw AO3WriteError.notSignedIn }
+        let workURL = Self.workURL(workID)
+        let pageRequest = try authenticatedRequest(for: workURL)
+        let html = try await AO3Client.shared.authenticatedPageHTML(for: pageRequest)
+        guard let token = AO3Client.parseCSRFToken(from: html) else { throw AO3WriteError.noCSRFToken }
+
+        let state = AO3Client.parseSubscription(from: html)
+        guard state.isSubscribed,
+              let path = state.unsubscribePath,
+              let url = Self.absoluteURL(path)
+        else { return "You're not following this." }
+
+        // AO3's unsubscribe form is a POST carrying `_method=delete`.
+        let body = Self.formEncoded([("_method", "delete"), ("authenticity_token", token)])
+        let request = try writeRequest(to: url, body: body, csrf: token, referer: workURL, ajax: false)
+        let (status, responseBody) = try await AO3Client.shared.submitWrite(request)
+        if (200 ... 399).contains(status) { return "Unsubscribed." }
+        throw AO3WriteError.rejected(
+            AO3Client.writeErrorMessage(in: responseBody) ?? "Couldn't unsubscribe."
+        )
+    }
+
     func markForLater(workID: Int) async throws -> String {
         guard isLoggedIn else { throw AO3WriteError.notSignedIn }
         let workURL = Self.workURL(workID)
