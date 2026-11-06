@@ -183,11 +183,16 @@ private struct WaitingRow: View {
     private var badgeLabel: some View {
         Text(badge)
             .font(.caption.bold())
-            // Not `.tint`: that is the user's accent (AO3 red by default), a
-            // fixed hex rather than a colorScheme colour, and on `.quaternary`
-            // over the dark surface it falls under 2:1. `.primary` carries the
-            // emphasis instead.
-            .foregroundStyle(isConfirmed ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+            // `.primary` in both states, and neither `.tint` nor `.secondary`.
+            // `.tint` is the user's accent (AO3 red by default), a fixed hex
+            // rather than a colorScheme colour, so on `.quaternary` over the
+            // dark surface it falls under 2:1. `.secondary` is no good either:
+            // at caption size this is 12pt bold, under the 14pt that would let
+            // it pass as large text, so it needs 4.5:1 — and `.secondary` on
+            // `.quaternary` measures about 3.2:1 on light and sepia. The hedge
+            // is carried by the words ("Check" vs "+1 · Ch. 9") and by the
+            // rail's outline dot, neither of which depends on contrast ratio.
+            .foregroundStyle(.primary)
             .padding(.horizontal, 9)
             .padding(.vertical, 4)
             .background(.quaternary, in: Capsule())
