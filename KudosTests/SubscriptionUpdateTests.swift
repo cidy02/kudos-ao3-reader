@@ -69,7 +69,8 @@ struct SubscriptionUpdateTests {
         chapterID: UInt64? = 255_464_091,
         chapterNumber: Int? = 9,
         isNewWork: Bool = false,
-        source: SubscriptionUpdate.Source = .work
+        source: SubscriptionUpdate.Source = .work,
+        attested: Bool = true
     ) -> SubscriptionUpdate {
         SubscriptionUpdate(
             uid: uid,
@@ -82,7 +83,8 @@ struct SubscriptionUpdateTests {
             workTitle: "Honest Work",
             author: "skydarius11",
             at: when,
-            source: source
+            source: source,
+            isAttested: attested
         )
     }
 
@@ -191,10 +193,34 @@ struct SubscriptionUpdateTests {
         #expect(update.at == when)
     }
 
-    @Test("Sender-only and rejected readings never reach the screen")
-    func rejectsUntrustedReadings() {
-        #expect(SubscriptionUpdate(reading: reading(verdict: .senderOnly)) == nil)
+    /// Sender-only mail is kept and demoted, not deleted. The crate degrades to
+    /// `.senderOnly` for a watched folder or an unreadable DKIM clause precisely
+    /// so the feature is not killed without a trace, and discarding those made a
+    /// folder import indistinguishable from an empty mailbox.
+    @Test("Sender-only mail arrives, but never as confirmed")
+    func senderOnlyIsDemotedNotDropped() throws {
+        let update = try #require(SubscriptionUpdate(reading: reading(verdict: .senderOnly)))
+        #expect(update.certainty == .workOnly)
+        #expect(update.chapterID == nil, "nothing unattested may offer a chapter")
+        #expect(!update.canDeepLinkToChapter)
+        #expect(update.workID == 83_701_926)
+    }
+
+    /// `read` turns a rejected verdict into an error, so this cannot arrive from
+    /// the crate; the mapper still fails closed on it.
+    @Test("A rejected reading is refused outright")
+    func rejectsRejectedReadings() {
         #expect(SubscriptionUpdate(reading: reading(verdict: .rejected)) == nil)
+    }
+
+    /// Attestation is a separate axis from the preface and the anchor: a fully
+    /// readable, work-pinned notification is still not confirmed if nobody
+    /// vouched for its DKIM.
+    @Test("Attestation alone can hold a row back")
+    func unattestedIsNeverConfirmed() {
+        #expect(make().certainty == .confirmed)
+        #expect(make(attested: false).certainty == .workOnly)
+        #expect(make(attested: false).chapterID == nil)
     }
 
     @Test("Contested and body identities both drop the chapter")
