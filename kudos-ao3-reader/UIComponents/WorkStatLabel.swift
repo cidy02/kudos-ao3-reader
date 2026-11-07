@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// A single compact work stat: a bold, theme-tinted glyph hugging its value, with
+/// A single compact work stat: a bold, secondary glyph hugging its value, with
 /// the value inheriting the surrounding font/colour. Shared across every work
 /// surface — the Search/Library rows (`AO3WorkRow` / `WorkRow`) and the Home/Library
 /// cover-card shelves — so metadata reads as one family (Part 4 card consistency).
@@ -18,7 +18,7 @@ struct WorkStatLabel: View {
         HStack(spacing: 3) {
             Image(systemName: symbol)
                 .font(.caption2.weight(.bold))
-                .foregroundStyle(.tint)
+                .foregroundStyle(.secondary)
             Text(text)
         }
         .lineLimit(1)

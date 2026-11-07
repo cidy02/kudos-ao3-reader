@@ -161,7 +161,7 @@ struct ReadingStatisticsView: View {
     private func activityRow(title: String, value: String, icon: String) -> some View {
         HStack(spacing: 12) {
             Image(systemName: icon)
-                .foregroundStyle(.tint)
+                .foregroundStyle(.secondary)
                 .frame(width: 24)
             Text(title)
             Spacer()

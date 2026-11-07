@@ -47,7 +47,7 @@ struct ReadingQueueCard: View {
                 VStack(alignment: .leading, spacing: 10) {
                     Image(systemName: queue.kind == .savedForLater ? "bookmark.fill" : "list.bullet.rectangle")
                         .font(.system(size: 34, weight: .semibold))
-                        .foregroundStyle(.tint)
+                        .foregroundStyle(.secondary)
                     Spacer()
                     Text(queue.displayName)
                         .font(.caption.weight(.semibold))
@@ -540,7 +540,7 @@ struct ReadingQueueStorageView: View {
     private func preservedWorkRow(_ work: SavedWork) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: work.isInSavedForLaterQueue ? "bookmark.fill" : "list.bullet.rectangle")
-                .foregroundStyle(.tint)
+                .foregroundStyle(.secondary)
                 .frame(width: 28, height: 28)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 4) {

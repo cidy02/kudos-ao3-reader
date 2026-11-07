@@ -347,7 +347,7 @@ struct AccountScrollChromeCard<Content: View>: View {
     }
 }
 
-/// One Overview navigation card row: tinted leading icon, title, optional
+/// One Overview navigation card row: secondary leading icon, title, optional
 /// cached list size, and a trailing chevron (in-app) or external-open glyph
 /// (AO3 website destinations).
 struct AccountNavCardLabel: View {
@@ -361,7 +361,7 @@ struct AccountNavCardLabel: View {
         HStack(spacing: 12) {
             Image(systemName: systemImage)
                 .font(.body.weight(.medium))
-                .foregroundStyle(.tint)
+                .foregroundStyle(.secondary)
                 .frame(width: 22, alignment: .center)
             Text(title)
                 .font(.body.weight(.medium))
