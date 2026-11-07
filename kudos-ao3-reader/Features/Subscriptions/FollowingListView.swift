@@ -52,11 +52,8 @@ struct FollowingListView: View {
     private func isFinished(_ work: AO3WorkSummary) -> Bool { work.isComplete == true && !isDeleted(work) }
 
     private var stillGoing: [AO3WorkSummary] {
-        visible.filter { $0.isComplete == false && !isDeleted($0) }
-    }
-
-    private var statusUnknown: [AO3WorkSummary] {
-        visible.filter { $0.isComplete == nil && !isDeleted($0) }
+        // nil is deliberately optimistic: the subscriptions page supplies no completion bit, so unknown stays in Still going until a source provides a real one.
+        visible.filter { $0.isComplete != true && !isDeleted($0) }
     }
 
     private var cannotNotify: [AO3WorkSummary] {
@@ -98,16 +95,6 @@ struct FollowingListView: View {
                         ForEach(stillGoing) { work in row(for: work) }
                     } header: {
                         FollowingGroupHeader(title: "Still going", count: stillGoing.count)
-                    }
-                }
-
-                if scope == .following, !statusUnknown.isEmpty {
-                    Section {
-                        ForEach(statusUnknown) { work in row(for: work) }
-                    } header: {
-                        FollowingGroupHeader(title: "Status unavailable", count: statusUnknown.count)
-                    } footer: {
-                        Text("AO3's subscriptions page doesn't include completion status.")
                     }
                 }
 
