@@ -13,7 +13,10 @@ struct NewToYouCardsView: View {
     var showsEmptyState = true
 
     @Environment(ThemeManager.self) private var theme
+    @Environment(PrivacyGate.self) private var privacyGate
     @Environment(\.dynamicTypeSize) private var typeSize
+    @AppStorage("hideMatureContent") private var hideMature = true
+    @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
     // Ids, not an index: a caller that drops decided works from `works` must not make the deck skip.
     @State private var handled = Set<Int>()
 
@@ -27,9 +30,21 @@ struct NewToYouCardsView: View {
         return works.filter { seen.insert($0.id).inserted }
     }
 
-    private var remaining: [AO3WorkSummary] { uniqueWorks.filter { !handled.contains($0.id) } }
+    private var undecidedWorks: [AO3WorkSummary] {
+        uniqueWorks.filter { !handled.contains($0.id) }
+    }
+
+    private var remaining: [AO3WorkSummary] {
+        undecidedWorks.filter {
+            !privacyGate.isHidden($0, enabled: hideMature, mode: matureMode)
+        }
+    }
 
     private var current: AO3WorkSummary? { remaining.first }
+
+    private func isObscured(_ work: AO3WorkSummary) -> Bool {
+        hideMature && work.isAdult && matureMode == .obscure && !privacyGate.isRevealed(work)
+    }
 
     private var positionText: String {
         "\(handled.count + 1) of \(handled.count + remaining.count)"
@@ -55,6 +70,8 @@ struct NewToYouCardsView: View {
         Group {
             if let work = current {
                 deck(work)
+            } else if !undecidedWorks.isEmpty {
+                MatureContentHiddenView()
             } else if showsEmptyState, handled.isEmpty {
                 ContentUnavailableView(
                     "Nothing new to you",
@@ -79,8 +96,17 @@ struct NewToYouCardsView: View {
         #endif
             // The decided card disappears under VoiceOver focus, so say what replaced it.
             .onChange(of: current?.id) {
-                let text = current.map { "\(positionText), \($0.title)" } ?? "All caught up"
+                let text = current.map {
+                    isObscured($0) ? "\(positionText), hidden mature work" : "\(positionText), \($0.title)"
+                } ?? "All caught up"
                 AccessibilityNotification.Announcement(text).post()
+            }
+            .toolbar {
+                if PrivacyGate.hasVisibleMatureWorks(in: undecidedWorks, hideMature: hideMature) {
+                    ToolbarItem(placement: .primaryAction) {
+                        MatureRevealToggle()
+                    }
+                }
             }
     }
 
@@ -94,10 +120,10 @@ struct NewToYouCardsView: View {
                     .accessibilityLabel("Work \(positionText)")
                     .accessibilityAddTraits(.isHeader)
 
-                card(work)
+                privacyAwareCard(work)
 
                 // Three buttons do not fit abreast at accessibility sizes, so the bar scrolls with the card there.
-                if isAccessibilitySize { actionBar(for: work) }
+                if isAccessibilitySize, !isObscured(work) { actionBar(for: work) }
             }
             .frame(maxWidth: Self.maxContentWidth)
             .padding(.horizontal, CardListMetrics.sideMargin)
@@ -107,7 +133,7 @@ struct NewToYouCardsView: View {
         // A fresh card starts at the top, not wherever the last summary was scrolled to.
         .id(work.id)
         .safeAreaInset(edge: .bottom) {
-            if !isAccessibilitySize {
+            if !isAccessibilitySize, !isObscured(work) {
                 actionBar(for: work)
                     .frame(maxWidth: Self.maxContentWidth)
                     .padding(.horizontal, CardListMetrics.sideMargin)
@@ -115,6 +141,25 @@ struct NewToYouCardsView: View {
                     .frame(maxWidth: .infinity)
                     .background(theme.appTheme.cardBackdrop)
             }
+        }
+    }
+
+    @ViewBuilder
+    private func privacyAwareCard(_ work: AO3WorkSummary) -> some View {
+        if isObscured(work) {
+            Button {
+                privacyGate.reveal(work)
+            } label: {
+                card(work)
+                    .blur(radius: 6)
+                    .overlay { MatureContentRevealLabel() }
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Hidden mature work. Activate to reveal.")
+        } else {
+            card(work)
         }
     }
 
@@ -256,4 +301,5 @@ struct NewToYouCardsView: View {
             .tabItem { Text("Empty") }
     }
     .environment(ThemeManager())
+    .environment(PrivacyGate())
 }
