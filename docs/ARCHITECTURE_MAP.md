@@ -25,7 +25,7 @@ All paths relative to `kudos-ao3-reader/` unless noted. Confirmed as of 2026-07-
 | Reader — iOS | `Features/ReaderReadium/ReadiumReaderView.swift` (progress saved per `locationDidChange` via `book.onLocatorChange` → `readiumLocator` + save) |
 | Reader — macOS (legacy) | `Features/Reader/ReaderView.swift` + `ReaderController.swift` (`#if os(macOS)`); progress = `lastSpineIndex`/`lastScrollFraction` *(inferred from Models fields; verify before editing)* |
 | Reader routing | `BookReaderView` (grep) routes per-platform |
-| Privacy (M/E) | `Features/Privacy/MatureContent.swift` — see below |
+| Privacy (adult/unverified ratings) | `Features/Privacy/MatureContent.swift` — see below |
 
 ## AO3 networking / scraping
 
@@ -64,10 +64,10 @@ All paths relative to `kudos-ao3-reader/` unless noted. Confirmed as of 2026-07-
 
 ## Privacy / M-E blur
 
-- `Features/Privacy/MatureContent.swift`: `SavedWork.isAdult` (rating == Mature/Explicit), `PrivacyGate` (@Observable; reveal state; `isHidden` = Hide-mode only), `SensitiveWorkRow` (List rows), `SensitiveWorkCoverCard` (carousel cards), `MatureRevealToggle` (the Privacy button), `PrivacyGate.hasVisibleMatureWorks(in:hideMature:)` (the single button-visibility rule).
+- `Features/Privacy/MatureContent.swift`: `SavedWork.isAdult` and `AO3WorkSummary.isAdult` share one fail-closed rating rule (only normalized General/Teen values are non-adult); `PrivacyGate` owns local+remote reveal state and Hide-mode filtering; `SensitiveWorkRow`/`SensitiveWorkCoverCard` gate local surfaces; Subscriptions › New to you gates its remote card with the same reveal affordance; `MatureRevealToggle` and `PrivacyGate.hasVisibleMatureWorks(in:hideMature:)` remain the single toolbar-button rule.
 - Modes: `MaturePrivacyMode.obscure` (blur, tap-to-reveal) / `.hide` (filtered out pre-render). Prefs: `@AppStorage("hideMatureContent")`, `("matureContentMode")`.
 - Invariant: the Privacy button gates on the **currently visible, filtered** set of the surface, via the shared rule — never the raw `@Query`.
-- `CanonicalWorkMerge` pairing matches only privacy-visible local works (Hide-mode works keep plain remote rows).
+- `CanonicalWorkMerge` pairing matches only privacy-visible local works (Hide-mode works keep plain remote rows outside the explicitly gated New-to-you surface).
 
 ## Themes / UI kit
 

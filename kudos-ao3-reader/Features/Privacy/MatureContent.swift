@@ -2,7 +2,7 @@ import LocalAuthentication
 import OSLog
 import SwiftUI
 
-/// How Mature/Explicit works are presented when content privacy is on.
+/// How adult or unverified-rating works are presented when content privacy is on.
 enum MaturePrivacyMode: String, CaseIterable, Identifiable {
     case obscure, hide
     var id: String {
@@ -17,10 +17,31 @@ enum MaturePrivacyMode: String, CaseIterable, Identifiable {
     }
 }
 
+nonisolated enum MatureContentRating {
+    static func isAdult(_ rating: String?) -> Bool {
+        guard let rating else { return true }
+        let normalized = rating
+            .split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ")
+            .lowercased()
+        return switch normalized {
+        case "general audiences", "teen and up audiences": false
+        default: true
+        }
+    }
+}
+
 extension SavedWork {
-    /// AO3-rated Mature or Explicit — the works the privacy feature shields.
+    /// Ratings other than a recognized General/Teen value fail closed.
     var isAdult: Bool {
-        rating == "Mature" || rating == "Explicit"
+        MatureContentRating.isAdult(rating)
+    }
+}
+
+extension AO3WorkSummary {
+    /// Uses the same fail-closed rating rule as a persisted work.
+    var isAdult: Bool {
+        MatureContentRating.isAdult(rating)
     }
 }
 
@@ -30,11 +51,16 @@ extension SavedWork {
 @Observable
 final class PrivacyGate {
     private(set) var revealedIDs: Set<UUID> = []
+    private var revealedRemoteWorkIDs: Set<Int> = []
     /// When true, every sensitive work is shown until toggled back off.
     private(set) var revealAll = false
 
     func isRevealed(_ work: SavedWork) -> Bool {
         revealAll || revealedIDs.contains(work.id)
+    }
+
+    func isRevealed(_ work: AO3WorkSummary) -> Bool {
+        revealAll || revealedRemoteWorkIDs.contains(work.id)
     }
 
     /// Reveals a single work (a Blur-mode tap), authenticating first if required.
@@ -45,11 +71,20 @@ final class PrivacyGate {
         }
     }
 
+    /// Reveals a remote work with the same session and authentication policy.
+    func reveal(_ work: AO3WorkSummary) {
+        authenticate {
+            self.revealedRemoteWorkIDs.insert(work.id)
+            Log.privacy.info("Revealed a mature work for this session")
+        }
+    }
+
     /// Shows or re-hides every sensitive work for the session.
     func toggleRevealAll() {
         if revealAll {
             revealAll = false
             revealedIDs.removeAll()
+            revealedRemoteWorkIDs.removeAll()
             Log.privacy.info("Re-hid all mature works")
         } else {
             authenticate {
@@ -64,9 +99,20 @@ final class PrivacyGate {
         enabled && work.isAdult && mode == .hide && !isRevealed(work)
     }
 
+    func isHidden(_ work: AO3WorkSummary, enabled: Bool, mode: MaturePrivacyMode) -> Bool {
+        enabled && work.isAdult && mode == .hide && !isRevealed(work)
+    }
+
     /// Whether a Privacy button should show for this currently-visible/filtered work
     /// list — the single rule every toolbar's Privacy-button condition shares.
     static func hasVisibleMatureWorks(in works: [SavedWork], hideMature: Bool) -> Bool {
+        shouldShowMatureReveal(
+            hideMature: hideMature,
+            hasVisibleMatureWorks: works.contains(where: \.isAdult)
+        )
+    }
+
+    static func hasVisibleMatureWorks(in works: [AO3WorkSummary], hideMature: Bool) -> Bool {
         shouldShowMatureReveal(
             hideMature: hideMature,
             hasVisibleMatureWorks: works.contains(where: \.isAdult)
@@ -102,7 +148,18 @@ final class PrivacyGate {
     }
 }
 
-/// A work row that respects content privacy. When the work is Mature/Explicit and
+struct MatureContentRevealLabel: View {
+    var body: some View {
+        Label("Tap to reveal", systemImage: "eye.slash.fill")
+            .font(.caption.weight(.medium))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(.regularMaterial, in: Capsule())
+    }
+}
+
+/// A work row that respects content privacy. When the rating is gated and
 /// Blur mode is on, it blurs the row and reveals on tap; in Hide mode the list
 /// filters the work out before it reaches this view. Otherwise it's a normal
 /// navigation row. The caller still attaches its own `.swipeActions`.
@@ -149,12 +206,7 @@ struct SensitiveWorkRow: View {
                     // toggles selection instead (use the toolbar's "Show mature" to
                     // reveal while selecting), so the label shouldn't promise otherwise.
                     if !isSelecting {
-                        Label("Tap to reveal", systemImage: "eye.slash.fill")
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(.regularMaterial, in: Capsule())
+                        MatureContentRevealLabel()
                     }
                 }
                 .contentShape(Rectangle())
@@ -230,7 +282,7 @@ struct SensitiveWorkRow: View {
 }
 
 /// A carousel card that respects content privacy, mirroring `SensitiveWorkRow` for
-/// `WorkCoverCard`. When the work is Mature/Explicit and Blur mode is on, it blurs
+/// `WorkCoverCard`. When the rating is gated and Blur mode is on, it blurs
 /// the card and reveals on tap; in Hide mode the carousel filters the work out
 /// before it reaches this view. Also covers the selection-mode carousel case
 /// (`SelectableWorkCoverCard`), so a single component is the drop-in replacement
@@ -260,12 +312,7 @@ struct SensitiveWorkCoverCard: View {
                     // toggles selection instead (use the toolbar's "Show mature" to
                     // reveal while selecting), so the label shouldn't promise otherwise.
                     if !isSelecting {
-                        Label("Tap to reveal", systemImage: "eye.slash.fill")
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(.regularMaterial, in: Capsule())
+                        MatureContentRevealLabel()
                     }
                 }
                 .contentShape(Rectangle())
@@ -339,9 +386,9 @@ struct MatureContentHiddenView: View {
 
     var body: some View {
         ContentUnavailableView {
-            Label("Mature works hidden", systemImage: "eye.slash")
+            Label("Sensitive works hidden", systemImage: "eye.slash")
         } description: {
-            Text("Mature and Explicit works are hidden. Reveal them to read.")
+            Text("Works without a recognized General or Teen rating are hidden. Reveal them to read.")
         } actions: {
             Button("Show mature") { gate.toggleRevealAll() }
         }
