@@ -126,7 +126,7 @@ struct MediaBrowserView: View {
             HStack(spacing: 10) {
                 Image(systemName: category.symbol)
                     .font(.headline) // icon stays emphasized
-                    .foregroundStyle(.tint)
+                    .foregroundStyle(.secondary)
                     .frame(width: 24)
                 Text(category.name)
                     .font(.headline.weight(.regular)) // regular weight (was bold)
@@ -166,12 +166,12 @@ struct MediaBrowserView: View {
     }
 
     private func statItem(_ symbol: String, _ text: String) -> some View {
-        // Icon hugs its label and is bold + tinted — matches the Search/Library
-        // result-card stats for visual consistency.
+        // Icon hugs its label and is bold + secondary — matches `WorkStatLabel`
+        // on the Search/Library result cards.
         HStack(spacing: 3) {
             Image(systemName: symbol)
                 .font(.caption2.weight(.bold))
-                .foregroundStyle(.tint)
+                .foregroundStyle(.secondary)
             Text(text)
         }
         .fixedSize()

@@ -257,7 +257,7 @@ struct AO3PreferencesView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Image(systemName: "questionmark.circle.fill")
                         .font(.title3)
-                        .foregroundStyle(.tint)
+                        .foregroundStyle(.secondary)
                         .accessibilityHidden(true)
                 }
                 .cardRow()

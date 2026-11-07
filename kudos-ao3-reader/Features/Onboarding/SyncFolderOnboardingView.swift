@@ -100,7 +100,7 @@ struct SyncFolderOnboardingView: View {
         HStack(alignment: .top, spacing: 16) {
             Image(systemName: symbol)
                 .font(.title2)
-                .foregroundStyle(.tint)
+                .foregroundStyle(.secondary)
                 .frame(width: 32)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 4) {

@@ -289,8 +289,8 @@ struct WorkStateBadge: View {
     }
 }
 
-/// Author/fandom meta row for work cards: a theme-tinted icon paired with
-/// secondary text, matching the tinted-icon style of `WorkStatLabel`.
+/// Author/fandom meta row for work cards: a secondary icon paired with
+/// secondary text, the same glyph colour `WorkStatLabel` uses.
 private struct CardMetaLabel: View {
     let text: String
     let symbol: String
@@ -299,7 +299,7 @@ private struct CardMetaLabel: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 4) {
             Image(systemName: symbol)
-                .foregroundStyle(.tint)
+                .foregroundStyle(.secondary)
             Text(text)
                 .foregroundStyle(.secondary)
         }

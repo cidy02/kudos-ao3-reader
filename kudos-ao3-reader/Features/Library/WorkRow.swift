@@ -89,13 +89,13 @@ struct WorkRow: View {
             }
 
             if !work.workFandoms.isEmpty {
-                // Tight icon→text gap + bold accent glyph, matching the stats row. Only
-                // the icon is tinted — fandom text stays readable/secondary like the
-                // rest of the metadata (CardMetaLabel's convention).
+                // Tight icon→text gap + bold secondary glyph, matching the stats row.
+                // Icon and fandom text share one secondary colour (`WorkStatLabel` /
+                // `CardMetaLabel`).
                 HStack(spacing: 4) {
                     Image(systemName: "books.vertical")
                         .fontWeight(.bold)
-                        .foregroundStyle(.tint)
+                        .foregroundStyle(.secondary)
                     Text(work.workFandoms.joined(separator: ", "))
                         .foregroundStyle(.secondary)
                 }

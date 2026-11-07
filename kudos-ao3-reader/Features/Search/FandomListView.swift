@@ -93,7 +93,7 @@ private struct FandomListRow: View {
         HStack(alignment: .center, spacing: 12) {
             Image(systemName: "books.vertical")
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.tint)
+                .foregroundStyle(.secondary)
                 .frame(width: 24)
                 .accessibilityHidden(true)
 
@@ -111,7 +111,7 @@ private struct FandomListRow: View {
                 HStack(spacing: 4) {
                     Image(systemName: "doc.text")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(.tint)
+                        .foregroundStyle(.secondary)
                     Text(count.formatted())
                         .monospacedDigit()
                         .foregroundStyle(.secondary)
