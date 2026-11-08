@@ -159,13 +159,18 @@ private extension SubscriptionSnapshotTests {
             case .waiting:
                 AnyView(NavigationStack { WaitingListView.snapshotSample })
             case .following:
+                // One still-going work, so Series and Authors land inside the snapshot frame.
                 AnyView(NavigationStack {
                     FollowingListView(
-                        works: Self.followingWorks,
-                        deletedIDs: [104],
-                        unfollowed: .constant([])
+                        works: [
+                            Self.work(101, "The Lantern Keeper", "saltwindow", complete: false, chapters: "9/?")
+                        ],
+                        unfollowed: .constant([]),
+                        series: Self.followingSeries,
+                        authors: Self.followingAuthors
                     )
-                })
+                }
+                .environment(AppRouter()))
             case .tidyUp:
                 AnyView(NavigationStack {
                     FollowingListView(
@@ -273,6 +278,38 @@ private extension SubscriptionSnapshotTests {
                 work(102, "A Quiet Harbour", "marrowlight"),
                 work(103, "Salt and Ember", "quietfern", complete: true, chapters: "24/24"),
                 work(104, "Gone Dark", "wrenfield")
+            ]
+        }
+
+        /// A missing series link is AO3's deleted subscribable: listed, not tappable.
+        private static var followingSeries: [AO3FollowedSeries] {
+            [
+                AO3FollowedSeries(
+                    subscriptionID: 501,
+                    title: "The Lantern Cycle",
+                    creatorNames: ["saltwindow"],
+                    creatorIdentities: [],
+                    seriesID: 50,
+                    url: URL(string: "https://archiveofourown.org/series/50")
+                ),
+                AO3FollowedSeries(
+                    subscriptionID: 502,
+                    title: "Deleted item",
+                    creatorNames: [],
+                    creatorIdentities: [],
+                    seriesID: nil,
+                    url: nil
+                )
+            ]
+        }
+
+        private static var followingAuthors: [AO3FollowedAuthor] {
+            [
+                AO3FollowedAuthor(
+                    subscriptionID: 601,
+                    name: "marrowlight",
+                    route: AO3AuthorRoute(username: "marrowlight")
+                )
             ]
         }
 
