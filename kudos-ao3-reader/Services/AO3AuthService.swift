@@ -134,6 +134,7 @@ struct LiveAO3SessionValidator: AO3SessionValidating {
         guard let http = response as? HTTPURLResponse else {
             throw URLError(.badServerResponse)
         }
+        try AO3Client.checkForMaintenance(statusCode: http.statusCode, body: data)
         guard (200 ... 299).contains(http.statusCode) else {
             // Only an explicit 401 is treated as expiry. Every other non-2xx is
             // thrown, which the caller treats as "couldn't verify" and keeps the
@@ -860,6 +861,27 @@ final class AO3AuthService {
             authenticationScope: AO3AuthorProfileFetcher.sessionScopedCacheScope(for: self)
         )
         return result.works
+    }
+
+    /// One page of the signed-in user's series or user subscriptions. Same auth
+    /// and client as `accountSubscriptions`. Returns an empty page only when
+    /// signed out; a parse or transport failure throws, so the caller can show
+    /// an error instead of "you follow nothing". Does not write the account
+    /// counts cache — that cache is the work-subscription list.
+    func accountSubscriptionIndex(
+        type: AO3SubscriptionListType,
+        page: Int = 1
+    ) async throws -> AO3SubscriptionIndexPage {
+        guard type == .series || type == .users else { throw AO3Error.parse }
+        guard isLoggedIn, let username,
+              let url = AO3Client.subscriptionsURL(username: username, page: page, type: type)
+        else {
+            return AO3SubscriptionIndexPage(
+                series: [], authors: [], currentPage: page, totalPages: page
+            )
+        }
+        let request = try authenticatedRequest(for: url)
+        return try await AO3Client.shared.subscriptionIndex(for: request, page: page, type: type)
     }
 
     func applyFallbackTheme(_ theme: ReaderTheme) {

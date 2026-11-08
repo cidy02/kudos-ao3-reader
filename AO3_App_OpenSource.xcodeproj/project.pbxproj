@@ -15,6 +15,7 @@
 		000000000000000410000000 /* MuPDF.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 000000000000000400000000 /* MuPDF.xcframework */; };
 		000000000000000820000000 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; platformFilter = ios; productRef = 000000000000000810000000 /* FluidAudio */; };
 		000000000000000720000000 /* sherpa-onnx in Frameworks */ = {isa = PBXBuildFile; platformFilter = ios; productRef = 000000000000000710000000 /* sherpa-onnx */; };
+		000000000000000591000000 /* KudosMail.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 000000000000000590000000 /* KudosMail.xcframework */; platformFilter = ios; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -33,6 +34,7 @@
 		000000000000000400000000 /* MuPDF.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = MuPDF.xcframework; path = Vendor/MuPDF.xcframework; sourceTree = "<group>"; };
 		000000000000000000000900 /* Shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config/Shared.xcconfig; sourceTree = "<group>"; };
 		000000000000000000000901 /* Kudos-iOS.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "kudos-ao3-reader/Kudos-iOS.entitlements"; sourceTree = "<group>"; };
+		000000000000000590000000 /* KudosMail.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = KudosMail.xcframework; path = build/KudosMail.xcframework; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -56,6 +58,7 @@
 				000000000000000820000000 /* FluidAudio in Frameworks */,
 				000000000000000720000000 /* sherpa-onnx in Frameworks */,
 				000000000000000220000000 /* SwiftSoup in Frameworks */,
+				000000000000000591000000 /* KudosMail.xcframework in Frameworks */,
 				000000000000000311000000 /* ReadiumShared in Frameworks */,
 				000000000000000321000000 /* ReadiumStreamer in Frameworks */,
 				000000000000000331000000 /* ReadiumNavigator in Frameworks */,
@@ -75,6 +78,7 @@
 			children = (
 				000000000000000000000010 /* kudos-ao3-reader */,
 				000000000000000000000510 /* KudosTests */,
+				000000000000000592000000 /* Frameworks */,
 				000000000000000000000020 /* Products */,
 				000000000000000000000900 /* Shared.xcconfig */,
 				000000000000000000000901 /* Kudos-iOS.entitlements */,
@@ -88,6 +92,14 @@
 				000000000000000000000520 /* KudosTests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		000000000000000592000000 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				000000000000000590000000 /* KudosMail.xcframework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */

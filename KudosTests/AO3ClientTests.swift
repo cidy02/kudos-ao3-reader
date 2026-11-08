@@ -309,7 +309,7 @@ struct AO3ClientTests {
     }
 
     @Test func buildsSubscriptionsURL() {
-        // Scoped to ?type=works so AO3 returns only work subscriptions (and pages them).
+        // The default stays ?type=works. Series and users are the other subnav filters.
         #expect(
             AO3Client.subscriptionsURL(username: "alice", page: 1)?.absoluteString
                 == "https://archiveofourown.org/users/alice/subscriptions?type=works"
@@ -317,6 +317,14 @@ struct AO3ClientTests {
         #expect(
             AO3Client.subscriptionsURL(username: "alice", page: 2)?.absoluteString
                 == "https://archiveofourown.org/users/alice/subscriptions?type=works&page=2"
+        )
+        #expect(
+            AO3Client.subscriptionsURL(username: "alice", page: 1, type: .series)?.absoluteString
+                == "https://archiveofourown.org/users/alice/subscriptions?type=series"
+        )
+        #expect(
+            AO3Client.subscriptionsURL(username: "alice", page: 2, type: .users)?.absoluteString
+                == "https://archiveofourown.org/users/alice/subscriptions?type=users&page=2"
         )
     }
 

@@ -374,6 +374,64 @@ struct AO3WriteActionsTests {
         #expect(!AO3Client.parseSubscription(from: html).isSubscribed)
     }
 
+    /// The state that makes `unsubscribe` and `toggleSubscribe` diverge, and the
+    /// reason the Following list must not use the toggle.
+    ///
+    /// `toggleSubscribe` reads the work page and SUBSCRIBES whenever it finds no
+    /// subscription — correct for a toggle on a work page. A row in the Following
+    /// list can be stale (unsubscribed on the website, or from another device), and
+    /// then the work page looks exactly like the fixture below: a plain subscribe
+    /// form, no `_method=delete`. Routed through the toggle, a tap labelled
+    /// "Unfollow" would subscribe the user instead. `unsubscribe` guards on this
+    /// same parse and returns without writing.
+    @Test("A stale Following row parses as not-subscribed, which is why Unfollow cannot use the toggle")
+    func notSubscribedIsTheStaleRowState() {
+        let staleRow = """
+        <form action="/users/me/subscriptions" method="post">
+          <input type="hidden" name="subscription[subscribable_type]" value="Work">
+          <input type="submit" value="Subscribe">
+        </form>
+        """
+        let state = AO3Client.parseSubscription(from: staleRow)
+        #expect(!state.isSubscribed, "the toggle would branch to subscribe here")
+        #expect(state.unsubscribePath == nil, "and there is no delete path to POST")
+    }
+
+    /// The failure these two states are easy to confuse, and the reason
+    /// `unsubscribe` checks the session before reporting "not following".
+    ///
+    /// A work page is PUBLIC, so an expired session does not redirect to
+    /// /users/login and `authenticatedPageHTML` does not throw — it returns a
+    /// valid logged-out page. That page has no subscription controls at all, so
+    /// `parseSubscription` reports not-subscribed exactly as it does for a work
+    /// the user genuinely does not follow. Without the session check the list
+    /// would quietly drop a row the user still follows.
+    @Test("A logged-out work page is not evidence that the user stopped following")
+    func loggedOutPageIsNotProofOfNoSubscription() {
+        let loggedOut = """
+        <html><body class="works-show">
+          <div id="header"><a href="/users/login">Log In</a></div>
+          <div id="main"><h2 class="title">A Quiet Harbour</h2></div>
+        </body></html>
+        """
+        let signedIn = """
+        <html><body class="works-show logged-in">
+          <div id="header"><a href="/users/logout">Log Out</a></div>
+          <form action="/users/me/subscriptions" method="post">
+            <input type="submit" value="Subscribe">
+          </form>
+        </body></html>
+        """
+
+        // Indistinguishable on the subscription parse alone.
+        #expect(!AO3Client.parseSubscription(from: loggedOut).isSubscribed)
+        #expect(!AO3Client.parseSubscription(from: signedIn).isSubscribed)
+
+        // Separable on the session, which is what `unsubscribe` branches on.
+        #expect(!LiveAO3SessionValidator.isLoggedIn(html: loggedOut))
+        #expect(LiveAO3SessionValidator.isLoggedIn(html: signedIn))
+    }
+
     @Test func parsesCollectionsIndex() throws {
         let html = """
         <html><body>

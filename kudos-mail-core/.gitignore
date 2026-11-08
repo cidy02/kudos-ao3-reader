@@ -1,0 +1,5 @@
+# Real mail is never committed: it carries the reader's address and reading history.
+tests/fixtures/real/
+*.real.eml
+# Rust build artifacts: never committed.
+target/

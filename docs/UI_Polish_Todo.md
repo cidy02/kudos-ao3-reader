@@ -23,8 +23,8 @@ matching task in [`../TASKS.md`](../TASKS.md). **Status:** `Idea` · `Planned` �
 
 ### Browse
 
-- **[UI-2] Theme-respecting category icons** — *Status: Done (2026-06-30) · Board: (see TASKS.md)*
-  The main icons in `MediaBrowserView.categoryCard` (for Browse categories like "TV Shows", "Books & Literature", etc.) now use `.foregroundStyle(.tint)` (was `.primary`). This ensures they respect the app theme accent (AO3 red on Light/Dark; warm brown on Sepia), consistent with stat icons and other elements.
+- **[UI-2] Theme-respecting category icons** — *Status: Done (2026-06-30); superseded 2026-11-06 · Board: (see TASKS.md)*
+  `MediaBrowserView.categoryCard` icons and the card's stat glyphs were briefly `.foregroundStyle(.tint)`. They are now `.secondary`, matching `WorkStatLabel` and `CardMetaLabel`. Caption-size accent (AO3 red on Light/Dark, warm brown on Sepia) was hard to read; secondary stays legible on all four themes.
 
 ---
 
@@ -38,4 +38,4 @@ matching task in [`../TASKS.md`](../TASKS.md). **Status:** `Idea` · `Planned` �
 
 ---
 
-*Last updated: 2026-06-30*
+*Last updated: 2026-11-06*

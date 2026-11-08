@@ -2,7 +2,7 @@ import LocalAuthentication
 import OSLog
 import SwiftUI
 
-/// How Mature/Explicit works are presented when content privacy is on.
+/// How adult or unverified-rating works are presented when content privacy is on.
 enum MaturePrivacyMode: String, CaseIterable, Identifiable {
     case obscure, hide
     var id: String {
@@ -17,17 +17,29 @@ enum MaturePrivacyMode: String, CaseIterable, Identifiable {
     }
 }
 
+nonisolated enum MatureContentRating {
+    static func isAdult(_ rating: String?) -> Bool {
+        guard let rating else { return true }
+        let normalized = rating
+            .split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ")
+            .lowercased()
+        return switch normalized {
+        case "general audiences", "teen and up audiences": false
+        default: true
+        }
+    }
+}
+
 extension SavedWork {
-    /// AO3-rated Mature or Explicit — the works the privacy feature shields.
     var isAdult: Bool {
-        rating == "Mature" || rating == "Explicit"
+        MatureContentRating.isAdult(rating)
     }
 }
 
 extension AO3WorkSummary {
-    /// AO3-rated Mature or Explicit — the works the privacy feature shields.
     var isAdult: Bool {
-        rating == "Mature" || rating == "Explicit"
+        MatureContentRating.isAdult(rating)
     }
 }
 
@@ -53,6 +65,7 @@ final class PrivacyGate {
     private(set) var revealedRemoteIDs: Set<Int> = []
     /// When true, every sensitive work is shown until toggled back off.
     private(set) var revealAll = false
+    private var signedInAccount: String?
 
     func isRevealed(_ work: SavedWork) -> Bool {
         let remoteID = work.ao3WorkID ?? WorkTags.ao3WorkID(from: work.sourceURL)
@@ -95,9 +108,7 @@ final class PrivacyGate {
     /// Shows or re-hides every sensitive work for the session.
     func toggleRevealAll() {
         if revealAll {
-            revealAll = false
-            revealedIDs.removeAll()
-            revealedRemoteIDs.removeAll()
+            clearReveals()
             Log.privacy.info("Re-hid all mature works")
         } else {
             authenticate {
@@ -105,6 +116,21 @@ final class PrivacyGate {
                 Log.privacy.info("Revealed all mature works for this session")
             }
         }
+    }
+
+    func noteSignedInAccount(_ username: String?) {
+        guard signedInAccount != username else { return }
+        let leavingAccount = signedInAccount != nil
+        signedInAccount = username
+        guard leavingAccount else { return }
+        clearReveals()
+        Log.privacy.info("Cleared mature-content reveals after the signed-in account changed")
+    }
+
+    private func clearReveals() {
+        revealAll = false
+        revealedIDs.removeAll()
+        revealedRemoteIDs.removeAll()
     }
 
     /// Whether this work should be omitted from a list right now (Hide mode only).

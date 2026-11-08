@@ -16,6 +16,10 @@ struct ContentView: View {
     @State private var auth = AO3AuthService()
     @State private var inboxModel = AO3InboxModel()
     @State private var downloadQueue = DownloadQueue()
+    @State private var subscriptionScan = SubscriptionScanService.shared
+    #if os(iOS)
+    @State private var mailSubscriptionDriver = MailSubscriptionDriver()
+    #endif
 
     /// First-launch onboarding gate, persisted locally.
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
@@ -57,7 +61,12 @@ struct ContentView: View {
             .background { WebKitPrewarmView() }
             // Overlay first so the environments below wrap it too — otherwise the
             // banner sits outside the .environment scope and can't find the queue.
-            .overlay(alignment: .bottom) { DownloadQueueBanner() }
+            .overlay(alignment: .bottom) {
+                VStack(spacing: 8) {
+                    SubscriptionScanBanner()
+                    DownloadQueueBanner()
+                }
+            }
             // Home's profile control opens Account as a self-contained sheet.
             // Root-hosting also gives restored/deep-linked Account routes one sink.
             .sheet(isPresented: $router.isPresentingAccount, onDismiss: router.accountDidDismiss) {
@@ -86,6 +95,16 @@ struct ContentView: View {
             .environment(auth)
             .environment(inboxModel)
             .environment(downloadQueue)
+            .environment(subscriptionScan)
+            #if os(iOS)
+            .environment(mailSubscriptionDriver)
+            #endif
+            .onChange(of: auth.username, initial: true) { _, username in
+                privacyGate.noteSignedInAccount(username)
+                subscriptionScan.adopt(
+                    authenticationScope: AO3AuthorProfileFetcher.authenticationScope(for: auth)
+                )
+            }
             // The app theme drives the whole app's light/dark appearance (the reader
             // overrides this for itself when its theme is unlinked).
             .preferredColorScheme(theme.appTheme.colorScheme)

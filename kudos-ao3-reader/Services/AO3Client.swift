@@ -364,6 +364,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         guard let http = response as? HTTPURLResponse else {
             throw AO3Error.network("No response from AO3.")
         }
+        if http.statusCode == 418 { throw AO3Error.maintenance }
         if (200 ... 299).contains(http.statusCode) { return }
         // Only a failed answer is read: a work's own text may say the words.
         if let body = body(), isMaintenancePage(body) {
@@ -388,6 +389,20 @@ actor AO3Client { // swiftlint:disable:this type_body_length
             of: #"<h2[^>]*>\s*the archive is down for maintenance"#,
             options: [.regularExpression, .caseInsensitive]
         ) != nil
+    }
+
+    static func checkHTTPResponse(
+        statusCode: Int, body: Data, retryAfter: TimeInterval? = nil
+    ) throws {
+        if statusCode == 418 || isMaintenancePage(body) { throw AO3Error.maintenance }
+        switch statusCode {
+        case 200 ... 299: return
+        case 429: throw AO3Error.rateLimited(retryAfter: retryAfter)
+        case 403: throw AO3Error.forbidden
+        case 404: throw AO3Error.notFound
+        case 500 ... 599: throw AO3Error.server(status: statusCode)
+        default: throw AO3Error.http(status: statusCode)
+        }
     }
 
     /// Parses a `Retry-After` header (seconds, or an HTTP-date) into a delay.
@@ -812,6 +827,12 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         return components?.url
     }
 
+    static func subscriptionsURL(
+        username: String, page: Int, type: AO3SubscriptionListType
+    ) -> URL? {
+        subscriptionsURL(username: username, page: page, type: type.rawValue)
+    }
+
     /// The URL of a user's AO3 bookmarks page (their bookmarked works), paginated.
     static func bookmarksURL(username: String, page: Int) -> URL? {
         let name = username.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -909,7 +930,9 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     /// already carry the user's session cookies — build it with
     /// `AO3AuthService.authenticatedRequest(for:)`. A bounce to AO3's login page is
     /// surfaced as `AO3Error.authenticationRequired` so the caller can re-auth.
-    private func authenticatedHTML(for request: URLRequest) async throws -> String {
+    private func authenticatedHTML(
+        for request: URLRequest, retryTransientFailures: Bool = true
+    ) async throws -> String {
         var request = request
         // The session cookies are attached explicitly by the auth service; don't let
         // URLSession's shared cookie storage add a second, possibly stale, set.
@@ -919,11 +942,13 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         let key = Self.authCoalescingKey(
             url: request.url,
             cookieHeader: request.value(forHTTPHeaderField: "Cookie")
-        )
+        ) + "|retry=\(retryTransientFailures)"
         // Capture a let so the coalescer closure does not close over the mutable `var request`.
         let fetchRequest = request
         let (data, responsePath) = try await authCoalescer.shared(key) { [self] in
-            try await performAuthenticatedFetch(for: fetchRequest)
+            try await performAuthenticatedFetch(
+                for: fetchRequest, retryTransientFailures: retryTransientFailures
+            )
         }
         if Self.isLoginRedirect(path: responsePath) {
             throw AO3Error.authenticationRequired
@@ -946,8 +971,10 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         (url?.absoluteString ?? "") + "|" + (cookieHeader ?? "")
     }
 
-    private func performAuthenticatedFetch(for request: URLRequest) async throws -> (Data, String?) {
-        try await withRetry {
+    private func performAuthenticatedFetch(
+        for request: URLRequest, retryTransientFailures: Bool = true
+    ) async throws -> (Data, String?) {
+        try await withRetry(maxRetries: retryTransientFailures ? 2 : 0) {
             try await pace()
             let (data, response) = try await session.data(for: request, delegate: redirectCookieRelay)
             // `defer`, not after `check`: a non-2xx authenticated response still has
@@ -1395,8 +1422,13 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     }
 
     /// An authenticated AO3 subscriptions page (the user's *work* subscriptions).
-    func subscriptionsPage(for request: URLRequest, page: Int) async throws -> AO3SearchPage {
-        try await subscriptionsIndex(for: request, page: page).page
+    func subscriptionsPage(
+        for request: URLRequest, page: Int, retryTransientFailures: Bool = true
+    ) async throws -> AO3SearchPage {
+        let html = try await authenticatedHTML(
+            for: request, retryTransientFailures: retryTransientFailures
+        )
+        return try Self.parseSubscriptionsIndex(html, page: page).page
     }
 
     /// The same GET as `subscriptionsPage`, keeping each row's unsubscribe form.
@@ -1416,6 +1448,13 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     ) async throws -> AO3NamedSubscriptionsPage {
         let html = try await authenticatedHTML(for: request)
         return try Self.parseNamedSubscriptions(html, scope: scope, page: page)
+    }
+
+    func subscriptionIndex(
+        for request: URLRequest, page: Int, type: AO3SubscriptionListType
+    ) async throws -> AO3SubscriptionIndexPage {
+        let html = try await authenticatedHTML(for: request)
+        return try Self.parseSubscriptionIndex(html, page: page, type: type)
     }
 
     /// Downloads a work's EPUB to a temp file. AO3 accepts any filename slug, so
@@ -1497,7 +1536,10 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     /// any thrown error as a non-destructive refresh failure; only this successful,
     /// fully parsed value should be merged into local `SavedWork` records.
     func workMetadata(
-        workID: Int, request: URLRequest? = nil, currentUsername: String? = nil
+        workID: Int,
+        request: URLRequest? = nil,
+        currentUsername: String? = nil,
+        retryTransientFailures: Bool = true
     ) async throws -> AO3WorkMetadata {
         guard let url = URL(string: "\(base)/works/\(workID)?view_adult=true") else {
             throw AO3Error.network("Bad work URL.")
@@ -1505,7 +1547,9 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         let html: String
         if var request {
             request.url = url
-            html = try await authenticatedPageHTML(for: request)
+            html = try await authenticatedHTML(
+                for: request, retryTransientFailures: retryTransientFailures
+            )
         } else {
             html = try await getHTML(url)
         }

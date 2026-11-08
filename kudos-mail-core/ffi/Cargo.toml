@@ -1,0 +1,32 @@
+[package]
+name = "kudos-mail-ffi"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.87"
+license = "AGPL-3.0-or-later"
+description = "UniFFI boundary for kudos-mail-core."
+
+[lib]
+crate-type = ["lib", "staticlib", "cdylib"]
+name = "kudos_mail_ffi"
+
+[features]
+bindgen = ["uniffi/cli"]
+
+[dependencies]
+kudos-mail-core = { path = ".." }
+thiserror = "2"
+tokio = { version = "1.53.3", default-features = false, features = ["rt-multi-thread", "sync"] }
+uniffi = { version = "0.32.2", default-features = false }
+zeroize = "1.8.2"
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+required-features = ["bindgen"]
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+indexing_slicing = "deny"

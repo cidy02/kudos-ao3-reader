@@ -173,6 +173,34 @@ extension AO3AuthService {
         )
     }
 
+    /// Unfollows a work without ever taking the toggle's subscribe branch.
+    func unsubscribe(workID: Int) async throws -> String {
+        guard isLoggedIn else { throw AO3WriteError.notSignedIn }
+        let workURL = Self.workURL(workID)
+        let pageRequest = try authenticatedRequest(for: workURL)
+        let html = try await AO3Client.shared.authenticatedPageHTML(for: pageRequest)
+        guard let token = AO3Client.parseCSRFToken(from: html) else { throw AO3WriteError.noCSRFToken }
+
+        let state = AO3Client.parseSubscription(from: html)
+        guard state.isSubscribed,
+              let path = state.unsubscribePath,
+              let url = Self.absoluteURL(path)
+        else {
+            guard LiveAO3SessionValidator.isLoggedIn(html: html) else {
+                throw AO3WriteError.notSignedIn
+            }
+            return "You're not following this."
+        }
+
+        let body = Self.formEncoded([("_method", "delete"), ("authenticity_token", token)])
+        let request = try writeRequest(to: url, body: body, csrf: token, referer: workURL, ajax: false)
+        let (status, responseBody) = try await submitWrite(request)
+        return try Self.readingsWriteResult(
+            status: status, body: responseBody,
+            success: "Unsubscribed.", rejectedFallback: "Couldn't unsubscribe."
+        )
+    }
+
     /// Adds the work to the user's Marked-for-Later reading list. AO3's control is
     /// a `button_to` form — `POST /works/<id>/mark_for_later` carrying
     /// `_method=patch` (verified live 2026-07-16); without the Rails method

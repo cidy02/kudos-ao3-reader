@@ -42,6 +42,7 @@ Native SwiftUI + SwiftData reader for Archive of Our Own (iOS/iPadOS/macOS, AGPL
 | Fire-and-forget `Task {}` touching `@Model` | Model may be invalidated before/while the task runs → SwiftData assertion crash. Guard `work.modelContext != nil` at entry AND after awaits (see `WorkTags.refreshFromAO3`, `WorkSearchIndex.rebuildIfNeeded`, `PersistenceMigrationService`). |
 | `.iso8601` JSON dates | Truncate to whole seconds → merge decisions become unorderable. `KudosBackup` uses a fractional-seconds encoder with whole-second decode fallback. Don't change either direction. |
 | Per-request headers | Override session-level `httpAdditionalHeaders`. The User-Agent is single-sourced in `AO3RequestDefaults.userAgent` — never define a second UA. |
+| Headless Grok delegation | A headless run cannot ask for tool approval. The local grok-companion plan-mode patch permits only `Fetch`, `Bash`, and `Shell`; plugin updates may overwrite it. `cargo` is not on the delegated agent's PATH, so Rust verification prompts must give its absolute toolchain path. |
 | `project.pbxproj` | File-system-synchronized groups: adding Swift files needs **no** pbxproj edit. Revert cosmetic churn before staging. Info.plist array keys are injected by a Run Script phase (PlistBuddy) — `INFOPLIST_KEY_*` can't express arrays. |
 | `remove`-then-write | Never delete a destination before writing its replacement (sync package destruction window). Stage to `itemReplacementDirectory` (same volume — EXDEV) + `replaceItemAt`. |
 | Reindex ≠ edit | `WorkSearchIndex.reindex` must never call `markModified()` — derived state must not win sync merges. |
@@ -51,7 +52,7 @@ Native SwiftUI + SwiftData reader for Archive of Our Own (iOS/iPadOS/macOS, AGPL
 
 ## Definition of done (all of it, before saying "done")
 
-1. **`Scripts/verify.sh`** — the whole gate in one command: mechanical invariants (`Scripts/check-invariants.sh`) → lint → full iOS suite → macOS build → `git diff --check`. All green, no exceptions. (iOS-only APIs must be `#if os(iOS)`-guarded or step 4 fails.)
+1. **`Scripts/verify.sh`** — the whole gate in one command: mechanical invariants (`Scripts/check-invariants.sh`) → UniFFI binding drift (`Scripts/check-binding-drift.sh`) → lint → full iOS suite → macOS build → `git diff --check`. All green, no exceptions. The drift check requires a Rust toolchain; an explicit skip is not a complete gate. (iOS-only APIs must be `#if os(iOS)`-guarded or the iOS test step fails.)
 2. New behavior has tests (see REGRESSION_TEST_MATRIX for suite placement). Suite count only goes up (2,368 `@Test` functions in 263 suites, plus 123 XCTest methods in 5 classes, as of 2026-10-22; counted by `git grep`, not by a test run).
 3. If your change makes any statement in `docs/*.md` false, update that doc **in the same commit** — stale docs become hallucination sources (this file's own AGENTS.md predecessor rotted exactly that way).
 4. `TASKS.md` row updated with what was verified and what remains **manual** — honesty about unverified device/UI behavior is a project convention.

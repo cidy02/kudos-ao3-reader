@@ -1,6 +1,7 @@
 #!/bin/sh
 # The whole definition-of-done as one command (docs/AGENT_ONBOARDING.md):
-#   invariants → lint → full iOS suite → macOS build → whitespace check.
+#   invariants → binding drift → lint → full iOS suite → macOS build →
+#   whitespace check.
 # Agents: run this before claiming any change is done. Pass a booted simulator
 # UDID, or set KUDOS_CASEFOLD_SIMULATOR_UDID, so the case-sensitive test harness
 # can mount inside the app container.
@@ -26,22 +27,26 @@ if [ ! -d "$ROOT/Vendor/MuPDF.xcframework" ]; then
     exit 1
 fi
 
-echo "== 1/5 invariants =="
+echo "== 1/6 invariants =="
 "$ROOT/Scripts/check-invariants.sh"
 
-echo "== 2/5 lint =="
+echo "== 2/6 binding drift =="
+"$ROOT/Scripts/test-binding-drift.sh"
+"$ROOT/Scripts/check-binding-drift.sh"
+
+echo "== 3/6 lint =="
 "$ROOT/Scripts/lint.sh"
 
-echo "== 3/5 iOS test suite ($SIMULATOR_UDID) =="
+echo "== 4/6 iOS test suite ($SIMULATOR_UDID) =="
 KUDOS_CASEFOLD_SIMULATOR_UDID="$SIMULATOR_UDID" "$ROOT/Scripts/test.sh"
 
-echo "== 4/5 macOS build + Release entitlements =="
+echo "== 5/6 macOS build + Release entitlements =="
 # WPD-2: the pbxproj + entitlements-file half must run in the local DoD
 # path, not only in dormant CI. build-macos.sh also builds Release and
 # invokes the product half against Kudos.app.
 "$ROOT/Scripts/check-macos-release-entitlements.sh"
 "$ROOT/Scripts/build-macos.sh"
 
-echo "== 5/5 whitespace =="
+echo "== 6/6 whitespace =="
 git -C "$ROOT" diff --check
 echo "verify: ALL GREEN"

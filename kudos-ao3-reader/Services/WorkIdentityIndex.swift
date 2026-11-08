@@ -55,4 +55,14 @@ struct WorkIdentityIndex {
     func existingWork(for summary: AO3WorkSummary) -> SavedWork? {
         existingWork(ao3WorkID: summary.id, sourceURL: summary.workURL.absoluteString)
     }
+
+    /// Same id-then-canonical-URL lookup as `existingWork`, for a mail work id.
+    /// A value that does not fit in `Int` cannot be a stored AO3 work id.
+    func containsAO3Work(_ workID: UInt64) -> Bool {
+        guard let id = Int(exactly: workID) else { return false }
+        return existingWork(
+            ao3WorkID: id,
+            sourceURL: "https://archiveofourown.org/works/\(id)"
+        ) != nil
+    }
 }

@@ -45,6 +45,7 @@ struct AccountView: View {
 
     enum Route: Hashable {
         case myCollections
+        case subscriptions
         case preferences
         case moreOnAO3
         case settings
@@ -327,6 +328,7 @@ struct AccountView: View {
     private func destination(for route: Route) -> some View {
         switch route {
         case .myCollections: AO3CollectionsList()
+        case .subscriptions: SubscriptionsView()
         case .preferences: AO3PreferencesView()
         case .moreOnAO3: AccountMoreOnAO3View()
         case .settings: SettingsHubView()
@@ -560,7 +562,7 @@ struct AccountView: View {
                 .init(
                     title: "Subscriptions",
                     countText: cachedCount(.subscriptions),
-                    action: { openLibraryAO3(.subscriptions) }
+                    action: { path.append(Route.subscriptions) }
                 )
             ])
         }
@@ -851,7 +853,7 @@ struct AccountView: View {
         case .markedForLater: path.append(AO3AccountWorksList.Kind.markedForLater)
         case .bookmarks: path.append(AO3AccountWorksList.Kind.bookmarks)
         case .collections: path.append(Route.myCollections)
-        case .subscriptions: path.append(AO3AccountWorksList.Kind.subscriptions)
+        case .subscriptions: path.append(Route.subscriptions)
         case .works: path.append(Route.myWorks)
         case .series: path.append(Route.mySeries)
         case .drafts: path.append(Route.drafts)
@@ -1473,7 +1475,7 @@ private extension AccountView {
         switch tab {
         case .later: path.append(AO3AccountWorksList.Kind.markedForLater)
         case .bookmarks: path.append(AO3AccountWorksList.Kind.bookmarks)
-        case .subscriptions: path.append(AO3AccountWorksList.Kind.subscriptions)
+        case .subscriptions: path.append(Route.subscriptions)
         case .collections: path.append(Route.myCollections)
         }
     }

@@ -1219,6 +1219,8 @@ private extension String {
 nonisolated enum AO3Error: LocalizedError, Sendable, Equatable {
     /// HTTP 429. `retryAfter` is the server's `Retry-After` hint in seconds, if given.
     case rateLimited(retryAfter: TimeInterval?)
+    /// AO3's HTTP 418 / narrowly recognized maintenance page. Never retried.
+    case maintenance
     case notFound
     /// HTTP 403 — AO3 (or its CDN) refused the request outright. Not retried:
     /// hammering a block only prolongs it.
@@ -1254,6 +1256,7 @@ nonisolated enum AO3Error: LocalizedError, Sendable, Equatable {
     var errorDescription: String? {
         switch self {
         case .rateLimited: "AO3 is rate-limiting requests. Wait a moment and try again."
+        case .maintenance: "AO3 is down for maintenance. Check status.archiveofourown.org."
         case .forbidden: "AO3 refused the request (HTTP 403). Wait a while before trying again."
         case .notFound: "That work or page couldn't be found (it may be restricted)."
         case let .server(status): "AO3 had a server problem (HTTP \(status)). Try again shortly."

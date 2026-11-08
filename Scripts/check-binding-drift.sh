@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+# Fail if the committed UniFFI binding no longer matches the Rust source.
+#
+# kudos-ao3-reader/Generated/KudosMail/kudos_mail_core.swift is generated code
+# that is deliberately tracked while the xcframework it binds is not. A source
+# build still needs the Rust toolchain to produce that ignored artifact, but
+# tracking the binding makes its API changes reviewable. The trade is that the
+# checked-in Swift can silently fall behind: change a `uniffi::Record` field or
+# an exported signature, forget to re-run Scripts/build-mail-xcframework.sh,
+# and nothing in the Swift build complains.
+#
+# The generated file does embed UniFFI checksums and `fatalError`s on a
+# mismatch, but only at runtime, on the first call into the library — so the
+# first person to find out is whoever launches the app, and the Swift unit tests
+# never do, because they build `Reading` and friends in process. This check
+# moves that failure to the gate.
+#
+# It regenerates through the real script rather than reimplementing the
+# generation, so the `#if os(iOS)` wrapper and whitespace normalisation are
+# whatever that script does today and the two cannot drift apart either.
+#
+# Needs a Rust toolchain and both iOS targets, so it is NOT part of
+# check-invariants.sh (which is pure grep and expected to be instant).
+#
+# Without cargo it FAILS, with no opt-out. An earlier version exited zero, which
+# let verify.sh go on to print ALL GREEN having never run its only check — and
+# with a cached xcframework the Swift tests pass against the old binding/library
+# pair while the Rust source has moved. A gate that announces the definition of
+# done must not pass when it did not run.
+#
+# There was briefly an --allow-missing-cargo escape hatch "for a contributor
+# without a Rust toolchain". That premise was wrong: README.md requires running
+# Scripts/build-mail-xcframework.sh — which needs cargo — before the project
+# builds at all, so no such contributor can run the rest of this gate either.
+# The flag had no legitimate user and was the last route to a false ALL GREEN,
+# since a cached xcframework would carry every later step.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+BINDING="kudos-ao3-reader/Generated/KudosMail/kudos_mail_core.swift"
+
+export PATH="${KUDOS_RUST_PATH:-/opt/homebrew/opt/rustup/bin:$HOME/.cargo/bin}:$PATH"
+if ! command -v cargo > /dev/null; then
+  echo "check-binding-drift: FAILED (no cargo on PATH)"
+  echo "  This gate cannot verify the committed binding without a Rust toolchain."
+  echo "  Install rustup; README.md's build instructions need it regardless, since"
+  echo "  the xcframework this binding links is built by"
+  echo "  Scripts/build-mail-xcframework.sh and is not committed."
+  exit 1
+fi
+
+# `git diff HEAD -- <path>` says nothing about a path git is not tracking: it
+# exits 0, so an untracked binding used to sail through the check below and then
+# get overwritten by the regeneration, with the restore silently doing nothing.
+if ! git -C "$ROOT" ls-files --error-unmatch "$BINDING" > /dev/null 2>&1; then
+  echo "check-binding-drift: FAILED"
+  echo "  $BINDING is not tracked by git."
+  echo "  This check compares the COMMITTED binding against the crate, so an"
+  echo "  untracked file has nothing to compare and would just be overwritten."
+  exit 1
+fi
+
+# Refuse to run on a dirty binding: a pre-existing local edit would be reported
+# as drift, and the regeneration below would destroy it. Compare against HEAD,
+# not the index — `diff --quiet` alone ignores a STAGED edit, which the
+# regeneration would then overwrite in the working tree.
+if ! git -C "$ROOT" diff --quiet HEAD -- "$BINDING"; then
+  echo "check-binding-drift: FAILED"
+  echo "  $BINDING has uncommitted changes."
+  echo "  Commit or revert them first — this check overwrites that file."
+  exit 1
+fi
+
+BEFORE=$(git -C "$ROOT" hash-object "$ROOT/$BINDING")
+
+# build-mail-xcframework.sh rewrites the tracked binding and deletes the existing
+# xcframework before reassembling it. If assembly then fails, `set -e` would exit
+# with the binding already overwritten and the previous framework gone — a check
+# that breaks the tree it was asked to inspect. Restore the binding on any
+# non-zero exit; the xcframework is a build artifact and is rebuilt on demand,
+# but say so rather than leaving it a surprise.
+restore_binding() {
+  status=$?
+  if [ "$status" -ne 0 ]; then
+    git -C "$ROOT" checkout -- "$BINDING" 2> /dev/null || true
+    echo "check-binding-drift: regeneration failed; restored $BINDING"
+    echo "  build/KudosMail.xcframework may have been removed — re-run"
+    echo "  Scripts/build-mail-xcframework.sh before building the app."
+  fi
+  return $status
+}
+trap restore_binding EXIT
+
+echo "check-binding-drift: regenerating from the crate"
+"$ROOT/Scripts/build-mail-xcframework.sh" > /dev/null
+
+# Regeneration succeeded, so disarm the trap. Past this point a non-zero exit
+# means DRIFT, not failure, and the regenerated file is the thing the developer
+# is told to review and commit — restoring it here would delete the evidence and
+# mislabel the result.
+trap - EXIT
+
+AFTER=$(git -C "$ROOT" hash-object "$ROOT/$BINDING")
+
+if [ "$BEFORE" != "$AFTER" ]; then
+  echo "check-binding-drift: FAILED"
+  echo "  The committed binding does not match the crate. Diff:"
+  git -C "$ROOT" --no-pager diff --stat -- "$BINDING"
+  echo
+  echo "  The regenerated file is already in your tree — review it and commit it"
+  echo "  together with the Rust change that caused it."
+  exit 1
+fi
+
+echo "check-binding-drift: OK"

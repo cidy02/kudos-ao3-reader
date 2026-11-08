@@ -20,6 +20,7 @@ All paths relative to `kudos-ao3-reader/` unless noted. Confirmed as of 2026-07-
 | Browse (categories → fandoms → works; multi-select batch actions) | `Features/Browse/NativeBrowseView.swift` (`BrowseView`, `FandomWorksView`, `TagWorksView`), `Features/Search/MediaBrowserView.swift`, `FandomListView.swift`, `FandomCatalog.swift` |
 | Search (global: local index matches + AO3 search) | `Features/Search/SearchView.swift`, `AO3WorkRow.swift` (remote result row, selection-capable); Filters › Sort By is `SearchSortByView.swift` — Ways to Find (`SearchWaysToFind.swift`, plain AO3 parameters) and T-473's computed ranks over the loaded works (`LoadedWorksRanking.swift`; Momentum's last-seen kudos live in `UserDefaults` via `LastSeenKudosStore`, device-local, not in backups) |
 | Account (AO3 profile hub) | `Features/Account/AccountView.swift` — one flat hub page, no segmented control: **Shortcuts**, then groups **Reading** (Marked for Later/Bookmarks/Collections/Subscriptions), **Writing** (Works/Series/Drafts), **Activity** (History/Inbox), then **Account** (Preferences, `AccountMoreOnAO3View`). Each row pushes its own screen; row orders are `AccountView.readingRowOrder` / `writingRowOrder` / `activityRowOrder`, shared with the signed-out preview. `libraryStyleCompactRoot` is unreachable while `showsWorkListControls` is false for every scope. `AO3PreferencesView.swift`, `PrivacyDataView.swift`, `AO3AccountWorksList.swift`; preferences in `AO3Client+Preferences.swift` / `AO3PreferencesActions.swift` / `AO3PreferencesModels.swift` |
+| Subscriptions (mail-backed Waiting + user-started AO3 scan + Following/Tidy up) | `Features/Subscriptions/`; Gmail credentials in `Services/MailCredentialsVault.swift`, local event state in `SubscriptionUpdateStore.swift`, refresh loop in `MailSubscriptionDriver.swift` (iOS-only UniFFI boundary). Scan: `Services/SubscriptionScanService.swift`, `SubscriptionScanModels.swift`, `SubscriptionScanStore.swift`; banner `Features/Subscriptions/SubscriptionScanBanner.swift` over `ContentView`. Following loads work, series, and author index pages only when opened, one page at a time. |
 | Native AO3 author profiles (pseud scope, Works/Series/Bookmarks/About, series detail) | `Features/Authors/AuthorProfileView.swift`, `AuthorProfileComponents.swift`, `AO3SeriesDetailView.swift`; shared tappable bylines in `UIComponents/AO3AuthorNavigation.swift` |
 | Settings (fonts, backup, folder sync, EPUB import, privacy prefs) | `Settings/SettingsHubView.swift` (1ab hub; routes + row values in `SettingsRoute.swift`) pushing one page per row: `SettingsReadingPages` (Appearance, Font, Reader, Listening), `SettingsStoragePages` (Downloads, Preservation, Reading Queues, Library), `SettingsBackupPage`, `SettingsSyncFolderPage`, `SettingsImportPage`, `SettingsAccountPages` (AO3 Account, Privacy, About). `SettingsView.swift` keeps `ReaderOptionsForm` (the reader's sheet) and the sections both share. One `.fileImporter` per page, see onboarding pitfalls |
 | Reader — iOS | `Features/ReaderReadium/ReadiumReaderView.swift` + `ReadiumProgressPersistence.swift` (locator stream is debounced ~2s / progression delta; flush on dismiss, disappear, scene background; mid-session writes go through `ReadiumReaderPersistence.writePosition` (also holds `deleteAnnotation`), which uses `applyDebouncedReadiumLocator` so shelf order / folder-sync dirty don't thrash on scroll) |
@@ -30,7 +31,7 @@ All paths relative to `kudos-ao3-reader/` unless noted. Confirmed as of 2026-07-
 | Reader — macOS (legacy) | `Features/Reader/ReaderView.swift` + `ReaderController.swift` (`#if os(macOS)`); progress = `lastSpineIndex`/`lastScrollFraction` via debounced `ReaderProgressBridge` |
 | Resume labels (Home and Work Detail) | `Utilities/WorkReadingPosition.swift` reads the persisted locator title; never infer chapter number from a spine index. |
 | Reader routing | `BookReaderView` (grep) routes per-platform |
-| Privacy (M/E) | `Features/Privacy/MatureContent.swift` — see below |
+| Privacy (adult/unverified ratings) | `Features/Privacy/MatureContent.swift` — see below |
 
 ## AO3 networking / scraping
 
@@ -42,6 +43,7 @@ All paths relative to `kudos-ao3-reader/` unless noted. Confirmed as of 2026-07-
 | Auth (WebKit login, Keychain session, validator, generation-owned lifecycle, serialized WebKit-cookie reconciliation, `authenticatedRequest`, `accountWorks`) | `Services/AO3AuthService.swift` (incl. `AO3RequestDefaults.userAgent` and `userAgent(feature:)` — the single UA source), `AO3SessionVault.swift`, `AO3WebLoginCoordinator.swift` |
 | Write actions (kudos/comments; CSRF; never retried/coalesced) | `Services/AO3WriteActions.swift` + `AO3Client.submitWrite` ⚠️ never live-verified against AO3 |
 | Tag/metadata enrichment | `Services/WorkTags.swift` (24h attempt cooldown), `WorkMetadataRefresh.swift`, `WorkUpdateChecker.swift` (WIP-only, 6h throttle incl. failures) |
+| Subscriptions scan | `Services/SubscriptionScanService.swift` + `LiveSubscriptionScanFetcher`: own work-subscription list, then the same authenticated work-metadata page as update checks. Dedicated one-slot coordinator; does not write `SavedWork` or share the mail update file. |
 | Author/profile parsing, lazy state, and auth-scoped 5-minute HTML cache (Inbox private HTML/forms add session generation to their cache scope) | `Services/AO3Client+Authors.swift`, `AO3AuthorProfileService.swift`; values/routes in `Models/AO3AuthorModels.swift` |
 | Download queue (sequential, skip/revive existing) | `Services/DownloadQueue.swift` |
 | EPUB import funnels | `Services/WorkImporter.swift` — `importEPUB` (AO3 downloads; post-download dedup/merge/revive) and `importUserEPUB` (user files) |
@@ -57,6 +59,9 @@ All paths relative to `kudos-ao3-reader/` unless noted. Confirmed as of 2026-07-
 | Migration + asset reconciliation + gate | `Services/PersistenceSync.swift` (`PersistenceMigrationService`, `PersistenceOperationGate`, `SyncTombstones`, `SyncMerge`) |
 | Soft delete / 90-day recovery / hard delete / sweep | `Services/PreservedWorkService.swift`; permanent path `WorkLifecycle.hardDelete` in `WorkLifecycle.swift` |
 | File locations (EPUBs by `effectiveAssetIdentifier`, reader cache, temp) | `Services/Storage.swift` |
+| Mail subscription updates (derived, device-only, capped; excluded from backups/sync) | `Services/SubscriptionUpdateStore.swift` |
+| Subscription scan snapshots (derived, per-auth-scope, device-only; excluded from backup/sync) | `Services/SubscriptionScanStore.swift` (`KudosSubscriptionScan` in Application Support) |
+| New to you cards (new works from author/series follows, with persisted decisions) | `Features/Subscriptions/NewToYouDeck.swift` |
 | Design doc | `docs/iCloudPersistence.md` |
 
 ## Identity, search, dedup
@@ -71,7 +76,7 @@ All paths relative to `kudos-ao3-reader/` unless noted. Confirmed as of 2026-07-
 
 ## Privacy / M-E blur
 
-- `Features/Privacy/MatureContent.swift`: `SavedWork.isAdult` (rating == Mature/Explicit), `PrivacyGate` (@Observable; reveal state; `isHidden` = Hide-mode only), `SensitiveWorkRow` (List rows), `SensitiveWorkCoverCard` (carousel cards), `MatureRevealToggle` (the Privacy button), `PrivacyGate.hasVisibleMatureWorks(in:hideMature:)` (the single button-visibility rule).
+- `Features/Privacy/MatureContent.swift`: `SavedWork.isAdult` and `AO3WorkSummary.isAdult` share one fail-closed rating rule (only normalized General/Teen values are non-adult); `PrivacyGate` owns local+remote reveal state and clears it when the signed-in account ends or changes; local rows/cards and Subscriptions › New to you use the same reveal affordance; `MatureRevealToggle` and `PrivacyGate.hasVisibleMatureWorks(in:hideMature:)` remain the single toolbar-button rule.
 - Modes: `MaturePrivacyMode.obscure` (blur, tap-to-reveal) / `.hide` (filtered out pre-render). Prefs: `@AppStorage("hideMatureContent")`, `("matureContentMode")`.
 - Invariant: the Privacy button gates on the **currently visible, filtered** set of the surface, via the shared rule — never the raw `@Query`.
 - Remote-led lists pair against the full local library before applying privacy, so a hidden local work's sparse
