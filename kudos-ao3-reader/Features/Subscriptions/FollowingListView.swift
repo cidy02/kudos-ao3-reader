@@ -282,6 +282,8 @@ private struct FollowingRow: View {
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
+            // The user accent is a fixed AO3 red and fails contrast on the tinted capsule in dark mode.
+            .tint(.red)
             .disabled(!canUnfollow || isBusy)
             .accessibilityLabel("Unfollow \(work.title)")
         }

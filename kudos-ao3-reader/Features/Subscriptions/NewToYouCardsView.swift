@@ -188,18 +188,18 @@ struct NewToYouCardsView: View {
                     }
                 }
                 FlowLayout(spacing: 12, rowSpacing: 4) {
-                    if !work.rating.isEmpty { WorkStatLabel(text: work.rating, symbol: "checkmark.shield") }
+                    if !work.rating.isEmpty { cardStat(work.rating, symbol: "checkmark.shield") }
                     // Unknown completion (nil) says nothing rather than claiming "In progress".
                     if let complete = work.isComplete {
-                        WorkStatLabel(
-                            text: complete ? "Complete" : "In progress",
+                        cardStat(
+                            complete ? "Complete" : "In progress",
                             symbol: complete ? "checkmark.circle" : "hourglass"
                         )
                     }
-                    if !work.chapters.isEmpty { WorkStatLabel(text: work.chapters, symbol: "book") }
-                    if let words = work.words { WorkStatLabel(text: words.formatted(), symbol: "textformat.size") }
-                    if let kudos = work.kudos { WorkStatLabel(text: kudos.formatted(), symbol: "heart") }
-                    if !work.dateUpdated.isEmpty { WorkStatLabel(text: work.dateUpdated, symbol: "calendar") }
+                    if !work.chapters.isEmpty { cardStat(work.chapters, symbol: "book") }
+                    if let words = work.words { cardStat(words.formatted(), symbol: "textformat.size") }
+                    if let kudos = work.kudos { cardStat(kudos.formatted(), symbol: "heart") }
+                    if !work.dateUpdated.isEmpty { cardStat(work.dateUpdated, symbol: "calendar") }
                 }
             }
             .font(.caption)
@@ -235,6 +235,23 @@ struct NewToYouCardsView: View {
                 )
         }
         .accessibilityElement(children: .combine)
+    }
+
+    /// `WorkStatLabel` is one line at its ideal width, and that default is shared
+    /// by every other caller. At accessibility sizes a rating such as "Teen And Up
+    /// Audiences" is wider than this card, so the stat wraps here instead of clipping.
+    @ViewBuilder
+    private func cardStat(_ text: String, symbol: String) -> some View {
+        if isAccessibilitySize {
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
+                Image(systemName: symbol)
+                    .font(.caption2.weight(.bold))
+                Text(text)
+            }
+            .fixedSize(horizontal: false, vertical: true)
+        } else {
+            WorkStatLabel(text: text, symbol: symbol)
+        }
     }
 
     private func actionBar(for work: AO3WorkSummary) -> some View {

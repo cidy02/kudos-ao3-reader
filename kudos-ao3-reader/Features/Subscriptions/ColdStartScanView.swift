@@ -181,11 +181,13 @@ struct ColdStartScanView: View {
                     .frame(maxWidth: .infinity, minHeight: 44)
                     .buttonStyle(.bordered)
                     .controlSize(.large)
+                    .tint(Color.primary)
                 Button("Cancel", role: .cancel, action: onCancel)
                     .font(.headline)
                     .frame(maxWidth: .infinity, minHeight: 44)
                     .buttonStyle(.bordered)
                     .controlSize(.large)
+                    .tint(Color.primary)
             }
         case .paused:
             HStack(spacing: 12) {
@@ -194,11 +196,13 @@ struct ColdStartScanView: View {
                     .frame(maxWidth: .infinity, minHeight: 44)
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
+                    .tint(Color.primary)
                 Button("Cancel", role: .cancel, action: onCancel)
                     .font(.headline)
                     .frame(maxWidth: .infinity, minHeight: 44)
                     .buttonStyle(.bordered)
                     .controlSize(.large)
+                    .tint(Color.primary)
             }
         case .finished:
             HStack(spacing: 8) {

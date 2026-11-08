@@ -182,13 +182,8 @@ private extension SubscriptionSnapshotTests {
                     )
                 })
             case .connectMail:
-                AnyView(NavigationStack {
-                    UpdateSourcesView(
-                        onScanAO3: {},
-                        onConnectMail: { _, _ in },
-                        initiallyShowsMailConnection: true
-                    )
-                })
+                // A presented sheet is drawn outside the hosted view, so render its content.
+                AnyView(MailConnectionView(onConnect: { _, _ in }))
             case .coldScan:
                 AnyView(NavigationStack {
                     ColdStartScanView(
