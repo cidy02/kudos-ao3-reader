@@ -47,6 +47,9 @@ extension AO3WorkSummary {
 
 /// Tracks which sensitive works the user has temporarily revealed this session,
 /// and gates reveals behind device biometrics when the user has enabled that.
+/// Reveals belong to the signed-in AO3 account and end when that account ends
+/// or a different one takes its place. Backgrounding does not, because the
+/// username does not change.
 @MainActor
 @Observable
 final class PrivacyGate {
@@ -54,6 +57,8 @@ final class PrivacyGate {
     private var revealedRemoteWorkIDs: Set<Int> = []
     /// When true, every sensitive work is shown until toggled back off.
     private(set) var revealAll = false
+    /// Username these reveals belong to. Nil means signed out, or not yet observed.
+    private var signedInAccount: String?
 
     func isRevealed(_ work: SavedWork) -> Bool {
         revealAll || revealedIDs.contains(work.id)
@@ -82,9 +87,7 @@ final class PrivacyGate {
     /// Shows or re-hides every sensitive work for the session.
     func toggleRevealAll() {
         if revealAll {
-            revealAll = false
-            revealedIDs.removeAll()
-            revealedRemoteWorkIDs.removeAll()
+            clearReveals()
             Log.privacy.info("Re-hid all mature works")
         } else {
             authenticate {
@@ -92,6 +95,25 @@ final class PrivacyGate {
                 Log.privacy.info("Revealed all mature works for this session")
             }
         }
+    }
+
+    /// Scene owner reports the current `AO3AuthService.username` (nil unless
+    /// `.signedIn`). Leaving a known account — sign-out, expiry, or a different
+    /// username — drops every reveal. The same username, and the first sign-in
+    /// after signed-out, do not: a reveal lasts for the account that made it.
+    func noteSignedInAccount(_ username: String?) {
+        guard signedInAccount != username else { return }
+        let leavingAccount = signedInAccount != nil
+        signedInAccount = username
+        guard leavingAccount else { return }
+        clearReveals()
+        Log.privacy.info("Cleared mature-content reveals after the signed-in account changed")
+    }
+
+    private func clearReveals() {
+        revealAll = false
+        revealedIDs.removeAll()
+        revealedRemoteWorkIDs.removeAll()
     }
 
     /// Whether this work should be omitted from a list right now (Hide mode only).

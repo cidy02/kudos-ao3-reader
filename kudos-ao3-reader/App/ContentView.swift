@@ -68,6 +68,14 @@ struct ContentView: View {
             .environment(theme)
             .environment(auth)
             .environment(downloadQueue)
+            // Username is nil for every status except `.signedIn`, so this one
+            // observation covers logout, session expiry, and a login or refresh
+            // that lands on someone else. `initial` records an account that is
+            // already signed in on first evaluation, so a later sign-out still
+            // counts as leaving it. Backgrounding does not change the username.
+            .onChange(of: auth.username, initial: true) { _, username in
+                privacyGate.noteSignedInAccount(username)
+            }
             // The app theme drives the whole app's light/dark appearance (the reader
             // overrides this for itself when its theme is unlinked).
             .preferredColorScheme(theme.appTheme.colorScheme)
