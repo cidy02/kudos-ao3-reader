@@ -1,9 +1,10 @@
 import SwiftUI
 
-/// A single compact work stat: a bold, secondary glyph hugging its value, with
-/// the value inheriting the surrounding font/colour. Shared across every work
-/// surface — the Search/Library rows (`AO3WorkRow` / `WorkRow`) and the Home/Library
-/// cover-card shelves — so metadata reads as one family (Part 4 card consistency).
+/// A single compact work stat: a bold glyph hugging its value, with both sharing
+/// the caller's foreground style and the value inheriting its font. Shared across
+/// every work surface — the Search/Library rows (`AO3WorkRow` / `WorkRow`) and the
+/// Home/Library cover-card shelves — so metadata reads as one family (Part 4 card
+/// consistency).
 struct WorkStatLabel: View {
     let text: String
     let symbol: String
@@ -18,7 +19,6 @@ struct WorkStatLabel: View {
         HStack(spacing: 3) {
             Image(systemName: symbol)
                 .font(.caption2.weight(.bold))
-                .foregroundStyle(.secondary)
             Text(text)
         }
         .lineLimit(1)

@@ -89,9 +89,9 @@ struct WorkRow: View {
             }
 
             if !work.workFandoms.isEmpty {
-                // Tight icon→text gap + bold secondary glyph, matching the stats row.
-                // Icon and fandom text share one secondary colour (`WorkStatLabel` /
-                // `CardMetaLabel`).
+                // Tight icon→text gap + bold glyph; icon and fandom text share one
+                // secondary colour, following the `WorkStatLabel` / `CardMetaLabel`
+                // one-colour treatment.
                 HStack(spacing: 4) {
                     Image(systemName: "books.vertical")
                         .fontWeight(.bold)

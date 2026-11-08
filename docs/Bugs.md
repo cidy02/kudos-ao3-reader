@@ -56,7 +56,7 @@ _None currently tracked._
   - **Browse-by-fandom footer** — was a white box; now plain text on the warm backdrop.
   - **Bookmarks empty states** — warm backdrop instead of white.
   - **Customize Theme sheet** — themed form + preview header.
-  - **Work cards** — warm card surfaces + accent icons.
+  - **Work cards** — warm card surfaces + metadata icons that match their values.
 
 ---
 

@@ -166,8 +166,8 @@ struct MediaBrowserView: View {
     }
 
     private func statItem(_ symbol: String, _ text: String) -> some View {
-        // Icon hugs its label and is bold + secondary — matches `WorkStatLabel`
-        // on the Search/Library result cards.
+        // Icon hugs its label and is bold + secondary — the same one-colour
+        // treatment as `WorkStatLabel` on the Search/Library result cards.
         HStack(spacing: 3) {
             Image(systemName: symbol)
                 .font(.caption2.weight(.bold))

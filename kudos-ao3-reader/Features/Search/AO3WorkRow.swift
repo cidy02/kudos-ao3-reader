@@ -62,9 +62,9 @@ struct AO3WorkRow: View {
 
             if !work.fandoms.isEmpty {
                 // Each fandom is individually tappable → AO3 search for that fandom.
-                // Icon and fandom text share one secondary colour (`WorkStatLabel` /
-                // `CardMetaLabel`), so a tappable fandom does not read as an
-                // accent-colored link.
+                // Icon and fandom text share one secondary colour, following the
+                // `WorkStatLabel` / `CardMetaLabel` one-colour treatment, so a
+                // tappable fandom does not read as an accent-colored link.
                 HStack(alignment: .top, spacing: 4) {
                     Image(systemName: "books.vertical")
                         .fontWeight(.bold)

@@ -169,8 +169,6 @@ struct NewToYouCardsView: View {
                 .font(.title3.bold())
                 .fixedSize(horizontal: false, vertical: true)
 
-            // `.tint` would put the icons in the user's accent, which fails contrast on the dark card
-            // surface; WorkStatLabel draws them with it, so redirect it for this block.
             VStack(alignment: .leading, spacing: 4) {
                 FlowLayout(spacing: 12, rowSpacing: 4) {
                     if !work.authors.isEmpty {
@@ -200,7 +198,6 @@ struct NewToYouCardsView: View {
             }
             .font(.caption)
             .foregroundStyle(.secondary)
-            .tint(Color.secondary)
 
             if !warnings(of: work).isEmpty {
                 Label(warnings(of: work).joined(separator: ", "), systemImage: "exclamationmark.triangle")
