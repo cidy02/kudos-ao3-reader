@@ -19,6 +19,18 @@ struct MailImportCounts: Codable, Equatable, Sendable {
     }
 }
 
+/// A New to you choice. `Next` is not one of these: it only hides the card
+/// until the next launch.
+struct SubscriptionDecision: Codable, Equatable, Sendable {
+    enum Action: String, Codable, Equatable, Sendable {
+        case saved
+        case notForMe
+    }
+
+    var workID: UInt64
+    var action: Action
+}
+
 struct SubscriptionUpdateState: Codable, Equatable, Sendable {
     static let limit = 500
 
@@ -26,6 +38,44 @@ struct SubscriptionUpdateState: Codable, Equatable, Sendable {
     var counts = MailImportCounts()
     var since: Date?
     var lastRefreshAt: Date?
+    /// Newest last. Capped with the updates. A missing key is an older file.
+    var decisions: [SubscriptionDecision] = []
+
+    init(
+        updates: [SubscriptionUpdate] = [],
+        counts: MailImportCounts = .init(),
+        since: Date? = nil,
+        lastRefreshAt: Date? = nil,
+        decisions: [SubscriptionDecision] = []
+    ) {
+        self.updates = updates
+        self.counts = counts
+        self.since = since
+        self.lastRefreshAt = lastRefreshAt
+        self.decisions = decisions
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case updates, counts, since, lastRefreshAt, decisions
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        updates = try container.decode([SubscriptionUpdate].self, forKey: .updates)
+        counts = try container.decode(MailImportCounts.self, forKey: .counts)
+        since = try container.decodeIfPresent(Date.self, forKey: .since)
+        lastRefreshAt = try container.decodeIfPresent(Date.self, forKey: .lastRefreshAt)
+        decisions = try container.decodeIfPresent([SubscriptionDecision].self, forKey: .decisions) ?? []
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(updates, forKey: .updates)
+        try container.encode(counts, forKey: .counts)
+        try container.encodeIfPresent(since, forKey: .since)
+        try container.encodeIfPresent(lastRefreshAt, forKey: .lastRefreshAt)
+        try container.encode(decisions, forKey: .decisions)
+    }
 
     func capped() -> Self {
         var seen = Set<UInt32>()
@@ -37,6 +87,15 @@ struct SubscriptionUpdateState: Codable, Equatable, Sendable {
             .filter { seen.insert($0.uid).inserted }
             .prefix(Self.limit)
             .map { $0 }
+        // shortcut: the oldest decisions fall off at `limit`, same as updates;
+        // raise it if a busy account dismisses more works than that and sees them return.
+        var seenWorks = Set<UInt64>()
+        var kept: [SubscriptionDecision] = []
+        for decision in decisions.reversed() where seenWorks.insert(decision.workID).inserted {
+            kept.append(decision)
+            if kept.count == Self.limit { break }
+        }
+        copy.decisions = Array(kept.reversed())
         return copy
     }
 }

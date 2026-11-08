@@ -78,6 +78,39 @@ struct SubscriptionUpdate: Codable, Equatable, Identifiable, Sendable {
     /// refuses to walk — so this is a prompt to go and look, not data.
     let extraCreations: UInt64
 
+    /// Preface metadata, copied only from what the crate reported. A contested
+    /// preface stores none of it. Older store files omit these keys; each one
+    /// decodes as empty rather than failing the whole file.
+    let rating: String?
+    let words: UInt64?
+    let chaptersPosted: UInt32?
+    let chaptersTotal: UInt32?
+    /// The series title printed in the preface, when there was one. This is not
+    /// the subscription named in `source`.
+    let series: String?
+    let summary: String?
+    private let storedWarnings: [String]?
+    private let storedFandoms: [String]?
+    private let storedRelationships: [String]?
+    private let storedCharacters: [String]?
+    private let storedAdditionalTags: [String]?
+
+    var warnings: [String] { storedWarnings ?? [] }
+    var fandoms: [String] { storedFandoms ?? [] }
+    var relationships: [String] { storedRelationships ?? [] }
+    var characters: [String] { storedCharacters ?? [] }
+    var additionalTags: [String] { storedAdditionalTags ?? [] }
+
+    private enum CodingKeys: String, CodingKey {
+        case uid, workID, chapterID, change, certainty, workTitle, author, at, source, extraCreations
+        case rating, words, chaptersPosted, chaptersTotal, series, summary
+        case storedWarnings = "warnings"
+        case storedFandoms = "fandoms"
+        case storedRelationships = "relationships"
+        case storedCharacters = "characters"
+        case storedAdditionalTags = "additionalTags"
+    }
+
     var id: String { "\(uid)-\(workID)" }
 
     /// True when the screen may offer to open a specific chapter.
@@ -118,7 +151,18 @@ struct SubscriptionUpdate: Codable, Equatable, Identifiable, Sendable {
         author: String,
         at: Date,
         source: Source,
-        extraCreations: UInt64 = 0
+        extraCreations: UInt64 = 0,
+        rating: String? = nil,
+        warnings: [String] = [],
+        fandoms: [String] = [],
+        relationships: [String] = [],
+        characters: [String] = [],
+        additionalTags: [String] = [],
+        words: UInt64? = nil,
+        chaptersPosted: UInt32? = nil,
+        chaptersTotal: UInt32? = nil,
+        series: String? = nil,
+        summary: String? = nil
     ) {
         self.uid = uid
         self.workID = workID
@@ -129,26 +173,31 @@ struct SubscriptionUpdate: Codable, Equatable, Identifiable, Sendable {
         let trustworthy = !isContested && isAnchoredToWork && source == .work
         certainty = trustworthy ? .confirmed : .workOnly
 
+        // A contested preface loses everything read from it, including the
+        // metadata below. Nothing here is filled back in from another source.
+        // An unpinned work keeps the title, byline and preface metadata the
+        // crate returned. That title is a claim: the screen must not headline it.
+        let prefaceReadable = !isContested
+        self.rating = prefaceReadable ? rating : nil
+        self.words = prefaceReadable ? words : nil
+        self.chaptersPosted = prefaceReadable ? chaptersPosted : nil
+        self.chaptersTotal = prefaceReadable ? chaptersTotal : nil
+        self.series = prefaceReadable ? series : nil
+        self.summary = prefaceReadable ? summary : nil
+        storedWarnings = prefaceReadable ? warnings : []
+        storedFandoms = prefaceReadable ? fandoms : []
+        storedRelationships = prefaceReadable ? relationships : []
+        storedCharacters = prefaceReadable ? characters : []
+        storedAdditionalTags = prefaceReadable ? additionalTags : []
+        self.workTitle = prefaceReadable ? workTitle : ""
+        self.author = prefaceReadable ? author : ""
+
         if trustworthy {
             self.chapterID = chapterID
             change = isNewWork ? .newWork : .newChapter(number: chapterNumber)
-            self.workTitle = workTitle
-            self.author = author
         } else {
-            // A contested preface loses everything read from it. An UNPINNED work
-            // (author or series subscription, `Identity::Body`) keeps its title
-            // and byline: the crate itself still returns them, and blanking them
-            // would reduce every author-subscription row to "Work #12345".
-            //
-            // That is a deliberate asymmetry, not an oversight, and it is the
-            // open question two reviewers have now raised: the subtitle and the
-            // "Check" badge hedge, but the HEADLINE is still preface text for a
-            // work nothing pinned. Awaiting the owner's call; do not silently
-            // change it either way.
             self.chapterID = nil
             change = isContested ? .unknown : (isNewWork ? .newWork : .newChapter(number: nil))
-            self.workTitle = isContested ? "" : workTitle
-            self.author = isContested ? "" : author
         }
     }
 }
@@ -244,7 +293,18 @@ extension SubscriptionUpdate {
             author: event.author,
             at: Date(timeIntervalSince1970: TimeInterval(event.at)),
             source: source,
-            extraCreations: event.extraCreations
+            extraCreations: event.extraCreations,
+            rating: event.rating,
+            warnings: event.warnings,
+            fandoms: event.fandoms,
+            relationships: event.relationships,
+            characters: event.characters,
+            additionalTags: event.additionalTags,
+            words: event.words,
+            chaptersPosted: event.chaptersPosted,
+            chaptersTotal: event.chaptersTotal,
+            series: event.series,
+            summary: event.summary
         )
     }
 }

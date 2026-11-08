@@ -57,6 +57,81 @@ struct MailPersistenceTests {
         #expect(try store.loadCursor() == nil)
     }
 
+    @Test func decisionsSurviveReloadAndAreCapped() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("kudos-mail-decisions-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = FileSubscriptionUpdateStore(directoryURL: directory)
+        let decisions = (1 ... 501).map {
+            SubscriptionDecision(workID: UInt64($0), action: .notForMe)
+        }
+        try store.saveState(SubscriptionUpdateState(decisions: decisions))
+
+        let reloaded = FileSubscriptionUpdateStore(directoryURL: directory)
+        let loaded = try reloaded.loadState()
+        #expect(loaded.decisions.count == 500)
+        #expect(loaded.decisions.map(\.workID) == (2 ... 501).map(UInt64.init))
+        #expect(loaded.decisions.last == SubscriptionDecision(workID: 501, action: .notForMe))
+    }
+
+    @Test func oldStoreFileDecodesWithoutNewKeys() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("kudos-mail-old-store-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = FileSubscriptionUpdateStore(directoryURL: directory)
+        let update = SubscriptionUpdate(
+            uid: 4,
+            workID: 42,
+            chapterID: 7,
+            chapterNumber: 2,
+            isNewWork: false,
+            isContested: false,
+            isAnchoredToWork: true,
+            workTitle: "Honest Work",
+            author: "skydarius11",
+            at: when,
+            source: .author("marrowlight"),
+            rating: "General Audiences",
+            fandoms: ["Original Work"],
+            words: 20,
+            summary: "A summary"
+        )
+        try store.saveState(SubscriptionUpdateState(
+            updates: [update],
+            since: when,
+            decisions: [SubscriptionDecision(workID: 42, action: .saved)]
+        ))
+
+        let url = directory.appendingPathComponent("updates.json")
+        let raw = try JSONSerialization.jsonObject(with: Data(contentsOf: url))
+        var object = try #require(raw as? [String: Any])
+        object.removeValue(forKey: "decisions")
+        if var updates = object["updates"] as? [[String: Any]] {
+            for index in updates.indices {
+                for key in [
+                    "rating", "warnings", "fandoms", "relationships", "characters",
+                    "additionalTags", "words", "chaptersPosted", "chaptersTotal", "series", "summary"
+                ] {
+                    updates[index].removeValue(forKey: key)
+                }
+            }
+            object["updates"] = updates
+        }
+        try JSONSerialization.data(withJSONObject: object).write(to: url)
+
+        let loaded = try FileSubscriptionUpdateStore(directoryURL: directory).loadState()
+        let decoded = try #require(loaded.updates.first)
+        #expect(decoded.workTitle == "Honest Work")
+        #expect(decoded.author == "skydarius11")
+        #expect(decoded.workID == 42)
+        #expect(decoded.source == .author("marrowlight"))
+        #expect(decoded.rating == nil)
+        #expect(decoded.fandoms.isEmpty)
+        #expect(decoded.words == nil)
+        #expect(decoded.summary == nil)
+        #expect(loaded.decisions.isEmpty)
+    }
+
     private func makeUpdate(uid: UInt32, at: Date) -> SubscriptionUpdate {
         SubscriptionUpdate(
             uid: uid,
@@ -226,6 +301,38 @@ struct MailSubscriptionDriverTests {
         #expect(store.cursor == MailCursor(uidValidity: 7, lastUID: 1))
         #expect(store.state.updates == previous.updates)
         #expect(driver.updates == previous.updates)
+    }
+
+    @Test func recordedDecisionSurvivesANewDriver() throws {
+        let vault = MemoryMailCredentialsVault(credentials: credentials)
+        let store = MemorySubscriptionUpdateStore()
+        let mailbox = FakeMailbox(harvests: [])
+        let driver = makeDriver(vault: vault, store: store, mailbox: mailbox)
+        try driver.recordDecision(.notForMe, workID: 42)
+
+        let reloaded = makeDriver(vault: vault, store: store, mailbox: mailbox)
+        #expect(reloaded.decisions == [SubscriptionDecision(workID: 42, action: .notForMe)])
+    }
+
+    @Test func mailboxGenerationChangeKeepsDecisions() async {
+        let vault = MemoryMailCredentialsVault(credentials: credentials)
+        let store = MemorySubscriptionUpdateStore(
+            state: SubscriptionUpdateState(
+                updates: [update(uid: 90, workID: 90)],
+                since: when,
+                decisions: [SubscriptionDecision(workID: 42, action: .saved)]
+            ),
+            cursor: MailCursor(uidValidity: 7, lastUID: 90)
+        )
+        let mailbox = FakeMailbox(harvests: [
+            harvest(readings: [reading(uid: 1)], uidValidity: 8, lastUID: 1)
+        ])
+        let driver = makeDriver(vault: vault, store: store, mailbox: mailbox)
+
+        await driver.refresh()
+
+        #expect(driver.updates.map(\.uid) == [1])
+        #expect(driver.decisions == [SubscriptionDecision(workID: 42, action: .saved)])
     }
 
     @Test func disconnectDeletesCredentialsAndStoredUpdates() throws {

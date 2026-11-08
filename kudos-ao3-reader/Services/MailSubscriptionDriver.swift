@@ -45,8 +45,27 @@ final class MailSubscriptionDriver {
     private(set) var errorMessage: String?
 
     var updates: [SubscriptionUpdate] { state.updates }
+    var decisions: [SubscriptionDecision] { state.decisions }
     var unverifiedCount: UInt64 { state.counts.unverified }
     var since: Date? { state.since }
+
+    /// Records Save or Not for me. The write lands before `state` changes, so a
+    /// failed save leaves the card in the deck.
+    func recordDecision(_ action: SubscriptionDecision.Action, workID: UInt64) throws {
+        let previous = state
+        var next = state
+        next.decisions.removeAll { $0.workID == workID }
+        next.decisions.append(SubscriptionDecision(workID: workID, action: action))
+        next = next.capped()
+        do {
+            try store.saveState(next)
+            state = next
+        } catch {
+            state = previous
+            errorMessage = Self.message(for: error)
+            throw error
+        }
+    }
 
     private let credentialsVault: any MailCredentialsPersisting
     private let store: any SubscriptionUpdateStoring
@@ -250,7 +269,10 @@ final class MailSubscriptionDriver {
         } else {
             generationChanged = !state.updates.isEmpty
         }
-        return generationChanged ? .init() : state
+        // A new mailbox generation replaces the rows. Decisions are about works,
+        // not UIDs, so Not for me / Save stay.
+        guard generationChanged else { return state }
+        return SubscriptionUpdateState(decisions: state.decisions)
     }
 
     private func merge(

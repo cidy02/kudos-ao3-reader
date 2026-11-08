@@ -1,13 +1,17 @@
+import SwiftData
 import SwiftUI
 
 /// The Subscriptions "New to you" triage: one unfamiliar work at a time, with
 /// Save / Not for me / Next. Renders what it is handed and reports each decision;
 /// the caller owns fetching and persisting.
 struct NewToYouCardsView: View {
-    enum Decision: Equatable, Sendable { case saved, dismissed, deferred }
+    private enum Decision: Equatable { case saved, dismissed, deferred }
 
-    let works: [AO3WorkSummary]
-    var onDecide: (AO3WorkSummary, Decision) -> Void = { _, _ in }
+    let cards: [NewToYouCard]
+    /// Not for me. Throw to leave the card in the deck.
+    var onDismiss: (NewToYouCard) throws -> Void = { _ in }
+    /// Save. Throw — including `AO3Error.maintenance` — to leave the card in the deck.
+    var onSave: (NewToYouCard) async throws -> Void = { _ in }
     var onFinished: () -> Void = {}
     /// A parent with more specific source state can supply its own honest empty view.
     var showsEmptyState = true
@@ -17,33 +21,35 @@ struct NewToYouCardsView: View {
     @Environment(\.dynamicTypeSize) private var typeSize
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
-    // Ids, not an index: a caller that drops decided works from `works` must not make the deck skip.
+    // Ids, not an index: a caller that drops decided cards must not make the deck skip.
     @State private var handled = Set<Int>()
+    @State private var isSaving = false
+    @State private var actionError: String?
 
     private static let maxContentWidth: CGFloat = 560 // keeps the card readable on iPad and macOS
 
     private var isAccessibilitySize: Bool { typeSize.isAccessibilitySize }
 
     // Decisions are keyed by id, so a repeated id would be handled twice and the last-card check would never fire.
-    private var uniqueWorks: [AO3WorkSummary] {
+    private var uniqueCards: [NewToYouCard] {
         var seen = Set<Int>()
-        return works.filter { seen.insert($0.id).inserted }
+        return cards.filter { seen.insert($0.id).inserted }
     }
 
-    private var undecidedWorks: [AO3WorkSummary] {
-        uniqueWorks.filter { !handled.contains($0.id) }
+    private var undecidedCards: [NewToYouCard] {
+        uniqueCards.filter { !handled.contains($0.id) }
     }
 
-    private var remaining: [AO3WorkSummary] {
-        undecidedWorks.filter {
-            !privacyGate.isHidden($0, enabled: hideMature, mode: matureMode)
+    private var remaining: [NewToYouCard] {
+        undecidedCards.filter {
+            !privacyGate.isHidden($0.summary, enabled: hideMature, mode: matureMode)
         }
     }
 
-    private var current: AO3WorkSummary? { remaining.first }
+    private var current: NewToYouCard? { remaining.first }
 
-    private func isObscured(_ work: AO3WorkSummary) -> Bool {
-        hideMature && work.isAdult && matureMode == .obscure && !privacyGate.isRevealed(work)
+    private func isObscured(_ card: NewToYouCard) -> Bool {
+        hideMature && card.summary.isAdult && matureMode == .obscure && !privacyGate.isRevealed(card.summary)
     }
 
     private var positionText: String {
@@ -53,7 +59,7 @@ struct NewToYouCardsView: View {
     /// VoiceOver text when the deck runs out. Hide can empty the visible deck
     /// while works remain, so "All caught up" is only for a truly empty deck.
     private var emptyDeckText: String {
-        undecidedWorks.isEmpty ? "All caught up" : "\(undecidedWorks.count) hidden by Hide mature content"
+        undecidedCards.isEmpty ? "All caught up" : "\(undecidedCards.count) hidden by Hide mature content"
     }
 
     /// AO3's own boilerplate warnings say nothing, so they stay off the card (as in `WorkRow`).
@@ -64,19 +70,44 @@ struct NewToYouCardsView: View {
         }
     }
 
-    private func decide(_ decision: Decision, on work: AO3WorkSummary) {
-        let wasLast = remaining.count == 1
+    /// Removes the card from this visit. `wasLast` is captured before the decision
+    /// runs, because a successful Save refreshes the deck before this returns.
+    private func drop(_ card: NewToYouCard, wasLast: Bool) {
         // shortcut: Next drops the card for this session instead of cycling back to it, upgrade when deferred works should resurface in-session
-        handled.insert(work.id)
-        onDecide(work, decision)
+        handled.insert(card.id)
         if wasLast { onFinished() }
+    }
+
+    private func dismiss(_ card: NewToYouCard) {
+        let wasLast = remaining.count == 1
+        do {
+            try onDismiss(card)
+            drop(card, wasLast: wasLast)
+        } catch {
+            actionError = (error as? LocalizedError)?.errorDescription ?? "That work is still in the deck."
+        }
+    }
+
+    private func save(_ card: NewToYouCard) async {
+        guard !isSaving else { return }
+        let wasLast = remaining.count == 1
+        isSaving = true
+        defer { isSaving = false }
+        do {
+            try await onSave(card)
+            drop(card, wasLast: wasLast)
+        } catch is CancellationError {
+            return
+        } catch {
+            actionError = (error as? LocalizedError)?.errorDescription ?? "The work couldn't be saved."
+        }
     }
 
     var body: some View {
         Group {
-            if let work = current {
-                deck(work)
-            } else if !undecidedWorks.isEmpty {
+            if let card = current {
+                deck(card)
+            } else if !undecidedCards.isEmpty {
                 MatureContentHiddenView()
             } else if showsEmptyState, handled.isEmpty {
                 ContentUnavailableView(
@@ -103,20 +134,34 @@ struct NewToYouCardsView: View {
             // The decided card disappears under VoiceOver focus, so say what replaced it.
             .onChange(of: current?.id) {
                 let text = current.map {
-                    isObscured($0) ? "\(positionText), hidden mature work" : "\(positionText), \($0.title)"
+                    isObscured($0) ? "\(positionText), hidden mature work" : "\(positionText), \($0.headline)"
                 } ?? emptyDeckText
                 AccessibilityNotification.Announcement(text).post()
             }
             .toolbar {
-                if PrivacyGate.hasVisibleMatureWorks(in: undecidedWorks, hideMature: hideMature) {
+                if PrivacyGate.hasVisibleMatureWorks(
+                    in: undecidedCards.map(\.summary),
+                    hideMature: hideMature
+                ) {
                     ToolbarItem(placement: .primaryAction) {
                         MatureRevealToggle()
                     }
                 }
             }
+            .alert(
+                "Couldn't finish",
+                isPresented: Binding(
+                    get: { actionError != nil },
+                    set: { if !$0 { actionError = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) { actionError = nil }
+            } message: {
+                Text(actionError ?? "")
+            }
     }
 
-    private func deck(_ work: AO3WorkSummary) -> some View {
+    private func deck(_ card: NewToYouCard) -> some View {
         ScrollView {
             VStack(spacing: CardListMetrics.interCardSpacing) {
                 Text(positionText)
@@ -126,10 +171,10 @@ struct NewToYouCardsView: View {
                     .accessibilityLabel("Work \(positionText)")
                     .accessibilityAddTraits(.isHeader)
 
-                privacyAwareCard(work)
+                privacyAwareCard(card)
 
                 // Three buttons do not fit abreast at accessibility sizes, so the bar scrolls with the card there.
-                if isAccessibilitySize, !isObscured(work) { actionBar(for: work) }
+                if isAccessibilitySize, !isObscured(card) { actionBar(for: card) }
             }
             .frame(maxWidth: Self.maxContentWidth)
             .padding(.horizontal, CardListMetrics.sideMargin)
@@ -137,10 +182,10 @@ struct NewToYouCardsView: View {
             .frame(maxWidth: .infinity)
         }
         // A fresh card starts at the top, not wherever the last summary was scrolled to.
-        .id(work.id)
+        .id(card.id)
         .safeAreaInset(edge: .bottom) {
-            if !isAccessibilitySize, !isObscured(work) {
-                actionBar(for: work)
+            if !isAccessibilitySize, !isObscured(card) {
+                actionBar(for: card)
                     .frame(maxWidth: Self.maxContentWidth)
                     .padding(.horizontal, CardListMetrics.sideMargin)
                     .padding(.vertical, CardListMetrics.interCardSpacing)
@@ -151,12 +196,12 @@ struct NewToYouCardsView: View {
     }
 
     @ViewBuilder
-    private func privacyAwareCard(_ work: AO3WorkSummary) -> some View {
-        if isObscured(work) {
+    private func privacyAwareCard(_ card: NewToYouCard) -> some View {
+        if isObscured(card) {
             Button {
-                privacyGate.reveal(work)
+                privacyGate.reveal(card.summary)
             } label: {
-                card(work)
+                cardBody(card)
                     .blur(radius: 6)
                     .overlay { MatureContentRevealLabel() }
                     .contentShape(Rectangle())
@@ -165,15 +210,24 @@ struct NewToYouCardsView: View {
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Hidden mature work. Activate to reveal.")
         } else {
-            card(work)
+            cardBody(card)
         }
     }
 
-    private func card(_ work: AO3WorkSummary) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(work.title)
+    private func cardBody(_ card: NewToYouCard) -> some View {
+        let work = card.summary
+        return VStack(alignment: .leading, spacing: 10) {
+            // The headline is the subscription URL, not the preface title.
+            Text(card.headline)
                 .font(.title3.bold())
                 .fixedSize(horizontal: false, vertical: true)
+
+            if let attribution = card.attribution {
+                Text(attribution)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             VStack(alignment: .leading, spacing: 4) {
                 FlowLayout(spacing: 12, rowSpacing: 4) {
@@ -254,29 +308,37 @@ struct NewToYouCardsView: View {
         }
     }
 
-    private func actionBar(for work: AO3WorkSummary) -> some View {
+    private func actionBar(for card: NewToYouCard) -> some View {
         let layout = isAccessibilitySize
             ? AnyLayout(VStackLayout(spacing: 12))
             : AnyLayout(HStackLayout(spacing: 12))
         return layout {
-            action("Save", .saved, on: work, label: "Save \(work.title)")
+            action("Save", .saved, on: card, label: "Save \(card.headline)")
                 .buttonStyle(.borderedProminent)
             // `.bordered` inherits the user accent, a fixed hex and not colorScheme-adaptive, so it fails contrast on the dark backdrop; `.borderedProminent` is fine.
-            action("Not for me", .dismissed, on: work, label: "Not for me, \(work.title). Won't show it again")
-                .buttonStyle(.bordered)
-                .tint(Color.primary)
-            action("Next", .deferred, on: work, label: "Next. Decide on \(work.title) later")
+            action(
+                "Not for me", .dismissed, on: card,
+                label: "Not for me, \(card.headline). Won't show it again"
+            )
+            .buttonStyle(.bordered)
+            .tint(Color.primary)
+            action("Next", .deferred, on: card, label: "Next. Decide on \(card.headline) later")
                 .buttonStyle(.bordered)
                 .tint(Color.primary)
         }
+        .disabled(isSaving)
     }
 
     /// The frame lives inside the label so the button's own background fills it; outside, it would not.
     private func action(
-        _ title: String, _ decision: Decision, on work: AO3WorkSummary, label: String
+        _ title: String, _ decision: Decision, on card: NewToYouCard, label: String
     ) -> some View {
         Button {
-            decide(decision, on: work)
+            switch decision {
+            case .saved: Task { await save(card) }
+            case .dismissed: dismiss(card)
+            case .deferred: drop(card, wasLast: remaining.count == 1)
+            }
         } label: {
             Text(title)
                 .font(.headline)
@@ -286,6 +348,53 @@ struct NewToYouCardsView: View {
         .accessibilityLabel(label)
     }
 }
+
+#if os(iOS)
+/// New to you fed by stored mail updates, minus works already in the library
+/// or already decided.
+struct NewToYouMailDeck: View {
+    @Environment(\.modelContext) private var modelContext
+    @Environment(MailSubscriptionDriver.self) private var mailDriver
+    @State private var library = WorkIdentityIndex([])
+    @State private var ready = false
+
+    private var cards: [NewToYouCard] {
+        NewToYouDeck.cards(
+            from: mailDriver.updates,
+            library: library,
+            decidedWorkIDs: Set(mailDriver.decisions.map(\.workID))
+        )
+    }
+
+    var body: some View {
+        Group {
+            if ready {
+                NewToYouCardsView(
+                    cards: cards,
+                    onDismiss: { card in
+                        try mailDriver.recordDecision(.notForMe, workID: card.workID)
+                    },
+                    onSave: { card in
+                        _ = try await NewToYouLibrary.save(card.summary, in: modelContext)
+                        reloadLibrary()
+                        try mailDriver.recordDecision(.saved, workID: card.workID)
+                    }
+                )
+            } else {
+                ProgressView("Checking your library…")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .task { reloadLibrary() }
+    }
+
+    private func reloadLibrary() {
+        let works = (try? modelContext.fetch(FetchDescriptor<SavedWork>())) ?? []
+        library = WorkIdentityIndex(works)
+        ready = true
+    }
+}
+#endif
 
 #Preview {
     func work(
@@ -312,12 +421,13 @@ struct NewToYouCardsView: View {
         work(3, "A Quiet Harbour", "marrowlight")
     ]
 
+    let cards = deck.map { NewToYouCard(preview: $0, source: .author("saltwindow")) }
     return TabView {
-        NavigationStack { NewToYouCardsView(works: deck) }
+        NavigationStack { NewToYouCardsView(cards: cards) }
             .tabItem { Text("Full deck") }
-        NavigationStack { NewToYouCardsView(works: [deck[2]]) }
+        NavigationStack { NewToYouCardsView(cards: [cards[2]]) }
             .tabItem { Text("Last card") }
-        NavigationStack { NewToYouCardsView(works: []) }
+        NavigationStack { NewToYouCardsView(cards: []) }
             .tabItem { Text("Empty") }
     }
     .environment(ThemeManager())

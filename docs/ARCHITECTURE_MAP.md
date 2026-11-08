@@ -52,6 +52,7 @@ All paths relative to `kudos-ao3-reader/` unless noted. Confirmed as of 2026-07-
 | Soft delete / 90-day recovery / hard delete / sweep | `Services/PreservedWorkService.swift`; permanent path `WorkLifecycle.hardDelete` in `WorkLifecycle.swift` |
 | File locations (EPUBs by `effectiveAssetIdentifier`, reader cache, temp) | `Services/Storage.swift` |
 | Mail subscription updates (derived, device-only, capped; excluded from backups/sync) | `Services/SubscriptionUpdateStore.swift` |
+| New to you cards (new works from author/series follows, from stored mail updates; Not for me / Save decisions persisted with the updates) | `Features/Subscriptions/NewToYouDeck.swift` |
 | Design doc | `docs/iCloudPersistence.md` |
 
 ## Identity, search, dedup

@@ -171,9 +171,17 @@ private extension SubscriptionSnapshotTests {
                     )
                 })
             case .newToYou:
-                AnyView(NavigationStack { NewToYouCardsView(works: [Self.newWork]) })
+                AnyView(NavigationStack {
+                    NewToYouCardsView(cards: [
+                        NewToYouCard(preview: Self.newWork, source: .author("saltwindow"))
+                    ])
+                })
             case .newToYouHidden:
-                AnyView(NavigationStack { NewToYouCardsView(works: [Self.hiddenWork]) })
+                AnyView(NavigationStack {
+                    NewToYouCardsView(cards: [
+                        NewToYouCard(preview: Self.hiddenWork, source: .author("saltwindow"))
+                    ])
+                })
             case .sources:
                 AnyView(NavigationStack {
                     UpdateSourcesView(

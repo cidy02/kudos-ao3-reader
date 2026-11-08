@@ -76,21 +76,7 @@ struct SubscriptionsView: View {
                             Label("Update sources", systemImage: "antenna.radiowaves.left.and.right")
                         }
                         NavigationLink {
-                            // An empty deck would read as "Nothing new to you", which is a loaded result.
-                            NewToYouCardsView(works: [], showsEmptyState: false)
-                                .overlay {
-                                    ContentUnavailableView {
-                                        Label("Source not connected", systemImage: "sparkles")
-                                    } description: {
-                                        Text(
-                                            "Kudos has no new works to show until a source is connected."
-                                        )
-                                    } actions: {
-                                        NavigationLink("Update sources") {
-                                            SubscriptionsSourcesView()
-                                        }
-                                    }
-                                }
+                            newToYouDestination
                         } label: {
                             Label("New to you", systemImage: "sparkles")
                         }
@@ -125,6 +111,36 @@ struct SubscriptionsView: View {
         case .tidyUp:
             followingContent(scope: .tidyUp)
         }
+    }
+
+    /// An empty deck would read as "Nothing new to you", which is a loaded result,
+    /// so a missing source keeps its own explanation on top of a blank deck.
+    @ViewBuilder
+    private var newToYouDestination: some View {
+        #if os(iOS)
+        if mailDriver.isConnected {
+            NewToYouMailDeck()
+        } else {
+            disconnectedNewToYou
+        }
+        #else
+        disconnectedNewToYou
+        #endif
+    }
+
+    private var disconnectedNewToYou: some View {
+        NewToYouCardsView(cards: [], showsEmptyState: false)
+            .overlay {
+                ContentUnavailableView {
+                    Label("Source not connected", systemImage: "sparkles")
+                } description: {
+                    Text("Kudos has no new works to show until a source is connected.")
+                } actions: {
+                    NavigationLink("Update sources") {
+                        SubscriptionsSourcesView()
+                    }
+                }
+            }
     }
 
     @ViewBuilder

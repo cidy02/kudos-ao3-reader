@@ -28,7 +28,18 @@ struct SubscriptionUpdateTests {
         identity: Identity = .work,
         kind: Ao3EventKind = .newChapter(number: 9),
         via: Subscription = .work(id: 83_701_926, name: "Honest Work"),
-        verdict: Verdict = .trusted
+        verdict: Verdict = .trusted,
+        rating: String? = nil,
+        warnings: [String] = [],
+        fandoms: [String] = [],
+        relationships: [String] = [],
+        characters: [String] = [],
+        additionalTags: [String] = [],
+        words: UInt64? = 34_920,
+        chaptersPosted: UInt32? = 9,
+        chaptersTotal: UInt32? = 13,
+        series: String? = nil,
+        summary: String? = nil
     ) -> Reading {
         Reading(
             uid: uid,
@@ -41,19 +52,19 @@ struct SubscriptionUpdateTests {
                 workTitle: "Honest Work",
                 author: "skydarius11",
                 via: via,
-                chaptersPosted: 9,
-                chaptersTotal: 13,
-                words: 34_920,
+                chaptersPosted: chaptersPosted,
+                chaptersTotal: chaptersTotal,
+                words: words,
                 chapterTitle: "Chapter 9",
                 chapterWords: 4_679,
-                rating: nil,
-                warnings: [],
-                fandoms: [],
-                relationships: [],
-                characters: [],
-                additionalTags: [],
-                series: nil,
-                summary: nil,
+                rating: rating,
+                warnings: warnings,
+                fandoms: fandoms,
+                relationships: relationships,
+                characters: characters,
+                additionalTags: additionalTags,
+                series: series,
+                summary: summary,
                 extraCreations: 0
             ),
             verdict: verdict
@@ -107,6 +118,144 @@ struct SubscriptionUpdateTests {
         #expect(update.workTitle.isEmpty)
         #expect(update.author.isEmpty)
         #expect(!update.canDeepLinkToChapter)
+    }
+
+    /// The crate reports nothing it read from a contested preface. Passing the
+    /// fields in anyway must not put them back: this type does not fill them
+    /// from anywhere else.
+    @Test("A contested preface keeps the metadata fields empty")
+    func contestedDropsPrefaceMetadata() {
+        let update = SubscriptionUpdate(
+            uid: 4_201,
+            workID: 83_701_926,
+            chapterID: 255_464_091,
+            chapterNumber: 9,
+            isNewWork: true,
+            isContested: true,
+            isAnchoredToWork: true,
+            workTitle: "Honest Work",
+            author: "skydarius11",
+            at: when,
+            source: .work,
+            rating: "Explicit",
+            warnings: ["Violence"],
+            fandoms: ["Planted Fandom"],
+            relationships: ["A/B"],
+            characters: ["A"],
+            additionalTags: ["Planted Tag"],
+            words: 10,
+            chaptersPosted: 1,
+            chaptersTotal: 2,
+            series: "Planted Series",
+            summary: "Planted summary"
+        )
+        #expect(update.rating == nil)
+        #expect(update.warnings.isEmpty)
+        #expect(update.fandoms.isEmpty)
+        #expect(update.relationships.isEmpty)
+        #expect(update.characters.isEmpty)
+        #expect(update.additionalTags.isEmpty)
+        #expect(update.words == nil)
+        #expect(update.chaptersPosted == nil)
+        #expect(update.chaptersTotal == nil)
+        #expect(update.series == nil)
+        #expect(update.summary == nil)
+        #expect(update.workTitle.isEmpty)
+    }
+
+    @Test("A readable unpinned preface keeps the metadata it was given")
+    func readablePrefaceKeepsMetadata() {
+        let update = SubscriptionUpdate(
+            uid: 4_201,
+            workID: 83_701_926,
+            chapterID: nil,
+            chapterNumber: nil,
+            isNewWork: true,
+            isContested: false,
+            isAnchoredToWork: false,
+            workTitle: "Honest Work",
+            author: "marrowlight",
+            at: when,
+            source: .author("marrowlight"),
+            rating: "Teen And Up Audiences",
+            fandoms: ["Original Work"],
+            words: 100,
+            chaptersPosted: 1,
+            chaptersTotal: nil,
+            summary: "A claim"
+        )
+        #expect(update.certainty == .workOnly)
+        #expect(update.change == .newWork)
+        #expect(update.rating == "Teen And Up Audiences")
+        #expect(update.fandoms == ["Original Work"])
+        #expect(update.words == 100)
+        #expect(update.chaptersPosted == 1)
+        #expect(update.chaptersTotal == nil)
+        #expect(update.summary == "A claim")
+    }
+
+    /// Files written before the preface keys existed must still open. The
+    /// encoder's own output, with those keys removed, is that file.
+    @Test("An older update file decodes with empty preface metadata")
+    func oldUpdateFileDecodes() throws {
+        let current = SubscriptionUpdate(
+            uid: 4_201,
+            workID: 83_701_926,
+            chapterID: 255_464_091,
+            chapterNumber: 9,
+            isNewWork: false,
+            isContested: false,
+            isAnchoredToWork: true,
+            workTitle: "Honest Work",
+            author: "skydarius11",
+            at: when,
+            source: .work,
+            extraCreations: 2,
+            rating: "General Audiences",
+            warnings: ["No Archive Warnings Apply"],
+            fandoms: ["Original Work"],
+            relationships: ["A & B"],
+            characters: ["A"],
+            additionalTags: ["Quiet"],
+            words: 100,
+            chaptersPosted: 9,
+            chaptersTotal: 13,
+            series: "The Long Winter",
+            summary: "A summary"
+        )
+        let encoded = try JSONEncoder().encode(current)
+        let object = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        var stripped = object
+        for key in [
+            "rating", "warnings", "fandoms", "relationships", "characters",
+            "additionalTags", "words", "chaptersPosted", "chaptersTotal", "series", "summary"
+        ] {
+            stripped.removeValue(forKey: key)
+        }
+        let oldFile = try JSONSerialization.data(withJSONObject: stripped)
+        let decoded = try JSONDecoder().decode(SubscriptionUpdate.self, from: oldFile)
+
+        #expect(decoded.uid == current.uid)
+        #expect(decoded.workID == current.workID)
+        #expect(decoded.chapterID == current.chapterID)
+        #expect(decoded.change == current.change)
+        #expect(decoded.certainty == current.certainty)
+        #expect(decoded.workTitle == current.workTitle)
+        #expect(decoded.author == current.author)
+        #expect(decoded.at == current.at)
+        #expect(decoded.source == current.source)
+        #expect(decoded.extraCreations == 2)
+        #expect(decoded.rating == nil)
+        #expect(decoded.warnings.isEmpty)
+        #expect(decoded.fandoms.isEmpty)
+        #expect(decoded.relationships.isEmpty)
+        #expect(decoded.characters.isEmpty)
+        #expect(decoded.additionalTags.isEmpty)
+        #expect(decoded.words == nil)
+        #expect(decoded.chaptersPosted == nil)
+        #expect(decoded.chaptersTotal == nil)
+        #expect(decoded.series == nil)
+        #expect(decoded.summary == nil)
     }
 
     /// An author or series subscription pins nothing: AO3's footer names a user or
@@ -289,6 +438,62 @@ struct SubscriptionUpdateTests {
     func mapsNewWork() throws {
         let update = try #require(SubscriptionUpdate(reading: reading(kind: .newWork)))
         #expect(update.change == .newWork)
+    }
+
+    @Test("A contested reading does not keep preface metadata")
+    func contestedReadingDropsPrefaceMetadata() throws {
+        let update = try #require(SubscriptionUpdate(reading: reading(
+            kind: .contested,
+            rating: "Explicit",
+            warnings: ["Violence"],
+            fandoms: ["Planted Fandom"],
+            relationships: ["A/B"],
+            characters: ["A"],
+            additionalTags: ["Planted Tag"],
+            words: 10,
+            chaptersPosted: 1,
+            chaptersTotal: 2,
+            series: "Planted Series",
+            summary: "Planted summary"
+        )))
+        #expect(update.rating == nil)
+        #expect(update.warnings.isEmpty)
+        #expect(update.fandoms.isEmpty)
+        #expect(update.relationships.isEmpty)
+        #expect(update.characters.isEmpty)
+        #expect(update.additionalTags.isEmpty)
+        #expect(update.words == nil)
+        #expect(update.chaptersPosted == nil)
+        #expect(update.chaptersTotal == nil)
+        #expect(update.series == nil)
+        #expect(update.summary == nil)
+        #expect(update.workTitle.isEmpty)
+        #expect(update.author.isEmpty)
+    }
+
+    @Test("A readable author new-work reading keeps preface metadata")
+    func authorNewWorkKeepsPrefaceMetadata() throws {
+        let update = try #require(SubscriptionUpdate(reading: reading(
+            identity: .body,
+            kind: .newWork,
+            via: .author(username: "marrowlight", name: "impostor"),
+            rating: "General Audiences",
+            fandoms: ["Original Work"],
+            words: 480,
+            chaptersPosted: 1,
+            chaptersTotal: nil,
+            summary: "Hello"
+        )))
+        #expect(update.change == .newWork)
+        #expect(update.certainty == .workOnly)
+        #expect(update.source == .author("marrowlight"))
+        #expect(update.rating == "General Audiences")
+        #expect(update.fandoms == ["Original Work"])
+        #expect(update.words == 480)
+        #expect(update.chaptersPosted == 1)
+        #expect(update.chaptersTotal == nil)
+        #expect(update.summary == "Hello")
+        #expect(update.workTitle == "Honest Work")
     }
     #endif
 }
