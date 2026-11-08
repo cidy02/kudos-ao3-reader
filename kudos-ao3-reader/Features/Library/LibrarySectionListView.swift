@@ -862,7 +862,7 @@ struct LibrarySectionListView: View {
                 )
                 .environment(\.ledgerKickerMuted, isAbandonedRow(work))
                 factsStrip(work, summary: summary)
-                WorkRowSeparator(inset: WorkRow.separatorInset(isSelecting: true) ?? WorkRowMetrics.textColumnInset)
+                WorkRowSeparator(selecting: true)
             }
         } else {
             swipeableRow(work, summary: summary)

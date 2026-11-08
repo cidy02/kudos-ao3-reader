@@ -17,6 +17,7 @@ struct SettingsAppearancePage: View {
     @State private var showCustomWarning = false
     @State private var customPick: Task<Void, Never>?
     @State private var pickerBridge = AccentColorPickerBridge()
+    @AppStorage(WorkSymbolPlacement.storageKey) private var symbolPlacement: WorkSymbolPlacement = .beside
 
     /// Bindings into the central ThemeManager (an @Observable in the environment).
     private var appThemeBinding: Binding<ReaderTheme> {
@@ -76,6 +77,24 @@ struct SettingsAppearancePage: View {
             } footer: {
                 Text("Delete and other destructive actions stay system red with every colour. "
                     + "Sepia keeps its warm tint.")
+            }
+
+            Section {
+                Picker("Work Symbols", selection: $symbolPlacement) {
+                    ForEach(WorkSymbolPlacement.allCases) { placement in
+                        Text(placement.title).tag(placement)
+                    }
+                }
+            } header: {
+                Text("Lists")
+            } footer: {
+                Text("Where work lists show the rating, category, warnings and status symbols. "
+                    + "Under the Title puts them in a row under the title and gives the text the full width.")
+            }
+            // Backed up like the Library layout (UserDefaults, which the folder-sync
+            // observer does not query), so it marks the sync folder dirty the same way.
+            .onChange(of: symbolPlacement) { _, _ in
+                NotificationCenter.default.post(name: .kudosSyncRelevantSettingChanged, object: nil)
             }
 
             #if os(iOS)

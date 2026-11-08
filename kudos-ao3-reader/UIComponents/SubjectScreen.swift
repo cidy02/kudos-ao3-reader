@@ -302,17 +302,57 @@ enum WorkRowMetrics {
     /// check to clear. A wide result keeps the separator at `screenInset`,
     /// because the tags and stats run the full width under the title.
     static let textColumnInset: CGFloat = screenInset + gridColumn + columnGap
+    /// Under the Title while selecting: 16 screen + the 24 pt leading check + 12 gap.
+    static let selectingUnderTitleInset: CGFloat = screenInset + 24 + columnGap
+
+    /// Where a plain row's separator starts. `selectingInset` is the caller's
+    /// inset, which callers pass only while selecting (the leading check).
+    static func separatorInset(
+        placement: WorkSymbolPlacement, stacked: Bool, wide: Bool, selectingInset: CGFloat?
+    ) -> CGFloat {
+        if placement == .underTitle {
+            return selectingInset == nil ? screenInset : selectingUnderTitleInset
+        }
+        return selectingInset ?? (stacked || wide ? screenInset : textColumnInset)
+    }
+}
+
+/// Where a work row draws its four symbols. Settings › Appearance › Work Symbols.
+nonisolated enum WorkSymbolPlacement: String, CaseIterable, Identifiable, Sendable {
+    /// The backed 2×2 grid in its own column beside the title block, as the boards draw it.
+    case beside
+    /// One row of four under the title; the text takes the full width.
+    case underTitle
+
+    static let storageKey = "workSymbolPlacement"
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .beside: "Beside the Title"
+        case .underTitle: "Under the Title"
+        }
+    }
 }
 
 /// 0.5 pt system separator. Inset is from the row's own leading edge.
 struct WorkRowSeparator: View {
-    var inset: CGFloat = WorkRowMetrics.textColumnInset
+    /// Nil: the text column for the current Work Symbols placement.
+    var inset: CGFloat?
+    /// Past the leading selection check (only used when `inset` is nil).
+    var selecting = false
+
+    @AppStorage(WorkSymbolPlacement.storageKey) private var placement: WorkSymbolPlacement = .beside
 
     var body: some View {
         Rectangle()
             .fill(.separator)
             .frame(height: 0.5)
-            .padding(.leading, inset)
+            .padding(.leading, inset ?? WorkRowMetrics.separatorInset(
+                placement: placement, stacked: false, wide: false,
+                selectingInset: selecting ? WorkRow.selectingSeparatorInset : nil
+            ))
             .accessibilityHidden(true)
     }
 }
@@ -361,35 +401,54 @@ struct WorkFandomLabel: View {
 /// The plain work row: a leading grid, the title block, and whatever sits under
 /// it. Wide results keep the grid beside the title block and let the rest run
 /// the full width. An accessibility size stacks the grid above the text.
-struct WorkPlainRow<Leading: View, Heading: View, Remainder: View>: View {
+/// With Work Symbols set to Under the Title, the symbols are a row under the
+/// title and only the selection check keeps a leading column.
+struct WorkPlainRow<Leading: View, Symbols: View, Heading: View, Remainder: View>: View {
     var wide = false
     var showsSeparator = true
     var separatorInset: CGFloat? = nil
+    /// The selection check (or its placeholder) while selecting; nothing otherwise.
     @ViewBuilder var leading: () -> Leading
+    /// The four symbols in the arrangement asked for: `.grid` beside, `.row` under the title.
+    @ViewBuilder var symbols: (WorkStatusIconGrid.Arrangement) -> Symbols
     @ViewBuilder var heading: () -> Heading
     @ViewBuilder var remainder: () -> Remainder
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @AppStorage(WorkSymbolPlacement.storageKey) private var placement: WorkSymbolPlacement = .beside
 
     private var stacked: Bool { dynamicTypeSize.isAccessibilitySize }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 12) {
-                if stacked {
-                    leading()
+                if placement == .underTitle {
+                    HStack(alignment: .center, spacing: WorkRowMetrics.columnGap) {
+                        leading()
+                        VStack(alignment: .leading, spacing: 12) {
+                            VStack(alignment: .leading, spacing: 6) {
+                                // Own stack, so the heading's parts keep their 12 pt spacing.
+                                VStack(alignment: .leading, spacing: 12) { heading() }
+                                symbols(.row)
+                            }
+                            remainder()
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                } else if stacked {
+                    besideColumn
                     heading()
                     remainder()
                 } else if wide {
                     HStack(alignment: .top, spacing: WorkRowMetrics.columnGap) {
-                        leading()
+                        besideColumn
                         heading()
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     remainder()
                 } else {
                     HStack(alignment: .top, spacing: WorkRowMetrics.columnGap) {
-                        leading()
+                        besideColumn
                         VStack(alignment: .leading, spacing: 12) {
                             heading()
                             remainder()
@@ -404,9 +463,19 @@ struct WorkPlainRow<Leading: View, Heading: View, Remainder: View>: View {
 
             if showsSeparator {
                 WorkRowSeparator(
-                    inset: separatorInset ?? (stacked || wide ? WorkRowMetrics.screenInset : WorkRowMetrics.textColumnInset)
+                    inset: WorkRowMetrics.separatorInset(
+                        placement: placement, stacked: stacked, wide: wide, selectingInset: separatorInset
+                    )
                 )
             }
+        }
+    }
+
+    /// The check and the 2×2 grid, side by side.
+    private var besideColumn: some View {
+        HStack(alignment: .center, spacing: 12) {
+            leading()
+            symbols(.grid)
         }
     }
 }

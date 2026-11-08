@@ -22,6 +22,13 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
+    @AppStorage(WorkSymbolPlacement.storageKey) private var symbolPlacement: WorkSymbolPlacement = .beside
+
+    /// New Chapters and Subscriptions dividers: under the 2×2 (79, as before), or at the
+    /// screen inset when the symbols sit under the title.
+    private var newChapterRowInset: CGFloat {
+        symbolPlacement == .underTitle ? WorkRowMetrics.screenInset : 79
+    }
     @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }, sort: \SavedWork.dateAdded, order: .reverse)
     private var works: [SavedWork]
     @Query(filter: #Predicate<ReadingQueue> { !$0.isPendingDeletion }, sort: \ReadingQueue.sortOrder)
@@ -586,7 +593,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                     ForEach(Array(visibleWorks.enumerated()), id: \.element.id) { index, work in
                         if index > 0 {
                             Divider()
-                                .padding(.leading, 79)
+                                .padding(.leading, newChapterRowInset)
                         }
                         HomeNewChapterRow(
                             work: work,
@@ -599,11 +606,11 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
 
                     if sectionWorks.count > 3 {
                         Divider()
-                            .padding(.leading, 79)
+                            .padding(.leading, newChapterRowInset)
                         ListMoreRow(
                             count: sectionWorks.count - 3,
                             sectionTitle: "New Chapters",
-                            leadingInset: 79,
+                            leadingInset: newChapterRowInset,
                             action: { path.append(HomeSectionKind.recentlyUpdated) }
                         )
                     }
@@ -710,18 +717,18 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                     ForEach(Array(visibleRows.enumerated()), id: \.element.id) { index, entry in
                         if index > 0 {
                             Divider()
-                                .padding(.leading, 79)
+                                .padding(.leading, newChapterRowInset)
                         }
                         subscriptionRow(entry)
                     }
 
                     if visibleEntries.count > 2 {
                         Divider()
-                            .padding(.leading, 79)
+                            .padding(.leading, newChapterRowInset)
                         ListMoreRow(
                             count: visibleEntries.count - 2,
                             sectionTitle: "Subscriptions",
-                            leadingInset: 79,
+                            leadingInset: newChapterRowInset,
                             action: { path.append(SubscriptionsRoute()) }
                         )
                     }
@@ -930,6 +937,7 @@ private struct HomeNewChapterRow: View {
     @Environment(PrivacyGate.self) private var gate
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var mode: MaturePrivacyMode = .obscure
+    @AppStorage(WorkSymbolPlacement.storageKey) private var symbolPlacement: WorkSymbolPlacement = .beside
 
     @State private var enrichedRemote: AO3WorkSummary?
     /// Measured chapter lengths for a downloaded work (word-count bar heights).
@@ -1157,6 +1165,19 @@ private struct HomeNewChapterRow: View {
         }
     }
 
+    private func rowSymbols(_ arrangement: WorkStatusIconGrid.Arrangement) -> some View {
+        WorkStatusIconGrid(
+            rating: rowRating,
+            categories: rowCategories,
+            warnings: rowWarnings,
+            completion: rowCompletion,
+            tileSize: 24,
+            announcesToVoiceOver: true,
+            arrangement: arrangement,
+            backed: true
+        )
+    }
+
     private var rowContent: some View {
         HStack(alignment: .center, spacing: 12) {
             if isSelecting {
@@ -1164,22 +1185,19 @@ private struct HomeNewChapterRow: View {
                     .opacity(blurred ? 0 : 1)
             }
 
-            WorkStatusIconGrid(
-                rating: rowRating,
-                categories: rowCategories,
-                warnings: rowWarnings,
-                completion: rowCompletion,
-                tileSize: 24,
-                announcesToVoiceOver: true,
-                arrangement: .grid,
-                backed: true
-            )
+            if symbolPlacement == .beside {
+                rowSymbols(.grid)
+            }
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(rowTitle)
                     .font(.body.weight(.semibold))
                     .foregroundStyle(.primary)
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+
+                if symbolPlacement == .underTitle {
+                    rowSymbols(.row)
+                }
 
                 ChapterBars(
                     items: chapterBarItems,

@@ -197,6 +197,8 @@ struct WorkLedgerListSection<Rows: View, Empty: View>: View {
     private let emptyState: () -> Empty
     private let topSpacing: CGFloat
 
+    @AppStorage(WorkSymbolPlacement.storageKey) private var symbolPlacement: WorkSymbolPlacement = .beside
+
     init(
         title: String,
         hasItems: Bool,
@@ -245,7 +247,7 @@ struct WorkLedgerListSection<Rows: View, Empty: View>: View {
                     ListMoreRow(
                         count: decision.hiddenCount,
                         sectionTitle: title,
-                        leadingInset: 79,
+                        leadingInset: symbolPlacement == .underTitle ? WorkRowMetrics.screenInset : 79,
                         action: onSeeAll
                     )
                     .dashboardListRow(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 16))

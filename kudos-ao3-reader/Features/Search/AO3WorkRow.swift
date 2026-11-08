@@ -145,7 +145,9 @@ struct AO3WorkRow: View {
     /// ledger — fandom, title, author, every stat, chapter bars — stays.
     private var bookmarkCard: some View {
         WorkPlainRow(wide: wide, showsSeparator: showsSeparator, separatorInset: rowSeparatorInset) {
-            statusGrid
+            selectionCheck
+        } symbols: { arrangement in
+            symbols(arrangement)
         } heading: {
             searchLedgerIdentity
         } remainder: {
@@ -164,7 +166,9 @@ struct AO3WorkRow: View {
 
     private var standardCard: some View {
         WorkPlainRow(wide: wide, showsSeparator: showsSeparator, separatorInset: rowSeparatorInset) {
-            statusGrid
+            selectionCheck
+        } symbols: { arrangement in
+            symbols(arrangement)
         } heading: {
             standardHeading
         } remainder: {
@@ -209,7 +213,9 @@ struct AO3WorkRow: View {
     /// A remote work has no downloaded lengths and no reading progress.
     private var searchLedgerCard: some View {
         WorkPlainRow(wide: wide, showsSeparator: showsSeparator, separatorInset: rowSeparatorInset) {
-            statusGrid
+            selectionCheck
+        } symbols: { arrangement in
+            symbols(arrangement)
         } heading: {
             searchLedgerIdentity
         } remainder: {
@@ -341,24 +347,27 @@ struct AO3WorkRow: View {
         .fixedSize(horizontal: false, vertical: true)
     }
 
-    private var statusGrid: some View {
-        HStack(alignment: .center, spacing: 12) {
-            if Self.selectionEdge(isSelecting: isSelecting) == .leading {
-                if showsSelectionIndicator {
-                    WorkLeadingSelectionCheck(isSelected: isSelected)
-                } else {
-                    Color.clear.frame(width: 24, height: 24)
-                }
+    @ViewBuilder
+    private var selectionCheck: some View {
+        if Self.selectionEdge(isSelecting: isSelecting) == .leading {
+            if showsSelectionIndicator {
+                WorkLeadingSelectionCheck(isSelected: isSelected)
+            } else {
+                Color.clear.frame(width: 24, height: 24)
             }
-            WorkStatusIconGrid(
-                rating: work.rating.isEmpty ? nil : work.rating,
-                categories: work.categories,
-                warnings: work.warnings,
-                completion: WorkCompletionStatus(isComplete: work.isComplete),
-                tileSize: 24,
-                announcesToVoiceOver: true
-            )
         }
+    }
+
+    private func symbols(_ arrangement: WorkStatusIconGrid.Arrangement) -> some View {
+        WorkStatusIconGrid(
+            rating: work.rating.isEmpty ? nil : work.rating,
+            categories: work.categories,
+            warnings: work.warnings,
+            completion: WorkCompletionStatus(isComplete: work.isComplete),
+            tileSize: 24,
+            announcesToVoiceOver: true,
+            arrangement: arrangement
+        )
     }
 
     private var remoteFigures: WorkStat.LedgerFigures {

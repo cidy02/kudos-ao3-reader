@@ -244,6 +244,7 @@ struct SensitiveWorkRow: View {
     @Environment(PrivacyGate.self) private var gate
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var mode: MaturePrivacyMode = .obscure
+    @AppStorage(WorkSymbolPlacement.storageKey) private var symbolPlacement: WorkSymbolPlacement = .beside
     @State private var blurredExpanded = false
 
     init(
@@ -408,13 +409,8 @@ struct SensitiveWorkRow: View {
                         .padding(.trailing, SubjectMetrics.gutter + contentInsets.trailing)
                 }
             }
-            .overlay(alignment: .topLeading) {
-                if isSelecting {
-                    WorkLeadingSelectionCheck(isSelected: isSelected)
-                        .frame(height: WorkRowMetrics.gridColumn)
-                        .padding(.top, WorkRowMetrics.verticalPadding + contentInsets.top)
-                        .padding(.leading, WorkRowMetrics.horizontalPadding + contentInsets.leading)
-                }
+            .overlay(alignment: blurredCheckAlignment) {
+                if isSelecting { blurredSelectionCheck }
             }
             sensitiveActionContainer(for: content)
 
@@ -459,16 +455,24 @@ struct SensitiveWorkRow: View {
                         .padding(.trailing, SubjectMetrics.gutter + contentInsets.trailing)
                 }
             }
-            .overlay(alignment: .topLeading) {
-                if isSelecting {
-                    WorkLeadingSelectionCheck(isSelected: isSelected)
-                        .frame(height: WorkRowMetrics.gridColumn)
-                        .padding(.top, WorkRowMetrics.verticalPadding + contentInsets.top)
-                        .padding(.leading, WorkRowMetrics.horizontalPadding + contentInsets.leading)
-                }
+            .overlay(alignment: blurredCheckAlignment) {
+                if isSelecting { blurredSelectionCheck }
             }
             sensitiveActionContainer(for: content)
         }
+    }
+
+    /// Where the blurred row's own (hidden) check sits: centred on the grid at the
+    /// top beside the title, centred on the row when the symbols sit under it.
+    private var blurredCheckAlignment: Alignment {
+        symbolPlacement == .underTitle ? .leading : .topLeading
+    }
+
+    private var blurredSelectionCheck: some View {
+        WorkLeadingSelectionCheck(isSelected: isSelected)
+            .frame(height: symbolPlacement == .underTitle ? nil : WorkRowMetrics.gridColumn)
+            .padding(.top, symbolPlacement == .underTitle ? 0 : WorkRowMetrics.verticalPadding + contentInsets.top)
+            .padding(.leading, WorkRowMetrics.horizontalPadding + contentInsets.leading)
     }
 
     @ViewBuilder

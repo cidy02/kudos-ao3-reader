@@ -436,6 +436,9 @@ struct WorkStatusIconGrid: View {
         case grid
         /// One row of four, the spare width going between the tiles.
         case strip
+        /// One row of four at the grid's gap, leading-aligned: a list row's
+        /// symbols under the title (Work Symbols › Under the Title). Bare.
+        case row
         /// Each tile followed by its name ("Teen", "F/M", "No warnings", "WIP"),
         /// the four wrapping as one run — the Symbols board's `inline` variant,
         /// Work Detail's line under the author (board 19). Bare, like a strip.
@@ -706,6 +709,12 @@ private struct WorkStatusIconGridContent: View {
                 }
             }
             .frame(maxWidth: .infinity)
+        case .row:
+            HStack(spacing: gap) {
+                ForEach(resolved.indices, id: \.self) { index in
+                    tile(resolved[index])
+                }
+            }
         case .inline:
             let names = WorkStatusIconGrid.inlineLabels(
                 rating: rating, categories: categories, warnings: warnings, completion: completion

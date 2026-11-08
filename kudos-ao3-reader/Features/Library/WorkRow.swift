@@ -218,7 +218,9 @@ struct WorkRow: View {
             showsSeparator: showsSeparator,
             separatorInset: Self.separatorInset(isSelecting: isSelecting)
         ) {
-            statusGrid
+            selectionCheck
+        } symbols: { arrangement in
+            symbols(arrangement)
         } heading: {
             ledgerHeading
         } remainder: {
@@ -276,7 +278,9 @@ struct WorkRow: View {
             showsSeparator: showsSeparator,
             separatorInset: Self.separatorInset(isSelecting: isSelecting)
         ) {
-            statusGrid
+            selectionCheck
+        } symbols: { arrangement in
+            symbols(arrangement)
         } heading: {
             standardHeading(isExpandable: isExpandable)
         } remainder: {
@@ -347,24 +351,27 @@ struct WorkRow: View {
         }
     }
 
-    private var statusGrid: some View {
-        HStack(alignment: .center, spacing: 12) {
-            if Self.selectionEdge(isSelecting: isSelecting) == .leading {
-                if showsSelectionIndicator {
-                    WorkLeadingSelectionCheck(isSelected: isSelected)
-                } else {
-                    Color.clear.frame(width: 24, height: 24)
-                }
+    @ViewBuilder
+    private var selectionCheck: some View {
+        if Self.selectionEdge(isSelecting: isSelecting) == .leading {
+            if showsSelectionIndicator {
+                WorkLeadingSelectionCheck(isSelected: isSelected)
+            } else {
+                Color.clear.frame(width: 24, height: 24)
             }
-            WorkStatusIconGrid(
-                rating: work.rating.isEmpty ? nil : work.rating,
-                categories: work.workCategories,
-                warnings: work.workWarnings,
-                completion: work.completionStatus,
-                tileSize: Self.ledgerTileSize,
-                announcesToVoiceOver: true
-            )
         }
+    }
+
+    private func symbols(_ arrangement: WorkStatusIconGrid.Arrangement) -> some View {
+        WorkStatusIconGrid(
+            rating: work.rating.isEmpty ? nil : work.rating,
+            categories: work.workCategories,
+            warnings: work.workWarnings,
+            completion: work.completionStatus,
+            tileSize: Self.ledgerTileSize,
+            announcesToVoiceOver: true,
+            arrangement: arrangement
+        )
     }
 
     private func titleLine(

@@ -1613,6 +1613,11 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
     /// decode. Apply writes it only when it is present, so the local layout
     /// stays. Additive — no manifest version bump.
     var libraryPageArrangement: LibraryPageArrangement?
+    /// Settings › Appearance › Work Symbols (`WorkSymbolPlacement`'s raw value). Nil when
+    /// the key is absent (an older archive, or Android) or nothing is stored, so a device
+    /// that never chose cannot reset one that did through folder sync. Apply writes only a
+    /// value this build knows. Additive — no manifest version bump.
+    var workSymbolPlacement: String?
 
     init(
         readerFontID: String,
@@ -1636,7 +1641,8 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         accentColorHex: String?,
         autoPreserveSmallSeriesOnSaveForLater: Bool,
         autoPreserveSeriesWorkThreshold: Int,
-        libraryPageArrangement: LibraryPageArrangement? = nil
+        libraryPageArrangement: LibraryPageArrangement? = nil,
+        workSymbolPlacement: String? = nil
     ) {
         self.readerFontID = readerFontID
         self.readerMode = readerMode
@@ -1660,6 +1666,7 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         self.autoPreserveSmallSeriesOnSaveForLater = autoPreserveSmallSeriesOnSaveForLater
         self.autoPreserveSeriesWorkThreshold = autoPreserveSeriesWorkThreshold
         self.libraryPageArrangement = libraryPageArrangement
+        self.workSymbolPlacement = workSymbolPlacement
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -1685,6 +1692,7 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         case autoPreserveSmallSeriesOnSaveForLater
         case autoPreserveSeriesWorkThreshold
         case libraryPageArrangement
+        case workSymbolPlacement
     }
 
     init(from decoder: Decoder) throws {
@@ -1732,6 +1740,10 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
             libraryPageArrangement: (try? container.decodeIfPresent(
                 LibraryPageArrangement.self,
                 forKey: .libraryPageArrangement
+            )) ?? nil,
+            workSymbolPlacement: (try? container.decodeIfPresent(
+                String.self,
+                forKey: .workSymbolPlacement
             )) ?? nil
         )
     }
@@ -1787,7 +1799,9 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
                 "autoPreserveSeriesWorkThreshold",
                 fallback: 5
             )),
-            libraryPageArrangement: LibraryPageArrangement.stored(in: defaults)
+            libraryPageArrangement: LibraryPageArrangement.stored(in: defaults),
+            // Only a stored choice, like `accentColorHex`.
+            workSymbolPlacement: defaults.string(forKey: WorkSymbolPlacement.storageKey)
         )
     }
 
@@ -1854,6 +1868,10 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         // sync from Android, must leave the reader's own Library layout alone.
         if let libraryPageArrangement {
             defaults.set(libraryPageArrangement.rawValue, forKey: LibraryPageArrangement.storageKey)
+        }
+        // Same rule; a value this build does not know is ignored.
+        if let workSymbolPlacement, WorkSymbolPlacement(rawValue: workSymbolPlacement) != nil {
+            defaults.set(workSymbolPlacement, forKey: WorkSymbolPlacement.storageKey)
         }
     }
 

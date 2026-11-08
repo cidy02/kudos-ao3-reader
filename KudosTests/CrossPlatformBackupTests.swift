@@ -498,6 +498,7 @@ struct CrossPlatformBackupTests {
         defaults.set("#2468AC", forKey: "accentColorHex")
         defaults.set(true, forKey: "autoPreserveSmallSeriesOnSaveForLater")
         defaults.set(9, forKey: "autoPreserveSeriesWorkThreshold")
+        defaults.set(WorkSymbolPlacement.underTitle.rawValue, forKey: WorkSymbolPlacement.storageKey)
         return defaults
     }
 
@@ -582,6 +583,7 @@ struct CrossPlatformBackupTests {
             // iOS writes the reader's Library shelf layout. The goldens and
             // Android do not, so the round-trip compares only shared fields.
             settings.removeValue(forKey: "libraryPageArrangement")
+            settings.removeValue(forKey: "workSymbolPlacement") // iOS-only, like the shelf layout.
             root["settings"] = settings
         }
         if var works = root["works"] as? [[String: Any]] {

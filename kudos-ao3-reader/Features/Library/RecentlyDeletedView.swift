@@ -785,19 +785,19 @@ struct RecentlyDeletedRow: View {
             showsSeparator: showsSeparator,
             separatorInset: WorkRow.separatorInset(isSelecting: isSelecting)
         ) {
-            HStack(alignment: .center, spacing: 12) {
-                if WorkRow.selectionEdge(isSelecting: isSelecting) == .leading {
-                    WorkLeadingSelectionCheck(isSelected: isSelected)
-                }
-                WorkStatusIconGrid(
-                    rating: work.rating.isEmpty ? nil : work.rating,
-                    categories: work.workCategories,
-                    warnings: work.workWarnings,
-                    completion: work.completionStatus,
-                    tileSize: WorkRow.ledgerTileSize,
-                    announcesToVoiceOver: true
-                )
+            if WorkRow.selectionEdge(isSelecting: isSelecting) == .leading {
+                WorkLeadingSelectionCheck(isSelected: isSelected)
             }
+        } symbols: { arrangement in
+            WorkStatusIconGrid(
+                rating: work.rating.isEmpty ? nil : work.rating,
+                categories: work.workCategories,
+                warnings: work.workWarnings,
+                completion: work.completionStatus,
+                tileSize: WorkRow.ledgerTileSize,
+                announcesToVoiceOver: true,
+                arrangement: arrangement
+            )
         } heading: {
             VStack(alignment: .leading, spacing: 6) {
                 VStack(alignment: .leading, spacing: 3) {

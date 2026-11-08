@@ -81,34 +81,46 @@ extension View {
 /// Wireframe roughly matching `AO3WorkRow` / `WorkRow`: title, author, fandom,
 /// summary lines, and a stats row.
 struct AO3WorkRowSkeleton: View {
+    @AppStorage(WorkSymbolPlacement.storageKey) private var symbolPlacement: WorkSymbolPlacement = .beside
+
     var body: some View {
-        // Matches the plain work row: the 24 pt grid leads, then title, author,
-        // fandom, summary and stats. The separator is the row's own.
+        // Matches the plain work row: the 24 pt grid leads (or, Under the Title,
+        // a row of four follows the title), then title, author, fandom, summary
+        // and stats. The separator is the row's own.
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .top, spacing: 12) {
-                // Same backing inset as `WorkStatusIconGrid`, so this placeholder
-                // is the 63 pt column the separator is aligned to.
-                Grid(horizontalSpacing: 2.88, verticalSpacing: 2.88) {
-                    GridRow {
-                        SkeletonBlock(height: 24, width: 24, cornerRadius: 5.76)
-                        SkeletonBlock(height: 24, width: 24, cornerRadius: 5.76)
+                if symbolPlacement == .beside {
+                    // Same backing inset as `WorkStatusIconGrid`, so this placeholder
+                    // is the 63 pt column the separator is aligned to.
+                    Grid(horizontalSpacing: 2.88, verticalSpacing: 2.88) {
+                        GridRow {
+                            SkeletonBlock(height: 24, width: 24, cornerRadius: 5.76)
+                            SkeletonBlock(height: 24, width: 24, cornerRadius: 5.76)
+                        }
+                        GridRow {
+                            SkeletonBlock(height: 24, width: 24, cornerRadius: 5.76)
+                            SkeletonBlock(height: 24, width: 24, cornerRadius: 5.76)
+                        }
                     }
-                    GridRow {
-                        SkeletonBlock(height: 24, width: 24, cornerRadius: 5.76)
-                        SkeletonBlock(height: 24, width: 24, cornerRadius: 5.76)
-                    }
-                }
-                .padding(WorkStatusIconGrid.backingPadding(tileSize: 24))
-                .background(
-                    RoundedRectangle(
-                        cornerRadius: WorkStatusIconGrid.backingCornerRadius(tileSize: 24),
-                        style: .continuous
+                    .padding(WorkStatusIconGrid.backingPadding(tileSize: 24))
+                    .background(
+                        RoundedRectangle(
+                            cornerRadius: WorkStatusIconGrid.backingCornerRadius(tileSize: 24),
+                            style: .continuous
+                        )
+                        .fill(.quaternary)
                     )
-                    .fill(.quaternary)
-                )
+                }
                 VStack(alignment: .leading, spacing: 6) {
                     SkeletonTextLine(height: 17, width: 200)
                     SkeletonTextLine(height: 17, width: 140)
+                    if symbolPlacement == .underTitle {
+                        HStack(spacing: 2.88) {
+                            ForEach(0..<4, id: \.self) { _ in
+                                SkeletonBlock(height: 24, width: 24, cornerRadius: 5.76)
+                            }
+                        }
+                    }
                     SkeletonTextLine(height: 14, width: 160)
                     SkeletonTextLine(height: 13, width: 220)
                     SkeletonTextLine(height: 13, width: 180)
@@ -121,7 +133,11 @@ struct AO3WorkRowSkeleton: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
-            WorkRowSeparator()
+            WorkRowSeparator(
+                inset: WorkRowMetrics.separatorInset(
+                    placement: symbolPlacement, stacked: false, wide: false, selectingInset: nil
+                )
+            )
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .skeletonShimmer()
