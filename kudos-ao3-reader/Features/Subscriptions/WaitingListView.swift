@@ -275,6 +275,43 @@ private struct WaitingDayHeader: View {
     }
 }
 
+/// Clock text for the 40pt gutter. `time` is the hour and minute in the
+/// locale's own separator and hour cycle; `marker` is the day period only
+/// when that cycle prints one. Field boundaries come from the formatter, so
+/// a leading marker ("오후 3:00") and a trailing one ("3:00 PM") split the
+/// same way, and the no-break space between them stays out of both tokens.
+struct WaitingGutterClock: Equatable {
+    var time: String
+    var marker: String?
+
+    static func parts(
+        for date: Date,
+        locale: Locale = .autoupdatingCurrent,
+        calendar: Calendar = .autoupdatingCurrent,
+        timeZone: TimeZone = .autoupdatingCurrent
+    ) -> WaitingGutterClock {
+        let style = Date.FormatStyle(locale: locale, calendar: calendar, timeZone: timeZone)
+            .hour()
+            .minute()
+        let attributed = date.formatted(style.attributedStyle)
+        var time = ""
+        var marker = ""
+        for run in attributed.runs {
+            let piece = String(attributed[run.range].characters)
+            if run.dateField == .amPM {
+                marker += piece
+            } else {
+                time += piece
+            }
+        }
+        let trimmedMarker = marker.trimmingCharacters(in: .whitespaces)
+        return WaitingGutterClock(
+            time: time.trimmingCharacters(in: .whitespaces),
+            marker: trimmedMarker.isEmpty ? nil : trimmedMarker
+        )
+    }
+}
+
 private struct WaitingRow: View {
     let update: SubscriptionUpdate
     let position: Int
@@ -364,12 +401,15 @@ private struct WaitingRow: View {
     /// The gutter's value has to live somewhere once the gutter is gone.
     private var showsValueInStrip: Bool { showsPosition || isAccessibilitySize }
 
+    /// Smaller than caption2, and it tracks caption2 as the type size grows.
+    @ScaledMetric(relativeTo: .caption2) private var gutterMarkerSize: CGFloat = 9
+
     private var gutter: some View {
         Group {
             if showsPosition {
                 Text("\(position)")
             } else {
-                Text(update.at, format: .dateTime.hour().minute())
+                gutterClock
             }
         }
         .font(.caption2.monospacedDigit())
@@ -377,6 +417,28 @@ private struct WaitingRow: View {
         .fixedSize(horizontal: false, vertical: true)
         .frame(width: 40, alignment: .trailing)
         .padding(.top, 12)
+    }
+
+    /// Digits stay full size. The day-period marker, when the locale has one,
+    /// sits on a second line: "3:00 AM" does not fit this column, and the
+    /// formatter joins the marker with a narrow no-break space, so a wrap
+    /// lands inside the marker. Each token scales instead of breaking when
+    /// the type size makes even one of them wider than 40pt.
+    private var gutterClock: some View {
+        let clock = WaitingGutterClock.parts(for: update.at)
+        return VStack(alignment: .trailing, spacing: 0) {
+            Text(clock.time)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+            if let marker = clock.marker {
+                Text(marker)
+                    .font(.system(size: gutterMarkerSize))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(update.at.formatted(.dateTime.hour().minute()))
     }
 
     private var sourceLine: some View {
