@@ -1,12 +1,21 @@
 import Foundation
 import OSLog
 
-/// App-scoped subscriptions scan. The user starts it; nothing here runs on
-/// launch, from a BGTask, or on a timer. One coordinator slot, then a pause
-/// between requests no shorter than series preservation.
+/// Captured when a scan starts. Later runs must not overwrite it: `adopt` bumps
+/// `generation` and swaps the account scope, and a stale run stops without writing.
+private struct SubscriptionScanRun: Equatable {
+    let generation: Int
+    let scope: String
+}
+
+/// One subscriptions scan for the process. Every window observes `shared`.
+/// The user starts it; nothing here runs on launch, from a BGTask, or on a timer.
+/// One coordinator slot, then a pause between requests no shorter than series preservation.
 @MainActor
 @Observable
 final class SubscriptionScanService {
+    /// Every window observes this. A second instance would scan the same account file.
+    static let shared = SubscriptionScanService()
     private(set) var phase: SubscriptionScanPhase = .idle
     private(set) var checked = 0
     private(set) var total = 0
@@ -70,9 +79,9 @@ final class SubscriptionScanService {
     private var pauseRequested = false
     private var resumeContinuation: CheckedContinuation<Void, Error>?
     private var requestSamples: [TimeInterval] = []
-    /// Bumped on account switch so an in-flight scan cannot write the next account's file.
+    /// Bumped on account switch. Each run captures this with the account scope and
+    /// never reads a later run's copy — see `SubscriptionScanRun`.
     private var generation = 0
-    private var loopGeneration = 0
     /// True after this scan has made a request, so the next request waits out the pause.
     private var didRequest = false
 
@@ -159,11 +168,14 @@ final class SubscriptionScanService {
             return
         }
         isExecuting = true
-        let token = generation
+        let token = SubscriptionScanRun(generation: generation, scope: store.authenticationScope)
         task = Task { [weak self] in
             guard let self else { return }
-            await self.loop(username: username, fetcher: fetcher, library: library)
-            if self.generation == token { self.isExecuting = false }
+            await self.loop(username: username, fetcher: fetcher, library: library, token: token)
+            if self.generation == token.generation,
+               self.store.authenticationScope == token.scope {
+                self.isExecuting = false
+            }
         }
     }
 
@@ -203,9 +215,13 @@ final class SubscriptionScanService {
     ) async {
         guard !isExecuting else { return }
         isExecuting = true
-        let token = generation
-        defer { if generation == token { isExecuting = false } }
-        await loop(username: username, fetcher: fetcher, library: library)
+        let token = SubscriptionScanRun(generation: generation, scope: store.authenticationScope)
+        defer {
+            if generation == token.generation, store.authenticationScope == token.scope {
+                isExecuting = false
+            }
+        }
+        await loop(username: username, fetcher: fetcher, library: library, token: token)
     }
 
     private func reloadStore() {
@@ -222,8 +238,11 @@ final class SubscriptionScanService {
     private func loop(
         username: String,
         fetcher: any SubscriptionScanFetching,
-        library: [Int: SubscriptionScanLibraryHint]
+        library: [Int: SubscriptionScanLibraryHint],
+        token: SubscriptionScanRun
     ) async {
+        // A queued loop can start after `adopt`. Touch nothing of the new account.
+        guard accepts(token) else { return }
         self.username = username
         self.library = library
         checked = 0
@@ -234,27 +253,27 @@ final class SubscriptionScanService {
         stopRequested = false
         pauseRequested = false
         didRequest = false
-        loopGeneration = generation
         phase = .running
         Log.network.info("Subscription scan starting")
         do {
             statusNote = "Reading your subscriptions…"
-            let follows = try await loadFollows(fetcher)
-            try ensureAccount()
+            let follows = try await loadFollows(fetcher, token: token)
+            try await checkpoint(token)
             if statusNote == "Reading your subscriptions…" { statusNote = nil }
+            try ensure(token)
             file.followedWorkIDs = follows.map(\.workID)
-            persist()
+            persist(token)
             total = follows.count
-            try await checkAll(follows, fetcher: fetcher)
-            guard generation == loopGeneration else { return }
+            try await checkAll(follows, fetcher: fetcher, token: token)
+            try ensure(token)
             phase = stopRequested ? .idle : .finished
             if phase == .finished, statusNote == "Reading your subscriptions…" { statusNote = nil }
             remaining = phase == .finished ? .zero : remaining
         } catch is CancellationError {
-            guard generation == loopGeneration else { return }
+            guard accepts(token) else { return }
             phase = .idle
         } catch {
-            guard generation == loopGeneration else { return }
+            guard accepts(token) else { return }
             phase = .stopped
             statusNote = Self.message(for: error)
             remaining = nil
@@ -263,18 +282,19 @@ final class SubscriptionScanService {
     }
 
     private func loadFollows(
-        _ fetcher: any SubscriptionScanFetching
+        _ fetcher: any SubscriptionScanFetching,
+        token: SubscriptionScanRun
     ) async throws -> [SubscriptionScanFollow] {
         var page = 1
         var follows: [SubscriptionScanFollow] = []
         var seen = Set<Int>()
         var requested = false
         while page <= Self.maxSubscriptionPages {
-            try await checkpoint()
-            if requested { try await pauseBetween() }
+            try await checkpoint(token)
+            if requested { try await pauseBetween(token) }
             let started = timing.now()
-            let listed = try await perform { try await fetcher.subscriptionPage(page) }
-            try ensureAccount()
+            let listed = try await perform(token: token) { try await fetcher.subscriptionPage(page) }
+            try await checkpoint(token)
             recordSample(since: started)
             requested = true
             didRequest = true
@@ -296,18 +316,19 @@ final class SubscriptionScanService {
 
     private func checkAll(
         _ follows: [SubscriptionScanFollow],
-        fetcher: any SubscriptionScanFetching
+        fetcher: any SubscriptionScanFetching,
+        token: SubscriptionScanRun
     ) async throws {
         for (index, follow) in follows.enumerated() {
-            try await checkpoint()
+            try await checkpoint(token)
             if shouldSkip(follow.workID) {
                 checked += 1
                 refreshRemaining(follows, after: index)
                 continue
             }
-            if didRequest { try await pauseBetween() }
-            try await checkpoint()
-            try await checkOne(follow, fetcher: fetcher)
+            if didRequest { try await pauseBetween(token) }
+            try await checkpoint(token)
+            try await checkOne(follow, fetcher: fetcher, token: token)
             didRequest = true
             checked += 1
             refreshRemaining(follows, after: index)
@@ -316,12 +337,14 @@ final class SubscriptionScanService {
 
     private func checkOne(
         _ follow: SubscriptionScanFollow,
-        fetcher: any SubscriptionScanFetching
+        fetcher: any SubscriptionScanFetching,
+        token: SubscriptionScanRun
     ) async throws {
         let started = timing.now()
         do {
-            let facts = try await perform { try await fetcher.workFacts(workID: follow.workID) }
-            try ensureAccount()
+            let facts = try await perform(token: token) { try await fetcher.workFacts(workID: follow.workID) }
+            // Cancel during this request: do not keep its facts.
+            try await checkpoint(token)
             recordSample(since: started)
             let decision = SubscriptionScanJudge.decide(
                 follow: follow,
@@ -331,71 +354,72 @@ final class SubscriptionScanService {
                 now: timing.now(),
                 nextUpdateUID: file.nextUpdateUID
             )
+            try ensure(token)
             file.upsert(decision.snapshot)
             file.nextUpdateUID = decision.nextUpdateUID
             if let update = decision.update {
                 file.updates.append(update)
                 trimUpdates()
             }
-            persist()
+            persist(token)
         } catch AO3Error.notFound {
-            try ensureAccount()
+            try await checkpoint(token)
             recordSample(since: started)
+            try ensure(token)
             file.upsert(SubscriptionScanJudge.gone(
                 follow: follow,
                 previous: file.snapshot(for: follow.workID),
                 now: timing.now()
             ))
-            persist()
-        } catch AO3Error.parse {
-            try ensureAccount()
-            recordSample(since: started)
-            file.upsert(SubscriptionScanJudge.unreadable(
-                follow: follow,
-                previous: file.snapshot(for: follow.workID),
-                now: timing.now()
-            ))
-            persist()
+            persist(token)
         }
     }
 
-    private func perform<T>(_ body: () async throws -> T) async throws -> T {
+    private func perform<T>(
+        token: SubscriptionScanRun,
+        _ body: () async throws -> T
+    ) async throws -> T {
         var waits = 0
         while true {
-            try await checkpoint()
+            try await checkpoint(token)
             do {
                 return try await coordinator.withSlot { try await body() }
             } catch let error as AO3Error {
                 guard case let .rateLimited(retryAfter) = error else { throw error }
                 waits += 1
                 if waits > Self.maxRateLimitWaits { throw error }
-                try await wait(for: retryAfter)
+                try await wait(for: retryAfter, token: token)
             }
         }
     }
 
-    private func wait(for retryAfter: TimeInterval?) async throws {
+    private func wait(for retryAfter: TimeInterval?, token: SubscriptionScanRun) async throws {
+        try ensure(token)
         let pause = SubscriptionScanClock.seconds(timing.pause)
         let seconds = max(retryAfter ?? pause, pause)
         statusNote = "AO3 asked us to wait."
         try await timing.sleep(SubscriptionScanClock.duration(seconds: seconds))
+        try await checkpoint(token)
         if statusNote == "AO3 asked us to wait." { statusNote = nil }
-        try await checkpoint()
     }
 
-    private func pauseBetween() async throws {
-        try await checkpoint()
+    private func pauseBetween(_ token: SubscriptionScanRun) async throws {
+        try await checkpoint(token)
         guard SubscriptionScanClock.seconds(timing.pause) > 0 else { return }
         try await timing.sleep(timing.pause)
-        try await checkpoint()
+        try await checkpoint(token)
     }
 
-    private func ensureAccount() throws {
-        if generation != loopGeneration { throw CancellationError() }
+    private func accepts(_ token: SubscriptionScanRun) -> Bool {
+        token.generation == generation && token.scope == store.authenticationScope
     }
 
-    private func checkpoint() async throws {
-        try ensureAccount()
+    private func ensure(_ token: SubscriptionScanRun) throws {
+        if !accepts(token) { throw CancellationError() }
+    }
+
+    private func checkpoint(_ token: SubscriptionScanRun) async throws {
+        try ensure(token)
         if stopRequested { throw CancellationError() }
         try Task.checkCancellation()
         guard pauseRequested else { return }
@@ -404,7 +428,7 @@ final class SubscriptionScanService {
             resumeContinuation = continuation
         }
         resumeContinuation = nil
-        try ensureAccount()
+        try ensure(token)
         if stopRequested { throw CancellationError() }
         try Task.checkCancellation()
         phase = .running
@@ -448,8 +472,8 @@ final class SubscriptionScanService {
         file.updates = Array(file.updates.suffix(limit))
     }
 
-    private func persist() {
-        guard !storeLocked else { return }
+    private func persist(_ token: SubscriptionScanRun) {
+        guard accepts(token), !storeLocked else { return }
         do {
             try store.save(file)
         } catch {
@@ -483,7 +507,11 @@ struct LiveSubscriptionScanFetcher: SubscriptionScanFetching {
               let url = AO3Client.subscriptionsURL(username: username, page: page)
         else { throw AO3Error.authenticationRequired }
         let request = try auth.authenticatedRequest(for: url)
-        let listed = try await AO3Client.shared.subscriptionsPage(for: request, page: page)
+        let listed = try await AO3Client.shared.subscriptionsPage(
+            for: request,
+            page: page,
+            retryTransientFailures: false
+        )
         return SubscriptionScanListPage(
             works: listed.works.map {
                 SubscriptionScanFollow(workID: $0.id, title: $0.title, author: $0.authorText)
@@ -497,7 +525,11 @@ struct LiveSubscriptionScanFetcher: SubscriptionScanFetching {
             throw AO3Error.network("Bad work URL.")
         }
         let request = try auth.authenticatedRequest(for: url)
-        let metadata = try await AO3Client.shared.workMetadata(workID: workID, request: request)
+        let metadata = try await AO3Client.shared.workMetadata(
+            workID: workID,
+            request: request,
+            retryTransientFailures: false
+        )
         return SubscriptionScanWorkFacts(metadata: metadata)
     }
 }

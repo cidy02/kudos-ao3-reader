@@ -56,4 +56,86 @@ struct RequestCoalescerTests {
 
         #expect(await counter.count == 2)   // sequential (non-overlapping) calls each run
     }
+
+    @Test func cancellingTheOnlyWaiterCancelsTheInnerRequest() async throws {
+        let coalescer = RequestCoalescer<String, Int>()
+        let entered = Flag()
+        let innerCancelled = Flag()
+        let task = Task {
+            try await coalescer.shared("k") {
+                await entered.mark()
+                do {
+                    try await Task.sleep(nanoseconds: 2_000_000_000)
+                } catch is CancellationError {
+                    await innerCancelled.mark()
+                    throw CancellationError()
+                }
+                return 1
+            }
+        }
+        for _ in 0 ..< 1_000 {
+            if await entered.isSet { break }
+            await Task.yield()
+        }
+        let started = ContinuousClock.now
+        task.cancel()
+        let result = await task.result
+        #expect(ContinuousClock.now - started < .seconds(1))
+        guard case .failure(is CancellationError) = result else {
+            Issue.record("cancelled waiter finished with \(result)")
+            return
+        }
+        #expect(await innerCancelled.isSet)
+    }
+
+    @Test func cancellingOneWaiterLeavesTheSharedRequestRunning() async throws {
+        let coalescer = RequestCoalescer<String, Int>()
+        let started = Gate()
+        let finish = Gate()
+        let runs = Counter()
+        let first = Task {
+            try await coalescer.shared("k") {
+                await runs.increment()
+                await started.signal()
+                await finish.wait()
+                try Task.checkCancellation()
+                return 7
+            }
+        }
+        await started.wait()
+        let second = Task {
+            try await coalescer.shared("k") {
+                await runs.increment()
+                return 0
+            }
+        }
+        for _ in 0 ..< 50 { await Task.yield() }
+        second.cancel()
+        for _ in 0 ..< 50 { await Task.yield() }
+        await finish.signal()
+        #expect(try await first.value == 7)
+        #expect(await runs.count == 1)
+    }
+}
+
+private actor Flag {
+    private(set) var isSet = false
+    func mark() { isSet = true }
+}
+
+private actor Gate {
+    private var open = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func signal() {
+        open = true
+        let pending = waiters
+        waiters.removeAll()
+        for waiter in pending { waiter.resume() }
+    }
+
+    func wait() async {
+        if open { return }
+        await withCheckedContinuation { waiters.append($0) }
+    }
 }

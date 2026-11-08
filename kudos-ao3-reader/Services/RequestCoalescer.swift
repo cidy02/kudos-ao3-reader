@@ -8,17 +8,46 @@ import Foundation
 /// The in-flight entry is cleared once the operation finishes (success or failure),
 /// so a later call re-runs (it's a de-duplicator, not a cache — caching is separate).
 actor RequestCoalescer<Key: Hashable & Sendable, Value: Sendable> {
-    private var inFlight: [Key: Task<Value, Error>] = [:]
+    private struct Flight {
+        var task: Task<Value, Error>
+        var waiters: Set<UUID>
+    }
+
+    private var inFlight: [Key: Flight] = [:]
 
     /// Runs `operation` for `key`, or — if one for `key` is already running — awaits
     /// that one and returns its result.
+    ///
+    /// The inner task is unstructured, so cancelling a waiter does not cancel it on
+    /// its own. When the last waiter goes, cancel that task instead of leaving the
+    /// waiter blocked until the request finishes.
     func shared(_ key: Key, _ operation: @Sendable @escaping () async throws -> Value) async throws -> Value {
-        if let existing = inFlight[key] {
-            return try await existing.value
+        let waiter = UUID()
+        let task: Task<Value, Error>
+        if var flight = inFlight[key] {
+            flight.waiters.insert(waiter)
+            inFlight[key] = flight
+            task = flight.task
+        } else {
+            let created = Task { try await operation() }
+            inFlight[key] = Flight(task: created, waiters: [waiter])
+            task = created
         }
-        let task = Task { try await operation() }
-        inFlight[key] = task
-        defer { inFlight[key] = nil }
-        return try await task.value
+        defer { abandon(key, waiter) }
+        return try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            Task { await self.abandon(key, waiter) }
+        }
+    }
+
+    private func abandon(_ key: Key, _ waiter: UUID) {
+        guard var flight = inFlight[key], flight.waiters.remove(waiter) != nil else { return }
+        if flight.waiters.isEmpty {
+            flight.task.cancel()
+            inFlight[key] = nil
+        } else {
+            inFlight[key] = flight
+        }
     }
 }

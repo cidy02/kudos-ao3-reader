@@ -22,8 +22,9 @@ struct ContentView: View {
     @State private var theme = ThemeManager()
     @State private var auth = AO3AuthService()
     @State private var downloadQueue = DownloadQueue()
-    /// User-started. Launch, scene phase, and BGTask never call `start`.
-    @State private var subscriptionScan = SubscriptionScanService()
+    /// User-started, one instance for every window. Launch, scene phase, and
+    /// BGTask never call `start`.
+    @State private var subscriptionScan = SubscriptionScanService.shared
     #if os(iOS)
     @State private var mailSubscriptionDriver = MailSubscriptionDriver()
     #endif

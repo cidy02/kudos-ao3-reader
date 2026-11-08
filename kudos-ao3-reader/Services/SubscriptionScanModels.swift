@@ -263,29 +263,6 @@ enum SubscriptionScanJudge {
         )
     }
 
-    /// The page did not parse. Keep the last counts and stamp the check so the
-    /// work is not requested again inside the cooldown.
-    static func unreadable(
-        follow: SubscriptionScanFollow,
-        previous: SubscriptionScanSnapshot?,
-        now: Date
-    ) -> SubscriptionScanSnapshot {
-        SubscriptionScanSnapshot(
-            workID: follow.workID,
-            title: title(previous?.title, follow.title),
-            author: author(previous?.author, follow.author),
-            chaptersPosted: previous?.chaptersPosted,
-            chaptersTotal: previous?.chaptersTotal,
-            words: previous?.words,
-            updatedText: previous?.updatedText ?? "",
-            updatedAt: previous?.updatedAt,
-            isComplete: previous?.isComplete,
-            gone: previous?.gone ?? false,
-            checkedAt: now,
-            lastReportedPosted: previous?.lastReportedPosted
-        )
-    }
-
     private static func observed(
         follow: SubscriptionScanFollow,
         previous: SubscriptionScanSnapshot?,

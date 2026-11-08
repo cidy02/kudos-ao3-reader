@@ -20,14 +20,19 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     private let base = "https://archiveofourown.org"
     private let session: URLSession
 
-    init() {
+    /// Tests inject a session (a `URLProtocol` stub). The app uses `init()`.
+    init(session: URLSession) {
+        self.session = session
+    }
+
+    convenience init() {
         let config = URLSessionConfiguration.default
         // The shared app identity (browser-like base + product token + contact URL) —
         // single-sourced in AO3RequestDefaults because authenticated requests set the
         // same header per-request, which would silently override a diverging default.
         config.httpAdditionalHeaders = ["User-Agent": AO3RequestDefaults.userAgent]
         config.timeoutIntervalForRequest = 30
-        session = URLSession(configuration: config)
+        self.init(session: URLSession(configuration: config))
     }
 
     // MARK: Pacing
@@ -383,7 +388,10 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     /// already carry the user's session cookies — build it with
     /// `AO3AuthService.authenticatedRequest(for:)`. A bounce to AO3's login page is
     /// surfaced as `AO3Error.authenticationRequired` so the caller can re-auth.
-    private func authenticatedHTML(for request: URLRequest) async throws -> String {
+    private func authenticatedHTML(
+        for request: URLRequest,
+        retryTransientFailures: Bool = true
+    ) async throws -> String {
         var request = request
         // The session cookies are attached explicitly by the auth service; don't let
         // URLSession's shared cookie storage add a second, possibly stale, set.
@@ -394,7 +402,10 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         // Capture a let so the coalescer closure does not close over the mutable `var request`.
         let fetchRequest = request
         let (data, responsePath) = try await authCoalescer.shared(key) { [self] in
-            try await performAuthenticatedFetch(for: fetchRequest)
+            try await performAuthenticatedFetch(
+                for: fetchRequest,
+                retryTransientFailures: retryTransientFailures
+            )
         }
         if let path = responsePath, path.contains("/users/login") {
             throw AO3Error.authenticationRequired
@@ -402,8 +413,13 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         return Self.htmlString(from: data)
     }
 
-    private func performAuthenticatedFetch(for request: URLRequest) async throws -> (Data, String?) {
-        try await withRetry {
+    private func performAuthenticatedFetch(
+        for request: URLRequest,
+        retryTransientFailures: Bool = true
+    ) async throws -> (Data, String?) {
+        // `maxRetries: 0` runs the attempt once. The scan uses that so its own
+        // Retry-After loop is the only 429 wait; every other caller keeps 2.
+        try await withRetry(maxRetries: retryTransientFailures ? 2 : 0) {
             try await pace()
             let (data, response) = try await session.data(for: request)
             try Self.check(response, body: data)
@@ -415,8 +431,11 @@ actor AO3Client { // swiftlint:disable:this type_body_length
 
     /// HTML of an authenticated page for a write flow that first needs the page's CSRF
     /// token (a polite GET — retried/coalesced like other reads).
-    func authenticatedPageHTML(for request: URLRequest) async throws -> String {
-        try await authenticatedHTML(for: request)
+    func authenticatedPageHTML(
+        for request: URLRequest,
+        retryTransientFailures: Bool = true
+    ) async throws -> String {
+        try await authenticatedHTML(for: request, retryTransientFailures: retryTransientFailures)
     }
 
     /// Submits a single authenticated POST and returns its status + body. **Never
@@ -545,8 +564,17 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     }
 
     /// An authenticated AO3 subscriptions page (the user's *work* subscriptions).
-    func subscriptionsPage(for request: URLRequest, page: Int) async throws -> AO3SearchPage {
-        try await Self.parseSubscriptionsPage(authenticatedHTML(for: request), page: page)
+    /// `retryTransientFailures: false` surfaces 429 on the first response. The
+    /// subscriptions scan uses that; other callers keep the client retries.
+    func subscriptionsPage(
+        for request: URLRequest,
+        page: Int,
+        retryTransientFailures: Bool = true
+    ) async throws -> AO3SearchPage {
+        try await Self.parseSubscriptionsPage(
+            authenticatedHTML(for: request, retryTransientFailures: retryTransientFailures),
+            page: page
+        )
     }
 
     /// An authenticated series or user subscriptions page. Same paced auth GET
@@ -651,7 +679,9 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     /// any thrown error as a non-destructive refresh failure; only this successful,
     /// fully parsed value should be merged into local `SavedWork` records.
     func workMetadata(
-        workID: Int, request: URLRequest? = nil
+        workID: Int,
+        request: URLRequest? = nil,
+        retryTransientFailures: Bool = true
     ) async throws -> AO3WorkMetadata {
         guard let url = URL(string: "\(base)/works/\(workID)?view_adult=true") else {
             throw AO3Error.network("Bad work URL.")
@@ -659,7 +689,10 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         let html: String
         if var request {
             request.url = url
-            html = try await authenticatedPageHTML(for: request)
+            html = try await authenticatedPageHTML(
+                for: request,
+                retryTransientFailures: retryTransientFailures
+            )
         } else {
             html = try await getHTML(url)
         }
@@ -1024,6 +1057,12 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     /// build a sparse summary (title + author only — the page carries no stats).
     static func parseSubscriptionsPage(_ html: String, page: Int) throws -> AO3SearchPage {
         let doc = try SwiftSoup.parse(html)
+        // otwarchive 452391b6 `app/views/subscriptions/index.html.erb` always renders
+        // this list, including when `@subscriptions` is empty. Without it, a 200
+        // whose markup drifted would look like "you follow no works".
+        guard try doc.select("dl.subscription.index.group").first() != nil else {
+            throw AO3Error.parse
+        }
         var works: [AO3WorkSummary] = []
         for dt in try doc.select("dl.subscription dt").array() {
             // The work link points at /works/<id>; series/user subscriptions have no

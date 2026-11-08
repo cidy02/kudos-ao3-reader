@@ -105,6 +105,25 @@ struct AO3SubscriptionsParseTests {
         #expect(page.authors[1].route == nil)
     }
 
+    @Test func emptyWorkSubscriptionListIsARealEmptyPage() throws {
+        let html = """
+        <h2 class="heading">My Work Subscriptions</h2>
+        <dl class="subscription index group"></dl>
+        """
+        let page = try AO3Client.parseSubscriptionsPage(html, page: 1)
+        #expect(page.works.isEmpty)
+        #expect(page.totalPages == 1)
+    }
+
+    @Test func missingWorkSubscriptionListThrowsInsteadOfLookingEmpty() {
+        #expect(throws: AO3Error.self) {
+            try AO3Client.parseSubscriptionsPage(
+                "<html><body><p>Nothing followed</p></body></html>",
+                page: 1
+            )
+        }
+    }
+
     @Test func emptySeriesIndexIsARealEmptyPage() throws {
         let html = """
         <h2 class="heading">My Series Subscriptions</h2>

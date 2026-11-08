@@ -4,6 +4,52 @@ import Testing
 
 private final class AO3ClientPolicyBundleAnchor {}
 
+/// Stands in for AO3 and counts how many times a scan read is actually sent.
+private final class ScanRateLimitProbe: URLProtocol, @unchecked Sendable {
+    private static let lock = NSLock()
+    private static var hitCount = 0
+
+    static var hits: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return hitCount
+    }
+
+    static func reset() {
+        lock.lock()
+        hitCount = 0
+        lock.unlock()
+    }
+
+    // URLProtocol declares these as `class` methods; `static` cannot override them.
+    // swiftlint:disable:next static_over_final_class
+    override class func canInit(with request: URLRequest) -> Bool { true }
+
+    // swiftlint:disable:next static_over_final_class
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        Self.lock.lock()
+        Self.hitCount += 1
+        Self.lock.unlock()
+        let url = request.url ?? URL(string: "https://archiveofourown.org/")!
+        guard let response = HTTPURLResponse(
+            url: url,
+            statusCode: 429,
+            httpVersion: "HTTP/1.1",
+            headerFields: ["Retry-After": "0"]
+        ) else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
+            return
+        }
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data())
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
+}
+
 /// Closes the coverage gap noted in docs/REGRESSION_TEST_MATRIX.md: the retry and
 /// pacing policies (docs/AO3_NETWORKING_POLICY.md) were enforced only by review.
 struct AO3ClientPolicyTests {
@@ -48,6 +94,38 @@ struct AO3ClientPolicyTests {
     }
 
     // MARK: - Retry policy
+
+    @Test func scanReadsSurface429WithoutTheClientRetry() async throws {
+        ScanRateLimitProbe.reset()
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [ScanRateLimitProbe.self]
+        let client = AO3Client(session: URLSession(configuration: config))
+        var request = URLRequest(url: URL(string: "https://archiveofourown.org/users/ada/subscriptions?type=works")!)
+        request.setValue("test=1", forHTTPHeaderField: "Cookie")
+
+        do {
+            _ = try await client.subscriptionsPage(for: request, page: 1, retryTransientFailures: false)
+            Issue.record("subscriptions page should surface 429")
+        } catch let AO3Error.rateLimited(retryAfter) {
+            #expect(retryAfter == 0)
+        } catch {
+            Issue.record("unexpected subscriptions error \(error)")
+        }
+        #expect(ScanRateLimitProbe.hits == 1)
+
+        ScanRateLimitProbe.reset()
+        var work = URLRequest(url: URL(string: "https://archiveofourown.org/works/1?view_adult=true")!)
+        work.setValue("test=1", forHTTPHeaderField: "Cookie")
+        do {
+            _ = try await client.workMetadata(workID: 1, request: work, retryTransientFailures: false)
+            Issue.record("work page should surface 429")
+        } catch let AO3Error.rateLimited(retryAfter) {
+            #expect(retryAfter == 0)
+        } catch {
+            Issue.record("unexpected work error \(error)")
+        }
+        #expect(ScanRateLimitProbe.hits == 1)
+    }
 
     @Test func rateLimitedHonorsRetryAfterWhenLargerThanBackoff() {
         let delay = AO3Client.retryDelay(for: AO3Error.rateLimited(retryAfter: 10), attempt: 1)

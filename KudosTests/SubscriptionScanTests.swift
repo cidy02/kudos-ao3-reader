@@ -53,22 +53,153 @@ struct SubscriptionScanTests {
         let harness = ScanHarness()
         harness.page([follow(1), follow(2)])
         harness.facts(1, posted: 6, title: "Kept")
-        harness.facts(2, posted: 1)
+        harness.facts(2, posted: 1, title: "Dropped")
         let service = try harness.service()
         harness.onWork = { id in
-            if id == 1 { service.cancel() }
+            if id == 2 { service.cancel() }
         }
 
         await service.run(username: "ada", fetcher: harness.fetcher)
 
         #expect(service.phase == .idle)
-        #expect(harness.events.contains("work 2") == false)
         let kept = try #require(service.snapshots.first { $0.workID == 1 })
         #expect(kept.title == "Kept")
         #expect(kept.chaptersPosted == 6)
         #expect(kept.gone == false)
+        #expect(service.snapshots.contains { $0.workID == 2 } == false)
         let reloaded = try ScanHarness(directory: harness.directory, scope: harness.scope).service()
         #expect(reloaded.snapshots.first { $0.workID == 1 }?.chaptersPosted == 6)
+        #expect(reloaded.snapshots.contains { $0.workID == 2 } == false)
+    }
+
+    @Test func windowsShareOneScan() async throws {
+        #expect(SubscriptionScanService.shared === SubscriptionScanService.shared)
+
+        let harness = ScanHarness()
+        harness.page([follow(1)])
+        harness.facts(1, posted: 1)
+        harness.suspendWorkID = 1
+        let process = try harness.service()
+        let windowA = process
+        let windowB = process
+        let running = Task { await windowA.run(username: "ada", fetcher: harness.fetcher) }
+        for _ in 0 ..< 2_000 where !harness.workSuspended {
+            await Task.yield()
+        }
+        #expect(harness.workSuspended)
+
+        await windowB.run(username: "ada", fetcher: harness.fetcher)
+
+        #expect(harness.events.filter { $0 == "page 1" }.count == 1)
+        harness.releaseWork()
+        await running.value
+        #expect(harness.events.filter { $0 == "page 1" }.count == 1)
+        #expect(process.phase == .finished)
+    }
+
+    @Test func aStaleAccountRunCannotWriteTheNewAccount() async throws {
+        let directory = temporaryDirectory()
+        let ada = ScanHarness(directory: directory, scope: "signed-in:ada")
+        ada.page([follow(1, title: "Ada Work")])
+        ada.facts(1, posted: 4, title: "Ada Work")
+        ada.suspendWorkID = 1
+        let service = try ada.service()
+        let adaTask = Task { await service.run(username: "ada", fetcher: ada.fetcher) }
+        for _ in 0 ..< 2_000 where !ada.workSuspended {
+            await Task.yield()
+        }
+        #expect(ada.workSuspended)
+
+        service.adopt(authenticationScope: "signed-in:bea")
+        let bea = ScanHarness(directory: directory, scope: "signed-in:bea")
+        bea.page([follow(9, title: "Bea Work")])
+        bea.facts(9, posted: 2, title: "Bea Work")
+        // B has to enter its loop (and, before the fix, overwrite the shared
+        // generation) while A still holds the single coordinator slot.
+        let beaTask = Task { await service.run(username: "bea", fetcher: bea.fetcher) }
+        for _ in 0 ..< 2_000 where service.phase != .running {
+            await Task.yield()
+        }
+        #expect(service.phase == .running)
+        ada.releaseWork()
+        await adaTask.value
+        await beaTask.value
+
+        #expect(service.phase == .finished)
+        #expect(service.snapshots.map(\.workID) == [9])
+        let beaFile = try SubscriptionScanStore(
+            directoryURL: directory,
+            authenticationScope: "signed-in:bea"
+        ).load()
+        #expect(beaFile.followedWorkIDs == [9])
+        #expect(beaFile.snapshots.map(\.workID) == [9])
+        #expect(beaFile.snapshots.contains { $0.title == "Ada Work" } == false)
+    }
+
+    @Test func cancelDuringADelayedRequestPersistsNothing() async throws {
+        let harness = ScanHarness()
+        harness.page([follow(1, title: "Late")])
+        harness.facts(1, posted: 5, title: "Late")
+        harness.coalesceDelay = .seconds(3)
+        let service = try harness.service()
+        service.start(username: "ada", fetcher: harness.fetcher)
+        for _ in 0 ..< 2_000 where !harness.events.contains("work 1") {
+            await Task.yield()
+        }
+        #expect(harness.events.contains("work 1"))
+
+        let started = ContinuousClock.now
+        service.cancel()
+        for _ in 0 ..< 2_000 where service.phase == .running || service.phase == .paused {
+            await Task.yield()
+        }
+        #expect(ContinuousClock.now - started < .seconds(1))
+        #expect(service.phase == .idle)
+        #expect(service.snapshots.isEmpty)
+        #expect(service.updates.isEmpty)
+        let saved = try SubscriptionScanStore(
+            directoryURL: harness.directory,
+            authenticationScope: harness.scope
+        ).load()
+        #expect(saved.snapshots.isEmpty)
+    }
+
+    @Test func aWorkPageParseStopsTheScan() async throws {
+        let harness = ScanHarness()
+        harness.page([follow(1), follow(2)])
+        harness.facts(1, posted: 3, title: "Kept")
+        let service = try harness.service()
+
+        await service.run(username: "ada", fetcher: harness.fetcher)
+
+        #expect(service.phase == .stopped)
+        #expect(service.statusNote == AO3Error.parse.errorDescription)
+        #expect(service.snapshots.map(\.workID) == [1])
+        #expect(harness.events.contains("work 2"))
+        let saved = try SubscriptionScanStore(
+            directoryURL: harness.directory,
+            authenticationScope: harness.scope
+        ).load()
+        #expect(saved.snapshots.map(\.workID) == [1])
+    }
+
+    @Test func anUnrecognizedSubscriptionsPageDoesNotClearFollows() async throws {
+        let harness = ScanHarness()
+        let previous = snapshot(workID: 4, posted: 3, checkedAt: harness.now)
+        try harness.seed(snapshots: [previous], followed: [4])
+        harness.pageError = AO3Error.parse
+        let service = try harness.service()
+
+        await service.run(username: "ada", fetcher: harness.fetcher)
+
+        #expect(service.phase == .stopped)
+        #expect(service.snapshots.map(\.workID) == [4])
+        let saved = try SubscriptionScanStore(
+            directoryURL: harness.directory,
+            authenticationScope: harness.scope
+        ).load()
+        #expect(saved.followedWorkIDs == [4])
+        #expect(saved.snapshots.map(\.workID) == [4])
     }
 
     @Test func rateLimitWaitsAtLeastRetryAfterBeforeTheSameWork() async throws {
@@ -322,6 +453,20 @@ private final class ScanHarness {
         set { fetcher.failOnce = newValue }
     }
 
+    var coalesceDelay: Duration? {
+        get { fetcher.coalesceDelay }
+        set { fetcher.coalesceDelay = newValue }
+    }
+
+    var suspendWorkID: Int? {
+        get { fetcher.suspendWorkID }
+        set { fetcher.suspendWorkID = newValue }
+    }
+
+    var workSuspended: Bool { fetcher.workSuspended }
+
+    func releaseWork() { fetcher.releaseWork() }
+
     init(directory: URL? = nil, scope: String = "signed-in:ada") {
         self.directory = directory ?? temporaryDirectory()
         fetcher = FakeSubscriptionScanFetcher(log: log)
@@ -396,6 +541,11 @@ private final class FakeSubscriptionScanFetcher: SubscriptionScanFetching {
     var pageError: Error?
     var failOnce: [Int: Error] = [:]
     var onWork: ((Int) -> Void)?
+    var coalesceDelay: Duration?
+    var suspendWorkID: Int?
+    private(set) var workSuspended = false
+    private var workGate: CheckedContinuation<Void, Never>?
+    private let workCoalescer = RequestCoalescer<Int, SubscriptionScanWorkFacts>()
     private var attempts: [Int: Int] = [:]
     private var inFlight = 0
     private(set) var maxInFlight = 0
@@ -408,10 +558,32 @@ private final class FakeSubscriptionScanFetcher: SubscriptionScanFetching {
         return pages[page] ?? SubscriptionScanListPage(works: [], totalPages: page)
     }
 
+    func releaseWork() {
+        workSuspended = false
+        let gate = workGate
+        workGate = nil
+        gate?.resume()
+    }
+
     func workFacts(workID: Int) async throws -> SubscriptionScanWorkFacts {
         attempts[workID, default: 0] += 1
         try await occupy("work \(workID)")
         onWork?(workID)
+        if let coalesceDelay {
+            let facts = facts[workID]
+            let nanos = SubscriptionScanClock.nanoseconds(coalesceDelay)
+            return try await workCoalescer.shared(workID) { @Sendable in
+                try await Task.sleep(nanoseconds: nanos)
+                guard let facts else { throw AO3Error.parse }
+                return facts
+            }
+        }
+        if suspendWorkID == workID {
+            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                workGate = continuation
+                workSuspended = true
+            }
+        }
         if attempts[workID] == 1, let error = failOnce[workID] { throw error }
         guard let facts = facts[workID] else { throw AO3Error.parse }
         return facts
