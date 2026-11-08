@@ -1219,7 +1219,10 @@ private extension String {
 nonisolated enum AO3Error: LocalizedError, Sendable, Equatable {
     /// HTTP 429. `retryAfter` is the server's `Retry-After` hint in seconds, if given.
     case rateLimited(retryAfter: TimeInterval?)
-    /// AO3's HTTP 418 / narrowly recognized maintenance page. Never retried.
+    /// AO3 answered with its "The archive is down for maintenance." page (any
+    /// non-2xx status; Cloudflare served it as 418 on 2026-11-03), or HTTP 418 /
+    /// a narrowly recognized maintenance page. Never retried; `AO3Client` holds
+    /// further requests briefly (`maintenanceHold`).
     case maintenance
     case notFound
     /// HTTP 403 — AO3 (or its CDN) refused the request outright. Not retried:
@@ -1237,10 +1240,6 @@ nonisolated enum AO3Error: LocalizedError, Sendable, Equatable {
     /// Anonymous `getHTML` / `imageData` was asked to fetch a non-AO3 host
     /// (M6). Never retried; the request must not leave the process.
     case untrustedHost
-    /// AO3 answered with its "The archive is down for maintenance." page (any
-    /// non-2xx status; Cloudflare served it as 418 on 2026-11-03). Not retried;
-    /// `AO3Client` holds further requests briefly (`maintenanceHold`).
-    case maintenance
 
     /// Whether a kept copy of a page may be shown in place of this failure: only when AO3
     /// could not be reached or was overloaded. Its own answer (403, 404, another 4xx, a page
@@ -1265,7 +1264,6 @@ nonisolated enum AO3Error: LocalizedError, Sendable, Equatable {
         case .parse: "AO3's page format wasn't what the app expected."
         case .authenticationRequired: "Your AO3 session expired. Please log in again."
         case .untrustedHost: "That address is not Archive of Our Own."
-        case .maintenance: "AO3 is down for maintenance. Your saved works still open. Try AO3 again later."
         }
     }
 }

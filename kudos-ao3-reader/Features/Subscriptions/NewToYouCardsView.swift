@@ -49,7 +49,8 @@ struct NewToYouCardsView: View {
     private var current: NewToYouCard? { remaining.first }
 
     private func isObscured(_ card: NewToYouCard) -> Bool {
-        hideMature && card.summary.isAdult && matureMode == .obscure && !privacyGate.isRevealed(card.summary)
+        // The gate's rule, so a card whose rating is not known yet stays concealed too.
+        privacyGate.isBlurred(card.summary, enabled: hideMature, mode: matureMode)
     }
 
     private var positionText: String {
@@ -108,7 +109,14 @@ struct NewToYouCardsView: View {
             if let card = current {
                 deck(card)
             } else if !undecidedCards.isEmpty {
-                MatureContentHiddenView()
+                // Every card left is hidden by Hide mode.
+                ContentUnavailableView {
+                    Label("Sensitive works hidden", systemImage: "eye.slash")
+                } description: {
+                    Text("Works without a recognized General or Teen rating are hidden. Reveal them to read.")
+                } actions: {
+                    Button("Show mature") { privacyGate.toggleRevealAll() }
+                }
             } else if showsEmptyState, handled.isEmpty {
                 ContentUnavailableView(
                     "Nothing new to you",
@@ -139,10 +147,8 @@ struct NewToYouCardsView: View {
                 AccessibilityNotification.Announcement(text).post()
             }
             .toolbar {
-                if PrivacyGate.hasVisibleMatureWorks(
-                    in: undecidedCards.map(\.summary),
-                    hideMature: hideMature
-                ) {
+                // T-284: the toggle is on every works screen while privacy is on.
+                if hideMature {
                     ToolbarItem(placement: .primaryAction) {
                         MatureRevealToggle()
                     }
@@ -203,7 +209,7 @@ struct NewToYouCardsView: View {
             } label: {
                 cardBody(card)
                     .blur(radius: 6)
-                    .overlay { MatureContentRevealLabel() }
+                    .overlay { MatureRevealCapsule() }
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -276,10 +282,10 @@ struct NewToYouCardsView: View {
         .padding(CardListMetrics.innerHorizontal)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
-            RoundedRectangle(cornerRadius: CardListMetrics.cornerRadius, style: .continuous)
+            RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
                 .fill(theme.appTheme.cardSurface)
                 .overlay(
-                    RoundedRectangle(cornerRadius: CardListMetrics.cornerRadius, style: .continuous)
+                    RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
                         .strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5)
                 )
                 .shadow(

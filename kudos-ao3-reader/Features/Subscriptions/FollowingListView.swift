@@ -272,7 +272,7 @@ struct FollowingListView: View {
             subtitle: item.creatorNames.isEmpty ? nil : item.creatorNames.joined(separator: ", ")
         )
         if let summary = item.navigationSummary {
-            row.cardNavigation(to: summary)
+            row.cardNavigation(to: summary, accessibilityLabel: item.title)
                 .accessibilityHint("Opens this series")
         } else {
             row
@@ -283,7 +283,7 @@ struct FollowingListView: View {
     private func authorRow(_ item: AO3FollowedAuthor) -> some View {
         let row = FollowedNameRow(title: item.name, subtitle: nil)
         if let route = item.route {
-            row.cardNavigation(to: route)
+            row.cardNavigation(to: route, accessibilityLabel: item.name)
                 .accessibilityHint("Opens this author's profile")
         } else {
             row

@@ -38,6 +38,8 @@ nonisolated struct AO3FollowedSeries: Identifiable, Hashable, Sendable {
             workCount: nil,
             dateUpdated: "",
             isComplete: nil,
+            // The index does not print the lock; the series page loads the real flag.
+            isRestricted: false,
             url: url
         )
     }

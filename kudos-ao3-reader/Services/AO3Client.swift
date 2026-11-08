@@ -391,6 +391,14 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         ) != nil
     }
 
+    /// HTTP 418, or AO3's maintenance page on a failed answer. For a caller that
+    /// handles every other status itself (the session check in `AO3AuthService`).
+    static func checkForMaintenance(statusCode: Int, body: Data) throws {
+        if statusCode == 418 || (!(200 ... 299).contains(statusCode) && isMaintenancePage(body)) {
+            throw AO3Error.maintenance
+        }
+    }
+
     static func checkHTTPResponse(
         statusCode: Int, body: Data, retryAfter: TimeInterval? = nil
     ) throws {
@@ -1961,6 +1969,12 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     /// and this screen does not scope the index to series or authors.
     static func parseSubscriptionsIndex(_ html: String, page: Int) throws -> AO3SubscriptionsIndex {
         let doc = try SwiftSoup.parse(html)
+        // otwarchive 452391b6 `app/views/subscriptions/index.html.erb` always renders
+        // this list, including when `@subscriptions` is empty. Without it, a 200
+        // whose markup drifted would look like "you follow no works".
+        guard try doc.select("dl.subscription.index.group").first() != nil else {
+            throw AO3Error.parse
+        }
         var works: [AO3WorkSummary] = []
         var paths: [Int: String] = [:]
         for dt in try doc.select("dl.subscription dt").array() {

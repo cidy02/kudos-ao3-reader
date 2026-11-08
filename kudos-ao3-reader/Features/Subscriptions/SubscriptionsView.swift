@@ -76,7 +76,6 @@ struct SubscriptionsView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(theme.appTheme.cardBackdrop.ignoresSafeArea())
-        .hidesFloatingTabBar()
         .navigationTitle("Subscriptions")
         #if !os(macOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -353,16 +352,18 @@ struct SubscriptionsView: View {
 
     private func loadFollowing() async {
         phase = .loading
+        // A response from an earlier login must not land here or expire a newer one.
+        let expectedSessionGeneration = auth.sessionGeneration
         do {
             // shortcut: load one AO3 page here, use the existing paged list when more pages are needed
             let loaded = try await auth.accountSubscriptions()
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, auth.sessionGeneration == expectedSessionGeneration else { return }
             works = loaded
             phase = .loaded
         } catch is CancellationError {
             return
         } catch AO3Error.authenticationRequired {
-            await auth.sessionDidExpire()
+            guard await auth.sessionDidExpire(expectedGeneration: expectedSessionGeneration) else { return }
             works = []
             phase = .idle
         } catch let error as AO3Error {
@@ -376,11 +377,12 @@ struct SubscriptionsView: View {
     private func loadFollowedLists() async {
         listsPhase = .loading
         listsMoreError = nil
+        let expectedSessionGeneration = auth.sessionGeneration
         do {
             let seriesLoaded = try await auth.accountSubscriptionIndex(type: .series, page: 1)
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, auth.sessionGeneration == expectedSessionGeneration else { return }
             let authorsLoaded = try await auth.accountSubscriptionIndex(type: .users, page: 1)
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, auth.sessionGeneration == expectedSessionGeneration else { return }
             followed.series = seriesLoaded.series
             followed.seriesPage = seriesLoaded.currentPage
             followed.seriesTotal = seriesLoaded.totalPages
@@ -391,7 +393,7 @@ struct SubscriptionsView: View {
         } catch is CancellationError {
             return
         } catch AO3Error.authenticationRequired {
-            await auth.sessionDidExpire()
+            guard await auth.sessionDidExpire(expectedGeneration: expectedSessionGeneration) else { return }
             followed.series = []
             followed.authors = []
             listsPhase = .idle
@@ -406,6 +408,7 @@ struct SubscriptionsView: View {
     /// changes. The scope is taken before the request and the page is dropped
     /// when it no longer matches.
     private func loadMore(_ kind: AO3SubscriptionListType) async {
+        let expectedSessionGeneration = auth.sessionGeneration
         do {
             try await followed.loadMore(kind, scope: {
                 AO3AuthorProfileFetcher.authenticationScope(for: auth)
@@ -415,7 +418,7 @@ struct SubscriptionsView: View {
         } catch is CancellationError {
             return
         } catch AO3Error.authenticationRequired {
-            await auth.sessionDidExpire()
+            await auth.sessionDidExpire(expectedGeneration: expectedSessionGeneration)
         } catch {
             listsMoreError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }

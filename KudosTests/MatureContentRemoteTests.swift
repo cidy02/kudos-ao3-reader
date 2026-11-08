@@ -40,7 +40,8 @@ struct MatureContentRemoteTests {
         #expect(makeSummary(rating: "Mature").isAdult)
         #expect(!makeSummary(rating: "Teen And Up Audiences").isAdult)
         #expect(!makeSummary(rating: "General Audiences").isAdult)
-        #expect(!makeSummary(rating: "Not Rated").isAdult)
+        // AO3 flags Not Rated adult (otwarchive ensure_required_tags.rb).
+        #expect(makeSummary(rating: "Not Rated").isAdult)
         #expect(!makeSummary(rating: "").isAdult)
     }
 

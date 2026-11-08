@@ -39,6 +39,11 @@ struct WorkStatLabel: View {
     /// (not app accent): language/words/kudos etc. sit under the category row and
     /// should read as quiet metadata, not chrome.
     var iconColor: Color?
+    /// Stats are bounded ("Mature", "12/24", "48K"), so by default the label takes
+    /// its ideal width and the surrounding `FlowLayout` wraps between labels. Free
+    /// text is not bounded (an AO3 pseud runs to 40 characters): opt in and the
+    /// value gets an ellipsis instead of drawing past the row.
+    var truncates = false
 
     var body: some View {
         HStack(spacing: 3) {
@@ -48,7 +53,8 @@ struct WorkStatLabel: View {
             Text(text)
         }
         .lineLimit(1)
-        .fixedSize()
+        .truncationMode(.tail)
+        .fixedSize(horizontal: !truncates, vertical: true)
         .combinedAccessibilityRow(accessibilityLabel ?? text)
     }
 }

@@ -62,11 +62,16 @@ mv "$TRACKED_BINDING.tmp" "$TRACKED_BINDING"
 # compiles the .swift from the synchronized group and links the xcframework, so
 # the header and modulemap belong with the framework, not the app sources.
 HEADERS="$OUT/headers"
+# In a folder named after the module: Xcode copies every xcframework's headers
+# into the same BUILT_PRODUCTS_DIR/include, so a bare module.modulemap collides
+# with any other library's (FluidAudio's NemoTextProcessing ships one). Clang
+# finds <include>/<ModuleName>/module.modulemap on its own.
+MODULE_HEADERS="$HEADERS/kudos_mail_coreFFI"
 rm -rf "$OUT/KudosMail.xcframework" "$HEADERS"
-mkdir -p "$HEADERS"
-mv "$GENERATED"/*.h "$HEADERS"/ 2>/dev/null || true
+mkdir -p "$MODULE_HEADERS"
+mv "$GENERATED"/*.h "$MODULE_HEADERS"/ 2>/dev/null || true
 if compgen -G "$GENERATED/*.modulemap" > /dev/null; then
-  mv "$GENERATED"/*.modulemap "$HEADERS/module.modulemap"
+  mv "$GENERATED"/*.modulemap "$MODULE_HEADERS/module.modulemap"
 fi
 
 echo "assembling the xcframework"

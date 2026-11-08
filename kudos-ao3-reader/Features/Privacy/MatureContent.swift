@@ -17,6 +17,12 @@ enum MaturePrivacyMode: String, CaseIterable, Identifiable {
     }
 }
 
+/// AO3's own rule (otwarchive `Taggable#adult?` and `ensure_required_tags.rb`): only
+/// General and Teen are not adult; Mature, Explicit and Not Rated are, and so is any
+/// rating this build does not recognize. No rating data at all (`nil`) fails closed.
+/// A blank rating is "not supplied yet" (a sparse AO3 listing, or a local file with no
+/// rating): not adult by itself; `PrivacyGate.isPrivacyUndetermined` keeps a blank remote
+/// work concealed in either mode.
 nonisolated enum MatureContentRating {
     static func isAdult(_ rating: String?) -> Bool {
         guard let rating else { return true }
@@ -25,7 +31,7 @@ nonisolated enum MatureContentRating {
             .joined(separator: " ")
             .lowercased()
         return switch normalized {
-        case "general audiences", "teen and up audiences": false
+        case "", "general audiences", "teen and up audiences": false
         default: true
         }
     }
