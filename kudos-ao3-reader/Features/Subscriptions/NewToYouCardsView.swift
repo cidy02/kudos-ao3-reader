@@ -375,9 +375,10 @@ struct NewToYouMailDeck: View {
                         try mailDriver.recordDecision(.notForMe, workID: card.workID)
                     },
                     onSave: { card in
-                        _ = try await NewToYouLibrary.save(card.summary, in: modelContext)
+                        _ = try await NewToYouLibrary.save(card, in: modelContext) { workID in
+                            try mailDriver.recordDecision(.saved, workID: workID)
+                        }
                         reloadLibrary()
-                        try mailDriver.recordDecision(.saved, workID: card.workID)
                     }
                 )
             } else {

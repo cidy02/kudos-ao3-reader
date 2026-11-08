@@ -118,19 +118,78 @@ struct NewToYouTests {
     @Test("Maintenance does not save the work or record the decision")
     func maintenanceKeepsTheWorkUndecided() async throws {
         let context = try makeContext()
-        var recorded = false
+        var recorded: [UInt64] = []
         let summary = AO3WorkSummary.subscription(id: 51, title: "Claimed", authors: ["Writer"])
+        let card = NewToYouCard(preview: summary, source: .author("marrowlight"))
         do {
-            _ = try await NewToYouLibrary.save(summary, in: context, downloadEPUB: { _ in
+            _ = try await NewToYouLibrary.save(card, in: context, downloadEPUB: { _ in
                 throw AO3Error.maintenance
-            })
-            recorded = true
+            }) { recorded.append($0) }
             Issue.record("maintenance must throw")
         } catch AO3Error.maintenance {
             // The card stays. Nothing was written.
         }
-        #expect(!recorded)
+        #expect(recorded.isEmpty)
         #expect(try context.fetch(FetchDescriptor<SavedWork>()).isEmpty)
+    }
+
+    @Test("Save stores the EPUB's metadata, not the card's claims")
+    func saveUsesEPUBMetadataNotTheClaim() async throws {
+        let context = try makeContext()
+        let temp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("NewToYou-\(UUID().uuidString).epub")
+        try FileManager.default.copyItem(at: try EPUBTests.sampleEPUB, to: temp)
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        var summary = AO3WorkSummary.subscription(
+            id: 77, title: "Claimed Title", authors: ["Claimed Author"]
+        )
+        summary.summary = "Claimed blurb"
+        summary.fandoms = ["Claimed Fandom"]
+        summary.rating = "Explicit"
+        summary.chapters = "99/?"
+        let card = NewToYouCard(preview: summary, source: .author("marrowlight"))
+
+        let work = try await NewToYouLibrary.save(card, in: context, downloadEPUB: { _ in temp }) { _ in }
+        defer { try? FileManager.default.removeItem(at: work.fileURL) }
+
+        #expect(work.title == "A Test Work")
+        #expect(work.author == "Test Author")
+        #expect(work.summary != "Claimed blurb")
+        #expect(work.rating == "Teen And Up Audiences")
+        #expect(!work.workFandoms.contains("Claimed Fandom"))
+        #expect(work.chapters != "99/?")
+        #expect(work.ao3WorkID == 77)
+        #expect(work.isInSavedForLaterQueue)
+    }
+
+    @Test("A failed EPUB install leaves no library row and no saved decision")
+    func failedInstallDoesNotSaveOrDecide() async throws {
+        let card = NewToYouCard(
+            preview: AO3WorkSummary.subscription(id: 51, title: "Claimed", authors: ["Writer"]),
+            source: .author("marrowlight")
+        )
+        let invalid = FileManager.default.temporaryDirectory
+            .appendingPathComponent("NewToYou-bad-\(UUID().uuidString).epub")
+        try Data("not an epub".utf8).write(to: invalid)
+        let missing = FileManager.default.temporaryDirectory
+            .appendingPathComponent("NewToYou-missing-\(UUID().uuidString).epub")
+        defer { try? FileManager.default.removeItem(at: invalid) }
+
+        for file in [invalid, missing] {
+            let context = try makeContext()
+            var recorded: [UInt64] = []
+            do {
+                _ = try await NewToYouLibrary.save(card, in: context, downloadEPUB: { _ in file }) {
+                    recorded.append($0)
+                }
+                Issue.record("install failure must throw")
+            } catch {
+                // The card stays. `.saved` is not recorded.
+            }
+            #expect(recorded.isEmpty)
+            #expect(try context.fetch(FetchDescriptor<SavedWork>()).isEmpty)
+        }
     }
 
     private func update(

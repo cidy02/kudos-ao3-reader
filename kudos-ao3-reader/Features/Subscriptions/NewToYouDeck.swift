@@ -115,9 +115,9 @@ enum NewToYouDeck {
     }
 }
 
-/// Save for a New to you card. The download runs before the existing
-/// save-for-later path so `AO3Error.maintenance` (and any other download
-/// failure) throws before a library row exists.
+/// Save for a New to you card. The downloaded file goes through `importEPUB`,
+/// so the library row is the file's own metadata. A download or install
+/// failure throws before that row exists and before `.saved` is recorded.
 @MainActor
 enum NewToYouLibrary {
     static func save(
@@ -127,10 +127,22 @@ enum NewToYouLibrary {
     ) async throws -> SavedWork {
         let download = downloadEPUB ?? { try await AO3Client.shared.downloadEPUB(workID: $0) }
         let file = try await download(summary.id)
-        return try await ReadingQueueService.addToSavedForLater(
-            summary,
-            in: context,
-            downloadEPUB: { _ in file }
-        )
+        let work = try await importEPUB(file, source: summary.workURL, into: context)
+        let queue = ReadingQueueService.ensureSavedForLaterQueue(in: context)
+        _ = ReadingQueueService.add(work, to: queue, in: context)
+        return work
+    }
+
+    /// Records `.saved` only after the import has landed. The deck drops the
+    /// card only when this returns.
+    static func save(
+        _ card: NewToYouCard,
+        in context: ModelContext,
+        downloadEPUB: ((Int) async throws -> URL)? = nil,
+        recordSaved: (UInt64) throws -> Void
+    ) async throws -> SavedWork {
+        let work = try await save(card.summary, in: context, downloadEPUB: downloadEPUB)
+        try recordSaved(card.workID)
+        return work
     }
 }

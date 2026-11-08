@@ -10,7 +10,8 @@ extension AO3Client {
     /// `app/helpers/byline_helper.rb`, `lib/pagination_list_link_renderer.rb`,
     /// `config/locales/views/en.yml` (`subscriptions.index`),
     /// `config/locales/models/en.yml` (`subscriptions.deleted`).
-    /// A missing `dl.subscription.index.group` is `AO3Error.parse`, not an empty follow list.
+    /// A missing `dl.subscription.index.group`, or one that still has markup but
+    /// produced no rows, is `AO3Error.parse`, not an empty follow list.
     static func parseSubscriptionIndex(
         _ html: String,
         page: Int,
@@ -18,7 +19,9 @@ extension AO3Client {
     ) throws -> AO3SubscriptionIndexPage {
         guard type == .series || type == .users else { throw AO3Error.parse }
         let doc = try SwiftSoup.parse(html)
-        guard try doc.select("dl.subscription.index.group").first() != nil else {
+        // otwarchive 452391b6 `subscriptions/index.html.erb` renders this list
+        // even when `@subscriptions` is empty, and then it has no child rows.
+        guard let list = try doc.select("dl.subscription.index.group").first() else {
             throw AO3Error.parse
         }
 
@@ -86,6 +89,13 @@ extension AO3Client {
             case .works:
                 throw AO3Error.parse
             }
+        }
+
+        if series.isEmpty, authors.isEmpty {
+            let leftover = try list.text().trimmingCharacters(in: .whitespacesAndNewlines)
+            // Zero rows is a real empty follow list only when the container
+            // itself is empty. Any leftover markup is drift, not "you follow nothing".
+            guard list.children().array().isEmpty, leftover.isEmpty else { throw AO3Error.parse }
         }
 
         return AO3SubscriptionIndexPage(

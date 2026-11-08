@@ -36,14 +36,7 @@ struct SubscriptionsView: View {
     @State private var works: [AO3WorkSummary] = []
     /// Session-only. Not stored: a new visit loads the AO3 page again.
     @State private var unfollowed = Set<Int>()
-    @State private var series: [AO3FollowedSeries] = []
-    @State private var authors: [AO3FollowedAuthor] = []
-    @State private var seriesPage = 1
-    @State private var seriesTotal = 1
-    @State private var authorsPage = 1
-    @State private var authorsTotal = 1
-    @State private var loadingMoreSeries = false
-    @State private var loadingMoreAuthors = false
+    @State private var followed = FollowedListPages()
     @State private var listsMoreError: String?
     @State private var phase = Phase.idle
     /// Series and author pages. Separate from `phase` so Tidy up still shows works
@@ -114,8 +107,8 @@ struct SubscriptionsView: View {
             .task(id: loadKey) {
                 guard auth.isLoggedIn else {
                     works = []
-                    series = []
-                    authors = []
+                    followed.series = []
+                    followed.authors = []
                     phase = .idle
                     listsPhase = .idle
                     return
@@ -330,15 +323,15 @@ struct SubscriptionsView: View {
                 scope: .following,
                 sourceNote: worksSourceNote,
                 unfollowed: $unfollowed,
-                series: series,
-                authors: authors,
-                seriesHasMore: seriesPage < seriesTotal,
-                authorsHasMore: authorsPage < authorsTotal,
-                isLoadingMoreSeries: loadingMoreSeries,
-                isLoadingMoreAuthors: loadingMoreAuthors,
+                series: followed.series,
+                authors: followed.authors,
+                seriesHasMore: followed.seriesPage < followed.seriesTotal,
+                authorsHasMore: followed.authorsPage < followed.authorsTotal,
+                isLoadingMoreSeries: followed.loadingMoreSeries,
+                isLoadingMoreAuthors: followed.loadingMoreAuthors,
                 showsEmptyFollowGroups: true,
-                onLoadMoreSeries: { Task { await loadMoreSeries() } },
-                onLoadMoreAuthors: { Task { await loadMoreAuthors() } }
+                onLoadMoreSeries: { Task { await loadMore(.series) } },
+                onLoadMoreAuthors: { Task { await loadMore(.users) } }
             )
         }
     }
@@ -388,19 +381,19 @@ struct SubscriptionsView: View {
             guard !Task.isCancelled else { return }
             let authorsLoaded = try await auth.accountSubscriptionIndex(type: .users, page: 1)
             guard !Task.isCancelled else { return }
-            series = seriesLoaded.series
-            seriesPage = seriesLoaded.currentPage
-            seriesTotal = seriesLoaded.totalPages
-            authors = authorsLoaded.authors
-            authorsPage = authorsLoaded.currentPage
-            authorsTotal = authorsLoaded.totalPages
+            followed.series = seriesLoaded.series
+            followed.seriesPage = seriesLoaded.currentPage
+            followed.seriesTotal = seriesLoaded.totalPages
+            followed.authors = authorsLoaded.authors
+            followed.authorsPage = authorsLoaded.currentPage
+            followed.authorsTotal = authorsLoaded.totalPages
             listsPhase = .loaded
         } catch is CancellationError {
             return
         } catch AO3Error.authenticationRequired {
             await auth.sessionDidExpire()
-            series = []
-            authors = []
+            followed.series = []
+            followed.authors = []
             listsPhase = .idle
         } catch let error as AO3Error {
             listsPhase = .failed(error.errorDescription ?? "Something went wrong.")
@@ -409,17 +402,16 @@ struct SubscriptionsView: View {
         }
     }
 
-    private func loadMoreSeries() async {
-        let next = seriesPage + 1
-        guard !loadingMoreSeries, next <= seriesTotal else { return }
-        loadingMoreSeries = true
-        defer { loadingMoreSeries = false }
+    /// The button's task is unstructured, so it is not cancelled when the account
+    /// changes. The scope is taken before the request and the page is dropped
+    /// when it no longer matches.
+    private func loadMore(_ kind: AO3SubscriptionListType) async {
         do {
-            let loaded = try await auth.accountSubscriptionIndex(type: .series, page: next)
-            guard !Task.isCancelled else { return }
-            appendSeries(loaded.series)
-            seriesPage = loaded.currentPage
-            seriesTotal = max(seriesTotal, loaded.totalPages)
+            try await followed.loadMore(kind, scope: {
+                AO3AuthorProfileFetcher.authenticationScope(for: auth)
+            }) { page in
+                try await auth.accountSubscriptionIndex(type: kind, page: page)
+            }
         } catch is CancellationError {
             return
         } catch AO3Error.authenticationRequired {
@@ -427,36 +419,6 @@ struct SubscriptionsView: View {
         } catch {
             listsMoreError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
-    }
-
-    private func loadMoreAuthors() async {
-        let next = authorsPage + 1
-        guard !loadingMoreAuthors, next <= authorsTotal else { return }
-        loadingMoreAuthors = true
-        defer { loadingMoreAuthors = false }
-        do {
-            let loaded = try await auth.accountSubscriptionIndex(type: .users, page: next)
-            guard !Task.isCancelled else { return }
-            appendAuthors(loaded.authors)
-            authorsPage = loaded.currentPage
-            authorsTotal = max(authorsTotal, loaded.totalPages)
-        } catch is CancellationError {
-            return
-        } catch AO3Error.authenticationRequired {
-            await auth.sessionDidExpire()
-        } catch {
-            listsMoreError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-        }
-    }
-
-    private func appendSeries(_ incoming: [AO3FollowedSeries]) {
-        let seen = Set(series.map(\.subscriptionID))
-        series.append(contentsOf: incoming.filter { !seen.contains($0.subscriptionID) })
-    }
-
-    private func appendAuthors(_ incoming: [AO3FollowedAuthor]) {
-        let seen = Set(authors.map(\.subscriptionID))
-        authors.append(contentsOf: incoming.filter { !seen.contains($0.subscriptionID) })
     }
 }
 
