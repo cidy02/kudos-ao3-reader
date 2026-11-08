@@ -44,6 +44,23 @@ struct MatureContentTests {
         }
     }
 
+    /// Mail updates and scan snapshots: known by id, maybe with a rating.
+    @MainActor
+    @Test func idOnlyRowsOmitKnownAdultAndBlurAnUnknownRating() {
+        let gate = PrivacyGate()
+        #expect(gate.isHidden(remoteID: 1, rating: "Explicit", enabled: true, mode: .hide))
+        #expect(!gate.isBlurred(remoteID: 1, rating: "Explicit", enabled: true, mode: .hide))
+        #expect(gate.isBlurred(remoteID: 1, rating: "Not Rated", enabled: true, mode: .obscure))
+        for rating in [nil, "", "  "] as [String?] {
+            #expect(!gate.isHidden(remoteID: 2, rating: rating, enabled: true, mode: .hide))
+            #expect(gate.isBlurred(remoteID: 2, rating: rating, enabled: true, mode: .hide))
+            #expect(gate.isBlurred(remoteID: 2, rating: rating, enabled: true, mode: .obscure))
+        }
+        #expect(!gate.isBlurred(remoteID: 3, rating: "General Audiences", enabled: true, mode: .obscure))
+        #expect(!gate.isHidden(remoteID: 1, rating: "Explicit", enabled: false, mode: .hide))
+        #expect(!gate.isBlurred(remoteID: 2, rating: nil, enabled: false, mode: .obscure))
+    }
+
     @MainActor
     @Test func remoteHideDecisionPreservesDisabledBlurAndHideSemantics() {
         var remote = AO3WorkSummary.subscription(id: 1, title: "Remote", authors: ["Writer"])

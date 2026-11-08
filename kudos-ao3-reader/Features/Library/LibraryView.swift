@@ -151,7 +151,13 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 .navigationDestination(for: ReadingQueue.self) { ReadingQueueDetailView(queue: $0) }
                 .navigationDestination(for: AO3WorkSummary.self) { WorkDetailView(remote: $0) }
                 .navigationDestination(for: LibraryAO3Route.self) { route in
-                    AO3AccountWorksList(kind: route.kind, originKicker: "Library")
+                    // Subscriptions is its own screen (T-505), like Account's and Home's
+                    // entries; its More menu keeps the full AO3 list one tap away.
+                    if route == .subscriptions {
+                        SubscriptionsView()
+                    } else {
+                        AO3AccountWorksList(kind: route.kind, originKicker: "Library")
+                    }
                 }
                 .ao3AuthorNavigation(path: $path, tab: .library)
                 .navigationDestination(for: RecentlyDeletedDestination.self) { _ in RecentlyDeletedView() }

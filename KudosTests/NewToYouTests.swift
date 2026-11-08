@@ -53,6 +53,7 @@ struct NewToYouTests {
         #expect(cards.first?.summary.title == "Newer claim")
     }
 
+    @MainActor
     @Test("The card headline is the subscription, and the title is only a claim")
     func headlineDoesNotStateTheTitle() {
         let author = update(
@@ -90,7 +91,11 @@ struct NewToYouTests {
         for text in [authorCard?.headline, authorCard?.attribution, seriesCard?.headline, seriesCard?.attribution] {
             #expect(text?.localizedCaseInsensitiveContains("email") != true)
         }
-        #expect(authorCard?.summary.isAdult == true)
+        // No rating in the notification: blank, so the gate's undetermined rule conceals
+        // the card in either mode (it is never shown in the clear).
+        let gate = PrivacyGate()
+        #expect(authorCard.map { gate.isBlurred($0.summary, enabled: true, mode: .obscure) } == true)
+        #expect(authorCard.map { gate.isBlurred($0.summary, enabled: true, mode: .hide) } == true)
         #expect(seriesCard?.summary.isAdult == true)
         #expect(authorCard?.summary.fandoms == ["Original Work"])
         #expect(authorCard?.summary.words == 480)

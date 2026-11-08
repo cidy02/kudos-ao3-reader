@@ -84,8 +84,24 @@ struct AO3ClientPolicyTests {
         expectMaintenance(statusCode: 418)
     }
 
-    @Test func maintenancePageMapsOnSuccessfulStatus() throws {
-        expectMaintenance(statusCode: 200, body: try maintenanceFixture())
+    @Test func maintenancePageMapsOnAFailedStatus() throws {
+        expectMaintenance(statusCode: 503, body: try maintenanceFixture())
+    }
+
+    /// Like every real fetch (`check`): a 2xx body is never read, so a work whose own
+    /// text carries the maintenance heading still opens.
+    @Test func aSuccessfulAnswerIsNeverReadForMaintenance() throws {
+        #expect(throws: Never.self) {
+            try AO3Client.checkHTTPResponse(statusCode: 200, body: try maintenanceFixture())
+        }
+    }
+
+    /// A write that meets 418 holds like a read, whatever its body.
+    @Test func everyWrite418IsMaintenance() throws {
+        #expect(AO3Client.isWriteMaintenance(status: 418, body: Data()))
+        #expect(AO3Client.isWriteMaintenance(status: 503, body: try maintenanceFixture()))
+        #expect(!AO3Client.isWriteMaintenance(status: 200, body: try maintenanceFixture()))
+        #expect(!AO3Client.isWriteMaintenance(status: 500, body: Data("oops".utf8)))
     }
 
     @Test func ordinaryMaintenanceMentionIsNotMatched() throws {

@@ -62,6 +62,33 @@ struct MatureRevealCapsule: View {
     }
 }
 
+extension View {
+    /// A custom row that may not name its work yet: blurred under the reveal capsule,
+    /// its own controls inert, one tap (or VoiceOver activate) reveals it.
+    @ViewBuilder
+    func concealedForPrivacy(_ concealed: Bool, reveal: @escaping () -> Void) -> some View {
+        if concealed {
+            self.blur(radius: 6)
+                .allowsHitTesting(false)
+                .overlay {
+                    Button(action: reveal) {
+                        MatureRevealCapsule()
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Hidden mature work")
+                .accessibilityHint("Activate to reveal.")
+                .accessibilityAddTraits(.isButton)
+                .accessibilityAction { reveal() }
+        } else {
+            self
+        }
+    }
+}
+
 /// Tracks which sensitive works the user has temporarily revealed this session,
 /// and gates reveals behind device biometrics when the user has enabled that.
 @MainActor
@@ -102,6 +129,27 @@ final class PrivacyGate {
 
     func reveal(_ work: AO3WorkSummary) {
         reveal(remoteID: work.id)
+    }
+
+    // Rows known only by an AO3 work id and maybe a rating (mail updates, scan snapshots).
+
+    /// Hide omits a row whose rating is known to be adult. A missing or blank rating is
+    /// not known, so the row is never omitted: it is blurred instead.
+    func isHidden(remoteID: Int, rating: String?, enabled: Bool, mode: MaturePrivacyMode) -> Bool {
+        guard enabled, mode == .hide, let rating, !Self.isBlankRating(rating) else { return false }
+        return MatureContentRating.isAdult(rating) && !isRevealed(remoteID: remoteID)
+    }
+
+    /// Blurred until revealed by id: a known-adult rating in Blur, or a rating that is
+    /// not known yet in either mode (the `isPrivacyUndetermined` rule).
+    func isBlurred(remoteID: Int, rating: String?, enabled: Bool, mode: MaturePrivacyMode) -> Bool {
+        guard enabled, !isRevealed(remoteID: remoteID) else { return false }
+        guard let rating, !Self.isBlankRating(rating) else { return true }
+        return mode == .obscure && MatureContentRating.isAdult(rating)
+    }
+
+    private static func isBlankRating(_ rating: String) -> Bool {
+        rating.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     func reveal(remoteID: Int) {

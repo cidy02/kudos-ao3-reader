@@ -391,6 +391,12 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         ) != nil
     }
 
+    /// The write path's rule, the same as `check`'s: every 418, or AO3's maintenance
+    /// page on any other failed answer. Internal for tests.
+    static func isWriteMaintenance(status: Int, body: Data) -> Bool {
+        status == 418 || (!(200 ... 299).contains(status) && isMaintenancePage(body))
+    }
+
     /// HTTP 418, or AO3's maintenance page on a failed answer. For a caller that
     /// handles every other status itself (the session check in `AO3AuthService`).
     static func checkForMaintenance(statusCode: Int, body: Data) throws {
@@ -402,9 +408,11 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     static func checkHTTPResponse(
         statusCode: Int, body: Data, retryAfter: TimeInterval? = nil
     ) throws {
-        if statusCode == 418 || isMaintenancePage(body) { throw AO3Error.maintenance }
+        // As `check`: a 2xx body is never read (a work's own text may carry the words).
+        if statusCode == 418 { throw AO3Error.maintenance }
+        if (200 ... 299).contains(statusCode) { return }
+        if isMaintenancePage(body) { throw AO3Error.maintenance }
         switch statusCode {
-        case 200 ... 299: return
         case 429: throw AO3Error.rateLimited(retryAfter: retryAfter)
         case 403: throw AO3Error.forbidden
         case 404: throw AO3Error.notFound
@@ -1075,8 +1083,8 @@ actor AO3Client { // swiftlint:disable:this type_body_length
             throw AO3Error.authenticationRequired
         }
         // The maintenance page answers at the edge: the write never reached AO3.
-        // Before 429, as in `check`.
-        if !(200 ... 299).contains(http.statusCode), Self.isMaintenancePage(data) {
+        // Before 429, as in `check`, and with the same hold.
+        if Self.isWriteMaintenance(status: http.statusCode, body: data) {
             holdForMaintenance()
             throw AO3Error.maintenance
         }

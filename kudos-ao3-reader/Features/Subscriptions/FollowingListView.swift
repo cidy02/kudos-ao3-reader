@@ -33,6 +33,9 @@ struct FollowingListView: View {
     @Environment(AO3AuthService.self) private var auth
     @State private var sort = Sort.title
     @State private var pendingUnfollow: AO3WorkSummary?
+    @Environment(PrivacyGate.self) private var privacyGate
+    @AppStorage("hideMatureContent") private var hideMature = true
+    @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
     @State private var confirmingUnfollow = false
     @State private var unfollowingID: Int?
     @State private var resultMessage = ""
@@ -58,7 +61,10 @@ struct FollowingListView: View {
     }
 
     private var visible: [AO3WorkSummary] {
-        works.filter { !unfollowed.contains($0.id) }.sorted(by: sort.areInOrder)
+        works
+            .filter { !unfollowed.contains($0.id) }
+            .filter { !privacyGate.isHidden($0, enabled: hideMature, mode: matureMode) }
+            .sorted(by: sort.areInOrder)
     }
 
     private func isDeleted(_ work: AO3WorkSummary) -> Bool { deletedIDs.contains(work.id) }
@@ -321,6 +327,10 @@ struct FollowingListView: View {
             pendingUnfollow = work
             confirmingUnfollow = true
         }
+        // The index prints no rating, so a row stays blurred until revealed or rated.
+        .concealedForPrivacy(privacyGate.isBlurred(work, enabled: hideMature, mode: matureMode)) {
+            privacyGate.reveal(work)
+        }
     }
 
     private func unfollow(_ work: AO3WorkSummary) async {
@@ -505,4 +515,5 @@ private struct FollowingRow: View {
     }
     .environment(ThemeManager())
     .environment(AppRouter())
+    .environment(PrivacyGate())
 }

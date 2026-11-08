@@ -34,6 +34,10 @@ struct WaitingListView: View {
     var alphabeticalNote: String?
     var onCheck: (() -> Void)?
 
+    @Environment(PrivacyGate.self) private var privacyGate
+    @AppStorage("hideMatureContent") private var hideMature = true
+    @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
+
     private struct Day: Identifiable {
         let start: Date
         let updates: [SubscriptionUpdate]
@@ -42,7 +46,10 @@ struct WaitingListView: View {
 
     private var days: [Day] {
         let calendar = Calendar.current
-        return Dictionary(grouping: updates.sorted { $0.at > $1.at }) { calendar.startOfDay(for: $0.at) }
+        let shown = updates.filter {
+            !privacyGate.isHidden(remoteID: Int(clamping: $0.workID), rating: $0.rating, enabled: hideMature, mode: matureMode)
+        }
+        return Dictionary(grouping: shown.sorted { $0.at > $1.at }) { calendar.startOfDay(for: $0.at) }
             .map { Day(start: $0.key, updates: $0.value) }
             .sorted { $0.start > $1.start }
     }
@@ -80,6 +87,13 @@ struct WaitingListView: View {
                     Section {
                         ForEach(baselines) { snapshot in
                             WaitingBaselineRow(snapshot: snapshot)
+                                // A scan snapshot carries no rating.
+                                .concealedForPrivacy(privacyGate.isBlurred(
+                                    remoteID: snapshot.workID, rating: nil,
+                                    enabled: hideMature, mode: matureMode
+                                )) {
+                                    privacyGate.reveal(remoteID: snapshot.workID)
+                                }
                         }
                     } header: {
                         Text("By updated date")
@@ -98,6 +112,12 @@ struct WaitingListView: View {
                                 isFirst: index == 0,
                                 isLast: index == day.updates.count - 1
                             )
+                            .concealedForPrivacy(privacyGate.isBlurred(
+                                remoteID: Int(clamping: update.workID), rating: update.rating,
+                                enabled: hideMature, mode: matureMode
+                            )) {
+                                privacyGate.reveal(remoteID: Int(clamping: update.workID))
+                            }
                             .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
                             .listRowSeparator(.hidden)
                         }
@@ -667,5 +687,6 @@ private extension SubscriptionUpdate.Source {
                    at: yesterday - 3_600, source: .author("wrenfield"))
         ])
     }
+    .environment(PrivacyGate())
     .environment(ThemeManager())
 }

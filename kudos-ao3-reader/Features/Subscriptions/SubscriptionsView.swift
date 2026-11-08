@@ -44,6 +44,7 @@ struct SubscriptionsView: View {
     @State private var listsPhase = Phase.idle
     @State private var reloadToken = 0
     @State private var showingLogin = false
+    @AppStorage("hideMatureContent") private var hideMature = true
 
     private var loadKey: LoadKey {
         LoadKey(
@@ -83,6 +84,10 @@ struct SubscriptionsView: View {
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Menu {
+                        // The app's one "…" order (pass2-1, T-284): Mature first.
+                        if hideMature {
+                            MatureRevealToggle()
+                        }
                         NavigationLink {
                             SubscriptionsSourcesView()
                         } label: {
@@ -357,13 +362,21 @@ struct SubscriptionsView: View {
         do {
             // shortcut: load one AO3 page here, use the existing paged list when more pages are needed
             let loaded = try await auth.accountSubscriptions()
-            guard !Task.isCancelled, auth.sessionGeneration == expectedSessionGeneration else { return }
+            guard !Task.isCancelled, auth.sessionGeneration == expectedSessionGeneration else {
+                // Not this session's answer. Still signed in (Verify Session moved the
+                // session on): nothing else would ask again, as on Home (audit A20-6).
+                if !Task.isCancelled, auth.isLoggedIn { await loadFollowing() }
+                return
+            }
             works = loaded
             phase = .loaded
         } catch is CancellationError {
             return
         } catch AO3Error.authenticationRequired {
-            guard await auth.sessionDidExpire(expectedGeneration: expectedSessionGeneration) else { return }
+            guard await auth.sessionDidExpire(expectedGeneration: expectedSessionGeneration) else {
+                if !Task.isCancelled, auth.isLoggedIn { await loadFollowing() }
+                return
+            }
             works = []
             phase = .idle
         } catch let error as AO3Error {
@@ -380,9 +393,15 @@ struct SubscriptionsView: View {
         let expectedSessionGeneration = auth.sessionGeneration
         do {
             let seriesLoaded = try await auth.accountSubscriptionIndex(type: .series, page: 1)
-            guard !Task.isCancelled, auth.sessionGeneration == expectedSessionGeneration else { return }
+            guard !Task.isCancelled, auth.sessionGeneration == expectedSessionGeneration else {
+                if !Task.isCancelled, auth.isLoggedIn { await loadFollowedLists() }
+                return
+            }
             let authorsLoaded = try await auth.accountSubscriptionIndex(type: .users, page: 1)
-            guard !Task.isCancelled, auth.sessionGeneration == expectedSessionGeneration else { return }
+            guard !Task.isCancelled, auth.sessionGeneration == expectedSessionGeneration else {
+                if !Task.isCancelled, auth.isLoggedIn { await loadFollowedLists() }
+                return
+            }
             followed.series = seriesLoaded.series
             followed.seriesPage = seriesLoaded.currentPage
             followed.seriesTotal = seriesLoaded.totalPages
@@ -393,7 +412,10 @@ struct SubscriptionsView: View {
         } catch is CancellationError {
             return
         } catch AO3Error.authenticationRequired {
-            guard await auth.sessionDidExpire(expectedGeneration: expectedSessionGeneration) else { return }
+            guard await auth.sessionDidExpire(expectedGeneration: expectedSessionGeneration) else {
+                if !Task.isCancelled, auth.isLoggedIn { await loadFollowedLists() }
+                return
+            }
             followed.series = []
             followed.authors = []
             listsPhase = .idle
