@@ -148,6 +148,11 @@ private extension SubscriptionSnapshotTests {
         case sources
         case connectMail = "connect-mail"
         case coldScan = "cold-scan"
+        case coldScanPaused = "cold-scan-paused"
+        case scanBannerRunning = "scan-banner-running"
+        case scanBannerPaused = "scan-banner-paused"
+        case scanBannerRetry = "scan-banner-retry"
+        case scanBannerMaintenance = "scan-banner-maintenance"
 
         var view: AnyView {
             switch self {
@@ -204,7 +209,62 @@ private extension SubscriptionSnapshotTests {
                         )
                     )
                 })
+            case .coldScanPaused:
+                AnyView(NavigationStack {
+                    ColdStartScanView(
+                        progress: .init(
+                            phase: .paused,
+                            checked: 12,
+                            total: 35,
+                            username: "sample_reader",
+                            remaining: .seconds(420)
+                        )
+                    )
+                })
+            case .scanBannerRunning:
+                Self.scanBanner(phase: .running, checked: 12, total: 35, remaining: .seconds(420))
+            case .scanBannerPaused:
+                Self.scanBanner(phase: .paused, checked: 12, total: 35, remaining: .seconds(420))
+            case .scanBannerRetry:
+                Self.scanBanner(
+                    phase: .running,
+                    checked: 12,
+                    total: 35,
+                    remaining: .seconds(420),
+                    statusNote: "AO3 asked us to wait."
+                )
+            case .scanBannerMaintenance:
+                Self.scanBanner(
+                    phase: .stopped,
+                    checked: 4,
+                    total: 35,
+                    statusNote: SubscriptionScanCopy.maintenance
+                )
             }
+        }
+
+        /// Bottom overlay, the same place `ContentView` pins the app-wide banner.
+        private static func scanBanner(
+            phase: SubscriptionScanPhase,
+            checked: Int,
+            total: Int,
+            remaining: Duration? = nil,
+            statusNote: String? = nil
+        ) -> AnyView {
+            let scan = SubscriptionScanService(
+                snapshot: phase,
+                checked: checked,
+                total: total,
+                remaining: remaining,
+                statusNote: statusNote
+            )
+            return AnyView(
+                Color.clear
+                    .overlay(alignment: .bottom) {
+                        SubscriptionScanBanner()
+                    }
+                    .environment(scan)
+            )
         }
 
         private static var followingWorks: [AO3WorkSummary] {

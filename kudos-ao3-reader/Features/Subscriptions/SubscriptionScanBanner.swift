@@ -3,6 +3,7 @@ import SwiftUI
 /// App-wide progress for a scan the user already started. Hidden once the scan
 /// is idle or finished; leaving the Subscriptions screen does not stop it.
 struct SubscriptionScanBanner: View {
+    @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(SubscriptionScanService.self) private var scan
 
     var body: some View {
@@ -68,7 +69,7 @@ struct SubscriptionScanBanner: View {
     private var controls: some View {
         switch scan.phase {
         case .running:
-            HStack(spacing: 12) {
+            buttonRow {
                 Button("Pause") { scan.pause() }
                     .frame(maxWidth: .infinity, minHeight: 44)
                     .buttonStyle(.bordered)
@@ -77,7 +78,7 @@ struct SubscriptionScanBanner: View {
                     .buttonStyle(.bordered)
             }
         case .paused:
-            HStack(spacing: 12) {
+            buttonRow {
                 Button("Resume") { scan.resume() }
                     .frame(maxWidth: .infinity, minHeight: 44)
                     .buttonStyle(.bordered)
@@ -89,8 +90,18 @@ struct SubscriptionScanBanner: View {
             Button("Close") { scan.cancel() }
                 .frame(maxWidth: .infinity, minHeight: 44)
                 .buttonStyle(.bordered)
+                .tint(Color.primary)
         case .idle, .finished:
             EmptyView()
         }
+    }
+
+    /// Side by side normally; stacked at accessibility sizes so labels don't break
+    /// mid-word. Neutral tint: the user's accent fails contrast on dark capsules.
+    private func buttonRow(@ViewBuilder _ buttons: () -> some View) -> some View {
+        let layout = typeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(spacing: 8))
+            : AnyLayout(HStackLayout(spacing: 12))
+        return layout { buttons() }.tint(Color.primary)
     }
 }

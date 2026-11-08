@@ -218,10 +218,12 @@ struct ColdStartScanView: View {
             }
         case .paused:
             HStack(spacing: 12) {
+                // .bordered, not .borderedProminent: with a .primary tint the
+                // prominent style draws white text on a white capsule in dark.
                 Button("Resume", action: onResume)
                     .font(.headline)
                     .frame(maxWidth: .infinity, minHeight: 44)
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.bordered)
                     .controlSize(.large)
                     .tint(Color.primary)
                 Button("Cancel", role: .cancel, action: onCancel)

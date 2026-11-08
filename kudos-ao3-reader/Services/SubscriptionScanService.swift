@@ -96,6 +96,30 @@ final class SubscriptionScanService {
         reloadStore()
     }
 
+    #if DEBUG
+    /// Frozen display state for snapshots. Does not start a scan or read an account file.
+    convenience init(
+        snapshot phase: SubscriptionScanPhase,
+        checked: Int = 0,
+        total: Int = 0,
+        remaining: Duration? = nil,
+        statusNote: String? = nil
+    ) {
+        self.init(
+            store: SubscriptionScanStore(
+                directoryURL: FileManager.default.temporaryDirectory
+                    .appendingPathComponent("kudos-subscription-scan-snapshot", isDirectory: true),
+                authenticationScope: "snapshot"
+            )
+        )
+        self.phase = phase
+        self.checked = checked
+        self.total = total
+        self.remaining = remaining
+        self.statusNote = statusNote
+    }
+    #endif
+
     func adopt(authenticationScope: String) {
         guard store.authenticationScope != authenticationScope else { return }
         generation += 1
