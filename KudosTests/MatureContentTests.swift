@@ -15,7 +15,11 @@ struct MatureContentTests {
             (nil, true),
             ("", true),
             (" \n\t ", true),
-            ("Everyone", true)
+            ("Everyone", true),
+            ("General\u{00A0}Audiences", false),
+            ("Teen\u{00A0}And\u{00A0}Up\u{00A0}Audiences", false),
+            ("Not General Audiences", true),
+            ("Teen And Up Audiences Extra", true)
         ]
 
         for testCase in cases {
@@ -37,6 +41,31 @@ struct MatureContentTests {
             #expect(saved.isAdult == MatureContentRating.isAdult(rating))
             #expect(remote.isAdult == saved.isAdult)
         }
+    }
+
+    @MainActor
+    @Test func hasVisibleMatureWorksRequiresPrivacyOnAndAnAdultWork() {
+        var adultRemote = AO3WorkSummary.subscription(id: 1, title: "Adult", authors: ["Writer"])
+        adultRemote.rating = "Mature"
+        var teenRemote = AO3WorkSummary.subscription(id: 2, title: "Teen", authors: ["Writer"])
+        teenRemote.rating = "Teen And Up Audiences"
+
+        #expect(!PrivacyGate.hasVisibleMatureWorks(in: [adultRemote], hideMature: false))
+        #expect(PrivacyGate.hasVisibleMatureWorks(in: [adultRemote], hideMature: true))
+        #expect(!PrivacyGate.hasVisibleMatureWorks(in: [teenRemote], hideMature: true))
+        #expect(PrivacyGate.hasVisibleMatureWorks(in: [teenRemote, adultRemote], hideMature: true))
+        #expect(!PrivacyGate.hasVisibleMatureWorks(in: [AO3WorkSummary](), hideMature: true))
+
+        let adultLocal = SavedWork(title: "Adult", author: "Writer")
+        adultLocal.rating = "Explicit"
+        let teenLocal = SavedWork(title: "Teen", author: "Writer")
+        teenLocal.rating = "General Audiences"
+
+        #expect(!PrivacyGate.hasVisibleMatureWorks(in: [adultLocal], hideMature: false))
+        #expect(PrivacyGate.hasVisibleMatureWorks(in: [adultLocal], hideMature: true))
+        #expect(!PrivacyGate.hasVisibleMatureWorks(in: [teenLocal], hideMature: true))
+        #expect(PrivacyGate.hasVisibleMatureWorks(in: [teenLocal, adultLocal], hideMature: true))
+        #expect(!PrivacyGate.hasVisibleMatureWorks(in: [SavedWork](), hideMature: true))
     }
 
     @MainActor

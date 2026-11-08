@@ -50,6 +50,12 @@ struct NewToYouCardsView: View {
         "\(handled.count + 1) of \(handled.count + remaining.count)"
     }
 
+    /// VoiceOver text when the deck runs out. Hide can empty the visible deck
+    /// while works remain, so "All caught up" is only for a truly empty deck.
+    private var emptyDeckText: String {
+        undecidedWorks.isEmpty ? "All caught up" : "\(undecidedWorks.count) hidden by Hide mature content"
+    }
+
     /// AO3's own boilerplate warnings say nothing, so they stay off the card (as in `WorkRow`).
     private func warnings(of work: AO3WorkSummary) -> [String] {
         work.warnings.filter {
@@ -98,7 +104,7 @@ struct NewToYouCardsView: View {
             .onChange(of: current?.id) {
                 let text = current.map {
                     isObscured($0) ? "\(positionText), hidden mature work" : "\(positionText), \($0.title)"
-                } ?? "All caught up"
+                } ?? emptyDeckText
                 AccessibilityNotification.Announcement(text).post()
             }
             .toolbar {
