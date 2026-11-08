@@ -1,0 +1,340 @@
+#if os(iOS)
+
+import Foundation
+import SwiftUI
+import Testing
+import UIKit
+@testable import Kudos
+
+@MainActor
+@Suite(.serialized)
+struct SubscriptionSnapshotTests {
+    private nonisolated static let outputPath = ProcessInfo.processInfo.environment["KUDOS_SNAPSHOT_DIR"]
+
+    @Test(.enabled(if: outputPath != nil))
+    func renderSubscriptionScreens() async throws {
+        guard let outputPath = Self.outputPath else { return }
+
+        let outputDirectory = URL(
+            fileURLWithPath: NSString(string: outputPath).expandingTildeInPath,
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(
+            at: outputDirectory,
+            withIntermediateDirectories: true
+        )
+
+        let defaultsName = "SubscriptionSnapshotTests"
+        guard let defaults = UserDefaults(suiteName: defaultsName) else {
+            throw SnapshotError.defaultsUnavailable
+        }
+        defaults.removePersistentDomain(forName: defaultsName)
+
+        let standardDefaults = UserDefaults.standard
+        let originalTheme = standardDefaults.object(forKey: "appTheme")
+        defer {
+            if let originalTheme {
+                standardDefaults.set(originalTheme, forKey: "appTheme")
+            } else {
+                standardDefaults.removeObject(forKey: "appTheme")
+            }
+            defaults.removePersistentDomain(forName: defaultsName)
+        }
+
+        let animationsWereEnabled = UIView.areAnimationsEnabled
+        UIView.setAnimationsEnabled(false)
+        defer { UIView.setAnimationsEnabled(animationsWereEnabled) }
+
+        for screen in Screen.allCases {
+            defaults.set(true, forKey: "hideMatureContent")
+            defaults.set(
+                screen == .newToYouHidden
+                    ? MaturePrivacyMode.hide.rawValue
+                    : MaturePrivacyMode.obscure.rawValue,
+                forKey: "matureContentMode"
+            )
+
+            for themeValue in ReaderTheme.allCases {
+                for textSize in TextSize.allCases {
+                    for display in Display.allCases {
+                        let theme = ThemeManager()
+                        theme.appTheme = themeValue
+                        let root = screen.view
+                            .environment(theme)
+                            .environment(PrivacyGate())
+                            .environment(AO3AuthService())
+                            .defaultAppStorage(defaults)
+                            .dynamicTypeSize(textSize.value)
+                            .preferredColorScheme(theme.appTheme.colorScheme)
+                            .tint(theme.effectiveTint)
+
+                        let image = try await render(
+                            AnyView(root),
+                            size: display.size,
+                            style: theme.appTheme.colorScheme == .dark ? .dark : .light
+                        )
+                        let filename = [
+                            screen.rawValue,
+                            themeValue.rawValue,
+                            textSize.rawValue,
+                            display.rawValue
+                        ].joined(separator: "-") + ".png"
+                        guard let data = image.pngData() else {
+                            throw SnapshotError.pngEncodingFailed(filename)
+                        }
+                        try data.write(to: outputDirectory.appendingPathComponent(filename), options: .atomic)
+                    }
+                }
+            }
+        }
+    }
+
+    /// `style` stands in for `preferredColorScheme`, which only reaches a window's
+    /// root, not this child controller.
+    private func render(_ root: AnyView, size: CGSize, style: UIUserInterfaceStyle) async throws -> UIImage {
+        let frame = CGRect(origin: .zero, size: size)
+        let controller = UIHostingController(rootView: root)
+        let previousKeyWindow = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .first(where: \.isKeyWindow)
+
+        guard let scene = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .first
+        else {
+            throw SnapshotError.windowSceneUnavailable
+        }
+        // The scene forces its windows to full screen, so lay the hosted view out
+        // at the requested size inside a plain container and draw only that view.
+        let window = UIWindow(windowScene: scene)
+        let container = UIViewController()
+        window.rootViewController = container
+        window.makeKeyAndVisible()
+        defer {
+            window.isHidden = true
+            previousKeyWindow?.makeKey()
+        }
+        container.overrideUserInterfaceStyle = style
+        container.addChild(controller)
+        controller.view.frame = frame
+        container.view.addSubview(controller.view)
+        controller.didMove(toParent: container)
+
+        controller.view.layoutIfNeeded()
+        for _ in 0..<3 { await Task.yield() }
+        try await Task.sleep(for: .milliseconds(50))
+        controller.view.layoutIfNeeded()
+
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = window.screen.scale
+        let renderer = UIGraphicsImageRenderer(bounds: frame, format: format)
+        var didDraw = false
+        let image = renderer.image { _ in
+            didDraw = controller.view.drawHierarchy(in: frame, afterScreenUpdates: true)
+        }
+        guard didDraw else { throw SnapshotError.drawHierarchyFailed }
+        return image
+    }
+}
+
+private extension SubscriptionSnapshotTests {
+    enum Screen: String, CaseIterable {
+        case waiting
+        case following
+        case tidyUp = "tidy-up"
+        case newToYou = "new-to-you"
+        case newToYouHidden = "new-to-you-hidden"
+        case sources
+        case connectMail = "connect-mail"
+        case coldScan = "cold-scan"
+
+        var view: AnyView {
+            switch self {
+            case .waiting:
+                AnyView(NavigationStack { WaitingListView.snapshotSample })
+            case .following:
+                AnyView(NavigationStack {
+                    FollowingListView(
+                        works: Self.followingWorks,
+                        deletedIDs: [104],
+                        unfollowed: .constant([])
+                    )
+                })
+            case .tidyUp:
+                AnyView(NavigationStack {
+                    FollowingListView(
+                        works: Self.followingWorks,
+                        deletedIDs: [104],
+                        scope: .tidyUp,
+                        unfollowed: .constant([])
+                    )
+                })
+            case .newToYou:
+                AnyView(NavigationStack { NewToYouCardsView(works: [Self.newWork]) })
+            case .newToYouHidden:
+                AnyView(NavigationStack { NewToYouCardsView(works: [Self.hiddenWork]) })
+            case .sources:
+                AnyView(NavigationStack {
+                    UpdateSourcesView(
+                        onScanAO3: {},
+                        onConnectMail: { _, _ in }
+                    )
+                })
+            case .connectMail:
+                AnyView(NavigationStack {
+                    UpdateSourcesView(
+                        onScanAO3: {},
+                        onConnectMail: { _, _ in },
+                        initiallyShowsMailConnection: true
+                    )
+                })
+            case .coldScan:
+                AnyView(NavigationStack {
+                    ColdStartScanView(
+                        progress: .init(
+                            phase: .running,
+                            checked: 12,
+                            total: 35,
+                            username: "sample_reader",
+                            remaining: .seconds(420)
+                        )
+                    )
+                })
+            }
+        }
+
+        private static var followingWorks: [AO3WorkSummary] {
+            [
+                work(101, "The Lantern Keeper", "saltwindow", complete: false, chapters: "9/?"),
+                work(102, "A Quiet Harbour", "marrowlight"),
+                work(103, "Salt and Ember", "quietfern", complete: true, chapters: "24/24"),
+                work(104, "Gone Dark", "wrenfield")
+            ]
+        }
+
+        private static var newWork: AO3WorkSummary {
+            var work = work(
+                201,
+                "The Lantern Keeper",
+                "saltwindow",
+                complete: false,
+                chapters: "9/?"
+            )
+            work.fandoms = ["Original Work"]
+            work.rating = "Teen And Up Audiences"
+            work.warnings = ["Creator Chose Not To Use Archive Warnings"]
+            work.summary = "A lighthouse keeper finds the lamp has been lit by someone else for years."
+            work.words = 48_210
+            work.kudos = 1_204
+            work.dateUpdated = "2026-11-07"
+            return work
+        }
+
+        private static var hiddenWork: AO3WorkSummary {
+            var work = newWork
+            work.rating = "Explicit"
+            return work
+        }
+
+        private static func work(
+            _ id: Int,
+            _ title: String,
+            _ author: String,
+            complete: Bool? = nil,
+            chapters: String = ""
+        ) -> AO3WorkSummary {
+            var work = AO3WorkSummary.subscription(id: id, title: title, authors: [author])
+            work.isComplete = complete
+            work.chapters = chapters
+            return work
+        }
+    }
+
+    enum TextSize: String, CaseIterable {
+        case large
+        case accessibility3
+        case accessibility5
+
+        var value: DynamicTypeSize {
+            switch self {
+            case .large: .large
+            case .accessibility3: .accessibility3
+            case .accessibility5: .accessibility5
+            }
+        }
+    }
+
+    enum Display: String, CaseIterable {
+        case duoInner = "duo-inner"
+        case cover
+
+        var size: CGSize {
+            switch self {
+            case .duoInner: CGSize(width: 951, height: 669)
+            case .cover: CGSize(width: 466, height: 678)
+            }
+        }
+    }
+
+    enum SnapshotError: Error {
+        case defaultsUnavailable
+        case windowSceneUnavailable
+        case drawHierarchyFailed
+        case pngEncodingFailed(String)
+    }
+}
+
+private extension WaitingListView {
+    static var snapshotSample: WaitingListView {
+        let now = Date(timeIntervalSince1970: 1_794_038_400)
+        return WaitingListView(
+            updates: [
+                SubscriptionUpdate(
+                    uid: 1,
+                    workID: 301,
+                    chapterID: 3_010,
+                    chapterNumber: 9,
+                    isNewWork: false,
+                    isContested: false,
+                    isAnchoredToWork: true,
+                    workTitle: "The Lantern Keeper",
+                    author: "saltwindow",
+                    at: now,
+                    source: .work
+                ),
+                SubscriptionUpdate(
+                    uid: 2,
+                    workID: 302,
+                    chapterID: 3_020,
+                    chapterNumber: 3,
+                    isNewWork: false,
+                    isContested: false,
+                    isAnchoredToWork: false,
+                    workTitle: "A Quiet Harbour",
+                    author: "marrowlight",
+                    at: now - 3_600,
+                    source: .author("marrowlight")
+                ),
+                SubscriptionUpdate(
+                    uid: 3,
+                    workID: 303,
+                    chapterID: 3_030,
+                    chapterNumber: nil,
+                    isNewWork: true,
+                    isContested: false,
+                    isAnchoredToWork: true,
+                    workTitle: "Salt and Ember",
+                    author: "quietfern",
+                    at: now - 7_200,
+                    source: .work,
+                    extraCreations: 3
+                )
+            ],
+            mailSince: now - 3_456_000,
+            unverifiedCount: 2
+        )
+    }
+}
+
+#endif

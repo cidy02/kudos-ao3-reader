@@ -205,23 +205,27 @@ struct MailSubscriptionDriverTests {
         #expect(closeCount == 1)
     }
 
-    /// The sheet's Cancel cancels the connect task, but the IMAP await still
-    /// finishes; nothing may be saved after that.
-    @Test func cancelledConnectStoresNoCredentialsAndRestoresTheCursor() async {
+    /// The sheet's Cancel lands while the IMAP await is suspended, and that
+    /// await still returns; nothing may be saved after it, and the store goes
+    /// back to what it held before.
+    @Test func cancelledConnectStoresNoCredentialsAndRestoresTheStore() async {
         let vault = MemoryMailCredentialsVault()
-        let store = MemorySubscriptionUpdateStore()
-        let mailbox = FakeMailbox(harvests: [harvest(lastUID: 3)])
+        let previous = SubscriptionUpdateState(updates: [update(uid: 1, workID: 1)], since: when)
+        let store = MemorySubscriptionUpdateStore(state: previous, cursor: MailCursor(uidValidity: 7, lastUID: 1))
+        let mailbox = FakeMailbox(harvests: [harvest(readings: [reading(uid: 2)], lastUID: 2)])
         let driver = makeDriver(vault: vault, store: store, mailbox: mailbox)
 
         let task = Task {
             try await driver.connect(address: credentials.address, appPassword: credentials.appPassword)
         }
-        task.cancel()
+        mailbox.onRead = { task.cancel() }
         await #expect(throws: CancellationError.self) { try await task.value }
 
         #expect(vault.credentials == nil)
         #expect(!driver.isConnected)
-        #expect(store.cursor == nil)
+        #expect(store.cursor == MailCursor(uidValidity: 7, lastUID: 1))
+        #expect(store.state.updates == previous.updates)
+        #expect(driver.updates == previous.updates)
     }
 
     @Test func disconnectDeletesCredentialsAndStoredUpdates() throws {
@@ -336,8 +340,12 @@ private final class FakeMailbox: MailboxProtocol {
         self.throwsOnRead = throwsOnRead
     }
 
+    /// Runs inside the read, as if Cancel arrived during the IMAP await.
+    var onRead: (() -> Void)?
+
     func readNew(cursor: Cursor?, authservId: String?) async throws -> Harvest {
         readCount += 1
+        onRead?()
         if throwsOnRead { throw FakeMailboxError.read }
         guard !harvests.isEmpty else { throw FakeMailboxError.read }
         return harvests.removeFirst()

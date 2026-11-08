@@ -105,8 +105,8 @@ final class MailSubscriptionDriver {
         } catch {
             // Cursor first: if it can't be put back, keep the rows that match it
             // rather than leave a cursor ahead of its rows (those UIDs would be lost).
-            if (try? store.saveCursor(previousCursor)) != nil {
-                try? store.saveState(previousState)
+            if (try? store.saveCursor(previousCursor)) != nil,
+               (try? store.saveState(previousState)) != nil {
                 state = previousState
             }
             if error is CancellationError { throw error }

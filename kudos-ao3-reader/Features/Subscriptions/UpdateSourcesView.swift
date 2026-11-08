@@ -11,6 +11,20 @@ struct UpdateSourcesView: View {
     @State private var showingDisconnectConfirmation = false
     @State private var errorMessage: String?
 
+    init(
+        onScanAO3: (() -> Void)? = nil,
+        mailConnected: Bool = false,
+        onConnectMail: ((String, String) async throws -> Void)? = nil,
+        onDisconnectMail: (() throws -> Void)? = nil,
+        initiallyShowsMailConnection: Bool = false
+    ) {
+        self.onScanAO3 = onScanAO3
+        self.mailConnected = mailConnected
+        self.onConnectMail = onConnectMail
+        self.onDisconnectMail = onDisconnectMail
+        _showingMailConnection = State(initialValue: initiallyShowsMailConnection)
+    }
+
     var body: some View {
         Form {
             Group {
