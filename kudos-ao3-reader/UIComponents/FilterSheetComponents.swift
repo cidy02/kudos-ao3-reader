@@ -22,8 +22,11 @@ struct SettingsIconTile: View {
         ZStack {
             RoundedRectangle(cornerRadius: 7, style: .continuous)
                 .fill(color)
+            // Cap below accessibility sizes: the symbol otherwise draws outside
+            // this 29 pt tile and over the row title.
             Image(systemName: systemImage)
                 .font(.subheadline.weight(.semibold))
+                .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                 .foregroundStyle(.white)
         }
         .frame(width: 29, height: 29)

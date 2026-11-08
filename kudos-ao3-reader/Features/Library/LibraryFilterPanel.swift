@@ -6,6 +6,7 @@ import SwiftUI
 /// on iPad/macOS through `filterPanelPresentation`.
 struct LibraryFilterPanel: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(ThemeManager.self) private var theme
     @Binding var filters: LibraryFilters
     /// All saved works, used to populate the tag/language facet lists.
@@ -70,6 +71,46 @@ struct LibraryFilterPanel: View {
         SubjectFieldLabel(text: text, style: .formGroup)
     }
 
+    /// One column at accessibility sizes. Two columns clip "Gen" to "Ge".
+    private var categoryColumns: [GridItem] {
+        dynamicTypeSize.isAccessibilitySize
+            ? [GridItem(.flexible())]
+            : [GridItem(.flexible()), GridItem(.flexible())]
+    }
+
+    /// Label over the value at accessibility sizes. Beside the icon, the
+    /// selection shares the line and clips.
+    @ViewBuilder
+    private var sortRow: some View {
+        let tile = SettingsIconTile(
+            color: Color(red: 0x1E / 255.0, green: 0x63 / 255.0, blue: 0xC8 / 255.0),
+            systemImage: "arrow.up.arrow.down"
+        )
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 12) {
+                    tile
+                    Text("Sort By")
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                        .accessibilityHidden(true)
+                }
+                sortPicker.labelsHidden()
+            }
+        } else {
+            HStack(spacing: 12) {
+                tile
+                sortPicker
+            }
+        }
+    }
+
+    private var sortPicker: some View {
+        Picker("Sort By", selection: $filters.sort) {
+            ForEach(LibrarySort.allCases) { Text($0.title).tag($0) }
+        }
+    }
+
     private var form: some View {
         Form {
             if !activeFilterItems.isEmpty {
@@ -85,15 +126,7 @@ struct LibraryFilterPanel: View {
             Group {
                 // MARK: Sort & Rating
                 Section {
-                    HStack(spacing: 12) {
-                        SettingsIconTile(
-                            color: Color(red: 0x1E / 255.0, green: 0x63 / 255.0, blue: 0xC8 / 255.0),
-                            systemImage: "arrow.up.arrow.down"
-                        )
-                        Picker("Sort By", selection: $filters.sort) {
-                            ForEach(LibrarySort.allCases) { Text($0.title).tag($0) }
-                        }
-                    }
+                    sortRow
                     HStack(spacing: 12) {
                         SettingsIconTile(
                             color: Color(red: 0xE0 / 255.0, green: 0xA1 / 255.0, blue: 0x00 / 255.0),
@@ -107,7 +140,7 @@ struct LibraryFilterPanel: View {
 
                 // MARK: Categories
                 Section {
-                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                    LazyVGrid(columns: categoryColumns, spacing: 8) {
                         ForEach(AO3SearchFilters.Category.allCases) { category in
                             FilterSymbolChipCard(
                                 title: category.title,

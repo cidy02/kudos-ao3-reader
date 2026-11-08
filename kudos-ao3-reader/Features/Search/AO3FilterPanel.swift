@@ -272,6 +272,40 @@ struct AO3FilterPanel: View {
 // MARK: - Form Sections
 
 extension AO3FilterPanel {
+    /// Label over the value at accessibility sizes. On one line, "Sort By" and
+    /// "Best Match" each wrap and clip.
+    @ViewBuilder
+    private var sortByLabel: some View {
+        let value = SearchSortBySummary.value(filters: filters, ranking: ranking?.wrappedValue)
+        let tile = SettingsIconTile(
+            color: Color(red: 0x1E / 255.0, green: 0x63 / 255.0, blue: 0xC8 / 255.0),
+            systemImage: "arrow.up.arrow.down"
+        )
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 12) {
+                    tile
+                    Text("Sort By")
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                }
+                Text(value)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(value.contains(where: \.isWhitespace) ? nil : 1)
+                    .minimumScaleFactor(value.contains(where: \.isWhitespace) ? 1 : 0.6)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        } else {
+            HStack(spacing: 12) {
+                tile
+                Text("Sort By")
+                Spacer()
+                Text(value)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
     private var sortSection: some View {
         Section {
             NavigationLink {
@@ -281,16 +315,7 @@ extension AO3FilterPanel {
                     allowsRelevanceSort: allowsRelevanceSort
                 )
             } label: {
-                HStack(spacing: 12) {
-                    SettingsIconTile(
-                        color: Color(red: 0x1E / 255.0, green: 0x63 / 255.0, blue: 0xC8 / 255.0),
-                        systemImage: "arrow.up.arrow.down"
-                    )
-                    Text("Sort By")
-                    Spacer()
-                    Text(SearchSortBySummary.value(filters: filters, ranking: ranking?.wrappedValue))
-                        .foregroundStyle(.secondary)
-                }
+                sortByLabel
             }
             .onChange(of: filters.sort) { _, newValue in
                 filters.sortDirection = newValue.naturalDirection

@@ -121,6 +121,9 @@ struct SettingsHubRow: View {
                     Text(route.title)
                         .font(.body)
                         .foregroundStyle(.primary)
+                        .lineLimit(route.title.contains(where: \.isWhitespace) ? nil : 1)
+                        .minimumScaleFactor(route.title.contains(where: \.isWhitespace) ? 1 : 0.5)
+                        .fixedSize(horizontal: false, vertical: true)
                     if !value.isEmpty {
                         Text(value)
                             .font(.subheadline)

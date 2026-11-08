@@ -100,13 +100,14 @@ struct LibraryEditShelvesSheet: View {
         let title = section.id.title
         return Group {
             if dynamicTypeSize.isAccessibilitySize {
+                // The name gets the row width. Beside the buttons it hyphenated
+                // ("Favouri- / tes", "Col- / lec- / tions").
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(alignment: .center, spacing: 10) {
                         removeButton(section, title: title)
                         LibraryShelfGlyph(shelf: section.id)
-                        Text(title)
-                            .fixedSize(horizontal: false, vertical: true)
                     }
+                    shelfName(title)
                     picker(section, title: title)
                 }
                 .padding(.vertical, 4)
@@ -155,27 +156,59 @@ struct LibraryEditShelvesSheet: View {
     }
 
     private func buttonRow(_ shelf: LibraryShelfID) -> some View {
-        HStack(alignment: .center, spacing: 10) {
-            Button {
-                arrangement = arrangement.addingToPage(shelf)
-            } label: {
-                Image(systemName: "plus.circle.fill")
-                    .font(.title3)
-                    .symbolRenderingMode(.palette)
-                    .foregroundStyle(.white, Color.green)
+        let title = shelf.title
+        let count = counts[shelf] ?? 0
+        return Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .center, spacing: 10) {
+                        addButton(shelf)
+                        LibraryShelfGlyph(shelf: shelf)
+                        Spacer(minLength: 8)
+                        countLabel(count)
+                    }
+                    shelfName(title)
+                }
+            } else {
+                HStack(alignment: .center, spacing: 10) {
+                    addButton(shelf)
+                    LibraryShelfGlyph(shelf: shelf)
+                    Text(title)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 8)
+                    countLabel(count)
+                }
             }
-            .buttonStyle(.borderless)
-            .accessibilityLabel("Show \(shelf.title) on the Library page")
-
-            LibraryShelfGlyph(shelf: shelf)
-            Text(shelf.title)
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 8)
-            Text((counts[shelf] ?? 0).compactCount)
-                .font(.body.monospacedDigit())
-                .foregroundStyle(.secondary)
-                .accessibilityLabel("\(counts[shelf] ?? 0)")
         }
+    }
+
+    private func addButton(_ shelf: LibraryShelfID) -> some View {
+        Button {
+            arrangement = arrangement.addingToPage(shelf)
+        } label: {
+            Image(systemName: "plus.circle.fill")
+                .font(.title3)
+                .symbolRenderingMode(.palette)
+                .foregroundStyle(.white, Color.green)
+        }
+        .buttonStyle(.borderless)
+        .accessibilityLabel("Show \(shelf.title) on the Library page")
+    }
+
+    private func countLabel(_ count: Int) -> some View {
+        Text(count.compactCount)
+            .font(.body.monospacedDigit())
+            .foregroundStyle(.secondary)
+            .accessibilityLabel("\(count)")
+    }
+
+    /// One word stays on one line. A name with a space may wrap at the space.
+    private func shelfName(_ title: String) -> some View {
+        let oneWord = !title.contains(where: \.isWhitespace)
+        return Text(title)
+            .lineLimit(oneWord ? 1 : nil)
+            .minimumScaleFactor(oneWord ? 0.5 : 1)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     private func styleBinding(_ id: LibraryShelfID) -> Binding<LibrarySectionStyle> {

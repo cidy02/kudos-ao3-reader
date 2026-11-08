@@ -256,9 +256,13 @@ struct FandomLetterHeader: View {
             Text(letter)
                 .font(.subheadline.weight(.bold))
                 .foregroundStyle(Self.titleColor)
+                // "Favourites" hyphenated beside the count at accessibility sizes.
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
             Text("\(count)")
                 .font(.caption.weight(.medium).monospaced())
                 .foregroundStyle(.tertiary)
+                .layoutPriority(1)
             Rectangle()
                 .fill(Color.primary.opacity(0.14))
                 .frame(height: 0.5)
