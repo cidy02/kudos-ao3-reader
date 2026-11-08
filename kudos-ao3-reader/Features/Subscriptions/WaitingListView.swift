@@ -15,6 +15,9 @@ struct WaitingListView: View {
     var showsPosition = false
     /// A parent with more specific source state can supply its own honest empty view.
     var showsEmptyState = true
+    var mailSince: Date?
+    var unverifiedCount: UInt64 = 0
+    var refreshError: String?
 
     private struct Day: Identifiable {
         let start: Date
@@ -34,6 +37,17 @@ struct WaitingListView: View {
             // Group so .appThemedRows() reaches every section's rows — it doesn't
             // propagate from the List container, only from a Group/Section/ForEach.
             Group {
+                if let mailSince {
+                    Section {
+                        WaitingMailHeader(
+                            since: mailSince,
+                            updateCount: updates.count,
+                            unverifiedCount: unverifiedCount,
+                            refreshError: refreshError
+                        )
+                        .listRowSeparator(.hidden)
+                    }
+                }
                 ForEach(days) { day in
                     Section {
                         ForEach(Array(day.updates.enumerated()), id: \.element.id) { index, update in
@@ -65,6 +79,49 @@ struct WaitingListView: View {
         #if !os(macOS)
             .navigationBarTitleDisplayMode(.inline)
         #endif
+    }
+}
+
+private struct WaitingMailHeader: View {
+    let since: Date
+    let updateCount: Int
+    let unverifiedCount: UInt64
+    let refreshError: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(
+                "From AO3 notifications · \(updateCount.formatted()) updates since "
+                    + since.formatted(.dateTime.month(.abbreviated).year())
+            )
+            .font(.subheadline.weight(.medium))
+            .foregroundStyle(.secondary)
+
+            Text("\(updateCount.formatted()) waiting")
+                .font(.largeTitle.bold())
+
+            Text("no requests to AO3")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            if unverifiedCount > 0 {
+                Label(
+                    "\(unverifiedCount.formatted()) updates couldn't be verified",
+                    systemImage: "exclamationmark.shield"
+                )
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            }
+
+            if let refreshError {
+                Text(refreshError)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.vertical, 8)
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -148,8 +205,8 @@ private struct WaitingRow: View {
         guard update.extraCreations > 0 else { return nil }
         let extras = update.extraCreations
         return extras == 1
-            ? "and 1 more update in this email"
-            : "and \(extras) more updates in this email"
+            ? "and 1 more update in the same notification"
+            : "and \(extras) more updates in the same notification"
     }
 
     private var whatChanged: String {
@@ -296,7 +353,7 @@ private struct WaitingRow: View {
                 metadata
                 if let claimedTitle {
                     // Quoted and attributed: the email said this, AO3 did not.
-                    Text("The email names \u{201C}\(claimedTitle)\u{201D}")
+                    Text("AO3's notification names \u{201C}\(claimedTitle)\u{201D}")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)

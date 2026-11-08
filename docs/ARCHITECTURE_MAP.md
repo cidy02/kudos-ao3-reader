@@ -20,6 +20,7 @@ All paths relative to `kudos-ao3-reader/` unless noted. Confirmed as of 2026-07-
 | Browse (categories → fandoms → works; multi-select batch actions) | `Features/Browse/NativeBrowseView.swift` (`BrowseView`, `FandomWorksView`, `TagWorksView`), `Features/Search/MediaBrowserView.swift`, `FandomListView.swift`, `FandomCatalog.swift` |
 | Search (global: local index matches + AO3 search) | `Features/Search/SearchView.swift`, `AO3WorkRow.swift` (remote result row, selection-capable) |
 | Account (AO3 profile hub) | `Features/Account/AccountView.swift` — primary segments **Overview / Reading / Writing / Activity**; Overview hub + `AccountMoreOnAO3View`; Reading = Later/Subscriptions/Bookmarks/Collections; Writing = Works/Series/Drafts; Activity = History/Inbox. `AO3PreferencesView.swift`, `PrivacyDataView.swift`, `AO3AccountWorksList.swift`; preferences in `AO3Client+Preferences.swift` / `AO3PreferencesActions.swift` / `AO3PreferencesModels.swift` |
+| Subscriptions (mail-backed Waiting + AO3 Following/Tidy up) | `Features/Subscriptions/`; Gmail credentials in `Services/MailCredentialsVault.swift`, local event state in `SubscriptionUpdateStore.swift`, refresh loop in `MailSubscriptionDriver.swift` (iOS-only UniFFI boundary) |
 | Native AO3 author profiles (pseud scope, Works/Series/Bookmarks/About, series detail) | `Features/Authors/AuthorProfileView.swift`, `AuthorProfileComponents.swift`, `AO3SeriesDetailView.swift`; shared tappable bylines in `UIComponents/AO3AuthorNavigation.swift` |
 | Settings (fonts, backup, folder sync, EPUB import, privacy prefs) | `Settings/SettingsView.swift` — ONE enum-driven `.fileImporter` (`FileImportKind`), see onboarding pitfalls |
 | Reader — iOS | `Features/ReaderReadium/ReadiumReaderView.swift` (progress saved per `locationDidChange` via `book.onLocatorChange` → `readiumLocator` + save) |
@@ -50,6 +51,7 @@ All paths relative to `kudos-ao3-reader/` unless noted. Confirmed as of 2026-07-
 | Migration + asset reconciliation + gate | `Services/PersistenceSync.swift` (`PersistenceMigrationService`, `PersistenceOperationGate`, `SyncTombstones`, `SyncMerge`) |
 | Soft delete / 90-day recovery / hard delete / sweep | `Services/PreservedWorkService.swift`; permanent path `WorkLifecycle.hardDelete` in `WorkLifecycle.swift` |
 | File locations (EPUBs by `effectiveAssetIdentifier`, reader cache, temp) | `Services/Storage.swift` |
+| Mail subscription updates (derived, device-only, capped; excluded from backups/sync) | `Services/SubscriptionUpdateStore.swift` |
 | Design doc | `docs/iCloudPersistence.md` |
 
 ## Identity, search, dedup

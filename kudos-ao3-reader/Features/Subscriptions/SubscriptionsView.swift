@@ -25,6 +25,9 @@ struct SubscriptionsView: View {
 
     @Environment(AO3AuthService.self) private var auth
     @Environment(ThemeManager.self) private var theme
+    #if os(iOS)
+    @Environment(MailSubscriptionDriver.self) private var mailDriver
+    #endif
 
     @State private var selectedTab = Tab.waiting
     @State private var works: [AO3WorkSummary] = []
@@ -116,23 +119,48 @@ struct SubscriptionsView: View {
     private var tabContent: some View {
         switch selectedTab {
         case .waiting:
-            WaitingListView(updates: [], showsEmptyState: false)
-                .overlay {
-                    ContentUnavailableView {
-                        Label("Mail source not connected", systemImage: "envelope")
-                    } description: {
-                        Text("Kudos has no Waiting updates to show until a mail source is connected.")
-                    } actions: {
-                        NavigationLink("Update sources") {
-                            SubscriptionsSourcesView()
-                        }
-                    }
-                }
+            waitingContent
         case .following:
             followingContent(scope: .following)
         case .tidyUp:
             followingContent(scope: .tidyUp)
         }
+    }
+
+    @ViewBuilder
+    private var waitingContent: some View {
+        #if os(iOS)
+        if mailDriver.isConnected {
+            WaitingListView(
+                updates: mailDriver.updates,
+                showsEmptyState: false,
+                mailSince: mailDriver.since,
+                unverifiedCount: mailDriver.unverifiedCount,
+                refreshError: mailDriver.errorMessage
+            )
+            .task { await mailDriver.refreshIfNeeded() }
+            .refreshable { await mailDriver.refresh() }
+        } else {
+            disconnectedWaiting
+        }
+        #else
+        disconnectedWaiting
+        #endif
+    }
+
+    private var disconnectedWaiting: some View {
+        WaitingListView(updates: [], showsEmptyState: false)
+            .overlay {
+                ContentUnavailableView {
+                    Label("Mail source not connected", systemImage: "envelope")
+                } description: {
+                    Text("Kudos has no Waiting updates to show until a mail source is connected.")
+                } actions: {
+                    NavigationLink("Update sources") {
+                        SubscriptionsSourcesView()
+                    }
+                }
+            }
     }
 
     @ViewBuilder
@@ -194,9 +222,12 @@ struct SubscriptionsView: View {
 
 private struct SubscriptionsSourcesView: View {
     @State private var showingScan = false
+    #if os(iOS)
+    @Environment(MailSubscriptionDriver.self) private var mailDriver
+    #endif
 
     var body: some View {
-        UpdateSourcesView(onScanAO3: { showingScan = true })
+        updateSources
             .navigationDestination(isPresented: $showingScan) {
                 ColdStartScanView(
                     progress: .init(),
@@ -204,10 +235,31 @@ private struct SubscriptionsSourcesView: View {
                 )
             }
     }
+
+    @ViewBuilder
+    private var updateSources: some View {
+        #if os(iOS)
+        UpdateSourcesView(
+            onScanAO3: { showingScan = true },
+            mailConnected: mailDriver.isConnected,
+            onConnectMail: { address, password in
+                try await mailDriver.connect(address: address, appPassword: password)
+            },
+            onDisconnectMail: { try mailDriver.disconnect() }
+        )
+        #else
+        UpdateSourcesView(onScanAO3: { showingScan = true })
+        #endif
+    }
 }
 
 #Preview {
-    NavigationStack { SubscriptionsView() }
+    let view = NavigationStack { SubscriptionsView() }
         .environment(AO3AuthService())
         .environment(ThemeManager())
+    #if os(iOS)
+    view.environment(MailSubscriptionDriver())
+    #else
+    view
+    #endif
 }

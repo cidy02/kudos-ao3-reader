@@ -13,9 +13,9 @@ import Foundation
 /// crate reports nothing read from it rather than guessing. All of that is undone
 /// if the UI then fills the gap with a plausible-looking chapter, so the gap is
 /// represented here instead of being papered over.
-struct SubscriptionUpdate: Equatable, Identifiable, Sendable {
+struct SubscriptionUpdate: Codable, Equatable, Identifiable, Sendable {
     /// How much of this update is AO3's own word.
-    enum Certainty: Equatable, Sendable {
+    enum Certainty: Codable, Equatable, Sendable {
         /// The work is AO3's — it came from the footer's unsubscribe URL, which
         /// AO3 generates — and so is everything else here.
         case confirmed
@@ -27,7 +27,7 @@ struct SubscriptionUpdate: Equatable, Identifiable, Sendable {
     }
 
     /// What changed, when it can be said at all.
-    enum Change: Equatable, Sendable {
+    enum Change: Codable, Equatable, Sendable {
         case newChapter(number: Int?)
         case newWork
         /// The notification was genuine but its preface was not readable.
@@ -36,7 +36,7 @@ struct SubscriptionUpdate: Equatable, Identifiable, Sendable {
 
     /// Which subscription brought this update in. The name is the series or author
     /// followed, not the work.
-    enum Source: Equatable, Sendable {
+    enum Source: Codable, Equatable, Sendable {
         case work
         case series(String)
         case author(String)

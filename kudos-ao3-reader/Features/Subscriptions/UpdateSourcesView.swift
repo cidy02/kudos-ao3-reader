@@ -3,6 +3,13 @@ import SwiftUI
 /// Explains the ranked sources Kudos can use to learn what changed in a subscription.
 struct UpdateSourcesView: View {
     var onScanAO3: (() -> Void)?
+    var mailConnected = false
+    var onConnectMail: ((String, String) async throws -> Void)?
+    var onDisconnectMail: (() throws -> Void)?
+
+    @State private var showingMailConnection = false
+    @State private var showingDisconnectConfirmation = false
+    @State private var errorMessage: String?
 
     var body: some View {
         Form {
@@ -11,9 +18,7 @@ struct UpdateSourcesView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Where updates come from")
                             .font(.title2.bold())
-                        Text("AO3's own subscriptions page lists what you follow, "
-                            + "but never says what changed or when. These are the sources Kudos can use. "
-                            + "Mail is not connected yet, and AO3 scanning still needs its paced driver.")
+                        Text(sourceSummary)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -29,7 +34,8 @@ struct UpdateSourcesView: View {
                         cost: "No AO3 requests.",
                         detail: "Kudos reads mail only to find AO3's notifications. "
                             + "Nothing is uploaded, and nothing leaves this device.",
-                        actionTitle: "Connect Mail"
+                        actionTitle: mailConnected ? "Disconnect Mail" : "Connect Mail",
+                        action: mailAction
                     )
                 }
 
@@ -65,6 +71,58 @@ struct UpdateSourcesView: View {
         #if !os(macOS)
             .navigationBarTitleDisplayMode(.inline)
         #endif
+        #if os(iOS)
+            .sheet(isPresented: $showingMailConnection) {
+                if let onConnectMail {
+                    MailConnectionView(onConnect: onConnectMail)
+                }
+            }
+        #endif
+            .confirmationDialog(
+                "Disconnect mail?",
+                isPresented: $showingDisconnectConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Disconnect Mail", role: .destructive) {
+                    do {
+                        try onDisconnectMail?()
+                    } catch {
+                        errorMessage = error.localizedDescription
+                    }
+                }
+            } message: {
+                Text("This removes the saved address, app password, and Waiting updates from this device.")
+            }
+            .alert("Mail connection error", isPresented: errorPresented) {
+                Button("OK", role: .cancel) { errorMessage = nil }
+            } message: {
+                Text(errorMessage ?? "Something went wrong.")
+            }
+    }
+
+    private var sourceSummary: String {
+        let mailStatus = mailConnected ? "Mail is connected. " : "Mail is not connected yet. "
+        return "AO3's own subscriptions page lists what you follow, "
+            + "but never says what changed or when. These are the sources Kudos can use. "
+            + mailStatus
+            + "AO3 scanning still needs its paced driver."
+    }
+
+    private var mailAction: (() -> Void)? {
+        if mailConnected, onDisconnectMail != nil {
+            return { showingDisconnectConfirmation = true }
+        }
+        if !mailConnected, onConnectMail != nil {
+            return { showingMailConnection = true }
+        }
+        return nil
+    }
+
+    private var errorPresented: Binding<Bool> {
+        Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )
     }
 }
 
@@ -111,7 +169,7 @@ private struct UpdateSourceCard: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            // shortcut: mail and backup setup stay disabled here, enable them when their drivers land
+            // shortcut: backup setup stays disabled here, enable it when its driver lands
             Button(actionTitle) { action?() }
                 .font(.headline)
                 .frame(maxWidth: .infinity, minHeight: 44)
@@ -122,3 +180,101 @@ private struct UpdateSourceCard: View {
         .padding(.vertical, 4)
     }
 }
+
+#if os(iOS)
+private struct MailConnectionView: View {
+    @Environment(\.dismiss) private var dismiss
+    let onConnect: (String, String) async throws -> Void
+
+    @State private var address = ""
+    @State private var appPassword = ""
+    @State private var errorMessage: String?
+    @State private var isConnecting = false
+    @State private var connectTask: Task<Void, Never>?
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Group {
+                    Section {
+                        TextField("Email address", text: $address)
+                            .textContentType(.emailAddress)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                        SecureField("App password", text: $appPassword)
+                            .textContentType(.password)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                    } header: {
+                        Text("Gmail")
+                    } footer: {
+                        Text("Use an app password created in your Google Account, not your usual password.")
+                    }
+
+                    Section {
+                        Text("Other providers cannot be verified yet.")
+                            .foregroundStyle(.secondary)
+                    } footer: {
+                        Text("Kudos connects read-only to imap.gmail.com and verifies Gmail's mail signature.")
+                    }
+                }
+                .appThemedRows()
+            }
+            .formStyle(.grouped)
+            .appThemedScroll()
+            .navigationTitle("Connect Mail")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Connect") { connect() }
+                        .disabled(address.isEmpty || appPassword.isEmpty || isConnecting)
+                }
+            }
+            .overlay {
+                if isConnecting {
+                    ProgressView("Checking Gmail…")
+                        .padding()
+                        .glassEffect(.regular, in: .capsule)
+                }
+            }
+            .interactiveDismissDisabled(isConnecting)
+            .alert("Couldn't connect", isPresented: errorPresented) {
+                Button("OK", role: .cancel) { errorMessage = nil }
+            } message: {
+                Text(errorMessage ?? "Something went wrong.")
+            }
+            .onDisappear {
+                connectTask?.cancel()
+            }
+        }
+    }
+
+    private var errorPresented: Binding<Bool> {
+        Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )
+    }
+
+    private func connect() {
+        connectTask?.cancel()
+        isConnecting = true
+        errorMessage = nil
+        connectTask = Task { @MainActor in
+            do {
+                try await onConnect(address, appPassword)
+                appPassword = ""
+                dismiss()
+            } catch is CancellationError {
+                return
+            } catch {
+                errorMessage = error.localizedDescription
+                isConnecting = false
+            }
+        }
+    }
+}
+#endif

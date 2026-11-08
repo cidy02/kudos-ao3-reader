@@ -22,6 +22,9 @@ struct ContentView: View {
     @State private var theme = ThemeManager()
     @State private var auth = AO3AuthService()
     @State private var downloadQueue = DownloadQueue()
+    #if os(iOS)
+    @State private var mailSubscriptionDriver = MailSubscriptionDriver()
+    #endif
     @State private var folderSyncUpTask: Task<Void, Never>?
     @State private var lastForegroundFolderSyncAt: Date?
 
@@ -68,6 +71,9 @@ struct ContentView: View {
             .environment(theme)
             .environment(auth)
             .environment(downloadQueue)
+            #if os(iOS)
+            .environment(mailSubscriptionDriver)
+            #endif
             // Username is nil for every status except `.signedIn`, so this one
             // observation covers logout, session expiry, and a login or refresh
             // that lands on someone else. `initial` records an account that is
