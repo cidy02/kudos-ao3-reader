@@ -15,6 +15,20 @@ struct FollowingListView: View {
     var sourceNote: String?
     /// The parent owns this. A tab switch rebuilds this view, and a local set would bring the row back.
     @Binding var unfollowed: Set<Int>
+    /// Series and author rows from the subscriptions index. Empty leaves the works
+    /// list exactly as it was: those sections are omitted, not shown as a zero.
+    var series: [AO3FollowedSeries] = []
+    var authors: [AO3FollowedAuthor] = []
+    var seriesHasMore = false
+    var authorsHasMore = false
+    var isLoadingMoreSeries = false
+    var isLoadingMoreAuthors = false
+    /// When true, a loaded Following screen still shows a Series or Authors
+    /// header if that list is empty and the other groups are not. Default false
+    /// keeps a works-only caller unchanged.
+    var showsEmptyFollowGroups = false
+    var onLoadMoreSeries: (() -> Void)?
+    var onLoadMoreAuthors: (() -> Void)?
 
     @Environment(AO3AuthService.self) private var auth
     @State private var sort = Sort.title
@@ -64,6 +78,29 @@ struct FollowingListView: View {
         scope == .following ? !visible.isEmpty : !cannotNotify.isEmpty
     }
 
+    /// A zero group is worth showing when something else followed is on screen.
+    /// All three empty uses the overlay instead of three "None." headers.
+    /// No work rows, but series or authors are on screen: say so, instead of
+    /// leaving the works group invisible.
+    private var showEmptyWorksGroup: Bool {
+        guard scope == .following, showsEmptyFollowGroups, visible.isEmpty else { return false }
+        return !series.isEmpty || !authors.isEmpty
+    }
+
+    private var showSeriesGroup: Bool {
+        guard scope == .following else { return false }
+        if !series.isEmpty || seriesHasMore { return true }
+        guard showsEmptyFollowGroups else { return false }
+        return !visible.isEmpty || !authors.isEmpty
+    }
+
+    private var showAuthorsGroup: Bool {
+        guard scope == .following else { return false }
+        if !authors.isEmpty || authorsHasMore { return true }
+        guard showsEmptyFollowGroups else { return false }
+        return !visible.isEmpty || !series.isEmpty
+    }
+
     /// Keeps the spec's sentence shape; a clause with a zero count is left out entirely.
     private var cannotNotifySentence: String {
         let finished = cannotNotify.filter(isFinished).count
@@ -111,6 +148,56 @@ struct FollowingListView: View {
                         FollowingGroupHeader(title: "Finished or gone", count: cannotNotify.count)
                     }
                 }
+
+                if showEmptyWorksGroup {
+                    Section {
+                        Text("None.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    } header: {
+                        FollowingGroupHeader(title: "Works", count: 0)
+                    }
+                }
+
+                if showSeriesGroup {
+                    Section {
+                        if series.isEmpty {
+                            Text("None.")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                        ForEach(series) { item in seriesRow(item) }
+                        if seriesHasMore {
+                            loadMoreButton(
+                                "Load more series",
+                                isLoading: isLoadingMoreSeries,
+                                action: onLoadMoreSeries
+                            )
+                        }
+                    } header: {
+                        FollowingGroupHeader(title: "Series", count: series.count)
+                    }
+                }
+
+                if showAuthorsGroup {
+                    Section {
+                        if authors.isEmpty {
+                            Text("None.")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                        ForEach(authors) { item in authorRow(item) }
+                        if authorsHasMore {
+                            loadMoreButton(
+                                "Load more authors",
+                                isLoading: isLoadingMoreAuthors,
+                                action: onLoadMoreAuthors
+                            )
+                        }
+                    } header: {
+                        FollowingGroupHeader(title: "Authors", count: authors.count)
+                    }
+                }
             }
             .appThemedRows()
         }
@@ -128,15 +215,17 @@ struct FollowingListView: View {
                                 + "so no works can be identified for cleanup yet."
                     )
                 )
-            } else if visible.isEmpty {
+            } else if visible.isEmpty && series.isEmpty && authors.isEmpty {
                 ContentUnavailableView(
-                    "No works followed",
+                    "Nothing followed",
                     systemImage: "bell",
-                    description: Text("Works you subscribe to on AO3 show up here.")
+                    description: Text(
+                        "Works, series, and authors you subscribe to on AO3 show up here."
+                    )
                 )
             }
         }
-        .navigationTitle(scope == .following ? "Works you follow" : "Tidy up")
+        .navigationTitle(scope == .following ? "You follow" : "Tidy up")
         #if !os(macOS)
             .navigationBarTitleDisplayMode(.inline)
         #endif
@@ -170,6 +259,52 @@ struct FollowingListView: View {
             } message: {
                 Text(resultMessage)
             }
+    }
+
+    /// Series and authors have no Unfollow. `unsubscribe(workID:)` loads `/works/<id>`
+    /// and posts that page's delete form. Series and user pages share the form
+    /// partial, but this function has no type argument, so calling it would hit
+    /// the wrong page. The index has its own delete form; using it would be a new write.
+    @ViewBuilder
+    private func seriesRow(_ item: AO3FollowedSeries) -> some View {
+        let row = FollowedNameRow(
+            title: item.title,
+            subtitle: item.creatorNames.isEmpty ? nil : item.creatorNames.joined(separator: ", ")
+        )
+        if let summary = item.navigationSummary {
+            row.cardNavigation(to: summary)
+                .accessibilityHint("Opens this series")
+        } else {
+            row
+        }
+    }
+
+    @ViewBuilder
+    private func authorRow(_ item: AO3FollowedAuthor) -> some View {
+        let row = FollowedNameRow(title: item.name, subtitle: nil)
+        if let route = item.route {
+            row.cardNavigation(to: route)
+                .accessibilityHint("Opens this author's profile")
+        } else {
+            row
+        }
+    }
+
+    private func loadMoreButton(
+        _ title: String,
+        isLoading: Bool,
+        action: (() -> Void)?
+    ) -> some View {
+        Button {
+            action?()
+        } label: {
+            HStack(spacing: 6) {
+                if isLoading { ProgressView().controlSize(.small) }
+                Text(isLoading ? "Loading…" : title)
+            }
+            .frame(minHeight: 44)
+        }
+        .disabled(isLoading || action == nil)
     }
 
     private func row(for work: AO3WorkSummary) -> some View {
@@ -207,6 +342,27 @@ struct FollowingListView: View {
             resultMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             showingResult = true
         }
+    }
+}
+
+private struct FollowedNameRow: View {
+    let title: String
+    let subtitle: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.headline)
+                .fixedSize(horizontal: false, vertical: true)
+            if let subtitle, !subtitle.isEmpty {
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -314,11 +470,32 @@ private struct FollowingRow: View {
         work(6, "Low Tide", "marrowlight", complete: true)
     ]
     let deleted = work(7, "Gone Dark", "someone")
+    let series = [
+        AO3FollowedSeries(
+            subscriptionID: 11,
+            title: "The Lantern Cycle",
+            creatorNames: ["saltwindow"],
+            creatorIdentities: [],
+            seriesID: 50,
+            url: URL(string: "https://archiveofourown.org/series/50")
+        )
+    ]
+    let authors = [
+        AO3FollowedAuthor(
+            subscriptionID: 12,
+            name: "marrowlight",
+            route: AO3AuthorRoute(username: "marrowlight")
+        )
+    ]
 
     return TabView {
         NavigationStack {
             FollowingListView(
-                works: going + finished + [deleted], deletedIDs: [7], unfollowed: .constant([])
+                works: going + finished + [deleted],
+                deletedIDs: [7],
+                unfollowed: .constant([]),
+                series: series,
+                authors: authors
             )
         }
         .tabItem { Text("Both groups") }
@@ -328,4 +505,5 @@ private struct FollowingRow: View {
             .tabItem { Text("Empty") }
     }
     .environment(ThemeManager())
+    .environment(AppRouter())
 }

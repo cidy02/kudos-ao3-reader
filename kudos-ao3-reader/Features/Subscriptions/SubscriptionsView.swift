@@ -36,7 +36,19 @@ struct SubscriptionsView: View {
     @State private var works: [AO3WorkSummary] = []
     /// Session-only. Not stored: a new visit loads the AO3 page again.
     @State private var unfollowed = Set<Int>()
+    @State private var series: [AO3FollowedSeries] = []
+    @State private var authors: [AO3FollowedAuthor] = []
+    @State private var seriesPage = 1
+    @State private var seriesTotal = 1
+    @State private var authorsPage = 1
+    @State private var authorsTotal = 1
+    @State private var loadingMoreSeries = false
+    @State private var loadingMoreAuthors = false
+    @State private var listsMoreError: String?
     @State private var phase = Phase.idle
+    /// Series and author pages. Separate from `phase` so Tidy up still shows works
+    /// if this load fails, and so a failure is an error rather than an empty group.
+    @State private var listsPhase = Phase.idle
     @State private var reloadToken = 0
     @State private var showingLogin = false
 
@@ -46,6 +58,12 @@ struct SubscriptionsView: View {
             isLoggedIn: auth.isLoggedIn,
             reloadToken: reloadToken
         )
+    }
+
+    /// Includes the selected tab so series and authors load when Following opens,
+    /// and not while the user is still on Waiting or Tidy up.
+    private var followedListsKey: String {
+        "\(auth.username ?? "")|\(auth.isLoggedIn)|\(reloadToken)|\(selectedTab.rawValue)"
     }
 
     var body: some View {
@@ -96,12 +114,30 @@ struct SubscriptionsView: View {
             .task(id: loadKey) {
                 guard auth.isLoggedIn else {
                     works = []
+                    series = []
+                    authors = []
                     phase = .idle
+                    listsPhase = .idle
                     return
                 }
                 await loadFollowing()
             }
+            .task(id: followedListsKey) {
+                guard selectedTab == .following, auth.isLoggedIn else { return }
+                await loadFollowedLists()
+            }
             .sheet(isPresented: $showingLogin) { AO3LoginView() }
+            .alert(
+                "AO3",
+                isPresented: Binding(
+                    get: { listsMoreError != nil },
+                    set: { if !$0 { listsMoreError = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(listsMoreError ?? "")
+            }
     }
 
     @ViewBuilder
@@ -247,7 +283,7 @@ struct SubscriptionsView: View {
             ContentUnavailableView {
                 Label("AO3 Subscriptions", systemImage: "bell")
             } description: {
-                Text("Log in to AO3 to see the works you subscribe to.")
+                Text("Log in to AO3 to see the works, series, and authors you subscribe to.")
             } actions: {
                 Button("Log In to AO3") { showingLogin = true }
             }
@@ -257,23 +293,68 @@ struct SubscriptionsView: View {
                 ProgressView("Loading subscriptions…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             case let .failed(message):
-                ContentUnavailableView {
-                    Label("Couldn't load subscriptions", systemImage: "exclamationmark.triangle")
-                } description: {
-                    Text(message)
-                } actions: {
-                    Button("Try Again") { reloadToken += 1 }
-                }
+                subscriptionFailure(message)
             case .loaded:
-                FollowingListView(
-                    works: works.map { scan.applying($0) },
-                    deletedIDs: scan.goneWorkIDs,
-                    scope: scope,
-                    sourceNote: "Showing the first AO3 page here. Use More → All AO3 subscriptions "
-                        + "to browse every page.",
-                    unfollowed: $unfollowed
-                )
+                if scope == .tidyUp {
+                    followedWorksList
+                } else {
+                    followedLists
+                }
             }
+        }
+    }
+
+    @ViewBuilder
+    private var followedWorksList: some View {
+        FollowingListView(
+            works: works.map { scan.applying($0) },
+            deletedIDs: scan.goneWorkIDs,
+            scope: .tidyUp,
+            sourceNote: worksSourceNote,
+            unfollowed: $unfollowed
+        )
+    }
+
+    @ViewBuilder
+    private var followedLists: some View {
+        switch listsPhase {
+        case .idle, .loading:
+            ProgressView("Loading subscriptions…")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        case let .failed(message):
+            subscriptionFailure(message)
+        case .loaded:
+            FollowingListView(
+                works: works.map { scan.applying($0) },
+                deletedIDs: scan.goneWorkIDs,
+                scope: .following,
+                sourceNote: worksSourceNote,
+                unfollowed: $unfollowed,
+                series: series,
+                authors: authors,
+                seriesHasMore: seriesPage < seriesTotal,
+                authorsHasMore: authorsPage < authorsTotal,
+                isLoadingMoreSeries: loadingMoreSeries,
+                isLoadingMoreAuthors: loadingMoreAuthors,
+                showsEmptyFollowGroups: true,
+                onLoadMoreSeries: { Task { await loadMoreSeries() } },
+                onLoadMoreAuthors: { Task { await loadMoreAuthors() } }
+            )
+        }
+    }
+
+    private var worksSourceNote: String {
+        "Showing the first AO3 page here. Use More → All AO3 subscriptions "
+            + "to browse every page."
+    }
+
+    private func subscriptionFailure(_ message: String) -> some View {
+        ContentUnavailableView {
+            Label("Couldn't load subscriptions", systemImage: "exclamationmark.triangle")
+        } description: {
+            Text(message)
+        } actions: {
+            Button("Try Again") { reloadToken += 1 }
         }
     }
 
@@ -296,6 +377,86 @@ struct SubscriptionsView: View {
         } catch {
             phase = .failed(error.localizedDescription)
         }
+    }
+
+    /// Page 1 of series, then page 1 of authors. Later pages wait for Load more.
+    private func loadFollowedLists() async {
+        listsPhase = .loading
+        listsMoreError = nil
+        do {
+            let seriesLoaded = try await auth.accountSubscriptionIndex(type: .series, page: 1)
+            guard !Task.isCancelled else { return }
+            let authorsLoaded = try await auth.accountSubscriptionIndex(type: .users, page: 1)
+            guard !Task.isCancelled else { return }
+            series = seriesLoaded.series
+            seriesPage = seriesLoaded.currentPage
+            seriesTotal = seriesLoaded.totalPages
+            authors = authorsLoaded.authors
+            authorsPage = authorsLoaded.currentPage
+            authorsTotal = authorsLoaded.totalPages
+            listsPhase = .loaded
+        } catch is CancellationError {
+            return
+        } catch AO3Error.authenticationRequired {
+            await auth.sessionDidExpire()
+            series = []
+            authors = []
+            listsPhase = .idle
+        } catch let error as AO3Error {
+            listsPhase = .failed(error.errorDescription ?? "Something went wrong.")
+        } catch {
+            listsPhase = .failed(error.localizedDescription)
+        }
+    }
+
+    private func loadMoreSeries() async {
+        let next = seriesPage + 1
+        guard !loadingMoreSeries, next <= seriesTotal else { return }
+        loadingMoreSeries = true
+        defer { loadingMoreSeries = false }
+        do {
+            let loaded = try await auth.accountSubscriptionIndex(type: .series, page: next)
+            guard !Task.isCancelled else { return }
+            appendSeries(loaded.series)
+            seriesPage = loaded.currentPage
+            seriesTotal = max(seriesTotal, loaded.totalPages)
+        } catch is CancellationError {
+            return
+        } catch AO3Error.authenticationRequired {
+            await auth.sessionDidExpire()
+        } catch {
+            listsMoreError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+
+    private func loadMoreAuthors() async {
+        let next = authorsPage + 1
+        guard !loadingMoreAuthors, next <= authorsTotal else { return }
+        loadingMoreAuthors = true
+        defer { loadingMoreAuthors = false }
+        do {
+            let loaded = try await auth.accountSubscriptionIndex(type: .users, page: next)
+            guard !Task.isCancelled else { return }
+            appendAuthors(loaded.authors)
+            authorsPage = loaded.currentPage
+            authorsTotal = max(authorsTotal, loaded.totalPages)
+        } catch is CancellationError {
+            return
+        } catch AO3Error.authenticationRequired {
+            await auth.sessionDidExpire()
+        } catch {
+            listsMoreError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+
+    private func appendSeries(_ incoming: [AO3FollowedSeries]) {
+        let seen = Set(series.map(\.subscriptionID))
+        series.append(contentsOf: incoming.filter { !seen.contains($0.subscriptionID) })
+    }
+
+    private func appendAuthors(_ incoming: [AO3FollowedAuthor]) {
+        let seen = Set(authors.map(\.subscriptionID))
+        authors.append(contentsOf: incoming.filter { !seen.contains($0.subscriptionID) })
     }
 }
 

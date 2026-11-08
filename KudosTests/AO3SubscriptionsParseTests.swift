@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import Kudos
 
@@ -60,5 +61,96 @@ struct AO3SubscriptionsParseTests {
         let page = try AO3Client.parseSubscriptionsPage(html, page: 1)
         #expect(page.currentPage == 1)
         #expect(page.totalPages == 3)
+    }
+
+    // MARK: Series and user indexes
+    //
+    // Fixtures follow otwarchive's subscriptions index (see the HTML comments),
+    // not the shortened work-list sample above.
+
+    @Test func parsesSeriesSubscriptionsFromTheIndexTemplate() throws {
+        let page = try AO3Client.parseSubscriptionIndex(fixture("ao3_subscriptions_series"), page: 1, type: .series)
+        #expect(page.authors.isEmpty)
+        #expect(page.currentPage == 1)
+        #expect(page.totalPages == 3)
+        #expect(page.series.map(\.subscriptionID) == [17, 18, 19])
+        #expect(page.series.map(\.title) == ["The Long Road", "Quiet Things", "Deleted item"])
+        #expect(page.series.map(\.seriesID) == [4242, 7, nil])
+
+        let linked = page.series[0]
+        #expect(linked.url?.path == "/series/4242")
+        #expect(linked.creatorNames == ["Pen (writer)", "quill"])
+        #expect(linked.creatorIdentities[0].route?.username == "writer")
+        #expect(linked.creatorIdentities[0].route?.pseud == "Pen")
+        #expect(linked.creatorIdentities[1].route?.username == "quill")
+
+        let anonymous = page.series[1]
+        #expect(anonymous.creatorNames == ["Anonymous"])
+        #expect(anonymous.creatorIdentities.first?.kind == .anonymous)
+        #expect(anonymous.creatorIdentities.first?.route == nil)
+
+        #expect(page.series[2].url == nil)
+        #expect(page.series[2].navigationSummary == nil)
+        #expect(linked.navigationSummary?.id == 4242)
+    }
+
+    @Test func parsesUserSubscriptionsFromTheIndexTemplate() throws {
+        let page = try AO3Client.parseSubscriptionIndex(fixture("ao3_subscriptions_users"), page: 1, type: .users)
+        #expect(page.series.isEmpty)
+        #expect(page.totalPages == 1)
+        #expect(page.authors.map(\.subscriptionID) == [21, 22])
+        #expect(page.authors.map(\.name) == ["someuser", "Deleted item"])
+        #expect(page.authors[0].route?.username == "someuser")
+        #expect(page.authors[0].route?.pseud == nil)
+        #expect(page.authors[1].route == nil)
+    }
+
+    @Test func emptySeriesIndexIsARealEmptyPage() throws {
+        let html = """
+        <h2 class="heading">My Series Subscriptions</h2>
+        <dl class="subscription index group"></dl>
+        """
+        let page = try AO3Client.parseSubscriptionIndex(html, page: 1, type: .series)
+        #expect(page.series.isEmpty)
+        #expect(page.totalPages == 1)
+    }
+
+    @Test func missingSubscriptionListThrowsInsteadOfLookingEmpty() {
+        #expect(throws: AO3Error.self) {
+            try AO3Client.parseSubscriptionIndex(
+                "<html><body><p>Nothing followed</p></body></html>",
+                page: 1,
+                type: .series
+            )
+        }
+    }
+
+    @Test func seriesIndexThatContainsAWorkLinkThrows() {
+        let html = """
+        <dl class="subscription index group">
+          <dt><a href="/works/456">Nope</a></dt>
+          <dd><form action="/users/alice/subscriptions/9" method="post">
+            <input type="hidden" name="_method" value="delete" />
+          </form></dd>
+        </dl>
+        """
+        #expect(throws: AO3Error.self) {
+            try AO3Client.parseSubscriptionIndex(html, page: 1, type: .series)
+        }
+    }
+
+    @Test func userIndexRejectsASeriesShapedRow() throws {
+        #expect(throws: AO3Error.self) {
+            try AO3Client.parseSubscriptionIndex(fixture("ao3_subscriptions_series"), page: 1, type: .users)
+        }
+    }
+
+    private final class BundleAnchor {}
+
+    private func fixture(_ name: String) throws -> String {
+        let url = try #require(
+            Bundle(for: BundleAnchor.self).url(forResource: name, withExtension: "html")
+        )
+        return try String(contentsOf: url, encoding: .utf8)
     }
 }

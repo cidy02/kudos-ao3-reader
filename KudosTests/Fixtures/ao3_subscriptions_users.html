@@ -1,0 +1,40 @@
+<!--
+  Shape of SubscriptionsController#index with ?type=users.
+  otwarchive 452391b648f2fb06b55c36133812449747634504 (master, 2026-11-01):
+  app/views/subscriptions/index.html.erb. A user row is only
+  link_to(subscription.name, subscription.subscribable) — no byline.
+  One page, so will_paginate renders nothing.
+  Rows: a user, then a deleted subscribable ("Deleted item").
+-->
+<h2 class="heading">My User Subscriptions</h2>
+<h3 class="landmark heading">Navigation</h3>
+<ul class="navigation actions" role="navigation">
+  <li><a href="/users/alice/subscriptions">All Subscriptions</a></li>
+  <li><a href="/users/alice/subscriptions?type=series">Series Subscriptions</a></li>
+  <li><span class="current">User Subscriptions</span></li>
+  <li><a href="/users/alice/subscriptions?type=works">Work Subscriptions</a></li>
+  <li><a href="/users/alice/subscriptions/confirm_delete_all?type=users">Delete All User Subscriptions</a></li>
+</ul>
+<h3 class="landmark heading">List of Subscriptions</h3>
+<dl class="subscription index group">
+  <dt>
+    <a href="/users/someuser">someuser</a>
+  </dt>
+  <dd>
+    <form id="edit_subscription_21" class="edit_subscription" action="/users/alice/subscriptions/21" accept-charset="UTF-8" method="post">
+      <input type="hidden" name="_method" value="delete" autocomplete="off" />
+      <input type="hidden" name="authenticity_token" value="csrf-token" autocomplete="off" />
+      <input type="submit" name="commit" value="Unsubscribe from someuser" data-disable-with="Unsubscribe from someuser" />
+    </form>
+  </dd>
+  <dt>
+    Deleted item
+  </dt>
+  <dd>
+    <form id="edit_subscription_22" class="edit_subscription" action="/users/alice/subscriptions/22" accept-charset="UTF-8" method="post">
+      <input type="hidden" name="_method" value="delete" autocomplete="off" />
+      <input type="hidden" name="authenticity_token" value="csrf-token" autocomplete="off" />
+      <input type="submit" name="commit" value="Unsubscribe from Deleted item" data-disable-with="Unsubscribe from Deleted item" />
+    </form>
+  </dd>
+</dl>

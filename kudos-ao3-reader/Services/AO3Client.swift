@@ -284,16 +284,20 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         return components?.url
     }
 
-    /// The URL of a user's AO3 *work* subscriptions. The subscriptions page is a
-    /// `<dl>` of work/series/user subscriptions — not work-blurb markup — so it needs
-    /// `parseSubscriptionsPage`, not `parseSearchPage`. `?type=works` narrows it to
-    /// work subscriptions server-side (so pagination counts works too).
-    static func subscriptionsURL(username: String, page: Int) -> URL? {
+    /// The URL of one page of a user's AO3 subscriptions index. The page is a
+    /// `<dl>` of one subscribable type — not work-blurb markup. `type` is the
+    /// subnav value (`works`, `series`, or `users`). The default stays `works`
+    /// so existing work-list callers keep that page.
+    static func subscriptionsURL(
+        username: String,
+        page: Int,
+        type: AO3SubscriptionListType = .works
+    ) -> URL? {
         let name = username.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return nil }
         var components = URLComponents(string: "https://archiveofourown.org")
         components?.path = "/users/\(name)/subscriptions"
-        var items = [URLQueryItem(name: "type", value: "works")]
+        var items = [URLQueryItem(name: "type", value: type.rawValue)]
         if page > 1 { items.append(URLQueryItem(name: "page", value: String(page))) }
         components?.queryItems = items
         return components?.url
@@ -543,6 +547,16 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     /// An authenticated AO3 subscriptions page (the user's *work* subscriptions).
     func subscriptionsPage(for request: URLRequest, page: Int) async throws -> AO3SearchPage {
         try await Self.parseSubscriptionsPage(authenticatedHTML(for: request), page: page)
+    }
+
+    /// An authenticated series or user subscriptions page. Same paced auth GET
+    /// as `subscriptionsPage`. One call is one page.
+    func subscriptionIndex(
+        for request: URLRequest,
+        page: Int,
+        type: AO3SubscriptionListType
+    ) async throws -> AO3SubscriptionIndexPage {
+        try await Self.parseSubscriptionIndex(authenticatedHTML(for: request), page: page, type: type)
     }
 
     /// Builds AO3's `word_count` expression from the from/to fields.
