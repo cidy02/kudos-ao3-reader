@@ -2,9 +2,51 @@ import Foundation
 import Testing
 @testable import Kudos
 
+private final class AO3ClientPolicyBundleAnchor {}
+
 /// Closes the coverage gap noted in docs/REGRESSION_TEST_MATRIX.md: the retry and
 /// pacing policies (docs/AO3_NETWORKING_POLICY.md) were enforced only by review.
 struct AO3ClientPolicyTests {
+    private func maintenanceFixture() throws -> Data {
+        let url = try #require(
+            Bundle(for: AO3ClientPolicyBundleAnchor.self)
+                .url(forResource: "ao3_maintenance", withExtension: "html")
+        )
+        return try Data(contentsOf: url)
+    }
+
+    private func expectMaintenance(
+        statusCode: Int,
+        body: Data = Data()
+    ) {
+        do {
+            try AO3Client.checkHTTPResponse(statusCode: statusCode, body: body)
+            Issue.record("Expected AO3Error.maintenance")
+        } catch AO3Error.maintenance {
+            #expect(
+                AO3Error.maintenance.errorDescription
+                    == "AO3 is down for maintenance. Check status.archiveofourown.org."
+            )
+        } catch {
+            Issue.record("Expected maintenance, got \(error)")
+        }
+    }
+
+    // MARK: - Maintenance mapping
+
+    @Test func status418MapsToMaintenance() {
+        expectMaintenance(statusCode: 418)
+    }
+
+    @Test func maintenancePageMapsOnSuccessfulStatus() throws {
+        expectMaintenance(statusCode: 200, body: try maintenanceFixture())
+    }
+
+    @Test func ordinaryMaintenanceMentionIsNotMatched() throws {
+        let ordinary = Data("<html><title>A normal work</title><p>Maintenance tag.</p></html>".utf8)
+        try AO3Client.checkHTTPResponse(statusCode: 200, body: ordinary)
+    }
+
     // MARK: - Retry policy
 
     @Test func rateLimitedHonorsRetryAfterWhenLargerThanBackoff() {
@@ -30,6 +72,7 @@ struct AO3ClientPolicyTests {
 
     @Test func nonTransientFailuresNeverRetry() {
         #expect(AO3Client.retryDelay(for: AO3Error.notFound, attempt: 1) == nil)
+        #expect(AO3Client.retryDelay(for: AO3Error.maintenance, attempt: 1) == nil)
         #expect(AO3Client.retryDelay(for: AO3Error.forbidden, attempt: 1) == nil)
         #expect(AO3Client.retryDelay(for: AO3Error.parse, attempt: 1) == nil)
         #expect(AO3Client.retryDelay(for: AO3Error.http(status: 418), attempt: 1) == nil)

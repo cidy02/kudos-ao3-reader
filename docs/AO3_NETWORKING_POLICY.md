@@ -11,7 +11,8 @@ AO3 has no API; Kudos scrapes public HTML. Respectful access is a hard product r
 | Concurrency cap | `AO3RequestCoordinator` (3 slots) wraps fan-out callers (fandom catalog, metadata refresh). Cancellation-aware FIFO. |
 | Coalescing | `RequestCoalescer` — anonymous GETs by URL (`fetchData`), authenticated GETs by URL+Cookie (`authenticatedHTML`). De-duplicator, not a cache. |
 | 429 | Typed `AO3Error.rateLimited(retryAfter:)`; retried with backoff honoring `Retry-After`; on writes it is surfaced to the user, never auto-retried. |
-| Retry policy | `withRetry`: max 2 retries, exponential 0.5s→1s→2s; ONLY transient failures (5xx, 429, transport drop). 404/403/other-4xx/parse never retried. |
+| Retry policy | `withRetry`: max 2 retries, exponential 0.5s→1s→2s; ONLY transient failures (5xx except a matched maintenance page, 429, transport drop). 404/403/other-4xx/parse never retried. |
+| Maintenance | HTTP 418 or a narrowly matched AO3 maintenance page (`Request temporarily denied` title + `down for maintenance` text) → `AO3Error.maintenance`; never retried or treated as 404/gone, and response data is never applied locally. |
 | 403 | `AO3Error.forbidden`, never retried (hammering a CDN block prolongs it). |
 | 404 | `AO3Error.notFound` → callers mark `ao3Unavailable`, keep local data. |
 | Writes | `submitWrite` is single-shot: never retried, never coalesced (double-kudos/comment risk). CSRF via `authenticatedPageHTML`. |

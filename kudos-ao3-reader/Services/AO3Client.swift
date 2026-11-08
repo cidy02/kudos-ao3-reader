@@ -110,23 +110,49 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         return try await withRetry {
             try await pace()
             let (data, response) = try await session.data(from: url)
-            try Self.check(response)
+            try Self.check(response, body: data)
             return data
         }
     }
 
-    private static func check(_ response: URLResponse) throws {
+    private static func check(_ response: URLResponse, body: Data) throws {
         guard let http = response as? HTTPURLResponse else {
             throw AO3Error.network("No response from AO3.")
         }
-        switch http.statusCode {
+        try checkHTTPResponse(
+            statusCode: http.statusCode,
+            body: body,
+            retryAfter: retryAfter(from: http)
+        )
+    }
+
+    /// Pure status/body mapping, internal so fixture-backed policy tests cover the
+    /// same path used by reads, authenticated reads, and downloads.
+    static func checkHTTPResponse(
+        statusCode: Int,
+        body: Data,
+        retryAfter: TimeInterval? = nil
+    ) throws {
+        try checkForMaintenance(statusCode: statusCode, body: body)
+        switch statusCode {
         case 200 ... 299: return
-        case 429: throw AO3Error.rateLimited(retryAfter: retryAfter(from: http))
+        case 429: throw AO3Error.rateLimited(retryAfter: retryAfter)
         case 403: throw AO3Error.forbidden
         case 404: throw AO3Error.notFound
-        case 500 ... 599: throw AO3Error.server(status: http.statusCode)
-        default: throw AO3Error.http(status: http.statusCode)
+        case 500 ... 599: throw AO3Error.server(status: statusCode)
+        default: throw AO3Error.http(status: statusCode)
         }
+    }
+
+    static func checkForMaintenance(statusCode: Int, body: Data) throws {
+        if statusCode == 418 || isMaintenancePage(body) {
+            throw AO3Error.maintenance
+        }
+    }
+
+    private static func isMaintenancePage(_ body: Data) -> Bool {
+        body.range(of: Data("<title>Request temporarily denied.".utf8)) != nil
+            && body.range(of: Data("down for maintenance".utf8)) != nil
     }
 
     /// Parses a `Retry-After` header (seconds, or an HTTP-date) into a delay.
@@ -146,8 +172,8 @@ actor AO3Client { // swiftlint:disable:this type_body_length
 
     /// Runs `operation`, retrying up to `maxRetries` times on *transient* failures
     /// with exponential backoff (~0.5s, then 1s). Network drop-outs/timeouts,
-    /// HTTP 5xx, and 429 (honouring Retry-After) are retried; 404 / other 4xx and
-    /// parse errors are not. Cancellation propagates immediately.
+    /// HTTP 5xx, and 429 (honouring Retry-After) are retried; maintenance, 404,
+    /// other 4xx, and parse errors are not. Cancellation propagates immediately.
     private func withRetry<T>(maxRetries: Int = 2, _ operation: () async throws -> T) async throws -> T {
         var attempt = 0
         while true {
@@ -376,7 +402,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         try await withRetry {
             try await pace()
             let (data, response) = try await session.data(for: request)
-            try Self.check(response)
+            try Self.check(response, body: data)
             return (data, response.url?.path)
         }
     }
@@ -401,6 +427,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         guard let http = response as? HTTPURLResponse else {
             throw AO3Error.network("No response from AO3.")
         }
+        try Self.checkForMaintenance(statusCode: http.statusCode, body: data)
         if let url = http.url, url.path.contains("/users/login") {
             throw AO3Error.authenticationRequired
         }
@@ -580,7 +607,12 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         let tempURL = try await withRetry { () -> URL in
             try await pace()
             let (tempURL, response) = try await session.download(from: url)
-            try Self.check(response)
+            let body = if (response as? HTTPURLResponse)?.mimeType == "text/html" {
+                try Data(contentsOf: tempURL)
+            } else {
+                Data()
+            }
+            try Self.check(response, body: body)
             return tempURL
         }
         let destination = Storage.tempDownloadURL(suggestedName: "\(workID).epub")

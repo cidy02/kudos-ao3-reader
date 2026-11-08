@@ -99,6 +99,7 @@ struct LiveAO3SessionValidator: AO3SessionValidating {
         guard let http = response as? HTTPURLResponse else {
             throw URLError(.badServerResponse)
         }
+        try AO3Client.checkForMaintenance(statusCode: http.statusCode, body: data)
         guard (200 ... 299).contains(http.statusCode) else {
             // Only an explicit 401 is treated as expiry. Every other non-2xx is
             // thrown, which the caller treats as "couldn't verify" and keeps the
