@@ -8,8 +8,10 @@ import SwiftData
 /// throttled so opening Home re-checks each work at most every few hours.
 @MainActor
 enum WorkUpdateChecker {
-    /// Don't re-poll a work more often than this.
-    private static let minInterval: TimeInterval = 6 * 3600
+    /// Don't re-poll a work more often than this. The subscriptions scan uses the
+    /// same gap (`SubscriptionScanService`) so a follow checked recently is not
+    /// requested again.
+    static let minInterval: TimeInterval = 6 * 3600
 
     /// Re-checks the live AO3 chapter count for each eligible work, updating its
     /// stored `chapters` (so `hasUpdate` reflects reality) and baselining

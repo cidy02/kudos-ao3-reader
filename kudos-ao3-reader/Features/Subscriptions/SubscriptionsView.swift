@@ -1,3 +1,4 @@
+import SwiftData
 import SwiftUI
 
 /// One destination for subscription updates, followed works, and cleanup.
@@ -25,6 +26,8 @@ struct SubscriptionsView: View {
 
     @Environment(AO3AuthService.self) private var auth
     @Environment(ThemeManager.self) private var theme
+    @Environment(SubscriptionScanService.self) private var scan
+    @Environment(\.modelContext) private var modelContext
     #if os(iOS)
     @Environment(MailSubscriptionDriver.self) private var mailDriver
     #endif
@@ -157,11 +160,70 @@ struct SubscriptionsView: View {
             .task { await mailDriver.refreshIfNeeded() }
             .refreshable { await mailDriver.refresh() }
         } else {
-            disconnectedWaiting
+            scanOrDisconnectedWaiting
         }
         #else
-        disconnectedWaiting
+        scanOrDisconnectedWaiting
         #endif
+    }
+
+    /// Mail wins while it is connected. Otherwise a scan that has already looked
+    /// at follows shows those rows; a cold account keeps the source prompt.
+    @ViewBuilder
+    private var scanOrDisconnectedWaiting: some View {
+        if showsScanWaiting {
+            WaitingListView(
+                updates: scan.updates,
+                showsPosition: true,
+                showsEmptyState: false,
+                scanStatus: scanStatus,
+                baselines: scan.partialBaselines,
+                alphabeticalNote: scan.partialBaselines.isEmpty
+                    ? nil
+                    : SubscriptionScanCopy.alphabeticalHonesty,
+                onCheck: canStartScan ? { startScan() } : nil
+            )
+        } else {
+            disconnectedWaiting
+        }
+    }
+
+    private var showsScanWaiting: Bool {
+        scan.phase != .idle
+            || !scan.file.followedWorkIDs.isEmpty
+            || !scan.snapshots.isEmpty
+            || !scan.updates.isEmpty
+    }
+
+    private var canStartScan: Bool {
+        scan.phase != .running && scan.phase != .paused
+    }
+
+    private var scanStatus: WaitingScanStatus {
+        let follows = scan.file.followedWorkIDs.count
+        let followWord = follows == 1 ? "follow" : "follows"
+        return WaitingScanStatus(
+            checkedLabel: scan.latestCheckedAt.map {
+                "Checked \($0.formatted(.relative(presentation: .named)))"
+            },
+            waitingCount: scan.updates.count,
+            followsLine: "\(follows) \(followWord) · \(checkedFollows) checked",
+            checkTitle: scan.dueCount > 0 ? "Check \(scan.dueCount)" : "Scan AO3",
+            note: scan.statusNote
+        )
+    }
+
+    private var checkedFollows: Int {
+        switch scan.phase {
+        case .running, .paused, .stopped:
+            return scan.checked
+        case .idle, .finished:
+            return scan.snapshots.filter { scan.file.followedWorkIDs.contains($0.workID) }.count
+        }
+    }
+
+    private func startScan() {
+        SubscriptionScanLaunch.start(scan: scan, auth: auth, modelContext: modelContext)
     }
 
     private var disconnectedWaiting: some View {
@@ -204,7 +266,8 @@ struct SubscriptionsView: View {
                 }
             case .loaded:
                 FollowingListView(
-                    works: works,
+                    works: works.map { scan.applying($0) },
+                    deletedIDs: scan.goneWorkIDs,
                     scope: scope,
                     sourceNote: "Showing the first AO3 page here. Use More → All AO3 subscriptions "
                         + "to browse every page.",
@@ -237,6 +300,9 @@ struct SubscriptionsView: View {
 }
 
 private struct SubscriptionsSourcesView: View {
+    @Environment(AO3AuthService.self) private var auth
+    @Environment(SubscriptionScanService.self) private var scan
+    @Environment(\.modelContext) private var modelContext
     @State private var showingScan = false
     #if os(iOS)
     @Environment(MailSubscriptionDriver.self) private var mailDriver
@@ -246,17 +312,32 @@ private struct SubscriptionsSourcesView: View {
         updateSources
             .navigationDestination(isPresented: $showingScan) {
                 ColdStartScanView(
-                    progress: .init(),
-                    unavailableReason: "The paced AO3 scan driver is not connected yet."
+                    progress: ColdStartScanView.Progress(scan),
+                    unavailableReason: auth.isLoggedIn
+                        ? nil
+                        : "Log in to AO3 to scan subscriptions.",
+                    notice: scan.statusNote,
+                    onStart: { startScan() },
+                    onPause: { scan.pause() },
+                    onResume: { scan.resume() },
+                    onCancel: { scan.cancel() }
                 )
             }
+    }
+
+    private func startScan() {
+        guard auth.isLoggedIn else { return }
+        SubscriptionScanLaunch.start(scan: scan, auth: auth, modelContext: modelContext)
     }
 
     @ViewBuilder
     private var updateSources: some View {
         #if os(iOS)
         UpdateSourcesView(
-            onScanAO3: { showingScan = true },
+            onScanAO3: {
+                startScan()
+                showingScan = true
+            },
             mailConnected: mailDriver.isConnected,
             onConnectMail: { address, password in
                 try await mailDriver.connect(address: address, appPassword: password)
@@ -264,7 +345,10 @@ private struct SubscriptionsSourcesView: View {
             onDisconnectMail: { try mailDriver.disconnect() }
         )
         #else
-        UpdateSourcesView(onScanAO3: { showingScan = true })
+        UpdateSourcesView(onScanAO3: {
+            startScan()
+            showingScan = true
+        })
         #endif
     }
 }
@@ -273,9 +357,64 @@ private struct SubscriptionsSourcesView: View {
     let view = NavigationStack { SubscriptionsView() }
         .environment(AO3AuthService())
         .environment(ThemeManager())
+        .environment(SubscriptionScanService())
     #if os(iOS)
     view.environment(MailSubscriptionDriver())
     #else
     view
     #endif
+}
+
+/// Reads a library snapshot at the moment the user starts a scan. The scan
+/// never writes these works back.
+@MainActor
+private enum SubscriptionScanLaunch {
+    static func start(
+        scan: SubscriptionScanService,
+        auth: AO3AuthService,
+        modelContext: ModelContext
+    ) {
+        scan.start(
+            username: auth.username ?? "",
+            fetcher: LiveSubscriptionScanFetcher(auth: auth),
+            library: libraryHints(in: modelContext)
+        )
+    }
+
+    private static func libraryHints(
+        in modelContext: ModelContext
+    ) -> [Int: SubscriptionScanLibraryHint] {
+        let works = (try? modelContext.fetch(FetchDescriptor<SavedWork>())) ?? []
+        var hints: [Int: SubscriptionScanLibraryHint] = [:]
+        for work in works where !work.isPendingDeletion {
+            let id = work.ao3WorkID ?? WorkTags.ao3WorkID(from: work.sourceURL)
+            guard let id else { continue }
+            hints[id] = merged(
+                hints[id],
+                posted: SubscriptionScanWorkFacts.chapterCounts(work.chapters).posted,
+                checked: work.lastUpdateCheck
+            )
+        }
+        return hints
+    }
+
+    private static func merged(
+        _ current: SubscriptionScanLibraryHint?,
+        posted: Int?,
+        checked: Date?
+    ) -> SubscriptionScanLibraryHint {
+        guard let current else {
+            return SubscriptionScanLibraryHint(postedChapters: posted, lastChecked: checked)
+        }
+        let lastChecked: Date? = switch (current.lastChecked, checked) {
+        case let (old?, new?): max(old, new)
+        case let (old?, nil): old
+        case let (nil, new?): new
+        case (nil, nil): nil
+        }
+        return SubscriptionScanLibraryHint(
+            postedChapters: posted ?? current.postedChapters,
+            lastChecked: lastChecked
+        )
+    }
 }

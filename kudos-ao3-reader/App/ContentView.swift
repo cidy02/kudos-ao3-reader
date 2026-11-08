@@ -22,6 +22,8 @@ struct ContentView: View {
     @State private var theme = ThemeManager()
     @State private var auth = AO3AuthService()
     @State private var downloadQueue = DownloadQueue()
+    /// User-started. Launch, scene phase, and BGTask never call `start`.
+    @State private var subscriptionScan = SubscriptionScanService()
     #if os(iOS)
     @State private var mailSubscriptionDriver = MailSubscriptionDriver()
     #endif
@@ -60,7 +62,12 @@ struct ContentView: View {
             .background { WebKitPrewarmView() }
             // Overlay first so the environments below wrap it too — otherwise the
             // banner sits outside the .environment scope and can't find the queue.
-            .overlay(alignment: .bottom) { DownloadQueueBanner() }
+            .overlay(alignment: .bottom) {
+                VStack(spacing: 8) {
+                    SubscriptionScanBanner()
+                    DownloadQueueBanner()
+                }
+            }
             // AO3 website sheet is root-hosted so `router.open` never switches the
             // user into Browse — Done returns them to the tab they left.
             .sheet(isPresented: $router.isPresentingWebBrowser) {
@@ -71,6 +78,7 @@ struct ContentView: View {
             .environment(theme)
             .environment(auth)
             .environment(downloadQueue)
+            .environment(subscriptionScan)
             #if os(iOS)
             .environment(mailSubscriptionDriver)
             #endif
@@ -81,6 +89,9 @@ struct ContentView: View {
             // counts as leaving it. Backgrounding does not change the username.
             .onChange(of: auth.username, initial: true) { _, username in
                 privacyGate.noteSignedInAccount(username)
+                subscriptionScan.adopt(
+                    authenticationScope: AO3AuthorProfileFetcher.authenticationScope(for: auth)
+                )
             }
             // The app theme drives the whole app's light/dark appearance (the reader
             // overrides this for itself when its theme is unlinked).

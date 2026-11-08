@@ -1,5 +1,14 @@
 import SwiftUI
 
+/// Header facts for Waiting when the scan, not mail, is the source.
+struct WaitingScanStatus: Equatable {
+    var checkedLabel: String?
+    var waitingCount: Int
+    var followsLine: String
+    var checkTitle: String
+    var note: String?
+}
+
 /// The Subscriptions "Waiting" list: what changed, grouped by day, down a 40pt
 /// gutter and a 14pt progress rail. Renders what it is handed; the caller owns
 /// fetching.
@@ -18,6 +27,12 @@ struct WaitingListView: View {
     var mailSince: Date?
     var unverifiedCount: UInt64 = 0
     var refreshError: String?
+    /// Present only when Waiting is showing the on-device scan. Mail leaves it nil.
+    var scanStatus: WaitingScanStatus?
+    /// First-look baselines while a scan is still partial. Not new-chapter rows.
+    var baselines: [SubscriptionScanSnapshot] = []
+    var alphabeticalNote: String?
+    var onCheck: (() -> Void)?
 
     private struct Day: Identifiable {
         let start: Date
@@ -46,6 +61,31 @@ struct WaitingListView: View {
                             refreshError: refreshError
                         )
                         .listRowSeparator(.hidden)
+                    }
+                }
+                if let scanStatus {
+                    Section {
+                        WaitingScanHeader(status: scanStatus, onCheck: onCheck)
+                            .listRowSeparator(.hidden)
+                        if let alphabeticalNote {
+                            Text(alphabeticalNote)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .listRowSeparator(.hidden)
+                        }
+                    }
+                }
+                if !baselines.isEmpty {
+                    Section {
+                        ForEach(baselines) { snapshot in
+                            WaitingBaselineRow(snapshot: snapshot)
+                        }
+                    } header: {
+                        Text("By updated date")
+                            .font(.headline)
+                            .foregroundStyle(.primary)
+                            .textCase(nil)
                     }
                 }
                 ForEach(days) { day in
@@ -79,6 +119,86 @@ struct WaitingListView: View {
         #if !os(macOS)
             .navigationBarTitleDisplayMode(.inline)
         #endif
+    }
+}
+
+private struct WaitingScanHeader: View {
+    let status: WaitingScanStatus
+    var onCheck: (() -> Void)?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 8) {
+                if let checkedLabel = status.checkedLabel {
+                    Text(checkedLabel)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.secondary)
+                }
+
+                Text("\(status.waitingCount.formatted()) waiting")
+                    .font(.largeTitle.bold())
+
+                Text(status.followsLine)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                if let note = status.note {
+                    Text(note)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .accessibilityElement(children: .combine)
+
+            Button(status.checkTitle) { onCheck?() }
+                .font(.headline)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(onCheck == nil)
+        }
+        .padding(.vertical, 8)
+    }
+}
+
+private struct WaitingBaselineRow: View {
+    let snapshot: SubscriptionScanSnapshot
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(snapshot.title.isEmpty ? "Work #\(snapshot.workID)" : snapshot.title)
+                .font(.headline)
+                .fixedSize(horizontal: false, vertical: true)
+            if !snapshot.author.isEmpty {
+                Text(snapshot.author)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            Text(detail)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+        .padding(.vertical, 6)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var detail: String {
+        var parts: [String] = []
+        if let posted = snapshot.chaptersPosted {
+            if let total = snapshot.chaptersTotal {
+                parts.append("\(posted)/\(total)")
+            } else {
+                parts.append("\(posted)/?")
+            }
+        }
+        if !snapshot.updatedText.isEmpty {
+            parts.append("Updated \(snapshot.updatedText)")
+        }
+        parts.append("Baseline")
+        return parts.joined(separator: " · ")
     }
 }
 

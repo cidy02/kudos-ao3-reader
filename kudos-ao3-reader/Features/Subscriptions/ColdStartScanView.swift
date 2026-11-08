@@ -4,7 +4,7 @@ import SwiftUI
 /// First-run cold-account scan screen for subscriptions, paced against AO3.
 struct ColdStartScanView: View {
     struct Progress: Equatable, Sendable {
-        enum Phase: Equatable, Sendable { case idle, running, paused, finished }
+        enum Phase: Equatable, Sendable { case idle, running, paused, finished, stopped }
         var phase: Phase = .idle
         var checked: Int = 0
         var total: Int = 0
@@ -28,7 +28,11 @@ struct ColdStartScanView: View {
     }
 
     let progress: Progress
+    /// Replaces the progress UI and disables Start. Log-in only — a scan that
+    /// stopped keeps its counts and explains itself with `notice`.
     var unavailableReason: String?
+    /// Rate-limit, maintenance, or other scan note. Does not hide the counts.
+    var notice: String?
     var onStart: () -> Void = {}
     var onPause: () -> Void = {}
     var onResume: () -> Void = {}
@@ -41,12 +45,31 @@ struct ColdStartScanView: View {
 
     /// Formatted status line showing checked count and honest rounded estimate.
     private var statusLineText: String {
-        let count = "\(progress.checked) of \(progress.total)"
-        if let remaining = progress.remaining,
-           let estimate = Self.formatEstimate(remaining) {
+        Self.statusLine(
+            checked: progress.checked,
+            total: progress.total,
+            remaining: progress.remaining
+        )
+    }
+
+    /// Shared with the app-wide banner so both say "12 of 35 · about a minute left".
+    static func statusLine(checked: Int, total: Int, remaining: Duration?) -> String {
+        let count = "\(checked) of \(total)"
+        if let remaining, let estimate = formatEstimate(remaining) {
             return "\(count) · \(estimate)"
         }
         return count
+    }
+
+    private var showsAlphabeticalNote: Bool {
+        switch progress.phase {
+        case .running, .paused:
+            return true
+        case .stopped:
+            return progress.checked > 0 && progress.checked < progress.total
+        case .idle, .finished:
+            return false
+        }
     }
 
     /// Deliberate identity copy: "Signed in as <username> · <total> follows · <checked> checked · <to go> to go".
@@ -143,20 +166,24 @@ struct ColdStartScanView: View {
                     .monospacedDigit()
                     .fixedSize(horizontal: false, vertical: true)
 
+                if let notice {
+                    Text(notice)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
                 Text(identityText)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            if progress.phase == .running || progress.phase == .paused {
-                Text(
-                    "AO3 pages alphabetically, so what is checked so far is the start "
-                    + "of the alphabet, not what changed most recently."
-                )
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            if showsAlphabeticalNote {
+                Text(SubscriptionScanCopy.alphabeticalHonesty)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             actionButtons
@@ -213,6 +240,12 @@ struct ColdStartScanView: View {
                     .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, minHeight: 44, alignment: .center)
+        case .stopped:
+            Button("Close", action: onCancel)
+                .font(.headline)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .buttonStyle(.bordered)
+                .controlSize(.large)
         }
     }
 
@@ -285,6 +318,41 @@ struct ColdStartScanView: View {
                 username: "skydarius11",
                 remaining: .seconds(180)
             )
+        )
+    }
+    .environment(ThemeManager())
+}
+
+extension ColdStartScanView.Progress {
+    @MainActor
+    init(_ scan: SubscriptionScanService) {
+        let phase: Phase = switch scan.phase {
+        case .idle: .idle
+        case .running: .running
+        case .paused: .paused
+        case .finished: .finished
+        case .stopped: .stopped
+        }
+        self.init(
+            phase: phase,
+            checked: scan.checked,
+            total: scan.total,
+            username: scan.username,
+            remaining: scan.remaining
+        )
+    }
+}
+
+#Preview("Stopped") {
+    NavigationStack {
+        ColdStartScanView(
+            progress: .init(
+                phase: .stopped,
+                checked: 4,
+                total: 35,
+                username: "skydarius11"
+            ),
+            notice: SubscriptionScanCopy.maintenance
         )
     }
     .environment(ThemeManager())

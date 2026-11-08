@@ -105,7 +105,7 @@ struct UpdateSourcesView: View {
         return "AO3's own subscriptions page lists what you follow, "
             + "but never says what changed or when. These are the sources Kudos can use. "
             + mailStatus
-            + "AO3 scanning isn't available yet."
+            + "Scanning checks the works you follow, one at a time, and only when you start it."
     }
 
     private var mailAction: (() -> Void)? {

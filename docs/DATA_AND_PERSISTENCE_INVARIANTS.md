@@ -5,7 +5,7 @@ Rules that protect user data. Breaking any of these is a regression even if test
 ## Never lose
 
 - A saved work's **EPUB file**, **reading progress** (`readiumLocator`, `lastSpineIndex`, `lastScrollFraction`, `progressModifiedAt`), user flags (`isFavorite`/`isSaved`/`isFinished`), tags, queues, collections, bookmarks.
-- **No network outcome may delete local data.** AO3 404 → set `ao3Unavailable = true`, keep everything (`WorkTags.refreshFromAO3`). 429/403/5xx/offline → keep prior state; list refreshes keep previously loaded content on failure.
+- **No network outcome may delete local data.** AO3 404 → set `ao3Unavailable = true`, keep everything (`WorkTags.refreshFromAO3`). The subscriptions scan records a 404 only as `gone` on its own snapshot and does not set `ao3Unavailable`, call `softDelete`/`hardDelete`, or otherwise write `SavedWork`. 429/403/5xx/offline → keep prior state; list refreshes keep previously loaded content on failure.
 - Deletion is user-initiated only, and lands in **Recently Deleted for 90 days** first (`PreservedWorkService.softDelete` — sets `isPendingDeletion`/`deletedAt`/`permanentDeletionScheduledAt`, records a tombstone, keeps the EPUB). Only `sweepExpired`/explicit "Delete Permanently" hard-deletes (`WorkLifecycle.hardDelete`). Sweep is gated behind `PersistenceOperationGate`.
 
 ## Source of truth vs derived vs transport
@@ -17,6 +17,7 @@ Rules that protect user data. Breaking any of these is a regression even if test
 | `authorIdentitiesJSON` | AO3-derived enrichment | Additive default-empty SwiftData field. Persist only identities parsed from AO3 links; never infer from `SavedWork.author`. Intentionally omitted from `.kudosbackup`, so restored legacy text remains visible but non-tappable until a later AO3 refresh. |
 | `.kudosbackup` package | Transport/backup | Manifest v7 + EPUB/font blobs. Carries source-of-truth fields incl. progress, flags, tombstones, settings, collections, queues+memberships. Versioned decode v1–v7; **fractional-second date encoder with whole-second decode fallback** — never regress either side. |
 | Folder sync (`FolderSyncService`) | Transport over iCloud Drive | Same package, one file `KudosLibrary.kudosbackup` in a user-picked folder (security-scoped bookmark in UserDefaults — dies on reinstall, file survives). No CloudKit/entitlements. `lastTagRefreshAttemptAt` is deliberately device-local (not in backups). |
+| Subscription scan file (`SubscriptionScanFile`) | Derived, per auth scope | Application Support `KudosSubscriptionScan`, excluded from device backup. Not in `.kudosbackup` or folder sync. One file per authentication scope; a mismatched scope is left untouched. A later backup source may copy the file as-is. |
 
 ## Identity & duplicates
 
