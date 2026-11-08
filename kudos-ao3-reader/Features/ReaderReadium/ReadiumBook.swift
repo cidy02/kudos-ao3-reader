@@ -209,6 +209,10 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
         )
         guard next != pageBoxGeometry else { return }
         pageBoxGeometry = next
+        // T-451: refresh insets now, not after the 220 ms quiet. Readium restores the
+        // page itself when it reloads spreads; an inset change that landed after that
+        // restore resized the paged web view and saved progression 0.
+        forcePageBoxContentInsetRefresh()
         pageBoxRemeasureTask?.cancel()
         // Invalidate old-layout samples immediately; measure only after quiet.
         clearVisualPageMetrics()
@@ -219,7 +223,6 @@ final class ReadiumBook: NSObject, EPUBNavigatorDelegate {
                 self.cancelPageBoxRemeasure()
                 return
             }
-            self.forcePageBoxContentInsetRefresh()
             self.pageBoxRemeasureTask = nil
             self.clearVisualPageMetrics()
             self.schedulePageBarRemeasure()
