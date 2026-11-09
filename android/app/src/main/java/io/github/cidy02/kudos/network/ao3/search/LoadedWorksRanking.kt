@@ -423,19 +423,17 @@ object LoadedWorksRanker {
         return format.format(value)
     }
 
-    companion object {
-        private val blurbDates = listOf("uuuu-MM-dd", "dd MMM uuuu").map {
-            DateTimeFormatter.ofPattern(it, Locale.US).withResolverStyle(ResolverStyle.STRICT)
-        }
+    private val blurbDates = listOf("uuuu-MM-dd", "dd MMM uuuu").map {
+        DateTimeFormatter.ofPattern(it, Locale.US).withResolverStyle(ResolverStyle.STRICT)
+    }
 
-        fun blurbDate(raw: String): LocalDate? {
-            if (raw.isBlank()) return null
-            for (parser in blurbDates) {
-                val parsed = runCatching { LocalDate.parse(raw.trim(), parser) }.getOrNull()
-                if (parsed != null) return parsed
-            }
-            return null
+    fun blurbDate(raw: String): LocalDate? {
+        if (raw.isBlank()) return null
+        for (parser in blurbDates) {
+            val parsed = runCatching { LocalDate.parse(raw.trim(), parser) }.getOrNull()
+            if (parsed != null) return parsed
         }
+        return null
     }
 }
 
