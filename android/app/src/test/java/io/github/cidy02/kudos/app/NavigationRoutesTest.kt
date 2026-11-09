@@ -1,5 +1,7 @@
 package io.github.cidy02.kudos.app
 
+import androidx.compose.runtime.saveable.SaverScope
+import io.github.cidy02.kudos.account.AccountListType
 import io.github.cidy02.kudos.home.accountAvatarInitial
 import io.github.cidy02.kudos.home.formatAccountUnreadAccessibilityValue
 import io.github.cidy02.kudos.home.formatAccountUnreadBadge
@@ -264,5 +266,87 @@ class NavigationRoutesTest {
         assertEquals("A", accountAvatarInitial("  avery_archive "))
         assertNull(accountAvatarInitial("   "))
         assertNull(accountAvatarInitial(null))
+    }
+
+    @Test
+    fun restoredAccountRunPopsEverySheetRouteAndKeepsTheDeepest() {
+        val inbox = listOf(Routes.Home, Routes.Account, Routes.AccountInbox)
+        assertEquals(
+            RestoredNavigation.AccountSheet(AccountSheetRoute.Inbox, popCount = 2, tabRoute = Routes.Home),
+            Routes.restoredNavigation(inbox, Routes.AccountInbox)
+        )
+        val settings = listOf(Routes.Home, Routes.Account, Routes.Settings)
+        assertEquals(
+            RestoredNavigation.AccountSheet(AccountSheetRoute.Settings, popCount = 2, tabRoute = Routes.Home),
+            Routes.restoredNavigation(settings, Routes.Settings)
+        )
+        assertNull(Routes.restoredNavigation(listOf(Routes.Home, Routes.Settings), Routes.Settings))
+    }
+
+    @Test
+    fun writingInboxAndLoginStayOnTheWritingStack() {
+        assertFalse(Routes.shouldInterceptAccountRoute(Routes.AccountInbox, isInitialRestore = true))
+        assertFalse(Routes.shouldInterceptAccountRoute(Routes.AccountLogin, isInitialRestore = true))
+        assertTrue(Routes.shouldInterceptAccountRoute(Routes.Account, isInitialRestore = true))
+        assertFalse(Routes.shouldInterceptAccountRoute(Routes.Account, isInitialRestore = false))
+        assertNull(Routes.restoredNavigation(listOf(Routes.Writing, Routes.AccountInbox), Routes.AccountInbox))
+        assertNull(Routes.restoredNavigation(listOf(Routes.Writing, Routes.AccountLogin), Routes.AccountLogin))
+    }
+
+    @Test
+    fun formerAccountRoutesRetargetWritingAndLibrary() {
+        assertEquals(
+            RestoredNavigation.TabPush(Routes.Writing, Routes.WritingDrafts),
+            Routes.restoredNavigation(listOf(Routes.Account, Routes.WritingDrafts), Routes.WritingDrafts)
+        )
+        val series = Routes.authorSeries("writer")
+        assertEquals(
+            RestoredNavigation.TabPush(Routes.Writing, series),
+            Routes.restoredNavigation(listOf(Routes.Account, series), series)
+        )
+        val marked = Routes.accountList("MarkedForLater")
+        assertEquals(
+            RestoredNavigation.TabPush(Routes.Library, marked),
+            Routes.legacyLaunchNavigation(marked)
+        )
+        assertEquals(
+            RestoredNavigation.AccountSheet(AccountSheetRoute.Inbox, popCount = 0, tabRoute = Routes.Home),
+            Routes.legacyLaunchNavigation(Routes.AccountInbox)
+        )
+    }
+
+    @Test
+    fun accountSheetStateRoundTripsTheOpenPage() {
+        val state = AccountSheetState(
+            initialIsPresenting = true,
+            initialPendingRoute = AccountSheetRoute.Inbox,
+            initialRequestEpoch = 4
+        )
+        val saved = with(AccountSheetState.Saver) { SaverScope { true }.save(state) }!!
+        val back = AccountSheetState.Saver.restore(saved)!!
+        assertTrue(back.isPresentingAccount)
+        assertEquals(AccountSheetRoute.Inbox, back.pendingAccountRoute)
+        assertEquals(4, back.requestEpoch)
+    }
+
+    @Test
+    fun accountSheetHostsAccountDestinationsAndLeavesForLibraryOrBrowse() {
+        assertTrue(Routes.belongsOnAccountSheet(Routes.Account))
+        assertTrue(Routes.belongsOnAccountSheet(Routes.AccountInbox))
+        assertTrue(Routes.belongsOnAccountSheet(Routes.NativeLogin))
+        assertFalse(Routes.belongsOnAccountSheet(Routes.WorkDetail))
+        assertFalse(Routes.belongsOnAccountSheet(Routes.Library))
+        assertFalse(Routes.belongsOnAccountSheet(Routes.webFallback("https://archiveofourown.org")))
+        assertEquals(Routes.Library, Routes.shellRootForAccountList(AccountListType.MarkedForLater))
+        assertEquals(Routes.Library, Routes.shellRootForAccountList(AccountListType.History))
+        assertEquals(Routes.Writing, Routes.shellRootForAccountList(AccountListType.MyWorks))
+        assertEquals(
+            Routes.Writing,
+            Routes.shellRootForAccountList(AccountListType.Collection("tag-set", "Tag Set"))
+        )
+        val jump = Routes.externalWebJump("https://archiveofourown.org/users/login")
+        assertEquals(Routes.Browse, jump.first)
+        assertEquals(Routes.webFallback("https://archiveofourown.org/users/login"), jump.second)
+        assertEquals(Routes.Library, Routes.libraryFilterRoot())
     }
 }

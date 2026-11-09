@@ -90,7 +90,7 @@ fun AppNavHost(
         deepLinks: List<NavDeepLink> = emptyList(),
         content: @Composable AnimatedVisibilityScope.(NavBackStackEntry) -> Unit
     ) {
-        if (!accountRoutesOnly || Routes.accountSheetRoute(route) != null) {
+        if (!accountRoutesOnly || Routes.belongsOnAccountSheet(route)) {
             registerSharedComposable(route, arguments, deepLinks, content)
         }
     }
@@ -102,6 +102,16 @@ fun AppNavHost(
             navController.navigateShellRoot(rootRoute)
             destinationRoute?.let(navController::navigate)
         }
+    }
+
+    fun openExternalWeb(url: String) {
+        val (root, destination) = Routes.externalWebJump(url)
+        leaveAccount(root, destination)
+    }
+
+    fun openLibraryFilter(prepare: () -> Unit) {
+        prepare()
+        leaveAccount(Routes.libraryFilterRoot(), null)
     }
     // The only state left here (T-90): a small id-keyed cache so opening Work
     // Detail from a search/browse/account-list result still shows instantly
@@ -504,12 +514,10 @@ fun AppNavHost(
                     authorNewestWorks = container.authorNewestWorkStore,
                     onOpenRemoteWork = { work -> navigateToWorkDetail(WorkDetailSource.RemoteSummary(work)) },
                     onFilterLibraryFandom = { name ->
-                        LibraryFilterRequest.requestFandom(name)
-                        navController.navigateShellRoot(Routes.Library)
+                        openLibraryFilter { LibraryFilterRequest.requestFandom(name) }
                     },
                     onFilterLibraryTag = { name ->
-                        LibraryFilterRequest.requestFreeform(name)
-                        navController.navigateShellRoot(Routes.Library)
+                        openLibraryFilter { LibraryFilterRequest.requestFreeform(name) }
                     }
                 )
             }
@@ -598,15 +606,10 @@ fun AppNavHost(
                 workRepository = container.workRepository,
                 onLogin = { navController.navigate(Routes.AccountLogin) },
                 onOpenList = { type ->
-                    val root = when (type) {
-                        AccountListType.MarkedForLater,
-                        AccountListType.Bookmarks,
-                        AccountListType.History,
-                        AccountListType.Subscriptions -> Routes.Library
-                        AccountListType.MyWorks,
-                        is AccountListType.Collection -> Routes.Writing
-                    }
-                    leaveAccount(root, Routes.accountList(NavArgCodecs.encodeAccountListType(type)))
+                    leaveAccount(
+                        Routes.shellRootForAccountList(type),
+                        Routes.accountList(NavArgCodecs.encodeAccountListType(type))
+                    )
                 },
                 onOpenAO3Collections = { leaveAccount(Routes.Writing, Routes.AO3Collections) },
                 onOpenDrafts = { leaveAccount(Routes.Writing, Routes.WritingDrafts) },
@@ -624,7 +627,7 @@ fun AppNavHost(
                                 leaveAccount(Routes.Home, Routes.authorProfile(username))
                             }
                         }
-                        else -> leaveAccount(Routes.Browse, Routes.webFallback(url))
+                        else -> openExternalWeb(url)
                     }
                 },
                 onOpenWork = { work ->
@@ -680,7 +683,7 @@ fun AppNavHost(
                     leaveAccount(Routes.Home, Routes.comments(workId, focusedCommentId = commentId,
                         composes = true, session = container.authRepository.generation.value))
                 },
-                onOpenWeb = { url -> leaveAccount(Routes.Browse, Routes.webFallback(url)) },
+                onOpenWeb = { url -> openExternalWeb(url) },
                 settingsRepository = container.accountListRepository.settingsRepository
             )
         }
@@ -700,11 +703,13 @@ fun AppNavHost(
                 },
                 onOpenSeries = { seriesUrl -> leaveAccount(Routes.Writing, Routes.seriesWorks(seriesUrl)) },
                 onOpenSeriesSummary = { leaveAccount(Routes.Writing, Routes.seriesWorks(it)) },
-                onOpenWeb = { url -> leaveAccount(Routes.Browse, Routes.webFallback(url)) },
+                onOpenWeb = { url -> openExternalWeb(url) },
                 username = username,
                 onOpenList = { type ->
-                    val root = if (type == AccountListType.MyWorks) Routes.Writing else Routes.Library
-                    leaveAccount(root, Routes.accountList(NavArgCodecs.encodeAccountListType(type)))
+                    leaveAccount(
+                        Routes.shellRootForAccountList(type),
+                        Routes.accountList(NavArgCodecs.encodeAccountListType(type))
+                    )
                 },
                 onOpenAO3Collections = { leaveAccount(Routes.Writing, Routes.AO3Collections) },
                 authRepository = container.authRepository,
@@ -727,9 +732,7 @@ fun AppNavHost(
                     else navController.popBackStack()
                 },
                 onCancel = { navController.popBackStack() },
-                onOpenAO3 = { url ->
-                    leaveAccount(Routes.Browse, Routes.webFallback(url))
-                }
+                onOpenAO3 = { url -> openExternalWeb(url) }
             )
         }
         if (io.github.cidy02.kudos.BuildConfig.DEBUG) {
@@ -1177,8 +1180,7 @@ fun AppNavHost(
                 privacyGate = container.privacyGate,
                 onOpenLocalWork = { navigateToWorkDetail(WorkDetailSource.LocalWork(it)) },
                 onFilterLibraryTag = { name ->
-                    LibraryFilterRequest.requestUserTag(name)
-                    navController.navigateShellRoot(Routes.Library)
+                    openLibraryFilter { LibraryFilterRequest.requestUserTag(name) }
                 },
                 onDismiss = { navController.popBackStack() },
                 workRepository = container.workRepository,
@@ -1377,7 +1379,11 @@ fun AppNavHost(
                     )
                 },
                 onOpenWork = { workId ->
-                    navigateToWorkDetail(WorkDetailSource.LocalWork(workId))
+                    val detail = Routes.workDetail(
+                        NavArgCodecs.encodeWorkDetailSource(WorkDetailSource.LocalWork(workId))
+                    )
+                    if (accountRoutesOnly) leaveAccount(Routes.Home, detail)
+                    else navigateToWorkDetail(WorkDetailSource.LocalWork(workId))
                 }
             )
         }
@@ -1486,12 +1492,8 @@ fun AppNavHost(
                     username = prefsUsername,
                     repository = container.preferencesRepository,
                     onSaved = { navController.popBackStack() },
-                    onOpenHelp = { url ->
-                        navController.navigate(Routes.webFallback(url))
-                    },
-                    onOpenWeb = { url ->
-                        navController.navigate(Routes.webFallback(url))
-                    }
+                    onOpenHelp = { url -> openExternalWeb(url) },
+                    onOpenWeb = { url -> openExternalWeb(url) }
                 )
             }
         }
@@ -1500,20 +1502,19 @@ fun AppNavHost(
             val moreOnAo3Auth by container.authRepository.state.collectAsState()
             io.github.cidy02.kudos.account.AccountMoreOnAO3Screen(
                 username = moreOnAo3Auth.usernameOrNull,
-                onOpenWeb = { url -> navController.navigate(Routes.webFallback(url)) }
+                onOpenWeb = { url -> openExternalWeb(url) }
             )
         }
 
         sharedComposable(Routes.NativeLogin) {
             AO3NativeLoginScreen(
                 authRepository = container.authRepository,
-                onLoginComplete = { navController.popBackStack(Routes.Account, inclusive = false) },
+                onLoginComplete = {
+                    if (accountRoutesOnly) navController.popBackStack(Routes.Account, inclusive = false)
+                    else navController.popBackStack()
+                },
                 onCancel = { navController.popBackStack() },
-                onOpenAO3 = { url ->
-                    navController.popBackStack()
-                    navController.navigateShellRoot(Routes.Browse)
-                    navController.navigate(Routes.webFallback(url))
-                }
+                onOpenAO3 = { url -> openExternalWeb(url) }
             )
         }
     }

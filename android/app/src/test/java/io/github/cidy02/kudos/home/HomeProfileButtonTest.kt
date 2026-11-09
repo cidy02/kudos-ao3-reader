@@ -45,4 +45,20 @@ class HomeProfileButtonTest {
 
         compose.onNodeWithText("12", useUnmergedTree = true).assertDoesNotExist()
     }
+
+    @Test
+    fun boundChromeFeedsTheToolbarBadgeAndOpensAccount() {
+        var opened = false
+        val chrome = HomeShellChrome()
+        chrome.bindAccount("Avery", null, 12) { opened = true }
+        compose.setContent {
+            KudosTheme(KudosThemeMode.Light) {
+                HomeToolbarActions(chrome)
+            }
+        }
+
+        compose.onNodeWithText("12", useUnmergedTree = true).assertExists()
+        compose.onNodeWithContentDescription("Account").performClick()
+        assertTrue(opened)
+    }
 }

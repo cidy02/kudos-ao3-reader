@@ -23,7 +23,8 @@ class AO3InboxRepository(
     private val parser: AO3InboxParser = AO3InboxParser(),
     private val formParser: AO3WriteFormParser = AO3WriteFormParser(),
     private val pageCache: AO3PageCache = AO3PageCache.shared,
-    sessionScope: CoroutineScope? = null
+    sessionScope: CoroutineScope? = null,
+    private val beforeInboxParse: (() -> Unit)? = null
 ) {
     val sessionChanges: kotlinx.coroutines.flow.StateFlow<Int> = client.sessionChanges ?: kotlinx.coroutines.flow.MutableStateFlow(0)
     private val lastUnreadByScope = kotlinx.coroutines.flow.MutableStateFlow<Pair<AO3PageCache.Scope, Int>?>(null)
@@ -81,12 +82,25 @@ class AO3InboxRepository(
         val result = pageCache.read(url, AO3PageCache.Kind.Inbox, client, bypassCache,
             fetch = { client.getAuthenticated(url) },
             parse = { parsePage(it.body, page, it.url, it.statusCode) })
-        if (viewerScope() == scope && result is AO3Result.Success) {
-            // AO3PageCache has run its post-parse scope fence before this session cache is written.
-            lastUnreadByScope.value = result.value.unreadCount?.let { scope to it }
-        }
+        // AO3PageCache has run its post-parse scope fence before this session cache is written.
+        inboxUnreadAfterFence(
+            scope,
+            viewerScope(),
+            (result as? AO3Result.Success)?.value?.unreadCount
+        )?.let { lastUnreadByScope.value = it }
         return result
     }
+
+    /** The session cache, including a value [cachedUnreadCount] would hide behind a cached page. */
+    internal fun storedInboxUnread(): Pair<AO3PageCache.Scope, Int>? = lastUnreadByScope.value
+
+    /** Publish unread only for the scope that started the read. A switched account gets nothing. */
+    internal fun inboxUnreadAfterFence(
+        captured: AO3PageCache.Scope,
+        current: AO3PageCache.Scope,
+        unread: Int?
+    ): Pair<AO3PageCache.Scope, Int>? =
+        if (current == captured) unread?.let { captured to it } else null
 
     /**
      * Submits one AO3 mass-edit action. Fail-closed: missing/partial form
@@ -156,6 +170,7 @@ class AO3InboxRepository(
     ): AO3Result<AO3InboxPage> {
         return try {
             val parsed = withContext(Dispatchers.Default) {
+                beforeInboxParse?.invoke()
                 parser.parseInboxPage(html, page, finalUrl)
             }
             AO3Result.Success(parsed)

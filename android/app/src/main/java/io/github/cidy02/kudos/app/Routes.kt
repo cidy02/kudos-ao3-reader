@@ -12,11 +12,12 @@ import androidx.compose.material.icons.outlined.Home
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.Saver
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
+import io.github.cidy02.kudos.account.AccountListType
 import io.github.cidy02.kudos.network.ao3.account.AO3ChallengeKind
 import java.net.URLEncoder
 import kotlinx.serialization.encodeToString
@@ -117,17 +118,36 @@ class AccountSheetState(
     }
 
     companion object {
-        val Saver = listSaver<AccountSheetState, Any>(
-            save = { listOf(it.isPresentingAccount, it.pendingAccountRoute?.name.orEmpty(), it.requestEpoch) },
-            restore = {
+        /** One string so process death can put the sheet back. A mixed list is not a Bundle value. */
+        val Saver = Saver<AccountSheetState, String>(
+            save = { state ->
+                val presenting = if (state.isPresentingAccount) "1" else "0"
+                val pending = state.pendingAccountRoute?.name.orEmpty()
+                "$presenting|$pending|${state.requestEpoch}"
+            },
+            restore = { raw ->
+                val parts = raw.split('|', limit = 3)
+                if (parts.size < 3) return@Saver null
                 AccountSheetState(
-                    initialIsPresenting = it[0] as Boolean,
-                    initialPendingRoute = (it[1] as String).takeIf(String::isNotEmpty)?.let(AccountSheetRoute::valueOf),
-                    initialRequestEpoch = it[2] as Int
+                    initialIsPresenting = parts[0] == "1",
+                    initialPendingRoute = parts[1].takeIf { it.isNotEmpty() }?.let { name ->
+                        AccountSheetRoute.entries.firstOrNull { it.name == name }
+                    },
+                    initialRequestEpoch = parts[2].toIntOrNull() ?: return@Saver null
                 )
             }
         )
     }
+}
+
+/**
+ * What a restored back stack or a legacy launch should do.
+ * [AccountSheet.popCount] is every consecutive account destination, popped together.
+ */
+sealed interface RestoredNavigation {
+    data class AccountSheet(val route: AccountSheetRoute, val popCount: Int, val tabRoute: String) : RestoredNavigation
+    data class TabPush(val tabRoute: String, val pushRoute: String) : RestoredNavigation
+    data class Push(val route: String) : RestoredNavigation
 }
 
 /**
@@ -495,18 +515,82 @@ object Routes {
         }
     }
 
+    /**
+     * Only the restored Account hub is stolen into the sheet. Inbox and Log In stay
+     * where Writing pushed them.
+     */
     fun shouldInterceptAccountRoute(route: String?, isInitialRestore: Boolean): Boolean =
-        isInitialRestore && accountSheetRoute(route) != null
+        isInitialRestore && route?.substringBefore("?")?.substringBefore("/") == Account
 
-    /** Pops one restored Account run without letting each popped route reopen the sheet. */
-    fun popRestoredAccountRun(
-        currentRoute: () -> String?,
-        popBackStack: () -> Boolean
-    ): AccountSheetRoute? {
-        val deepest = accountSheetRoute(currentRoute()) ?: return null
-        while (accountSheetRoute(currentRoute()) != null && popBackStack()) Unit
-        return deepest
+    /**
+     * Top of a restored Home → Account → Inbox|Settings run, or null when the run
+     * does not include the Account hub (Writing → Inbox, Writing → Log In).
+     */
+    fun restoredAccountSheet(stackFromRoot: List<String?>): AccountSheetRoute? {
+        val run = ArrayList<AccountSheetRoute>()
+        for (route in stackFromRoot.asReversed()) {
+            val sheet = accountSheetRoute(route) ?: break
+            run.add(sheet)
+        }
+        if (run.none { shouldInterceptAccountRoute(it.route, isInitialRestore = true) }) return null
+        return run.firstOrNull()
     }
+
+    /** How many consecutive account destinations to pop so one pop cannot reopen the sheet. */
+    fun restoredAccountPopCount(stackFromRoot: List<String?>): Int {
+        if (restoredAccountSheet(stackFromRoot) == null) return 0
+        var count = 0
+        for (route in stackFromRoot.asReversed()) {
+            if (accountSheetRoute(route) == null) break
+            count++
+        }
+        return count
+    }
+
+    /** Process-death / upgrade back stack. Does not move Writing's Inbox or Log In. */
+    fun restoredNavigation(stackFromRoot: List<String?>, concreteTop: String?): RestoredNavigation? {
+        val sheet = restoredAccountSheet(stackFromRoot)
+        if (sheet != null) {
+            return RestoredNavigation.AccountSheet(sheet, restoredAccountPopCount(stackFromRoot), Home)
+        }
+        return when (val legacy = resolveFormerAccountRoute(concreteTop)) {
+            is LegacyAccountDestination.Writing ->
+                concreteTop?.let { RestoredNavigation.TabPush(Writing, it) }
+            is LegacyAccountDestination.Library ->
+                concreteTop?.let { RestoredNavigation.TabPush(Library, it) }
+            is LegacyAccountDestination.Account, null -> null
+        }
+    }
+
+    /** Debug `nav:` launch and other explicit legacy routes, including Inbox → the sheet. */
+    fun legacyLaunchNavigation(route: String): RestoredNavigation? {
+        val restored = restoredSelection(route)
+        return when (val legacy = resolveFormerAccountRoute(route)) {
+            is LegacyAccountDestination.Account ->
+                RestoredNavigation.AccountSheet(legacy.route, popCount = 0, tabRoute = restored.tabRoute)
+            is LegacyAccountDestination.Writing -> RestoredNavigation.TabPush(Writing, route)
+            is LegacyAccountDestination.Library -> RestoredNavigation.TabPush(Library, route)
+            null -> if (route != restored.tabRoute) RestoredNavigation.Push(route) else null
+        }
+    }
+
+    /** Routes the Account sheet may host. Everything else is a tab jump on the main graph. */
+    fun belongsOnAccountSheet(route: String): Boolean = accountSheetRoute(route) != null
+
+    /** Marked for Later, Bookmarks, History and Subscriptions live on Library. Works live on Writing. */
+    fun shellRootForAccountList(type: AccountListType): String = when (type) {
+        AccountListType.MarkedForLater,
+        AccountListType.Bookmarks,
+        AccountListType.History,
+        AccountListType.Subscriptions -> Library
+        AccountListType.MyWorks,
+        is AccountListType.Collection -> Writing
+    }
+
+    fun libraryFilterRoot(): String = Library
+
+    /** Login "Open AO3" and other in-sheet web links leave for Browse on the main graph. */
+    fun externalWebJump(url: String): Pair<String, String> = Browse to webFallback(url)
 
     fun resolveFormerAccountRoute(route: String?): LegacyAccountDestination? {
         if (route == null) return null

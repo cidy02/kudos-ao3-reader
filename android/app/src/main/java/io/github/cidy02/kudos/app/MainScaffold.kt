@@ -58,6 +58,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.SideEffect
+import kotlinx.coroutines.flow.first
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -183,32 +184,34 @@ fun MainScaffold(
         AccountSheetState()
     }
     var handledStartRoute by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
-    var handledRestoredRoute by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    // Not saveable: process death must plan again from the restored back stack.
+    // The sheet itself is what [AccountSheetState.Saver] keeps.
+    var handledRestoredRoute by androidx.compose.runtime.remember { mutableStateOf(false) }
 
-    fun openInitialRoute(route: String, restoredBackStack: Boolean) {
-        val restored = Routes.restoredSelection(route)
-        when (val legacy = Routes.resolveFormerAccountRoute(route)) {
-            is LegacyAccountDestination.Account -> {
-                val target = if (restoredBackStack) {
-                    Routes.popRestoredAccountRun(
-                        currentRoute = { navController.currentDestination?.route },
-                        popBackStack = navController::popBackStack
-                    ) ?: legacy.route
-                } else {
-                    legacy.route
+    fun concreteRoute(entry: androidx.navigation.NavBackStackEntry): String? {
+        val pattern = entry.destination.route ?: return null
+        return when (pattern) {
+            Routes.AccountList -> Routes.routeArg(entry, "listType")?.let(Routes::accountList) ?: pattern
+            Routes.AuthorSeries -> Routes.routeArg(entry, "authorUsername")?.let(Routes::authorSeries) ?: pattern
+            else -> pattern
+        }
+    }
+
+    fun applyRestored(plan: RestoredNavigation) {
+        when (plan) {
+            is RestoredNavigation.AccountSheet -> {
+                var left = plan.popCount
+                while (left > 0 && navController.popBackStack()) left -= 1
+                if (navController.currentDestination?.route != plan.tabRoute) {
+                    navController.navigateShellRoot(plan.tabRoute)
                 }
-                navController.navigateShellRoot(restored.tabRoute)
-                accountSheetState.showAccount(target)
+                accountSheetState.showAccount(plan.route)
             }
-            is LegacyAccountDestination.Writing -> {
-                navController.navigateShellRoot(Routes.Writing)
-                navController.navigate(route)
+            is RestoredNavigation.TabPush -> {
+                navController.navigateShellRoot(plan.tabRoute)
+                navController.navigate(plan.pushRoute)
             }
-            is LegacyAccountDestination.Library -> {
-                navController.navigateShellRoot(Routes.Library)
-                navController.navigate(route)
-            }
-            null -> if (!restoredBackStack && route != restored.tabRoute) navController.navigate(route)
+            is RestoredNavigation.Push -> navController.navigate(plan.route)
         }
     }
 
@@ -216,21 +219,20 @@ fun MainScaffold(
     LaunchedEffect(startRoute) {
         if (startRoute != null && handledStartRoute != startRoute) {
             handledStartRoute = startRoute
-            openInitialRoute(startRoute, restoredBackStack = false)
+            Routes.legacyLaunchNavigation(startRoute)?.let(::applyRestored)
         }
     }
-    LaunchedEffect(currentRoute, debugShotName, startRoute) {
-        if (!handledRestoredRoute && currentRoute != null && debugShotName == null && startRoute == null) {
-            handledRestoredRoute = true
-            val concreteRoute = when (currentRoute) {
-                Routes.AccountList -> Routes.routeArg(backStackEntry!!, "listType")?.let(Routes::accountList)
-                Routes.AuthorSeries -> Routes.routeArg(backStackEntry!!, "authorUsername")?.let(Routes::authorSeries)
-                else -> currentRoute
-            }
-            if (Routes.shouldInterceptAccountRoute(concreteRoute, isInitialRestore = true) ||
-                Routes.resolveFormerAccountRoute(concreteRoute) != null
-            ) concreteRoute?.let { openInitialRoute(it, restoredBackStack = true) }
-        }
+    // Not keyed on the current route: each pop would cancel this effect before the
+    // rest of the account run left the main stack.
+    LaunchedEffect(debugShotName, startRoute) {
+        if (debugShotName != null || startRoute != null) return@LaunchedEffect
+        val entries = navController.currentBackStack.first { it.isNotEmpty() }
+        if (handledRestoredRoute) return@LaunchedEffect
+        handledRestoredRoute = true
+        val top = entries.last()
+        val concreteTop = concreteRoute(top)
+        val stack = entries.dropLast(1).map { it.destination.route } + concreteTop
+        Routes.restoredNavigation(stack, concreteTop)?.let(::applyRestored)
     }
     val onHome = currentRoute == Routes.Home
     val onLibrary = currentRoute == Routes.Library

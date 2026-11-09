@@ -95,7 +95,6 @@ import androidx.compose.material.icons.outlined.People
 import androidx.compose.material.icons.outlined.PersonAdd
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Verified
 import androidx.compose.material.icons.outlined.WifiOff
@@ -278,33 +277,18 @@ fun AccountScreen(
 
             item {
                 AccountScopeGroup("Reading") {
-                    AccountScopeRow(
-                        title = "Marked for Later",
-                        icon = Icons.Outlined.Schedule,
-                        count = state.counts[AccountListType.MarkedForLater.listKey]?.displayText,
-                        onClick = { onOpenList(AccountListType.MarkedForLater) }
-                    )
-                    HorizontalDivider(modifier = Modifier.padding(start = 50.dp))
-                    AccountScopeRow(
-                        title = "Bookmarks",
-                        icon = Icons.Outlined.BookmarkBorder,
-                        count = state.counts[AccountListType.Bookmarks.listKey]?.displayText,
-                        onClick = { onOpenList(AccountListType.Bookmarks) }
-                    )
-                    HorizontalDivider(modifier = Modifier.padding(start = 50.dp))
-                    AccountScopeRow(
-                        title = "Collections",
-                        icon = Icons.Outlined.FilterNone,
-                        count = state.counts[AO3AccountListCountsCache.COLLECTIONS]?.displayText,
-                        onClick = onOpenAO3Collections
-                    )
-                    HorizontalDivider(modifier = Modifier.padding(start = 50.dp))
-                    AccountScopeRow(
-                        title = "Subscriptions",
-                        icon = Icons.Outlined.NotificationsNone,
-                        count = state.counts[AccountListType.Subscriptions.listKey]?.displayText,
-                        onClick = { onOpenList(AccountListType.Subscriptions) }
-                    )
+                    accountOverviewReadingRows().forEachIndexed { index, row ->
+                        if (index > 0) HorizontalDivider(modifier = Modifier.padding(start = 50.dp))
+                        AccountScopeRow(
+                            title = row.title,
+                            icon = row.icon,
+                            count = row.countKey?.let { state.counts[it]?.displayText },
+                            onClick = {
+                                val type = row.listType
+                                if (type == null) onOpenAO3Collections() else onOpenList(type)
+                            }
+                        )
+                    }
                 }
             }
 
@@ -923,12 +907,44 @@ internal fun AccountHubShortcuts(
     }
 }
 
+internal data class AccountOverviewReadingRow(
+    val title: String,
+    val icon: ImageVector,
+    val countKey: String?,
+    val listType: AccountListType?
+)
+
+/** T-460 overview. Marked for Later stays a shortcut and a Library list, not a hub row. */
+internal fun accountOverviewReadingRows(): List<AccountOverviewReadingRow> = listOf(
+    AccountOverviewReadingRow(
+        "Bookmarks",
+        Icons.Outlined.BookmarkBorder,
+        AccountListType.Bookmarks.listKey,
+        AccountListType.Bookmarks
+    ),
+    AccountOverviewReadingRow(
+        "Collections",
+        Icons.Outlined.FilterNone,
+        AO3AccountListCountsCache.COLLECTIONS,
+        null
+    ),
+    AccountOverviewReadingRow(
+        "Subscriptions",
+        Icons.Outlined.NotificationsNone,
+        AccountListType.Subscriptions.listKey,
+        AccountListType.Subscriptions
+    )
+)
+
+internal const val SIGNED_OUT_ACCOUNT_LINE =
+    "When you sign in, this page shows your AO3 account and activity."
+
 @Composable
 private fun SignedOutPreviewSection() {
     Column(modifier = Modifier.padding(horizontal = 12.dp)) {
         SectionRuleHeader(title = "What is waiting")
         Text(
-            text = "When you sign in, this tab shows your AO3 account and activity.",
+            text = SIGNED_OUT_ACCOUNT_LINE,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(bottom = 14.dp, start = 4.dp)
@@ -948,13 +964,10 @@ private fun SignedOutPreviewSection() {
         }
 
         AccountScopeGroup("Reading") {
-            AccountScopeRow(title = "Marked for Later", icon = Icons.Outlined.Schedule, onClick = {})
-            HorizontalDivider(modifier = Modifier.padding(start = 50.dp))
-            AccountScopeRow(title = "Bookmarks", icon = Icons.Outlined.BookmarkBorder, onClick = {})
-            HorizontalDivider(modifier = Modifier.padding(start = 50.dp))
-            AccountScopeRow(title = "Collections", icon = Icons.Outlined.FilterNone, onClick = {})
-            HorizontalDivider(modifier = Modifier.padding(start = 50.dp))
-            AccountScopeRow(title = "Subscriptions", icon = Icons.Outlined.NotificationsNone, onClick = {})
+            accountOverviewReadingRows().forEachIndexed { index, row ->
+                if (index > 0) HorizontalDivider(modifier = Modifier.padding(start = 50.dp))
+                AccountScopeRow(title = row.title, icon = row.icon, onClick = {})
+            }
         }
         Spacer(Modifier.height(16.dp))
         AccountScopeGroup("Writing") {
