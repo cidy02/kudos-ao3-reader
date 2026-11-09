@@ -1,6 +1,7 @@
 package io.github.cidy02.kudos.library
 
 import io.github.cidy02.kudos.app.DebugShotEffect
+import io.github.cidy02.kudos.ui.components.shouldConfirmDelete
 import io.github.cidy02.kudos.ui.components.workDeletionMessage
 
 import io.github.cidy02.kudos.works.finishedActionLabel
@@ -356,7 +357,10 @@ fun LibraryScreen(
     DestructiveConfirmation(
         show = confirmBulkRemove,
         title = if (state.selectedCount == 1) "Delete 1 work?" else "Delete ${state.selectedCount} works?",
-        text = workDeletionMessage(state.collectionMembers.filter { it.item.work.id in state.selectedWorkIds }.map { it.item.work }),
+        text = workDeletionMessage(
+            state.collectionMembers.filter { it.item.work.id in state.selectedWorkIds }.map { it.item.work },
+            fileStore = workRepository.fileStore
+        ),
         confirmText = "Delete",
         confirmBeforeDelete = true,
         onConfirm = {
@@ -408,12 +412,13 @@ fun LibraryScreen(
         onDismissRequest = { confirmDeleteCollection = null }
     )
 
+    val removeOneWorks = listOfNotNull(state.collectionMembers.firstOrNull { it.item.work.id == confirmRemoveOne }?.item?.work)
     DestructiveConfirmation(
         show = confirmRemoveOne != null,
         title = "Delete this work?",
-        text = workDeletionMessage(listOfNotNull(state.collectionMembers.firstOrNull { it.item.work.id == confirmRemoveOne }?.item?.work)),
+        text = workDeletionMessage(removeOneWorks, fileStore = workRepository.fileStore),
         confirmText = "Delete",
-        confirmBeforeDelete = state.confirmBeforeDelete,
+        confirmBeforeDelete = shouldConfirmDelete(removeOneWorks, state.confirmBeforeDelete, workRepository.fileStore),
         onConfirm = {
             val workId = confirmRemoveOne ?: return@DestructiveConfirmation
             confirmRemoveOne = null

@@ -1,6 +1,7 @@
 package io.github.cidy02.kudos.works
 
 import io.github.cidy02.kudos.app.DebugShotEffect
+import io.github.cidy02.kudos.ui.components.shouldConfirmDelete
 import io.github.cidy02.kudos.ui.components.workDeletionMessage
 
 import androidx.compose.ui.semantics.Role
@@ -662,12 +663,17 @@ fun WorkDetailScreen(
         download()
     }
 
+    val localDeleteWorks = listOfNotNull(state.local)
     DestructiveConfirmation(
         show = confirmRemove,
         title = "Remove from Library",
-        text = workDeletionMessage(listOfNotNull(state.local)),
+        text = workDeletionMessage(localDeleteWorks, fileStore = workRepository.fileStore),
         confirmText = "Remove",
-        confirmBeforeDelete = settings.app.confirmBeforeDelete,
+        confirmBeforeDelete = shouldConfirmDelete(
+            localDeleteWorks,
+            settings.app.confirmBeforeDelete,
+            workRepository.fileStore
+        ),
         onConfirm = {
             val work = state.local ?: return@DestructiveConfirmation
             confirmRemove = false

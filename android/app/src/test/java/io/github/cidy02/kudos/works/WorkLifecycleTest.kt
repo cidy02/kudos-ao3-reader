@@ -350,8 +350,8 @@ class WorkLifecycleRepositoryTest {
         val available = sampleSavedWork()
         val unavailable = available.copy(ao3Unavailable = true)
         assertTrue(io.github.cidy02.kudos.ui.components.workDeletionMessage(listOf(available)).contains("Recently Deleted"))
-        assertTrue(io.github.cidy02.kudos.ui.components.workDeletionMessage(listOf(unavailable)).contains("no longer available"))
-        assertTrue(io.github.cidy02.kudos.ui.components.workDeletionMessage(listOf(available, unavailable)).contains("can't download"))
+        assertTrue(io.github.cidy02.kudos.ui.components.workDeletionMessage(listOf(unavailable)).contains("no longer on AO3"))
+        assertTrue(io.github.cidy02.kudos.ui.components.workDeletionMessage(listOf(available, unavailable)).contains("1 of these 2 can't be downloaded again"))
     }
 
     /** Swift ReadingLogTests.moveBackToInProgressStoresTheOverrideAndRebuckets. */

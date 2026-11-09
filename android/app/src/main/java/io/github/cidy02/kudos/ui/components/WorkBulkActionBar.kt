@@ -201,7 +201,7 @@ fun WorkBulkActionBar(
     DestructiveConfirmation(
         show = confirmDelete,
         title = if (selectedWorks.size == 1) "Remove 1 work?" else "Remove ${selectedWorks.size} works?",
-        text = workDeletionMessage(selectedWorks),
+        text = workDeletionMessage(selectedWorks, fileStore = workRepository.fileStore),
         confirmText = "Remove",
         confirmBeforeDelete = true,
         onConfirm = {

@@ -1,5 +1,8 @@
 package io.github.cidy02.kudos.library
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -20,7 +23,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
@@ -29,19 +31,18 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -51,11 +52,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
@@ -70,9 +75,13 @@ import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.core.model.WorkCollection
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.home.HomeFacts
+import io.github.cidy02.kudos.ui.components.DestructiveConfirmation
 import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.ErrorStateCard
 import io.github.cidy02.kudos.ui.components.LoadingStateCard
+import io.github.cidy02.kudos.ui.components.OriginalFileExport
+import io.github.cidy02.kudos.ui.components.WorkRedownloadability
+import io.github.cidy02.kudos.ui.components.deleteConfirmationMessage
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SectionRuleHeader
 import io.github.cidy02.kudos.ui.subject.SubjectAmber
@@ -87,11 +96,13 @@ import io.github.cidy02.kudos.ui.subject.WorkSelectionBubble
 import io.github.cidy02.kudos.ui.subject.subjectPanel
 import io.github.cidy02.kudos.ui.subject.subjectScreenWash
 import io.github.cidy02.kudos.works.WorkRepository
+import java.nio.file.Files
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -112,7 +123,9 @@ data class RecentlyDeletedEntry(
     val daysRemaining: Int,
     val isHeldCopy: Boolean,
     val deleteTitle: String,
-    val deleteLabel: String
+    val deleteLabel: String,
+    val redownloadability: WorkRedownloadability = WorkRedownloadability.CanRedownload,
+    val originalFile: OriginalFileExport? = null
 )
 
 data class RecentlyDeletedUiState(
@@ -126,7 +139,7 @@ data class RecentlyDeletedUiState(
     val error: String? = null
 ) {
     val allEntries: List<RecentlyDeletedEntry>
-        get() = (deletedEntries + heldEntries).sortedBy { it.daysRemaining }
+        get() = sortedSoonestFirst(deletedEntries + heldEntries)
 }
 
 class RecentlyDeletedViewModel(
@@ -161,7 +174,9 @@ class RecentlyDeletedViewModel(
                 daysRemaining = daysRemaining(work.permanentDeletionScheduledAt, now),
                 isHeldCopy = false,
                 deleteTitle = "Delete “${work.title}” permanently?",
-                deleteLabel = "Delete Permanently"
+                deleteLabel = "Delete Permanently",
+                redownloadability = WorkRedownloadability.of(work, workRepository.fileStore),
+                originalFile = WorkRedownloadability.originalFile(work.id, workRepository.fileStore)
             )
         }
 
@@ -193,23 +208,28 @@ class RecentlyDeletedViewModel(
             )
         }
 
-        val heldEntries = heldCopies.map { work ->
-            val expires = work.freedAt?.plus(WorkRepository.FREED_COPY_WINDOW)
-            RecentlyDeletedEntry(
-                id = work.id,
-                kicker = "Finished work",
-                noun = "work",
-                title = work.title,
-                detail = workDetail(work),
-                daysRemaining = daysRemaining(expires, now),
-                isHeldCopy = true,
-                deleteTitle = "Remove the copy of “${work.title}”?",
-                deleteLabel = "Remove Copy"
-            )
-        }.sortedBy { it.daysRemaining }
+        val heldEntries = sortedSoonestFirst(
+            heldCopies.map { work ->
+                val expires = work.freedAt?.plus(WorkRepository.FREED_COPY_WINDOW)
+                RecentlyDeletedEntry(
+                    id = work.id,
+                    kicker = "Finished work",
+                    noun = "work",
+                    title = work.title,
+                    detail = workDetail(work),
+                    daysRemaining = daysRemaining(expires, now),
+                    isHeldCopy = true,
+                    deleteTitle = "Remove the copy of “${work.title}”?",
+                    deleteLabel = "Remove Copy",
+                    redownloadability = WorkRedownloadability.of(work, workRepository.fileStore),
+                    originalFile = WorkRedownloadability.originalFile(work.id, workRepository.fileStore)
+                )
+            }
+        )
 
-        val allDeleted = (deletedWorkEntries + deletedCollectionEntries + deletedQueueEntries)
-            .sortedBy { it.daysRemaining }
+        val allDeleted = sortedSoonestFirst(
+            deletedWorkEntries + deletedCollectionEntries + deletedQueueEntries
+        )
 
         RecentlyDeletedUiState(
             loading = false,
@@ -319,21 +339,6 @@ class RecentlyDeletedViewModel(
         }
     }
 
-    fun deleteAllPermanently() {
-        viewModelScope.launch {
-            workRepository.hardDeleteAllPending()
-            val queues = queueRepository?.listRecentlyDeletedQueues().orEmpty()
-            for (queue in queues) {
-                queueRepository?.hardDeleteQueue(queue.id, onlyIfStillDeleted = true)
-            }
-            val currentHeld = state.value.heldEntries
-            for (held in currentHeld) {
-                workRepository.freeHeldCopy(held.id)
-            }
-            queueTick.value += 1
-        }
-    }
-
     suspend fun getWorkAnnotationCounts(workId: String): Pair<Int, Int> =
         workRepository.getAnnotationCounts(workId)
 
@@ -360,6 +365,7 @@ fun RecentlyDeletedScreen(
     val state by viewModel.state.collectAsState()
     val tokens = LocalKudosTokens.current
     val palette = tokens.scopePalette
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
     var isSelecting by remember { mutableStateOf(false) }
@@ -368,9 +374,26 @@ fun RecentlyDeletedScreen(
 
     var pendingSingleDelete by remember { mutableStateOf<RecentlyDeletedEntry?>(null) }
     var pendingSingleMessage by remember { mutableStateOf<String?>(null) }
-    var confirmingDeleteAll by remember { mutableStateOf(false) }
     var pendingBulkDelete by remember { mutableStateOf<List<RecentlyDeletedEntry>?>(null) }
     var restoreFailureMessage by remember { mutableStateOf<String?>(null) }
+    var pendingOriginalExport by remember { mutableStateOf<OriginalFileExport?>(null) }
+
+    val originalExportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("*/*")
+    ) { uri: Uri? ->
+        val target = pendingOriginalExport
+        pendingOriginalExport = null
+        if (uri == null || target == null) return@rememberLauncherForActivityResult
+        scope.launch(Dispatchers.IO) {
+            runCatching {
+                val bytes = Files.readAllBytes(target.path)
+                context.contentResolver.openOutputStream(uri)?.use { out ->
+                    out.write(bytes)
+                    out.flush()
+                }
+            }
+        }
+    }
 
     val allEntries = state.allEntries
     val allSelected = allEntries.isNotEmpty() && allEntries.all { it.id in selection }
@@ -427,27 +450,43 @@ fun RecentlyDeletedScreen(
         scope.launch {
             val message = when {
                 entry.isHeldCopy -> {
-                    "Kudos removes this work's copy from your device now. The work stays in your " +
-                        "reading history, and you can download it again from AO3."
+                    if (!entry.redownloadability.canRedownload) {
+                        deleteConfirmationMessage(
+                            title = entry.title,
+                            reason = entry.redownloadability,
+                            permanently = true
+                        )
+                    } else {
+                        "Kudos removes this work's copy from your device now. The work stays in your " +
+                            "reading history, and you can download it again from AO3."
+                    }
                 }
                 entry.noun == "work" -> {
-                    val work = state.rawWorks[entry.id]
-                    val (highlights, bookmarks) = viewModel.getWorkAnnotationCounts(entry.id)
-                    val place = if (work?.isFinished == true) null else {
-                        val title = HomeFacts.locatorTitle(work?.readiumLocator)
-                        when {
-                            !title.isNullOrBlank() -> title
-                            work != null && work.lastScrollFraction > 0.0 ->
-                                "${(work.lastScrollFraction * 100.0).toInt()}%"
-                            else -> null
+                    if (!entry.redownloadability.canRedownload) {
+                        deleteConfirmationMessage(
+                            title = entry.title,
+                            reason = entry.redownloadability,
+                            permanently = true
+                        )
+                    } else {
+                        val work = state.rawWorks[entry.id]
+                        val (highlights, bookmarks) = viewModel.getWorkAnnotationCounts(entry.id)
+                        val place = if (work?.isFinished == true) null else {
+                            val title = HomeFacts.locatorTitle(work?.readiumLocator)
+                            when {
+                                !title.isNullOrBlank() -> title
+                                work != null && work.lastScrollFraction > 0.0 ->
+                                    "${(work.lastScrollFraction * 100.0).toInt()}%"
+                                else -> null
+                            }
                         }
+                        workDeletionMessage(
+                            hasDownload = work?.hasEpub ?: true,
+                            place = place,
+                            highlights = highlights,
+                            bookmarks = bookmarks
+                        )
                     }
-                    workDeletionMessage(
-                        hasDownload = work?.hasEpub ?: true,
-                        place = place,
-                        highlights = highlights,
-                        bookmarks = bookmarks
-                    )
                 }
                 entry.noun == "collection" -> {
                     val count = state.rawCollections[entry.id]?.workIds?.size ?: 0
@@ -524,16 +563,29 @@ fun RecentlyDeletedScreen(
             }
 
             item {
-                Text(
-                    text = "Deleting an item here removes only the copy in Kudos, including its download, your progress, " +
-                        "and your notes. The work stays on AO3.",
-                    fontSize = 12.5.sp,
-                    color = tokens.secondaryInk,
+                val irreplaceable = irreplaceableCount(allEntries)
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .subjectPanel()
-                        .padding(horizontal = 14.dp, vertical = 12.dp)
-                )
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = "Deleting an item here removes only the copy in Kudos, including its download, your progress, " +
+                            "and your notes. The work stays on AO3.",
+                        fontSize = 12.5.sp,
+                        color = tokens.secondaryInk
+                    )
+                    if (irreplaceable > 0) {
+                        Text(
+                            text = reassuranceIrreplaceableLine(irreplaceable),
+                            fontSize = 12.5.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = tokens.secondaryInk
+                        )
+                    }
+                }
             }
 
             if (state.deletedEntries.isNotEmpty()) {
@@ -617,35 +669,6 @@ fun RecentlyDeletedScreen(
                     )
                 }
             }
-
-            if (!isSelecting) {
-                item {
-                    Spacer(Modifier.padding(top = 12.dp))
-                    OutlinedButton(
-                        onClick = { confirmingDeleteAll = true },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 4.dp),
-                        shape = CircleShape,
-                        border = ButtonDefaults.outlinedButtonBorder.copy(
-                            brush = androidx.compose.ui.graphics.SolidColor(tokens.destructive.copy(alpha = 0.42f))
-                        ),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = tokens.destructive)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Delete,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(Modifier.padding(end = 8.dp))
-                        Text(
-                            text = "Delete All Permanently",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                }
-            }
         }
 
         if (isSelecting) {
@@ -716,100 +739,47 @@ fun RecentlyDeletedScreen(
         }
     }
 
-    pendingSingleDelete?.let { entry ->
-        AlertDialog(
-            onDismissRequest = {
+    DestructiveConfirmation(
+        show = pendingSingleDelete != null,
+        title = pendingSingleDelete?.deleteTitle.orEmpty(),
+        text = pendingSingleMessage.orEmpty(),
+        confirmText = pendingSingleDelete?.deleteLabel ?: "Delete Permanently",
+        confirmBeforeDelete = true,
+        palette = palette,
+        secondaryActionText = if (pendingSingleDelete?.originalFile != null) "Save the Original File…" else null,
+        onSecondaryAction = pendingSingleDelete?.originalFile?.let { original ->
+            {
                 pendingSingleDelete = null
                 pendingSingleMessage = null
-            },
-            title = { Text(entry.deleteTitle) },
-            text = { Text(pendingSingleMessage.orEmpty()) },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        viewModel.deletePermanently(entry)
-                        pendingSingleDelete = null
-                        pendingSingleMessage = null
-                    },
-                    colors = ButtonDefaults.textButtonColors(contentColor = tokens.destructive)
-                ) {
-                    Text(entry.deleteLabel)
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        pendingSingleDelete = null
-                        pendingSingleMessage = null
-                    }
-                ) {
-                    Text("Cancel")
-                }
+                pendingOriginalExport = original
+                originalExportLauncher.launch(original.suggestedName)
             }
-        )
-    }
+        },
+        onConfirm = {
+            pendingSingleDelete?.let { viewModel.deletePermanently(it) }
+            pendingSingleDelete = null
+            pendingSingleMessage = null
+        },
+        onDismissRequest = {
+            pendingSingleDelete = null
+            pendingSingleMessage = null
+        }
+    )
 
-    if (confirmingDeleteAll) {
-        AlertDialog(
-            onDismissRequest = { confirmingDeleteAll = false },
-            title = {
-                Text(if (allEntries.size == 1) "Delete 1 item permanently?" else "Delete all ${allEntries.size} items permanently?")
-            },
-            text = {
-                Text(
-                    "Kudos will permanently remove every item here and any download, progress, or notes " +
-                        "stored with it, and the copies of finished works. The works stay on AO3. " +
-                        "You can't undo this."
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        confirmingDeleteAll = false
-                        viewModel.deleteAllPermanently()
-                    },
-                    colors = ButtonDefaults.textButtonColors(contentColor = tokens.destructive)
-                ) {
-                    Text("Delete All Permanently")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmingDeleteAll = false }) {
-                    Text("Cancel")
-                }
-            }
-        )
-    }
-
-    pendingBulkDelete?.let { chosen ->
-        AlertDialog(
-            onDismissRequest = { pendingBulkDelete = null },
-            title = { Text(bulkDeleteTitle(chosen.size)) },
-            text = {
-                Text(
-                    "Kudos will permanently remove each item and any download, progress, or notes stored with it. " +
-                        "The works stay on AO3. You can't undo this."
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        viewModel.bulkDelete(chosen)
-                        pendingBulkDelete = null
-                        exitSelectMode()
-                    },
-                    colors = ButtonDefaults.textButtonColors(contentColor = tokens.destructive)
-                ) {
-                    Text("Delete Permanently")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { pendingBulkDelete = null }) {
-                    Text("Cancel")
-                }
-            }
-        )
-    }
+    DestructiveConfirmation(
+        show = pendingBulkDelete != null,
+        title = bulkDeleteTitle(pendingBulkDelete?.size ?: 0),
+        text = bulkPermanentMessage(pendingBulkDelete.orEmpty()),
+        confirmText = "Delete Permanently",
+        confirmBeforeDelete = true,
+        palette = palette,
+        onConfirm = {
+            pendingBulkDelete?.let { viewModel.bulkDelete(it) }
+            pendingBulkDelete = null
+            exitSelectMode()
+        },
+        onDismissRequest = { pendingBulkDelete = null }
+    )
 
     restoreFailureMessage?.let { msg ->
         AlertDialog(
@@ -853,12 +823,17 @@ private fun RecentlyDeletedRow(
                 )
                 .padding(horizontal = 14.dp, vertical = 12.dp)
                 .semantics {
-                    contentDescription = "${entry.title}, ${entry.kicker}, ${entry.detail}, ${entry.daysRemaining} days left"
+                    val base = "${entry.title}, ${entry.kicker}, ${entry.detail}, ${daysLeftLabel(entry.daysRemaining)}"
+                    val note = entry.redownloadability.rowTitle?.let { title ->
+                        val body = entry.redownloadability.rowBody.orEmpty()
+                        ", $title $body"
+                    }.orEmpty()
+                    contentDescription = base + note
                 },
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 SubjectKicker(
                     text = entry.kicker,
                     palette = palette,
@@ -882,24 +857,12 @@ private fun RecentlyDeletedRow(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-            }
-
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(1.dp)
-            ) {
-                Text(
-                    text = "${entry.daysRemaining}d",
-                    color = if (isUrgent(entry.daysRemaining)) SubjectAmber else tokens.primaryInk,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    style = TextStyle(fontFeatureSettings = "tnum")
-                )
-                Text(
-                    text = "LEFT",
-                    color = tokens.secondaryInk,
-                    fontSize = 9.sp
-                )
+                DaysLeftLine(days = entry.daysRemaining)
+                val warningTitle = entry.redownloadability.rowTitle
+                val warningBody = entry.redownloadability.rowBody
+                if (warningTitle != null && warningBody != null) {
+                    RedownloadWarningNote(title = warningTitle, body = warningBody)
+                }
             }
 
             if (isSelecting) {
@@ -952,6 +915,90 @@ private fun RecentlyDeletedRow(
     }
 }
 
+@Composable
+private fun DaysLeftLine(days: Int) {
+    val tokens = LocalKudosTokens.current
+    val urgent = isUrgent(days)
+    val tint = if (urgent) tokens.destructive else tokens.secondaryInk
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.Schedule,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(13.dp)
+        )
+        Text(
+            text = daysLeftLabel(days),
+            color = tint,
+            fontSize = 12.sp,
+            fontWeight = if (urgent) FontWeight.SemiBold else FontWeight.Medium,
+            style = TextStyle(fontFeatureSettings = "tnum")
+        )
+    }
+}
+
+@Composable
+private fun RedownloadWarningNote(title: String, body: String) {
+    val tokens = LocalKudosTokens.current
+    val noteShape = RoundedCornerShape(8.dp)
+    Row(
+        modifier = Modifier
+            .padding(top = 2.dp)
+            .fillMaxWidth()
+            .clip(noteShape)
+            .background(SubjectAmber.copy(alpha = 0.14f))
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.WarningAmber,
+            contentDescription = null,
+            tint = SubjectAmber,
+            modifier = Modifier
+                .padding(top = 1.dp)
+                .size(14.dp)
+        )
+        Text(
+            text = buildAnnotatedString {
+                withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) {
+                    append(title)
+                }
+                append(" ")
+                append(body)
+            },
+            color = tokens.primaryInk,
+            fontSize = 12.sp,
+            lineHeight = 16.sp
+        )
+    }
+}
+
+internal fun sortedSoonestFirst(entries: List<RecentlyDeletedEntry>): List<RecentlyDeletedEntry> =
+    entries.sortedBy { it.daysRemaining }
+
+internal fun irreplaceableCount(entries: List<RecentlyDeletedEntry>): Int =
+    entries.count { entry ->
+        (entry.noun == "work" || entry.isHeldCopy) && !entry.redownloadability.canRedownload
+    }
+
+internal fun reassuranceIrreplaceableLine(irreplaceableCount: Int): String =
+    if (irreplaceableCount == 1) {
+        "1 of these can't be downloaded again once it's gone."
+    } else {
+        "$irreplaceableCount of these can't be downloaded again once they're gone."
+    }
+
+internal fun bulkPermanentMessage(entries: List<RecentlyDeletedEntry>): String =
+    deleteConfirmationMessage(
+        itemCount = entries.size,
+        irreplaceableCount = irreplaceableCount(entries),
+        permanently = true
+    )
+
 private fun daysRemaining(scheduled: Instant?, now: Instant = Instant.now()): Int =
     if (scheduled == null) 0 else daysRemainingUntil(scheduled, now).toInt()
 
@@ -963,7 +1010,10 @@ internal fun daysRemainingUntil(scheduled: Instant, now: Instant = Instant.now()
     return (millis + dayMillis - 1L) / dayMillis
 }
 
-private fun isUrgent(daysRemaining: Int): Boolean = daysRemaining < 7
+internal fun isUrgent(daysRemaining: Int): Boolean = daysRemaining <= 7
+
+internal fun daysLeftLabel(days: Int): String =
+    if (days == 1) "1 day left" else "$days days left"
 
 // iOS SavedWork.readingState (Models.swift:580): finished wins, then no file means freed.
 private fun stateWord(work: SavedWork): String = when {

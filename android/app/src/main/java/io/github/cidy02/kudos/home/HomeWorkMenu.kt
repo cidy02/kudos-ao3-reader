@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.home
 
+import io.github.cidy02.kudos.ui.components.shouldConfirmDelete
 import io.github.cidy02.kudos.ui.components.workDeletionMessage
 
 import androidx.compose.foundation.combinedClickable
@@ -238,9 +239,10 @@ fun HomeWorkDialogs(
         } else {
             "Delete ${controller.deleteTargets.size} works?"
         },
-        text = workDeletionMessage(controller.deleteTargets),
+        text = workDeletionMessage(controller.deleteTargets, fileStore = workRepository.fileStore),
         confirmText = "Delete",
-        confirmBeforeDelete = controller.deletingSelection || confirmBeforeDelete,
+        confirmBeforeDelete = controller.deletingSelection ||
+            shouldConfirmDelete(controller.deleteTargets, confirmBeforeDelete, workRepository.fileStore),
         onConfirm = {
             val targets = controller.deleteTargets
             controller.deleteTargets = emptyList()

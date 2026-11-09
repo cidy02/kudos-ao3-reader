@@ -47,7 +47,7 @@ import kotlinx.coroutines.yield
  */
 class WorkRepository(
     private val database: KudosDatabase,
-    private val fileStore: WorkFileStore,
+    internal val fileStore: WorkFileStore,
     private val tagsRepository: WorkTagsRepository? = null,
     private val clock: () -> Instant = { Instant.now() },
     private val uuidFactory: () -> String = { UUID.randomUUID().toString() },

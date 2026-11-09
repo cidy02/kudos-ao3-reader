@@ -12,6 +12,7 @@ import androidx.compose.runtime.setValue
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.core.model.WorkDownloadAction
 import io.github.cidy02.kudos.ui.components.setWorksDownloaded
+import io.github.cidy02.kudos.ui.components.shouldConfirmDelete
 import io.github.cidy02.kudos.ui.components.workDeletionMessage
 import io.github.cidy02.kudos.works.DownloadQueue
 import io.github.cidy02.kudos.works.RebuildOriginalDialog
@@ -66,8 +67,11 @@ internal fun scopedWorkActions(
     }
     deleteWork?.let { work ->
         io.github.cidy02.kudos.ui.components.DestructiveConfirmation(
-            show = true, title = "Delete this work?", text = workDeletionMessage(listOf(work)),
-            confirmText = "Delete", confirmBeforeDelete = confirmBeforeDelete,
+            show = true,
+            title = "Delete this work?",
+            text = workDeletionMessage(listOf(work), fileStore = workRepository.fileStore),
+            confirmText = "Delete",
+            confirmBeforeDelete = shouldConfirmDelete(work, confirmBeforeDelete, workRepository.fileStore),
             onConfirm = { deleteWork = null; change { workRepository.softDelete(work.id) } },
             onDismissRequest = { deleteWork = null }
         )

@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.home
 
+import io.github.cidy02.kudos.ui.components.shouldConfirmDelete
 import io.github.cidy02.kudos.ui.components.workDeletionMessage
 
 import android.content.Context
@@ -538,12 +539,17 @@ fun HomeSectionListScreen(
         )
     }
 
+    val pendingDeleteWorks = listOfNotNull(pendingDelete?.let { displayById[it]?.item?.work })
     DestructiveConfirmation(
         show = pendingDelete != null,
         title = "Delete this work?",
-        text = workDeletionMessage(listOfNotNull(pendingDelete?.let { displayById[it]?.item?.work })),
+        text = workDeletionMessage(pendingDeleteWorks, fileStore = workRepository.fileStore),
         confirmText = "Delete",
-        confirmBeforeDelete = snapshot?.confirmBeforeDelete ?: true,
+        confirmBeforeDelete = shouldConfirmDelete(
+            pendingDeleteWorks,
+            snapshot?.confirmBeforeDelete ?: true,
+            workRepository.fileStore
+        ),
         onConfirm = {
             val id = pendingDelete
             pendingDelete = null
