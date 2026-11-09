@@ -69,11 +69,7 @@ object LibraryPrivacy {
      */
     fun isAdultRating(rating: String?): Boolean {
         if (rating == null) return true
-        val normalized = rating
-            .split { it.isWhitespace() }
-            .filter { it.isNotEmpty() }
-            .joinToString(" ")
-            .lowercase(java.util.Locale.ROOT)
+        val normalized = rating.trim().replace(Regex("\\s+"), " ").lowercase(java.util.Locale.ROOT)
         return normalized != "" &&
             normalized != "general audiences" &&
             normalized != "teen and up audiences"
