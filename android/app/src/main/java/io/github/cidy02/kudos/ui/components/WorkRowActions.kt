@@ -12,6 +12,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
+import io.github.cidy02.kudos.app.PrivacyRevealState
 import io.github.cidy02.kudos.app.PrivacyGate
 import io.github.cidy02.kudos.core.model.KudosSettings
 import io.github.cidy02.kudos.core.model.SavedWork
@@ -233,7 +234,12 @@ internal fun RemoteWorkActionFrame(
 
 /** Hide mode drops a known-adult remote rating. Selection still lists every work. */
 internal fun AO3WorkSummary.keptForPrivacy(environment: WorkRowEnvironment?, selecting: Boolean = false): Boolean {
-    if (selecting || environment == null || !environment.loaded) return true
+    if (selecting) return true
+    // Before settings load, fail closed with the default (Hide), as the old rule did.
+    if (environment == null || !environment.loaded) {
+        return LibraryPrivacy.keepsRemoteRow(
+            id.toString(), rating, null, LibraryPrivacy.UNREAD_SETTING, PrivacyRevealState())
+    }
     return LibraryPrivacy.keepsRemoteRow(
         id.toString(), rating, environment.index.findMatch(this), environment.privacy, environment.revealState)
 }
@@ -243,6 +249,7 @@ internal fun List<AO3WorkSummary>.withoutHiddenRemote(
     selecting: Boolean = false
 ): List<AO3WorkSummary> = filter { it.keptForPrivacy(environment, selecting) }
 
+@JvmName("withoutHiddenRemoteCanonical")
 internal fun List<CanonicalWork>.withoutHiddenRemote(
     environment: WorkRowEnvironment?,
     selecting: Boolean = false

@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.author
 
+import io.github.cidy02.kudos.app.PrivacyRevealState
 import io.github.cidy02.kudos.app.DebugShotEffect
 import io.github.cidy02.kudos.ui.subject.SubjectSkeletonList
 import io.github.cidy02.kudos.ui.components.rememberStoredChoice
@@ -881,10 +882,13 @@ fun AuthorProfileScreen(
                             h.recentBookmarks.filter { bookmark ->
                                 val work = bookmark.work ?: return@filter true
                                 val env = rowEnv
-                                if (env == null || !env.loaded) return@filter true
+                                // Before settings load, judge with the default (Hide): never fail open.
+                                val loaded = env != null && env.loaded
                                 LibraryPrivacy.remoteRowVisibility(
-                                    work.id.toString(), work.rating, env.index.findMatch(work),
-                                    env.privacy, env.revealState
+                                    work.id.toString(), work.rating,
+                                    if (loaded) env!!.index.findMatch(work) else null,
+                                    if (loaded) env!!.privacy else LibraryPrivacy.UNREAD_SETTING,
+                                    if (loaded) env!!.revealState else PrivacyRevealState()
                                 ) == LibraryPrivacyVisibility.Visible
                             }.forEach { b ->
                                 AO3DashboardCompactCard(

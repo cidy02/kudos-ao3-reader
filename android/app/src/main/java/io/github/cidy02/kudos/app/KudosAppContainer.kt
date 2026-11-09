@@ -3,6 +3,8 @@ package io.github.cidy02.kudos.app
 import android.content.Context
 import androidx.room.Room
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.launch
 import io.github.cidy02.kudos.BuildConfig
 import io.github.cidy02.kudos.account.AO3AccountListCountsCache
 import io.github.cidy02.kudos.account.AccountListRepository
@@ -102,7 +104,12 @@ class KudosAppContainer(
     }
 
     /** One shared instance app-wide — see PrivacyGate's doc comment for why. */
-    val privacyGate: PrivacyGate by lazy { PrivacyGate() }
+    val privacyGate: PrivacyGate by lazy {
+        PrivacyGate().also { gate ->
+            // iOS PrivacyGate.noteSignedInAccount: another account starts with nothing revealed.
+            appScope?.launch { authorRepository.sessionChanges.drop(1).collect { gate.clearReveals() } }
+        }
+    }
 
     val customFontRepository: CustomFontRepository by lazy {
         CustomFontRepository(

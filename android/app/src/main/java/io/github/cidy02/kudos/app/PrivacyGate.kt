@@ -64,6 +64,11 @@ class PrivacyGate {
      * Shows or re-hides every sensitive work for the session.
      * Re-hiding never requires auth; revealing-all does when the setting is on.
      */
+    /** Forgets every reveal (another AO3 account signed in). */
+    fun clearReveals() {
+        _state.value = PrivacyRevealState()
+    }
+
     fun toggleRevealAll(activity: FragmentActivity? = null) {
         if (_state.value.revealAll) {
             _state.update { PrivacyRevealState(revealAll = false, revealedIds = emptySet()) }
