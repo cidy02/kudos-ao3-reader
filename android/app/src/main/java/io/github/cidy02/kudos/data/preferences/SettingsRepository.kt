@@ -24,6 +24,7 @@ import io.github.cidy02.kudos.core.model.ReaderMode
 import io.github.cidy02.kudos.core.model.ReaderSettings
 import io.github.cidy02.kudos.core.model.ReaderThemeSetting
 import io.github.cidy02.kudos.core.model.SyncSettings
+import io.github.cidy02.kudos.core.model.WorkSymbolPlacement
 import io.github.cidy02.kudos.reader.settings.ReaderSpeechPreferences
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -350,6 +351,10 @@ class SettingsRepository(
         dataStore.edit { it[Keys.ShowsZeroStats] = shows }
     }
 
+    suspend fun updateWorkSymbolPlacement(placement: WorkSymbolPlacement) {
+        dataStore.edit { it[Keys.WorkSymbolPlacement] = placement.storageValue }
+    }
+
     suspend fun updateKeepsWorksYouRead(keep: Boolean) {
         dataStore.edit { it[Keys.KeepsWorksYouRead] = keep }
     }
@@ -602,6 +607,7 @@ class SettingsRepository(
             if (incomingAccent != null && !io.github.cidy02.kudos.core.model.isLegacyUnchosenAccentColorHex(incomingAccent)) {
                 prefs[Keys.AccentColorHex] = incomingAccent
             }
+            settings.app.restorableWorkSymbolPlacement?.let { prefs[Keys.WorkSymbolPlacement] = it }
             prefs[Keys.AutoPreserveSmallSeries] = settings.app.autoPreserveSmallSeriesOnSaveForLater
             prefs[Keys.AutoPreserveSeriesThreshold] = settings.app.autoPreserveSeriesWorkThreshold
         }
@@ -656,6 +662,8 @@ class SettingsRepository(
                 // Map a stored legacy #990000 to AO3 Red #821019 on read without rewriting storage.
                 accentColorHex = io.github.cidy02.kudos.core.model.readingAccentColorHex(rawAccent),
                 storedAccentColorHex = rawAccent,
+                workSymbolPlacement = WorkSymbolPlacement.fromStorage(preferences[Keys.WorkSymbolPlacement]),
+                storedWorkSymbolPlacement = preferences[Keys.WorkSymbolPlacement],
                 autoPreserveSmallSeriesOnSaveForLater = preferences[Keys.AutoPreserveSmallSeries]
                     ?: defaults.app.autoPreserveSmallSeriesOnSaveForLater,
                 autoPreserveSeriesWorkThreshold = preferences[Keys.AutoPreserveSeriesThreshold]
@@ -717,6 +725,7 @@ class SettingsRepository(
         val ReaderTheme = stringPreferencesKey("readerTheme")
         val MatchAppReaderTheme = booleanPreferencesKey("matchAppReaderTheme")
         val AccentColorHex = stringPreferencesKey("accentColorHex")
+        val WorkSymbolPlacement = stringPreferencesKey("workSymbolPlacement")
         val AutoPreserveSmallSeries = booleanPreferencesKey("autoPreserveSmallSeriesOnSaveForLater")
         val AutoPreserveSeriesThreshold = androidx.datastore.preferences.core.intPreferencesKey(
             "autoPreserveSeriesWorkThreshold"

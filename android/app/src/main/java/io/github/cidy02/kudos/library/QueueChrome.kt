@@ -60,7 +60,9 @@ import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.core.model.ReadingQueue
 import io.github.cidy02.kudos.core.model.ReadingQueueKind
 import io.github.cidy02.kudos.core.model.SavedWork
+import io.github.cidy02.kudos.core.model.WorkSymbolPlacement
 import io.github.cidy02.kudos.home.HomeFacts
+import io.github.cidy02.kudos.ui.components.LocalWorkSymbolPlacement
 import io.github.cidy02.kudos.ui.subject.HomeStatusArrangement
 import io.github.cidy02.kudos.ui.subject.HomeStatusTray
 import io.github.cidy02.kudos.ui.subject.RevealCapsule
@@ -205,6 +207,7 @@ fun QueueLedgerCard(
     onStep: (Int) -> Unit = {}
 ) {
     val tokens = LocalKudosTokens.current
+    val symbolPlacement = LocalWorkSymbolPlacement.current
     val fandoms = work.workFandoms.filter { it.isNotBlank() }
     val kicker = HomeFacts.primaryFandom(work.workFandoms)
     val fraction = work.readingProgressFraction() ?: if (work.isFinished) 1.0 else 0.0
@@ -252,6 +255,17 @@ fun QueueLedgerCard(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
+                    if (symbolPlacement == WorkSymbolPlacement.UnderTitle) {
+                        HomeStatusTray(
+                            rating = work.rating,
+                            categories = work.workCategories,
+                            warnings = work.workWarnings,
+                            isComplete = work.knownCompletion,
+                            arrangement = HomeStatusArrangement.Row,
+                            tileSize = tile,
+                            announces = true
+                        )
+                    }
                     if (metadata.isNotEmpty()) {
                         Text(
                             text = metadata.joinToString("  ·  "),
@@ -262,17 +276,19 @@ fun QueueLedgerCard(
                         )
                     }
                 }
-                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    HomeStatusTray(
-                        rating = work.rating,
-                        categories = work.workCategories,
-                        warnings = work.workWarnings,
-                        isComplete = work.knownCompletion,
-                        arrangement = HomeStatusArrangement.Grid,
-                        tileSize = tile,
-                        announces = true
-                    )
-                    if (selecting) SelectionBubble(selected)
+                if (symbolPlacement == WorkSymbolPlacement.Beside || selecting) {
+                    Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        if (symbolPlacement == WorkSymbolPlacement.Beside) HomeStatusTray(
+                            rating = work.rating,
+                            categories = work.workCategories,
+                            warnings = work.workWarnings,
+                            isComplete = work.knownCompletion,
+                            arrangement = HomeStatusArrangement.Grid,
+                            tileSize = tile,
+                            announces = true
+                        )
+                        if (selecting) SelectionBubble(selected)
+                    }
                 }
                 if (drag) DragGrip(Modifier.queueDragHandle(true, onStep))
             }

@@ -3,19 +3,20 @@ package io.github.cidy02.kudos.data.preferences
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
-import io.github.cidy02.kudos.library.FavoriteScope
-import io.github.cidy02.kudos.library.FavoritePreferences
-import io.github.cidy02.kudos.library.ReadingAffinities
-import io.github.cidy02.kudos.library.LibraryHistoryGrouping
-import io.github.cidy02.kudos.core.model.BackupSettings
 import io.github.cidy02.kudos.backup.BackupJson
+import io.github.cidy02.kudos.backup.BackupSettingsPayload
 import io.github.cidy02.kudos.backup.toBackupSettingsPayload
-import kotlinx.serialization.encodeToString
 import io.github.cidy02.kudos.core.model.AppThemeSetting
+import io.github.cidy02.kudos.core.model.BackupSettings
 import io.github.cidy02.kudos.core.model.KudosSettings
 import io.github.cidy02.kudos.core.model.MatureContentMode
 import io.github.cidy02.kudos.core.model.ReaderMode
 import io.github.cidy02.kudos.core.model.ReaderThemeSetting
+import io.github.cidy02.kudos.core.model.WorkSymbolPlacement
+import io.github.cidy02.kudos.library.FavoriteScope
+import io.github.cidy02.kudos.library.FavoritePreferences
+import io.github.cidy02.kudos.library.LibraryHistoryGrouping
+import io.github.cidy02.kudos.library.ReadingAffinities
 import io.github.cidy02.kudos.reader.settings.ReaderSpeechPreferences
 import java.io.File
 import java.nio.file.Files
@@ -25,6 +26,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -286,6 +289,36 @@ class SettingsRepositoryTest {
         // Restore with any other valid hex applies it as stored.
         repository.replaceAll(BackupSettings(accentColorHex = "#2468AC").toSettings())
         assertEquals("#2468AC", repository.snapshot().app.accentColorHex)
+    }
+
+    @Test
+    fun workSymbolPlacementDefaultsStoresAndRoundTripsWithoutResettingFromAbsentOrUnknown() = runBlocking {
+        val key = stringPreferencesKey("workSymbolPlacement")
+        assertEquals(WorkSymbolPlacement.Beside, repository.snapshot().app.workSymbolPlacement)
+        assertEquals(null, dataStore.data.first()[key])
+        val unchosenJson = BackupJson.encodeToString(
+            BackupSettings.fromSettings(repository.snapshot()).toBackupSettingsPayload()
+        )
+        assertFalse(unchosenJson.contains("workSymbolPlacement"))
+
+        dataStore.edit { it[key] = "sideways" }
+        assertEquals(WorkSymbolPlacement.Beside, repository.snapshot().app.workSymbolPlacement)
+        assertEquals("sideways", BackupSettings.fromSettings(repository.snapshot()).workSymbolPlacement)
+
+        repository.updateWorkSymbolPlacement(WorkSymbolPlacement.UnderTitle)
+        assertEquals("underTitle", dataStore.data.first()[key])
+        val encoded = BackupJson.encodeToString(
+            BackupSettings.fromSettings(repository.snapshot()).toBackupSettingsPayload()
+        )
+        val decoded = BackupJson.decodeFromString<BackupSettingsPayload>(encoded)
+        assertEquals("underTitle", decoded.workSymbolPlacement)
+
+        repository.replaceAll(BackupSettings(workSymbolPlacement = null).toSettings())
+        assertEquals(WorkSymbolPlacement.UnderTitle, repository.snapshot().app.workSymbolPlacement)
+        repository.replaceAll(BackupSettings(workSymbolPlacement = "sideways").toSettings())
+        assertEquals(WorkSymbolPlacement.UnderTitle, repository.snapshot().app.workSymbolPlacement)
+        repository.replaceAll(BackupSettings(workSymbolPlacement = "beside").toSettings())
+        assertEquals(WorkSymbolPlacement.Beside, repository.snapshot().app.workSymbolPlacement)
     }
 
     @Test

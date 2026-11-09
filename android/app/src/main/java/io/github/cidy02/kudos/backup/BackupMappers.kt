@@ -465,6 +465,7 @@ fun CoreBackupSettings.toBackupSettingsPayload(): BackupSettingsPayload {
         readerTheme = readerTheme,
         matchAppReaderTheme = matchAppReaderTheme,
         accentColorHex = accentColorHex,
+        workSymbolPlacement = workSymbolPlacement,
         autoPreserveSmallSeriesOnSaveForLater = autoPreserveSmallSeriesOnSaveForLater,
         autoPreserveSeriesWorkThreshold = autoPreserveSeriesWorkThreshold
     )
@@ -491,6 +492,7 @@ fun BackupSettingsPayload.toCoreBackupSettings(): CoreBackupSettings {
         readerTheme = readerTheme,
         matchAppReaderTheme = matchAppReaderTheme,
         accentColorHex = accentColorHex,
+        workSymbolPlacement = workSymbolPlacement,
         autoPreserveSmallSeriesOnSaveForLater = autoPreserveSmallSeriesOnSaveForLater,
         autoPreserveSeriesWorkThreshold = autoPreserveSeriesWorkThreshold
     )

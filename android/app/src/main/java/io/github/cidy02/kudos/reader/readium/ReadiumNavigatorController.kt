@@ -2,6 +2,7 @@ package io.github.cidy02.kudos.reader.readium
 
 import android.graphics.Color
 import io.github.cidy02.kudos.core.model.ReadingAnnotation
+import io.github.cidy02.kudos.reader.ReadingAnnotationColor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.readium.r2.navigator.Decoration
@@ -82,7 +83,7 @@ class ReadiumNavigatorController {
             Decoration(
                 id = annotation.id,
                 locator = locator,
-                style = if (annotation.colorRaw.equals("underline", ignoreCase = true)) {
+                style = if (annotation.colorRaw == "underline") {
                     Decoration.Style.Underline(tint = tint, isActive = false)
                 } else {
                     Decoration.Style.Highlight(tint = tint, isActive = false)
@@ -116,7 +117,8 @@ class ReadiumNavigatorController {
         }
 
         fun colorForName(name: String): Int {
-            return when (name.lowercase()) {
+            ReadingAnnotationColor.customHex(name)?.let { return Color.parseColor(it) }
+            return when (name) {
                 "green" -> Color.parseColor("#81C784")
                 "pink" -> Color.parseColor("#F48FB1")
                 "purple" -> Color.parseColor("#CE93D8")

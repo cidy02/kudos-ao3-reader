@@ -37,6 +37,10 @@ class SettingsDefaultsTest {
         assertEquals("#821019", defaults.app.accentColorHex)
         assertNull(defaults.app.storedAccentColorHex)
         assertNull(defaults.app.chosenAccentColorHex)
+        assertEquals(WorkSymbolPlacement.Beside, defaults.app.workSymbolPlacement)
+        assertNull(defaults.app.storedWorkSymbolPlacement)
+        assertNull(defaults.app.backupWorkSymbolPlacement)
+        assertNull(defaults.app.restorableWorkSymbolPlacement)
     }
 
     @Test
@@ -59,6 +63,11 @@ class SettingsDefaultsTest {
         assertEquals(MatureContentMode.Obscure, MatureContentMode.fromStorage("obscure"))
         assertEquals(MatureContentMode.Hide, MatureContentMode.fromStorage("hide"))
         assertEquals(MatureContentMode.Obscure, MatureContentMode.fromStorage("show"))
+
+        assertEquals("beside", WorkSymbolPlacement.Beside.storageValue)
+        assertEquals("underTitle", WorkSymbolPlacement.UnderTitle.storageValue)
+        assertEquals(WorkSymbolPlacement.Beside, WorkSymbolPlacement.fromStorage(null))
+        assertEquals(WorkSymbolPlacement.Beside, WorkSymbolPlacement.fromStorage("unknown"))
     }
 
     @Test

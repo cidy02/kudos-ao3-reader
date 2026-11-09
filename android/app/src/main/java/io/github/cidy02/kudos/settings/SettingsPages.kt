@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.core.model.KudosSettings
 import io.github.cidy02.kudos.core.model.ReaderMode
 import io.github.cidy02.kudos.core.model.ReaderThemeSetting
+import io.github.cidy02.kudos.core.model.WorkSymbolPlacement
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.ui.subject.HsvColorDialog
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
@@ -147,6 +148,24 @@ fun SettingsAppearancePage(
                     accentHex = settings.app.accentColorHex,
                     onSelectNamed = { hex -> scope.launch { repository.updateAccentColor(hex) } },
                     onCustom = { showCustomWarning = true }
+                )
+            }
+        }
+        item {
+            SettingsSection(
+                label = "Lists",
+                footnote = "Where work lists show the rating, category, warnings and status symbols. " +
+                    "Under the Title puts them in a row under the title and gives the text the full width."
+            ) {
+                SubjectSegmentedControl(
+                    options = WorkSymbolPlacement.entries,
+                    selected = settings.app.workSymbolPlacement,
+                    onSelect = { placement ->
+                        scope.launch { repository.updateWorkSymbolPlacement(placement) }
+                    },
+                    title = { it.title },
+                    contentDescription = "Work Symbols",
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp)
                 )
             }
         }

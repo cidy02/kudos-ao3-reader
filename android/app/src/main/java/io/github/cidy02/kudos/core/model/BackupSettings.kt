@@ -20,6 +20,7 @@ data class BackupSettings(
     val readerTheme: String = ReaderThemeSetting.Light.storageValue,
     val matchAppReaderTheme: Boolean = true,
     val accentColorHex: String? = null,
+    val workSymbolPlacement: String? = null,
     val autoPreserveSmallSeriesOnSaveForLater: Boolean = false,
     val autoPreserveSeriesWorkThreshold: Int = 5
 ) {
@@ -45,6 +46,8 @@ data class BackupSettings(
                 appTheme = AppThemeSetting.fromStorage(appTheme),
                 accentColorHex = readingAccentColorHex(accentColorHex),
                 storedAccentColorHex = accentColorHex,
+                workSymbolPlacement = WorkSymbolPlacement.fromStorage(workSymbolPlacement),
+                storedWorkSymbolPlacement = workSymbolPlacement,
                 autoPreserveSmallSeriesOnSaveForLater = autoPreserveSmallSeriesOnSaveForLater,
                 autoPreserveSeriesWorkThreshold = autoPreserveSeriesWorkThreshold
             ),
@@ -79,6 +82,7 @@ data class BackupSettings(
                 matchAppReaderTheme = settings.reader.matchAppReaderTheme,
                 // Omit when the device has no stored accent, matching KudosBackup.swift.
                 accentColorHex = settings.app.chosenAccentColorHex,
+                workSymbolPlacement = settings.app.backupWorkSymbolPlacement,
                 autoPreserveSmallSeriesOnSaveForLater =
                     settings.app.autoPreserveSmallSeriesOnSaveForLater,
                 autoPreserveSeriesWorkThreshold = settings.app.autoPreserveSeriesWorkThreshold

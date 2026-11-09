@@ -29,11 +29,12 @@ class ReaderHighlightColorBarTest {
         var picked: String? = null
         compose.setContent {
             CompositionLocalProvider(LocalKudosTokens provides KudosTokens.of(ReaderTheme.Sepia, Color.Red)) {
-                if (showing) ReaderHighlightColorBar(ReadingAnnotationColor.YELLOW,
+                if (showing) ReaderHighlightColorBar(ReadingAnnotationColor.YELLOW.raw,
                     onSelect = { picked = it; showing = false }, onDismiss = { showing = false })
             }
         }
         ReadingAnnotationColor.entries.forEach { compose.onNodeWithContentDescription(it.displayName).assertExists() }
+        compose.onNodeWithContentDescription("Custom colour").assertExists()
         compose.onNodeWithContentDescription("Underline").performClick()
         compose.onNodeWithContentDescription("Highlight colour").assertDoesNotExist()
         compose.runOnIdle { assertEquals("underline", picked) }

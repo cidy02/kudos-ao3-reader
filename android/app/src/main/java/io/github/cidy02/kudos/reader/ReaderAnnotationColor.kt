@@ -22,7 +22,25 @@ enum class ReadingAnnotationColor(
     companion object {
         fun fromRaw(raw: String?): ReadingAnnotationColor {
             if (raw == null) return YELLOW
-            return entries.firstOrNull { it.raw.equals(raw, ignoreCase = true) } ?: YELLOW
+            return entries.firstOrNull { it.raw == raw } ?: YELLOW
         }
+
+        /** Uppercase `#RRGGBB`, or null for a preset/malformed value. */
+        fun customHex(raw: String?): String? {
+            val trimmed = raw?.trim() ?: return null
+            if (!trimmed.startsWith("#")) return null
+            val digits = trimmed.drop(1)
+            if (digits.length != 6 || digits.toLongOrNull(16) == null) return null
+            return "#${digits.uppercase()}"
+        }
+
+        fun normalizedRaw(raw: String): String =
+            entries.firstOrNull { it.raw == raw }?.raw
+                ?: customHex(raw)
+                ?: YELLOW.raw
+
+        fun displayColor(raw: String?): Color = customHex(raw)
+            ?.let { io.github.cidy02.kudos.ui.subject.parseStoredColor(it) }
+            ?: fromRaw(raw).color
     }
 }

@@ -110,7 +110,7 @@ class AnnotationRepository(
                 !existing.kindRaw.equals("note", ignoreCase = true) &&
                 !existing.kindRaw.equals("bookmark", ignoreCase = true))
         ) return
-        saveAnnotation(existing.copy(colorRaw = color))
+        saveAnnotation(existing.copy(colorRaw = ReadingAnnotationColor.normalizedRaw(color)))
     }
 
     /** Result also drives the iOS post-selection editor/colour-bar routing. */
@@ -120,17 +120,18 @@ class AnnotationRepository(
         workId: String, locatorString: String, selectedText: String, color: String,
         progression: Double, spineIndex: Int, withNote: Boolean
     ): SelectionResult {
+        val normalizedColor = ReadingAnnotationColor.normalizedRaw(color)
         val existing = findSamePassage(workId, locatorString)
         if (existing != null) {
             // Add Note never toggles or recolours an existing mark, including its saved note.
             if (withNote) return SelectionResult(existing, created = false)
-            if (existing.colorRaw == color) {
+            if (ReadingAnnotationColor.normalizedRaw(existing.colorRaw) == normalizedColor) {
                 deleteAnnotation(existing.id)
                 return SelectionResult(null, created = false)
             }
         }
         val annotation = addOrRecolorHighlight(
-            workId, locatorString, selectedText, color, progression = progression,
+            workId, locatorString, selectedText, normalizedColor, progression = progression,
             spineIndex = spineIndex, kind = existing?.kindRaw ?: "highlight"
         )
         return SelectionResult(annotation, created = existing == null)
@@ -158,10 +159,11 @@ class AnnotationRepository(
         chapterTitle: String = "",
         kind: String = "highlight"
     ): ReadingAnnotation {
+        val normalizedColor = ReadingAnnotationColor.normalizedRaw(color)
         val existing = findSamePassage(workId, locatorString)
         val annotation = if (existing != null) {
             existing.copy(
-                colorRaw = color,
+                colorRaw = normalizedColor,
                 note = note.ifBlank { existing.note },
                 kindRaw = kind,
                 locatorString = locatorString.ifBlank { existing.locatorString },
@@ -172,7 +174,7 @@ class AnnotationRepository(
                 id = UUID.randomUUID().toString(),
                 workID = workId,
                 kindRaw = kind,
-                colorRaw = color,
+                colorRaw = normalizedColor,
                 locatorString = locatorString,
                 selectedText = selectedText,
                 note = note,

@@ -54,6 +54,7 @@ import io.github.cidy02.kudos.core.strippingHtml
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 
 import io.github.cidy02.kudos.core.model.SavedWork
+import io.github.cidy02.kudos.core.model.WorkSymbolPlacement
 import io.github.cidy02.kudos.works.CanonicalWork
 import androidx.compose.foundation.background
 import androidx.compose.ui.draw.blur
@@ -193,6 +194,7 @@ fun SensitiveWorkRow(
     authorNames: List<String> = io.github.cidy02.kudos.works.resolveTappableAuthorNames(null, author),
     leadingProgress: (@Composable () -> Unit)? = null
 ) {
+    val symbolPlacement = LocalWorkSymbolPlacement.current
     var expanded by remember(id) { mutableStateOf(expandAll) }
     LaunchedEffect(expandAll) { expanded = expandAll }
     
@@ -335,7 +337,8 @@ fun SensitiveWorkRow(
                                 }
                                 // iOS `standardCard`: AO3's required-tag grid beside the title.
                                 // It remains one accessible summary and moves out at large text.
-                                if (showsStatusTray && !isAccessibilityFontScale()) {
+                                if (showsStatusTray && !isAccessibilityFontScale() &&
+                                    symbolPlacement == WorkSymbolPlacement.Beside) {
                                     HomeStatusTray(
                                         rating = rating,
                                         categories = categories,
@@ -345,6 +348,18 @@ fun SensitiveWorkRow(
                                         tileSize = 24.dp
                                     )
                                 }
+                            }
+
+                            if (showsStatusTray && !isAccessibilityFontScale() &&
+                                symbolPlacement == WorkSymbolPlacement.UnderTitle) {
+                                HomeStatusTray(
+                                    rating = rating,
+                                    categories = categories,
+                                    warnings = warnings,
+                                    isComplete = isComplete,
+                                    arrangement = HomeStatusArrangement.Row,
+                                    tileSize = 24.dp
+                                )
                             }
 
                             if (fandoms.isNotEmpty() && savedCard) {
@@ -553,6 +568,7 @@ private fun LedgerBody(
 ) {
     val tokens = LocalKudosTokens.current
     val accessibility = isAccessibilityFontScale()
+    val symbolPlacement = LocalWorkSymbolPlacement.current
     val named = fandoms.filter { it.isNotBlank() }
     val identity: @Composable (Modifier) -> Unit = { modifier ->
         Column(modifier, verticalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -609,12 +625,16 @@ private fun LedgerBody(
             categories = categories,
             warnings = warnings,
             isComplete = isComplete,
-            arrangement = HomeStatusArrangement.Grid,
+            arrangement = if (symbolPlacement == WorkSymbolPlacement.UnderTitle) {
+                HomeStatusArrangement.Row
+            } else {
+                HomeStatusArrangement.Grid
+            },
             tileSize = 24.dp,
             announces = true
         )
     }
-    if (accessibility) {
+    if (accessibility || symbolPlacement == WorkSymbolPlacement.UnderTitle) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             identity(Modifier.fillMaxWidth())
             signals()

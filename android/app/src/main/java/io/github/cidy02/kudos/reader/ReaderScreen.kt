@@ -263,11 +263,12 @@ private fun ReaderReading(
     var showSearchSheet by remember { mutableStateOf(false) }
     var confirmVoicePack by remember { mutableStateOf(false) }
     val annotationPreferences = remember(context) { context.getSharedPreferences("reader-annotations", Context.MODE_PRIVATE) }
-    var lastHighlightColor by remember { mutableStateOf(ReadingAnnotationColor.fromRaw(
-        annotationPreferences.getString("lastHighlightColor", ReadingAnnotationColor.YELLOW.raw).orEmpty()).raw) }
+    var lastHighlightColor by remember { mutableStateOf(ReadingAnnotationColor.normalizedRaw(
+        annotationPreferences.getString("lastHighlightColor", ReadingAnnotationColor.YELLOW.raw).orEmpty())) }
     fun rememberHighlightColor(color: String) {
-        lastHighlightColor = color
-        annotationPreferences.edit().putString("lastHighlightColor", color).apply()
+        val normalized = ReadingAnnotationColor.normalizedRaw(color)
+        lastHighlightColor = normalized
+        annotationPreferences.edit().putString("lastHighlightColor", normalized).apply()
     }
     var isOrientationLocked by remember { mutableStateOf(false) }
     var showTtsControls by remember { mutableStateOf(false) }
@@ -769,7 +770,7 @@ private fun ReaderReading(
                     ) {
                         state.highlights.firstOrNull { it.id == state.colorBarAnnotationId }?.let { annotation ->
                             ReaderHighlightColorBar(
-                                selected = ReadingAnnotationColor.fromRaw(annotation.colorRaw),
+                                selectedRaw = annotation.colorRaw,
                                 onSelect = { color ->
                                     rememberHighlightColor(color)
                                     viewModel.recolorHighlight(annotation.id, color)

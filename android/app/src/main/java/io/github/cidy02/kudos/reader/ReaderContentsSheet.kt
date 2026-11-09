@@ -280,7 +280,7 @@ private fun HighlightRow(
     val tokens = LocalKudosTokens.current
     val title = annotation.chapterTitle.ifBlank { "In this work" }
     val percent = (annotation.progression * 100).roundToInt()
-    val swatchColor = ReadingAnnotationColor.fromRaw(annotation.colorRaw).color
+    val swatchColor = ReadingAnnotationColor.displayColor(annotation.colorRaw)
 
     Row(
         modifier = Modifier

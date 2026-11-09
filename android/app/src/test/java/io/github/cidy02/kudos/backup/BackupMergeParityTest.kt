@@ -381,14 +381,14 @@ class BackupMergeParityTest {
     }
 
     @Test
-    fun parkedNoteUsesIosKindAndColourFallbacksForUnknownStoredRawValues() {
+    fun parkedNoteKeepsUnknownStoredColourUntilTheUserPicksOne() {
         val old = annotation().copy(kindRaw = "note", colorRaw = "unknown", note = "old", lastModifiedAt = at(100))
         val remote = old.copy(kindRaw = "highlight", colorRaw = "blue", note = "new", lastModifiedAt = at(200))
         val result = merge(BackupLibrarySnapshot(works = listOf(work()), annotations = listOf(old)),
             BackupLibrarySnapshot(works = listOf(work()), annotations = listOf(remote)))
         val parked = result.annotations.single { it.id != ANN }
         assertEquals("bookmark", parked.kindRaw)
-        assertEquals("yellow", parked.colorRaw)
+        assertEquals("unknown", parked.colorRaw)
         assertEquals("old", parked.note)
     }
 

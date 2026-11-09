@@ -20,7 +20,7 @@ import io.github.cidy02.kudos.ui.subject.subjectPanel
 /** One tap refines the new mark and dismisses, as iOS ReaderHighlightColorBar. */
 @Composable
 internal fun ReaderHighlightColorBar(
-    selected: ReadingAnnotationColor,
+    selectedRaw: String,
     onSelect: (String) -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier
@@ -33,7 +33,7 @@ internal fun ReaderHighlightColorBar(
         verticalAlignment = Alignment.CenterVertically
     ) {
         androidx.compose.foundation.layout.Box(Modifier.weight(1f, fill = false)) {
-            ReadingAnnotationColorPicker(selected, onSelect)
+            ReadingAnnotationColorPicker(selectedRaw, onSelect)
         }
         IconButton(onClick = onDismiss) {
             Icon(Icons.Filled.Close, contentDescription = "Dismiss colour picker",

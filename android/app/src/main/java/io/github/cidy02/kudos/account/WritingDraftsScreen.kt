@@ -59,11 +59,13 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import io.github.cidy02.kudos.app.ProvidePushedShellChrome
 import io.github.cidy02.kudos.auth.AO3AuthState
+import io.github.cidy02.kudos.core.model.WorkSymbolPlacement
 import io.github.cidy02.kudos.home.HomeFacts
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 import io.github.cidy02.kudos.network.ao3.writing.DraftExpiry
 import io.github.cidy02.kudos.ui.components.KudosPaginationBar
 import io.github.cidy02.kudos.ui.components.KudosRefreshBox
+import io.github.cidy02.kudos.ui.components.LocalWorkSymbolPlacement
 import io.github.cidy02.kudos.ui.subject.HomeStatusArrangement
 import io.github.cidy02.kudos.ui.subject.HomeStatusTray
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
@@ -237,6 +239,7 @@ private fun DraftCard(work: AO3WorkSummary, deletion: LocalDate?, today: LocalDa
     val tokens = LocalKudosTokens.current
     val palette = SubjectPalette.fromHue(HomeFacts.workHue(work.fandoms, work.title), tokens.theme)
     val accessibility = isAccessibilityFontScale()
+    val symbolPlacement = LocalWorkSymbolPlacement.current
     val title = work.title.ifEmpty { "Untitled" }
     val fandoms = work.fandoms.filter { it.isNotBlank() }
     val shape = RoundedCornerShape(SubjectMetrics.rowRadius)
@@ -261,7 +264,7 @@ private fun DraftCard(work: AO3WorkSummary, deletion: LocalDate?, today: LocalDa
     Column(Modifier.fillMaxWidth().clip(shape).background(tokens.cardFill, shape).background(palette.cardWash, shape)
         .border(0.5.dp, palette.cardBorder, shape).clickable(onClick = onOpen)
         .padding(horizontal = 16.dp, vertical = 18.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
-        if (accessibility) {
+        if (accessibility || symbolPlacement == WorkSymbolPlacement.UnderTitle) {
             heading()
             DraftStatusGrid(work)
         } else Row(horizontalArrangement = Arrangement.spacedBy(13.dp)) {
@@ -301,12 +304,17 @@ private fun DraftExpiryBadge(days: Int) {
 /** The shared 24 dp required-tag grid used by every work surface. */
 @Composable
 private fun DraftStatusGrid(work: AO3WorkSummary) {
+    val arrangement = if (LocalWorkSymbolPlacement.current == WorkSymbolPlacement.UnderTitle) {
+        HomeStatusArrangement.Row
+    } else {
+        HomeStatusArrangement.Grid
+    }
     HomeStatusTray(
         rating = work.rating,
         categories = work.categories,
         warnings = work.warnings,
         isComplete = work.isComplete,
-        arrangement = HomeStatusArrangement.Grid,
+        arrangement = arrangement,
         tileSize = 24.dp,
         announces = true
     )

@@ -79,7 +79,7 @@ fun carouselCardScale(width: Dp = HomeCardMetrics.width): Float {
     return fontScale * minOf(1f, maxWidth.value / (width.value * fontScale))
 }
 
-enum class HomeStatusArrangement { Grid, Strip }
+enum class HomeStatusArrangement { Grid, Strip, Row }
 
 @Composable
 fun rememberWorkDownloadFraction(
@@ -403,7 +403,11 @@ fun HomeStatusTray(
     } else {
         Row(
             framedModifier,
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = if (arrangement == HomeStatusArrangement.Row) {
+                Arrangement.spacedBy(gap)
+            } else {
+                Arrangement.SpaceBetween
+            },
             verticalAlignment = Alignment.CenterVertically
         ) {
             tiles.forEach { io.github.cidy02.kudos.ui.components.WorkSymbolTileView(it, scaledTileSize) }

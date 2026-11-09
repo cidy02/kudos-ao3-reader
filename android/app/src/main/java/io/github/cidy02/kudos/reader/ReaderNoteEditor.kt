@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Icon
@@ -51,9 +52,11 @@ import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.core.model.ReadingAnnotation
 import io.github.cidy02.kudos.settings.SettingsActionRow
 import io.github.cidy02.kudos.settings.SettingsSection
+import io.github.cidy02.kudos.ui.subject.HsvColorDialog
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SubjectMetrics
 import io.github.cidy02.kudos.ui.subject.ToolbarCircleButton
+import io.github.cidy02.kudos.ui.subject.toStoredHex
 
 /** Contents' note editor, also opened by a page highlight (iOS ReaderNoteEditor). */
 @Composable
@@ -76,7 +79,7 @@ internal fun ReaderNoteEditor(
         onDispose { if (!finished[0] && draft.trim() != saved) onKeep(draft.trim()) }
     }
     val focus = remember(annotation.id) { FocusRequester() }
-    val color = ReadingAnnotationColor.fromRaw(annotation.colorRaw)
+    val color = ReadingAnnotationColor.displayColor(annotation.colorRaw)
 
     CompositionLocalProvider(LocalSettingsFormGround provides (tokens.theme != ReaderTheme.Light)) {
     Column(
@@ -106,7 +109,7 @@ internal fun ReaderNoteEditor(
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Box(Modifier.size(width = 3.dp, height = 24.dp)
-                        .background(color.color, RoundedCornerShape(2.dp)))
+                        .background(color, RoundedCornerShape(2.dp)))
                     Text(annotation.selectedText, color = tokens.primaryInk, fontSize = 14.sp)
                 }
             }
@@ -122,7 +125,7 @@ internal fun ReaderNoteEditor(
             )
         }
         SettingsSection(footnote = null, label = "Colour") {
-            ReadingAnnotationColorPicker(color, onColorChange)
+            ReadingAnnotationColorPicker(annotation.colorRaw, onColorChange)
         }
         SettingsSection(footnote = null) {
             SettingsActionRow("Delete Highlight", onClick = { finished[0] = true; onDelete() },
@@ -135,14 +138,17 @@ internal fun ReaderNoteEditor(
 
 /** Shared by the immediate Highlight refinement bar and the full note editor. */
 @Composable
-internal fun ReadingAnnotationColorPicker(selectedColor: ReadingAnnotationColor, onColorChange: (String) -> Unit) {
+internal fun ReadingAnnotationColorPicker(selectedRaw: String, onColorChange: (String) -> Unit) {
     val tokens = LocalKudosTokens.current
+    val selectedHex = ReadingAnnotationColor.customHex(selectedRaw)
+    val selectedColor = ReadingAnnotationColor.fromRaw(selectedRaw)
+    var pickingCustom by remember { mutableStateOf(false) }
     Row(
         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(9.dp),
         horizontalArrangement = Arrangement.spacedBy(2.dp)
     ) {
         ReadingAnnotationColor.entries.forEach { option ->
-            val selected = selectedColor == option
+            val selected = selectedHex == null && selectedColor == option
             Box(
                 Modifier.size(44.dp)
                     .selectable(selected = selected, role = Role.RadioButton,
@@ -165,5 +171,37 @@ internal fun ReadingAnnotationColorPicker(selectedColor: ReadingAnnotationColor,
                 }
             }
         }
+        Box(
+            Modifier.size(44.dp)
+                .selectable(selected = selectedHex != null, role = Role.RadioButton,
+                    onClick = { pickingCustom = true })
+                .semantics { contentDescription = "Custom colour" },
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                Modifier.size(32.dp)
+                    .then(if (selectedHex == null) Modifier else Modifier.background(
+                        ReadingAnnotationColor.displayColor(selectedHex), CircleShape))
+                    .border(if (selectedHex != null) 3.dp else 1.dp,
+                        if (selectedHex != null) tokens.accent else tokens.primaryInk.copy(alpha = 0.35f),
+                        CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                if (selectedHex == null) {
+                    Icon(Icons.Filled.Add, contentDescription = null, tint = tokens.secondaryInk,
+                        modifier = Modifier.size(16.dp))
+                }
+            }
+        }
+    }
+    if (pickingCustom) {
+        HsvColorDialog(
+            initial = ReadingAnnotationColor.displayColor(selectedRaw),
+            onDismiss = { pickingCustom = false },
+            onConfirm = { color ->
+                pickingCustom = false
+                onColorChange(color.toStoredHex())
+            }
+        )
     }
 }

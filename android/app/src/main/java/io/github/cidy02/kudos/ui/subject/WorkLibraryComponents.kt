@@ -53,6 +53,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.home.HomeFacts
+import io.github.cidy02.kudos.core.model.WorkSymbolPlacement
+import io.github.cidy02.kudos.ui.components.LocalWorkSymbolPlacement
 import kotlinx.coroutines.launch
 
 enum class WorkSectionLayout { Shelves, Ledger }
@@ -157,6 +159,7 @@ fun WorkLedgerRow(
     val tokens = LocalKudosTokens.current
     val fontScale = LocalDensity.current.fontScale
     val accessibilityFontScale = isAccessibilityFontScale()
+    val symbolPlacement = LocalWorkSymbolPlacement.current
     // iOS CoverArt.workHue, as every other work surface uses.
     val palette = remember(fandoms, title, tokens.theme) {
         SubjectPalette.fromHue(HomeFacts.workHue(fandoms, title), tokens.theme)
@@ -212,8 +215,15 @@ fun WorkLedgerRow(
                             )
                             if (favorite) Text("★", color = Color(0xFFFFC107), fontSize = 13.sp)
                         }
+                        if (symbolPlacement == WorkSymbolPlacement.UnderTitle) {
+                            HomeStatusTray(rating, categories, warnings, isComplete, HomeStatusArrangement.Row,
+                                tileSize = 24.dp, announces = true)
+                        }
                         Text(metadata, color = tokens.secondaryInk, fontSize = 11.5.sp)
-                        HomeStatusTray(rating, categories, warnings, isComplete, HomeStatusArrangement.Grid, tileSize = 24.dp, announces = true)
+                        if (symbolPlacement == WorkSymbolPlacement.Beside) {
+                            HomeStatusTray(rating, categories, warnings, isComplete, HomeStatusArrangement.Grid,
+                                tileSize = 24.dp, announces = true)
+                        }
                     }
                 } else Row(
                     Modifier
@@ -243,6 +253,10 @@ fun WorkLedgerRow(
                             )
                             if (favorite) Text("★", color = Color(0xFFFFC107), fontSize = 13.sp)
                         }
+                        if (symbolPlacement == WorkSymbolPlacement.UnderTitle) {
+                            HomeStatusTray(rating, categories, warnings, isComplete, HomeStatusArrangement.Row,
+                                tileSize = 24.dp, announces = true)
+                        }
                         Text(
                             metadata,
                             color = tokens.secondaryInk,
@@ -251,7 +265,10 @@ fun WorkLedgerRow(
                             overflow = TextOverflow.Ellipsis
                         )
                     }
-                    HomeStatusTray(rating, categories, warnings, isComplete, HomeStatusArrangement.Grid, tileSize = 24.dp, announces = true)
+                    if (symbolPlacement == WorkSymbolPlacement.Beside) {
+                        HomeStatusTray(rating, categories, warnings, isComplete, HomeStatusArrangement.Grid,
+                            tileSize = 24.dp, announces = true)
+                    }
                 }
             }
         }

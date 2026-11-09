@@ -141,6 +141,7 @@ class WorkSymbolTileTest {
         assertFalse(WorkSymbolGeometry.drawsBacking(HomeStatusArrangement.Grid, backed = false))
         assertFalse(WorkSymbolGeometry.drawsBacking(HomeStatusArrangement.Strip, backed = true))
         assertFalse(WorkSymbolGeometry.drawsBacking(HomeStatusArrangement.Strip, backed = false))
+        assertFalse(WorkSymbolGeometry.drawsBacking(HomeStatusArrangement.Row, backed = true))
 
         compose.setContent {
             KudosTheme(KudosThemeMode.Light) {
@@ -172,6 +173,26 @@ class WorkSymbolTileTest {
         assertEquals(50.88f, unbackedWidthDp, 1.0f)
         assertFalse(defaultNode.config.contains(SemanticsProperties.ContentDescription))
         assertTrue(unbackedNode.config.contains(SemanticsProperties.ContentDescription))
+    }
+
+    @Test fun underTitleArrangementIsOneBareRow() {
+        compose.setContent {
+            KudosTheme(KudosThemeMode.Light) {
+                HomeStatusTray(
+                    rating = "General Audiences",
+                    categories = listOf("Gen"),
+                    warnings = emptyList(),
+                    isComplete = true,
+                    arrangement = HomeStatusArrangement.Row,
+                    modifier = Modifier.testTag("underTitle")
+                )
+            }
+        }
+        val node = compose.onNodeWithTag("underTitle", useUnmergedTree = true).fetchSemanticsNode()
+        val width = with(compose.density) { node.size.width.toDp().value }
+        val height = with(compose.density) { node.size.height.toDp().value }
+        assertEquals(104.64f, width, 1.0f)
+        assertEquals(24f, height, 1.0f)
     }
 
     @Test fun backingColoursMatchTheBoard() {

@@ -19,7 +19,6 @@ import io.github.cidy02.kudos.data.local.entity.FandomReadWatermarkEntity
 import io.github.cidy02.kudos.data.local.entity.ReadingFavoriteEntity
 import io.github.cidy02.kudos.data.local.entity.ReadingSessionEntity
 import io.github.cidy02.kudos.reader.ReaderProgressGate
-import io.github.cidy02.kudos.reader.ReadingAnnotationColor
 import io.github.cidy02.kudos.works.EpubImportMetadata
 import io.github.cidy02.kudos.works.WorkIdentityIndex
 import io.github.cidy02.kudos.works.WorkRepository
@@ -2271,7 +2270,7 @@ object BackupMergeService {
         val parked = original.copy(
             id = UUID.randomUUID().toString(), workID = workId,
             kindRaw = original.kindRaw.takeIf { it == "bookmark" || it == "highlight" } ?: "bookmark",
-            colorRaw = original.colorRaw.takeIf { raw -> ReadingAnnotationColor.entries.any { it.raw == raw } } ?: "yellow",
+            colorRaw = original.colorRaw,
             isPendingDeletion = true, deletedAt = now, lastModifiedAt = now
         )
         byId[parked.id] = parked

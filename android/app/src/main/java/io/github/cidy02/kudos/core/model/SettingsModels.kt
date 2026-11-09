@@ -50,6 +50,19 @@ enum class MatureContentMode(val storageValue: String) {
     }
 }
 
+enum class WorkSymbolPlacement(val storageValue: String, val title: String) {
+    Beside("beside", "Beside the Title"),
+    UnderTitle("underTitle", "Under the Title");
+
+    companion object {
+        fun fromStorage(value: String?): WorkSymbolPlacement =
+            entries.firstOrNull { it.storageValue == value } ?: Beside
+
+        fun knownStorage(value: String?): String? =
+            entries.firstOrNull { it.storageValue == value }?.storageValue
+    }
+}
+
 data class ReaderSettings(
     val readerFontId: String = "system",
     val readerMode: ReaderMode = ReaderMode.Scroll,
@@ -94,6 +107,9 @@ data class AppSettings(
     val accentColorHex: String = DefaultAccentColorHex,
     /** Raw stored preference (or decoded backup key) so unchosen devices omit accentColorHex on export. */
     val storedAccentColorHex: String? = null,
+    val workSymbolPlacement: WorkSymbolPlacement = WorkSymbolPlacement.Beside,
+    /** Raw stored choice; null means the default was never explicitly chosen. */
+    val storedWorkSymbolPlacement: String? = null,
     /** Shared Reading queues setting; Work Detail uses it after Save for Later. */
     val autoPreserveSmallSeriesOnSaveForLater: Boolean = false,
     val autoPreserveSeriesWorkThreshold: Int = 5
@@ -102,6 +118,12 @@ data class AppSettings(
         get() = storedAccentColorHex ?: accentColorHex.takeIf {
             !it.equals(DefaultAccentColorHex, ignoreCase = true)
         }
+
+    val backupWorkSymbolPlacement: String?
+        get() = storedWorkSymbolPlacement
+
+    val restorableWorkSymbolPlacement: String?
+        get() = WorkSymbolPlacement.knownStorage(storedWorkSymbolPlacement)
 }
 
 data class PrivacySettings(

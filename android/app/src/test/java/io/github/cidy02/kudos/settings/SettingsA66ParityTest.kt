@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import io.github.cidy02.kudos.core.model.KudosSettings
+import io.github.cidy02.kudos.core.model.WorkSymbolPlacement
 import io.github.cidy02.kudos.data.local.KudosDatabase
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.files.WorkFileStore
@@ -21,6 +22,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Rule
 import org.junit.Test
@@ -96,6 +98,21 @@ class SettingsA66ParityTest {
             .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.SetProgress) { it(0.5f) }
         compose.onNodeWithText("Done").performClick()
         compose.waitUntil(5_000) { runBlocking { repository.snapshot().app.accentColorHex != "#7B2D6B" } }
+    }
+
+    @Test fun appearanceWorkSymbolsChoiceSwitchesTheStoredLayout() {
+        compose.setContent {
+            val current = androidx.compose.runtime.produceState(KudosSettings.Defaults) {
+                repository.settings.collect { value = it }
+            }.value
+            KudosTheme(KudosThemeMode.Light) { SettingsAppearancePage(repository, current) }
+        }
+        compose.onNodeWithText("Under the Title").performScrollTo().performClick()
+        compose.waitUntil(5_000) {
+            runBlocking { repository.snapshot().app.workSymbolPlacement == WorkSymbolPlacement.UnderTitle }
+        }
+        assertEquals(WorkSymbolPlacement.UnderTitle,
+            runBlocking { repository.snapshot().app.workSymbolPlacement })
     }
 
     @Test fun downloadsUsesThePrivacyTotalIncludingCacheAndExcludingOtherFiles() = runBlocking<Unit> {

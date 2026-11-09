@@ -37,8 +37,10 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.sp
 
 import androidx.compose.runtime.staticCompositionLocalOf
+import io.github.cidy02.kudos.core.model.WorkSymbolPlacement
 
 val LocalShowsZeroStats = staticCompositionLocalOf { true }
+val LocalWorkSymbolPlacement = staticCompositionLocalOf { WorkSymbolPlacement.Beside }
 
 /**
  * Compact work metadata expressed with Material 3 color/type roles.
