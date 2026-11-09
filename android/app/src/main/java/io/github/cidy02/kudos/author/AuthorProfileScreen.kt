@@ -57,6 +57,7 @@ import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.ErrorStateCard
 import io.github.cidy02.kudos.ui.subject.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.joinAll
 
 import io.github.cidy02.kudos.app.ProvidePushedShellChrome
 import io.github.cidy02.kudos.ui.subject.ToolbarCircleButton
@@ -106,7 +107,11 @@ fun AuthorProfileScreen(
     onNewWork: (() -> Unit)? = null,
     onOpenAuthor: (AO3AuthorRoute) -> Unit = {},
     onLogin: () -> Unit = {},
-    onOpenAuthorTab: (AO3AuthorRoute, AuthorTab) -> Unit = { _, _ -> }
+    onOpenAuthorTab: (AO3AuthorRoute, AuthorTab) -> Unit = { _, _ -> },
+    /** The overview's See All and count strip (iOS `dashboardDestination`). Defaults to the plain tab. */
+    onSeeAll: (AO3AuthorRoute, AuthorSeeAll) -> Unit = { r, target -> onOpenAuthorTab(r, target.tab) },
+    /** Works opened as Gifts or Most Kudos from the overview's See All. */
+    initialView: AuthorSeeAll? = null
 ) {
     val account by ((authRepository ?: seriesFormRepository?.auth)?.state?.collectAsState() ?: remember {
         mutableStateOf<io.github.cidy02.kudos.auth.AO3AuthState>(io.github.cidy02.kudos.auth.AO3AuthState.SignedOut) })
@@ -114,7 +119,8 @@ fun AuthorProfileScreen(
     val ownAccount = isOwnWorks(signedInUsername, username)
     val isContentDestination = initialTab != null
     val usesAccountHeader = isDashboard || (ownAccount && isContentDestination)
-    val showsTabs = !isDashboard && (!ownAccount || !isContentDestination)
+    // iOS T-468: with no tab named, the page is one overview of sections (no segmented switch).
+    val overview = !isDashboard && initialTab == null
     var editingSeries by remember(username) { mutableStateOf<Pair<AO3AuthorSeriesSummary, Boolean>?>(null) }
     var route by navigationEntryState("profile-route:$username:$initialPseud") {
         AO3AuthorRoute(username.trim(), initialPseud?.trim()?.takeIf { it.isNotBlank() })
@@ -143,7 +149,7 @@ fun AuthorProfileScreen(
     var tabLoading by navigationEntryState("profile:$username:${route.id}:$sessionGeneration:tabLoading") { false }
     var tabError by navigationEntryState<String?>("profile:$username:${route.id}:$sessionGeneration:tabError") { null }
     
-    var scopeState by navigationEntryState("profile:$username:${route.id}:$sessionGeneration:scopeState") { AO3AuthorWorksScope.Works }
+    var scopeState by navigationEntryState("profile:$username:${route.id}:$sessionGeneration:scopeState") { initialView?.scope ?: AO3AuthorWorksScope.Works }
     // iOS `AO3AuthorFandomFilterSection`: one of the author's fandoms, from the list AO3 prints
     // beside the plain works list. Android read that list and never offered it.
     var selectedFandom by navigationEntryState<io.github.cidy02.kudos.network.ao3.author.AO3AuthorFandom?>("profile:$username:${route.id}:$sessionGeneration:selectedFandom") { null }
@@ -151,7 +157,10 @@ fun AuthorProfileScreen(
     // the detailed card and forgot.
     var displayMode by rememberStoredChoice("authorProfile.displayMode", AuthorDisplayMode.Ledger)
     
-    var worksSort by navigationEntryState("profile:$username:${route.id}:$sessionGeneration:worksSort") { AO3AuthorWorksSort() }
+    var worksSort by navigationEntryState("profile:$username:${route.id}:$sessionGeneration:worksSort") { initialView?.sort ?: AO3AuthorWorksSort() }
+    var popular by navigationEntryState<AO3SearchPage?>("profile:$username:${route.id}:$sessionGeneration:popular") { null }
+    var overviewLoads by navigationEntryState("profile:$username:${route.id}:$sessionGeneration:overviewLoads") {
+        emptyMap<AuthorOverviewSection, AuthorSectionLoad>() }
     var worksFilters by navigationEntryState("profile:$username:${route.id}:$sessionGeneration:worksFilters") { AO3SearchFilters() }
     var showingWorksFilters by remember(route.id, sessionGeneration) { mutableStateOf(false) }
     // Same generation fence as AuthorWorksScreen, shared by tab/page/scope/sort changes.
@@ -164,7 +173,7 @@ fun AuthorProfileScreen(
     val tokens = LocalKudosTokens.current
 
     val selection = rememberRemoteWorkSelection()
-    val ownWorks = isOwnWorks(signedInUsername, route.username) && tab == AuthorTab.Works && !isDashboard &&
+    val ownWorks = !overview && isOwnWorks(signedInUsername, route.username) && tab == AuthorTab.Works && !isDashboard &&
         scopeState != AO3AuthorWorksScope.Gifts
     var rowAction by remember(username) { mutableStateOf<Pair<AO3WorkSummary, String>?>(null) }
     var bulkModel by remember(username) { mutableStateOf<WritingBulkEditState?>(null) }
@@ -287,6 +296,54 @@ fun AuthorProfileScreen(
         }
     }
 
+    // iOS overview: the profile page on open; Most Kudos, and Series and Bookmarks when the
+    // dashboard did not carry them, only when their section first scrolls into view.
+    fun loadOverview(section: AuthorOverviewSection, bypassCache: Boolean = false): Job {
+        val expectedRoute = route
+        val expectedSession = sessionGeneration
+        fun setLoad(load: AuthorSectionLoad) { overviewLoads = overviewLoads + (section to load) }
+        setLoad(AuthorSectionLoad.Loading)
+        return scope.launch {
+            try {
+                val failure: String? = when (section) {
+                    AuthorOverviewSection.About -> when (val r = authorRepository.loadAbout(expectedRoute, bypassCache)) {
+                        is AO3Result.Success -> { about = r.value; tabStale = tabStale || r.isStale; null }
+                        is AO3Result.Failure -> r.error.displayMessage()
+                    }
+                    AuthorOverviewSection.Popular -> when (val r = authorRepository.loadWorks(
+                        expectedRoute, 1, AO3AuthorWorksScope.Works, AuthorMostKudosSort, bypassCache)) {
+                        is AO3Result.Success -> { popular = r.value; tabStale = tabStale || r.isStale; null }
+                        is AO3Result.Failure -> r.error.displayMessage()
+                    }
+                    AuthorOverviewSection.Series -> when (val r = authorRepository.loadSeries(expectedRoute, 1, bypassCache)) {
+                        is AO3Result.Success -> { series = r.value; tabStale = tabStale || r.isStale; null }
+                        is AO3Result.Failure -> r.error.displayMessage()
+                    }
+                    AuthorOverviewSection.Bookmarks -> when (val r = authorRepository.loadBookmarks(expectedRoute, 1, bypassCache)) {
+                        is AO3Result.Success -> { bookmarks = r.value; tabStale = tabStale || r.isStale; null }
+                        is AO3Result.Failure -> r.error.displayMessage()
+                    }
+                }
+                currentCoroutineContext().ensureActive()
+                setLoad(failure?.let { AuthorSectionLoad.Failed(it) } ?: AuthorSectionLoad.Loaded)
+            } finally {
+                // Left while the screen went: do not stay "Loading" for the next visit.
+                if (overviewLoads[section] == AuthorSectionLoad.Loading) setLoad(AuthorSectionLoad.Idle)
+            }
+        }
+    }
+    fun ensureOverviewSection(section: AuthorOverviewSection) {
+        if ((overviewLoads[section] ?: AuthorSectionLoad.Idle) != AuthorSectionLoad.Idle) return
+        val h = header ?: return
+        when (section) {
+            AuthorOverviewSection.About -> if (about != null) return
+            AuthorOverviewSection.Popular -> {}
+            AuthorOverviewSection.Series -> if (h.recentSeries != null || series != null) return
+            AuthorOverviewSection.Bookmarks -> if (h.recentBookmarks != null || bookmarks != null) return
+        }
+        loadOverview(section)
+    }
+
     LaunchedEffect(route.id, sessionGeneration) {
         if (header == null && headerError == null) loadHeader()
     }
@@ -399,13 +456,16 @@ fun AuthorProfileScreen(
             AuthorTab.Works -> works; AuthorTab.Series -> series
             AuthorTab.Bookmarks -> bookmarks; AuthorTab.About -> about
         } != null
-        if (!refreshingProfile && header != null && !isDashboard && !loaded && !tabLoading && tabError == null) loadTab(tab, 1)
+        if (overview) { if (header != null && !refreshingProfile) ensureOverviewSection(AuthorOverviewSection.About) }
+        else if (!refreshingProfile && header != null && !isDashboard && !loaded && !tabLoading && tabError == null) loadTab(tab, 1)
     }
 
     val shareContext = androidx.compose.ui.platform.LocalContext.current
     var showMenu by remember { mutableStateOf(false) }
 
-    val palette = tokens.scopePalette
+    // iOS: an author's overview is washed in the author's own colour.
+    val palette = if (overview) io.github.cidy02.kudos.ui.subject.SubjectPalette.fromHue(
+        io.github.cidy02.kudos.home.HomeFacts.coverHue(route.username), tokens.theme) else tokens.scopePalette
 
     LaunchedEffect(route.id, sessionGeneration, tab, scopeState) { selection.exit() }
     LaunchedEffect(deleteState.confirmed) {
@@ -413,7 +473,7 @@ fun AuthorProfileScreen(
     }
     DisposableEffect(deletes) { onDispose { deletes?.close() } }
     val bulk = bulkModel
-    DebugShotEffect("author", ready = !works?.works.isNullOrEmpty()) { name ->
+    DebugShotEffect("author", ready = (overview && header != null) || !works?.works.isNullOrEmpty()) { name ->
         if (name == "authorworksfilter") showingWorksFilters = true
         else if (ownWorks && seriesWrites != null) {
             bulkModel = WritingBulkEditState(works!!.works.take(2).map { it.id }, seriesWrites, sessionGeneration)
@@ -466,7 +526,7 @@ fun AuthorProfileScreen(
         hasSubjectHeader = true,
         customTitle = if (selection.isSelecting) "${selection.selectedIn(works?.works.orEmpty()).size} selected" else null,
         trailingContent = {
-            if (!selection.isSelecting && onNewWork != null && isOwnWorks(signedInUsername, route.username) &&
+            if (!selection.isSelecting && !overview && onNewWork != null && isOwnWorks(signedInUsername, route.username) &&
                 (isDashboard || tab == AuthorTab.Works)) {
                 io.github.cidy02.kudos.ui.subject.ToolbarAddButton(onClick = onNewWork, accessibilityName = "New Work",
                     palette = tokens.scopePalette)
@@ -478,7 +538,7 @@ fun AuthorProfileScreen(
                         color = tokens.scopePalette.controlInk, lineHeight = 20.sp)
                 }
                 IconButton(onClick = selection::exit) { Icon(Icons.Default.Check, "Done", tint = tokens.scopePalette.controlInk) }
-            } else if (!isDashboard && tab == AuthorTab.Works) {
+            } else if (!isDashboard && !overview && tab == AuthorTab.Works) {
                 val activeCount = worksSort.activeCount + worksFilters.activeCountForRefine
                 ToolbarCircleButton(onClick = { showingWorksFilters = true }, accessibilityName = "Sort and filter",
                     palette = tokens.scopePalette, isAccented = activeCount > 0,
@@ -541,19 +601,21 @@ fun AuthorProfileScreen(
                         )
                         HorizontalDivider()
                     }
-                    DropdownMenuItem(
-                        text = { Text("Ledger Mode", color = tokens.primaryInk, lineHeight = 22.sp) },
-                        onClick = { displayMode = AuthorDisplayMode.Ledger; showMenu = false }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Detailed Mode", color = tokens.primaryInk, lineHeight = 22.sp) },
-                        onClick = { displayMode = AuthorDisplayMode.Detailed; showMenu = false }
-                    )
-                    if (isDashboard || tab != AuthorTab.About) DropdownMenuItem(
-                        text = { Text(if (expandAll) "Collapse All" else "Expand All", color = tokens.primaryInk, lineHeight = 22.sp) },
-                        onClick = { showMenu = false; expandAll = !expandAll }
-                    )
-                    HorizontalDivider()
+                    if (!overview) {
+                        DropdownMenuItem(
+                            text = { Text("Ledger Mode", color = tokens.primaryInk, lineHeight = 22.sp) },
+                            onClick = { displayMode = AuthorDisplayMode.Ledger; showMenu = false }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Detailed Mode", color = tokens.primaryInk, lineHeight = 22.sp) },
+                            onClick = { displayMode = AuthorDisplayMode.Detailed; showMenu = false }
+                        )
+                        if (isDashboard || tab != AuthorTab.About) DropdownMenuItem(
+                            text = { Text(if (expandAll) "Collapse All" else "Expand All", color = tokens.primaryInk, lineHeight = 22.sp) },
+                            onClick = { showMenu = false; expandAll = !expandAll }
+                        )
+                        HorizontalDivider()
+                    }
                     DropdownMenuItem(
                         text = { Text("Open on AO3", color = tokens.primaryInk, lineHeight = 22.sp) },
                         onClick = { showMenu = false; onOpenWeb(AO3AuthorUrls.userDashboardUrl(route.username, route.pseud) ?: "") }
@@ -662,7 +724,10 @@ fun AuthorProfileScreen(
         try {
             loadHeader(bypassCache = true)
             headerTask?.join()
-            if (headerError == null && header != null && !isDashboard) {
+            if (headerError == null && header != null && overview) {
+                (overviewLoads.filterValues { it != AuthorSectionLoad.Idle }.keys + AuthorOverviewSection.About)
+                    .map { loadOverview(it, bypassCache = true) }.joinAll()
+            } else if (headerError == null && header != null && !isDashboard) {
                 loadTab(tab, 1, bypassCache = true, keepContent = true)
                 tabTask?.join()
                 loadOwnStats(bypassCache = true)
@@ -746,6 +811,32 @@ fun AuthorProfileScreen(
                                 Spacer(Modifier.size(8.dp))
                                 AuthorPseudSelector(h.pseuds, route) { route = it }
                             }
+                        } else if (overview) {
+                            AuthorOverviewHeader(
+                                header = h,
+                                route = route,
+                                about = about,
+                                aboutLoad = overviewLoads[AuthorOverviewSection.About] ?: AuthorSectionLoad.Idle,
+                                isOwnProfile = signedInUsername?.equals(route.username, ignoreCase = true) == true,
+                                subscriptionBusy = subscriptionBusy || headerLoading,
+                                moderationBusy = moderationBusy,
+                                onSubscription = { form ->
+                                    when {
+                                        signedInUsername == null -> showingSubscriptionLogin = true
+                                        seriesWrites == null -> onOpenWeb(form.actionUrl)
+                                        // Leaving is asked first; joining is done at once (iOS).
+                                        form.isSubscribed -> confirmingUnsubscribe = form
+                                        else -> submitSubscription(form)
+                                    }
+                                },
+                                // Block and Mute only open AO3's own confirm page as a dialog; nothing is sent until its button.
+                                onModeration = { action ->
+                                    if (seriesWrites == null) onOpenWeb(action.url) else beginModeration(action)
+                                },
+                                onSelectScope = { route = it },
+                                onOpenWeb = onOpenWeb,
+                                onRetryAbout = { loadOverview(AuthorOverviewSection.About, bypassCache = true) }
+                            )
                         } else {
                             AO3AuthorHero(
                                 header = h,
@@ -777,22 +868,10 @@ fun AuthorProfileScreen(
                     }
                 }
 
-                if (!usesAccountHeader && h.pseuds.size > 1) {
+                if (!usesAccountHeader && !overview && h.pseuds.size > 1) {
                     item { AuthorPseudSelector(h.pseuds, route, card = true) { route = it } }
                 }
 
-                if (showsTabs) {
-                    item {
-                        SubjectSegmentedControl(
-                            items = AuthorTab.entries,
-                            selectedItem = tab,
-                            onItemSelected = {
-                                if (tab != it) { tab = it; loadTab(it, 1) }
-                            },
-                            labelProvider = { it.label }
-                        )
-                    }
-                }
             }
             
             if (h != null && (headerStale || tabStale)) item {
@@ -902,6 +981,17 @@ fun AuthorProfileScreen(
                     }
                     DashboardSeeAll("bookmarks") { onOpenAuthorTab(route, AuthorTab.Bookmarks) }
                 }
+            } else if (overview && h != null) {
+                authorOverviewItems(
+                    header = h, route = route, popular = popular, series = series, bookmarks = bookmarks,
+                    loads = overviewLoads, env = rowEnv,
+                    onSeeAll = { target -> onSeeAll(route, target) },
+                    onOpenWork = onOpenWork,
+                    onOpenSeries = { onOpenSeriesSummary(it) },
+                    onOpenFandom = { fandom -> onOpenWeb(fandom.url) },
+                    onVisible = ::ensureOverviewSection,
+                    onRetry = { loadOverview(it, bypassCache = true) }
+                )
             } else if (!isDashboard) {
                 val tabHasContent = when (tab) {
                     AuthorTab.Works -> works != null
@@ -974,7 +1064,7 @@ fun AuthorProfileScreen(
                                 .withoutHiddenRemote(rowEnv, selection.isSelecting)
                             item {
                                 SectionRuleHeader(
-                                    if (selection.isSelecting && ownWorks) "Your works" else "Works",
+                                    if (selection.isSelecting && ownWorks) "Your works" else if (scopeState == AO3AuthorWorksScope.Gifts) "Gifts" else "Works",
                                     count = visibleWorks.size.takeIf { !selection.isSelecting && it > 0 },
                                     countText = if (selection.isSelecting) "${selection.selectedIn(pageData?.works.orEmpty()).size} / ${pageData?.works.orEmpty().size}" else null
                                 )

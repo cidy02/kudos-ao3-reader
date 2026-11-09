@@ -1407,7 +1407,8 @@ fun AppNavHost(
         listOf(Routes.AuthorProfile, Routes.AuthorSeries, Routes.AuthorAbout).forEach { authorRoute -> sharedComposable(
             authorRoute,
             arguments = listOf(Routes.navArgOf("authorUsername")) + if (authorRoute == Routes.AuthorProfile) {
-                listOf(navArgument("tab") { type = NavType.StringType; nullable = true; defaultValue = null })
+                listOf(navArgument("tab") { type = NavType.StringType; nullable = true; defaultValue = null },
+                    navArgument("view") { type = NavType.StringType; nullable = true; defaultValue = null })
             } else emptyList()
         ) { backStackEntry ->
             val authorUsername = Routes.routeArg(backStackEntry, "authorUsername")
@@ -1421,6 +1422,10 @@ fun AppNavHost(
                     onOpenAbout = { navController.navigate(Routes.authorAbout(it)) },
                     onOpenAuthor = { navController.navigate(Routes.authorProfile(it)) },
                     onNewWork = { navController.navigate(io.github.cidy02.kudos.account.WritingWorkDestination.route()) },
+                    onSeeAll = { seeAllRoute, target ->
+                        navController.navigate(Routes.authorProfile(seeAllRoute, target.tab, target.view))
+                    },
+                    initialView = io.github.cidy02.kudos.author.AuthorSeeAll.fromView(Routes.routeArg(backStackEntry, "view")),
                     username = author.username,
                     initialPseud = author.pseud,
                     initialTab = when (authorRoute) {

@@ -368,9 +368,16 @@ object Routes {
     const val AuthorAbout = "author-about/{$ARG_AUTHOR_USERNAME}"
     fun authorAbout(route: io.github.cidy02.kudos.network.ao3.author.AO3AuthorRoute): String =
         "author-about/${encode(route.pseud?.let { "${it} (${route.username})" } ?: route.username)}"
-    const val AuthorProfile = "author-profile/{$ARG_AUTHOR_USERNAME}?tab={tab}"
-    fun authorProfile(username: String, initialTab: io.github.cidy02.kudos.author.AuthorTab? = null): String =
-        "author-profile/${encode(username)}" + (initialTab?.let { "?tab=${it.name}" } ?: "")
+    const val AuthorProfile = "author-profile/{$ARG_AUTHOR_USERNAME}?tab={tab}&view={view}"
+    /** [view] is [io.github.cidy02.kudos.author.AuthorSeeAll.view]: Works as Gifts or as Most Kudos. */
+    fun authorProfile(
+        username: String,
+        initialTab: io.github.cidy02.kudos.author.AuthorTab? = null,
+        view: String? = null
+    ): String {
+        val query = listOfNotNull(initialTab?.let { "tab=${it.name}" }, view?.let { "view=$it" })
+        return "author-profile/${encode(username)}" + if (query.isEmpty()) "" else query.joinToString("&", "?")
+    }
 
     fun authorProfileInitialTab(value: String?): io.github.cidy02.kudos.author.AuthorTab? =
         io.github.cidy02.kudos.author.AuthorTab.entries.firstOrNull { it.name == value }
@@ -378,8 +385,9 @@ object Routes {
     /** Existing author destinations carry AO3's pseud (account) byline through navigation. */
     fun authorProfile(
         route: io.github.cidy02.kudos.network.ao3.author.AO3AuthorRoute,
-        initialTab: io.github.cidy02.kudos.author.AuthorTab? = null
-    ): String = authorProfile(route.pseud?.let { "$it (${route.username})" } ?: route.username, initialTab)
+        initialTab: io.github.cidy02.kudos.author.AuthorTab? = null,
+        view: String? = null
+    ): String = authorProfile(route.pseud?.let { "$it (${route.username})" } ?: route.username, initialTab, view)
 
     private const val ARG_SERIES_URL = "seriesUrl"
     const val SeriesWorks = "series-works/{$ARG_SERIES_URL}?facts={facts}"
