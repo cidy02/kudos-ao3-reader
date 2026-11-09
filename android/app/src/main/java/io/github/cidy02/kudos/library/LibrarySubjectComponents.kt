@@ -49,7 +49,6 @@ import io.github.cidy02.kudos.ui.components.CoverStackKind
 import io.github.cidy02.kudos.ui.components.CoverStackLayout
 import io.github.cidy02.kudos.ui.components.coverHue
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
-import io.github.cidy02.kudos.ui.subject.SubjectColor
 import io.github.cidy02.kudos.ui.subject.SubjectPalette
 import io.github.cidy02.kudos.ui.subject.SubjectWorkCardMetrics
 import io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale
@@ -101,7 +100,7 @@ fun CollectionCard(
                 )
             }
         } else {
-            val displayHue = collection.hue ?: SubjectColor.hue(collection.name.trim().ifEmpty { "Collection" })
+            val displayHue = collection.hue ?: HomeFacts.coverHue(collection.name.trim().ifEmpty { "Collection" })
             CoverStack(
                 kind = CoverStackKind.Collection,
                 name = collection.name,

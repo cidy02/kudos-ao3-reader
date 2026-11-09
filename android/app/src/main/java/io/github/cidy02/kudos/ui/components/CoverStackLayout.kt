@@ -26,13 +26,12 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import io.github.cidy02.kudos.core.model.SavedWork
+import io.github.cidy02.kudos.home.HomeFacts
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.ReaderTheme
-import io.github.cidy02.kudos.ui.subject.SubjectColor
 import io.github.cidy02.kudos.ui.subject.SubjectPalette
 import io.github.cidy02.kudos.ui.subject.hsb
-import io.github.cidy02.kudos.ui.subject.mix
-import io.github.cidy02.kudos.ui.subject.parseSubjectHexColor
+import io.github.cidy02.kudos.ui.subject.parseStoredColor
 import io.github.cidy02.kudos.ui.subject.withOpacity
 import kotlin.math.PI
 import kotlin.math.abs
@@ -369,9 +368,9 @@ fun CoverStackNameFace(
                 listOf(start, end)
             }
             CoverStackKind.Queue -> {
-                val base = parseSubjectHexColor(pickedHex)
+                val base = pickedHex?.let(::parseStoredColor)
                     ?: SubjectPalette.fromHue(hue, tokens.theme).accent
-                listOf(base.mix(Color.Black, 0.38), base)
+                listOf(base.mixWith(Color.Black, 0.38), base)
             }
         }
     }
@@ -410,13 +409,13 @@ private fun BackCover(
     modifier: Modifier = Modifier
 ) {
     val tokens = LocalKudosTokens.current
-    val art = remember(work.workFandoms, work.title) {
-        SubjectColor.workArt(work.workFandoms, work.title)
+    val hue = remember(work.workFandoms, work.title) {
+        workArtHueDegrees(work.workFandoms, work.title)
     }
-    val colors = remember(art.hue) {
+    val colors = remember(hue) {
         listOf(
-            hslColor(art.hue.toDouble(), saturation = 0.46, lightness = 0.27),
-            hslColor(((art.hue + 22) % 360).toDouble(), saturation = 0.50, lightness = 0.41)
+            hslColor(hue.toDouble(), saturation = 0.46, lightness = 0.27),
+            hslColor(((hue + 22) % 360).toDouble(), saturation = 0.50, lightness = 0.41)
         )
     }
     Box(
@@ -493,9 +492,9 @@ internal fun carouselCollectionGradient(
     hue: Double,
     pickedHex: String? = null
 ): Pair<Color, Color> {
-    val picked = parseSubjectHexColor(pickedHex)
+    val picked = pickedHex?.let(::parseStoredColor)
     if (picked != null) {
-        return picked to picked.mix(Color.Black, 0.30)
+        return picked to picked.mixWith(Color.Black, 0.30)
     }
     return when (theme) {
         ReaderTheme.Dark, ReaderTheme.Oled ->
@@ -505,6 +504,23 @@ internal fun carouselCollectionGradient(
         ReaderTheme.Sepia ->
             hsb(hue, 0.40, 0.80) to hsb(hue, 0.52, 0.58)
     }
+}
+
+private fun workArtHueDegrees(fandoms: List<String>, title: String): Int {
+    val familyHue = (HomeFacts.workHue(fandoms, title) * 360.0).toInt()
+    val seed = title.fold(0) { acc, ch -> (acc * 31 + ch.code) and 0x7fffffff }
+    val shade = (seed % 29) - 14
+    return (familyHue + shade + 360) % 360
+}
+
+private fun Color.mixWith(other: Color, fraction: Double): Color {
+    val t = fraction.toFloat().coerceIn(0f, 1f)
+    return Color(
+        red = red + (other.red - red) * t,
+        green = green + (other.green - green) * t,
+        blue = blue + (other.blue - blue) * t,
+        alpha = alpha + (other.alpha - alpha) * t
+    )
 }
 
 private fun hslColor(hue: Double, saturation: Double, lightness: Double): Color {

@@ -133,8 +133,8 @@ fun HomeScreen(
             io.github.cidy02.kudos.library.LibraryPrivacy.visibility(it, state.privacy, privacyState) ==
                 io.github.cidy02.kudos.library.LibraryPrivacyVisibility.Visible
         }
-        val split = io.github.cidy02.kudos.library.ReadingQueueFacts.upNext(visible)
-        return (listOfNotNull(split.upNext) + split.inLine)
+        val (upNext, inLine) = io.github.cidy02.kudos.library.ReadingQueueFacts.upNext(visible)
+        return (listOfNotNull(upNext) + inLine)
             .take(io.github.cidy02.kudos.ui.components.CoverStackLayout.maxBacks)
     }
 

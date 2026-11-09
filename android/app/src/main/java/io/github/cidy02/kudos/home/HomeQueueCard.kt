@@ -28,7 +28,7 @@ import io.github.cidy02.kudos.ui.components.CoverStackLayout
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SubjectPalette
 import io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale
-import io.github.cidy02.kudos.ui.subject.parseSubjectHexColor
+import io.github.cidy02.kudos.ui.subject.parseStoredColor
 import io.github.cidy02.kudos.ui.subject.withOpacity
 
 /**
@@ -49,7 +49,7 @@ fun HomeQueueCard(
     val maxWidth = (LocalConfiguration.current.screenWidthDp.dp - 32.dp).coerceAtLeast(1.dp)
     val rowWidth = if (accessibility) maxWidth else minOf(300.dp, maxWidth)
     val queueHue = queue.hue ?: HomeFacts.coverHue(queue.displayName.ifBlank { "Queue" })
-    val palette = parseSubjectHexColor(queue.colorHex)?.let { SubjectPalette.fromColor(it, tokens.theme) }
+    val palette = queue.colorHex?.let(::parseStoredColor)?.let { SubjectPalette.fromColor(it, tokens.theme) }
         ?: SubjectPalette.fromHue(queueHue, tokens.theme)
     Row(
         modifier = modifier
