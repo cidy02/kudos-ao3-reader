@@ -198,13 +198,7 @@ object LibraryQuery {
             .sortedWith(lastReadComparator())
     }
 
-    private fun isMatureWork(work: SavedWork): Boolean {
-        val rating = work.rating.lowercase()
-        return rating.contains("explicit") ||
-            rating.contains("mature") ||
-            rating == "e" ||
-            rating == "m"
-    }
+    private fun isMatureWork(work: SavedWork): Boolean = LibraryPrivacy.isAdultRating(work.rating)
 
     fun sortDisplayItems(
         items: List<LibraryDisplayItem>,

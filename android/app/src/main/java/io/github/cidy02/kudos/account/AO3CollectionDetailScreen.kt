@@ -31,6 +31,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import io.github.cidy02.kudos.ui.components.LocalWorkRowEnvironment
+import io.github.cidy02.kudos.ui.components.WorkRowEnvironment
+import io.github.cidy02.kudos.ui.components.withoutHiddenRemote
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -124,6 +127,7 @@ fun AO3CollectionDetailScreen(
     val reveal by privacyGate.state.collectAsState()
     val activity = LocalContext.current as? FragmentActivity
     val tokens = LocalKudosTokens.current
+    val rowEnv = LocalWorkRowEnvironment.current
     val paletteTitle = show?.collection?.title ?: title
     val palette = remember(paletteTitle, tokens.theme) {
         SubjectPalette.fromHue(HomeFacts.workHue(emptyList(), paletteTitle), tokens.theme)
@@ -277,7 +281,8 @@ fun AO3CollectionDetailScreen(
                             bookmarksPage = bookmarksPage,
                             peoplePage = peoplePage,
                             palette = palette,
-                            onOpenWork = onOpenWork
+                            onOpenWork = onOpenWork,
+                            rowEnv = rowEnv
                         )
                     }
                 }
@@ -297,7 +302,8 @@ fun AO3CollectionDetailScreen(
                     bookmarksPage = bookmarksPage,
                     peoplePage = peoplePage,
                     palette = palette,
-                    onOpenWork = onOpenWork
+                    onOpenWork = onOpenWork,
+                    rowEnv = rowEnv
                 )
             }
 
@@ -359,18 +365,19 @@ private fun androidx.compose.foundation.lazy.LazyListScope.collectionSegmentCont
     bookmarksPage: AO3SearchPage?,
     peoplePage: AO3CollectionPeoplePage?,
     palette: SubjectPalette,
-    onOpenWork: (AO3WorkSummary) -> Unit
+    onOpenWork: (AO3WorkSummary) -> Unit,
+    rowEnv: WorkRowEnvironment?
 ) {
     when (segment) {
         AO3CollectionSegment.Works -> workRows(
-            rows = worksPage?.works.orEmpty(),
+            rows = worksPage?.works.orEmpty().withoutHiddenRemote(rowEnv),
             count = show?.collection?.worksCount,
             emptyMessage = "This collection has no works yet.",
             palette = palette,
             onOpenWork = onOpenWork
         )
         AO3CollectionSegment.Bookmarks -> workRows(
-            rows = bookmarksPage?.works.orEmpty(),
+            rows = bookmarksPage?.works.orEmpty().withoutHiddenRemote(rowEnv),
             count = show?.collection?.bookmarksCount,
             emptyMessage = "This collection has no bookmarks yet.",
             palette = palette,

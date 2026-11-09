@@ -37,7 +37,11 @@ import io.github.cidy02.kudos.account.WritingDraftsRepository
 import io.github.cidy02.kudos.auth.AO3AuthRepository
 import io.github.cidy02.kudos.auth.AO3AuthState
 import io.github.cidy02.kudos.auth.AO3PostingPseudStore
+import io.github.cidy02.kudos.app.PrivacyRevealState
 import io.github.cidy02.kudos.core.model.KudosSettings
+import io.github.cidy02.kudos.core.model.MatureContentMode
+import io.github.cidy02.kudos.core.model.PrivacySettings
+import io.github.cidy02.kudos.library.LibraryPrivacyVisibility
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.library.LibraryPrivacy
 import io.github.cidy02.kudos.network.ao3.author.AO3AuthorRepository
@@ -76,7 +80,14 @@ internal fun cachedWritingDrafts(
 }?.value
 
 internal fun writingDraftTitle(draft: AO3WorkSummary, hideMature: Boolean): String = when {
-    hideMature && LibraryPrivacy.isAdultRating(draft.rating) -> LibraryPrivacy.HIDDEN_WORK_TITLE
+    // The continue row names the draft. A known-adult rating, or a rating AO3 has not
+    // supplied yet, is concealed in either mode. The row itself stays.
+    hideMature && LibraryPrivacy.remoteVisibility(
+        draft.id.toString(),
+        draft.rating,
+        PrivacySettings(hideMatureContent = true, matureContentMode = MatureContentMode.Obscure),
+        PrivacyRevealState()
+    ) != LibraryPrivacyVisibility.Visible -> LibraryPrivacy.HIDDEN_WORK_TITLE
     draft.title.isBlank() -> "Untitled"
     else -> draft.title
 }

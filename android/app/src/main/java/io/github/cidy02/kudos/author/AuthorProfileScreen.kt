@@ -47,6 +47,11 @@ import io.github.cidy02.kudos.network.ao3.author.*
 import io.github.cidy02.kudos.network.ao3.displayMessage
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchPage
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
+import io.github.cidy02.kudos.library.LibraryPrivacy
+import io.github.cidy02.kudos.library.LibraryPrivacyVisibility
+import io.github.cidy02.kudos.ui.components.LocalWorkRowEnvironment
+import io.github.cidy02.kudos.ui.components.keptForPrivacy
+import io.github.cidy02.kudos.ui.components.withoutHiddenRemote
 import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.ErrorStateCard
 import io.github.cidy02.kudos.ui.subject.*
@@ -667,6 +672,7 @@ fun AuthorProfileScreen(
             refreshingProfile = false
         }
     }, modifier = Modifier.weight(1f)) {
+    val rowEnv = LocalWorkRowEnvironment.current
     LazyColumn(
         modifier = Modifier
             .testTag("Author profile")
@@ -823,7 +829,7 @@ fun AuthorProfileScreen(
                         Text("No recent works visible on AO3.", color = tokens.secondaryInk)
                     } else {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            h.recentWorks.forEach { work ->
+                            h.recentWorks.withoutHiddenRemote(rowEnv).forEach { work ->
                                 AO3AuthorWorkCard(
                                     work = work,
                                     displayMode = displayMode,
@@ -871,7 +877,16 @@ fun AuthorProfileScreen(
                         Text("No recent bookmarks visible on AO3.", color = tokens.secondaryInk)
                     } else {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            h.recentBookmarks.forEach { b ->
+                            // This card prints the title and cannot blur, so a concealed rating is left out.
+                            h.recentBookmarks.filter { bookmark ->
+                                val work = bookmark.work ?: return@filter true
+                                val env = rowEnv
+                                if (env == null || !env.loaded) return@filter true
+                                LibraryPrivacy.remoteRowVisibility(
+                                    work.id.toString(), work.rating, env.index.findMatch(work),
+                                    env.privacy, env.revealState
+                                ) == LibraryPrivacyVisibility.Visible
+                            }.forEach { b ->
                                 AO3DashboardCompactCard(
                                     fandoms = b.work?.fandoms ?: emptyList(),
                                     title = b.work?.title ?: "Bookmark",
@@ -950,7 +965,9 @@ fun AuthorProfileScreen(
                             }
                             
                             val pageData = works
-                            val visibleWorks = pageData?.works.orEmpty().filter { worksFilters.matchesSummary(it) }
+                            val visibleWorks = pageData?.works.orEmpty()
+                                .filter { worksFilters.matchesSummary(it) }
+                                .withoutHiddenRemote(rowEnv, selection.isSelecting)
                             item {
                                 SectionRuleHeader(
                                     if (selection.isSelecting && ownWorks) "Your works" else "Works",
@@ -1049,7 +1066,7 @@ fun AuthorProfileScreen(
                             if (pageData == null || pageData.bookmarks.isEmpty()) {
                                 item { EmptyStateCard("No visible bookmarks", "No bookmarks by this author are visible to you on AO3.") }
                             } else {
-                                items(pageData.bookmarks, key = { it.id }) { bm ->
+                                items(pageData.bookmarks.filter { it.work?.keptForPrivacy(rowEnv, selection.isSelecting) != false }, key = { it.id }) { bm ->
                                     // iOS: the note, the tags, Rec and the day are in the work's
                                     // card, as on the reader's own Bookmarks. They sat loose
                                     // under it here.

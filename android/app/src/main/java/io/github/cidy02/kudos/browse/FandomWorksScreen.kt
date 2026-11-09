@@ -47,7 +47,9 @@ import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 import io.github.cidy02.kudos.search.SearchFilterSheet
 import io.github.cidy02.kudos.search.activeFilterCount
 import io.github.cidy02.kudos.search.collectLocalTagSuggestions
+import io.github.cidy02.kudos.ui.components.LocalWorkRowEnvironment
 import io.github.cidy02.kudos.ui.components.SensitiveWorkRow
+import io.github.cidy02.kudos.ui.components.withoutHiddenRemote
 import io.github.cidy02.kudos.ui.components.KudosPaginationBar
 import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.KudosSectionHeader
@@ -242,6 +244,7 @@ fun FandomWorksScreen(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
             )
             is FandomWorksState.Loaded -> {
+                val listed = current.page.works.withoutHiddenRemote(LocalWorkRowEnvironment.current, selection.isSelecting)
                 current.error?.let { Text(it, color = LocalKudosTokens.current.secondaryInk, modifier = Modifier.padding(16.dp)) }
                 if (current.page.works.isEmpty()) {
                     EmptyStateCard(
@@ -311,7 +314,7 @@ fun FandomWorksScreen(
                                     modifier = Modifier.padding(horizontal = 16.dp)
                                 )
                             }
-                            items(current.page.works, key = { it.id }) { work ->
+                            items(listed, key = { it.id }) { work ->
                                 if (selection.isSelecting) {
                                     SelectableRemoteWorkRow(
                                         work = work,

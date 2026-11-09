@@ -211,7 +211,8 @@ fun SubjectWorkCoverCard(
 fun SubjectRemoteCoverCard(
     summary: AO3WorkSummary,
     modifier: Modifier = Modifier,
-    showsProvenance: Boolean = false
+    showsProvenance: Boolean = false,
+    obscured: Boolean = false
 ) {
     val tokens = LocalKudosTokens.current
     val cardSize = scaledHomeCardSize()
@@ -219,6 +220,12 @@ fun SubjectRemoteCoverCard(
     val palette = SubjectPalette.fromHue(hue, tokens.theme)
     val shape = RoundedCornerShape(HomeCardMetrics.radius)
     Box(modifier.padding(top = 2.dp, bottom = 8.dp).size(cardSize.width, cardSize.height)) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .then(if (obscured) Modifier.blur(8.dp) else Modifier)
+                .hiddenMatureWorkSemantics(obscured)
+        ) {
         CoverSurface(palette = palette, shape = shape, hero = false) {
             Column(
                 Modifier
@@ -269,6 +276,8 @@ fun SubjectRemoteCoverCard(
                 )
             }
         }
+        }
+        if (obscured) RevealCapsule(Modifier.align(Alignment.Center))
         if (showsProvenance) {
             Text(
                 text = "AO3",

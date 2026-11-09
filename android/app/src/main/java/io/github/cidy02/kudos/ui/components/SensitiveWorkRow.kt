@@ -759,11 +759,13 @@ fun SensitiveWorkRow(
                 selecting = selecting,
                 selectionAllowsDetails = selectionAllowsDetails,
                 selected = selected,
+                obscured = obscured,
                 onClick = click,
+                onReveal = click,
                 onSelect = { onOpenWork(work) },
                 onTagClick = onTagClick,
                 onTagSearch = onTagSearch,
-                onLongClick = onLongClick ?: longClick
+                onLongClick = if (obscured) longClick else onLongClick ?: longClick
             )
         }
     }

@@ -49,6 +49,7 @@ import io.github.cidy02.kudos.library.readingProgressFraction
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 import io.github.cidy02.kudos.network.ao3.work.AO3WorkMetadataRepository
 import io.github.cidy02.kudos.ui.components.KudosRefreshBox
+import io.github.cidy02.kudos.ui.components.keptForPrivacy
 import io.github.cidy02.kudos.ui.components.rememberCollapsedSections
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SectionRuleHeader
@@ -582,9 +583,12 @@ private fun SubscriptionsBlock(
             localLibrary = state.visibleItems.map { it.item.work }
         )
     }
+    // Hide drops a known-adult remote rating. A blank rating stays and the cover blurs.
+    val rowEnv = io.github.cidy02.kudos.ui.components.LocalWorkRowEnvironment.current
+    val shown = merged.filter { it.remote.keptForPrivacy(rowEnv) }
     val count = when {
-        showSkeleton || merged.isEmpty() || state.subscriptionsExactCount == null -> null
-        else -> merged.size
+        showSkeleton || shown.isEmpty() || state.subscriptionsExactCount == null -> null
+        else -> shown.size
     }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(5.dp)) {
         SectionRuleHeader(
@@ -592,7 +596,7 @@ private fun SubscriptionsBlock(
             count = count,
             isCollapsed = collapsed,
             onToggleCollapse = onToggle,
-            onSeeAll = if (merged.isEmpty()) null else onSeeAll
+            onSeeAll = if (shown.isEmpty()) null else onSeeAll
         )
         if (!collapsed) {
             when {
@@ -607,7 +611,7 @@ private fun SubscriptionsBlock(
                         repeat(6) { HomeCoverSkeleton() }
                     }
                 }
-                merged.isEmpty() -> HomeSectionEmpty(
+                shown.isEmpty() -> HomeSectionEmpty(
                     message = HomeSubscriptionsCopy.emptyMessage(state.isSignedIn, state.subscriptionsLoadFailed),
                     icon = HomeEmptyIcons.subscriptions
                 )
@@ -618,7 +622,7 @@ private fun SubscriptionsBlock(
                         .padding(horizontal = 16.dp, vertical = 6.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    merged.take(HomeShelfLimit).forEach { entry ->
+                    shown.take(HomeShelfLimit).forEach { entry ->
                         val local = entry.local
                         if (local != null) {
                             val item = displayById[local.id]
@@ -652,7 +656,8 @@ private fun SubscriptionsBlock(
                                         if (matched != null && obscured) {
                                             io.github.cidy02.kudos.ui.subject.SubjectWorkCoverCard(
                                                 work = matched, obscured = true, downloadFraction = null)
-                                        } else SubjectRemoteCoverCard(summary = entry.remote, showsProvenance = true)
+                                        } else SubjectRemoteCoverCard(
+                                            summary = entry.remote, showsProvenance = true, obscured = obscured)
                                     }
                                 }
                             } else HomePress(onClick = { onOpenRemote(entry.remote) }) {

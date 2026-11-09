@@ -82,15 +82,20 @@ class RemoteWorkActionsTest {
         directory.toFile().deleteRecursively()
     }
 
-    private fun show(selection: RemoteWorkSelectionState? = null, matureMenu: Boolean = false, selectingRow: Boolean = false) {
+    private fun show(
+        selection: RemoteWorkSelectionState? = null,
+        matureMenu: Boolean = false,
+        selectingRow: Boolean = false,
+        summary: AO3WorkSummary = remote
+    ) {
         compose.setContent {
             KudosTheme(KudosThemeMode.Light) {
                 ProvideWorkRowActions(works, queues, downloads, importer, settings, gate,
                     openDetails = {}, openReader = { opened += it }, openComments = {}) {
                     Column {
-                        SensitiveWorkRow(work = remote, onOpenWork = { selectionTaps++ }, selecting = selectingRow)
+                        SensitiveWorkRow(work = summary, onOpenWork = { selectionTaps++ }, selecting = selectingRow)
                         if (matureMenu) MatureWorkMenuItem {}
-                        if (selection != null) RemoteWorkSelectionActions(selection, listOf(remote), importer, queues)
+                        if (selection != null) RemoteWorkSelectionActions(selection, listOf(summary), importer, queues)
                     }
                 }
             }
@@ -125,13 +130,14 @@ class RemoteWorkActionsTest {
     }
 
     @Test fun hideModeLeavesTheRemoteListingUnmatched() {
+        val safe = remote.copy(rating = "General Audiences")
         runBlocking {
             settings.updateHideMatureContent(true)
             settings.updateMatureContentMode(MatureContentMode.Hide)
             works.upsert(SavedWork(title = "Local title", author = "A", rating = "Explicit",
-                sourceUrl = remote.workUrl, hasEpub = false))
+                sourceUrl = safe.workUrl, hasEpub = false))
         }
-        show()
+        show(summary = safe)
         awaitText("Remote title")
         compose.onNodeWithText("Local title").assertDoesNotExist()
         assertEquals(0, requests)

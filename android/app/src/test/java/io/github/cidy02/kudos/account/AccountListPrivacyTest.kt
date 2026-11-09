@@ -6,8 +6,10 @@ import io.github.cidy02.kudos.core.model.PrivacySettings
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 import io.github.cidy02.kudos.works.CanonicalWork
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** iOS `AO3AccountWorksList.visibleEntries`: which library works stay paired with their AO3 row. */
@@ -43,9 +45,27 @@ class AccountListPrivacyTest {
     ) = visibleEntries(paired(rating), privacy, reveal).single().local
 
     @Test
-    fun hideModeUnpairsAMatureLibraryWork() {
-        assertNull(local("Explicit", privacy(MatureContentMode.Hide)))
-        assertNull(local("Mature", privacy(MatureContentMode.Hide)))
+    fun hideModeOmitsAKnownAdultRemoteWork() {
+        assertTrue(visibleEntries(paired("Explicit"), privacy(MatureContentMode.Hide), PrivacyRevealState()).isEmpty())
+        assertTrue(visibleEntries(paired("Mature"), privacy(MatureContentMode.Hide), PrivacyRevealState()).isEmpty())
+        assertTrue(visibleEntries(paired("Not Rated"), privacy(MatureContentMode.Hide), PrivacyRevealState()).isEmpty())
+    }
+
+    @Test
+    fun hideModeKeepsASafeRemoteListingUnpairedFromItsMatureLocalCopy() {
+        val shown = visibleEntries(
+            listOf(paired("Explicit").single().copy(remote = paired("General Audiences").single().remote)),
+            privacy(MatureContentMode.Hide),
+            PrivacyRevealState()
+        )
+        assertNull(shown.single().local)
+        assertEquals("General Audiences", shown.single().remote.rating)
+    }
+
+    @Test
+    fun aBlankRemoteRatingStaysListedInBothModes() {
+        assertEquals(1, visibleEntries(paired(""), privacy(MatureContentMode.Hide), PrivacyRevealState()).size)
+        assertEquals(1, visibleEntries(paired("   "), privacy(MatureContentMode.Obscure), PrivacyRevealState()).size)
     }
 
     @Test

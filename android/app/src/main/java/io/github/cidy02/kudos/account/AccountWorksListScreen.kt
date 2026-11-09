@@ -1688,10 +1688,16 @@ internal fun visibleEntries(
     works: List<CanonicalWork>,
     privacy: PrivacySettings,
     reveal: PrivacyRevealState
-): List<CanonicalWork> = works.map { work ->
+): List<CanonicalWork> = works.mapNotNull { work ->
     val hidden = work.local != null &&
         LibraryPrivacy.visibility(work.local, privacy, reveal) == LibraryPrivacyVisibility.Hidden
-    if (hidden) work.copy(local = null) else work
+    val shownLocal = if (hidden) null else work.local
+    // A known-adult remote rating is omitted in Hide. A blank rating stays, and the row blurs.
+    if (!LibraryPrivacy.keepsRemoteRow(work.remote.id.toString(), work.remote.rating, shownLocal, privacy, reveal)) {
+        null
+    } else {
+        work.copy(local = shownLocal)
+    }
 }
 
 /**

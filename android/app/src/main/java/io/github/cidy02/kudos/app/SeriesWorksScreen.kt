@@ -31,7 +31,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.collectAsState
+import io.github.cidy02.kudos.ui.components.LocalWorkRowEnvironment
 import io.github.cidy02.kudos.ui.components.navigationEntryState
+import io.github.cidy02.kudos.ui.components.withoutHiddenRemote
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -229,6 +231,7 @@ fun SeriesWorksScreen(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
             )
             is SeriesWorksState.Loaded -> {
+                val listed = current.page.works.withoutHiddenRemote(LocalWorkRowEnvironment.current, selection.isSelecting)
                 if (current.isStale) io.github.cidy02.kudos.ui.components.CachedAO3DataRow(
                     Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
                 if (current.page.works.isEmpty()) {
@@ -260,7 +263,7 @@ fun SeriesWorksScreen(
                                 count = current.page.works.size.takeIf { it > 0 }
                             )
                         }
-                        items(current.page.works, key = { it.id }) { work ->
+                        items(listed, key = { it.id }) { work ->
                             SeriesWorkRow(work, selection.isSelecting, selection.isSelected(work.id),
                                 { selection.toggle(work.id) }, onOpenWork, expandAll)
                         }

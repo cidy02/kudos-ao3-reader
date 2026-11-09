@@ -35,6 +35,9 @@ internal class WorkRowEnvironment(
     val index: WorkIdentityIndexInstance,
     val visibility: (SavedWork) -> LibraryPrivacyVisibility,
     val reveal: (String) -> Unit,
+    val revealIds: (Set<String>) -> Unit,
+    val privacy: io.github.cidy02.kudos.core.model.PrivacySettings,
+    val revealState: io.github.cidy02.kudos.app.PrivacyRevealState,
     val confirmBeforeDelete: Boolean,
     val hideMature: Boolean,
     val revealAll: Boolean,
@@ -71,7 +74,10 @@ internal fun ProvideWorkRowActions(
     CompositionLocalProvider(LocalWorkRowEnvironment provides WorkRowEnvironment(
         repository, queues, downloads, importer, works != null && settings != null, index,
         { LibraryPrivacy.visibility(it, currentSettings.privacy, reveal) },
-        { privacyGate.reveal(it, activity) }, currentSettings.app.confirmBeforeDelete,
+        { privacyGate.reveal(it, activity) },
+        { privacyGate.reveal(it, activity) },
+        currentSettings.privacy, reveal,
+        currentSettings.app.confirmBeforeDelete,
         currentSettings.privacy.hideMatureContent, reveal.revealAll, { privacyGate.toggleRevealAll(activity) },
         openDetails, openReader, openComments
     ), content = content)
@@ -133,7 +139,9 @@ internal fun RemoteWorkActionFrame(
     if (!environment.loaded) return
     val scope = rememberCoroutineScope()
     val local = environment.index.findMatch(summary)
-    val obscured = local != null && environment.visibility(local) == LibraryPrivacyVisibility.Obscured
+    val presentation = LibraryPrivacy.remoteRowVisibility(
+        summary.id.toString(), summary.rating, local, environment.privacy, environment.revealState)
+    val obscured = presentation == LibraryPrivacyVisibility.Obscured
     val work = local ?: remember(summary) {
         WorkMetadataMerger(uuidFactory = { "remote_${summary.id}" }).merge(
             summary, null, null, markSaved = false, hasEpub = false)
@@ -178,9 +186,15 @@ internal fun RemoteWorkActionFrame(
         isInSavedForLater = { local?.let { environment.queues.isInSavedForLater(it.id) } == true }
     )
     val effectiveActions = if (local != null) actions else remoteActions
+    // After the remembers above, so reveal-all can put this row back without reordering them.
+    // Hide mode omits a known-adult remote rating. A blank rating is blurred, not dropped.
+    if (presentation == LibraryPrivacyVisibility.Hidden) return
     val click: () -> Unit = {
         if (!busy) {
-            if (obscured) environment.reveal(work.id)
+            if (obscured) environment.revealIds(buildSet {
+                local?.let { add(it.id) }
+                add(summary.id.toString())
+            })
             else if (local != null) actions.onOpenReader(local.id)
             else onOpenRemote(summary)
         }
@@ -216,3 +230,20 @@ internal fun RemoteWorkActionFrame(
             text = { Text(message) }, confirmButton = { TextButton(onClick = { error = null }) { Text("OK") } })
     }
 }
+
+/** Hide mode drops a known-adult remote rating. Selection still lists every work. */
+internal fun AO3WorkSummary.keptForPrivacy(environment: WorkRowEnvironment?, selecting: Boolean = false): Boolean {
+    if (selecting || environment == null || !environment.loaded) return true
+    return LibraryPrivacy.keepsRemoteRow(
+        id.toString(), rating, environment.index.findMatch(this), environment.privacy, environment.revealState)
+}
+
+internal fun List<AO3WorkSummary>.withoutHiddenRemote(
+    environment: WorkRowEnvironment?,
+    selecting: Boolean = false
+): List<AO3WorkSummary> = filter { it.keptForPrivacy(environment, selecting) }
+
+internal fun List<CanonicalWork>.withoutHiddenRemote(
+    environment: WorkRowEnvironment?,
+    selecting: Boolean = false
+): List<CanonicalWork> = filter { it.remote.keptForPrivacy(environment, selecting) }

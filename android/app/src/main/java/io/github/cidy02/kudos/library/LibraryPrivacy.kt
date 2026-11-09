@@ -60,13 +60,88 @@ object LibraryPrivacy {
         if (visibility != LibraryPrivacyVisibility.Visible) HIDDEN_WORK_TITLE
         else work.title
 
-    fun isAdultRating(rating: String): Boolean {
-        val normalized = rating.trim().lowercase()
-        return normalized == "mature" ||
-            normalized == "explicit" ||
-            normalized.contains("mature") ||
-            normalized.contains("explicit")
+    /**
+     * AO3's own rule (`Taggable#adult?`, iOS `MatureContentRating.isAdult`): only General
+     * Audiences and Teen And Up Audiences are not adult. Mature, Explicit, Not Rated, and any
+     * rating this build does not recognise are adult. No rating data at all (`null`) fails
+     * closed. A blank rating is "not supplied yet": not adult by itself.
+     * Whitespace is collapsed and the comparison is case-insensitive.
+     */
+    fun isAdultRating(rating: String?): Boolean {
+        if (rating == null) return true
+        val normalized = rating
+            .split { it.isWhitespace() }
+            .filter { it.isNotEmpty() }
+            .joinToString(" ")
+            .lowercase(java.util.Locale.ROOT)
+        return normalized != "" &&
+            normalized != "general audiences" &&
+            normalized != "teen and up audiences"
     }
+
+    /**
+     * Hide omits a remote row whose rating is known to be adult. A missing or blank rating is
+     * not known, so the row is never omitted: it is blurred in both modes until revealed.
+     * iOS `PrivacyGate.isHidden` / `isBlurred` for a remote id.
+     */
+    fun remoteVisibility(
+        remoteId: String,
+        rating: String?,
+        privacy: PrivacySettings,
+        reveal: PrivacyRevealState
+    ): LibraryPrivacyVisibility {
+        if (!privacy.hideMatureContent || reveal.isRevealed(remoteId)) {
+            return LibraryPrivacyVisibility.Visible
+        }
+        if (rating.isNullOrBlank()) return LibraryPrivacyVisibility.Obscured
+        if (!isAdultRating(rating)) return LibraryPrivacyVisibility.Visible
+        return when (privacy.matureContentMode) {
+            MatureContentMode.Hide -> LibraryPrivacyVisibility.Hidden
+            MatureContentMode.Obscure -> LibraryPrivacyVisibility.Obscured
+        }
+    }
+
+    /**
+     * A rated local copy speaks for a remote blurb that has not supplied a rating yet
+     * (iOS `remoteDefersToLocal`). A blank local rating does not.
+     */
+    fun remoteDefersToLocal(localRating: String, remoteRating: String?): Boolean =
+        localRating.isNotEmpty() && remoteRating.isNullOrBlank()
+
+    /**
+     * How a remote listing is drawn. A library match that is still on the shelf uses the
+     * local rule, and a known-adult remote rating conceals that card too. A blank remote
+     * rating blurs unless the local copy already has a rating. Callers that have already
+     * dropped a hidden local pass `local = null`, so a safe remote listing stays.
+     */
+    fun remoteRowVisibility(
+        remoteId: String,
+        rating: String?,
+        local: SavedWork?,
+        privacy: PrivacySettings,
+        reveal: PrivacyRevealState
+    ): LibraryPrivacyVisibility {
+        val remote = remoteVisibility(remoteId, rating, privacy, reveal)
+        if (local == null) return remote
+        val localVisibility = visibility(local, privacy, reveal)
+        if (localVisibility == LibraryPrivacyVisibility.Hidden) return remote
+        val defer = remoteDefersToLocal(local.rating, rating)
+        if (remote == LibraryPrivacyVisibility.Hidden && !defer) return LibraryPrivacyVisibility.Hidden
+        if (localVisibility == LibraryPrivacyVisibility.Obscured ||
+            (remote == LibraryPrivacyVisibility.Obscured && !defer)
+        ) {
+            return LibraryPrivacyVisibility.Obscured
+        }
+        return LibraryPrivacyVisibility.Visible
+    }
+
+    fun keepsRemoteRow(
+        remoteId: String,
+        rating: String?,
+        local: SavedWork?,
+        privacy: PrivacySettings,
+        reveal: PrivacyRevealState
+    ): Boolean = remoteRowVisibility(remoteId, rating, local, privacy, reveal) != LibraryPrivacyVisibility.Hidden
 
     private fun SavedWork.isAdultRated(): Boolean = isAdultRating(rating)
 }

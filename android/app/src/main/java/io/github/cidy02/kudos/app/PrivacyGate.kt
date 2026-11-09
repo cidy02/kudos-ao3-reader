@@ -46,8 +46,17 @@ class PrivacyGate {
 
     /** Reveals a single work (an Obscure-mode tap), optionally gated by biometric/passcode. */
     fun reveal(workId: String, activity: FragmentActivity? = null) {
+        reveal(setOf(workId), activity)
+    }
+
+    /**
+     * One authentication reveals a local work and its AO3 id together. A remote blurb and the
+     * saved copy are different ids; prompting twice for one tap would leave the other blurred.
+     */
+    fun reveal(workIds: Set<String>, activity: FragmentActivity? = null) {
+        if (workIds.isEmpty()) return
         authenticate(activity) {
-            _state.update { it.copy(revealedIds = it.revealedIds + workId) }
+            _state.update { it.copy(revealedIds = it.revealedIds + workIds) }
         }
     }
 

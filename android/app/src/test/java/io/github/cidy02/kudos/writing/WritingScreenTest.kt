@@ -56,6 +56,9 @@ class WritingScreenTest {
         assertEquals(LibraryPrivacy.HIDDEN_WORK_TITLE, writingDraftTitle(mature, hideMature = true))
         assertEquals("Explicit Draft", writingDraftTitle(mature, hideMature = false))
         assertEquals("Quiet", writingDraftTitle(draft(title = "Quiet", rating = "General Audiences"), hideMature = true))
+        assertEquals(LibraryPrivacy.HIDDEN_WORK_TITLE, writingDraftTitle(draft(title = "Unrated", rating = "Not Rated"), hideMature = true))
+        assertEquals(LibraryPrivacy.HIDDEN_WORK_TITLE, writingDraftTitle(draft(title = "Pending", rating = ""), hideMature = true))
+        assertEquals("Pending", writingDraftTitle(draft(title = "Pending", rating = ""), hideMature = false))
     }
 
     private fun drafts(vararg works: AO3WorkSummary) = AO3DraftsPage(

@@ -34,7 +34,9 @@ import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.author.AO3AuthorWorksRepository
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchPage
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
+import io.github.cidy02.kudos.ui.components.LocalWorkRowEnvironment
 import io.github.cidy02.kudos.ui.components.SensitiveWorkRow
+import io.github.cidy02.kudos.ui.components.withoutHiddenRemote
 import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.ErrorStateCard
 import io.github.cidy02.kudos.ui.components.KudosScreenHeader
@@ -120,6 +122,7 @@ fun AuthorWorksScreen(
                 onPrimaryAction = { load(current.page) }
             )
             is AuthorWorksState.Loaded -> {
+                val listed = current.page.works.withoutHiddenRemote(LocalWorkRowEnvironment.current, selection.isSelecting)
                 if (current.page.works.isEmpty()) {
                     EmptyStateCard(
                         title = "No works found",
@@ -140,7 +143,7 @@ fun AuthorWorksScreen(
                                 subtitle = "Page ${current.page.currentPage} of ${current.page.totalPages}"
                             )
                         }
-                        items(current.page.works, key = { it.id }) { work ->
+                        items(listed, key = { it.id }) { work ->
                             if (selection.isSelecting) {
                                 SelectableRemoteWorkRow(
                                     work = work,

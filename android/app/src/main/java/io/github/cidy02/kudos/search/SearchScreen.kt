@@ -79,7 +79,9 @@ import io.github.cidy02.kudos.network.ao3.search.AO3SearchPage
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchRepository
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchSort
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
+import io.github.cidy02.kudos.ui.components.LocalWorkRowEnvironment
 import io.github.cidy02.kudos.ui.components.SensitiveWorkRow
+import io.github.cidy02.kudos.ui.components.withoutHiddenRemote
 import io.github.cidy02.kudos.ui.components.GlassFieldBar
 import io.github.cidy02.kudos.ui.components.KudosPaginationBar
 import io.github.cidy02.kudos.ui.components.KudosRefreshBox
@@ -1102,6 +1104,7 @@ private fun SearchResultsList(
     onSortSelected: (AO3SearchSort) -> Unit,
     onRefresh: suspend () -> Unit
 ) {
+    val shown = works.withoutHiddenRemote(LocalWorkRowEnvironment.current, selecting)
     val listState = rememberLazyListState()
     LaunchedEffect(page.currentPage) {
         listState.animateScrollToItem(0)
@@ -1124,7 +1127,7 @@ private fun SearchResultsList(
                     onPage = onPage
                 )
             }
-            items(works, key = { it.remote.id }) { work ->
+            items(shown, key = { it.remote.id }) { work ->
                 if (selecting) {
                     SelectableRemoteWorkRow(
                         work = work.remote,

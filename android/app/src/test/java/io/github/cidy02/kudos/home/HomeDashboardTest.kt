@@ -79,7 +79,7 @@ class HomeDashboardTest {
     fun dashboardCarriesPrivacyHiddenCountAndOmitsHiddenWorks() {
         val state = HomeDashboard.buildState(
             snapshot(
-                work(id = "visible", title = "Visible Work", rating = "Teen"),
+                work(id = "visible", title = "Visible Work", rating = "Teen And Up Audiences"),
                 work(
                     id = "hidden-update",
                     title = "Hidden Update",
