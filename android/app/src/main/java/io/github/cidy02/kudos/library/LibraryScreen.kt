@@ -2313,7 +2313,11 @@ private fun CollectionsShelf(
         layout = layout
     ) {
         if (layout == WorkSectionLayout.Shelves) {
-            WorkCardCarousel(collections.take(ShelfLimit), key = { it.id }) { collection ->
+            WorkCardCarousel(
+                collections.take(ShelfLimit),
+                key = { it.id },
+                cardSpacing = io.github.cidy02.kudos.ui.subject.SubjectWorkCardMetrics.coverStackSpacing
+            ) { collection ->
                 CollectionDashboardCard(collection, allItems, onOpenCollection, onDeleteCollection)
             }
         } else {

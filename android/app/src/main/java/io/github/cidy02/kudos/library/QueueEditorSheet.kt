@@ -179,6 +179,22 @@ fun QueueEditorSheet(
                     .padding(bottom = 28.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                val previewName = name.trim().ifEmpty { "Reading Queue" }
+                val previewHue = hue ?: ReadingQueueFacts.coverHue(previewName)
+                Box(
+                    Modifier.fillMaxWidth().padding(top = 8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    io.github.cidy02.kudos.ui.components.CoverStack(
+                        kind = io.github.cidy02.kudos.ui.components.CoverStackKind.Queue,
+                        name = previewName,
+                        hue = previewHue,
+                        pickedHex = colorHex,
+                        backs = emptyList(),
+                        width = 88.dp,
+                        height = 120.dp
+                    )
+                }
                 SubjectFieldLabel("Name", Modifier.padding(top = 12.dp))
                 OutlinedTextField(
                     value = name,

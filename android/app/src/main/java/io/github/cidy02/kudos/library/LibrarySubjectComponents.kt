@@ -44,8 +44,12 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.TextUnit
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.core.model.WorkCollection
+import io.github.cidy02.kudos.ui.components.CoverStack
+import io.github.cidy02.kudos.ui.components.CoverStackKind
+import io.github.cidy02.kudos.ui.components.CoverStackLayout
 import io.github.cidy02.kudos.ui.components.coverHue
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
+import io.github.cidy02.kudos.ui.subject.SubjectColor
 import io.github.cidy02.kudos.ui.subject.SubjectPalette
 import io.github.cidy02.kudos.ui.subject.SubjectWorkCardMetrics
 import io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale
@@ -63,7 +67,7 @@ fun CollectionCard(
     val accessibility = isAccessibilityFontScale()
     val cardWidth = if (accessibility) (LocalConfiguration.current.screenWidthDp.dp - 32.dp).coerceAtLeast(1.dp)
         else SubjectWorkCardMetrics.width
-    val mosaicHeight = 221.dp * (cardWidth / SubjectWorkCardMetrics.width)
+    val tileHeight = cardWidth * (140f / 150f)
     val palette = remember(collection.hue, collection.colorHex, collection.name, tokens.theme) {
         collectionDraftPalette(collection.name, collection.hue, collection.colorHex, tokens.theme)
     }
@@ -84,7 +88,7 @@ fun CollectionCard(
             Box(
                 Modifier
                     .fillMaxWidth()
-                    .height(mosaicHeight)
+                    .height(tileHeight)
                     .clip(shape)
                     .background(palette.cardWash),
                 contentAlignment = Alignment.Center
@@ -97,32 +101,16 @@ fun CollectionCard(
                 )
             }
         } else {
-            // iOS StackedWorkCover: neutral glass, a 2x2 of the newest works, faint empty slots.
-            val slots: List<SavedWork?> = previewWorks.take(4) + List(4 - previewWorks.size.coerceAtMost(4)) { null }
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .then(if (accessibility) Modifier.heightIn(min = mosaicHeight) else Modifier.height(mosaicHeight))
-                    .clip(shape)
-                    .background(tokens.glassFill(0.06))
-                    .border(0.5.dp, tokens.glassStroke(0.07), shape)
-                    .padding(10.dp),
-                verticalArrangement = Arrangement.spacedBy(7.dp)
-            ) {
-                slots.chunked(2).forEachIndexed { rowIndex, row ->
-                    // Keep Android's full preview text while preserving iOS's two columns.
-                    val rowModifier = if (accessibility) {
-                        Modifier.heightIn(min = (mosaicHeight - 27.dp) / 2).height(IntrinsicSize.Min)
-                    } else Modifier.weight(1f)
-                    Row(rowModifier, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                        row.forEachIndexed { columnIndex, work ->
-                            val cell = Modifier.weight(1f).fillMaxHeight()
-                                .testTag("Collection mosaic slot ${rowIndex * 2 + columnIndex}")
-                            if (work == null) MosaicPlaceholder(cell) else MosaicWorkTile(work, cell)
-                        }
-                    }
-                }
-            }
+            val displayHue = collection.hue ?: SubjectColor.hue(collection.name.trim().ifEmpty { "Collection" })
+            CoverStack(
+                kind = CoverStackKind.Collection,
+                name = collection.name,
+                hue = displayHue,
+                pickedHex = collection.colorHex,
+                backs = previewWorks.take(CoverStackLayout.maxBacks),
+                width = cardWidth,
+                height = tileHeight
+            )
         }
         Text(
             collection.name,
@@ -226,62 +214,6 @@ private fun MiniatureWorkCover(
             overflow = TextOverflow.Ellipsis
         )
     }
-}
-
-/** iOS StackedWorkCover.workCell. */
-@Composable
-private fun MosaicWorkTile(work: SavedWork, modifier: Modifier) {
-    val tokens = LocalKudosTokens.current
-    val accessibility = isAccessibilityFontScale()
-    val palette = remember(work.title, work.workFandoms, tokens.theme) {
-        SubjectPalette.fromHue(HomeFacts.workHue(work.workFandoms, work.title), tokens.theme)
-    }
-    val shape = RoundedCornerShape(9.dp)
-    val dark = tokens.theme.isDarkFamily
-    val authorInk = if (accessibility) tokens.secondaryInk
-        else if (dark) Color.White.copy(alpha = 0.62f) else tokens.secondaryInk
-    Column(
-        modifier
-            .clip(shape)
-            .background(palette.cardWash)
-            .border(0.5.dp, tokens.glassStroke(0.10), shape)
-            .padding(horizontal = 7.dp, vertical = 6.dp)
-    ) {
-        Box(Modifier.size(width = 14.dp, height = 2.dp).background(palette.accent, RoundedCornerShape(50)))
-        Spacer(Modifier.height(6.dp))
-        Text(
-            work.title,
-            color = if (accessibility) tokens.primaryInk
-                else if (dark) Color.White.copy(alpha = 0.92f) else tokens.primaryInk,
-            fontSize = 9.5.sp,
-            lineHeight = 12.sp,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = if (accessibility) Int.MAX_VALUE else 2,
-            overflow = TextOverflow.Ellipsis,
-            // iOS lets the title shrink to 85% before giving up (`minimumScaleFactor(0.85)`). A long
-            // word was broken across the lines instead ("Unanswere / d Is Not U…").
-            autoSize = if (accessibility) null
-                else androidx.compose.foundation.text.TextAutoSize.StepBased(minFontSize = 8.sp, maxFontSize = 9.5.sp, stepSize = 0.25.sp)
-        )
-        Spacer(Modifier.weight(1f).height(4.dp))
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-            Icon(Icons.Outlined.Person, contentDescription = null, tint = authorInk, modifier = Modifier.size(8.dp))
-            Text(
-                work.author, color = authorInk, fontSize = 8.5.sp,
-                lineHeight = if (accessibility) 12.sp else TextUnit.Unspecified,
-                maxLines = if (accessibility) Int.MAX_VALUE else 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-    }
-}
-
-/** iOS StackedWorkCover.placeholderCell. */
-@Composable
-private fun MosaicPlaceholder(modifier: Modifier) {
-    val tokens = LocalKudosTokens.current
-    val shape = RoundedCornerShape(9.dp)
-    Box(modifier.clip(shape).background(tokens.glassFill(0.04)).border(0.5.dp, tokens.glassStroke(0.06), shape))
 }
 
 @Composable

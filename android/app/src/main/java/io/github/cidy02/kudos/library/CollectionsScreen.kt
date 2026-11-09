@@ -154,7 +154,7 @@ fun CollectionsScreen(
                     top = topInset + 56.dp,
                     bottom = 16.dp
                 ),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(SubjectWorkCardMetrics.coverStackSpacing),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier.fillMaxSize()
             ) {

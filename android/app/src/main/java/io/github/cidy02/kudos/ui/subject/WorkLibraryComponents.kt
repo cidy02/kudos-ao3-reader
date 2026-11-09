@@ -61,6 +61,7 @@ object SubjectWorkCardMetrics {
     val width = 164.dp
     val height = 232.dp
     val spacing = 12.dp
+    val coverStackSpacing = 20.dp
 }
 
 @Composable
@@ -115,11 +116,12 @@ fun WorkCarouselSection(
 fun <T> WorkCardCarousel(
     values: List<T>,
     key: (T) -> Any,
+    cardSpacing: Dp = SubjectWorkCardMetrics.spacing,
     card: @Composable (T) -> Unit
 ) {
     LazyRow(
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(SubjectWorkCardMetrics.spacing)
+        horizontalArrangement = Arrangement.spacedBy(cardSpacing)
     ) {
         items(values, key = key) { card(it) }
     }

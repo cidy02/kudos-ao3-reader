@@ -1,45 +1,39 @@
 package io.github.cidy02.kudos.home
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.core.model.ReadingQueue
 import io.github.cidy02.kudos.core.model.SavedWork
-import io.github.cidy02.kudos.ui.subject.HomeCardMetrics
+import io.github.cidy02.kudos.ui.components.CoverStack
+import io.github.cidy02.kudos.ui.components.CoverStackKind
+import io.github.cidy02.kudos.ui.components.CoverStackLayout
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
-import io.github.cidy02.kudos.ui.subject.SubjectKicker
 import io.github.cidy02.kudos.ui.subject.SubjectPalette
+import io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale
+import io.github.cidy02.kudos.ui.subject.parseSubjectHexColor
 import io.github.cidy02.kudos.ui.subject.withOpacity
 
 /**
- * 1b's stacked deck: two glass backs and the next work's face.
- * The face uses that work's `cardWash`, matching `ReadingQueueCard` and the
- * iOS Home screenshot. `hue` / `colorHex` tint the glass backs via
- * `carouselQueueTint`, which is where iOS shows the queue's own colour.
+ * Port of iOS `ReadingQueueCard` (T-461 / T-501): a 300dp row with a 72×72 queue `CoverStack`
+ * beside the queue's name, detail line, and progress strip.
  */
 @Composable
 fun HomeQueueCard(
@@ -47,132 +41,68 @@ fun HomeQueueCard(
     works: List<SavedWork>,
     /** `HomeFacts.queueFace`: required, so no caller names a work the privacy setting keeps back. */
     face: HomeFacts.QueueFace,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    backs: List<SavedWork> = if (face.obscured) emptyList() else listOfNotNull(face.upNext)
 ) {
     val tokens = LocalKudosTokens.current
-    val tint = HomeFacts.carouselQueueTint(tokens.theme, queue.hue, queue.colorHex)
-    // With the text, as the cover cards beside it: at twice the size the count line was cut in half
-    // by the fixed height, and the deck's title to "Sodium …".
-    val grow = io.github.cidy02.kudos.ui.subject.carouselCardScale()
-    Column(
-        modifier
+    val accessibility = isAccessibilityFontScale()
+    val maxWidth = (LocalConfiguration.current.screenWidthDp.dp - 32.dp).coerceAtLeast(1.dp)
+    val rowWidth = if (accessibility) maxWidth else minOf(300.dp, maxWidth)
+    val queueHue = queue.hue ?: HomeFacts.coverHue(queue.displayName.ifBlank { "Queue" })
+    val palette = parseSubjectHexColor(queue.colorHex)?.let { SubjectPalette.fromColor(it, tokens.theme) }
+        ?: SubjectPalette.fromHue(queueHue, tokens.theme)
+    Row(
+        modifier = modifier
             .padding(top = 2.dp, bottom = 8.dp)
-            .width(HomeCardMetrics.width * grow)
-            .heightIn(min = 168.dp * grow)
+            .width(rowWidth),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = if (accessibility) Alignment.Top else Alignment.CenterVertically
     ) {
-        Deck(tint = tint, face = face, works = works, grow = grow)
-        Spacer(Modifier.height(9.dp))
-        Text(
-            text = queue.displayName,
-            color = tokens.primaryInk,
-            fontSize = 15.sp,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
+        CoverStack(
+            kind = CoverStackKind.Queue,
+            name = queue.displayName,
+            hue = queueHue,
+            pickedHex = queue.colorHex,
+            backs = backs.take(CoverStackLayout.maxBacks),
+            width = 72.dp,
+            height = 72.dp
         )
-        Text(
-            text = HomeFacts.queueCardFooter(works),
-            color = tokens.secondaryInk,
-            fontSize = 12.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-    }
-}
-
-@Composable
-private fun Deck(tint: Color?, face: HomeFacts.QueueFace, works: List<SavedWork>, grow: Float = 1f) {
-    val upNext = face.upNext
-    val tokens = LocalKudosTokens.current
-    val shape = RoundedCornerShape(12.dp)
-    val back = tint ?: tokens.glassFill(0.06)
-    val mid = tint?.withOpacity(0.85) ?: tokens.glassFill(0.09)
-    Box(Modifier.size(width = HomeCardMetrics.width * grow, height = 96.dp * grow)) {
-        GlassCard(
-            fill = back,
-            shape = shape,
-            modifier = Modifier
-                .size(148.dp * grow, 88.dp * grow)
-                .offset(x = 16.dp)
-        )
-        GlassCard(
-            fill = mid,
-            shape = shape,
-            modifier = Modifier
-                .size(148.dp * grow, 88.dp * grow)
-                .offset(x = 8.dp, y = 4.dp)
-        )
-        Box(
-            Modifier
-                .size(148.dp * grow, 88.dp * grow)
-                .offset(y = 8.dp)
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(3.dp)
         ) {
-            if (upNext == null) {
-                GlassCard(fill = tokens.glassFill(0.12), shape = shape, modifier = Modifier.fillMaxSize()) {
-                    // A queue whose every work is hidden is not empty, and says nothing.
-                    if (works.isEmpty()) Text(
-                        text = "No works yet",
-                        color = tokens.secondaryInk,
-                        fontSize = 12.sp,
-                        modifier = Modifier.padding(10.dp)
-                    )
-                }
-            } else {
-                // An obscured work gives the face neither its colour, its fandom nor its title.
-                val palette = SubjectPalette.fromHue(
-                    if (face.obscured) HomeFacts.workHue(emptyList(), HIDDEN_WORK)
-                    else HomeFacts.workHue(upNext.workFandoms, upNext.title),
-                    tokens.theme
+            Text(
+                text = queue.displayName,
+                color = tokens.primaryInk,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = if (accessibility) Int.MAX_VALUE else 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = HomeFacts.queueCardFooter(works),
+                color = tokens.secondaryInk,
+                fontSize = 13.sp,
+                maxLines = if (accessibility) Int.MAX_VALUE else 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            face.upNext?.let { upNext ->
+                Text(
+                    text = if (face.obscured) HIDDEN_WORK else upNext.title,
+                    color = tokens.primaryInk,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = if (accessibility) Int.MAX_VALUE else 1,
+                    overflow = TextOverflow.Ellipsis
                 )
-                Column(
-                    Modifier
-                        .fillMaxSize()
-                        .clip(shape)
-                        .background(palette.cardWash)
-                        .border(0.5.dp, tokens.glassStroke(0.12), shape)
-                        .padding(10.dp)
-                ) {
-                    val fandom = HomeFacts.primaryFandom(upNext.workFandoms).takeUnless { face.obscured }
-                    if (fandom != null) {
-                        SubjectKicker(
-                            text = fandom,
-                            palette = palette,
-                            size = 8.5.sp,
-                            ruleWidth = 18.dp,
-                            ruleSpacing = 5.dp
-                        )
-                    }
-                    Text(
-                        text = if (face.obscured) HIDDEN_WORK else upNext.title,
-                        color = tokens.primaryInk,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Spacer(Modifier.weight(1f))
-                    QueueProgressStrip(progress = HomeFacts.queueProgress(works), palette = palette)
-                }
+            }
+            if (works.isNotEmpty()) {
+                QueueProgressStrip(
+                    progress = HomeFacts.queueProgress(works),
+                    palette = palette
+                )
             }
         }
-    }
-}
-
-@Composable
-private fun GlassCard(
-    fill: Color,
-    shape: RoundedCornerShape,
-    modifier: Modifier = Modifier,
-    content: @Composable () -> Unit = {}
-) {
-    val tokens = LocalKudosTokens.current
-    Box(
-        modifier
-            .clip(shape)
-            .background(fill)
-            .border(0.5.dp, tokens.glassStroke(0.09), shape)
-    ) {
-        content()
     }
 }
 

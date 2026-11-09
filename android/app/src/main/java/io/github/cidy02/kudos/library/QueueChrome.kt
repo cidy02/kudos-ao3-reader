@@ -125,44 +125,6 @@ fun QueueProgressStrip(
     }
 }
 
-/** 44dp 2×2 peek of the first four works, each in that work's own colour. */
-@Composable
-fun QueuePeekTile(works: List<SavedWork>, modifier: Modifier = Modifier) {
-    val tokens = LocalKudosTokens.current
-    val shape = RoundedCornerShape(9.dp)
-    Box(
-        modifier
-            .size(44.dp)
-            .clip(shape)
-            .background(tokens.glassFill(0.08))
-            .border(0.5.dp, tokens.glassStroke(0.14), shape)
-            .padding(3.dp)
-    ) {
-        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(2.5.dp)) {
-            repeat(2) { row ->
-                Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(2.5.dp)) {
-                    repeat(2) { column ->
-                        val index = row * 2 + column
-                        val work = works.getOrNull(index)
-                        val cell = RoundedCornerShape(4.dp)
-                        val color = if (work == null) {
-                            tokens.primaryInk.withOpacity(0.05)
-                        } else {
-                            SubjectPalette.fromHue(
-                                ReadingQueueFacts.coverHue(
-                                    work.workFandoms.firstOrNull { it.isNotBlank() } ?: work.title
-                                ),
-                                tokens.theme
-                            ).accent.withOpacity(0.4)
-                        }
-                        Box(Modifier.weight(1f).fillMaxSize().clip(cell).background(color))
-                    }
-                }
-            }
-        }
-    }
-}
-
 @Composable
 fun QueueRowTagLabel(text: String, dashed: Boolean = false, modifier: Modifier = Modifier) {
     val tokens = LocalKudosTokens.current

@@ -117,13 +117,13 @@ class A72LayoutTest {
         show {
             CollectionCard(WorkCollection(name = "Weekend", workIds = works.map { it.id }), works, {}, {})
         }
-        val slots = (0..3).map { compose.onNodeWithTag("Collection mosaic slot $it", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot }
-        assertEquals(slots[0].top, slots[1].top, 1f)
-        assertEquals(slots[2].top, slots[3].top, 1f)
-        assertEquals(slots[0].left, slots[2].left, 1f)
-        assertEquals(slots[1].left, slots[3].left, 1f)
-        assertTrue(slots[0].right < slots[1].left)
-        assertTrue(slots[0].bottom < slots[2].top)
+        readable("Weekend")
+        readable("2 works")
+        val card = compose.onNodeWithContentDescription("Weekend, 2 works. Opens collection.").fetchSemanticsNode().boundsInRoot
+        val title = bounds("Weekend")
+        val count = bounds("2 works")
+        assertTrue(title.top > card.top)
+        assertTrue(count.top >= title.bottom - 1f)
     }
 
     @Test fun authorPickerKeepsFourWholeLabelsOnOneRowAtScaleTwo() {

@@ -128,6 +128,16 @@ fun HomeScreen(
         io.github.cidy02.kudos.library.LibraryPrivacy.visibility(it, state.privacy, privacyState)
     }
 
+    fun queueBacks(works: List<SavedWork>): List<SavedWork> {
+        val visible = works.filter {
+            io.github.cidy02.kudos.library.LibraryPrivacy.visibility(it, state.privacy, privacyState) ==
+                io.github.cidy02.kudos.library.LibraryPrivacyVisibility.Visible
+        }
+        val split = io.github.cidy02.kudos.library.ReadingQueueFacts.upNext(visible)
+        return (listOfNotNull(split.upNext) + split.inLine)
+            .take(io.github.cidy02.kudos.ui.components.CoverStackLayout.maxBacks)
+    }
+
     suspend fun reloadQueues() {
         val repo = queueRepository ?: return
         val loaded = runCatching {
@@ -270,7 +280,12 @@ fun HomeScreen(
                     ) { (queue, works) ->
                         if (queueRepo == null) {
                             HomePress(onClick = { onOpenQueue(queue.id) }) {
-                                HomeQueueCard(queue = queue, works = works, face = queueFace(works))
+                                HomeQueueCard(
+                                    queue = queue,
+                                    works = works,
+                                    face = queueFace(works),
+                                    backs = queueBacks(works)
+                                )
                             }
                         } else {
                             QueueCardPress(
@@ -291,7 +306,12 @@ fun HomeScreen(
                                     }
                                 }
                             ) {
-                                HomeQueueCard(queue = queue, works = works, face = queueFace(works))
+                                HomeQueueCard(
+                                    queue = queue,
+                                    works = works,
+                                    face = queueFace(works),
+                                    backs = queueBacks(works)
+                                )
                             }
                         }
                     }

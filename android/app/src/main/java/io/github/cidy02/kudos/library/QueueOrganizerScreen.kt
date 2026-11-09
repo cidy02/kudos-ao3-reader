@@ -256,6 +256,9 @@ fun QueueOrganizerScreen(
                 pinned.forEach { row ->
                     OrganizerRow(
                         row = row,
+                        visibleWorks = row.works.filter {
+                            LibraryPrivacy.visibility(it, privacy, reveal) == LibraryPrivacyVisibility.Visible
+                        },
                         selecting = selecting,
                         selected = row.queue.id in selected,
                         reordering = false,
@@ -277,6 +280,9 @@ fun QueueOrganizerScreen(
             ordered.forEach { row ->
                 OrganizerRow(
                     row = row,
+                    visibleWorks = row.works.filter {
+                        LibraryPrivacy.visibility(it, privacy, reveal) == LibraryPrivacyVisibility.Visible
+                    },
                     selecting = selecting,
                     selected = row.queue.id in selected,
                     reordering = reordering && row.queue.kindRaw == ReadingQueueKind.CUSTOM,
@@ -401,6 +407,7 @@ private fun OrganizerToolbarActions(
 @Composable
 private fun OrganizerRow(
     row: QueueRowModel,
+    visibleWorks: List<SavedWork>,
     selecting: Boolean,
     selected: Boolean,
     reordering: Boolean,
@@ -414,6 +421,7 @@ private fun OrganizerRow(
     val tokens = LocalKudosTokens.current
     val custom = row.queue.kindRaw == ReadingQueueKind.CUSTOM
     val palette = if (custom) queuePalette(tokens.theme, row.queue) else tokens.scopePalette
+    val queueHue = row.queue.hue ?: ReadingQueueFacts.coverHue(row.queue.displayName)
     val body: @Composable () -> Unit = {
         QueueOrganizerCard(custom = custom, palette = palette) {
             Row(
@@ -421,7 +429,15 @@ private fun OrganizerRow(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                QueuePeekTile(row.works)
+                io.github.cidy02.kudos.ui.components.CoverStack(
+                    kind = io.github.cidy02.kudos.ui.components.CoverStackKind.Queue,
+                    name = row.queue.displayName,
+                    hue = queueHue,
+                    pickedHex = row.queue.colorHex,
+                    backs = visibleWorks.take(io.github.cidy02.kudos.ui.components.CoverStackLayout.maxBacks),
+                    width = 48.dp,
+                    height = 48.dp
+                )
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                         if (custom) {

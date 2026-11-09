@@ -126,11 +126,7 @@ class LargeTextScreensTest {
         val works = previewWorks(large = true)
         val name = "A collection of stories with a long name that must remain readable in full"
         showLocalCollections(2f, name, works)
-        (listOf(name, "4 works", secondCollection) + works.flatMap { listOf(it.title, it.author) })
-            .forEach(::assertReadable)
-        assertRow(works[0].title, works[1].title)
-        assertRow(works[2].title, works[3].title)
-        assertBelow(works[2].title, works[0].author)
+        listOf(name, "4 works", secondCollection).forEach(::assertReadable)
         assertBelow(secondCollection, name)
         assertTrue(layout(name).lineCount > 2)
     }
@@ -140,9 +136,6 @@ class LargeTextScreensTest {
         val works = previewWorks(large = false)
         val name = "Weekend"
         showLocalCollections(1f, name, works)
-        assertRow(works[0].title, works[1].title)
-        assertRow(works[2].title, works[3].title)
-        assertBelow(works[2].title, works[0].author)
         assertRow(name, secondCollection)
         compose.onNodeWithContentDescription("$name, 4 works. Opens collection.")
             .assertWidthIsEqualTo(SubjectWorkCardMetrics.width)

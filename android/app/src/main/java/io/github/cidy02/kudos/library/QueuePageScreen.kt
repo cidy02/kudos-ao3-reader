@@ -312,17 +312,65 @@ fun QueuePageScreen(
         ) {
             Spacer(Modifier.height(WindowInsets.systemBars.asPaddingValues().calculateTopPadding() + 56.dp))
             if (current != null) {
-                SubjectHeaderBlock(
-                    kicker = ReadingQueueFacts.kicker("Home"),
-                    title = if (selecting) "${selected.size} selected" else current.displayName,
-                    subtitle = if (selecting) null else ReadingQueueFacts.subtitle(
-                        works.size,
-                        preservedIds.size,
-                        preservedBytes
-                    ),
-                    palette = palette,
-                    modifier = Modifier.padding(top = 4.dp)
-                )
+                val visibleHeaderWorks = works.filter {
+                    LibraryPrivacy.visibility(it, shownSettings.privacy, reveal) == LibraryPrivacyVisibility.Visible
+                }
+                val queueHue = current.hue ?: ReadingQueueFacts.coverHue(current.displayName)
+                val coverStack: @Composable () -> Unit = {
+                    io.github.cidy02.kudos.ui.components.CoverStack(
+                        kind = io.github.cidy02.kudos.ui.components.CoverStackKind.Queue,
+                        name = current.displayName,
+                        hue = queueHue,
+                        pickedHex = current.colorHex,
+                        backs = visibleHeaderWorks.take(io.github.cidy02.kudos.ui.components.CoverStackLayout.maxBacks),
+                        width = 96.dp,
+                        height = 96.dp
+                    )
+                }
+                if (io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale()) {
+                    Column(
+                        Modifier.padding(top = 4.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Box(Modifier.padding(horizontal = SubjectMetrics.headerGutter)) { coverStack() }
+                        SubjectHeaderBlock(
+                            kicker = ReadingQueueFacts.kicker("Home"),
+                            title = if (selecting) "${selected.size} selected" else current.displayName,
+                            subtitle = if (selecting) null else ReadingQueueFacts.subtitle(
+                                works.size,
+                                preservedIds.size,
+                                preservedBytes
+                            ),
+                            palette = palette
+                        )
+                    }
+                } else {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(
+                                start = SubjectMetrics.headerGutter,
+                                end = SubjectMetrics.headerGutter,
+                                top = 4.dp
+                            ),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        coverStack()
+                        SubjectHeaderBlock(
+                            kicker = ReadingQueueFacts.kicker("Home"),
+                            title = if (selecting) "${selected.size} selected" else current.displayName,
+                            subtitle = if (selecting) null else ReadingQueueFacts.subtitle(
+                                works.size,
+                                preservedIds.size,
+                                preservedBytes
+                            ),
+                            palette = palette,
+                            gutter = 0.dp,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
                 if (!reordering) {
                     QueueHeaderDetails(
                         works = works,
