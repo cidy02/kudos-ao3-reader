@@ -12,6 +12,7 @@ import androidx.compose.material.icons.outlined.Home
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavType
@@ -87,12 +88,16 @@ data class RestoredTabSelection(
     val accountRoute: AccountSheetRoute? = if (presentsAccount) AccountSheetRoute.Profile else null
 )
 
-class AccountSheetState {
-    var isPresentingAccount by mutableStateOf(false)
+class AccountSheetState(
+    initialIsPresenting: Boolean = false,
+    initialPendingRoute: AccountSheetRoute? = null,
+    initialRequestEpoch: Int = 0
+) {
+    var isPresentingAccount by mutableStateOf(initialIsPresenting)
         internal set
-    var pendingAccountRoute by mutableStateOf<AccountSheetRoute?>(null)
+    var pendingAccountRoute by mutableStateOf(initialPendingRoute)
         internal set
-    var requestEpoch by mutableStateOf(0)
+    var requestEpoch by mutableStateOf(initialRequestEpoch)
         private set
     fun showAccount(route: AccountSheetRoute = AccountSheetRoute.Profile) {
         pendingAccountRoute = route
@@ -109,6 +114,19 @@ class AccountSheetState {
     fun dismissAccount() {
         isPresentingAccount = false
         pendingAccountRoute = null
+    }
+
+    companion object {
+        val Saver = listSaver<AccountSheetState, Any>(
+            save = { listOf(it.isPresentingAccount, it.pendingAccountRoute?.name.orEmpty(), it.requestEpoch) },
+            restore = {
+                AccountSheetState(
+                    initialIsPresenting = it[0] as Boolean,
+                    initialPendingRoute = (it[1] as String).takeIf(String::isNotEmpty)?.let(AccountSheetRoute::valueOf),
+                    initialRequestEpoch = it[2] as Int
+                )
+            }
+        )
     }
 }
 
@@ -475,6 +493,19 @@ object Routes {
         return AccountSheetRoute.entries.firstOrNull {
             it.route == route || it.route.substringBefore("?").substringBefore("/") == base
         }
+    }
+
+    fun shouldInterceptAccountRoute(route: String?, isInitialRestore: Boolean): Boolean =
+        isInitialRestore && accountSheetRoute(route) != null
+
+    /** Pops one restored Account run without letting each popped route reopen the sheet. */
+    fun popRestoredAccountRun(
+        currentRoute: () -> String?,
+        popBackStack: () -> Boolean
+    ): AccountSheetRoute? {
+        val deepest = accountSheetRoute(currentRoute()) ?: return null
+        while (accountSheetRoute(currentRoute()) != null && popBackStack()) Unit
+        return deepest
     }
 
     fun resolveFormerAccountRoute(route: String?): LegacyAccountDestination? {

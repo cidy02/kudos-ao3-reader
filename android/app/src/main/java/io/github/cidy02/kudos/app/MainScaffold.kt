@@ -169,10 +169,6 @@ fun MainScaffold(
             }
         }
     }
-    // Debug launch extra `kudosDebugRoute nav:<route>` opens a screen directly (like iOS -KudosDebugRoute).
-    androidx.compose.runtime.LaunchedEffect(startRoute) {
-        startRoute?.let { navController.navigate(it) }
-    }
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
     val shell = Routes.isShellRoot(currentRoute)
@@ -183,16 +179,57 @@ fun MainScaffold(
     val libraryChrome = remember { LibraryShellChrome() }
     val writingChrome = remember { WritingShellChrome() }
     val pushedChrome = remember { PushedShellChrome() }
-    val accountSheetState = remember { AccountSheetState() }
-    LaunchedEffect(currentRoute, debugShotName) {
-        if (debugShotName == null) {
-            val sheetRoute = Routes.accountSheetRoute(currentRoute)
-            if (sheetRoute != null) {
-                if (!navController.popBackStack()) {
-                    navController.navigateShellRoot(Routes.Home)
+    val accountSheetState = androidx.compose.runtime.saveable.rememberSaveable(saver = AccountSheetState.Saver) {
+        AccountSheetState()
+    }
+    var handledStartRoute by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
+    var handledRestoredRoute by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+
+    fun openInitialRoute(route: String, restoredBackStack: Boolean) {
+        val restored = Routes.restoredSelection(route)
+        when (val legacy = Routes.resolveFormerAccountRoute(route)) {
+            is LegacyAccountDestination.Account -> {
+                val target = if (restoredBackStack) {
+                    Routes.popRestoredAccountRun(
+                        currentRoute = { navController.currentDestination?.route },
+                        popBackStack = navController::popBackStack
+                    ) ?: legacy.route
+                } else {
+                    legacy.route
                 }
-                accountSheetState.showAccount(sheetRoute)
+                navController.navigateShellRoot(restored.tabRoute)
+                accountSheetState.showAccount(target)
             }
+            is LegacyAccountDestination.Writing -> {
+                navController.navigateShellRoot(Routes.Writing)
+                navController.navigate(route)
+            }
+            is LegacyAccountDestination.Library -> {
+                navController.navigateShellRoot(Routes.Library)
+                navController.navigate(route)
+            }
+            null -> if (!restoredBackStack && route != restored.tabRoute) navController.navigate(route)
+        }
+    }
+
+    // Debug launch extra `kudosDebugRoute nav:<route>` opens through the same legacy migration as restore.
+    LaunchedEffect(startRoute) {
+        if (startRoute != null && handledStartRoute != startRoute) {
+            handledStartRoute = startRoute
+            openInitialRoute(startRoute, restoredBackStack = false)
+        }
+    }
+    LaunchedEffect(currentRoute, debugShotName, startRoute) {
+        if (!handledRestoredRoute && currentRoute != null && debugShotName == null && startRoute == null) {
+            handledRestoredRoute = true
+            val concreteRoute = when (currentRoute) {
+                Routes.AccountList -> Routes.routeArg(backStackEntry!!, "listType")?.let(Routes::accountList)
+                Routes.AuthorSeries -> Routes.routeArg(backStackEntry!!, "authorUsername")?.let(Routes::authorSeries)
+                else -> currentRoute
+            }
+            if (Routes.shouldInterceptAccountRoute(concreteRoute, isInitialRestore = true) ||
+                Routes.resolveFormerAccountRoute(concreteRoute) != null
+            ) concreteRoute?.let { openInitialRoute(it, restoredBackStack = true) }
         }
     }
     val onHome = currentRoute == Routes.Home
@@ -553,7 +590,8 @@ fun MainScaffold(
                     container = container,
                     themeMode = themeMode,
                     onCycleTheme = onCycleTheme,
-                    state = accountSheetState
+                    state = accountSheetState,
+                    mainNavController = navController
                 )
             }
         }
@@ -567,7 +605,8 @@ private fun AccountSheetModal(
     container: KudosAppContainer,
     themeMode: KudosThemeMode,
     onCycleTheme: () -> Unit,
-    state: AccountSheetState
+    state: AccountSheetState,
+    mainNavController: NavHostController
 ) {
     val sheetNavController = rememberNavController()
     val sheetBackStackEntry by sheetNavController.currentBackStackEntryAsState()
@@ -663,14 +702,26 @@ private fun AccountSheetModal(
                     LocalShellOverlayState provides sheetOverlay,
                     LocalPushedShellChrome provides sheetPushedChrome,
                     io.github.cidy02.kudos.works.detail.LocalOpenAuthor provides { byline ->
-                        sheetNavController.navigate(Routes.authorProfile(byline))
+                        state.dismissAccount()
+                        mainNavController.navigate(Routes.authorProfile(byline))
+                    },
+                    LocalTagSearch provides { field, value ->
+                        SearchTagRequests.request(field, value, isFreshTabJump = true)
+                        state.dismissAccount()
+                        mainNavController.navigateShellRoot(Routes.Search)
                     }
                 ) {
                     AppNavHost(
                         container = container,
                         navController = sheetNavController,
                         startDestination = Routes.Account,
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier.fillMaxSize(),
+                        accountRoutesOnly = true,
+                        onLeaveAccount = { rootRoute, destinationRoute ->
+                            state.dismissAccount()
+                            mainNavController.navigateShellRoot(rootRoute)
+                            destinationRoute?.let(mainNavController::navigate)
+                        }
                     )
                     androidx.activity.compose.BackHandler(
                         enabled = sheetPushedChrome.mounted && sheetPushedChrome.onBack != null

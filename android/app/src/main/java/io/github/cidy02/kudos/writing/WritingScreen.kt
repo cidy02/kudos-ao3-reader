@@ -37,6 +37,9 @@ import io.github.cidy02.kudos.account.WritingDraftsRepository
 import io.github.cidy02.kudos.auth.AO3AuthRepository
 import io.github.cidy02.kudos.auth.AO3AuthState
 import io.github.cidy02.kudos.auth.AO3PostingPseudStore
+import io.github.cidy02.kudos.core.model.KudosSettings
+import io.github.cidy02.kudos.data.preferences.SettingsRepository
+import io.github.cidy02.kudos.library.LibraryPrivacy
 import io.github.cidy02.kudos.network.ao3.author.AO3AuthorRepository
 import io.github.cidy02.kudos.network.ao3.author.AO3AuthorRoute
 import io.github.cidy02.kudos.network.ao3.inbox.AO3InboxRepository
@@ -63,6 +66,20 @@ internal fun writingRootState(isSignedIn: Boolean, drafts: AO3DraftsPage?): Writ
         draftsLoaded = isSignedIn && drafts != null,
         latestDraft = if (isSignedIn) drafts?.page?.works?.firstOrNull() else null
     )
+
+internal fun cachedWritingDrafts(
+    cached: WritingDraftsRepository.CachedPage?,
+    username: String?,
+    generation: Int
+): AO3DraftsPage? = cached?.takeIf {
+    username != null && it.username.equals(username, ignoreCase = true) && it.generation == generation
+}?.value
+
+internal fun writingDraftTitle(draft: AO3WorkSummary, hideMature: Boolean): String = when {
+    hideMature && LibraryPrivacy.isAdultRating(draft.rating) -> LibraryPrivacy.HIDDEN_WORK_TITLE
+    draft.title.isBlank() -> "Untitled"
+    else -> draft.title
+}
 
 class WritingShellChrome {
     var mounted by mutableStateOf(false)
@@ -92,6 +109,7 @@ fun WritingScreen(
     inboxRepository: AO3InboxRepository,
     countsCache: AO3AccountListCountsCache,
     postingPseudStore: AO3PostingPseudStore,
+    settingsRepository: SettingsRepository,
     shellChrome: WritingShellChrome? = null,
     onNewWork: () -> Unit,
     onOpenDraft: (Long) -> Unit,
@@ -107,10 +125,9 @@ fun WritingScreen(
     val cachedDrafts by draftsRepository.cachedPage.collectAsState()
     val cacheRevision by io.github.cidy02.kudos.network.ao3.AO3PageCache.shared.changes.collectAsState()
     val pseudNames by postingPseudStore.mapFlow.collectAsState(initial = emptyMap())
+    val settings by settingsRepository.settings.collectAsState(initial = KudosSettings.Defaults)
     val username = (auth as? AO3AuthState.SignedIn)?.username
-    val drafts = cachedDrafts?.takeIf {
-        it.username.equals(username, ignoreCase = true) && it.generation == generation
-    }?.value
+    val drafts = cachedWritingDrafts(cachedDrafts, username, generation)
     val state = writingRootState(username != null, drafts)
     val scope = rememberCoroutineScope()
     val header = remember(username, cacheRevision, authorRepository) {
@@ -180,7 +197,8 @@ fun WritingScreen(
             SettingsPanel(Modifier.padding(top = 8.dp)) {
                 val draft = state.latestDraft
                 SubjectFormRow(
-                    label = draft?.title ?: if (state.draftsLoaded) "No drafts on AO3" else "Drafts",
+                    label = draft?.let { writingDraftTitle(it, settings.privacy.hideMatureContent) }
+                        ?: if (state.draftsLoaded) "No drafts on AO3" else "Drafts",
                     value = draft?.updatedDate?.takeIf(String::isNotBlank)?.let { "Edited $it · Continue" }
                         ?: if (state.draftsLoaded) null else "Open Drafts to load this section",
                     leadingIcon = Icons.Outlined.Drafts,

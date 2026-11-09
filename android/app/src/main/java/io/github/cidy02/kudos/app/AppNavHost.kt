@@ -80,8 +80,29 @@ fun AppNavHost(
     shellChrome: HomeShellChrome? = null,
     libraryChrome: io.github.cidy02.kudos.library.LibraryShellChrome? = null,
     writingChrome: io.github.cidy02.kudos.writing.WritingShellChrome? = null,
-    onOpenAccount: () -> Unit = {}
+    onOpenAccount: () -> Unit = {},
+    accountRoutesOnly: Boolean = false,
+    onLeaveAccount: (rootRoute: String, destinationRoute: String?) -> Unit = { _, _ -> }
 ) {
+    fun NavGraphBuilder.sharedComposable(
+        route: String,
+        arguments: List<androidx.navigation.NamedNavArgument> = emptyList(),
+        deepLinks: List<NavDeepLink> = emptyList(),
+        content: @Composable AnimatedVisibilityScope.(NavBackStackEntry) -> Unit
+    ) {
+        if (!accountRoutesOnly || Routes.accountSheetRoute(route) != null) {
+            registerSharedComposable(route, arguments, deepLinks, content)
+        }
+    }
+
+    fun leaveAccount(rootRoute: String, destinationRoute: String? = null) {
+        if (accountRoutesOnly) {
+            onLeaveAccount(rootRoute, destinationRoute)
+        } else {
+            navController.navigateShellRoot(rootRoute)
+            destinationRoute?.let(navController::navigate)
+        }
+    }
     // The only state left here (T-90): a small id-keyed cache so opening Work
     // Detail from a search/browse/account-list result still shows instantly
     // from the AO3WorkSummary already in hand, without carrying the full
@@ -329,6 +350,7 @@ fun AppNavHost(
                 inboxRepository = container.inboxRepository,
                 countsCache = container.accountListCountsCache,
                 postingPseudStore = container.postingPseudStore,
+                settingsRepository = container.settingsRepository,
                 shellChrome = writingChrome,
                 onNewWork = {
                     navController.navigate(io.github.cidy02.kudos.account.WritingWorkDestination.route())
@@ -576,10 +598,18 @@ fun AppNavHost(
                 workRepository = container.workRepository,
                 onLogin = { navController.navigate(Routes.AccountLogin) },
                 onOpenList = { type ->
-                    navController.navigate(Routes.accountList(NavArgCodecs.encodeAccountListType(type)))
+                    val root = when (type) {
+                        AccountListType.MarkedForLater,
+                        AccountListType.Bookmarks,
+                        AccountListType.History,
+                        AccountListType.Subscriptions -> Routes.Library
+                        AccountListType.MyWorks,
+                        is AccountListType.Collection -> Routes.Writing
+                    }
+                    leaveAccount(root, Routes.accountList(NavArgCodecs.encodeAccountListType(type)))
                 },
-                onOpenAO3Collections = { navController.navigate(Routes.AO3Collections) },
-                onOpenDrafts = { navController.navigate(Routes.WritingDrafts) },
+                onOpenAO3Collections = { leaveAccount(Routes.Writing, Routes.AO3Collections) },
+                onOpenDrafts = { leaveAccount(Routes.Writing, Routes.WritingDrafts) },
                 settingsRepository = container.settingsRepository,
                 onEditShortcuts = { navController.navigate(Routes.AccountShortcuts) },
                 onOpenDashboard = { navController.navigate(Routes.AO3Dashboard) },
@@ -591,32 +621,43 @@ fun AppNavHost(
                             val auth = (container.authRepository.state.value as? AO3AuthState.SignedIn)
                             val username = auth?.username
                             if (username != null) {
-                                navController.navigate(Routes.authorProfile(username))
+                                leaveAccount(Routes.Home, Routes.authorProfile(username))
                             }
                         }
-                        else -> navController.navigate(Routes.webFallback(url))
+                        else -> leaveAccount(Routes.Browse, Routes.webFallback(url))
                     }
                 },
                 onOpenWork = { work ->
-                    navigateToWorkDetail(WorkDetailSource.RemoteSummary(work))
+                    if (accountRoutesOnly) {
+                        leaveAccount(
+                            Routes.Home,
+                            Routes.workDetail(NavArgCodecs.encodeWorkDetailSource(WorkDetailSource.RemoteSummary(work)))
+                        )
+                    } else navigateToWorkDetail(WorkDetailSource.RemoteSummary(work))
                 },
                 onOpenCollection = { collection ->
                     val type = AccountListType.Collection(
                         name = collection.name,
                         displayTitle = collection.title
                     )
-                    navController.navigate(Routes.accountList(NavArgCodecs.encodeAccountListType(type)))
+                    leaveAccount(Routes.Writing, Routes.accountList(NavArgCodecs.encodeAccountListType(type)))
                 },
                 onOpenSeries = { seriesUrl ->
                     val username = Regex("/users/([^/]+)/series").find(seriesUrl)?.groupValues?.get(1)
-                    navController.navigate(if (username == null) Routes.seriesWorks(seriesUrl) else Routes.authorSeries(username))
+                    leaveAccount(
+                        Routes.Writing,
+                        if (username == null) Routes.seriesWorks(seriesUrl) else Routes.authorSeries(username)
+                    )
                 },
                 inboxRepository = container.inboxRepository,
                 commentRepository = container.commentRepository,
                 authorRepository = container.authorRepository,
                 countsCache = container.accountListCountsCache,
                 onOpenWorkComments = { workId, focusedId ->
-                    navController.navigate(Routes.comments(workId, focusedId, session = container.authRepository.generation.value))
+                    leaveAccount(
+                        Routes.Home,
+                        Routes.comments(workId, focusedId, session = container.authRepository.generation.value)
+                    )
                 },
                 onOpenInbox = { navController.navigate(Routes.AccountInbox) }
             )
@@ -628,17 +669,18 @@ fun AppNavHost(
                 commentRepository = container.commentRepository,
                 currentUsername = (authState as? AO3AuthState.SignedIn)?.username,
                 onOpenWorkComments = { workId, focusedId ->
-                    navController.navigate(Routes.comments(workId, focusedId, session = container.authRepository.generation.value))
+                    leaveAccount(Routes.Home, Routes.comments(workId, focusedId,
+                        session = container.authRepository.generation.value))
                 },
                 onOpenChapterComments = { workId, commentId, position ->
-                    navController.navigate(Routes.comments(workId, focusedCommentId = commentId, chapterPosition = position,
-                        session = container.authRepository.generation.value))
+                    leaveAccount(Routes.Home, Routes.comments(workId, focusedCommentId = commentId,
+                        chapterPosition = position, session = container.authRepository.generation.value))
                 },
                 onReply = { workId, commentId ->
-                    navController.navigate(Routes.comments(workId, focusedCommentId = commentId, composes = true,
-                        session = container.authRepository.generation.value))
+                    leaveAccount(Routes.Home, Routes.comments(workId, focusedCommentId = commentId,
+                        composes = true, session = container.authRepository.generation.value))
                 },
-                onOpenWeb = { url -> navController.navigate(Routes.webFallback(url)) },
+                onOpenWeb = { url -> leaveAccount(Routes.Browse, Routes.webFallback(url)) },
                 settingsRepository = container.accountListRepository.settingsRepository
             )
         }
@@ -648,20 +690,25 @@ fun AppNavHost(
             )
             val username = (authState as? AO3AuthState.SignedIn)?.username
             AO3DashboardScreen(
-                onOpenAuthorTab = { author, tab -> navController.navigate(Routes.authorProfile(author, tab)) },
-                onOpenAbout = { navController.navigate(Routes.authorAbout(it)) },
+                onOpenAuthorTab = { author, tab -> leaveAccount(Routes.Home, Routes.authorProfile(author, tab)) },
+                onOpenAbout = { leaveAccount(Routes.Home, Routes.authorAbout(it)) },
                 authorRepository = container.authorRepository,
-                onOpenWork = { work -> navigateToWorkDetail(WorkDetailSource.RemoteSummary(work)) },
-                onOpenSeries = { seriesUrl -> navController.navigate(Routes.seriesWorks(seriesUrl)) },
-                onOpenSeriesSummary = { navController.navigate(Routes.seriesWorks(it)) },
-                onOpenWeb = { url -> navController.navigate(Routes.webFallback(url)) },
+                onOpenWork = { work ->
+                    if (accountRoutesOnly) leaveAccount(Routes.Home,
+                        Routes.workDetail(NavArgCodecs.encodeWorkDetailSource(WorkDetailSource.RemoteSummary(work))))
+                    else navigateToWorkDetail(WorkDetailSource.RemoteSummary(work))
+                },
+                onOpenSeries = { seriesUrl -> leaveAccount(Routes.Writing, Routes.seriesWorks(seriesUrl)) },
+                onOpenSeriesSummary = { leaveAccount(Routes.Writing, Routes.seriesWorks(it)) },
+                onOpenWeb = { url -> leaveAccount(Routes.Browse, Routes.webFallback(url)) },
                 username = username,
                 onOpenList = { type ->
-                    navController.navigate(Routes.accountList(NavArgCodecs.encodeAccountListType(type)))
+                    val root = if (type == AccountListType.MyWorks) Routes.Writing else Routes.Library
+                    leaveAccount(root, Routes.accountList(NavArgCodecs.encodeAccountListType(type)))
                 },
-                onOpenAO3Collections = { navController.navigate(Routes.AO3Collections) },
+                onOpenAO3Collections = { leaveAccount(Routes.Writing, Routes.AO3Collections) },
                 authRepository = container.authRepository,
-                onNewWork = { navController.navigate(io.github.cidy02.kudos.account.WritingWorkDestination.route()) }
+                onNewWork = { leaveAccount(Routes.Writing, io.github.cidy02.kudos.account.WritingWorkDestination.route()) }
             )
         }
         sharedComposable(Routes.About) {
@@ -675,12 +722,13 @@ fun AppNavHost(
         sharedComposable(Routes.AccountLogin) {
             AO3NativeLoginScreen(
                 authRepository = container.authRepository,
-                onLoginComplete = { navController.popBackStack(Routes.Account, inclusive = false) },
+                onLoginComplete = {
+                    if (accountRoutesOnly) navController.popBackStack(Routes.Account, inclusive = false)
+                    else navController.popBackStack()
+                },
                 onCancel = { navController.popBackStack() },
                 onOpenAO3 = { url ->
-                    navController.popBackStack()
-                    navController.navigateShellRoot(Routes.Browse)
-                    navController.navigate(Routes.webFallback(url))
+                    leaveAccount(Routes.Browse, Routes.webFallback(url))
                 }
             )
         }
@@ -1474,7 +1522,7 @@ fun AppNavHost(
     }
 }
 
-fun NavGraphBuilder.sharedComposable(
+private fun NavGraphBuilder.registerSharedComposable(
     route: String,
     arguments: List<androidx.navigation.NamedNavArgument> = emptyList(),
     deepLinks: List<NavDeepLink> = emptyList(),

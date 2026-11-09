@@ -178,10 +178,7 @@ fun HomeScreen(
             shellChrome.showPrivacy = hideMature
             shellChrome.revealAll = privacyState.revealAll
             shellChrome.showSelect = selectable.isNotEmpty()
-            shellChrome.isSignedIn = signedInUsername != null
-            shellChrome.username = signedInUsername
-            shellChrome.avatarUrl = cachedAvatarUrl
-            shellChrome.unreadInboxCount = cachedUnreadCount
+            shellChrome.bindAccount(signedInUsername, cachedAvatarUrl, cachedUnreadCount, onOpenAccount)
             shellChrome.washHue = readingNow.firstOrNull()?.let { HomeFacts.workHue(it.workFandoms, it.title) }
             shellChrome.actions.onNewQueue = { showNewQueue = true }
             shellChrome.actions.onSelectAll = {
@@ -189,7 +186,6 @@ fun HomeScreen(
             }
             shellChrome.actions.onEnterSelect = { isSelecting = true }
             shellChrome.actions.onTogglePrivacy = { privacyGate.toggleRevealAll(activity) }
-            shellChrome.actions.onOpenAccount = onOpenAccount
             controller.onChanged = { reloadQueues() }
         }
         DisposableEffect(shellChrome) {

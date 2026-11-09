@@ -60,11 +60,13 @@ object LibraryPrivacy {
         if (visibility != LibraryPrivacyVisibility.Visible) HIDDEN_WORK_TITLE
         else work.title
 
-    private fun SavedWork.isAdultRated(): Boolean {
+    fun isAdultRating(rating: String): Boolean {
         val normalized = rating.trim().lowercase()
         return normalized == "mature" ||
             normalized == "explicit" ||
             normalized.contains("mature") ||
             normalized.contains("explicit")
     }
+
+    private fun SavedWork.isAdultRated(): Boolean = isAdultRating(rating)
 }

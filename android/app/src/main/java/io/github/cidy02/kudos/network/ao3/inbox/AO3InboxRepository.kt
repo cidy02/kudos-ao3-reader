@@ -5,7 +5,10 @@ import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.writes.AO3AuthenticatedClient
 import io.github.cidy02.kudos.network.ao3.writes.AO3WriteFormParser
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
@@ -19,10 +22,18 @@ class AO3InboxRepository(
     private val client: AO3AuthenticatedClient,
     private val parser: AO3InboxParser = AO3InboxParser(),
     private val formParser: AO3WriteFormParser = AO3WriteFormParser(),
-    private val pageCache: AO3PageCache = AO3PageCache.shared
+    private val pageCache: AO3PageCache = AO3PageCache.shared,
+    sessionScope: CoroutineScope? = null
 ) {
     val sessionChanges: kotlinx.coroutines.flow.StateFlow<Int> = client.sessionChanges ?: kotlinx.coroutines.flow.MutableStateFlow(0)
     private val lastUnreadByScope = kotlinx.coroutines.flow.MutableStateFlow<Pair<AO3PageCache.Scope, Int>?>(null)
+
+    init {
+        sessionScope?.launch {
+            sessionChanges.drop(1).collect { lastUnreadByScope.value = null }
+        }
+    }
+
     fun viewerScope() = AO3PageCache.scope(client)
 
     /**
@@ -66,9 +77,15 @@ class AO3InboxRepository(
             else -> AO3InboxParser.inboxUrl(username, page)
         } ?: return AO3Result.Failure(AO3Error.Validation("Couldn't build the AO3 Inbox URL."))
 
-        return pageCache.read(url, AO3PageCache.Kind.Inbox, client, bypassCache,
+        val scope = viewerScope()
+        val result = pageCache.read(url, AO3PageCache.Kind.Inbox, client, bypassCache,
             fetch = { client.getAuthenticated(url) },
             parse = { parsePage(it.body, page, it.url, it.statusCode) })
+        if (viewerScope() == scope && result is AO3Result.Success) {
+            // AO3PageCache has run its post-parse scope fence before this session cache is written.
+            lastUnreadByScope.value = result.value.unreadCount?.let { scope to it }
+        }
+        return result
     }
 
     /**
@@ -141,8 +158,6 @@ class AO3InboxRepository(
             val parsed = withContext(Dispatchers.Default) {
                 parser.parseInboxPage(html, page, finalUrl)
             }
-            // A page without an unread count makes the count unknown, not stale.
-            lastUnreadByScope.value = parsed.unreadCount?.let { viewerScope() to it }
             AO3Result.Success(parsed)
         } catch (_: AO3InboxParseException.LoginRequired) {
             AO3Result.Failure(AO3Error.AuthenticationRequired)

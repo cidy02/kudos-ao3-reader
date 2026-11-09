@@ -64,6 +64,14 @@ class HomeShellChrome {
     var washHue by mutableStateOf<Double?>(null)
     val actions = HomeShellActions()
 
+    fun bindAccount(username: String?, avatarUrl: String?, unreadInboxCount: Int?, onOpen: () -> Unit) {
+        isSignedIn = username != null
+        this.username = username
+        this.avatarUrl = avatarUrl
+        this.unreadInboxCount = unreadInboxCount
+        actions.onOpenAccount = onOpen
+    }
+
     fun reset() {
         mounted = false
         hideTabBar = false
