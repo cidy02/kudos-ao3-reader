@@ -6,6 +6,9 @@ import io.github.cidy02.kudos.ui.components.workDeletionMessage
 
 import io.github.cidy02.kudos.works.finishedActionLabel
 import androidx.activity.compose.BackHandler
+import io.github.cidy02.kudos.core.model.LibraryPageArrangement
+import io.github.cidy02.kudos.core.model.LibraryShelf
+import io.github.cidy02.kudos.core.model.LibraryStyleList
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -502,7 +505,21 @@ fun LibraryScreen(
         )
     }
 
+    val arrangement by (settingsRepository?.settings?.map { it.app.libraryPageArrangement }
+        ?: kotlinx.coroutines.flow.flowOf(null)).collectAsState(initial = null)
+    var editShelvesOpen by remember { mutableStateOf(false) }
+    val effectiveArrangement = arrangement ?: LibraryPageArrangement.Default
+    if (editShelvesOpen && settingsRepository != null) {
+        LibraryEditShelvesDialog(
+            arrangement = effectiveArrangement,
+            onChange = { scope.launch { settingsRepository.updateLibraryPageArrangement(it) } },
+            onDismiss = { editShelvesOpen = false }
+        )
+    }
+
     LibraryContent(
+        arrangement = effectiveArrangement,
+        onEditShelves = { editShelvesOpen = settingsRepository != null },
         state = state,
         section = section,
         dashboardLayout = dashboardLayout,
@@ -670,7 +687,9 @@ private fun LibraryContent(
     onOpenAffinity: (FavoriteScope, ReadingAffinities.Row) -> Unit,
     onHistoryGroupingChange: (LibraryHistoryGrouping) -> Unit,
     onKeepInProgress: (String) -> Unit,
-    onRefresh: suspend (List<SavedWork>) -> Unit
+    onRefresh: suspend (List<SavedWork>) -> Unit,
+    arrangement: LibraryPageArrangement = LibraryPageArrangement.Default,
+    onEditShelves: () -> Unit = {}
 ) {
     val tokens = LocalKudosTokens.current
     val collapsed = io.github.cidy02.kudos.ui.components.rememberCollapsedSections()
@@ -811,100 +830,54 @@ private fun LibraryContent(
                     )
                 }
             } else {
-                item {
-                    LibraryDashboardWorkSection(
-                        kind = LibrarySectionKind.ReadingNow,
-                        items = state.continueReading,
-                        layout = dashboardLayout,
-                        collapsed = collapsed["readingNow"],
-                        showsZeroStats = state.showsZeroStats,
-                        onToggleCollapsed = { collapsed.toggle("readingNow") },
-                        onSeeAll = { onOpenSection(LibrarySectionKind.ReadingNow) },
-                        actions = cardActions,
-                        onRemoveFromHistory = onRemoveFromHistory,
-                        onRemoveFromAllQueues = onRemoveFromAllQueues
-                    )
+                items(arrangement.sections, key = { "shelf-${it.id}" }) { shelf ->
+                    val layout = if (shelf.style == LibraryStyleList) WorkSectionLayout.Ledger else WorkSectionLayout.Shelves
+                    val kind = shelfKind(shelf.id)
+                    when {
+                        shelf.id == LibraryShelf.Collections.id -> CollectionsShelf(
+                            collections = state.collections,
+                            allItems = state.collectionMembers,
+                            layout = layout,
+                            collapsed = collapsed["collections"],
+                            onToggleCollapsed = { collapsed.toggle("collections") },
+                            onSeeAll = onOpenCollections,
+                            onOpenCollection = onOpenCollection,
+                            onDeleteCollection = onDeleteCollection
+                        )
+                        shelf.id == LibraryShelf.Queues.id -> ReadingQueuesShelf(
+                            queues = state.queues,
+                            collapsed = collapsed["queues"],
+                            onToggleCollapsed = { collapsed.toggle("queues") },
+                            onSeeAll = onOpenReadingQueues,
+                            onCreate = onCreateQueue,
+                            onOpenQueue = onOpenQueue
+                        )
+                        kind != null -> LibraryDashboardWorkSection(
+                            kind = kind,
+                            items = kind.items(state),
+                            layout = layout,
+                            collapsed = collapsed[kind.id],
+                            showsZeroStats = state.showsZeroStats,
+                            onToggleCollapsed = { collapsed.toggle(kind.id) },
+                            onSeeAll = { onOpenSection(kind) },
+                            actions = cardActions,
+                            onRemoveFromHistory = onRemoveFromHistory,
+                            onRemoveFromAllQueues = onRemoveFromAllQueues
+                        )
+                    }
                 }
                 item {
-                    LibraryDashboardWorkSection(
-                        kind = LibrarySectionKind.SavedForLater,
-                        items = state.savedForLater,
-                        layout = dashboardLayout,
-                        collapsed = collapsed["savedForLater"],
-                        showsZeroStats = state.showsZeroStats,
-                        onToggleCollapsed = { collapsed.toggle("savedForLater") },
-                        onSeeAll = { onOpenSection(LibrarySectionKind.SavedForLater) },
-                        actions = cardActions,
-                        onRemoveFromHistory = onRemoveFromHistory,
-                        onRemoveFromAllQueues = onRemoveFromAllQueues
-                    )
-                }
-                item {
-                    LibraryDashboardWorkSection(
-                        kind = LibrarySectionKind.Finished,
-                        items = state.finished,
-                        layout = dashboardLayout,
-                        collapsed = collapsed["finished"],
-                        showsZeroStats = state.showsZeroStats,
-                        onToggleCollapsed = { collapsed.toggle("finished") },
-                        onSeeAll = { onOpenSection(LibrarySectionKind.Finished) },
-                        actions = cardActions,
-                        onRemoveFromHistory = onRemoveFromHistory,
-                        onRemoveFromAllQueues = onRemoveFromAllQueues
-                    )
-                }
-                item {
-                    CollectionsShelf(
-                        collections = state.collections,
-                        allItems = state.collectionMembers,
-                        layout = dashboardLayout,
-                        collapsed = collapsed["collections"],
-                        onToggleCollapsed = { collapsed.toggle("collections") },
-                        onSeeAll = onOpenCollections,
-                        onOpenCollection = onOpenCollection,
-                        onDeleteCollection = onDeleteCollection
-                    )
-                }
-                item {
-                    LibraryDashboardWorkSection(
-                        kind = LibrarySectionKind.Downloaded,
-                        items = state.downloaded,
-                        layout = dashboardLayout,
-                        collapsed = collapsed["downloaded"],
-                        showsZeroStats = state.showsZeroStats,
-                        onToggleCollapsed = { collapsed.toggle("downloaded") },
-                        onSeeAll = { onOpenSection(LibrarySectionKind.Downloaded) },
-                        actions = cardActions,
-                        onRemoveFromHistory = onRemoveFromHistory,
-                        onRemoveFromAllQueues = onRemoveFromAllQueues
-                    )
-                }
-                item {
-                    LibraryDashboardWorkSection(
-                        kind = LibrarySectionKind.History,
-                        items = state.readingHistory,
-                        layout = dashboardLayout,
-                        collapsed = collapsed["history"],
-                        showsZeroStats = state.showsZeroStats,
-                        onToggleCollapsed = { collapsed.toggle("history") },
-                        onSeeAll = { onOpenSection(LibrarySectionKind.History) },
-                        actions = cardActions,
-                        onRemoveFromHistory = onRemoveFromHistory,
-                        onRemoveFromAllQueues = onRemoveFromAllQueues
-                    )
-                }
-                item {
-                    LibraryDashboardWorkSection(
-                        kind = LibrarySectionKind.Favorites,
-                        items = state.favorites,
-                        layout = dashboardLayout,
-                        collapsed = collapsed["favorites"],
-                        showsZeroStats = state.showsZeroStats,
-                        onToggleCollapsed = { collapsed.toggle("favorites") },
-                        onSeeAll = { onOpenSection(LibrarySectionKind.Favorites) },
-                        actions = cardActions,
-                        onRemoveFromHistory = onRemoveFromHistory,
-                        onRemoveFromAllQueues = onRemoveFromAllQueues
+                    LibraryShelfButtons(
+                        buttons = arrangement.buttons,
+                        onOpen = { id ->
+                            val kind = shelfKind(id)
+                            when {
+                                kind != null -> onOpenSection(kind)
+                                id == LibraryShelf.Queues.id -> onOpenReadingQueues()
+                                id == LibraryShelf.Collections.id -> onOpenCollections()
+                            }
+                        },
+                        onEditShelves = onEditShelves
                     )
                 }
                 item { LibraryOnAO3Panel(onOpenAO3List) }
@@ -973,6 +946,35 @@ private fun LibraryOnAO3Panel(onOpen: (AccountListType) -> Unit) {
             showsDisclosure = true,
             onClick = { onOpen(AccountListType.History) }
         )
+    }
+}
+
+/** Shelf id (iOS `LibraryShelfID`) to this screen's section; null for ids with no work list here. */
+private fun shelfKind(id: String): LibrarySectionKind? = when (id) {
+    LibraryShelf.Favourites.id -> LibrarySectionKind.Favorites
+    LibraryShelf.Downloaded.id -> LibrarySectionKind.Downloaded
+    LibraryShelf.WantToRead.id -> LibrarySectionKind.SavedForLater
+    LibraryShelf.ReadingNow.id -> LibrarySectionKind.ReadingNow
+    LibraryShelf.Finished.id -> LibrarySectionKind.Finished
+    LibraryShelf.History.id -> LibrarySectionKind.History
+    else -> null
+}
+
+/** Shelves that are not sections: one 48 dp row each (unknown or unsupported ids are kept, not shown). */
+@Composable
+private fun LibraryShelfButtons(buttons: List<String>, onOpen: (String) -> Unit, onEditShelves: () -> Unit) {
+    val shown = buttons.filter { LibraryShelf.fromId(it) != null && it != LibraryShelf.Imported.id }
+    Column(Modifier.padding(horizontal = 16.dp)) {
+        shown.forEach { id ->
+            TextButton(
+                onClick = { onOpen(id) },
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+            ) {
+                Text(shelfTitle(id), Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, contentDescription = null)
+            }
+        }
+        TextButton(onClick = onEditShelves, modifier = Modifier.heightIn(min = 48.dp)) { Text("Edit Shelves") }
     }
 }
 
