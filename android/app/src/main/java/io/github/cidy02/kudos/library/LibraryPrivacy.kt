@@ -117,6 +117,8 @@ object LibraryPrivacy {
         privacy: PrivacySettings,
         reveal: PrivacyRevealState
     ): LibraryPrivacyVisibility {
+        // Revealing the library copy reveals its AO3 listing too: they are the same work.
+        if (local != null && reveal.isRevealed(local.id)) return LibraryPrivacyVisibility.Visible
         val remote = remoteVisibility(remoteId, rating, privacy, reveal)
         if (local == null) return remote
         val localVisibility = visibility(local, privacy, reveal)
