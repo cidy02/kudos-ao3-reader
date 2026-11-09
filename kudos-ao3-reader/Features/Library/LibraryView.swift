@@ -1007,7 +1007,8 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             // first card (owner, 2026-10-01). Edit Shelves, Privacy and Reading
             // Insights live behind "...".
             // Board 01: the filter, then + and ••• as one pill (adjacent items in one placement
-            // share a glass pill; the spacer keeps the filter out of it), then a Select pill.
+            // share a glass pill; the spacer keeps the filter out of it). Select lives in •••
+            // (owner, 2026-11-09), in the app's menu order: Mature · Select · page items.
             if !works.isEmpty {
                 ToolbarItem(placement: .primaryAction) {
                     FilterButton(filtersActive: filters.hasActiveFilters,
@@ -1032,6 +1033,13 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                         if showsMature {
                             MatureRevealToggle()
                         }
+                        if showsSelect {
+                            Button {
+                                enterSelectMode()
+                            } label: {
+                                Label("Select", systemImage: "checklist")
+                            }
+                        }
                         // A page item, so after the shelf controls (pass2-2).
                         if showsStatistics {
                             NavigationLink(value: ReadingInsightsDestination()) {
@@ -1040,12 +1048,6 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                         }
                     }
                     .labelStyle(.iconOnly)
-                }
-            }
-            if showsSelect {
-                ToolbarSpacer(.fixed, placement: .primaryAction)
-                ToolbarItem(placement: .primaryAction) {
-                    Button("Select") { enterSelectMode() }
                 }
             }
         }
