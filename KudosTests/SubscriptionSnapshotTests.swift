@@ -46,7 +46,7 @@ struct SubscriptionSnapshotTests {
         defer { UIView.setAnimationsEnabled(animationsWereEnabled) }
 
         for screen in Screen.allCases {
-            defaults.set(screen != .waitingOpen, forKey: "hideMatureContent")
+            defaults.set(screen != .waitingOpen && screen != .waitingRows, forKey: "hideMatureContent")
             defaults.set(
                 screen == .newToYouHidden
                     ? MaturePrivacyMode.hide.rawValue
@@ -145,6 +145,8 @@ private extension SubscriptionSnapshotTests {
         case waiting
         /// The same sample with privacy off, so the rows themselves can be reviewed.
         case waitingOpen = "waiting-open"
+        /// Home's update rows alone (T-506), privacy off, so the marker stays in frame at AX5.
+        case waitingRows = "waiting-rows"
         case following
         case tidyUp = "tidy-up"
         case newToYou = "new-to-you"
@@ -162,6 +164,22 @@ private extension SubscriptionSnapshotTests {
             switch self {
             case .waiting, .waitingOpen:
                 AnyView(NavigationStack { WaitingListView.snapshotSample })
+            case .waitingRows:
+                AnyView(ScrollView {
+                    let updates = WaitingListView.snapshotUpdates
+                    VStack(spacing: 0) {
+                        ForEach(Array(updates.enumerated()), id: \.offset) { index, update in
+                            WaitingRow(
+                                update: update,
+                                position: index + 1,
+                                showsPosition: false,
+                                isFirst: index == 0,
+                                isLast: index == updates.count - 1
+                            )
+                            .padding(.horizontal, 16)
+                        }
+                    }
+                })
             case .following:
                 // One still-going work, so Series and Authors land inside the snapshot frame.
                 AnyView(NavigationStack {
@@ -390,54 +408,60 @@ private extension SubscriptionSnapshotTests {
 }
 
 private extension WaitingListView {
+    static let snapshotNow = Date(timeIntervalSince1970: 1_794_038_400)
+
     static var snapshotSample: WaitingListView {
-        let now = Date(timeIntervalSince1970: 1_794_038_400)
-        return WaitingListView(
-            updates: [
-                SubscriptionUpdate(
-                    uid: 1,
-                    workID: 301,
-                    chapterID: 3_010,
-                    chapterNumber: 9,
-                    isNewWork: false,
-                    isContested: false,
-                    isAnchoredToWork: true,
-                    workTitle: "The Lantern Keeper",
-                    author: "saltwindow",
-                    at: now,
-                    source: .work
-                ),
-                SubscriptionUpdate(
-                    uid: 2,
-                    workID: 302,
-                    chapterID: 3_020,
-                    chapterNumber: 3,
-                    isNewWork: false,
-                    isContested: false,
-                    isAnchoredToWork: false,
-                    workTitle: "A Quiet Harbour",
-                    author: "marrowlight",
-                    at: now - 3_600,
-                    source: .author("marrowlight")
-                ),
-                SubscriptionUpdate(
-                    uid: 3,
-                    workID: 303,
-                    chapterID: 3_030,
-                    chapterNumber: nil,
-                    isNewWork: true,
-                    isContested: false,
-                    isAnchoredToWork: true,
-                    workTitle: "Salt and Ember",
-                    author: "quietfern",
-                    at: now - 7_200,
-                    source: .work,
-                    extraCreations: 3
-                )
-            ],
-            mailSince: now - 3_456_000,
+        WaitingListView(
+            updates: snapshotUpdates,
+            mailSince: snapshotNow - 3_456_000,
             unverifiedCount: 2
         )
+    }
+
+    static var snapshotUpdates: [SubscriptionUpdate] {
+        let now = snapshotNow
+        return [
+            SubscriptionUpdate(
+                uid: 1,
+                workID: 301,
+                chapterID: 3_010,
+                chapterNumber: 9,
+                isNewWork: false,
+                isContested: false,
+                isAnchoredToWork: true,
+                workTitle: "The Lantern Keeper",
+                author: "saltwindow",
+                at: now,
+                source: .work
+            ),
+            SubscriptionUpdate(
+                uid: 2,
+                workID: 302,
+                chapterID: 3_020,
+                chapterNumber: 3,
+                isNewWork: false,
+                isContested: false,
+                isAnchoredToWork: false,
+                workTitle: "A Quiet Harbour",
+                author: "marrowlight",
+                at: now - 3_600,
+                source: .author("marrowlight")
+            ),
+            SubscriptionUpdate(
+                uid: 3,
+                workID: 303,
+                chapterID: 3_030,
+                chapterNumber: nil,
+                isNewWork: true,
+                isContested: false,
+                isAnchoredToWork: true,
+                workTitle: "Salt and Ember",
+                author: "quietfern",
+                at: now - 7_200,
+                source: .work,
+                extraCreations: 3
+            )
+        ]
     }
 }
 
