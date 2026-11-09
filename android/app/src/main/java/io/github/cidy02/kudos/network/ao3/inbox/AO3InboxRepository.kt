@@ -35,6 +35,9 @@ class AO3InboxRepository(
         }
     }
 
+    /** The scoped session unread count; changes when an Inbox page loads or the session changes. */
+    val unreadUpdates: kotlinx.coroutines.flow.StateFlow<Pair<AO3PageCache.Scope, Int>?> = lastUnreadByScope
+
     fun viewerScope() = AO3PageCache.scope(client)
 
     /**

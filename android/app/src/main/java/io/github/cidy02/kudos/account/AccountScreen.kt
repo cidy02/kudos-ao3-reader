@@ -770,7 +770,8 @@ internal fun AccountLatestCard(work: AO3WorkSummary, obscured: Boolean) {
                 )
             }
         } else {
-            RevealCapsule(Modifier.align(Alignment.Center))
+            // The card's own semantics already say "hidden mature work"; the capsule would repeat it.
+            RevealCapsule(Modifier.align(Alignment.Center).clearAndSetSemantics {})
         }
     }
 }
@@ -885,7 +886,8 @@ private fun AccountInboxPreviewRow(
         Box(
             modifier = Modifier
                 .size(28.dp)
-                .background(palette.accent.copy(alpha = 0.16f), CircleShape),
+                .background(palette.accent.copy(alpha = 0.16f), CircleShape)
+                .clearAndSetSemantics {},
             contentAlignment = Alignment.Center
         ) {
             Text(

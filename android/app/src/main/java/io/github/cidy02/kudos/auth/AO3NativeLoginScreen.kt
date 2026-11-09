@@ -48,6 +48,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
@@ -402,7 +405,9 @@ internal fun AO3InvitationRequestLink(
         lineHeight = 19.sp,
         modifier = modifier
             .fillMaxWidth()
-            .clickable(onClick = onOpenAO3)
+            .heightIn(min = 48.dp)
+            .clickable(onClick = onOpenAO3) // a text line, not a button (iOS T-470); 48 dp keeps it tappable
+            .wrapContentHeight(Alignment.CenterVertically)
     )
 }
 

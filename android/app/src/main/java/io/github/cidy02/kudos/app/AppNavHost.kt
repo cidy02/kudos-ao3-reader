@@ -662,7 +662,10 @@ fun AppNavHost(
                         Routes.comments(workId, focusedId, session = container.authRepository.generation.value)
                     )
                 },
-                onOpenInbox = { navController.navigate(Routes.AccountInbox) }
+                onOpenInbox = { navController.navigate(Routes.AccountInbox) },
+                onOpenSettings = { navController.navigate(Routes.Settings) { launchSingleTop = true } },
+                onOpenBackup = { navController.navigate(Routes.Backup) },
+                onOpenAbout = { navController.navigate(Routes.About) }
             )
         }
         sharedComposable(Routes.AccountInbox) {

@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
@@ -160,6 +161,22 @@ class AccountViewModel(
     )
 
     init {
+        inboxRepository?.let { repo ->
+            viewModelScope.launch {
+                // The Inbox pane reloads page 1 after reading; follow it so the preview and badge
+                // aren't stale (iOS shares one inbox model). Cache-first: no extra AO3 request while
+                // the page is fresh, and an unchanged count emits nothing, so this can't loop.
+                // A session reset (null, or another viewer's scope) is the auth collector's job.
+                repo.unreadUpdates.drop(1).collect { update ->
+                    if (update == null || update.first != repo.viewerScope()) return@collect
+                    val username = authRepository.username() ?: return@collect
+                    val current = inboxFlow.value
+                    if (current?.first == authRepository.generation.value &&
+                        current.second is AccountInboxPreviewState.Loaded
+                    ) refreshInbox(username)
+                }
+            }
+        }
         viewModelScope.launch {
             authRepository.restoreSession()
             combine(authRepository.state, authRepository.generation) { auth, generation -> auth to generation }
@@ -176,6 +193,7 @@ class AccountViewModel(
                 aboutErrorFlow.value = null
                 staleFlow.value = false
                 inboxFlow.value = null
+                countsFlow.value = emptyMap()
                 if (username != null && authRepository.username() == username) {
                     val initialRoute = AO3AuthorRoute(username)
                     routeFlow.value = generation to initialRoute

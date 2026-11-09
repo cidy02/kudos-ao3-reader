@@ -374,6 +374,48 @@ class AccountOverviewRowsTest {
     }
 
     @Test
+    fun accountPreviewFollowsTheInboxPaneReload() {
+        val auth = AO3AuthRepository(MemorySessionStore(testSession("Avery_Archive")), MemoryCookieStore())
+        runBlocking { auth.restoreSession() }
+        val transport = AccountFakeTransport(auth)
+        val authorRepo = AO3AuthorRepository(transport, transport, parseDispatcher = Dispatchers.Unconfined)
+        val inboxRepo = AO3InboxRepository(transport)
+        val vm = AccountViewModel(auth, authorRepo, AO3AccountListCountsCache(), inboxRepo)
+        models.put("inbox-follow", vm)
+        compose.setContent {
+            KudosTheme(KudosThemeMode.Light) {
+                AccountScreen(
+                    authRepository = auth,
+                    workRepository = works,
+                    onLogin = {},
+                    onOpenList = {},
+                    authorRepository = authorRepo,
+                    inboxRepository = inboxRepo,
+                    privacySettings = PrivacySettings(hideMatureContent = false),
+                    viewModel = vm
+                )
+            }
+        }
+        fun unread() = (vm.uiState.value.inboxPreview as? AccountInboxPreviewState.Loaded)?.unreadCount
+        compose.waitUntil(15_000) { unread() == 2 }
+
+        // The Inbox pane reads one message and reloads page 1; the sheet must not keep showing 2.
+        transport.inboxHtml = AccountFakeTransport.INBOX_HTML.replace("2 unread", "1 unread")
+        // Off the main thread, as the pane's own coroutine runs it: runBlocking here would capture the
+        // sheet's follow-up refresh in its event loop and leave it parked until the test ends.
+        kotlin.concurrent.thread { runBlocking { inboxRepo.load(page = 1, bypassCache = true) } }.join()
+        // The follow-up refresh resumes on the main looper, which waitUntil does not drain on its own here.
+        // Drain it outside Compose's callbacks: idling inside waitUntil re-entered layout in later tests.
+        val deadline = System.currentTimeMillis() + 15_000
+        while (unread() != 1 && System.currentTimeMillis() < deadline) {
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+            Thread.sleep(10)
+        }
+        compose.waitForIdle()
+        assertEquals(1, unread())
+    }
+
+    @Test
     fun inboxCardShowsAtMostTwoMessagesAndOpensItemOrFullInbox() {
         val items = listOf(
             inboxItem(501L, "ReaderOne", "Chapter 2 of Dawn", 101L, "First inbox preview message"),
@@ -483,6 +525,7 @@ private class AccountFakeTransport(
     private val auth: AO3AuthRepository
 ) : AO3Client, AO3AuthenticatedClient {
     val gets = CopyOnWriteArrayList<String>()
+    @Volatile var inboxHtml: String = INBOX_HTML
 
     override val sessionChanges get() = auth.generation
     override fun username(): String? = auth.username()
@@ -492,7 +535,7 @@ private class AccountFakeTransport(
         gets += url
         val html = when {
             url.endsWith("/profile") -> fixtureHtml("ao3_author_profile")
-            url.contains("/inbox") -> INBOX_HTML
+            url.contains("/inbox") -> inboxHtml
             else -> fixtureHtml("ao3_author_dashboard_demo")
         }
         return AO3Result.Success(AO3HttpResponse(url, 200, emptyMap(), html))
@@ -507,7 +550,7 @@ private class AccountFakeTransport(
     ): AO3Result<AO3HttpResponse> = AO3Result.Failure(AO3Error.Network("No writes in AccountOverviewRowsTest"))
 
     companion object {
-        private const val INBOX_HTML = """
+        const val INBOX_HTML = """
             <html><body><div id="main" class="inbox-show dashboard">
               <h2 class="heading">My Inbox (3 comments, 2 unread)</h2>
               <form id="inbox-form" action="/users/Avery_Archive/inbox" method="post">
