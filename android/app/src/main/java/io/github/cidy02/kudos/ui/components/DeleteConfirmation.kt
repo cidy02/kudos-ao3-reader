@@ -13,6 +13,8 @@ import androidx.compose.ui.unit.dp
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.files.ImportedFileFormat
 import io.github.cidy02.kudos.files.WorkFileStore
+import io.github.cidy02.kudos.library.LibraryPrivacy
+import io.github.cidy02.kudos.library.LibraryPrivacyVisibility
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SubjectPalette
 import io.github.cidy02.kudos.works.WorkConversionRecord
@@ -54,7 +56,7 @@ enum class WorkOrigin(
         }
 
         fun of(work: SavedWork): WorkOrigin {
-            if (work.hasAo3WorkId) return ARCHIVE_OF_OUR_OWN
+            if (work.ao3WorkID != null) return ARCHIVE_OF_OUR_OWN
             return detect(work.sourceUrl)
         }
     }
@@ -95,16 +97,7 @@ sealed class WorkRedownloadability {
 
     val importSourcePhrase: String?
         get() = when (this) {
-            is Imported -> {
-                val site = namedSite(origin)
-                val fmt = formatDisplayName?.trim()?.takeIf { it.isNotEmpty() }
-                when {
-                    fmt != null && site != null -> "${withIndefiniteArticle(fmt)} from $site"
-                    fmt != null -> withIndefiniteArticle(fmt)
-                    site != null -> site
-                    else -> "a file"
-                }
-            }
+            is Imported -> importedSourcePhrase(formatDisplayName, origin)
             CanRedownload, NoLongerOnAO3 -> null
         }
 
@@ -117,7 +110,7 @@ sealed class WorkRedownloadability {
             if (origin.supportsLiveLookup) {
                 return if (ao3Unavailable) NoLongerOnAO3 else CanRedownload
             }
-            return Imported(formatDisplayName = importFormatDisplayName, origin = origin)
+            return Imported(formatDisplayName = cleanedFormat(importFormatDisplayName), origin = origin)
         }
 
         fun of(work: SavedWork, fileStore: WorkFileStore? = null): WorkRedownloadability {
@@ -192,9 +185,18 @@ sealed class WorkRedownloadability {
             ImportedFileFormat.UNKNOWN -> null
         }
 
-        private fun importedLead(formatDisplayName: String?, origin: WorkOrigin): String {
-            val site = namedSite(origin)
-            val fmt = formatDisplayName?.trim()?.takeIf { it.isNotEmpty() }
+        private fun cleanedFormat(name: String?): String? =
+            name?.trim()?.takeIf { it.isNotEmpty() }
+
+        private fun siteName(origin: WorkOrigin): String? = when (origin) {
+            WorkOrigin.IMPORTED_FILE -> null
+            WorkOrigin.UNKNOWN -> "another site"
+            else -> origin.displayName
+        }
+
+        private fun importedLead(format: String?, origin: WorkOrigin): String {
+            val fmt = cleanedFormat(format)
+            val site = siteName(origin)
             return when {
                 fmt != null && site != null -> "$fmt from $site"
                 fmt != null -> fmt
@@ -203,21 +205,26 @@ sealed class WorkRedownloadability {
             }
         }
 
-        private fun namedSite(origin: WorkOrigin): String? = when (origin) {
-            WorkOrigin.ARCHIVE_OF_OUR_OWN, WorkOrigin.IMPORTED_FILE, WorkOrigin.UNKNOWN -> null
-            else -> origin.displayName
+        private fun importedSourcePhrase(format: String?, origin: WorkOrigin): String {
+            val fmt = cleanedFormat(format)
+            val site = siteName(origin)
+            return when {
+                fmt != null && site != null -> "${article(fmt)} from $site"
+                fmt != null -> article(fmt)
+                site != null -> site
+                else -> "a file"
+            }
         }
 
-        private fun withIndefiniteArticle(noun: String): String {
-            val upper = noun.uppercase()
-            val vowelSound = upper.startsWith("A") ||
-                upper.startsWith("E") ||
-                upper.startsWith("I") ||
-                upper.startsWith("O") ||
-                upper.startsWith("U") ||
-                upper.startsWith("HTML") ||
-                upper.startsWith("RTF")
-            return if (vowelSound) "an $noun" else "a $noun"
+        private fun article(format: String): String {
+            val first = format.firstOrNull() ?: return "a $format"
+            val spelledOut = format.all { it.isUpperCase() || it.isDigit() }
+            val an = if (spelledOut) {
+                first in "AEFHILMNORSX"
+            } else {
+                first.lowercaseChar() in "aeiou"
+            }
+            return if (an) "an $format" else "a $format"
         }
     }
 }
@@ -237,20 +244,29 @@ fun shouldConfirmDelete(
 fun deleteConfirmationMessage(
     work: SavedWork,
     permanently: Boolean = false,
-    fileStore: WorkFileStore? = null
+    fileStore: WorkFileStore? = null,
+    visibility: LibraryPrivacyVisibility = LibraryPrivacyVisibility.Visible
 ): String = deleteConfirmationMessage(
     title = work.title,
     reason = WorkRedownloadability.of(work, fileStore),
-    permanently = permanently
+    permanently = permanently,
+    concealed = visibility != LibraryPrivacyVisibility.Visible
 )
 
 fun deleteConfirmationMessage(
     works: List<SavedWork>,
     permanently: Boolean = false,
-    fileStore: WorkFileStore? = null
+    fileStore: WorkFileStore? = null,
+    visibility: (SavedWork) -> LibraryPrivacyVisibility = { LibraryPrivacyVisibility.Visible }
 ): String {
     if (works.size == 1) {
-        return deleteConfirmationMessage(work = works.first(), permanently = permanently, fileStore = fileStore)
+        val work = works.first()
+        return deleteConfirmationMessage(
+            work = work,
+            permanently = permanently,
+            fileStore = fileStore,
+            visibility = visibility(work)
+        )
     }
     val irreplaceable = works.count { !WorkRedownloadability.of(it, fileStore).canRedownload }
     return deleteConfirmationMessage(
@@ -265,54 +281,64 @@ fun deleteConfirmationMessage(
     irreplaceableCount: Int,
     permanently: Boolean = false
 ): String {
-    val countNote = when {
-        irreplaceableCount <= 0 -> ""
-        itemCount == 1 -> " It can't be downloaded again."
-        else -> " $irreplaceableCount of these $itemCount can't be downloaded again."
-    }
-    if (permanently) {
-        if (itemCount == 1) {
-            return "This removes the item and its download from Kudos and can't be undone.$countNote"
+    if (itemCount == 1 && irreplaceableCount == 0) {
+        return if (permanently) {
+            "Kudos will permanently remove this item and any download, progress, or notes stored with it. " +
+                "The work stays on AO3. You can't undo this."
+        } else {
+            "Kudos will move this work to Recently Deleted. You can restore it for the next 90 days."
         }
-        val stayClause = if (irreplaceableCount > 0) "" else " The works stay on AO3."
-        return "This removes the selected items and their downloads from Kudos and can't be undone.$countNote$stayClause"
     }
-    if (itemCount == 1) {
-        return "Kudos will move this work to Recently Deleted. You can restore it for the next 90 days.$countNote"
+    val base = if (permanently) {
+        val ao3Clause = if (irreplaceableCount == 0) " The works stay on AO3." else ""
+        "Kudos will permanently remove each item and any download, progress, or notes stored with it." +
+            ao3Clause +
+            " You can't undo this."
+    } else {
+        "Kudos will move the selected works to Recently Deleted. " +
+            "You can restore them for the next 90 days."
     }
-    return "Kudos will move the selected works to Recently Deleted. You can restore them for the next 90 days.$countNote"
+    if (irreplaceableCount <= 0 || itemCount <= 0) return base
+    return "$base $irreplaceableCount of these $itemCount can't be downloaded again."
 }
 
 fun deleteConfirmationMessage(
     title: String,
     reason: WorkRedownloadability,
-    permanently: Boolean = false
+    permanently: Boolean = false,
+    concealed: Boolean = false
 ): String {
     val trimmed = title.trim()
-    val named = if (trimmed.isEmpty()) "this work" else "“$trimmed”"
+    val named = if (concealed || trimmed.isEmpty() || trimmed == LibraryPrivacy.HIDDEN_WORK_TITLE) {
+        "this work"
+    } else {
+        "“$trimmed”"
+    }
     return when (reason) {
         WorkRedownloadability.CanRedownload -> {
             if (permanently) {
-                "This removes $named and its download from Kudos and can't be undone. The work stays on AO3."
-            } else if (trimmed.isEmpty()) {
-                deleteConfirmationMessage(itemCount = 1, irreplaceableCount = 0, permanently = false)
+                "Kudos will permanently remove $named and any download, progress, or notes " +
+                    "stored with it. The work stays on AO3. You can't undo this."
             } else {
                 "Kudos will move $named to Recently Deleted. You can restore it for the next 90 days."
             }
         }
         WorkRedownloadability.NoLongerOnAO3 -> {
             if (permanently) {
-                "$named is no longer on AO3. Deleting it permanently removes your last copy and can't be undone."
+                "$named is no longer on AO3, so Kudos can't download it again. You can't undo this."
             } else {
-                "$named is no longer on AO3, so Kudos can't download it again. It stays in Recently Deleted for 90 days, then it's gone for good."
+                "$named is no longer on AO3, so Kudos can't download it again. It stays in Recently " +
+                    "Deleted for 90 days, then it's gone for good."
             }
         }
         is WorkRedownloadability.Imported -> {
             val source = reason.importSourcePhrase ?: "a file"
             if (permanently) {
-                "$named was imported from $source. Kudos only downloads from AO3, so deleting it permanently removes your only copy and can't be undone."
+                "$named was imported from $source. Kudos only downloads from AO3, so this " +
+                    "is the only copy."
             } else {
-                "$named was imported from $source. Kudos only downloads from AO3, so this is the only copy. It stays in Recently Deleted for 90 days, then it's gone for good."
+                "$named was imported from $source. Kudos only downloads from AO3, so this is " +
+                    "the only copy. It stays in Recently Deleted for 90 days, then it's gone for good."
             }
         }
     }
@@ -322,8 +348,14 @@ fun deleteConfirmationMessage(
 fun workDeletionMessage(
     works: List<SavedWork>,
     permanently: Boolean = false,
-    fileStore: WorkFileStore? = null
-): String = deleteConfirmationMessage(works = works, permanently = permanently, fileStore = fileStore)
+    fileStore: WorkFileStore? = null,
+    visibility: (SavedWork) -> LibraryPrivacyVisibility = { LibraryPrivacyVisibility.Visible }
+): String = deleteConfirmationMessage(
+    works = works,
+    permanently = permanently,
+    fileStore = fileStore,
+    visibility = visibility
+)
 
 @Composable
 fun DestructiveConfirmation(

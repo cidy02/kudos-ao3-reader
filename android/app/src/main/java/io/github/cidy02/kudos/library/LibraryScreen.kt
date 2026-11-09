@@ -354,12 +354,17 @@ fun LibraryScreen(
         )
     }
 
+    val selectedCollectionMembers = state.collectionMembers.filter { it.item.work.id in state.selectedWorkIds }
     DestructiveConfirmation(
         show = confirmBulkRemove,
         title = if (state.selectedCount == 1) "Delete 1 work?" else "Delete ${state.selectedCount} works?",
         text = workDeletionMessage(
-            state.collectionMembers.filter { it.item.work.id in state.selectedWorkIds }.map { it.item.work },
-            fileStore = workRepository.fileStore
+            selectedCollectionMembers.map { it.item.work },
+            fileStore = workRepository.fileStore,
+            visibility = { work ->
+                selectedCollectionMembers.firstOrNull { it.item.work.id == work.id }?.privacyVisibility
+                    ?: LibraryPrivacyVisibility.Visible
+            }
         ),
         confirmText = "Delete",
         confirmBeforeDelete = true,
@@ -412,11 +417,16 @@ fun LibraryScreen(
         onDismissRequest = { confirmDeleteCollection = null }
     )
 
-    val removeOneWorks = listOfNotNull(state.collectionMembers.firstOrNull { it.item.work.id == confirmRemoveOne }?.item?.work)
+    val removeOneMember = state.collectionMembers.firstOrNull { it.item.work.id == confirmRemoveOne }
+    val removeOneWorks = listOfNotNull(removeOneMember?.item?.work)
     DestructiveConfirmation(
         show = confirmRemoveOne != null,
         title = "Delete this work?",
-        text = workDeletionMessage(removeOneWorks, fileStore = workRepository.fileStore),
+        text = workDeletionMessage(
+            removeOneWorks,
+            fileStore = workRepository.fileStore,
+            visibility = { removeOneMember?.privacyVisibility ?: LibraryPrivacyVisibility.Visible }
+        ),
         confirmText = "Delete",
         confirmBeforeDelete = shouldConfirmDelete(removeOneWorks, state.confirmBeforeDelete, workRepository.fileStore),
         onConfirm = {

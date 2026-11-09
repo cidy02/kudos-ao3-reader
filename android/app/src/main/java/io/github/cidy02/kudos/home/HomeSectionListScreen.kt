@@ -539,11 +539,23 @@ fun HomeSectionListScreen(
         )
     }
 
-    val pendingDeleteWorks = listOfNotNull(pendingDelete?.let { displayById[it]?.item?.work })
+    val pendingDeleteDisplay = pendingDelete?.let { displayById[it] }
+    val pendingDeleteWorks = listOfNotNull(pendingDeleteDisplay?.item?.work)
     DestructiveConfirmation(
         show = pendingDelete != null,
         title = "Delete this work?",
-        text = workDeletionMessage(pendingDeleteWorks, fileStore = workRepository.fileStore),
+        text = workDeletionMessage(
+            pendingDeleteWorks,
+            fileStore = workRepository.fileStore,
+            visibility = { work ->
+                displayById[work.id]?.privacyVisibility
+                    ?: LibraryPrivacy.visibility(
+                        work,
+                        snapshot?.privacy ?: LibraryPrivacy.UNREAD_SETTING,
+                        privacyState
+                    )
+            }
+        ),
         confirmText = "Delete",
         confirmBeforeDelete = shouldConfirmDelete(
             pendingDeleteWorks,

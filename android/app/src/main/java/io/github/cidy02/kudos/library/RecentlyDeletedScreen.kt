@@ -70,6 +70,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import io.github.cidy02.kudos.app.ProvidePushedShellChrome
+import io.github.cidy02.kudos.core.model.KudosSettings
 import io.github.cidy02.kudos.core.model.ReadingQueue
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.core.model.WorkCollection
@@ -79,6 +80,7 @@ import io.github.cidy02.kudos.ui.components.DestructiveConfirmation
 import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.ErrorStateCard
 import io.github.cidy02.kudos.ui.components.LoadingStateCard
+import io.github.cidy02.kudos.ui.components.LocalWorkRowEnvironment
 import io.github.cidy02.kudos.ui.components.OriginalFileExport
 import io.github.cidy02.kudos.ui.components.WorkRedownloadability
 import io.github.cidy02.kudos.ui.components.deleteConfirmationMessage
@@ -108,6 +110,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -144,7 +147,8 @@ data class RecentlyDeletedUiState(
 
 class RecentlyDeletedViewModel(
     private val workRepository: WorkRepository,
-    private val queueRepository: ReadingQueueRepository? = null
+    private val queueRepository: ReadingQueueRepository? = null,
+    private val settingsRepository: SettingsRepository? = null
 ) : ViewModel() {
     private val queueTick = MutableStateFlow(0)
     // iOS: .dateTime.day().month(.abbreviated) in the user's locale ("Oct 2" in en-US).
@@ -157,23 +161,25 @@ class RecentlyDeletedViewModel(
         workRepository.observeRecentlyDeleted(),
         workRepository.observeRecentlyDeletedCollections(),
         workRepository.observeHeldCopies(),
+        settingsRepository?.settings ?: flowOf(KudosSettings()),
         queueTick
-    ) { works, collections, heldCopies, _ ->
+    ) { works, collections, heldCopies, settings, _ ->
         val queues = queueRepository?.listRecentlyDeletedQueues().orEmpty()
         // ReadingQueue carries no count; a deleted queue keeps its memberships until purged.
         val queueWorkCounts = queues.associate { it.id to (queueRepository?.listWorks(it.id)?.size ?: 0) }
         val now = Instant.now()
 
         val deletedWorkEntries = works.map { work ->
+            val visibility = LibraryPrivacy.visibility(work, settings.privacy)
             RecentlyDeletedEntry(
                 id = work.id,
                 kicker = recentlyDeletedWorkKicker(work),
                 noun = "work",
-                title = work.title,
+                title = LibraryPrivacy.shownTitle(work, visibility),
                 detail = workDetail(work),
                 daysRemaining = daysRemaining(work.permanentDeletionScheduledAt, now),
                 isHeldCopy = false,
-                deleteTitle = "Delete “${work.title}” permanently?",
+                deleteTitle = recentlyDeletedDeleteTitle(work, isHeldCopy = false, visibility = visibility),
                 deleteLabel = "Delete Permanently",
                 redownloadability = WorkRedownloadability.of(work, workRepository.fileStore),
                 originalFile = WorkRedownloadability.originalFile(work.id, workRepository.fileStore)
@@ -211,15 +217,16 @@ class RecentlyDeletedViewModel(
         val heldEntries = sortedSoonestFirst(
             heldCopies.map { work ->
                 val expires = work.freedAt?.plus(WorkRepository.FREED_COPY_WINDOW)
+                val visibility = LibraryPrivacy.visibility(work, settings.privacy)
                 RecentlyDeletedEntry(
                     id = work.id,
                     kicker = "Finished work",
                     noun = "work",
-                    title = work.title,
+                    title = LibraryPrivacy.shownTitle(work, visibility),
                     detail = workDetail(work),
                     daysRemaining = daysRemaining(expires, now),
                     isHeldCopy = true,
-                    deleteTitle = "Remove the copy of “${work.title}”?",
+                    deleteTitle = recentlyDeletedDeleteTitle(work, isHeldCopy = true, visibility = visibility),
                     deleteLabel = "Remove Copy",
                     redownloadability = WorkRedownloadability.of(work, workRepository.fileStore),
                     originalFile = WorkRedownloadability.originalFile(work.id, workRepository.fileStore)
@@ -345,10 +352,11 @@ class RecentlyDeletedViewModel(
     companion object {
         fun factory(
             workRepository: WorkRepository,
-            queueRepository: ReadingQueueRepository? = null
+            queueRepository: ReadingQueueRepository? = null,
+            settingsRepository: SettingsRepository? = null
         ): ViewModelProvider.Factory =
             viewModelFactory {
-                initializer { RecentlyDeletedViewModel(workRepository, queueRepository) }
+                initializer { RecentlyDeletedViewModel(workRepository, queueRepository, settingsRepository) }
             }
     }
 }
@@ -360,13 +368,34 @@ fun RecentlyDeletedScreen(
     settingsRepository: SettingsRepository? = null
 ) {
     val viewModel: RecentlyDeletedViewModel = viewModel(
-        factory = RecentlyDeletedViewModel.factory(workRepository, queueRepository)
+        factory = RecentlyDeletedViewModel.factory(workRepository, queueRepository, settingsRepository)
     )
     val state by viewModel.state.collectAsState()
     val tokens = LocalKudosTokens.current
     val palette = tokens.scopePalette
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val rowEnv = LocalWorkRowEnvironment.current
+    val settingsFlow = remember(settingsRepository) {
+        settingsRepository?.settings ?: flowOf(KudosSettings())
+    }
+    val currentSettings by settingsFlow.collectAsState(
+        initial = if (settingsRepository != null) {
+            KudosSettings(privacy = LibraryPrivacy.UNREAD_SETTING)
+        } else {
+            KudosSettings()
+        }
+    )
+
+    fun privacyAdjusted(entry: RecentlyDeletedEntry): RecentlyDeletedEntry {
+        val work = state.rawWorks[entry.id] ?: return entry
+        val visibility = rowEnv?.visibility?.invoke(work)
+            ?: LibraryPrivacy.visibility(work, currentSettings.privacy)
+        return entry.copy(
+            title = LibraryPrivacy.shownTitle(work, visibility),
+            deleteTitle = recentlyDeletedDeleteTitle(work, isHeldCopy = entry.isHeldCopy, visibility = visibility)
+        )
+    }
 
     var isSelecting by remember { mutableStateOf(false) }
     var selection by remember { mutableStateOf<Set<String>>(emptySet()) }
@@ -603,7 +632,8 @@ fun RecentlyDeletedScreen(
                     )
                 }
 
-                items(state.deletedEntries, key = { it.id }) { entry ->
+                items(state.deletedEntries, key = { it.id }) { rawEntry ->
+                    val entry = privacyAdjusted(rawEntry)
                     RecentlyDeletedRow(
                         entry = entry,
                         palette = palette,
@@ -645,7 +675,8 @@ fun RecentlyDeletedScreen(
                     )
                 }
 
-                items(state.heldEntries, key = { "held-${it.id}" }) { entry ->
+                items(state.heldEntries, key = { "held-${it.id}" }) { rawEntry ->
+                    val entry = privacyAdjusted(rawEntry)
                     RecentlyDeletedRow(
                         entry = entry,
                         palette = palette,
@@ -974,6 +1005,23 @@ private fun RedownloadWarningNote(title: String, body: String) {
             fontSize = 12.sp,
             lineHeight = 16.sp
         )
+    }
+}
+
+internal fun recentlyDeletedDeleteTitle(
+    work: SavedWork,
+    isHeldCopy: Boolean = false,
+    visibility: LibraryPrivacyVisibility = LibraryPrivacyVisibility.Visible
+): String {
+    val concealed = visibility != LibraryPrivacyVisibility.Visible ||
+        work.title.isBlank() ||
+        work.title == LibraryPrivacy.HIDDEN_WORK_TITLE
+    return if (isHeldCopy) {
+        if (concealed) "Remove the copy of this work?"
+        else "Remove the copy of “${work.title}”?"
+    } else {
+        if (concealed) "Delete this work permanently?"
+        else "Delete “${work.title}” permanently?"
     }
 }
 

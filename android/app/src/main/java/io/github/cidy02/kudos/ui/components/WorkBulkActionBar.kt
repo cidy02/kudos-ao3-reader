@@ -48,6 +48,7 @@ import io.github.cidy02.kudos.core.model.WorkDownloadAction
 import io.github.cidy02.kudos.core.model.WorkDownloadSemantics
 import io.github.cidy02.kudos.core.model.WorkCollection
 import io.github.cidy02.kudos.core.model.ReadingQueue
+import io.github.cidy02.kudos.library.LibraryPrivacyVisibility
 import io.github.cidy02.kudos.library.ReadingQueueRepository
 import io.github.cidy02.kudos.works.DownloadQueue
 import io.github.cidy02.kudos.works.WorkRepository
@@ -198,10 +199,15 @@ fun WorkBulkActionBar(
         }
     }
     
+    val rowEnv = LocalWorkRowEnvironment.current
     DestructiveConfirmation(
         show = confirmDelete,
         title = if (selectedWorks.size == 1) "Remove 1 work?" else "Remove ${selectedWorks.size} works?",
-        text = workDeletionMessage(selectedWorks, fileStore = workRepository.fileStore),
+        text = workDeletionMessage(
+            selectedWorks,
+            fileStore = workRepository.fileStore,
+            visibility = { rowEnv?.visibility?.invoke(it) ?: LibraryPrivacyVisibility.Visible }
+        ),
         confirmText = "Remove",
         confirmBeforeDelete = true,
         onConfirm = {

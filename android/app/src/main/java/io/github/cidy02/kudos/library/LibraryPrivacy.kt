@@ -54,8 +54,11 @@ object LibraryPrivacy {
 
     /** The name a row may show for [display]: an obscured work has none of its own. */
     fun shownTitle(display: LibraryDisplayItem): String =
-        if (display.privacyVisibility == LibraryPrivacyVisibility.Obscured) HIDDEN_WORK_TITLE
-        else display.item.work.title
+        shownTitle(display.item.work, display.privacyVisibility)
+
+    fun shownTitle(work: SavedWork, visibility: LibraryPrivacyVisibility): String =
+        if (visibility != LibraryPrivacyVisibility.Visible) HIDDEN_WORK_TITLE
+        else work.title
 
     private fun SavedWork.isAdultRated(): Boolean {
         val normalized = rating.trim().lowercase()

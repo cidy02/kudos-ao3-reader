@@ -66,10 +66,15 @@ internal fun scopedWorkActions(
             } }, onDismiss = { collectionWork = null })
     }
     deleteWork?.let { work ->
+        val rowEnv = io.github.cidy02.kudos.ui.components.LocalWorkRowEnvironment.current
         io.github.cidy02.kudos.ui.components.DestructiveConfirmation(
             show = true,
             title = "Delete this work?",
-            text = workDeletionMessage(listOf(work), fileStore = workRepository.fileStore),
+            text = workDeletionMessage(
+                listOf(work),
+                fileStore = workRepository.fileStore,
+                visibility = { rowEnv?.visibility?.invoke(it) ?: LibraryPrivacyVisibility.Visible }
+            ),
             confirmText = "Delete",
             confirmBeforeDelete = shouldConfirmDelete(work, confirmBeforeDelete, workRepository.fileStore),
             onConfirm = { deleteWork = null; change { workRepository.softDelete(work.id) } },

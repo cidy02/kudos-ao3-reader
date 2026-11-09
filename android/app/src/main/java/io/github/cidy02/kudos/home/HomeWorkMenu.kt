@@ -232,6 +232,7 @@ fun HomeWorkDialogs(
             palette = io.github.cidy02.kudos.ui.subject.LocalKudosTokens.current.scopePalette,
             onDismiss = { controller.tagTargets = emptyList() })
     }
+    val rowEnv = io.github.cidy02.kudos.ui.components.LocalWorkRowEnvironment.current
     DestructiveConfirmation(
         show = controller.deleteTargets.isNotEmpty(),
         title = if (controller.deleteTargets.size == 1) {
@@ -239,7 +240,14 @@ fun HomeWorkDialogs(
         } else {
             "Delete ${controller.deleteTargets.size} works?"
         },
-        text = workDeletionMessage(controller.deleteTargets, fileStore = workRepository.fileStore),
+        text = workDeletionMessage(
+            controller.deleteTargets,
+            fileStore = workRepository.fileStore,
+            visibility = {
+                rowEnv?.visibility?.invoke(it)
+                    ?: io.github.cidy02.kudos.library.LibraryPrivacyVisibility.Visible
+            }
+        ),
         confirmText = "Delete",
         confirmBeforeDelete = controller.deletingSelection ||
             shouldConfirmDelete(controller.deleteTargets, confirmBeforeDelete, workRepository.fileStore),

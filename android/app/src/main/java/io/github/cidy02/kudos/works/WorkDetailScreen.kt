@@ -667,7 +667,11 @@ fun WorkDetailScreen(
     DestructiveConfirmation(
         show = confirmRemove,
         title = "Remove from Library",
-        text = workDeletionMessage(localDeleteWorks, fileStore = workRepository.fileStore),
+        text = workDeletionMessage(
+            localDeleteWorks,
+            fileStore = workRepository.fileStore,
+            visibility = { io.github.cidy02.kudos.library.LibraryPrivacy.visibility(it, settings.privacy, reveal) }
+        ),
         confirmText = "Remove",
         confirmBeforeDelete = shouldConfirmDelete(
             localDeleteWorks,

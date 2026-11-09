@@ -144,6 +144,22 @@ class RecentlyDeletedDaysRemainingTest {
         assertEquals("Imported file.", plainFile.rowTitle)
         assertEquals("a file", plainFile.importSourcePhrase)
 
+        val unknownSite = WorkRedownloadability.of(
+            origin = WorkOrigin.UNKNOWN,
+            ao3Unavailable = false,
+            importFormatDisplayName = null
+        )
+        assertEquals("Imported from another site.", unknownSite.rowTitle)
+        assertEquals("another site", unknownSite.importSourcePhrase)
+
+        val unknownEpub = WorkRedownloadability.of(
+            origin = WorkOrigin.UNKNOWN,
+            ao3Unavailable = false,
+            importFormatDisplayName = "EPUB"
+        )
+        assertEquals("Imported EPUB from another site.", unknownEpub.rowTitle)
+        assertEquals("an EPUB from another site", unknownEpub.importSourcePhrase)
+
         val htmlImport = WorkRedownloadability.of(
             origin = WorkOrigin.WATTPAD,
             ao3Unavailable = false,
@@ -208,7 +224,7 @@ class RecentlyDeletedDaysRemainingTest {
             permanently = true
         )
         assertEquals(
-            "“Gone Work” is no longer on AO3. Deleting it permanently removes your last copy and can't be undone.",
+            "“Gone Work” is no longer on AO3, so Kudos can't download it again. You can't undo this.",
             permUnavailable
         )
 
@@ -222,7 +238,7 @@ class RecentlyDeletedDaysRemainingTest {
             deleteConfirmationMessage(title = "Imported Story", reason = ffnPdfReason, permanently = false)
         )
         assertEquals(
-            "“Imported Story” was imported from a PDF from FanFiction.net. Kudos only downloads from AO3, so deleting it permanently removes your only copy and can't be undone.",
+            "“Imported Story” was imported from a PDF from FanFiction.net. Kudos only downloads from AO3, so this is the only copy.",
             deleteConfirmationMessage(title = "Imported Story", reason = ffnPdfReason, permanently = true)
         )
 
@@ -238,12 +254,16 @@ class RecentlyDeletedDaysRemainingTest {
         assertTrue(bulkSoft.contains("90 days"))
 
         val bulkPerm = deleteConfirmationMessage(itemCount = 5, irreplaceableCount = 2, permanently = true)
-        assertTrue(bulkPerm.contains("2 of these 5 can't be downloaded again."))
-        assertFalse(bulkPerm.contains("stay on AO3"))
+        assertEquals(
+            "Kudos will permanently remove each item and any download, progress, or notes stored with it. You can't undo this. 2 of these 5 can't be downloaded again.",
+            bulkPerm
+        )
 
         val bulkPermAllRedownloadable = deleteConfirmationMessage(itemCount = 3, irreplaceableCount = 0, permanently = true)
-        assertFalse(bulkPermAllRedownloadable.contains("can't be downloaded again"))
-        assertTrue(bulkPermAllRedownloadable.contains("The works stay on AO3."))
+        assertEquals(
+            "Kudos will permanently remove each item and any download, progress, or notes stored with it. The works stay on AO3. You can't undo this.",
+            bulkPermAllRedownloadable
+        )
     }
 
     @Test
@@ -332,6 +352,86 @@ class RecentlyDeletedDaysRemainingTest {
         } finally {
             tempDir.toFile().deleteRecursively()
         }
+    }
+
+    @Test
+    fun worksUrlOnNonAo3HostWithNoAo3WorkIdGetsWarningAndAsks() {
+        val mirrorWork = SavedWork(
+            id = "66666666-6666-4666-8666-666666666666",
+            title = "Mirror Copy",
+            author = "Author",
+            ao3WorkID = null,
+            sourceUrl = "https://ao3.satr.dev/works/555",
+            hasAo3WorkId = true
+        )
+        val mirrorReason = WorkRedownloadability.of(mirrorWork)
+        assertFalse(mirrorReason.canRedownload)
+        assertEquals("Imported from AO3 mirror.", mirrorReason.rowTitle)
+        assertTrue(shouldConfirmDelete(mirrorWork, settingOn = false))
+
+        val otherWorksUrl = SavedWork(
+            id = "77777777-7777-4777-8777-777777777777",
+            title = "Other Site Copy",
+            author = "Author",
+            ao3WorkID = null,
+            sourceUrl = "https://example.org/works/555",
+            hasAo3WorkId = true
+        )
+        val otherReason = WorkRedownloadability.of(otherWorksUrl)
+        assertFalse(otherReason.canRedownload)
+        assertEquals("Imported from another site.", otherReason.rowTitle)
+        assertTrue(shouldConfirmDelete(otherWorksUrl, settingOn = false))
+    }
+
+    @Test
+    fun concealedMatureWorksUseThisWorkAndHiddenTitle() {
+        val secretWork = SavedWork(
+            id = "88888888-8888-4888-8888-888888888888",
+            title = "Secret Title",
+            author = "Author",
+            ao3WorkID = 10,
+            sourceUrl = "https://archiveofourown.org/works/10",
+            ao3Unavailable = true,
+            rating = "Explicit"
+        )
+
+        val obscuredMsg = workDeletionMessage(
+            listOf(secretWork),
+            visibility = { LibraryPrivacyVisibility.Obscured }
+        )
+        assertFalse(obscuredMsg.contains("Secret Title"))
+        assertEquals(
+            "this work is no longer on AO3, so Kudos can't download it again. It stays in Recently Deleted for 90 days, then it's gone for good.",
+            obscuredMsg
+        )
+
+        val hiddenMsg = deleteConfirmationMessage(
+            work = secretWork,
+            permanently = true,
+            visibility = LibraryPrivacyVisibility.Hidden
+        )
+        assertFalse(hiddenMsg.contains("Secret Title"))
+        assertEquals(
+            "this work is no longer on AO3, so Kudos can't download it again. You can't undo this.",
+            hiddenMsg
+        )
+
+        assertEquals(
+            LibraryPrivacy.HIDDEN_WORK_TITLE,
+            LibraryPrivacy.shownTitle(secretWork, LibraryPrivacyVisibility.Obscured)
+        )
+        assertEquals(
+            LibraryPrivacy.HIDDEN_WORK_TITLE,
+            LibraryPrivacy.shownTitle(secretWork, LibraryPrivacyVisibility.Hidden)
+        )
+        assertEquals(
+            "Delete this work permanently?",
+            recentlyDeletedDeleteTitle(secretWork, isHeldCopy = false, visibility = LibraryPrivacyVisibility.Obscured)
+        )
+        assertEquals(
+            "Remove the copy of this work?",
+            recentlyDeletedDeleteTitle(secretWork, isHeldCopy = true, visibility = LibraryPrivacyVisibility.Hidden)
+        )
     }
 
     private fun sampleEntry(
