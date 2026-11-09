@@ -226,6 +226,8 @@ struct AO3SeriesDetailView: View {
             // The arrow says it leaves the app.
             Button { router.open(series.url) } label: {
                 HStack(spacing: 4) {
+                    // The bell is Subscribe app-wide (owner, 2026-11-09).
+                    Image(systemName: "bell")
                     Text("Subscribe")
                     Image(systemName: "arrow.up.forward").imageScale(.small)
                 }

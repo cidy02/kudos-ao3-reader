@@ -131,7 +131,7 @@ struct AO3AuthorHero: View {
                         .controlSize(.small)
                         .accentFill()
                 } else {
-                    Image(systemName: form.isSubscribed ? "bell.slash" : "plus")
+                    Image(systemName: form.isSubscribed ? "bell.slash" : "bell")
                 }
                 subscribeTitle(form)
             }

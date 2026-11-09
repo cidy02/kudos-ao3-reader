@@ -166,7 +166,7 @@ struct AuthorProfileOverviewHeader: View {
                 if model.isPerformingSubscription {
                     ProgressView().controlSize(.small).accentFill()
                 } else {
-                    Image(systemName: form.isSubscribed ? "bell.slash" : "plus")
+                    Image(systemName: form.isSubscribed ? "bell.slash" : "bell")
                 }
                 Text(form.isSubscribed ? "Unsubscribe" : "Subscribe")
             }
