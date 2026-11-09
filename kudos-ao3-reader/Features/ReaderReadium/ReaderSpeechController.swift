@@ -27,9 +27,9 @@ import UIKit
 ///
 /// **Now Playing / Dynamic Island:** while a session is playing or paused, we
 /// publish system Now Playing info + remote commands so Lock Screen / Control
-/// Center / Dynamic Island can control transport. Lifetime is **reader-scoped**:
-/// leaving the work stops speech and clears Now Playing. Backgrounding the app
-/// with the reader still open keeps speech (requires `UIBackgroundModes=audio`).
+/// Center / Dynamic Island can control transport. The app owns one controller;
+/// leaving the reader detaches its navigator callbacks while an active session
+/// keeps the publication and transport alive (requires `UIBackgroundModes=audio`).
 /// Anything that can be told to stop speaking (the controller; a stub in tests).
 @MainActor
 protocol SpeechStoppable: AnyObject { func stop() }
@@ -105,7 +105,30 @@ final class ReaderSpeechController {
     /// Now Playing / Lock Screen next-track — chapter skip (same as mini player).
     var onSkipNext: (() -> Void)?
 
+    /// App-owned persistence sink. Unlike the callbacks above, this never captures
+    /// a reader/navigator and stays installed while the reader is detached.
+    var onSavePosition: ((
+        _ workID: UUID,
+        _ locatorString: String,
+        _ sections: [ReaderSection],
+        _ event: ReaderSpeechPositionSaveThrottle.Event,
+        _ date: Date,
+        _ sessionProgressStamp: Date
+    ) -> ReaderSpeechPositionSaveResult)?
+    /// Lets the app resume normal finished-copy cleanup after the detached
+    /// controller has released the Publication that still read from that EPUB.
+    var onReleaseDetachedWork: ((_ workID: UUID) -> Void)?
+
     private var publication: Publication?
+    private(set) var sessionWorkID: UUID?
+    private(set) var isReaderOpen = false
+    private var openReaderWorkID: UUID?
+    private var sections: [ReaderSection] = []
+    private var chapterStartLocators: [Locator?] = []
+    private var positionSaveThrottle = ReaderSpeechPositionSaveThrottle()
+    private var detachedProgressStamp: Date?
+    private var detachedWritesSuspended = false
+    private var workEPUBChangeObserver: NSObjectProtocol?
     private var ttsService: TTSService?
     private var ttsServiceKind: ReaderTTSEngineKind?
     private var ttsServiceRuntimeConfiguration: KokoroRuntimeConfiguration?
@@ -136,6 +159,7 @@ final class ReaderSpeechController {
     /// Work metadata for the system Now Playing card (title + author byline).
     private var nowPlayingTitle: String = ""
     private var nowPlayingArtist: String?
+    private var concealsNowPlayingMetadata = false
     /// Total Readium positions in the open publication — drives Now Playing
     /// duration/elapsed via `ReaderTimeEstimate` (same model as the position card).
     private var totalPositionCount: Int = 0
@@ -148,6 +172,13 @@ final class ReaderSpeechController {
     var isPlaying: Bool { status == .playing }
     /// Mini player / fan "session on" — playing or paused, not fully stopped.
     var isSessionActive: Bool { status == .playing || status == .paused }
+    var sessionTitle: String { nowPlayingTitle }
+
+    isolated deinit {
+        if let workEPUBChangeObserver {
+            NotificationCenter.default.removeObserver(workEPUBChangeObserver)
+        }
+    }
 
     /// Voices the settings UI can offer (already filtered for long-form reading).
     var availableVoices: [TTSVoice] {
@@ -175,13 +206,35 @@ final class ReaderSpeechController {
     /// elapsed / remaining instead of `--:--`.
     func prepare(
         publication: Publication?,
+        workID: UUID,
         title: String,
         author: String,
-        totalPositions: Int
+        totalPositions: Int,
+        sections: [ReaderSection],
+        chapterStartLocators: [Locator?]
     ) {
+        installWorkEPUBChangeObserverIfNeeded()
+        let action = ReaderSpeechSessionPolicy.openReader(
+            sessionActive: isSessionActive,
+            sessionWorkID: sessionWorkID,
+            openingWorkID: workID
+        )
+        if action == .endPreviousSession {
+            tearDown()
+        }
+
         nowPlayingTitle = title
         nowPlayingArtist = author.isEmpty ? nil : author
         totalPositionCount = max(0, totalPositions)
+        self.sections = sections
+        self.chapterStartLocators = chapterStartLocators
+
+        if action == .reattach {
+            // The reopened reader has a new Publication instance. Keep the old
+            // one and its synthesizer so the current utterance is uninterrupted;
+            // compatible locators are handed to the new navigator on attach.
+            return
+        }
 
         guard let publication, publication.content() != nil else {
             tearDown()
@@ -200,10 +253,87 @@ final class ReaderSpeechController {
         nowPlayingTitle = title
         nowPlayingArtist = author.isEmpty ? nil : author
         totalPositionCount = max(0, totalPositions)
+        self.sections = sections
+        self.chapterStartLocators = chapterStartLocators
         self.publication = publication
+        sessionWorkID = workID
 
         installTTSService(for: preferredEngineKind())
         self.status = .stopped
+    }
+
+    /// Marks reader presentation immediately, before its publication finishes
+    /// opening, so the app mini player cannot remain under an open reader.
+    func readerDidOpen(workID: UUID) {
+        let action = ReaderSpeechSessionPolicy.openReader(
+            sessionActive: isSessionActive,
+            sessionWorkID: sessionWorkID,
+            openingWorkID: workID
+        )
+        if action == .endPreviousSession {
+            tearDown()
+        }
+        openReaderWorkID = workID
+        isReaderOpen = true
+    }
+
+    /// Installs only callbacks owned by the live navigator. A same-work reopen
+    /// immediately catches the page and audible decoration up to the voice.
+    func attachReader(
+        workID: UUID,
+        onAdvance: @escaping (Locator) -> Void,
+        onSpokenRange: @escaping (Locator) -> Void,
+        onSessionEnded: @escaping () -> Void,
+        onSkipPrevious: @escaping () -> Void,
+        onSkipNext: @escaping () -> Void
+    ) {
+        guard openReaderWorkID == workID, sessionWorkID == workID else { return }
+        resetDetachedPositionSaving()
+        self.onAdvance = onAdvance
+        self.onSpokenRange = onSpokenRange
+        self.onSessionEnded = onSessionEnded
+        self.onSkipPrevious = onSkipPrevious
+        self.onSkipNext = onSkipNext
+        if isSessionActive, let resumeLocator {
+            onAdvance(resumeLocator)
+            onSpokenRange(resumeLocator)
+        }
+    }
+
+    /// Active speech keeps its publication; an idle prepared controller releases it.
+    @discardableResult
+    func readerDidClose(workID: UUID) -> ReaderSpeechSessionPolicy.LeaveReaderAction {
+        guard openReaderWorkID == workID else {
+            return ReaderSpeechSessionPolicy.leaveReader(sessionActive: isSessionActive)
+        }
+        openReaderWorkID = nil
+        isReaderOpen = false
+        let action = ReaderSpeechSessionPolicy.leaveReader(sessionActive: isSessionActive)
+        switch action {
+        case .detach:
+            detachedProgressStamp = Date()
+            detachedWritesSuspended = false
+            positionSaveThrottle.reset()
+            detachReaderCallbacks()
+        case .tearDown:
+            tearDown()
+        }
+        return action
+    }
+
+    /// Root scene-phase checkpoint. Attached readers save through their existing
+    /// flush path; only a detached session needs the app-owned saver.
+    func saveDetachedPositionForBackground() {
+        guard !isReaderOpen else { return }
+        persistPosition(for: .appBackground)
+    }
+
+    func setConcealsNowPlayingMetadata(_ concealed: Bool) {
+        guard concealsNowPlayingMetadata != concealed else { return }
+        concealsNowPlayingMetadata = concealed
+        if isSessionActive {
+            publishNowPlaying(playing: isPlaying)
+        }
     }
 
     /// Pushes the latest UserDefaults preferences into the live synthesizer.
@@ -331,7 +461,11 @@ final class ReaderSpeechController {
             switch newStatus {
             case .unavailable:
                 self.status = .unavailable
+                self.persistPosition(for: .sessionEnd)
                 self.onSessionEnded?()
+                if self.publication != nil, !self.isReaderOpen {
+                    self.releasePreparedSession()
+                }
             case .stopped:
                 // Only auto-advance when a playing chapter actually finished.
                 // `speak()` used to call `stop()` on the way in, which fired this
@@ -341,11 +475,19 @@ final class ReaderSpeechController {
                 self.status = .stopped
                 self.clearSpeechEnergy()
                 self.clearNowPlaying()
+                if !self.stoppedManually {
+                    self.persistPosition(for: .sessionEnd)
+                }
                 self.onSessionEnded?()
                 if shouldContinue {
                     self.pendingAutoContinue = true
-                    self.onSkipNext?()
+                    let didAdvance = self.requestNextChapter()
                     self.pendingAutoContinue = false
+                    if !didAdvance, !self.isReaderOpen {
+                        self.releasePreparedSession()
+                    }
+                } else if !self.stoppedManually, !self.isReaderOpen {
+                    self.releasePreparedSession()
                 }
             case .playing:
                 self.status = .playing
@@ -386,10 +528,12 @@ final class ReaderSpeechController {
 
         service.onAdvance = { [weak self] locator in
             self?.resumeLocator = locator
+            self?.persistPosition(for: .utteranceBoundary)
             self?.onAdvance?(locator)
         }
 
         service.onSpokenRange = { [weak self] locator in
+            self?.persistPosition(for: .spokenRange, locator: locator)
             self?.onSpokenRange?(locator)
         }
 
@@ -566,6 +710,10 @@ final class ReaderSpeechController {
     }
 
     func stop() {
+        if isSessionActive {
+            persistPosition(for: .stop)
+        }
+        let releasesPublication = !isReaderOpen && publication != nil
         SpeechOwnerRegistry.shared.release(self)
         pendingPauseAfterReanchor = false
         pendingAutoContinue = false
@@ -583,10 +731,14 @@ final class ReaderSpeechController {
         // dead session. `installRemoteCommandsIfNeeded()` re-adds them the next
         // time playback actually starts.
         removeRemoteCommands()
+        if releasesPublication {
+            releasePreparedSession()
+        }
     }
 
     /// Pause without ending the session (hold-to-seek while scrubbing).
     func pause() {
+        persistPosition(for: .pause)
         pendingPauseAfterReanchor = false
         ttsService?.pause()
         clearSpeechEnergy()
@@ -616,11 +768,12 @@ final class ReaderSpeechController {
         resumeLocator = locator
     }
 
-    /// Full teardown used when leaving the reader or switching publications.
-    /// Clears synthesizer, Now Playing, remote commands, and advance callbacks.
-    /// Prefer this over `stop()` when the reader view goes away so Lock Screen /
-    /// Island transport does not keep targeting a dead session.
+    /// Full teardown used for an idle reader close or switching publications.
+    /// Active speech normally uses `readerDidClose(workID:)` and detaches instead.
     func tearDown() {
+        if isSessionActive {
+            persistPosition(for: .sessionEnd)
+        }
         SpeechOwnerRegistry.shared.release(self)
         pendingPauseAfterReanchor = false
         pendingAutoContinue = false
@@ -634,13 +787,142 @@ final class ReaderSpeechController {
         onSkipPrevious = nil
         onSkipNext = nil
         ttsService?.stop()
+        releasePreparedSession()
+        clearNowPlaying()
+        removeRemoteCommands()
+    }
+
+    private func detachReaderCallbacks() {
+        onAdvance = nil
+        onSpokenRange = nil
+        onSessionEnded = nil
+        onSkipPrevious = nil
+        onSkipNext = nil
+    }
+
+    private func releasePreparedSession() {
+        let releasedWorkID = sessionWorkID
+        SpeechOwnerRegistry.shared.release(self)
+        clearSpeechEnergy()
+        clearNowPlaying()
+        removeRemoteCommands()
         ttsService = nil
         ttsServiceKind = nil
         ttsServiceRuntimeConfiguration = nil
         publication = nil
-        clearNowPlaying()
-        removeRemoteCommands()
+        sessionWorkID = nil
+        sections = []
+        chapterStartLocators = []
+        resumeLocator = nil
+        nowPlayingTitle = ""
+        nowPlayingArtist = nil
+        concealsNowPlayingMetadata = false
+        totalPositionCount = 0
+        spokenText = ""
+        resetDetachedPositionSaving()
         status = .unavailable
+        if !isReaderOpen, let releasedWorkID {
+            onReleaseDetachedWork?(releasedWorkID)
+        }
+    }
+
+    private func persistPosition(
+        for event: ReaderSpeechPositionSaveThrottle.Event,
+        locator: Locator? = nil,
+        at date: Date = Date()
+    ) {
+        guard !isReaderOpen,
+              !detachedWritesSuspended,
+              let workID = sessionWorkID,
+              let detachedProgressStamp,
+              let locatorString = (locator ?? resumeLocator)?.persistenceString,
+              positionSaveThrottle.shouldSave(locatorString: locatorString, for: event)
+        else { return }
+        guard let result = onSavePosition?(
+            workID,
+            locatorString,
+            sections,
+            event,
+            date,
+            detachedProgressStamp
+        ) else { return }
+        switch result {
+        case .wrote(let progressStamp):
+            self.detachedProgressStamp = progressStamp
+            positionSaveThrottle.didSave(for: event)
+        case .endSession:
+            detachedWritesSuspended = true
+            tearDown()
+        case .suspendWrites:
+            detachedWritesSuspended = true
+        }
+    }
+
+    private func resetDetachedPositionSaving() {
+        detachedProgressStamp = nil
+        detachedWritesSuspended = false
+        positionSaveThrottle.reset()
+    }
+
+    private func installWorkEPUBChangeObserverIfNeeded() {
+        guard workEPUBChangeObserver == nil else { return }
+        workEPUBChangeObserver = NotificationCenter.default.addObserver(
+            forName: .kudosWorkEPUBWillChange,
+            object: nil,
+            queue: nil
+        ) { [weak self] notification in
+            MainActor.assumeIsolated {
+                guard let self,
+                      let workID = notification.object as? UUID,
+                      workID == self.sessionWorkID
+                else { return }
+                self.detachedWritesSuspended = true
+                self.tearDown()
+            }
+        }
+    }
+
+    private func requestNextChapter() -> Bool {
+        if isReaderOpen, let onSkipNext {
+            onSkipNext()
+            return true
+        }
+        return skipDetachedChapter(forward: true)
+    }
+
+    private func requestPreviousChapter() -> Bool {
+        if isReaderOpen, let onSkipPrevious {
+            onSkipPrevious()
+            return true
+        }
+        return skipDetachedChapter(forward: false)
+    }
+
+    /// Detached fallback for auto-advance and Lock Screen chapter controls.
+    /// Locators come from the publication's reading-order position lists, so no
+    /// navigator or view-owned `ReadiumBook` is retained.
+    private func skipDetachedChapter(forward: Bool) -> Bool {
+        guard !isReaderOpen, !chapterStartLocators.isEmpty else { return false }
+        let currentIndex = resumeLocator.flatMap { locator in
+            let key = ReaderSectionBuilder.hrefKey(locator.href.string)
+            return chapterStartLocators.firstIndex {
+                $0.map { ReaderSectionBuilder.hrefKey($0.href.string) == key } ?? false
+            }
+        } ?? 0
+        let targetIndex: Int
+        if forward {
+            targetIndex = currentIndex + 1
+        } else if currentIndex > 0 {
+            targetIndex = currentIndex - 1
+        } else {
+            guard (resumeLocator?.locations.progression ?? 0) > 0 else { return false }
+            targetIndex = 0
+        }
+        guard chapterStartLocators.indices.contains(targetIndex),
+              let target = chapterStartLocators[targetIndex]
+        else { return false }
+        reanchor(to: target, resumePlaying: isPlaying)
+        return true
     }
 
     private func startSpeechEnergySmoothingIfNeeded() {
@@ -717,12 +999,15 @@ final class ReaderSpeechController {
         installRemoteCommandsIfNeeded()
         UIApplication.shared.beginReceivingRemoteControlEvents()
 
-        let title = nowPlayingTitle.isEmpty ? "Reading aloud" : nowPlayingTitle
+        let title = concealsNowPlayingMetadata
+            ? "Reading Aloud"
+            : (nowPlayingTitle.isEmpty ? "Reading aloud" : nowPlayingTitle)
+        let artist = concealsNowPlayingMetadata ? nil : nowPlayingArtist
         if NowPlayingInfo.shared.media?.title != title
-            || NowPlayingInfo.shared.media?.artist != nowPlayingArtist {
+            || NowPlayingInfo.shared.media?.artist != artist {
             NowPlayingInfo.shared.media = .init(
                 title: title,
-                artist: nowPlayingArtist
+                artist: artist
             )
         }
 
@@ -792,19 +1077,11 @@ final class ReaderSpeechController {
         rcc.nextTrackCommand.addTarget { [weak self] _ in
             guard let self, self.isSessionActive else { return .noActionableNowPlayingItem }
             // Same chapter-skip as the mini player `>>` (not sentence step).
-            if let onSkipNext {
-                onSkipNext()
-                return .success
-            }
-            return .commandFailed
+            return self.requestNextChapter() ? .success : .noActionableNowPlayingItem
         }
         rcc.previousTrackCommand.addTarget { [weak self] _ in
             guard let self, self.isSessionActive else { return .noActionableNowPlayingItem }
-            if let onSkipPrevious {
-                onSkipPrevious()
-                return .success
-            }
-            return .commandFailed
+            return self.requestPreviousChapter() ? .success : .noActionableNowPlayingItem
         }
         rcc.stopCommand.addTarget { [weak self] _ in
             guard let self else { return .commandFailed }

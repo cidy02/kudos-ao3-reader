@@ -42,6 +42,8 @@ struct ReaderSpeechSettingsSection: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.accentFill) private var accentFill
     @Environment(\.accentInk) private var accentInk
+    /// Optional: previews and tests can host Settings without the app's controller.
+    @Environment(ReaderSpeechController.self) private var appSpeech: ReaderSpeechController?
 
     private var sortedVoices: [TTSVoice] {
         voices.sorted()
@@ -135,7 +137,7 @@ struct ReaderSpeechSettingsSection: View {
         }
         .onChange(of: engineID) { _, _ in
             if auditionController.isPlaying {
-                auditionController.audition(text: selectedSample.text)
+                audition(selectedSample.text)
             }
             updateVoices()
         }
@@ -151,12 +153,12 @@ struct ReaderSpeechSettingsSection: View {
         }
         .onChange(of: voiceID) { _, _ in
             if auditionController.isPlaying {
-                auditionController.audition(text: selectedSample.text)
+                audition(selectedSample.text)
             }
         }
         .onChange(of: rate) { _, _ in
             if auditionController.isPlaying {
-                auditionController.audition(text: selectedSample.text)
+                audition(selectedSample.text)
             }
         }
     }
@@ -206,7 +208,7 @@ struct ReaderSpeechSettingsSection: View {
                 }
             }
             .onChange(of: selectedSample) { _, sample in
-                if auditionController.isPlaying { auditionController.audition(text: sample.text) }
+                if auditionController.isPlaying { audition(sample.text) }
             }
         }
         .accessibilityElement(children: .contain)
@@ -235,7 +237,7 @@ struct ReaderSpeechSettingsSection: View {
             if auditionController.isPlaying {
                 auditionController.stop()
             } else {
-                auditionController.audition(text: selectedSample.text)
+                audition(selectedSample.text)
             }
         } label: {
             HStack(spacing: 5) {
@@ -268,6 +270,11 @@ struct ReaderSpeechSettingsSection: View {
                 }
             }
         }
+    }
+
+    private func audition(_ text: String) {
+        if let appSpeech, appSpeech.isPlaying { appSpeech.pause() }
+        auditionController.audition(text: text)
     }
 
     private var voiceSection: some View {

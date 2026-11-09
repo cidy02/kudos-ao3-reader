@@ -239,6 +239,12 @@ final class AppRouter {
     /// A Library section to push on its next appearance (e.g. Home Resume "See all"
     /// → Reading Now). Consumed + cleared by `LibraryView`.
     var pendingLibrarySection: LibrarySectionKind?
+    /// An app-level request to reopen a local work in Home's existing reader path.
+    /// Read Aloud uses this after its reader-scoped navigation has been dismissed.
+    var pendingLocalWorkDestination: LocalWorkDestination?
+    /// The focused Comments screen owns its tab's system accessory while its
+    /// composer is available; Read Aloud remains visible on other tabs.
+    var commentAccessoryTab: AppTab?
     /// The tab that asked for it, drawn as the pushed list's kicker.
     var pendingLibrarySectionOrigin: String?
     /// A tag the Search tab should search AO3 for (e.g. a tapped fandom/character/
@@ -510,6 +516,11 @@ final class AppRouter {
         pendingLibrarySection = kind
         pendingLibrarySectionOrigin = origin
         selection = .library
+    }
+
+    func openReader(_ work: SavedWork) {
+        pendingLocalWorkDestination = .reader(work)
+        selection = .home
     }
 
     /// Switches to Search and runs an AO3 search for `value` in the given tag `field`

@@ -281,6 +281,11 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                         ReadingQueueBrowserView(initialQueueID: destination.initialQueueID, originKicker: "Home")
                     }
                 }
+                .onChange(of: router.pendingLocalWorkDestination, initial: true) { _, destination in
+                    guard let destination else { return }
+                    router.pendingLocalWorkDestination = nil
+                    path.append(destination)
+                }
                 .ao3AuthorNavigation(path: $path, tab: .home)
                 #if DEBUG
                 .task {

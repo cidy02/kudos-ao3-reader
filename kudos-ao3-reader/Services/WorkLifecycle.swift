@@ -2,6 +2,12 @@ import Foundation
 import OSLog
 import SwiftData
 
+#if os(iOS)
+extension Notification.Name {
+    static let kudosWorkEPUBWillChange = Notification.Name("kudosWorkEPUBWillChange")
+}
+#endif
+
 /// Transitions for a work's storage lifecycle: Reading → (finished) → History or
 /// Saved. Kept in one place so the reader, library, and detail views stay in sync.
 enum WorkLifecycle {
@@ -190,6 +196,9 @@ enum WorkLifecycle {
             SyncTombstones.recordDeletion(of: annotation, in: context)
             context.delete(annotation)
         }
+        #if os(iOS)
+        NotificationCenter.default.post(name: .kudosWorkEPUBWillChange, object: work.id)
+        #endif
         try? FileManager.default.removeItem(at: work.fileURL)
         try? FileManager.default.removeItem(at: Storage.readerDirectory(for: work.id))
         // A converted import keeps the original file it came from. Only permanent

@@ -9,6 +9,7 @@ import UIKit
 /// at the bottom of the sidebar; on iOS it's an adaptive tab bar / sidebar.
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.scenePhase) private var scenePhase
     @State private var router = AppRouter()
     @State private var externalImport = ExternalFileImport()
     @State private var privacyGate = PrivacyGate()
@@ -16,6 +17,10 @@ struct ContentView: View {
     @State private var auth = AO3AuthService()
     @State private var inboxModel = AO3InboxModel()
     @State private var downloadQueue = DownloadQueue()
+    #if os(iOS)
+    @State private var speech = ReaderSpeechController()
+    @AppStorage("hideMatureContent") private var hideMature = true
+    #endif
     @State private var subscriptionScan = SubscriptionScanService.shared
     #if os(iOS)
     @State private var mailSubscriptionDriver = MailSubscriptionDriver()
@@ -97,7 +102,17 @@ struct ContentView: View {
             .environment(downloadQueue)
             .environment(subscriptionScan)
             #if os(iOS)
+            .environment(speech)
             .environment(mailSubscriptionDriver)
+            .onAppear { installSpeechPositionSaver() }
+            .onChange(of: speechMetadataIsConcealed, initial: true) { _, concealed in
+                speech.setConcealsNowPlayingMetadata(concealed)
+            }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .background {
+                    speech.saveDetachedPositionForBackground()
+                }
+            }
             #endif
             .onChange(of: auth.username, initial: true) { _, username in
                 privacyGate.noteSignedInAccount(username)
@@ -503,6 +518,16 @@ struct ContentView: View {
         #if os(iOS)
         // Owner, 2026-10-01: the tab bar shrinks while you scroll down.
         .tabBarMinimizeBehavior(.onScrollDown)
+        .tabViewBottomAccessory(
+            isEnabled: ReaderSpeechSessionPolicy.showsMiniPlayer(
+                sessionActive: speech.isSessionActive,
+                readerOpen: speech.isReaderOpen,
+                commentAccessoryTab: router.commentAccessoryTab,
+                selectedTab: router.selection
+            )
+        ) {
+            readerSpeechAccessory
+        }
         #endif
         #if os(visionOS)
             .tabViewBottomAccessory {
@@ -510,6 +535,132 @@ struct ContentView: View {
             }
         #endif
     }
+
+    #if os(iOS)
+    private var readerSpeechAccessory: some View {
+        HStack(spacing: 6) {
+            Button(action: openSpeechReader) {
+                HStack(spacing: 10) {
+                    Image(systemName: "waveform")
+                        .foregroundStyle(.accentInk)
+                    Text(speechAccessoryTitle)
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                }
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(speechAccessoryAccessibilityLabel)
+
+            Button { speech.toggle(from: nil) } label: {
+                Image(systemName: speech.isPlaying ? "pause.fill" : "play.fill")
+                    .foregroundStyle(.accentInk)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(speech.isPlaying ? "Pause" : "Play")
+
+            Button { speech.stop() } label: {
+                Image(systemName: "stop.fill")
+                    .foregroundStyle(.accentInk)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Stop Reading Aloud")
+        }
+        .padding(.leading, 14)
+        .padding(.trailing, 6)
+    }
+
+    private func installSpeechPositionSaver() {
+        let context = modelContext
+        speech.onSavePosition = {
+            workID, locatorString, sections, event, date, sessionProgressStamp in
+            let targetID = workID
+            var descriptor = FetchDescriptor<SavedWork>(
+                predicate: #Predicate { $0.id == targetID }
+            )
+            descriptor.fetchLimit = 1
+            guard let works = try? context.fetch(descriptor), let work = works.first else {
+                return .endSession
+            }
+            switch ReaderSpeechSessionPolicy.detachedSaveDecision(
+                isPendingDeletion: work.isPendingDeletion,
+                workProgressStamp: work.progressModifiedAt,
+                sessionProgressStamp: sessionProgressStamp
+            ) {
+            case .endSession:
+                return .endSession
+            case .suspendWrites:
+                return .suspendWrites
+            case .write:
+                break
+            }
+            ReadiumReaderPersistence.writePosition(
+                locatorString,
+                to: work,
+                sections: sections,
+                at: date
+            )
+            if event.stampsShelf {
+                work.markProgressModified(date)
+            }
+            // A failed save leaves this write in the context; the next boundary's save retries it.
+            if context.saveBestEffort(reason: "Saving detached read-aloud position failed") {
+                FolderSyncService.markDirty()
+            }
+            return .wrote(progressStamp: work.progressModifiedAt ?? date)
+        }
+        speech.onReleaseDetachedWork = { workID in
+            let targetID = workID
+            var descriptor = FetchDescriptor<SavedWork>(
+                predicate: #Predicate { $0.id == targetID }
+            )
+            descriptor.fetchLimit = 1
+            guard let works = try? context.fetch(descriptor), let work = works.first else { return }
+            WorkLifecycle.freeEPUBIfFinished(work, in: context)
+        }
+    }
+
+    private var speechMetadataIsConcealed: Bool {
+        guard let workID = speech.sessionWorkID else { return false }
+        let targetID = workID
+        var descriptor = FetchDescriptor<SavedWork>(
+            predicate: #Predicate { $0.id == targetID }
+        )
+        descriptor.fetchLimit = 1
+        guard let work = try? modelContext.fetch(descriptor).first else { return false }
+        return privacyGate.isConcealed(work, enabled: hideMature)
+    }
+
+    private var speechAccessoryTitle: String {
+        speechMetadataIsConcealed ? "Reading Aloud" : speech.sessionTitle
+    }
+
+    private var speechAccessoryAccessibilityLabel: String {
+        speechMetadataIsConcealed
+            ? "Open reader, Reading Aloud"
+            : "Open reader for \(speech.sessionTitle)"
+    }
+
+    private func openSpeechReader() {
+        guard let workID = speech.sessionWorkID else { return }
+        let targetID = workID
+        var descriptor = FetchDescriptor<SavedWork>(
+            predicate: #Predicate { $0.id == targetID && !$0.isPendingDeletion }
+        )
+        descriptor.fetchLimit = 1
+        guard let works = try? modelContext.fetch(descriptor), let work = works.first else {
+            speech.tearDown()
+            return
+        }
+        router.openReader(work)
+    }
+    #endif
 }
 
 /// Warms WebKit's shared WebContent/Networking process pool at launch instead of
