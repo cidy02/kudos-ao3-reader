@@ -14,6 +14,7 @@ import io.github.cidy02.kudos.author.AuthorWorksSortFields
 import io.github.cidy02.kudos.network.ao3.author.AO3AuthorWorksSort
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Refresh
@@ -54,8 +55,7 @@ import io.github.cidy02.kudos.network.ao3.search.AO3Crossover
 import io.github.cidy02.kudos.network.ao3.search.AO3Rating
 import io.github.cidy02.kudos.network.ao3.search.AO3RatingMatch
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchFilters
-import io.github.cidy02.kudos.network.ao3.search.AO3SearchSort
-import io.github.cidy02.kudos.network.ao3.search.AO3SortDirection
+import io.github.cidy02.kudos.network.ao3.search.SearchSortBySummary
 import io.github.cidy02.kudos.network.ao3.search.AO3TagAutocompleteRepository
 import io.github.cidy02.kudos.network.ao3.search.AO3Updated
 import io.github.cidy02.kudos.network.ao3.search.AO3Warning
@@ -65,9 +65,7 @@ import io.github.cidy02.kudos.ui.subject.SubjectFormRow
 import io.github.cidy02.kudos.ui.subject.SubjectPalette
 import io.github.cidy02.kudos.ui.subject.SubjectMetrics
 import io.github.cidy02.kudos.ui.subject.SubjectRowSeparator
-import io.github.cidy02.kudos.ui.subject.SubjectSegmentedControl
 import io.github.cidy02.kudos.ui.subject.SubjectToggle
-import io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale
 import io.github.cidy02.kudos.ui.subject.subjectPanel
 import kotlinx.coroutines.flow.first
 import java.time.LocalDate
@@ -84,6 +82,8 @@ fun SearchFilterSheet(
     fandomContext: List<String>,
     onSave: (() -> Unit)? = null,
     allowsRelevanceSort: Boolean = true,
+    /** Search passes true. Browse and the other lists have no computed rank. */
+    ranksLoadedWorks: Boolean = false,
     localTagSuggestions: LocalTagSuggestions = LocalTagSuggestions(),
     autocompleteRepository: AO3TagAutocompleteRepository? = null,
     refine: Boolean = false,
@@ -96,6 +96,7 @@ fun SearchFilterSheet(
     opensHalfHeight: Boolean = false
 ) {
     val tokens = LocalKudosTokens.current
+    var showingSortBy by remember { mutableStateOf(false) }
     var sortDraft by remember { mutableStateOf(worksSort ?: AO3AuthorWorksSort()) }
     val seededSort = remember { worksSort }
     val debugList = androidx.compose.foundation.lazy.rememberLazyListState()
@@ -116,12 +117,20 @@ fun SearchFilterSheet(
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onClear, enabled = canReset) {
-                    Icon(Icons.Outlined.Refresh, "Reset filters",
-                        tint = if (canReset) tokens.accentInk else tokens.tertiaryInk)
+                if (showingSortBy) {
+                    IconButton(onClick = { showingSortBy = false }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
+                    }
+                } else {
+                    IconButton(onClick = onClear, enabled = canReset) {
+                        Icon(Icons.Outlined.Refresh, "Reset filters",
+                            tint = if (canReset) tokens.accentInk else tokens.tertiaryInk)
+                    }
                 }
                 Text(
-                    if (worksSort != null) "Sort and filter" else if (refine) "Refine" else "Filters", Modifier.weight(1f),
+                    if (showingSortBy) "Sort By"
+                    else if (worksSort != null) "Sort and filter" else if (refine) "Refine" else "Filters",
+                    Modifier.weight(1f),
                     color = tokens.primaryInk, fontSize = 18.sp, lineHeight = 25.sp, fontWeight = FontWeight.SemiBold
                 )
                 // iOS's accent-filled confirm icon wins over the brief's plain-actions description.
@@ -145,6 +154,17 @@ fun SearchFilterSheet(
                 Modifier.fillMaxWidth().weight(1f, fill = false).testTag("AO3 filter form"),
                 verticalArrangement = Arrangement.spacedBy(18.dp), state = debugList
             ) {
+                if (showingSortBy) {
+                    item {
+                        SearchSortByPage(
+                            filters = filters,
+                            onFiltersChange = onFiltersChange,
+                            allowsRelevanceSort = allowsRelevanceSort,
+                            ranksLoadedWorks = ranksLoadedWorks
+                        )
+                    }
+                    return@LazyColumn
+                }
                 if (worksSort != null) item {
                     Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
                         AuthorWorksSortFields(sortDraft) { sortDraft = it }
@@ -153,27 +173,15 @@ fun SearchFilterSheet(
                 item {
                     FilterGroup {
                         if (!refine) {
-                            FilterChoiceRow("Sort by", AO3SearchSort.entries.filter {
-                                allowsRelevanceSort || it != AO3SearchSort.RELEVANCE
-                            }, filters.sort, { it.title }) {
-                                onFiltersChange(filters.copy(sort = it, sortDirection = it.naturalDirection))
-                            }
-                            if (filters.sort != AO3SearchSort.RELEVANCE) {
-                                SubjectRowSeparator()
-                                if (isAccessibilityFontScale()) {
-                                    FilterChoiceRow("Order", AO3SortDirection.entries, filters.sortDirection, { it.title }) {
-                                        onFiltersChange(filters.copy(sortDirection = it))
-                                    }
-                                } else {
-                                    SubjectFormRow("Order", trailing = {
-                                        SubjectSegmentedControl(
-                                            AO3SortDirection.entries, filters.sortDirection,
-                                            { onFiltersChange(filters.copy(sortDirection = it)) }, { it.title },
-                                            modifier = Modifier.fillMaxWidth(0.75f), contentDescription = "Order"
-                                        )
-                                    })
-                                }
-                            }
+                            SubjectFormRow(
+                                "Sort By",
+                                value = SearchSortBySummary.value(
+                                    filters,
+                                    ranking = if (ranksLoadedWorks) filters.loadedWorksRanking else null
+                                ),
+                                showsDisclosure = true,
+                                onClick = { showingSortBy = true }
+                            )
                             SubjectRowSeparator()
                         }
                         FilterChoiceRow("Rating", AO3Rating.searchCases, filters.rating, { it.title }) {

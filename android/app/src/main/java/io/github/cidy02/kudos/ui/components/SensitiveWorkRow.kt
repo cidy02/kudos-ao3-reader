@@ -180,6 +180,8 @@ fun SensitiveWorkRow(
      * writer's own works, iOS `showsPerformance`): the line of figures then leaves them out.
      */
     figuresIncludePerformance: Boolean = true,
+    /** The rank's ratio or momentum line. Null hides it. */
+    rankingSignal: String? = null,
     onClick: () -> Unit,
     onReveal: (() -> Unit)? = null,
     onSelect: (() -> Unit)? = null,
@@ -290,7 +292,8 @@ fun SensitiveWorkRow(
                                 expandable = expandable && bookmark == null, expanded = expanded,
                                 // Under the blur, or while selecting, the glyph is part of the row.
                                 onToggleExpanded = if (obscured || (selecting && !selectionAllowsDetails)) cardTap else { { expanded = !expanded } },
-                                palette = palette, tagSearch = tagSearch
+                                palette = palette, tagSearch = tagSearch,
+                                rankingSignal = rankingSignal
                             )
                         } else {
                             Row(
@@ -545,7 +548,8 @@ private fun LedgerBody(
     expanded: Boolean,
     onToggleExpanded: () -> Unit,
     palette: SubjectPalette,
-    tagSearch: (SearchSubjectField, String) -> Unit
+    tagSearch: (SearchSubjectField, String) -> Unit,
+    rankingSignal: String? = null
 ) {
     val tokens = LocalKudosTokens.current
     val accessibility = isAccessibilityFontScale()
@@ -695,6 +699,9 @@ private fun LedgerBody(
             }
         }
     }
+    if (!rankingSignal.isNullOrBlank()) {
+        Text(rankingSignal, fontSize = 11.5.sp, lineHeight = 16.sp, color = tokens.secondaryInk)
+    }
 }
 
 @Composable
@@ -710,6 +717,7 @@ fun SensitiveWorkRow(
     bookmark: LedgerBookmark? = null,
     footer: (@Composable () -> Unit)? = null,
     figuresIncludePerformance: Boolean = true,
+    rankingSignal: String? = null,
     selecting: Boolean = false,
     selected: Boolean = false,
     selectionAllowsDetails: Boolean = false,
@@ -722,7 +730,7 @@ fun SensitiveWorkRow(
                 SensitiveWorkRow(work = local, onOpenWork = { click() }, expandAll = expandAll,
                     ledger = ledger, obscured = obscured, onReveal = click, neutralCard = neutralCard,
                     onLongClick = longClick, onTagClick = onTagClick, onTagSearch = onTagSearch,
-                    footer = footer)
+                    footer = footer, rankingSignal = rankingSignal)
                 if (bookmark != null && !obscured) (bookmark.localFootnote ?: bookmark.footnote).invoke()
             }
         } else {
@@ -756,6 +764,7 @@ fun SensitiveWorkRow(
                 footer = footer,
                 showsStatusTray = true,
                 figuresIncludePerformance = figuresIncludePerformance,
+                rankingSignal = rankingSignal,
                 selecting = selecting,
                 selectionAllowsDetails = selectionAllowsDetails,
                 selected = selected,
@@ -810,6 +819,7 @@ fun SensitiveWorkRow(
     mutedHistory: Boolean = false,
     neutralCard: Boolean = false,
     ledger: Boolean = false,
+    rankingSignal: String? = null,
     footer: (@Composable () -> Unit)? = null,
     downloadFraction: Double? = rememberWorkDownloadFraction(work)
 ) {
@@ -851,6 +861,7 @@ fun SensitiveWorkRow(
         neutralCard = neutralCard,
         ledger = ledger,
         footer = footer,
+        rankingSignal = rankingSignal,
         savedWork = true,
         modifier = modifier.downloadDimmed(if (downloadFraction != null) 1f else 0f),
         leadingProgress = if (downloadFraction != null || work.hasStartedReading) {

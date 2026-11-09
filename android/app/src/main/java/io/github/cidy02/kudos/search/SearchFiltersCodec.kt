@@ -11,6 +11,9 @@ import io.github.cidy02.kudos.network.ao3.search.AO3SearchFilters
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchSort
 import io.github.cidy02.kudos.network.ao3.search.AO3SortDirection
 import io.github.cidy02.kudos.network.ao3.search.AO3Updated
+import io.github.cidy02.kudos.network.ao3.search.LoadedWorksRank
+import io.github.cidy02.kudos.network.ao3.search.LoadedWorksRankOrder
+import io.github.cidy02.kudos.network.ao3.search.LoadedWorksRanking
 import io.github.cidy02.kudos.network.ao3.search.AO3Warning
 import io.github.cidy02.kudos.network.ao3.search.PreservedSearchFilterValue
 import java.time.Instant
@@ -34,6 +37,9 @@ import kotlinx.serialization.json.put
 object SearchFiltersCodec {
     private val json = Json { isLenient = true }
     private val backupDateFormatter = DateTimeFormatterBuilder().appendInstant(3).toFormatter()
+    private val rankingKeys = setOf(
+        "loadedWorksRank", "loadedWorksRankOrder", "ranksCautiously", "setsAsideUnusual", "showsSignal"
+    )
 
     fun encode(filters: AO3SearchFilters): String {
         val fields = canonicalFields(filters).toMutableMap()
@@ -51,12 +57,22 @@ object SearchFiltersCodec {
                 fields[key] = JsonArray(retained + current.filter { it !in represented })
             }
         }
+        val ranking = filters.loadedWorksRanking
+        if (ranking != LoadedWorksRanking()) {
+            fields["loadedWorksRank"] = JsonPrimitive(ranking.rank.storageKey)
+            fields["loadedWorksRankOrder"] = JsonPrimitive(ranking.order.storageKey)
+            fields["ranksCautiously"] = JsonPrimitive(ranking.ranksCautiously)
+            fields["setsAsideUnusual"] = JsonPrimitive(ranking.setsAsideUnusual)
+            fields["showsSignal"] = JsonPrimitive(ranking.showsSignal)
+        }
         return JsonObject(fields).toString()
     }
 
     fun decode(filtersJson: String): AO3SearchFilters {
-        val fields = runCatching { json.parseToJsonElement(filtersJson) as? JsonObject }.getOrNull()
+        val parsed = runCatching { json.parseToJsonElement(filtersJson) as? JsonObject }.getOrNull()
             ?: return AO3SearchFilters()
+        val ranking = rankingFrom(parsed)
+        val fields = JsonObject(parsed.filterKeys { it !in rankingKeys })
         fun text(key: String): String = stringValue(fields[key]).orEmpty()
         fun date(key: String): LocalDate? {
             val raw = stringValue(fields[key]) ?: return null
@@ -108,7 +124,23 @@ object SearchFiltersCodec {
         val canonical = canonicalFields(filters)
         val preserved = fields.filter { (key, value) -> value != canonical[key] }
             .mapValues { (key, value) -> PreservedSearchFilterValue(value, canonical[key]) }
-        return filters.copy(preservedFilterValues = preserved)
+        return filters.copy(loadedWorksRanking = ranking, preservedFilterValues = preserved)
+    }
+
+    /** Missing keys stay at the defaults, which is every saved search written before A-473. */
+    private fun rankingFrom(fields: JsonObject): LoadedWorksRanking {
+        if (rankingKeys.none { it in fields }) return LoadedWorksRanking()
+        fun text(key: String) = stringValue(fields[key])
+        fun flag(key: String, default: Boolean): Boolean =
+            (fields[key] as? JsonPrimitive)?.booleanOrNull ?: default
+        return LoadedWorksRanking(
+            rank = text("loadedWorksRank")?.let { LoadedWorksRank.fromStorage(it) } ?: LoadedWorksRank.AO3_ORDER,
+            order = text("loadedWorksRankOrder")?.let { LoadedWorksRankOrder.fromStorage(it) }
+                ?: LoadedWorksRankOrder.HIGHEST_FIRST,
+            ranksCautiously = flag("ranksCautiously", true),
+            setsAsideUnusual = flag("setsAsideUnusual", true),
+            showsSignal = flag("showsSignal", true)
+        )
     }
 
     /** Swift synthesizes encode(to:) from its 37 CodingKeys; nil Date bounds are omitted. */

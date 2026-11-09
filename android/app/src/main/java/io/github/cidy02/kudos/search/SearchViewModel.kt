@@ -14,6 +14,11 @@ import io.github.cidy02.kudos.network.ao3.browse.AO3Fandom
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchFilters
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchPage
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchRepository
+import io.github.cidy02.kudos.network.ao3.search.KudosSightings
+import io.github.cidy02.kudos.network.ao3.search.KudosStringStore
+import io.github.cidy02.kudos.network.ao3.search.LastSeenKudosStore
+import io.github.cidy02.kudos.network.ao3.search.LoadedWorksRanking
+import io.github.cidy02.kudos.network.ao3.search.MemoryKudosStringStore
 import io.github.cidy02.kudos.works.CanonicalWork
 import io.github.cidy02.kudos.works.WorkRepository
 import io.github.cidy02.kudos.works.WorkTags
@@ -42,7 +47,8 @@ class SearchViewModel(
      * anyway, with their title and summary, and listed a fandom that only one of them
      * carries (audit A19-3; iOS `PrivacyGate.isHidden`, as Home applies it).
      */
-    hiddenWorks: Flow<(SavedWork) -> Boolean> = flowOf({ false })
+    hiddenWorks: Flow<(SavedWork) -> Boolean> = flowOf({ false }),
+    private val kudosStore: KudosStringStore = MemoryKudosStringStore()
 ) : ViewModel() {
 
     private val _filters = MutableStateFlow(AO3SearchFilters())
@@ -62,6 +68,11 @@ class SearchViewModel(
 
     private val _isPaging = MutableStateFlow(false)
     val isPaging: StateFlow<Boolean> = _isPaging.asStateFlow()
+
+    /** Kudos each loaded work had before this session. Momentum reads this; ranking does not fetch. */
+    private val sightings = KudosSightings()
+    private val _previousKudos = MutableStateFlow<Map<Long, Int>>(emptyMap())
+    val previousKudos: StateFlow<Map<Long, Int>> = _previousKudos.asStateFlow()
 
     private val catalog = MutableStateFlow<List<AO3Fandom>>(emptyList())
     private val userTags = MutableStateFlow<List<Tag>>(emptyList())
@@ -122,6 +133,32 @@ class SearchViewModel(
 
     fun updateFilters(newFilters: AO3SearchFilters) {
         _filters.value = newFilters
+        // Ranking applies to the works already loaded. Copy it onto the results immediately
+        // so a page tap does not send it as a new search, and dismissing the sheet keeps it.
+        if (newFilters.loadedWorksRanking != lastFilters.loadedWorksRanking) {
+            lastFilters = lastFilters.copy(loadedWorksRanking = newFilters.loadedWorksRanking)
+        }
+    }
+
+    /**
+     * Apply from the filter sheet. A change that is only the local rank reorders the
+     * works already on screen and does not ask AO3 for a page. Hits and Ways to Find
+     * are AO3 parameters, so they still run a search.
+     */
+    fun applyFilters() {
+        val searchFilters = _filters.value
+        val ao3Same = searchFilters.copy(loadedWorksRanking = LoadedWorksRanking()) ==
+            lastFilters.copy(loadedWorksRanking = LoadedWorksRanking())
+        val hasLoadedWorks = when (val current = _state.value) {
+            is SearchUiState.Results -> true
+            is SearchUiState.Error -> current.stale != null
+            else -> false
+        }
+        if (ao3Same && hasLoadedWorks) {
+            lastFilters = searchFilters
+            return
+        }
+        runSearch(page = 1, searchFilters = searchFilters)
     }
 
     fun runSearch(page: Int = 1, searchFilters: AO3SearchFilters = _filters.value) {
@@ -371,10 +408,19 @@ class SearchViewModel(
                     val local = localWorks.find { WorkTags.ao3WorkIdFromUrl(it.sourceUrl) == remote.id }
                     CanonicalWork(local = local, remote = remote)
                 }
+                noteSightings(merged)
                 SearchUiState.Results(res.value, merged)
             }
             is AO3Result.Failure -> SearchUiState.Error(res.error, page, stale)
         }
+    }
+
+    /** Every loaded page, whether or not Momentum is the rank in effect. */
+    private fun noteSightings(works: List<CanonicalWork>) {
+        val stored = LastSeenKudosStore.load(kudosStore)
+        val updated = sightings.record(works.map { it.remote }, stored)
+        LastSeenKudosStore.save(updated, kudosStore)
+        _previousKudos.value = sightings.previousKudos
     }
 
     private data class FilterHistoryEntry(
@@ -388,10 +434,11 @@ class SearchViewModel(
             repository: AO3SearchRepository,
             savedSearchRepository: SavedSearchRepository? = null,
             workRepository: WorkRepository? = null,
-            hiddenWorks: Flow<(SavedWork) -> Boolean> = flowOf({ false })
+            hiddenWorks: Flow<(SavedWork) -> Boolean> = flowOf({ false }),
+            kudosStore: KudosStringStore = MemoryKudosStringStore()
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
-                SearchViewModel(repository, savedSearchRepository, workRepository, hiddenWorks)
+                SearchViewModel(repository, savedSearchRepository, workRepository, hiddenWorks, kudosStore)
             }
         }
     }

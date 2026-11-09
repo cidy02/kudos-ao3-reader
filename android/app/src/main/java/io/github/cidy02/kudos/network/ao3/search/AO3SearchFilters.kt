@@ -44,7 +44,12 @@ data class AO3SearchFilters(
     val dateFrom: LocalDate? = null,
     val dateTo: LocalDate? = null,
     /** Imported values not representable by these controls; retained across ordinary copy edits. */
-    val preservedFilterValues: Map<String, PreservedSearchFilterValue> = emptyMap()
+    val preservedFilterValues: Map<String, PreservedSearchFilterValue> = emptyMap(),
+    /**
+     * Computed order of works already loaded. Not an AO3 parameter. Saved JSON keeps it
+     * only when it differs from [LoadedWorksRanking]'s defaults, so older searches still decode.
+     */
+    val loadedWorksRanking: LoadedWorksRanking = LoadedWorksRanking()
 ) {
     /** A future language from an imported search still constrains the live request. */
     val languageId: String?

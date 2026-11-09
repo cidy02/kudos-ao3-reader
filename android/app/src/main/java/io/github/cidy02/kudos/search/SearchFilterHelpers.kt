@@ -12,6 +12,7 @@ import io.github.cidy02.kudos.network.ao3.search.AO3RatingMatch
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchFilters
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchSort
 import io.github.cidy02.kudos.network.ao3.search.AO3Updated
+import io.github.cidy02.kudos.network.ao3.search.SearchSortBySummary
 import io.github.cidy02.kudos.network.ao3.search.AO3Warning
 import androidx.compose.ui.graphics.vector.ImageVector
 
@@ -234,7 +235,7 @@ fun summaryLabels(
     // always an order in effect, so this is the one label that is never noise — and it is the
     // setting users most often forget they changed.
     if (includesSort) {
-        add("Sort: ${filters.sort.title}")
+        add("Sort: ${SearchSortBySummary.value(filters)}")
     }
 
     return chips
@@ -400,7 +401,8 @@ fun savedSearchSubtitle(filters: AO3SearchFilters): String? {
     }
     if (filters.rating != AO3Rating.ANY) parts += filters.rating.title
     if (filters.completion != AO3Completion.ANY) parts += filters.completion.title
-    if (filters.sort != AO3SearchSort.RELEVANCE) parts += filters.sort.title
+    if (filters.loadedWorksRanking.isActive) parts += filters.loadedWorksRanking.rank.title
+    else if (filters.sort != AO3SearchSort.RELEVANCE) parts += filters.sort.title
     return parts.takeIf { it.isNotEmpty() }?.joinToString(" · ")
 }
 

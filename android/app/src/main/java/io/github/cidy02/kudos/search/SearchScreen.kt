@@ -79,6 +79,7 @@ import io.github.cidy02.kudos.network.ao3.search.AO3SearchPage
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchRepository
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchSort
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
+import io.github.cidy02.kudos.network.ao3.search.LastSeenKudosStore
 import io.github.cidy02.kudos.ui.components.LocalWorkRowEnvironment
 import io.github.cidy02.kudos.ui.components.SensitiveWorkRow
 import io.github.cidy02.kudos.ui.components.withoutHiddenRemote
@@ -143,6 +144,15 @@ fun SearchScreen(
     onFilterLibraryFandom: (String) -> Unit = {},
     onFilterLibraryTag: (String) -> Unit = {}
 ) {
+    val appContext = LocalContext.current.applicationContext
+    val kudosStore = remember(appContext) {
+        SharedPreferencesKudosStringStore(
+            appContext.getSharedPreferences(
+                LastSeenKudosStore.PREFS_NAME,
+                android.content.Context.MODE_PRIVATE
+            )
+        )
+    }
     val viewModel: SearchViewModel = viewModel(
         factory = SearchViewModel.factory(
             repository, savedSearchRepository, workRepository,
@@ -153,7 +163,8 @@ fun SearchScreen(
                 { work: SavedWork ->
                     LibraryPrivacy.visibility(work, privacy, reveal) == LibraryPrivacyVisibility.Hidden
                 }
-            }
+            },
+            kudosStore = kudosStore
         )
     )
     // The Library's blur, for the matches that come from the reader's own library. Until the
@@ -164,6 +175,7 @@ fun SearchScreen(
     val reveal by privacyGate.state.collectAsState()
     val activity = LocalContext.current as? androidx.fragment.app.FragmentActivity
     val filters by viewModel.filters.collectAsState()
+    val previousKudos by viewModel.previousKudos.collectAsState()
     val state by viewModel.state.collectAsState()
     val savedSearches by viewModel.savedSearches.collectAsState()
     val localMatches by viewModel.localMatches.collectAsState()
@@ -430,6 +442,7 @@ fun SearchScreen(
                                 page = resultsState.page,
                                 palette = resultsPalette ?: LocalKudosTokens.current.scopePalette,
                                 filters = filters,
+                                previousKudos = previousKudos,
                                 expandAll = expandAllCards,
                                 isPaging = isPaging,
                                 selecting = remoteSelection.isSelecting,
@@ -549,8 +562,9 @@ fun SearchScreen(
             onApply = {
                 showFilterSheet = false
                 leaveSelection()
-                viewModel.runSearch(page = 1, searchFilters = filters)
+                viewModel.applyFilters()
             },
+            ranksLoadedWorks = true,
             onClear = { viewModel.clearFilters() },
             onDismiss = { showFilterSheet = false; viewModel.discardFilterEdits() },
             onSave = if (savedSearchRepository != null) {
@@ -1093,6 +1107,7 @@ private fun SearchResultsList(
     page: AO3SearchPage,
     palette: SubjectPalette,
     filters: AO3SearchFilters,
+    previousKudos: Map<Long, Int>,
     expandAll: Boolean,
     isPaging: Boolean,
     selecting: Boolean,
@@ -1105,6 +1120,9 @@ private fun SearchResultsList(
     onRefresh: suspend () -> Unit
 ) {
     val shown = works.withoutHiddenRemote(LocalWorkRowEnvironment.current, selecting)
+    val ranked = rankSearchWorks(works, filters.loadedWorksRanking, previousKudos)
+    val visibleIds = shown.map { it.remote.id }.toSet()
+    val rows = ranked.filter { it.work.remote.id in visibleIds }
     val listState = rememberLazyListState()
     LaunchedEffect(page.currentPage) {
         listState.animateScrollToItem(0)
@@ -1127,21 +1145,22 @@ private fun SearchResultsList(
                     onPage = onPage
                 )
             }
-            items(shown, key = { it.remote.id }) { work ->
+            items(rows, key = { it.work.remote.id }) { row ->
                 if (selecting) {
                     SelectableRemoteWorkRow(
-                        work = work.remote,
-                        selected = isSelected(work.remote.id),
-                        onToggle = { onToggleSelection(work.remote.id) },
+                        work = row.work.remote,
+                        selected = isSelected(row.work.remote.id),
+                        onToggle = { onToggleSelection(row.work.remote.id) },
                         modifier = Modifier.padding(horizontal = 16.dp)
                     )
                 } else {
                     SensitiveWorkRow(
-                        work = work.remote,
+                        work = row.work.remote,
                         onOpenWork = onOpenWork,
                         expandAll = expandAll,
                         onTagSearch = onTagClick,
                         ledger = true,
+                        rankingSignal = row.signal,
                         modifier = Modifier.padding(horizontal = 16.dp)
                     )
                 }
