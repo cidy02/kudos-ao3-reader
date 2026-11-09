@@ -1363,15 +1363,49 @@ private fun LibrarySectionContent(
         if (state.sort == LibrarySort.Natural) it else LibraryQuery.sortDisplayItems(it, state.sort)
     }
     val now = Instant.now()
-    val groupedItems = if (kind == LibrarySectionKind.History) {
-        LibraryHistoryGrouping.groups(
-            state.historyGrouping, sectionItems.map { it.item.work }, now = now,
-            isAbandoned = { ReadingAbandonment.isAbandoned(it, now) }
-        )
-    } else if (sectionItems.isEmpty()) emptyList() else listOf(
+    val groupedItems = if (kind == LibrarySectionKind.History || sectionItems.isEmpty()) {
+        emptyList()
+    } else listOf(
         LibraryHistoryGrouping.Bucket(kind.groupTitle, sectionItems.map { it.item.work.id })
     )
     val itemsById = sectionItems.associateBy { it.item.work.id }
+    var historyScope by rememberSaveable(kind) { mutableStateOf(ReadingHistoryScope.Week) }
+    var historyPeriodOffset by rememberSaveable(kind) { mutableStateOf(0) }
+    val zone = java.time.ZoneId.systemDefault()
+    val locale = java.util.Locale.getDefault()
+    val weekFields = java.time.temporal.WeekFields.of(locale)
+    val historyReference = remember(now, historyScope, historyPeriodOffset, zone) {
+        val zdt = now.atZone(zone)
+        when (historyScope) {
+            ReadingHistoryScope.Week -> zdt.plusWeeks(historyPeriodOffset.toLong())
+            ReadingHistoryScope.Month -> zdt.plusMonths(historyPeriodOffset.toLong())
+            ReadingHistoryScope.Year -> zdt.plusYears(historyPeriodOffset.toLong())
+        }.toInstant()
+    }
+    val historyTimeline = if (kind == LibrarySectionKind.History) {
+        val visibleWorks = sectionItems.map { it.item.work }
+        val visibleIds = visibleWorks.mapTo(hashSetOf()) { it.id }
+        val visibleSessions = state.readingSessions.filter { it.workID in visibleIds }
+        val facts = ReadingInsights.facts(visibleSessions, visibleWorks)
+        ReadingHistoryTimeline.make(
+            scope = historyScope,
+            reference = historyReference,
+            facts = facts,
+            shelfWorkIDs = visibleWorks.map { it.id },
+            now = now,
+            zone = zone,
+            weekFields = weekFields
+        )
+    } else null
+    val unrecordedDisplays = historyTimeline?.unrecordedWorkIDs
+        ?.mapNotNull { itemsById[it] }
+        .orEmpty()
+    val abandonedHistoryDisplays = unrecordedDisplays.filter {
+        ReadingAbandonment.isAbandoned(it.item.work, now)
+    }
+    val untimedHistoryDisplays = unrecordedDisplays.filter {
+        !ReadingAbandonment.isAbandoned(it.item.work, now)
+    }
     val ids = if (showsAffinityList) emptySet() else sectionItems.mapTo(linkedSetOf()) { it.item.work.id }
     val allSelected = ids.isNotEmpty() && state.selectedWorkIds.containsAll(ids)
     // A selection acts on what is on screen (iOS `selectedWorks`). A row a quick filter hides
@@ -1478,8 +1512,6 @@ private fun LibrarySectionContent(
                         title = kind.title,
                         subtitle = if (state.hasActiveQueryOrFilters && sectionItems.isEmpty() && unfilteredItems.isNotEmpty()) {
                             "${unfilteredItems.size} ${if (unfilteredItems.size == 1) "work" else "works"} · none match the current filters"
-                        } else if (kind == LibrarySectionKind.History) {
-                            LibraryHistoryGrouping.tallyLine(sectionItems.size, state.historyGrouping, groupedItems)
                         } else {
                             val sortLabel = if (state.hasActiveQueryOrFilters) null else {
                                 if (state.sort != LibrarySort.Natural) state.sort.label else when (kind) {
@@ -1538,11 +1570,6 @@ private fun LibrarySectionContent(
                         }
                     }
                 }
-                if (kind == LibrarySectionKind.History) {
-                    item(key = "history-grouping") {
-                        HistoryGroupingStrip(state.historyGrouping, onHistoryGroupingChange)
-                    }
-                }
                 if (kind != LibrarySectionKind.History && (!showsFavoriteScopes || hasWorkContent)) {
                     item {
                         SectionRuleHeader(kind.groupTitle, count = sectionItems.size, modifier = Modifier.padding(top = 8.dp))
@@ -1578,12 +1605,34 @@ private fun LibrarySectionContent(
                             icon = kind.emptyStateIcon
                         )
                     }
+                    kind == LibrarySectionKind.History && historyTimeline != null -> {
+                        readingHistoryTimelineItems(
+                            timeline = historyTimeline,
+                            scope = historyScope,
+                            onScopeChange = { next ->
+                                historyScope = next
+                                historyPeriodOffset = 0
+                            },
+                            onStepPeriod = { delta ->
+                                historyPeriodOffset += delta
+                            },
+                            itemsById = itemsById,
+                            abandonedWorks = abandonedHistoryDisplays,
+                            untimedWorks = untimedHistoryDisplays,
+                            state = state,
+                            ledger = displayMode == LibrarySectionDisplayMode.Ledger,
+                            expandAll = expandAll,
+                            cardActions = cardActions,
+                            onRemoveFromHistory = onRemoveFromHistory,
+                            onRemoveFromAllQueues = onRemoveFromAllQueues,
+                            onKeepInProgress = onKeepInProgress,
+                            now = now,
+                            zone = zone,
+                            locale = locale,
+                            weekFields = weekFields
+                        )
+                    }
                     else -> groupedItems.forEach { group ->
-                        if (kind == LibrarySectionKind.History) {
-                            item(key = "group-${group.id}") {
-                                SectionRuleHeader(group.title, count = group.workIds.size, modifier = Modifier.padding(top = 8.dp))
-                            }
-                        }
                         if (displayMode == LibrarySectionDisplayMode.Compact) {
                             items(group.workIds.chunked(coverColumns), key = { "covers-${it.first()}" }) { rowIds ->
                                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -1606,8 +1655,7 @@ private fun LibrarySectionContent(
                                 showsZeroStats = state.showsZeroStats,
                                 ledger = displayMode == LibrarySectionDisplayMode.Ledger, expandAll = expandAll,
                                 summary = state.readingSummaries[id],
-                                abandoned = kind == LibrarySectionKind.History && state.historyGrouping == LibraryHistoryGrouping.State &&
-                                    ReadingAbandonment.isAbandoned(display.item.work, now),
+                                abandoned = false,
                                 onKeepInProgress = onKeepInProgress
                             )
                         }
@@ -1652,29 +1700,6 @@ private fun MoveBackToInProgressButton(onClick: () -> Unit) {
             tint = tokens.scopePalette.controlInk, modifier = Modifier.size(16.dp))
         Text("Move back to In progress", color = tokens.scopePalette.controlInk,
             modifier = Modifier.weight(1f, fill = false), fontSize = 12.5.sp, lineHeight = 18.sp, fontWeight = FontWeight.Medium)
-    }
-}
-
-@Composable
-private fun HistoryGroupingStrip(
-    grouping: LibraryHistoryGrouping,
-    onSelect: (LibraryHistoryGrouping) -> Unit
-) {
-    val tokens = LocalKudosTokens.current
-    if (isAccessibilityFontScale()) {
-        SettingsPanel {
-            LibraryHistoryGrouping.entries.forEachIndexed { index, option ->
-                if (index > 0) SubjectRowSeparator()
-                Text(option.title, color = if (grouping == option) tokens.scopePalette.controlInk else tokens.primaryInk,
-                    fontSize = 13.sp, lineHeight = 19.sp, fontWeight = FontWeight.Medium,
-                    modifier = Modifier.fillMaxWidth().semantics { selected = grouping == option }
-                        .clickable(role = Role.RadioButton) { onSelect(option) }.padding(14.dp))
-            }
-        }
-    } else {
-        SubjectSegmentedControl(options = LibraryHistoryGrouping.entries, selected = grouping,
-            onSelect = onSelect, title = { it.title },
-            modifier = Modifier.padding(horizontal = 16.dp))
     }
 }
 

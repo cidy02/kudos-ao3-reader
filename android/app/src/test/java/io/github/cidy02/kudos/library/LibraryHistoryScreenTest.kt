@@ -7,8 +7,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.SemanticsMatcher
@@ -22,6 +22,7 @@ import io.github.cidy02.kudos.app.LocalPushedShellChrome
 import io.github.cidy02.kudos.app.PushedShellChrome
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.data.local.KudosDatabase
+import io.github.cidy02.kudos.data.local.entity.ReadingSessionEntity
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.files.WorkFileStore
 import io.github.cidy02.kudos.ui.theme.KudosTheme
@@ -59,6 +60,7 @@ class LibraryHistoryScreenTest {
     private val opened = mutableListOf<String>()
     private val now = Instant.ofEpochMilli(System.currentTimeMillis())
     private val dustyId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+    private val activeId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
 
     @Before fun setUp() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
@@ -72,7 +74,7 @@ class LibraryHistoryScreenTest {
             dateAdded = now.minusSeconds(40 * 86_400L), lastModifiedAt = now.minusSeconds(10),
             lastReadDate = now.minusSeconds(30 * 86_400L), legacyReaderProgress = 0.4,
             workFandoms = listOf("Doctor Who (2005)")))
-        works.upsert(SavedWork(id = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", title = "Active", author = "A",
+        works.upsert(SavedWork(id = activeId, title = "Active", author = "A",
             isSaved = true, isFavorite = true, lastReadDate = now, legacyReaderProgress = 0.5,
             workFandoms = listOf("Doctor Who")))
         works.upsert(SavedWork(id = "cccccccc-cccc-4ccc-8ccc-cccccccccccc", title = "Freed", author = "A",
@@ -84,9 +86,6 @@ class LibraryHistoryScreenTest {
     @After fun tearDown() {
         database.close()
         settingsScope.cancel()
-        // The folder is left for the system's temporary-files sweep. The last tap's write to
-        // the settings file may still be on its way: deleting the folder under it failed a
-        // test at random, and waiting for it here (on the test's main thread) hung the suite.
         directory.toFile().deleteOnExit()
     }
 
@@ -99,7 +98,6 @@ class LibraryHistoryScreenTest {
                     Box {
                         LibraryScreen(repository = library, workRepository = works, settingsRepository = settings, readingLogDao = database.readingLogDao(),
                             onOpenWork = { opened += it }, onOpenReader = { opened += it }, section = kind.value)
-                        // Draw the real pushed screen toolbar supplied to the shell.
                         Row(Modifier.align(Alignment.TopEnd).testTag("history-toolbar")) { chrome.trailingContent?.invoke(this) }
                     }
                 }
@@ -112,7 +110,6 @@ class LibraryHistoryScreenTest {
         compose.waitUntil(15_000) { compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty() }
     }
 
-    /** The page's vertical list; Favorites' scope strip scrolls sideways too. */
     private val pageList = hasScrollAction() and
         SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange)
 
@@ -120,41 +117,36 @@ class LibraryHistoryScreenTest {
         compose.onNode(pageList).performScrollToNode(hasText(text))
     }
 
-    private fun selectGrouping(title: String) {
+    private fun selectScope(title: String) {
         reach(title)
         compose.onNodeWithText(title).performClick()
     }
 
-    @Test fun tallyFollowsEveryGroupingAndZerosDisappear() {
+    @Test fun timelineSwitchesScopesAndSummarizesChartInOneSentence() {
         show()
         awaitText("3 works · most recently read first")
-        selectGrouping("State")
-        awaitText("3 works · 1 in progress · 1 abandoned")
-        reach("READ, NOT FINISHED")
-        compose.onNodeWithText("READ, NOT FINISHED").assertExists()
-        selectGrouping("Fandom")
-        awaitText("3 works")
-        // iOS WorkRow.ledgerRow also names the fandom on each work; select the group heading.
-        val fandomHeading = hasText("DOCTOR WHO") and !hasClickAction()
-        compose.onNode(pageList).performScrollToNode(fandomHeading)
-        compose.onNode(fandomHeading).assertExists()
-        selectGrouping("Flat")
-        awaitText("3 works · most recently read first")
-        reach("ALL")
-        compose.onNodeWithText("ALL").assertExists()
-        selectGrouping("Time")
-        awaitText("3 works · most recently read first")
+        awaitText("This week")
+        compose.onNodeWithContentDescription("This week: no reading").assertExists()
+        reach("Nothing read this week.")
+        compose.onNodeWithText("Nothing read this week.").assertExists()
+        reach("ABANDONED")
+        compose.onNodeWithText("ABANDONED").assertExists()
+        reach("NO READING TIME RECORDED")
+        compose.onNodeWithText("NO READING TIME RECORDED").assertExists()
+        selectScope("Month")
+        awaitText("Nothing read this month.")
+        selectScope("Year")
+        awaitText("Nothing read this year.")
+        selectScope("Week")
+        awaitText("This week")
     }
 
     @Test fun buttonWritesOverrideAndMergeClockAndRebucketsWithoutReload() {
         show()
-        selectGrouping("State")
-        awaitText("3 works · 1 in progress · 1 abandoned")
+        awaitText("3 works · most recently read first")
         reach("Move back to In progress")
         compose.onNodeWithText("Move back to In progress").performClick()
-        awaitText("3 works · 2 in progress")
-        reach("IN PROGRESS")
-        compose.onNodeWithText("IN PROGRESS").assertExists()
+        compose.waitUntil(15_000) { compose.onAllNodesWithText("ABANDONED").fetchSemanticsNodes().isEmpty() }
         compose.onNodeWithText("ABANDONED").assertDoesNotExist()
         compose.onNodeWithText("Move back to In progress").assertDoesNotExist()
         val kept = runBlocking { works.getWork(dustyId)!! }
@@ -165,31 +157,27 @@ class LibraryHistoryScreenTest {
         assertTrue(opened.isEmpty())
     }
 
-    @Test fun otherSectionsNeverShowTheGroupingStrip() {
+    @Test fun otherSectionsNeverShowTheTimelineScopeStrip() {
         show()
         for (other in LibrarySectionKind.entries.filter { it != LibrarySectionKind.History }) {
             compose.runOnIdle { kind.value = other }
             awaitText(other.title)
-            for (title in listOf("Time", "State", "Fandom", "Flat")) compose.onNodeWithText(title).assertDoesNotExist()
+            for (title in listOf("Week", "Month", "Year")) compose.onNodeWithText(title).assertDoesNotExist()
         }
     }
 
-    @Test fun groupedRowsKeepLongPressSelectionAndToolbar() {
+    @Test fun timelineRowsKeepLongPressSelectionAndToolbar() {
         show()
-        selectGrouping("State")
-        awaitText("3 works · 1 in progress · 1 abandoned")
+        awaitText("3 works · most recently read first")
         reach("Dusty")
         compose.onNodeWithContentDescription("Dusty, by A").performTouchInput { longClick() }
         awaitText("Mark as Finished")
         compose.onNodeWithText("Select").performClick()
         awaitText("Select All")
         compose.onNodeWithText("Move back to In progress").assertDoesNotExist()
-        selectGrouping("Flat")
-        awaitText("3 works · most recently read first")
         reach("Dusty")
         compose.onAllNodes(isToggleable()).filter(isOn()).assertCountEquals(1)
         compose.onNodeWithText("Deselect All").assertDoesNotExist()
-        // A different section hides Dusty: it must leave the selection, as a chip/filter would.
         compose.runOnIdle { kind.value = LibrarySectionKind.Favorites }
         awaitText("Favorites")
         compose.waitUntil(15_000) { compose.onAllNodes(isOn()).fetchSemanticsNodes().isEmpty() }
@@ -222,10 +210,9 @@ class LibraryHistoryScreenTest {
         assertFalse(runBlocking { works.getWork(dustyId)!!.isDeleted })
     }
 
-    @Test fun groupedHistoryRetainsItsRemoveSwipe() {
+    @Test fun historyRetainsItsRemoveSwipe() {
         show()
-        selectGrouping("State")
-        awaitText("3 works · 1 in progress · 1 abandoned")
+        awaitText("3 works · most recently read first")
         reach("Dusty")
         compose.onNodeWithContentDescription("Dusty, by A").performTouchInput { swipeLeft() }
         awaitText("Remove")
@@ -233,38 +220,41 @@ class LibraryHistoryScreenTest {
         assertFalse(runBlocking { works.getWork(dustyId)!!.isDeleted })
     }
 
-    @Test fun storedFactsReachHistoryAndFavoritesRowsInLedgerAndDetailedButNotCompactCovers() {
+    @Test fun storedSessionsDriveTimelineSittingsAndFavoritesFactsStrip() {
         runBlocking {
-            val active = works.getWork("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")!!
+            val active = works.getWork(activeId)!!
             works.upsert(active.copy(chapters = "4/?"))
             for (index in 0..1) database.readingLogDao().upsertSession(
-                io.github.cidy02.kudos.data.local.entity.ReadingSessionEntity(id = "fact-$index", workID = active.id,
+                ReadingSessionEntity(id = "fact-$index", workID = active.id,
                     startedAt = now.minusSeconds(3600L - index * 1800), endedAt = now.minusSeconds(1800L - index * 1800),
-                    durationSeconds = 1800.0, chapterCountAtVisit = 1, didFinish = true, lastModifiedAt = now))
+                    durationSeconds = 1800.0, endingProgress = 1.0, chapterCountAtVisit = 1,
+                    didFinish = true, lastModifiedAt = now))
         }
         show()
-        for (section in listOf(LibrarySectionKind.History, LibrarySectionKind.Favorites)) {
-            compose.runOnIdle { kind.value = section }
-            awaitText(section.title)
-            for (mode in listOf("Ledger", "Detailed")) {
-                compose.onNodeWithContentDescription("More").performClick()
-                compose.onNodeWithText("Layout").performClick()
-                compose.onNodeWithText(mode).performClick()
-                reach("Read ×2")
-                compose.onNodeWithText("1h").assertExists()
-                if (section == LibrarySectionKind.History) compose.onNodeWithText("3 new chapters").assertExists()
-                else compose.onNodeWithText("new chapter", substring = true).assertDoesNotExist()
-            }
+        awaitText("1 work · 1 finished")
+        reach("TODAY")
+        compose.onNodeWithText("TODAY").assertExists()
+        reach("Ch. 1 · 30 min · 2nd read")
+        compose.onNodeWithText("Ch. 1 · 30 min · 2nd read").assertExists()
+
+        compose.runOnIdle { kind.value = LibrarySectionKind.Favorites }
+        awaitText("Favorites")
+        for (mode in listOf("Ledger", "Detailed")) {
+            compose.onNodeWithContentDescription("More").performClick()
+            compose.onNodeWithText("Layout").performClick()
+            compose.onNodeWithText(mode).performClick()
+            reach("Read ×2")
+            compose.onNodeWithText("1h").assertExists()
+            compose.onNodeWithText("new chapter", substring = true).assertDoesNotExist()
         }
         compose.onNodeWithContentDescription("More").performClick()
         compose.onNodeWithText("Layout").performClick()
         compose.onNodeWithText("Compact").performClick()
         reach("Active")
         compose.onNodeWithText("Read ×2").assertDoesNotExist()
-        compose.onNodeWithText("1h").assertDoesNotExist()
     }
 
-    @Test fun historyAndFavoritesFilterHelpAndHistoryOptionsUseIOSSpokenWords() {
+    @Test fun historyAndFavoritesFilterHelpAndScopeControlSelection() {
         show()
         for (section in listOf(LibrarySectionKind.History, LibrarySectionKind.Favorites)) {
             compose.runOnIdle { kind.value = section }
@@ -274,11 +264,9 @@ class LibraryHistoryScreenTest {
         }
         compose.runOnIdle { kind.value = LibrarySectionKind.History }
         awaitText("Reading History")
-        compose.onNodeWithContentDescription("History grouping").assertDoesNotExist()
-        selectGrouping("Flat")
-        // The choice is saved to settings and read back before the segment shows it.
-        compose.waitUntil(15_000) { compose.onAllNodes(hasText("Flat") and isSelected()).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNode(hasText("Flat") and isSelected()).assertHasClickAction()
+        selectScope("Month")
+        compose.waitUntil(15_000) { compose.onAllNodes(hasText("Month") and isSelected()).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(hasText("Month") and isSelected()).assertHasClickAction()
     }
 
     @Test fun historyLayoutOffersDetailedAndLedgerAndCardExpansionOnlyInDetailed() {
@@ -346,10 +334,8 @@ class LibraryHistoryScreenTest {
     private fun accessibility(theme: KudosThemeMode) {
         show(theme, scale = 2.4f)
         awaitText("3 works · most recently read first")
-        listOf("Time", "State", "Fandom", "Flat").forEach(::assertUnclipped)
-        selectGrouping("State")
-        awaitText("3 works · 1 in progress · 1 abandoned")
-        assertUnclipped("3 works · 1 in progress · 1 abandoned")
+        listOf("Week", "Month", "Year").forEach(::assertUnclipped)
+        assertUnclipped("This week")
         assertUnclipped("ABANDONED")
         assertUnclipped("Move back to In progress")
     }

@@ -99,7 +99,7 @@ enum class ReadingInsightsPeriod(val title: String) {
     Year("This year")
 }
 
-/** One stored session reduced to the fields used by Reading Insights. */
+/** One stored session reduced to the fields used by Reading Insights and the History timeline. */
 data class ReadingSessionFacts(
     val workID: String,
     val startedAt: Instant,
@@ -108,7 +108,11 @@ data class ReadingSessionFacts(
     val didFinish: Boolean,
     val fandom: String = "",
     /** What this sitting read, in words (owner Q27, 2026-10-20): see `wordsRead`. */
-    val wordsRead: Int = 0
+    val wordsRead: Int = 0,
+    val sessionID: String? = null,
+    val title: String = "",
+    val endingProgress: Double = 0.0,
+    val chapterCount: Int = 0
 )
 
 /** iOS Reading Insights' session-derived figures. */
@@ -164,18 +168,55 @@ data class ReadingInsights(
             val worksByID = works.associateBy { it.id }
             val read = wordsRead(sessions)
             return sessions.map { session ->
+                val work = worksByID[session.workID]
                 ReadingSessionFacts(
                     workID = session.workID,
                     startedAt = session.startedAt,
                     durationSeconds = session.durationSeconds,
                     wordCount = session.wordCount,
                     didFinish = session.didFinish,
-                    fandom = worksByID[session.workID]?.workFandoms
+                    fandom = work?.workFandoms
                         ?.firstOrNull { it.isNotEmpty() }
                         .orEmpty(),
-                    wordsRead = read[session.id] ?: 0
+                    wordsRead = read[session.id] ?: 0,
+                    sessionID = session.id,
+                    title = session.workTitle.ifEmpty { work?.title.orEmpty() },
+                    endingProgress = session.endingProgress,
+                    chapterCount = if (session.chapterCountAtVisit > 0) {
+                        session.chapterCountAtVisit
+                    } else {
+                        work?.postedChapterCount ?: 0
+                    }
                 )
             }
+        }
+
+        /**
+         * Progress at the start of each sitting in [facts], in the same index order: 0 for a work's
+         * first sitting or the sitting after a finished read; otherwise the previous sitting's ending
+         * progress. Shared by [wordsRead] and [ReadingHistoryTimeline].
+         */
+        fun startingProgress(facts: List<ReadingSessionFacts>): List<Double> {
+            if (facts.isEmpty()) return emptyList()
+            val orderedIndices = facts.indices.sortedWith { lhs, rhs ->
+                sittingOrder(facts[lhs], facts[rhs])
+            }
+            val starts = DoubleArray(facts.size)
+            val startByWork = HashMap<String, Double>()
+            for (index in orderedIndices) {
+                val fact = facts[index]
+                val start = startByWork[fact.workID] ?: 0.0
+                starts[index] = start
+                val end = fact.endingProgress.coerceIn(0.0, 1.0)
+                startByWork[fact.workID] = if (fact.didFinish) 0.0 else end
+            }
+            return starts.toList()
+        }
+
+        fun sittingOrder(lhs: ReadingSessionFacts, rhs: ReadingSessionFacts): Int {
+            val byTime = lhs.startedAt.compareTo(rhs.startedAt)
+            if (byTime != 0) return byTime
+            return lhs.sessionID.orEmpty().compareTo(rhs.sessionID.orEmpty())
         }
 
         /**

@@ -4,6 +4,7 @@ import io.github.cidy02.kudos.core.model.PrivacySettings
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.core.model.Tag
 import io.github.cidy02.kudos.core.model.WorkCollection
+import io.github.cidy02.kudos.data.local.entity.ReadingSessionEntity
 
 data class LibraryWorkListItem(
     val work: SavedWork,
@@ -60,6 +61,7 @@ data class LibraryUiState(
     /** Finishing-session count per work, for Favorites → Rereads. */
     val finishCounts: Map<String, Int> = emptyMap(),
     val readingSummaries: Map<String, WorkReadingSummary> = emptyMap(),
+    val readingSessions: List<ReadingSessionEntity> = emptyList(),
     val favoritePreferences: FavoritePreferences = FavoritePreferences(),
     /** iOS Library dashboard shelves (Reading Now / Saved for Later / Finished / Downloaded). */
     val savedForLater: List<LibraryDisplayItem> = emptyList(),

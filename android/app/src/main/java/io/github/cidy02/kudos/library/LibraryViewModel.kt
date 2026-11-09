@@ -7,6 +7,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import io.github.cidy02.kudos.app.PrivacyGate
 import io.github.cidy02.kudos.data.local.dao.ReadingLogDao
+import io.github.cidy02.kudos.data.local.entity.ReadingSessionEntity
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.core.model.WorkDownloadAction
 import io.github.cidy02.kudos.core.model.WorkDownloadSemantics
@@ -42,8 +43,8 @@ class LibraryViewModel(
     private val readingQueues = MutableStateFlow<List<LibraryQueuePreview>>(emptyList())
     private val deletedQueueCount = MutableStateFlow(0)
     private val queueRefreshTick = MutableStateFlow(0)
-    private val readingSummaries = readingLogDao?.observeSessions()?.map(ReadingAffinities::summaries)
-        ?: flowOf(emptyMap<String, WorkReadingSummary>())
+    private val readingSessions = readingLogDao?.observeSessions()
+        ?: flowOf(emptyList<ReadingSessionEntity>())
     private val layouts = combine(
         settingsRepository?.historyGrouping ?: flowOf(LibraryHistoryGrouping.Default),
         settingsRepository?.favoritePreferences ?: flowOf(FavoritePreferences())
@@ -90,10 +91,17 @@ class LibraryViewModel(
         readingQueues,
         repository.observeRecentlyDeletedCount(),
         deletedQueueCount,
-        readingSummaries,
+        readingSessions,
         layouts
-    ) { queues, deletedCount, queueCount, summaries, layout ->
-        LibraryDashboardExtras(queues, deletedCount + queueCount, summaries, layout.first, layout.second)
+    ) { queues, deletedCount, queueCount, sessions, layout ->
+        LibraryDashboardExtras(
+            queues = queues,
+            recentlyDeletedCount = deletedCount + queueCount,
+            readingSessions = sessions,
+            readingSummaries = ReadingAffinities.summaries(sessions),
+            historyGrouping = layout.first,
+            favoritePreferences = layout.second
+        )
     }
 
     val state: StateFlow<LibraryUiState> = combine(
@@ -112,6 +120,7 @@ class LibraryViewModel(
             recentlyDeletedCount = extras.recentlyDeletedCount,
             finishCounts = extras.readingSummaries.mapValues { it.value.finishCount },
             readingSummaries = extras.readingSummaries,
+            readingSessions = extras.readingSessions,
             favoritePreferences = extras.favoritePreferences,
             historyGrouping = extras.historyGrouping
             // Reveal is already folded into every shelf by LibraryQuery.buildState.
@@ -548,6 +557,7 @@ class LibraryViewModel(
 private data class LibraryDashboardExtras(
     val queues: List<LibraryQueuePreview>,
     val recentlyDeletedCount: Int,
+    val readingSessions: List<ReadingSessionEntity>,
     val readingSummaries: Map<String, WorkReadingSummary>,
     val historyGrouping: LibraryHistoryGrouping,
     val favoritePreferences: FavoritePreferences
