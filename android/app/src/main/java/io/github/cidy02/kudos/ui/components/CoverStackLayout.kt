@@ -30,7 +30,7 @@ import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.ReaderTheme
 import io.github.cidy02.kudos.ui.subject.SubjectColor
 import io.github.cidy02.kudos.ui.subject.SubjectPalette
-import io.github.cidy02.kudos.ui.subject.hsv
+import io.github.cidy02.kudos.ui.subject.hsb
 import io.github.cidy02.kudos.ui.subject.mix
 import io.github.cidy02.kudos.ui.subject.parseSubjectHexColor
 import io.github.cidy02.kudos.ui.subject.withOpacity
@@ -499,11 +499,11 @@ internal fun carouselCollectionGradient(
     }
     return when (theme) {
         ReaderTheme.Dark, ReaderTheme.Oled ->
-            hsv(hue, 0.50, 0.80) to hsv(hue, 0.62, 0.55)
+            hsb(hue, 0.50, 0.80) to hsb(hue, 0.62, 0.55)
         ReaderTheme.Light ->
-            hsv(hue, 0.45, 0.85) to hsv(hue, 0.58, 0.62)
+            hsb(hue, 0.45, 0.85) to hsb(hue, 0.58, 0.62)
         ReaderTheme.Sepia ->
-            hsv(hue, 0.40, 0.80) to hsv(hue, 0.52, 0.58)
+            hsb(hue, 0.40, 0.80) to hsb(hue, 0.52, 0.58)
     }
 }
 
