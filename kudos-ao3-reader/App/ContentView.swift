@@ -609,10 +609,10 @@ struct ContentView: View {
             if event.stampsShelf {
                 work.markProgressModified(date)
             }
-            guard context.saveBestEffort(reason: "Saving detached read-aloud position failed") else {
-                return .suspendWrites
+            // A failed save leaves this write in the context; the next boundary's save retries it.
+            if context.saveBestEffort(reason: "Saving detached read-aloud position failed") {
+                FolderSyncService.markDirty()
             }
-            FolderSyncService.markDirty()
             return .wrote(progressStamp: work.progressModifiedAt ?? date)
         }
         speech.onReleaseDetachedWork = { workID in

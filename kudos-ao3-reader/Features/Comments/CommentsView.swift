@@ -117,6 +117,9 @@ struct CommentsView: View {
     /// The thread being pushed, if any. AO3 gives Thread / Parent Thread their own
     /// isolated-thread pages, so these navigate rather than scrolling in place.
     @State private var pushedThread: CommentThreadRoute?
+    #if os(iOS)
+    @State private var accessoryTab: AppTab?
+    #endif
     @State private var readerSections: [ReaderSection]
     @State private var readerDestination: CommentReaderDestination?
     #if DEBUG
@@ -266,10 +269,12 @@ struct CommentsView: View {
                 }
             }
             .onAppear {
-                router.commentAccessoryTab = commentAccessoryActive ? router.selection : nil
+                // The tab this screen lives in; the selection can change before the composer loads.
+                if accessoryTab == nil { accessoryTab = router.selection }
+                router.commentAccessoryTab = commentAccessoryActive ? accessoryTab : nil
             }
             .onChange(of: commentAccessoryActive) { _, active in
-                router.commentAccessoryTab = active ? router.selection : nil
+                router.commentAccessoryTab = active ? accessoryTab : nil
             }
             #endif
             .refreshable { await model.load(auth: auth, forceRefresh: true) }
