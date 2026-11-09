@@ -33,13 +33,13 @@ struct ReaderSpeechSessionPolicyTests {
 
     @Test func positionSavingIgnoresRangesButKeepsBoundariesAndCheckpoints() {
         var throttle = ReaderSpeechPositionSaveThrottle()
-        #expect(!throttle.shouldSave(locatorString: "one", for: .spokenRange))
-        #expect(throttle.shouldSave(locatorString: "one", for: .utteranceBoundary))
-        #expect(!throttle.shouldSave(locatorString: "one", for: .utteranceBoundary))
-        #expect(throttle.shouldSave(locatorString: "one", for: .pause))
-        #expect(throttle.shouldSave(locatorString: "one", for: .stop))
-        #expect(throttle.shouldSave(locatorString: "one", for: .sessionEnd))
-        #expect(throttle.shouldSave(locatorString: "one", for: .appBackground))
+        let events: [ReaderSpeechPositionSaveThrottle.Event] = [
+            .spokenRange, .utteranceBoundary, .utteranceBoundary,
+            .pause, .stop, .sessionEnd, .appBackground
+        ]
+        // #expect cannot call a mutating member, so record the answers first.
+        let saved = events.map { throttle.shouldSave(locatorString: "one", for: $0) }
+        #expect(saved == [false, true, false, true, true, true, true])
     }
 
     @Test func activeSpeechProtectsOnlyItsOwnEPUB() {
