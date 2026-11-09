@@ -24,6 +24,14 @@ class ReadingAnnotationColorTest {
         assertEquals(ReadingAnnotationColor.YELLOW.raw, ReadingAnnotationColor.normalizedRaw("BLUE"))
     }
 
+    // toLongOrNull(16) accepted a sign; Color.parseColor then threw in the reader (review of A-471).
+    @Test fun signedOrNonHexDigitsAreNotACustomColour() {
+        assertNull(ReadingAnnotationColor.customHex("#-12345"))
+        assertNull(ReadingAnnotationColor.customHex("#+ABCDE"))
+        assertNull(ReadingAnnotationColor.customHex("#GGGGGG"))
+        assertEquals("yellow", ReadingAnnotationColor.normalizedRaw("#-12345"))
+    }
+
     @Test fun customHexRoundTripsThroughBackupWithoutBecomingAPreset() {
         val annotation = ReadingAnnotation(
             id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",

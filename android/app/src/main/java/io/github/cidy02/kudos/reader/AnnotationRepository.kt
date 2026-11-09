@@ -103,14 +103,19 @@ class AnnotationRepository(
     }
 
     /** Editor recolouring uses identity, not the selection path’s same-passage matcher. */
-    suspend fun addOrRecolorHighlight(id: String, color: String) {
+    suspend fun addOrRecolorHighlight(id: String, color: String) = recolor(id, ReadingAnnotationColor.normalizedRaw(color))
+
+    /** Cancel in the editor puts back exactly what was stored before the reader's pick. */
+    suspend fun restoreHighlightColor(id: String, storedRaw: String) = recolor(id, storedRaw)
+
+    private suspend fun recolor(id: String, colorRaw: String) {
         val existing = dao.getById(id)?.toDomain() ?: return
         if (existing.isPendingDeletion ||
             (!existing.kindRaw.equals("highlight", ignoreCase = true) &&
                 !existing.kindRaw.equals("note", ignoreCase = true) &&
                 !existing.kindRaw.equals("bookmark", ignoreCase = true))
         ) return
-        saveAnnotation(existing.copy(colorRaw = ReadingAnnotationColor.normalizedRaw(color)))
+        saveAnnotation(existing.copy(colorRaw = colorRaw))
     }
 
     /** Result also drives the iOS post-selection editor/colour-bar routing. */

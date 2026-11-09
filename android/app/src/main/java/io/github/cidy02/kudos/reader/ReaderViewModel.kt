@@ -359,6 +359,14 @@ class ReaderViewModel(
         }
     }
 
+    fun restoreHighlightColor(id: String, storedRaw: String) {
+        viewModelScope.launch {
+            annotationEditMutex.withLock {
+                annotationRepository.restoreHighlightColor(id = id, storedRaw = storedRaw)
+            }
+        }
+    }
+
     fun deleteAnnotation(id: String) {
         updateReading { it.copy(
             editingAnnotationId = it.editingAnnotationId?.takeUnless { editor -> editor == id },

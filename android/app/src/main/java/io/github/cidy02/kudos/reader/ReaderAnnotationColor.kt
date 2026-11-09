@@ -30,7 +30,9 @@ enum class ReadingAnnotationColor(
             val trimmed = raw?.trim() ?: return null
             if (!trimmed.startsWith("#")) return null
             val digits = trimmed.drop(1)
-            if (digits.length != 6 || digits.toLongOrNull(16) == null) return null
+            // Six hex digits exactly, as iOS's isHexDigit check: toLongOrNull would accept "-12345",
+            // which Color.parseColor then rejects with an exception in the reader.
+            if (digits.length != 6 || !digits.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }) return null
             return "#${digits.uppercase()}"
         }
 

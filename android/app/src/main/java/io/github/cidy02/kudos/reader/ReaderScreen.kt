@@ -905,7 +905,7 @@ private fun ReaderReading(
                 // and a typed note, as iOS's swipe does (3dz): only Cancel throws work away.
                 val colourOnOpen = remember(annotation.id) { annotation.colorRaw }
                 val cancelNote = {
-                    if (annotation.colorRaw != colourOnOpen) viewModel.recolorHighlight(annotation.id, colourOnOpen)
+                    if (annotation.colorRaw != colourOnOpen) viewModel.restoreHighlightColor(annotation.id, colourOnOpen)
                     viewModel.closeNoteEditor()
                 }
                 ModalBottomSheet(

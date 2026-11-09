@@ -248,6 +248,10 @@ class AnnotationTombstoneTest {
         assertEquals("bookmark", withNote.kindRaw)
         assertEquals("Remember this chapter", withNote.note)
         assertEquals("blue", withNote.colorRaw)
+        // Cancel in the editor restores exactly what was stored, not a normalized form (review of A-471).
+        annotationRepository.restoreHighlightColor(bookmark.id, "#abcdef")
+        assertEquals("#abcdef", database.annotationDao().getById(bookmark.id)!!.colorRaw)
+        annotationRepository.restoreHighlightColor(bookmark.id, "blue")
         // A deleted bookmark does not stand in the way of a new one at the same place.
         annotationRepository.deleteAnnotation(bookmark.id)
         val fresh = annotationRepository.addBookmark(WORK_ID, envelope, 0.6, 4, "Chapter 5")
