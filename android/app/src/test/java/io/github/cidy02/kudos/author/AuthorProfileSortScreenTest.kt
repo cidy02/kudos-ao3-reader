@@ -383,10 +383,10 @@ class AuthorProfileSortScreenTest {
         compose.onNodeWithText("Gifts").assertDoesNotExist()
         compose.onNodeWithContentDescription("Sort and filter").assertExists()
         assertEquals(2, requests.size)
-        compose.onNodeWithText("Series", ignoreCase = true).performClick(); compose.waitForIdle()
-        compose.onNodeWithContentDescription("Sort and filter").assertDoesNotExist()
-        compose.onNodeWithText("Bookmarks", ignoreCase = true).performClick(); compose.waitForIdle()
-        compose.onNodeWithContentDescription("Sort and filter").assertDoesNotExist()
+        // No segmented switch (T-468): the funnel belongs to the Works list only, and the other
+        // lists are their own destinations, which carry no funnel.
+        compose.onNodeWithText("Series", ignoreCase = true).assertDoesNotExist()
+        compose.onNodeWithText("Bookmarks", ignoreCase = true).assertDoesNotExist()
     }
 
     @Test fun scopeIsAMenuAndChoosingAPseudChangesTheRoute() {

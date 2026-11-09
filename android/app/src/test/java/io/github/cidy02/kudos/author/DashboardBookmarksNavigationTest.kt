@@ -116,7 +116,9 @@ class DashboardBookmarksNavigationTest {
             assertTrue(accountLists.isEmpty())
             assertFalse(requests.any { it.toHttpUrl().encodedPath == "/users/Avery_Archive/works" })
         }
-        compose.onNode(hasText("Bookmarks") and isSelectable()).assertIsSelected()
+        // The page opened on the Bookmarks list itself (its heading), with no tab switch.
+        compose.onNode(hasText("Bookmarks") and
+            SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.Heading)).assertExists()
         compose.runOnIdle { nav.popBackStack() }
         compose.onNodeWithTag("Author profile").performScrollToNode(hasText("See all works"))
         compose.onNodeWithText("See all works").performClick()

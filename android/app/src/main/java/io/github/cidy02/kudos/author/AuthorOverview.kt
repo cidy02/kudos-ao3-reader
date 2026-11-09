@@ -364,15 +364,21 @@ private fun OverviewMessage(text: String) {
         modifier = Modifier.fillMaxWidth().subjectPanel().padding(16.dp))
 }
 
+/** What a concealed card may draw: nothing that names or describes the work (the blur is not enough for TalkBack). */
+internal fun AO3WorkSummary.redacted() = copy(
+    title = "Hidden work", authors = emptyList(), fandoms = emptyList(), relationships = emptyList(),
+    characters = emptyList(), freeforms = emptyList(), summary = "", chapters = "", updatedDate = "",
+    wordCount = null, kudos = null, hits = null, comments = null, bookmarks = null, seriesTitle = null)
+
 /** A remote work's card under the reader's privacy rule: omitted if hidden, blurred and tap-to-reveal if obscured. */
 @Composable
 private fun PrivateWorkFrame(
     work: AO3WorkSummary, env: WorkRowEnvironment?, onOpen: () -> Unit, modifier: Modifier = Modifier,
-    content: @Composable (obscured: Boolean) -> Unit
+    content: @Composable (obscured: Boolean, shown: AO3WorkSummary) -> Unit
 ) {
     when (AuthorOverview.workVisibility(work, env)) {
         LibraryPrivacyVisibility.Hidden -> Unit
-        LibraryPrivacyVisibility.Visible -> Box(modifier.clickable(onClick = onOpen)) { content(false) }
+        LibraryPrivacyVisibility.Visible -> Box(modifier.clickable(onClick = onOpen)) { content(false, work) }
         LibraryPrivacyVisibility.Obscured -> Box(modifier.clickable {
             env?.let { e ->
                 e.revealIds(buildSet {
@@ -380,7 +386,7 @@ private fun PrivateWorkFrame(
                     add(work.id.toString())
                 })
             }
-        }) { content(true) }
+        }) { content(true, work.redacted()) }
     }
 }
 
@@ -437,7 +443,7 @@ internal fun LazyListScope.authorOverviewItems(
                 latest != null -> {
                     if (visibility(latest) != LibraryPrivacyVisibility.Hidden) {
                         SectionRuleHeader("Latest", gutter = 0.dp)
-                        PrivateWorkFrame(latest, env, { onOpenWork(latest) }) { obscured -> AuthorLatestCard(latest, obscured) }
+                        PrivateWorkFrame(latest, env, { onOpenWork(latest) }) { obscured, shown -> AuthorLatestCard(shown, obscured) }
                     }
                 }
                 header.recentWorks == null -> {
@@ -537,8 +543,8 @@ internal fun LazyListScope.authorOverviewItems(
                 else -> LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     items(shown, key = { it.id }) { bookmark ->
                         bookmark.work?.let { work ->
-                            PrivateWorkFrame(work, env, { onOpenWork(work) }) { obscured ->
-                                AuthorBookmarkNoteCard(bookmark, work, obscured)
+                            PrivateWorkFrame(work, env, { onOpenWork(work) }) { obscured, shown ->
+                                AuthorBookmarkNoteCard(if (obscured) bookmark.copy(notes = "") else bookmark, shown, obscured)
                             }
                         }
                     }
@@ -552,8 +558,8 @@ internal fun LazyListScope.authorOverviewItems(
 private fun PopularShelf(works: List<AO3WorkSummary>, env: WorkRowEnvironment?, onOpenWork: (AO3WorkSummary) -> Unit) {
     LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         items(works, key = { it.id }) { work ->
-            PrivateWorkFrame(work, env, { onOpenWork(work) }) { obscured ->
-                SubjectRemoteCoverCard(work, obscured = obscured)
+            PrivateWorkFrame(work, env, { onOpenWork(work) }) { obscured, shown ->
+                SubjectRemoteCoverCard(shown, obscured = obscured)
             }
         }
     }
@@ -597,7 +603,7 @@ private fun AuthorLatestCard(work: AO3WorkSummary, obscured: Boolean) {
                 Text(work.summary, color = tokens.primaryInk.copy(alpha = 0.92f), fontSize = 15.sp, lineHeight = 21.sp,
                     maxLines = if (isAccessibilityFontScale()) Int.MAX_VALUE else 3, overflow = TextOverflow.Ellipsis)
             }
-            HomeStatusTray(work.rating, work.categories, work.warnings, work.isComplete, tileSize = 24.dp, announces = true)
+            HomeStatusTray(work.rating, work.categories, work.warnings, work.isComplete, tileSize = 24.dp, announces = !obscured)
             if (stats.isNotEmpty()) Text(stats, color = tokens.secondaryInk, fontSize = 12.sp, lineHeight = 17.sp)
         }
         if (!obscured) Box(

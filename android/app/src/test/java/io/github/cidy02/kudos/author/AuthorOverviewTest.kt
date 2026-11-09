@@ -223,7 +223,7 @@ class AuthorOverviewTest {
     }
 
     @Test fun mostKudosFallsBackToRecentWorksByKudosWhenItsPageFailed_stillUnderThePrivacyRule() {
-        val recent = listOf(work(1, "Low", kudos = 1), work(2, "Hidden High", rating = "Explicit", kudos = 99), work(3, "Mid", kudos = 5))
+        val recent = listOf(work(0, "Newest", kudos = 0), work(1, "Low", kudos = 1), work(2, "Hidden High", rating = "Explicit", kudos = 99), work(3, "Mid", kudos = 5))
         showItems(header(recentWorks = recent), popular = null, popularLoad = AuthorSectionLoad.Failed("Offline"))
         compose.onAllNodesWithText("Hidden High", useUnmergedTree = true).assertCountEquals(0)
         assertTrue("Most kudos first", left("Mid") < left("Low"))
