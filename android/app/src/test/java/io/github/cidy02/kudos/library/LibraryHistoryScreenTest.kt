@@ -224,9 +224,14 @@ class LibraryHistoryScreenTest {
         runBlocking {
             val active = works.getWork(activeId)!!
             works.upsert(active.copy(chapters = "4/?"))
+            val todayStart = now.atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+                .atStartOfDay(java.time.ZoneId.systemDefault()).toInstant()
+            val firstStart = maxOf(todayStart.plusSeconds(60), now.minusSeconds(3600L))
+            val secondStart = maxOf(firstStart.plusSeconds(60), now.minusSeconds(1800L))
+            val starts = listOf(firstStart, secondStart)
             for (index in 0..1) database.readingLogDao().upsertSession(
                 ReadingSessionEntity(id = "fact-$index", workID = active.id,
-                    startedAt = now.minusSeconds(3600L - index * 1800), endedAt = now.minusSeconds(1800L - index * 1800),
+                    startedAt = starts[index], endedAt = starts[index].plusSeconds(1800),
                     durationSeconds = 1800.0, endingProgress = 1.0, chapterCountAtVisit = 1,
                     didFinish = true, lastModifiedAt = now))
         }

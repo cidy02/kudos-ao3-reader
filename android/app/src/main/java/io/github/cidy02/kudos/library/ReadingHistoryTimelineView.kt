@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -44,6 +45,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -54,6 +56,7 @@ import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.browse.FandomDisplayName
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.home.HomeFacts
+import io.github.cidy02.kudos.settings.SettingsPanel
 import io.github.cidy02.kudos.ui.components.SensitiveWorkRow
 import io.github.cidy02.kudos.ui.subject.KudosTokens
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
@@ -173,11 +176,10 @@ internal fun LazyListScope.readingHistoryTimelineItems(
     }
     if (abandonedWorks.isNotEmpty()) {
         item(key = "history-abandoned-header") {
-            SectionRuleHeader(
+            OffTimelineSectionHeader(
                 title = "Abandoned",
                 count = abandonedWorks.size,
-                note = "In progress, untouched for 21 days",
-                modifier = Modifier.padding(top = 8.dp)
+                note = "In progress, untouched for 21 days"
             )
         }
         items(abandonedWorks, key = { "history-abandoned-${it.item.work.id}" }) { display ->
@@ -193,11 +195,10 @@ internal fun LazyListScope.readingHistoryTimelineItems(
     }
     if (untimedWorks.isNotEmpty()) {
         item(key = "history-untimed-header") {
-            SectionRuleHeader(
+            OffTimelineSectionHeader(
                 title = "No reading time recorded",
                 count = untimedWorks.size,
-                note = "Read before Kudos kept time",
-                modifier = Modifier.padding(top = 8.dp)
+                note = "Read before Kudos kept time"
             )
         }
         items(untimedWorks, key = { "history-untimed-${it.item.work.id}" }) { display ->
@@ -214,6 +215,39 @@ internal fun LazyListScope.readingHistoryTimelineItems(
 }
 
 @Composable
+private fun OffTimelineSectionHeader(
+    title: String,
+    count: Int,
+    note: String
+) {
+    val tokens = LocalKudosTokens.current
+    if (isAccessibilityFontScale()) {
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            SectionRuleHeader(
+                title = title,
+                count = count,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+            Text(
+                text = note,
+                color = tokens.tertiaryInk,
+                fontSize = 11.sp,
+                lineHeight = 16.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.padding(horizontal = SubjectMetrics.gutter)
+            )
+        }
+    } else {
+        SectionRuleHeader(
+            title = title,
+            count = count,
+            note = note,
+            modifier = Modifier.padding(top = 8.dp)
+        )
+    }
+}
+
+@Composable
 private fun ReadingHistoryPeriodSummary(
     timeline: ReadingHistoryTimeline,
     scope: ReadingHistoryScope,
@@ -224,44 +258,126 @@ private fun ReadingHistoryPeriodSummary(
     locale: Locale
 ) {
     val tokens = LocalKudosTokens.current
+    val large = isAccessibilityFontScale()
     Column(
-        Modifier.fillMaxWidth().padding(horizontal = SubjectMetrics.gutter),
+        Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        SubjectSegmentedControl(
-            options = ReadingHistoryScope.entries,
-            selected = scope,
-            onSelect = onScopeChange,
-            title = { it.title }
-        )
-        Row(
-            Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(periodTitle(timeline, now, zone, locale), color = tokens.secondaryInk,
-                    fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                Text(ReadingInsights.durationLabel(timeline.totalSeconds), color = tokens.primaryInk,
-                    fontSize = 28.sp, lineHeight = 34.sp, fontWeight = FontWeight.Bold,
-                    style = TextStyle(fontFeatureSettings = "tnum"))
-                Text(summaryLine(timeline), color = tokens.secondaryInk, fontSize = 13.sp, lineHeight = 18.sp)
+        if (large) {
+            SettingsPanel {
+                ReadingHistoryScope.entries.forEachIndexed { index, option ->
+                    if (index > 0) SubjectRowSeparator()
+                    Text(
+                        text = option.title,
+                        color = if (scope == option) tokens.scopePalette.controlInk else tokens.primaryInk,
+                        fontSize = 13.sp,
+                        lineHeight = 19.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.fillMaxWidth()
+                            .semantics { selected = scope == option }
+                            .clickable(role = Role.RadioButton) { onScopeChange(option) }
+                            .padding(14.dp)
+                    )
+                }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                PeriodStepButton(
-                    icon = Icons.AutoMirrored.Outlined.KeyboardArrowLeft,
-                    label = "Previous ${scope.title.lowercase(Locale.ROOT)}",
-                    enabled = true,
-                    onClick = { onStepPeriod(-1) }
+            Column(
+                Modifier.fillMaxWidth().padding(horizontal = SubjectMetrics.gutter),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                PeriodTotalsBlock(timeline, now, zone, locale)
+                PeriodStepButtons(scope, timeline.isCurrent, onStepPeriod)
+            }
+        } else {
+            Column(
+                Modifier.fillMaxWidth().padding(horizontal = SubjectMetrics.gutter),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                SubjectSegmentedControl(
+                    options = ReadingHistoryScope.entries,
+                    selected = scope,
+                    onSelect = onScopeChange,
+                    title = { it.title }
                 )
-                PeriodStepButton(
-                    icon = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
-                    label = "Next ${scope.title.lowercase(Locale.ROOT)}",
-                    enabled = !timeline.isCurrent,
-                    onClick = { onStepPeriod(1) }
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Box(Modifier.weight(1f)) {
+                        PeriodTotalsBlock(timeline, now, zone, locale)
+                    }
+                    PeriodStepButtons(scope, timeline.isCurrent, onStepPeriod)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PeriodTotalsBlock(
+    timeline: ReadingHistoryTimeline,
+    now: Instant,
+    zone: ZoneId,
+    locale: Locale
+) {
+    val tokens = LocalKudosTokens.current
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            text = periodTitle(timeline, now, zone, locale),
+            color = tokens.secondaryInk,
+            fontSize = 13.sp,
+            lineHeight = 19.sp,
+            fontWeight = FontWeight.SemiBold
+        )
+        Text(
+            text = ReadingInsights.durationLabel(timeline.totalSeconds),
+            color = tokens.primaryInk,
+            fontSize = 28.sp,
+            lineHeight = 34.sp,
+            fontWeight = FontWeight.Bold,
+            style = TextStyle(fontFeatureSettings = "tnum")
+        )
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                text = summaryCoreLine(timeline),
+                color = tokens.secondaryInk,
+                fontSize = 13.sp,
+                lineHeight = 18.sp
+            )
+            summaryExtraParts(timeline).forEach { extra ->
+                Text(
+                    text = "· $extra",
+                    color = tokens.secondaryInk,
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun PeriodStepButtons(
+    scope: ReadingHistoryScope,
+    isCurrent: Boolean,
+    onStepPeriod: (Int) -> Unit
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        PeriodStepButton(
+            icon = Icons.AutoMirrored.Outlined.KeyboardArrowLeft,
+            label = "Previous ${scope.title.lowercase(Locale.ROOT)}",
+            enabled = true,
+            onClick = { onStepPeriod(-1) }
+        )
+        PeriodStepButton(
+            icon = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+            label = "Next ${scope.title.lowercase(Locale.ROOT)}",
+            enabled = !isCurrent,
+            onClick = { onStepPeriod(1) }
+        )
     }
 }
 
@@ -846,7 +962,7 @@ private fun SittingFactsRow(
     val a11yLabel = sittingAccessibilityLabel(sitting, timeText)
 
     Column(
-        Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = a11yLabel },
+        Modifier.fillMaxWidth().semantics { contentDescription = a11yLabel },
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         if (sitting.chapters != null && !obscured) {
@@ -968,17 +1084,20 @@ private fun periodTitle(
         timeline.period.start.atZone(zone).year.toString()
 }
 
-private fun summaryLine(timeline: ReadingHistoryTimeline): String {
+private fun summaryCoreLine(timeline: ReadingHistoryTimeline): String {
+    val workLabel = if (timeline.workCount == 1) "1 work" else "${timeline.workCount} works"
+    return "$workLabel · ${timeline.finishedCount} finished"
+}
+
+private fun summaryExtraParts(timeline: ReadingHistoryTimeline): List<String> {
     val parts = mutableListOf<String>()
-    parts += if (timeline.workCount == 1) "1 work" else "${timeline.workCount} works"
-    if (timeline.finishedCount > 0) parts += "${timeline.finishedCount} finished"
     if (timeline.scope == ReadingHistoryScope.Month) {
         val readDays = timeline.buckets.count { !it.isFuture && it.seconds > 0.0 }
         val elapsedDays = maxOf(1, timeline.buckets.count { !it.isFuture })
         if (readDays > 0) parts += "read on $readDays of $elapsedDays days"
     }
-    if (timeline.streakDays > 1) parts += "${timeline.streakDays}-day streak"
-    return parts.joinToString(" · ")
+    if (timeline.streakDays > 0) parts += "${timeline.streakDays}-day streak"
+    return parts
 }
 
 private fun periodNoun(timeline: ReadingHistoryTimeline): String = when (timeline.scope) {
