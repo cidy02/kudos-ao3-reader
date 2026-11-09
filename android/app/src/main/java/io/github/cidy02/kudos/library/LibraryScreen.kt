@@ -158,6 +158,7 @@ import io.github.cidy02.kudos.ui.subject.subjectScreenWash
 import java.time.Instant
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.map
 
 private const val ShelfLimit = 12
 private const val LibraryPreferences = "library-dashboard"
@@ -845,7 +846,7 @@ private fun LibraryContent(
                             onDeleteCollection = onDeleteCollection
                         )
                         shelf.id == LibraryShelf.Queues.id -> ReadingQueuesShelf(
-                            queues = state.queues,
+                            queues = state.readingQueues,
                             collapsed = collapsed["queues"],
                             onToggleCollapsed = { collapsed.toggle("queues") },
                             onSeeAll = onOpenReadingQueues,
