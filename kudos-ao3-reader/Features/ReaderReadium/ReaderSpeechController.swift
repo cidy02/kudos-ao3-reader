@@ -174,7 +174,7 @@ final class ReaderSpeechController {
     var isSessionActive: Bool { status == .playing || status == .paused }
     var sessionTitle: String { nowPlayingTitle }
 
-    deinit {
+    isolated deinit {
         if let workEPUBChangeObserver {
             NotificationCenter.default.removeObserver(workEPUBChangeObserver)
         }

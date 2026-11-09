@@ -42,7 +42,8 @@ struct ReaderSpeechSettingsSection: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.accentFill) private var accentFill
     @Environment(\.accentInk) private var accentInk
-    @Environment(ReaderSpeechController.self) private var appSpeech
+    /// Optional: previews and tests can host Settings without the app's controller.
+    @Environment(ReaderSpeechController.self) private var appSpeech: ReaderSpeechController?
 
     private var sortedVoices: [TTSVoice] {
         voices.sorted()
@@ -272,7 +273,7 @@ struct ReaderSpeechSettingsSection: View {
     }
 
     private func audition(_ text: String) {
-        if appSpeech.isPlaying { appSpeech.pause() }
+        if let appSpeech, appSpeech.isPlaying { appSpeech.pause() }
         auditionController.audition(text: text)
     }
 
