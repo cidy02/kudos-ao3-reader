@@ -88,7 +88,10 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
     @State private var hasSectionCache = false
 
     /// Route marker so the Subscriptions header can push the full AO3 list.
-    private struct SubscriptionsRoute: Hashable {}
+    private struct SubscriptionsRoute: Hashable {
+        /// The tab the rows on Home were showing: updates → Waiting, followed works → Following.
+        var tab: SubscriptionsView.Tab = .waiting
+    }
 
     private var selectedWorks: [SavedWork] {
         allLocalSectionWorks.filter { selection.contains($0.id) }
@@ -220,6 +223,9 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                                 .padding(.vertical, 12)
                             }
                             .refreshable { await refreshHome() }
+                            #if os(iOS)
+                            .task { await mailDriver.refreshIfNeeded() }
+                            #endif
                             .scrollAwayTopChrome()
                             #if DEBUG
                             .task {
@@ -263,8 +269,8 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                 }
                 .navigationDestination(for: AO3WorkSummary.self) { WorkDetailView(remote: $0) }
                 .navigationDestination(for: WorkCollection.self) { CollectionDetailView(collection: $0) }
-                .navigationDestination(for: SubscriptionsRoute.self) { _ in
-                    SubscriptionsView()
+                .navigationDestination(for: SubscriptionsRoute.self) { route in
+                    SubscriptionsView(initialTab: route.tab)
                 }
                 .navigationDestination(for: AllReadingQueuesDestination.self) { destination in
                     // Chevron passes nil → stack grid (owns its own New Queue sheet).
@@ -710,7 +716,9 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                 title: "Subscriptions",
                 count: updates.isEmpty ? totalCount : updates.count,
                 actionTitle: (updates.isEmpty ? visibleEntries.count : updates.count) > 2 ? "See All" : nil,
-                onSeeAll: visibleEntries.isEmpty && updates.isEmpty ? nil : { path.append(SubscriptionsRoute()) }
+                onSeeAll: visibleEntries.isEmpty && updates.isEmpty
+                    ? nil
+                    : { path.append(SubscriptionsRoute(tab: updates.isEmpty ? .following : .waiting)) }
             )
             .dashboardLeadingRegion()
 
@@ -768,7 +776,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                             count: visibleEntries.count - 2,
                             sectionTitle: "Subscriptions",
                             leadingInset: newChapterRowInset,
-                            action: { path.append(SubscriptionsRoute()) }
+                            action: { path.append(SubscriptionsRoute(tab: .following)) }
                         )
                     }
                 }
@@ -844,6 +852,10 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
     private func refreshHome() async {
         _ = await WorkMetadataRefresh.refresh(visibleHomeWorks, in: context, auth: auth)
         await loadSubscriptions()
+        #if os(iOS)
+        // The Subscriptions rows above can come from mail; reading it asks AO3 for nothing.
+        await mailDriver.refresh()
+        #endif
     }
 
     private var visibleHomeWorks: [SavedWork] {

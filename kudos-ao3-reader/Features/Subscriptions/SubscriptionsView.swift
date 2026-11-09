@@ -3,7 +3,7 @@ import SwiftUI
 
 /// One destination for subscription updates, followed works, and cleanup.
 struct SubscriptionsView: View {
-    private enum Tab: String, CaseIterable, Identifiable {
+    enum Tab: String, CaseIterable, Identifiable {
         case waiting = "Waiting"
         case following = "Following"
         case tidyUp = "Tidy up"
@@ -32,7 +32,12 @@ struct SubscriptionsView: View {
     @Environment(MailSubscriptionDriver.self) private var mailDriver
     #endif
 
-    @State private var selectedTab = Tab.waiting
+    @State private var selectedTab: Tab
+
+    /// Home opens Following when it showed followed works rather than updates.
+    init(initialTab: Tab = .waiting) {
+        _selectedTab = State(initialValue: initialTab)
+    }
     @State private var works: [AO3WorkSummary] = []
     /// Session-only. Not stored: a new visit loads the AO3 page again.
     @State private var unfollowed = Set<Int>()
