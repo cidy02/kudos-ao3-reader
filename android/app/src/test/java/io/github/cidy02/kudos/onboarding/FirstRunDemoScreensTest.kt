@@ -85,7 +85,7 @@ class FirstRunDemoScreensTest {
         compose.onNodeWithContentDescription("Username or email").performTextInput("reader")
         compose.onNodeWithContentDescription("Password").performTextInput("password")
         compose.onNodeWithText("Log In").performScrollTo().assertIsEnabled().performClick()
-        compose.onNodeWithText("Create an AO3 account").performScrollTo().performClick()
+        compose.onNodeWithText("No AO3 account? Create one").performScrollTo().performClick()
         compose.onNodeWithText("Forgot your password?").performScrollTo().performClick()
         assertEquals(0, completed)
         assertEquals(0, opened)
@@ -142,7 +142,7 @@ class FirstRunDemoScreensTest {
             assertReadable("Log In to AO3")
             assertReadable("Kudos submits these credentials only to AO3's official login page. " +
                 "Your password is never saved.")
-            assertReadable("Create an AO3 account")
+            assertReadable("No AO3 account? Create one")
             assertReadable("Forgot your password?")
             assertReadable("These open AO3 in the Browse tab. Come back here to log in afterwards.")
         }

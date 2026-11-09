@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.text.input.ImeAction
@@ -11,6 +12,8 @@ import androidx.compose.ui.unit.Density
 import io.github.cidy02.kudos.ui.theme.KudosTheme
 import io.github.cidy02.kudos.ui.theme.KudosThemeMode
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -75,5 +78,35 @@ class AO3NativeLoginFieldTest {
         compose.runOnIdle { enabled.value = false }
         compose.onNodeWithContentDescription("Password").assertIsNotEnabled()
         assertEquals(1, submissions)
+    }
+
+    @Test fun noAo3AccountCreateOneIsATextLineUnderForgotYourPasswordAndOpensInviteRequests() {
+        val openedUrls = mutableListOf<String>()
+        compose.setContent {
+            KudosTheme(KudosThemeMode.Light) {
+                AO3NativeLoginScreen(
+                    authRepository = null,
+                    onLoginComplete = {},
+                    onCancel = {},
+                    onOpenAO3 = { openedUrls += it },
+                    demo = false
+                )
+            }
+        }
+        compose.onNodeWithText("Create an AO3 account").assertDoesNotExist()
+        val forgotNode = compose.onNodeWithText("Forgot your password?").performScrollTo()
+        val inviteNode = compose.onNodeWithText("No AO3 account? Create one").performScrollTo()
+        val forgotTop = forgotNode.fetchSemanticsNode().boundsInRoot.top
+        val inviteTop = inviteNode.fetchSemanticsNode().boundsInRoot.top
+        assertTrue(
+            "\"No AO3 account? Create one\" must sit under \"Forgot your password?\"",
+            forgotTop < inviteTop
+        )
+        assertFalse(
+            "\"No AO3 account? Create one\" is a text line, not a Button",
+            inviteNode.fetchSemanticsNode().config.contains(SemanticsProperties.Role)
+        )
+        inviteNode.assertHasClickAction().performClick()
+        assertEquals(listOf("https://archiveofourown.org/invite_requests"), openedUrls)
     }
 }

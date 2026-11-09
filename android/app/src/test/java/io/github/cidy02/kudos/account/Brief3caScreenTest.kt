@@ -270,7 +270,7 @@ class Brief3caScreenTest {
         assertEquals(1, client.gets.size)
         client.dashboardError = null
         compose.onNodeWithText("Try Again").performClick()
-        compose.waitUntil(15_000) { client.gets.size == 2 &&
+        compose.waitUntil(15_000) { client.gets.size >= 2 &&
             compose.onAllNodesWithText("Couldn't load your profile").fetchSemanticsNodes().isEmpty() }
         assertTrue(client.posts.isEmpty())
     }
@@ -514,6 +514,7 @@ private class Brief3caClient : AO3Client, AO3FormPostClient {
             path.endsWith("/preferences") -> brief3caFixture("ao3_preferences")
             emptyWorks && isIndex -> "<ol class='work index group'></ol>"
             path.endsWith("/bookmarks") -> brief3caFixture("ao3_author_bookmarks")
+            path.endsWith("/profile") -> brief3caFixture("ao3_author_profile")
             isIndex -> brief3caFixture("ao3_author_works")
             else -> brief3caFixture("ao3_author_dashboard")
         }

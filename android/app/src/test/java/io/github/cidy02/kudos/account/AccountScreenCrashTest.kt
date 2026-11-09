@@ -44,7 +44,8 @@ class AccountScreenCrashTest {
         // Activity group's rows render directly.
         composeTestRule.waitForIdle()
         
-        // Wait for it to render Activity tab content
-        composeTestRule.onNodeWithText("History").assertExists()
+        // Wait for it to render the redesigned Account sheet content
+        composeTestRule.onNodeWithText("Settings").assertExists()
+        composeTestRule.onNodeWithText("Backup & Sync").assertExists()
     }
 }

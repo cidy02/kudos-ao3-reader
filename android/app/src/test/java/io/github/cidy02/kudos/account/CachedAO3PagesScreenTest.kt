@@ -81,6 +81,7 @@ class CachedAO3PagesScreenTest {
                 url.contains("/series/321") -> "ao3_demo_dawn_series"
                 url.contains("show_comments=true") -> "ao3_comments_empty"
                 url.contains("/works") -> "ao3_author_works"
+                url.endsWith("/profile") -> "ao3_author_profile"
                 else -> "ao3_author_dashboard_demo"
             }
             val raw = fixture(name)

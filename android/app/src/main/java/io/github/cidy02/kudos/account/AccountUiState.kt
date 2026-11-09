@@ -2,8 +2,12 @@ package io.github.cidy02.kudos.account
 
 import io.github.cidy02.kudos.auth.AO3AuthState
 import io.github.cidy02.kudos.auth.AO3SessionHealth
+import io.github.cidy02.kudos.author.AuthorSectionLoad
 import io.github.cidy02.kudos.network.ao3.account.AO3Collection
+import io.github.cidy02.kudos.network.ao3.author.AO3AuthorAbout
 import io.github.cidy02.kudos.network.ao3.author.AO3AuthorHeader
+import io.github.cidy02.kudos.network.ao3.author.AO3AuthorRoute
+import io.github.cidy02.kudos.network.ao3.inbox.AO3InboxItem
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchPage
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 import io.github.cidy02.kudos.works.CanonicalWork
@@ -11,10 +15,33 @@ import io.github.cidy02.kudos.works.CanonicalWork
 data class AccountUiState(
     val authState: AO3AuthState = AO3AuthState.Restoring,
     val sessionHealth: AO3SessionHealth = AO3SessionHealth.Unknown,
+    val route: AO3AuthorRoute? = null,
     val header: AO3AuthorHeader? = null,
+    val about: AO3AuthorAbout? = null,
+    val aboutLoading: Boolean = false,
+    val aboutError: String? = null,
     val isShowingStaleCache: Boolean = false,
-    val counts: Map<String, AO3AccountListCountsCache.Count> = emptyMap()
+    val counts: Map<String, AO3AccountListCountsCache.Count> = emptyMap(),
+    val inboxPreview: AccountInboxPreviewState = AccountInboxPreviewState.Idle
 )
+
+internal val AccountUiState.aboutLoad: AuthorSectionLoad
+    get() = when {
+        aboutError != null -> AuthorSectionLoad.Failed(aboutError)
+        aboutLoading -> AuthorSectionLoad.Loading
+        about != null -> AuthorSectionLoad.Loaded
+        else -> AuthorSectionLoad.Idle
+    }
+
+sealed interface AccountInboxPreviewState {
+    data object Idle : AccountInboxPreviewState
+    data object Loading : AccountInboxPreviewState
+    data class Loaded(
+        val items: List<AO3InboxItem>,
+        val unreadCount: Int? = null
+    ) : AccountInboxPreviewState
+    data class Failed(val message: String) : AccountInboxPreviewState
+}
 
 /** Top segmented control on the Account hub (iOS SoT: Overview | Reading | Writing | Activity). */
 enum class AccountHubTab(val label: String) {

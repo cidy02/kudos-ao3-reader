@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.systemBars
@@ -29,7 +30,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.Login
-import androidx.compose.material.icons.outlined.PersonAdd
 import androidx.compose.material.icons.outlined.PersonOutline
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -50,12 +50,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -221,17 +225,8 @@ fun AO3NativeLoginScreen(
             }
             Text(if (loading) "Logging In…" else "Log In", lineHeight = 22.sp)
         }
-        Column {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             SettingsPanel {
-                TextButton(
-                    onClick = { if (networkAllowed) onOpenAO3(SignUpUrl) },
-                    colors = ButtonDefaults.textButtonColors(contentColor = tokens.accentInk)
-                ) {
-                    Icon(Icons.Outlined.PersonAdd, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Create an AO3 account", lineHeight = 22.sp)
-                }
-                SubjectRowSeparator()
                 TextButton(
                     onClick = { if (networkAllowed) onOpenAO3(PasswordResetUrl) },
                     colors = ButtonDefaults.textButtonColors(contentColor = tokens.accentInk)
@@ -241,6 +236,10 @@ fun AO3NativeLoginScreen(
                     Text("Forgot your password?", lineHeight = 22.sp)
                 }
             }
+            AO3InvitationRequestLink(
+                modifier = Modifier.padding(horizontal = 20.dp),
+                onOpenAO3 = { if (networkAllowed) onOpenAO3(InviteRequestUrl) }
+            )
             SettingsFootnote("These open AO3 in the Browse tab. Come back here to log in afterwards.")
         }
         // Keep the existing explicit fallback entry; it changes no requests.
@@ -379,6 +378,34 @@ internal fun LoginField(label: String, value: String, onValueChange: (String) ->
     }
 }
 
+/**
+ * Subtle text line for readers without an AO3 account (iOS `AO3InvitationRequestLink`, T-470).
+ * AO3 requires an invitation before creating an account, so this opens `/invite_requests`.
+ */
+@Composable
+internal fun AO3InvitationRequestLink(
+    onOpenAO3: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val tokens = LocalKudosTokens.current
+    val text = buildAnnotatedString {
+        withStyle(SpanStyle(color = tokens.secondaryInk)) {
+            append("No AO3 account? ")
+        }
+        withStyle(SpanStyle(color = tokens.accentInk, fontWeight = FontWeight.Medium)) {
+            append("Create one")
+        }
+    }
+    Text(
+        text = text,
+        fontSize = 13.sp,
+        lineHeight = 19.sp,
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(onClick = onOpenAO3)
+    )
+}
+
 private const val FallbackPrompt = "Let's finish logging in on AO3's page below."
-private const val SignUpUrl = "https://archiveofourown.org/users/new"
+internal const val InviteRequestUrl = "https://archiveofourown.org/invite_requests"
 private const val PasswordResetUrl = "https://archiveofourown.org/users/password/new"

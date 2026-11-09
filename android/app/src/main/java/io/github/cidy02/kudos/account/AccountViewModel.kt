@@ -8,9 +8,12 @@ import io.github.cidy02.kudos.auth.AO3AuthState
 import io.github.cidy02.kudos.auth.usernameOrNull
 import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.AO3Result
+import io.github.cidy02.kudos.network.ao3.author.AO3AuthorAbout
+import io.github.cidy02.kudos.network.ao3.author.AO3AuthorHeader
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchPage
 import io.github.cidy02.kudos.network.ao3.author.AO3AuthorRepository
 import io.github.cidy02.kudos.network.ao3.author.AO3AuthorRoute
+import io.github.cidy02.kudos.network.ao3.inbox.AO3InboxRepository
 import io.github.cidy02.kudos.works.CanonicalWorkMerge
 import io.github.cidy02.kudos.works.WorkRepository
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -86,30 +89,69 @@ sealed interface AccountSeriesUiState {
 class AccountViewModel(
     private val authRepository: AO3AuthRepository,
     private val authorRepository: AO3AuthorRepository? = null,
-    private val countsCache: AO3AccountListCountsCache? = null
+    private val countsCache: AO3AccountListCountsCache? = null,
+    private val inboxRepository: AO3InboxRepository? = null
 ) : ViewModel() {
-    private val headerFlow = MutableStateFlow<Pair<Int, io.github.cidy02.kudos.network.ao3.author.AO3AuthorHeader>?>(null)
+    private var headerJob: Job? = null
+    private var aboutJob: Job? = null
+    private var inboxJob: Job? = null
+    private val routeFlow = MutableStateFlow<Pair<Int, AO3AuthorRoute>?>(null)
+    private val headerFlow = MutableStateFlow<Pair<Int, AO3AuthorHeader>?>(null)
+    private val aboutFlow = MutableStateFlow<Pair<Int, AO3AuthorAbout>?>(null)
+    private val aboutLoadingFlow = MutableStateFlow(false)
+    private val aboutErrorFlow = MutableStateFlow<String?>(null)
     private val staleFlow = MutableStateFlow(false)
     private val unavailableFlow = MutableStateFlow(false)
     val profileUnavailable: StateFlow<Boolean> = unavailableFlow
     private val failureFlow = MutableStateFlow<String?>(null)
     val profileFailure: StateFlow<String?> = failureFlow
     private val countsFlow = MutableStateFlow<Map<String, AO3AccountListCountsCache.Count>>(emptyMap())
+    private val inboxFlow = MutableStateFlow<Pair<Int, AccountInboxPreviewState>?>(null)
+
+    private data class ProfileSnapshot(
+        val route: AO3AuthorRoute?,
+        val header: AO3AuthorHeader?,
+        val about: AO3AuthorAbout?,
+        val aboutLoading: Boolean,
+        val aboutError: String?,
+        val isStale: Boolean
+    )
+
+    private val profileSnapshotFlow = combine(
+        combine(routeFlow, headerFlow, aboutFlow) { route, header, about -> Triple(route, header, about) },
+        combine(aboutLoadingFlow, aboutErrorFlow, staleFlow) { loading, error, stale -> Triple(loading, error, stale) },
+        authRepository.generation
+    ) { (route, header, about), (loading, error, stale), generation ->
+        ProfileSnapshot(
+            route = route?.takeIf { it.first == generation }?.second,
+            header = header?.takeIf { it.first == generation }?.second,
+            about = about?.takeIf { it.first == generation }?.second,
+            aboutLoading = loading,
+            aboutError = error,
+            isStale = header?.first == generation && stale
+        )
+    }
 
     val uiState: StateFlow<AccountUiState> = combine(
         authRepository.state,
         authRepository.sessionHealth,
-        combine(headerFlow, staleFlow, authRepository.generation) { header, stale, generation ->
-            header?.takeIf { it.first == generation }?.second to (header?.first == generation && stale)
-        },
-        countsFlow
-    ) { authState, sessionHealth, profile, counts ->
+        profileSnapshotFlow,
+        countsFlow,
+        combine(inboxFlow, authRepository.generation) { inbox, generation ->
+            inbox?.takeIf { it.first == generation }?.second ?: AccountInboxPreviewState.Idle
+        }
+    ) { authState, sessionHealth, profile, counts, inboxPreview ->
         AccountUiState(
             authState = authState,
             sessionHealth = sessionHealth,
-            header = profile.first,
-            isShowingStaleCache = profile.second,
-            counts = counts
+            route = profile.route,
+            header = profile.header,
+            about = profile.about,
+            aboutLoading = profile.aboutLoading,
+            aboutError = profile.aboutError,
+            isShowingStaleCache = profile.isStale,
+            counts = counts,
+            inboxPreview = inboxPreview
         )
     }.stateIn(
         viewModelScope,
@@ -121,39 +163,96 @@ class AccountViewModel(
         viewModelScope.launch {
             authRepository.restoreSession()
             combine(authRepository.state, authRepository.generation) { auth, generation -> auth to generation }
-                .collect { (auth, _) ->
+                .collect { (auth, generation) ->
                 val username = auth.usernameOrNull
+                headerJob?.cancel()
+                aboutJob?.cancel()
+                inboxJob?.cancel()
                 unavailableFlow.value = false
                 failureFlow.value = null
                 headerFlow.value = null
+                aboutFlow.value = null
+                aboutLoadingFlow.value = false
+                aboutErrorFlow.value = null
                 staleFlow.value = false
+                inboxFlow.value = null
                 if (username != null && authRepository.username() == username) {
-                    refreshHeader(username)
+                    val initialRoute = AO3AuthorRoute(username)
+                    routeFlow.value = generation to initialRoute
+                    refreshHeader(initialRoute)
+                    refreshInbox(username)
                     // Counts only from pages already read (a list opened, Home, the dashboard's
                     // nav): the hub makes no request for one, as iOS (A59).
-                    refreshCounts(AO3AccountListCountsCache.scope(username, authRepository.generation.value))
+                    refreshCounts(AO3AccountListCountsCache.scope(username, generation))
+                } else {
+                    routeFlow.value = null
                 }
             }
         }
     }
 
-    private fun refreshHeader(username: String, bypassCache: Boolean = false): Job? {
-        val repo = authorRepository ?: return null
-        if (authRepository.username() != username) return null
+    fun selectScope(newRoute: AO3AuthorRoute) {
         val generation = authRepository.generation.value
-        return viewModelScope.launch {
-            if (generation != authRepository.generation.value || authRepository.username() != username) return@launch
-            val result = repo.loadDashboard(AO3AuthorRoute(username), bypassCache)
+        val current = routeFlow.value?.takeIf { it.first == generation }?.second
+        if (current?.id == newRoute.id) return
+        headerJob?.cancel()
+        routeFlow.value = generation to newRoute
+        headerFlow.value = null
+        staleFlow.value = false
+        unavailableFlow.value = false
+        failureFlow.value = null
+        if (current != null && !current.username.equals(newRoute.username, ignoreCase = true)) {
+            aboutJob?.cancel()
+            aboutFlow.value = null
+            aboutLoadingFlow.value = false
+            aboutErrorFlow.value = null
+        }
+        refreshHeader(newRoute, bypassCache = false)
+    }
+
+    fun retryAbout() {
+        val username = authRepository.username() ?: return
+        val generation = authRepository.generation.value
+        val route = routeFlow.value?.takeIf { it.first == generation }?.second ?: AO3AuthorRoute(username)
+        aboutJob?.cancel()
+        aboutJob = viewModelScope.launch {
+            loadAboutInternal(route, generation, bypassCache = true)
+        }
+    }
+
+    fun retryInbox() {
+        val username = authRepository.username() ?: return
+        refreshInbox(username, bypassCache = true)
+    }
+
+    private fun refreshHeader(route: AO3AuthorRoute, bypassCache: Boolean = false): Job? {
+        val repo = authorRepository ?: return null
+        val signedInUser = authRepository.username() ?: return null
+        if (!signedInUser.equals(route.username, ignoreCase = true)) return null
+        val generation = authRepository.generation.value
+        headerJob?.cancel()
+        val job = viewModelScope.launch {
+            if (generation != authRepository.generation.value ||
+                !authRepository.username().equals(route.username, ignoreCase = true)) return@launch
+            val result = repo.loadDashboard(route, bypassCache)
             currentCoroutineContext().ensureActive()
-            if (generation != authRepository.generation.value) return@launch
+            if (generation != authRepository.generation.value ||
+                routeFlow.value?.takeIf { it.first == generation }?.second?.id != route.id) return@launch
             when (result) {
                 is AO3Result.Success -> {
                     failureFlow.value = null
-                    headerFlow.value = generation to result.value; unavailableFlow.value = false; staleFlow.value = result.isStale
-                    // The nav just parsed carries the account's own list sizes (iOS; A59).
-                    val scope = AO3AccountListCountsCache.scope(username, generation)
-                    countsCache?.recordDashboard(result.value.actions, username, scope)
-                    refreshCounts(scope)
+                    headerFlow.value = generation to result.value
+                    unavailableFlow.value = false
+                    staleFlow.value = result.isStale
+                    if (route.pseud == null) {
+                        // The nav just parsed carries the account's own list sizes (iOS; A59).
+                        val scope = AO3AccountListCountsCache.scope(route.username, generation)
+                        countsCache?.recordDashboard(result.value.actions, route.username, scope)
+                        refreshCounts(scope)
+                    }
+                    if (aboutFlow.value?.first != generation || bypassCache) {
+                        loadAboutInternal(route, generation, bypassCache)
+                    }
                 }
                 is AO3Result.Failure -> {
                     headerFlow.value = null; staleFlow.value = false
@@ -162,12 +261,80 @@ class AccountViewModel(
                 }
             }
         }
+        headerJob = job
+        return job
+    }
+
+    private suspend fun loadAboutInternal(route: AO3AuthorRoute, generation: Int, bypassCache: Boolean) {
+        val repo = authorRepository ?: return
+        aboutLoadingFlow.value = true
+        aboutErrorFlow.value = null
+        try {
+            val result = repo.loadAbout(AO3AuthorRoute(route.username), bypassCache)
+            currentCoroutineContext().ensureActive()
+            if (generation != authRepository.generation.value) return
+            when (result) {
+                is AO3Result.Success -> {
+                    aboutFlow.value = generation to result.value
+                    aboutErrorFlow.value = null
+                }
+                is AO3Result.Failure -> {
+                    aboutErrorFlow.value = result.error.displayMessage()
+                }
+            }
+        } finally {
+            if (generation == authRepository.generation.value) {
+                aboutLoadingFlow.value = false
+            }
+        }
+    }
+
+    private fun refreshInbox(username: String, bypassCache: Boolean = false): Job? {
+        val repo = inboxRepository ?: return null
+        if (authRepository.username() != username) return null
+        val generation = authRepository.generation.value
+        inboxJob?.cancel()
+        val job = viewModelScope.launch {
+            if (generation != authRepository.generation.value || authRepository.username() != username) return@launch
+            val currentPreview = inboxFlow.value?.takeIf { it.first == generation }?.second
+            if (currentPreview !is AccountInboxPreviewState.Loaded) {
+                inboxFlow.value = generation to AccountInboxPreviewState.Loading
+            }
+            val result = repo.load(page = 1, bypassCache = bypassCache)
+            currentCoroutineContext().ensureActive()
+            if (generation != authRepository.generation.value || authRepository.username() != username) return@launch
+            when (result) {
+                is AO3Result.Success -> {
+                    inboxFlow.value = generation to AccountInboxPreviewState.Loaded(
+                        items = result.value.items,
+                        unreadCount = result.value.unreadCount
+                    )
+                }
+                is AO3Result.Failure -> {
+                    if (result.error == AO3Error.AuthenticationRequired) {
+                        authRepository.sessionDidExpire(generation)
+                    }
+                    inboxFlow.value = generation to AccountInboxPreviewState.Failed(result.error.displayMessage())
+                }
+            }
+        }
+        inboxJob = job
+        return job
     }
 
     suspend fun refreshProfile() {
         val username = authRepository.username() ?: return
-        val job = refreshHeader(username, bypassCache = true) ?: return
-        try { job.join() } finally { if (job.isActive) job.cancel() }
+        val generation = authRepository.generation.value
+        val currentRoute = routeFlow.value?.takeIf { it.first == generation }?.second ?: AO3AuthorRoute(username)
+        val hJob = refreshHeader(currentRoute, bypassCache = true)
+        val iJob = refreshInbox(username, bypassCache = true)
+        try {
+            hJob?.join()
+            iJob?.join()
+        } finally {
+            if (hJob?.isActive == true) hJob.cancel()
+            if (iJob?.isActive == true) iJob.cancel()
+        }
     }
 
     private fun refreshCounts(scope: String) {
@@ -199,12 +366,13 @@ class AccountViewModel(
         fun factory(
             authRepository: AO3AuthRepository,
             authorRepository: AO3AuthorRepository? = null,
-            countsCache: AO3AccountListCountsCache? = null
+            countsCache: AO3AccountListCountsCache? = null,
+            inboxRepository: AO3InboxRepository? = null
         ): ViewModelProvider.Factory {
             return object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                    return AccountViewModel(authRepository, authorRepository, countsCache) as T
+                    return AccountViewModel(authRepository, authorRepository, countsCache, inboxRepository) as T
                 }
             }
         }
