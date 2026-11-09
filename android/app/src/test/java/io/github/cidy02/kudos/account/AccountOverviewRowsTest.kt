@@ -214,7 +214,7 @@ class AccountOverviewRowsTest {
         // Signed-in open fetches only dashboard, profile about, and inbox page 1 (no extra enrichment).
         assertEquals(
             setOf(
-                "https://archiveofourown.org/users/Avery_Archive/dashboard",
+                "https://archiveofourown.org/users/Avery_Archive", // route.dashboardUrl: AO3's dashboard is /users/<name>
                 "https://archiveofourown.org/users/Avery_Archive/profile",
                 "https://archiveofourown.org/users/Avery_Archive/inbox"
             ),

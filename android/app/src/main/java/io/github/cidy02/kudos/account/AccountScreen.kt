@@ -184,8 +184,7 @@ fun AccountScreen(
     val state by viewModel.uiState.collectAsState()
     val profileUnavailable by viewModel.profileUnavailable.collectAsState()
     val profileFailure by viewModel.profileFailure.collectAsState()
-    val lastUnreadPair by (inboxRepository?.lastUnreadCount ?: kotlinx.coroutines.flow.flowOf(null))
-        .collectAsState(initial = null)
+    val pageCacheChanges by io.github.cidy02.kudos.network.ao3.AO3PageCache.shared.changes.collectAsState()
     val generation by authRepository.generation.collectAsState()
     val settingsState by (settingsRepository?.settings ?: kotlinx.coroutines.flow.flowOf(null))
         .collectAsState(initial = null)
@@ -202,12 +201,13 @@ fun AccountScreen(
     val effectivePrivacyLoaded = privacySettings != null || (rowEnv != null && rowEnv.loaded) || settingsState != null
     val effectiveReveal = if (privacySettings != null) privacyRevealState else (rowEnv?.revealState ?: privacyRevealState)
 
+    // Scope-checked, cache-only count (same source as Home's badge); never fetches.
+    val cachedUnread = remember(username, generation, pageCacheChanges, inboxRepository) {
+        if (username != null) inboxRepository?.cachedUnreadCount() else null
+    }
     val unreadCount = when (val preview = state.inboxPreview) {
         is AccountInboxPreviewState.Loaded -> preview.unreadCount
-        else -> if (username != null) {
-            val expectedScope = "${username.lowercase()}|$generation"
-            lastUnreadPair?.takeIf { it.first == expectedScope }?.second
-        } else null
+        else -> cachedUnread
     }
 
     var confirmingLogout by remember { mutableStateOf(false) }
@@ -349,7 +349,7 @@ internal fun AccountSignedInProfileSection(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         if (state.isShowingStaleCache) {
-            CachedAO3DataRow(inPanel = true, onRefresh = onRetryProfile)
+            CachedAO3DataRow(inPanel = true)
         }
         val header = state.header
         if (header != null) {
