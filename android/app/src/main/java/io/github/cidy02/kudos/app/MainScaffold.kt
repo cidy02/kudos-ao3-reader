@@ -177,6 +177,18 @@ fun MainScaffold(
     val homeChrome = remember { HomeShellChrome() }
     val libraryChrome = remember { LibraryShellChrome() }
     val pushedChrome = remember { PushedShellChrome() }
+    val accountSheetState = remember { AccountSheetState() }
+    LaunchedEffect(currentRoute, debugShotName) {
+        if (debugShotName == null) {
+            val sheetRoute = Routes.accountSheetRoute(currentRoute)
+            if (sheetRoute != null) {
+                if (!navController.popBackStack()) {
+                    navController.navigateShellRoot(Routes.Home)
+                }
+                accountSheetState.showAccount(sheetRoute)
+            }
+        }
+    }
     val onHome = currentRoute == Routes.Home
     val onLibrary = currentRoute == Routes.Library
     val homeSelecting = onHome && homeChrome.hideTabBar
@@ -337,7 +349,8 @@ fun MainScaffold(
                             navController = navController,
                             modifier = Modifier.fillMaxSize(),
                             shellChrome = homeChrome,
-                            libraryChrome = libraryChrome
+                            libraryChrome = libraryChrome,
+                            onOpenAccount = { accountSheetState.showAccount(AccountSheetRoute.Profile) }
                         )
                     }
                 }
@@ -503,8 +516,173 @@ fun MainScaffold(
                     .onSizeChanged { barHeight = with(density) { it.height.toDp() } }
             )
         }
+
+        if (accountSheetState.isPresentingAccount) {
+            AccountSheetModal(
+                container = container,
+                themeMode = themeMode,
+                onCycleTheme = onCycleTheme,
+                state = accountSheetState
+            )
+        }
     }
     }
+    }
+}
+
+@Composable
+private fun AccountSheetModal(
+    container: KudosAppContainer,
+    themeMode: KudosThemeMode,
+    onCycleTheme: () -> Unit,
+    state: AccountSheetState
+) {
+    val sheetNavController = rememberNavController()
+    val sheetBackStackEntry by sheetNavController.currentBackStackEntryAsState()
+    val sheetCurrentRoute = sheetBackStackEntry?.destination?.route
+    val sheetPushedChrome = remember { PushedShellChrome() }
+    val sheetOverlay = remember { ShellOverlayState() }
+    val tokens = LocalKudosTokens.current
+    val scopePalette = io.github.cidy02.kudos.ui.subject.LocalSubjectPalette.current
+    val authState by container.authRepository.state.collectAsState()
+
+    LaunchedEffect(state.requestEpoch, state.pendingAccountRoute) {
+        val target = state.consumePendingAccountRoute()
+        if (target != null) {
+            sheetNavController.popBackStack(Routes.Account, inclusive = false)
+            if (target != AccountSheetRoute.Profile) {
+                sheetNavController.navigate(target.route) { launchSingleTop = true }
+            }
+        }
+    }
+
+    val isAtSheetRoot = sheetCurrentRoute == null || sheetCurrentRoute == Routes.Account
+    val canPopSheetStack = !isAtSheetRoot && sheetNavController.previousBackStackEntry != null
+    val performSheetBack: () -> Unit = {
+        handleAccountSheetBack(
+            customOnBack = sheetPushedChrome.onBack.takeIf { sheetPushedChrome.mounted },
+            canPopSheetStack = canPopSheetStack,
+            popSheetStack = { sheetNavController.popBackStack() },
+            dismissSheet = { state.accountDidDismiss() }
+        )
+    }
+
+    androidx.activity.compose.BackHandler(enabled = true, onBack = performSheetBack)
+
+    val hasSubjectHeader = sheetPushedChrome.hasSubjectHeader ?: Routes.hasSubjectHeader(sheetCurrentRoute)
+    val isPushedSubject = !isAtSheetRoot && hasSubjectHeader
+    val washModifier = if (isAtSheetRoot && authState is io.github.cidy02.kudos.auth.AO3AuthState.SignedIn) {
+        Modifier.subjectScreenWash(scopePalette)
+    } else {
+        Modifier
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(tokens.background)
+            .then(washModifier)
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            if (isAtSheetRoot) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Top))
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Done",
+                        color = tokens.accentInk,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier
+                            .clickable(onClick = { state.accountDidDismiss() })
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                    )
+                    Spacer(modifier = Modifier.weight(1f))
+                    ToolbarCircleButton(
+                        onClick = {
+                            sheetNavController.navigate(Routes.Settings) { launchSingleTop = true }
+                        },
+                        accessibilityName = "Settings",
+                        isAccented = true
+                    ) {
+                        Icon(Icons.Outlined.Settings, contentDescription = null)
+                    }
+                }
+            } else if (!hasSubjectHeader) {
+                PushedTopBar(
+                    title = sheetPushedChrome.customTitle ?: Routes.titleFor(sheetCurrentRoute),
+                    showTheme = sheetCurrentRoute == Routes.Settings,
+                    themeMode = themeMode,
+                    onBack = performSheetBack,
+                    onCycleTheme = onCycleTheme,
+                    trailingActions = sheetPushedChrome.trailingContent
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+            ) {
+                CompositionLocalProvider(
+                    LocalShellOverlayState provides sheetOverlay,
+                    LocalPushedShellChrome provides sheetPushedChrome,
+                    io.github.cidy02.kudos.works.detail.LocalOpenAuthor provides { byline ->
+                        sheetNavController.navigate(Routes.authorProfile(byline))
+                    }
+                ) {
+                    AppNavHost(
+                        container = container,
+                        navController = sheetNavController,
+                        startDestination = Routes.Account,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                    androidx.activity.compose.BackHandler(
+                        enabled = sheetPushedChrome.mounted && sheetPushedChrome.onBack != null
+                    ) {
+                        sheetPushedChrome.onBack?.invoke()
+                    }
+                }
+            }
+        }
+
+        if (isPushedSubject) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.TopCenter)
+                    .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Top))
+                    .padding(start = 4.dp, end = 4.dp, top = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                ToolbarCircleButton(
+                    onClick = performSheetBack,
+                    accessibilityName = "Back"
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+                }
+                if (sheetPushedChrome.customTitle != null) {
+                    PushedBarTitle(
+                        title = sheetPushedChrome.customTitle.orEmpty(),
+                        wholeOnly = sheetPushedChrome.wholeTitleOnly,
+                        modifier = Modifier.weight(1f).padding(start = 12.dp)
+                    )
+                } else {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+                if (sheetPushedChrome.trailingContent != null) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        sheetPushedChrome.trailingContent?.invoke(this)
+                    }
+                }
+            }
+        }
     }
 }
 

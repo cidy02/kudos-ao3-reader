@@ -22,7 +22,29 @@ class AO3InboxRepository(
     private val pageCache: AO3PageCache = AO3PageCache.shared
 ) {
     val sessionChanges: kotlinx.coroutines.flow.StateFlow<Int> = client.sessionChanges ?: kotlinx.coroutines.flow.MutableStateFlow(0)
+    private val lastUnreadByScope = kotlinx.coroutines.flow.MutableStateFlow<Pair<AO3PageCache.Scope, Int>?>(null)
     fun viewerScope() = AO3PageCache.scope(client)
+
+    /**
+     * Returns the unread Inbox count only if already loaded in the current session scope.
+     * Never triggers a network request (T-460 / AO3_NETWORKING_POLICY).
+     */
+    fun cachedUnreadCount(): Int? {
+        val scope = viewerScope()
+        val username = scope.viewer?.takeIf { it.isNotBlank() } ?: return null
+        val url = AO3InboxParser.inboxUrl(username, 1)
+        if (url != null) {
+            val cached = pageCache.value(
+                AO3PageCache.Key(url, scope, AO3PageCache.Kind.Inbox),
+                stale = true
+            )
+            if (cached != null) {
+                val parsed = runCatching { parser.parseInboxPage(cached.body, 1, cached.url).unreadCount }.getOrNull()
+                if (parsed != null) return parsed
+            }
+        }
+        return lastUnreadByScope.value?.takeIf { it.first == scope }?.second
+    }
 
     /**
      * Loads one Inbox page. When [filterForm] + [filterValues] are provided,
@@ -114,11 +136,11 @@ class AO3InboxRepository(
         statusCode: Int
     ): AO3Result<AO3InboxPage> {
         return try {
-            AO3Result.Success(
-                withContext(Dispatchers.Default) {
-                    parser.parseInboxPage(html, page, finalUrl)
-                }
-            )
+            val parsed = withContext(Dispatchers.Default) {
+                parser.parseInboxPage(html, page, finalUrl)
+            }
+            lastUnreadByScope.value = viewerScope() to parsed.unreadCount
+            AO3Result.Success(parsed)
         } catch (_: AO3InboxParseException.LoginRequired) {
             AO3Result.Failure(AO3Error.AuthenticationRequired)
         } catch (_: AO3InboxParseException.Overloaded) {

@@ -75,7 +75,10 @@ fun HomeScreen(
     queueRepository: ReadingQueueRepository? = null,
     downloadQueue: DownloadQueue? = null,
     workImporter: WorkImporter? = null,
+    authorRepository: io.github.cidy02.kudos.network.ao3.author.AO3AuthorRepository? = null,
+    inboxRepository: io.github.cidy02.kudos.network.ao3.inbox.AO3InboxRepository? = null,
     shellChrome: HomeShellChrome? = null,
+    onOpenAccount: () -> Unit = {},
     onOpenWork: (String) -> Unit,
     onOpenReader: (String) -> Unit,
     onOpenRemoteWork: (AO3WorkSummary) -> Unit,
@@ -99,6 +102,19 @@ fun HomeScreen(
         )
     )
     val state by viewModel.state.collectAsState()
+    val authState by authRepository.state.collectAsState()
+    val signedInUsername = (authState as? io.github.cidy02.kudos.auth.AO3AuthState.SignedIn)?.session?.username
+    val pageCacheChanges by io.github.cidy02.kudos.network.ao3.AO3PageCache.shared.changes.collectAsState()
+    val cachedAvatarUrl = remember(signedInUsername, pageCacheChanges, authorRepository) {
+        signedInUsername?.let {
+            authorRepository?.cachedDashboardAvatarUrl(
+                io.github.cidy02.kudos.network.ao3.author.AO3AuthorRoute(it)
+            )
+        }
+    }
+    val cachedUnreadCount = remember(signedInUsername, pageCacheChanges, inboxRepository) {
+        if (signedInUsername != null) inboxRepository?.cachedUnreadCount() else null
+    }
     val privacyState by privacyGate.state.collectAsState()
     val activity = androidx.compose.ui.platform.LocalContext.current as? androidx.fragment.app.FragmentActivity
     val collapsed = rememberCollapsedSections()
@@ -162,6 +178,10 @@ fun HomeScreen(
             shellChrome.showPrivacy = hideMature
             shellChrome.revealAll = privacyState.revealAll
             shellChrome.showSelect = selectable.isNotEmpty()
+            shellChrome.isSignedIn = signedInUsername != null
+            shellChrome.username = signedInUsername
+            shellChrome.avatarUrl = cachedAvatarUrl
+            shellChrome.unreadInboxCount = cachedUnreadCount
             shellChrome.washHue = readingNow.firstOrNull()?.let { HomeFacts.workHue(it.workFandoms, it.title) }
             shellChrome.actions.onNewQueue = { showNewQueue = true }
             shellChrome.actions.onSelectAll = {
@@ -169,6 +189,7 @@ fun HomeScreen(
             }
             shellChrome.actions.onEnterSelect = { isSelecting = true }
             shellChrome.actions.onTogglePrivacy = { privacyGate.toggleRevealAll(activity) }
+            shellChrome.actions.onOpenAccount = onOpenAccount
             controller.onChanged = { reloadQueues() }
         }
         DisposableEffect(shellChrome) {

@@ -76,8 +76,10 @@ fun AppNavHost(
     container: KudosAppContainer,
     navController: NavHostController,
     modifier: Modifier = Modifier,
+    startDestination: String = Routes.Home,
     shellChrome: HomeShellChrome? = null,
-    libraryChrome: io.github.cidy02.kudos.library.LibraryShellChrome? = null
+    libraryChrome: io.github.cidy02.kudos.library.LibraryShellChrome? = null,
+    onOpenAccount: () -> Unit = {}
 ) {
     // The only state left here (T-90): a small id-keyed cache so opening Work
     // Detail from a search/browse/account-list result still shows instantly
@@ -129,7 +131,7 @@ fun AppNavHost(
         CompositionLocalProvider(LocalSharedTransitionScope provides this) {
             NavHost(
                 navController = navController,
-                startDestination = Routes.Home,
+                startDestination = startDestination,
                 modifier = modifier
             ) {
         sharedComposable(Routes.Home) {
@@ -143,7 +145,10 @@ fun AppNavHost(
                 queueRepository = container.readingQueueRepository,
                 downloadQueue = container.downloadQueue,
                 workImporter = container.workImporter,
+                authorRepository = container.authorRepository,
+                inboxRepository = container.inboxRepository,
                 shellChrome = shellChrome,
+                onOpenAccount = onOpenAccount,
                 onOpenWork = { workId ->
                     navigateToWorkDetail(WorkDetailSource.LocalWork(workId))
                 },
@@ -311,6 +316,12 @@ fun AppNavHost(
                     }
                 )
             }
+        }
+        sharedComposable(Routes.Writing) {
+            io.github.cidy02.kudos.account.WritingDraftsScreen(
+                repository = container.writingDraftsRepository,
+                onOpenWork = { navController.navigate(it) }
+            )
         }
         sharedComposable(Routes.Browse) {
             BrowseScreen(

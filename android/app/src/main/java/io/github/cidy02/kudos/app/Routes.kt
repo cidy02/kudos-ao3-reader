@@ -3,12 +3,15 @@ package io.github.cidy02.kudos.app
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.outlined.Person
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavType
@@ -25,9 +28,171 @@ data class TopLevelDestination(
     val unselectedIcon: ImageVector
 )
 
+enum class AccountSheetRoute(val route: String) {
+    Profile(Routes.Account),
+    Inbox(Routes.AccountInbox),
+    Preferences(Routes.AO3Preferences),
+    Dashboard(Routes.AO3Dashboard),
+    MoreOnAO3(Routes.AccountMoreOnAO3),
+    Settings(Routes.Settings),
+    BackupAndSync(Routes.Backup),
+    About(Routes.About),
+    Shortcuts(Routes.AccountShortcuts),
+    Login(Routes.AccountLogin),
+    NativeLogin(Routes.NativeLogin),
+    BugReport(Routes.BugReport),
+    QueueStorage(Routes.QueueStorage),
+    AvailabilitySweep(Routes.AvailabilitySweep)
+}
+
+enum class WritingRoute {
+    Works,
+    Drafts,
+    Series,
+    CollectionsAndChallenges
+}
+
+enum class LibraryAO3Route(val listTypeKey: String) {
+    MarkedForLater("MarkedForLater"),
+    Bookmarks("Bookmarks"),
+    Subscriptions("Subscriptions"),
+    History("History")
+}
+
+sealed interface LegacyAccountDestination {
+    data class Account(val route: AccountSheetRoute) : LegacyAccountDestination
+    data class Writing(val route: WritingRoute) : LegacyAccountDestination
+    data class Library(val route: LibraryAO3Route) : LegacyAccountDestination
+}
+
+enum class LegacyAccountRoute(val destination: LegacyAccountDestination) {
+    Dashboard(LegacyAccountDestination.Account(AccountSheetRoute.Dashboard)),
+    Inbox(LegacyAccountDestination.Account(AccountSheetRoute.Inbox)),
+    Preferences(LegacyAccountDestination.Account(AccountSheetRoute.Preferences)),
+    MoreOnAO3(LegacyAccountDestination.Account(AccountSheetRoute.MoreOnAO3)),
+    Settings(LegacyAccountDestination.Account(AccountSheetRoute.Settings)),
+    Works(LegacyAccountDestination.Writing(WritingRoute.Works)),
+    Drafts(LegacyAccountDestination.Writing(WritingRoute.Drafts)),
+    Series(LegacyAccountDestination.Writing(WritingRoute.Series)),
+    Collections(LegacyAccountDestination.Writing(WritingRoute.CollectionsAndChallenges)),
+    MarkedForLater(LegacyAccountDestination.Library(LibraryAO3Route.MarkedForLater)),
+    Bookmarks(LegacyAccountDestination.Library(LibraryAO3Route.Bookmarks)),
+    Subscriptions(LegacyAccountDestination.Library(LibraryAO3Route.Subscriptions)),
+    History(LegacyAccountDestination.Library(LibraryAO3Route.History))
+}
+
+data class RestoredTabSelection(
+    val tabRoute: String,
+    val presentsAccount: Boolean,
+    val accountRoute: AccountSheetRoute? = if (presentsAccount) AccountSheetRoute.Profile else null
+)
+
+class AccountSheetState(initialTab: String = Routes.Home) {
+    var selectedTab by mutableStateOf(initialTab)
+    var isPresentingAccount by mutableStateOf(false)
+        internal set
+    var pendingAccountRoute by mutableStateOf<AccountSheetRoute?>(null)
+        internal set
+    var requestEpoch by mutableStateOf(0)
+        private set
+    var pendingWebUrl by mutableStateOf<String?>(null)
+        internal set
+    var isPresentingWebBrowser by mutableStateOf(false)
+        internal set
+    private var deferredWebUrlAfterDismiss: String? = null
+
+    val authorNavigationTarget: String
+        get() = if (isPresentingAccount) Routes.Account else selectedTab
+
+    fun showAccount(route: AccountSheetRoute = AccountSheetRoute.Profile) {
+        pendingAccountRoute = route
+        requestEpoch += 1
+        isPresentingAccount = true
+    }
+
+    fun consumePendingAccountRoute(): AccountSheetRoute? {
+        val route = pendingAccountRoute
+        pendingAccountRoute = null
+        return route
+    }
+
+    fun dismissAccount() {
+        isPresentingAccount = false
+        pendingAccountRoute = null
+    }
+
+    fun accountDidDismiss() {
+        isPresentingAccount = false
+        val deferred = deferredWebUrlAfterDismiss ?: return
+        deferredWebUrlAfterDismiss = null
+        pendingWebUrl = deferred
+        isPresentingWebBrowser = true
+    }
+
+    fun openUrl(url: String) {
+        if (isPresentingAccount) {
+            deferredWebUrlAfterDismiss = url
+            isPresentingAccount = false
+            return
+        }
+        pendingWebUrl = url
+        isPresentingWebBrowser = true
+    }
+
+    fun openLegacyRoute(route: LegacyAccountRoute) {
+        applyDestination(route.destination)
+    }
+
+    fun handleRoute(route: String?): Boolean {
+        val destination = Routes.resolveFormerAccountRoute(route) ?: return false
+        applyDestination(destination)
+        return true
+    }
+
+    fun restoreSelection(rawRoute: String?) {
+        val restored = Routes.restoredSelection(rawRoute)
+        selectedTab = restored.tabRoute
+        if (restored.presentsAccount) {
+            showAccount(restored.accountRoute ?: AccountSheetRoute.Profile)
+        }
+    }
+
+    private fun applyDestination(destination: LegacyAccountDestination) {
+        when (destination) {
+            is LegacyAccountDestination.Account -> showAccount(destination.route)
+            is LegacyAccountDestination.Writing -> {
+                dismissAccount()
+                selectedTab = Routes.Writing
+            }
+            is LegacyAccountDestination.Library -> {
+                dismissAccount()
+                selectedTab = Routes.Library
+            }
+        }
+    }
+}
+
+/**
+ * Back/predictive-back handler for the Account sheet: pops custom subpage back callbacks first,
+ * then any pushed screen on the sheet's NavController stack, before dismissing the sheet itself.
+ */
+fun handleAccountSheetBack(
+    customOnBack: (() -> Unit)?,
+    canPopSheetStack: Boolean,
+    popSheetStack: () -> Unit,
+    dismissSheet: () -> Unit
+) {
+    when {
+        customOnBack != null -> customOnBack()
+        canPopSheetStack -> popSheetStack()
+        else -> dismissSheet()
+    }
+}
+
 object Routes {
     const val Home = "home"
     const val Library = "library"
+    const val Writing = "writing"
     const val Browse = "browse"
     const val Account = "account"
     const val Search = "search"
@@ -267,16 +432,16 @@ object Routes {
             unselectedIcon = Icons.AutoMirrored.Outlined.MenuBook
         ),
         TopLevelDestination(
+            route = Writing,
+            label = "Writing",
+            selectedIcon = Icons.Filled.Edit,
+            unselectedIcon = Icons.Outlined.Edit
+        ),
+        TopLevelDestination(
             route = Browse,
             label = "Browse",
             selectedIcon = Icons.Filled.Explore,
             unselectedIcon = Icons.Outlined.Explore
-        ),
-        TopLevelDestination(
-            route = Account,
-            label = "Account",
-            selectedIcon = Icons.Filled.Person,
-            unselectedIcon = Icons.Outlined.Person
         )
     )
 
@@ -284,6 +449,7 @@ object Routes {
         return when (route) {
             Home -> "Kudos"
             Library -> "Library"
+            Writing -> "Writing"
             Browse -> "Browse"
             Account -> "Account"
             Search -> "Search"
@@ -358,8 +524,62 @@ object Routes {
     fun shellTitle(route: String?): String? = when (route) {
         Home -> "Home"
         Library -> "Library"
+        Writing -> "Writing"
         Browse -> "Browse"
         else -> null
+    }
+
+    fun accountSheetRoute(route: String?): AccountSheetRoute? {
+        if (route == null) return null
+        val base = route.substringBefore("?").substringBefore("/")
+        return AccountSheetRoute.entries.firstOrNull {
+            it.route == route || it.route.substringBefore("?").substringBefore("/") == base
+        }
+    }
+
+    fun resolveFormerAccountRoute(route: String?): LegacyAccountDestination? {
+        if (route == null) return null
+        accountSheetRoute(route)?.let { return LegacyAccountDestination.Account(it) }
+        val base = route.substringBefore("?").substringBefore("/")
+        return when (base) {
+            WritingDrafts -> LegacyAccountDestination.Writing(WritingRoute.Drafts)
+            AO3Collections -> LegacyAccountDestination.Writing(WritingRoute.CollectionsAndChallenges)
+            "account-list" -> {
+                val arg = route.substringAfter("account-list/", missingDelimiterValue = "")
+                when (arg) {
+                    "MyWorks" -> LegacyAccountDestination.Writing(WritingRoute.Works)
+                    "MarkedForLater" -> LegacyAccountDestination.Library(LibraryAO3Route.MarkedForLater)
+                    "Bookmarks" -> LegacyAccountDestination.Library(LibraryAO3Route.Bookmarks)
+                    "Subscriptions" -> LegacyAccountDestination.Library(LibraryAO3Route.Subscriptions)
+                    "History" -> LegacyAccountDestination.Library(LibraryAO3Route.History)
+                    else -> null
+                }
+            }
+            else -> null
+        }
+    }
+
+    fun restoredSelection(rawRoute: String?): RestoredTabSelection {
+        val sheetRoute = accountSheetRoute(rawRoute)
+        if (sheetRoute != null) {
+            return RestoredTabSelection(
+                tabRoute = Home,
+                presentsAccount = true,
+                accountRoute = sheetRoute
+            )
+        }
+        if (rawRoute != null && isShellRoot(rawRoute)) {
+            return RestoredTabSelection(
+                tabRoute = rawRoute,
+                presentsAccount = false,
+                accountRoute = null
+            )
+        }
+        return RestoredTabSelection(
+            tabRoute = Home,
+            presentsAccount = false,
+            accountRoute = null
+        )
     }
 
     /**

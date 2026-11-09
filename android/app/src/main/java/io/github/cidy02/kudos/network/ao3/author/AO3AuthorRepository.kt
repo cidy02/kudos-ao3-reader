@@ -27,6 +27,27 @@ class AO3AuthorRepository(
         return cached(url, AO3PageCache.Kind.Dashboard, bypassCache) { parser.parseDashboard(it, route) }
     }
 
+    /**
+     * Reads an own-profile avatar from an already-cached dashboard page. This never falls
+     * through to a network fetch, so Home chrome cannot cause AO3 traffic at launch (T-460).
+     */
+    fun cachedDashboardAvatarUrl(route: AO3AuthorRoute): String? {
+        val url = route.dashboardUrl
+        val scopes = listOf(
+            AO3PageCache.scope(authenticatedClient),
+            AO3PageCache.Scope(null, null)
+        ).distinct()
+        for (scope in scopes) {
+            val response = pageCache.value(
+                AO3PageCache.Key(url, scope, AO3PageCache.Kind.Dashboard),
+                stale = true
+            ) ?: continue
+            val avatarUrl = runCatching { parser.parseDashboard(response.body, route).avatarUrl }.getOrNull()
+            if (!avatarUrl.isNullOrBlank()) return avatarUrl
+        }
+        return null
+    }
+
     suspend fun loadAbout(route: AO3AuthorRoute, bypassCache: Boolean = false): AO3Result<AO3AuthorAbout> {
         val url = route.profileUrl
         return cached(url, AO3PageCache.Kind.About, bypassCache) { parser.parseAbout(it, route) }

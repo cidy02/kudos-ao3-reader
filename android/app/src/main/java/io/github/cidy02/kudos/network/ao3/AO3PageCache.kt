@@ -20,6 +20,8 @@ class AO3PageCache(
     private data class Entry(val response: AO3HttpResponse, val freshUntil: Long, val staleUntil: Long)
     private val entries = mutableMapOf<Key, Entry>()
     private var revision = 0L
+    private val mutableChanges = kotlinx.coroutines.flow.MutableStateFlow(0L)
+    val changes: kotlinx.coroutines.flow.StateFlow<Long> = mutableChanges
     /**
      * What each removal took, so a read in flight is stopped only when its own page was
      * removed after it began. Every removal used to stop every read: one page's 404 left an
@@ -33,6 +35,7 @@ class AO3PageCache(
     private fun removed(matches: (Key) -> Boolean) {
         removals.addLast(Removal(++revision, matches))
         while (removals.size > 64) forgottenThrough = removals.removeFirst().at
+        mutableChanges.value = revision
     }
 
     @Synchronized
@@ -55,6 +58,7 @@ class AO3PageCache(
             entries.minByOrNull { it.value.staleUntil }?.key?.let(entries::remove)
         }
         entries[key] = Entry(response.copy(headers = emptyMap()), time + ttlMillis, time + maxOf(ttlMillis, staleMillis))
+        mutableChanges.value = ++revision
     }
 
     @Synchronized

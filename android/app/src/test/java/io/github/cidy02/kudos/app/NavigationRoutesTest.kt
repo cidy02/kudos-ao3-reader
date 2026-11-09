@@ -1,7 +1,11 @@
 package io.github.cidy02.kudos.app
 
+import io.github.cidy02.kudos.home.accountAvatarInitial
+import io.github.cidy02.kudos.home.formatAccountUnreadAccessibilityValue
+import io.github.cidy02.kudos.home.formatAccountUnreadBadge
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -9,9 +13,10 @@ class NavigationRoutesTest {
     @Test
     fun topLevelDestinationsStayLimitedToApprovedAppSections() {
         assertEquals(
-            listOf(Routes.Home, Routes.Library, Routes.Browse, Routes.Account),
+            listOf(Routes.Home, Routes.Library, Routes.Writing, Routes.Browse),
             Routes.topLevelDestinations.map { it.route }
         )
+        assertFalse(Routes.Account in Routes.topLevelDestinations.map { it.route })
         assertFalse(Routes.Search in Routes.topLevelDestinations.map { it.route })
     }
 
@@ -19,8 +24,11 @@ class NavigationRoutesTest {
     fun searchIsAShellRootBesideTheFourTabs() {
         assertTrue(Routes.isShellRoot(Routes.Search))
         assertTrue(Routes.isShellRoot(Routes.Home))
+        assertTrue(Routes.isShellRoot(Routes.Writing))
+        assertFalse(Routes.isShellRoot(Routes.Account))
         assertFalse(Routes.isTopLevel(Routes.Search))
         assertEquals("Home", Routes.shellTitle(Routes.Home))
+        assertEquals("Writing", Routes.shellTitle(Routes.Writing))
         assertEquals(null, Routes.shellTitle(Routes.Account))
         assertFalse(Routes.isShellRoot(Routes.WorkDetail))
     }
@@ -112,6 +120,156 @@ class NavigationRoutesTest {
         assertFalse(Routes.hidesTabBar(Routes.HomeSection))
         assertFalse(Routes.hidesTabBar(Routes.RecentlyDeleted))
         assertFalse(Routes.hidesTabBar(Routes.CollectionDetail))
+        assertFalse(Routes.hidesTabBar(Routes.Writing))
         assertFalse(Routes.hidesTabBar(null))
+    }
+
+    @Test
+    fun everyFormerAccountTabRouteResolvesToSheetOrNewTabHome() {
+        assertEquals(AccountSheetRoute.Profile, Routes.accountSheetRoute(Routes.Account))
+        assertEquals(AccountSheetRoute.Inbox, Routes.accountSheetRoute(Routes.AccountInbox))
+        assertEquals(AccountSheetRoute.Preferences, Routes.accountSheetRoute(Routes.AO3Preferences))
+        assertEquals(AccountSheetRoute.Dashboard, Routes.accountSheetRoute(Routes.AO3Dashboard))
+        assertEquals(AccountSheetRoute.MoreOnAO3, Routes.accountSheetRoute(Routes.AccountMoreOnAO3))
+        assertEquals(AccountSheetRoute.Settings, Routes.accountSheetRoute(Routes.Settings))
+        assertEquals(AccountSheetRoute.BackupAndSync, Routes.accountSheetRoute(Routes.Backup))
+        assertEquals(AccountSheetRoute.About, Routes.accountSheetRoute(Routes.About))
+        assertEquals(AccountSheetRoute.Shortcuts, Routes.accountSheetRoute(Routes.AccountShortcuts))
+        assertEquals(AccountSheetRoute.Login, Routes.accountSheetRoute(Routes.AccountLogin))
+        assertEquals(AccountSheetRoute.NativeLogin, Routes.accountSheetRoute(Routes.NativeLogin))
+        assertEquals(AccountSheetRoute.BugReport, Routes.accountSheetRoute(Routes.BugReport))
+        assertEquals(AccountSheetRoute.QueueStorage, Routes.accountSheetRoute(Routes.QueueStorage))
+        assertEquals(AccountSheetRoute.AvailabilitySweep, Routes.accountSheetRoute(Routes.AvailabilitySweep))
+
+        assertEquals(LegacyAccountDestination.Account(AccountSheetRoute.Dashboard), LegacyAccountRoute.Dashboard.destination)
+        assertEquals(LegacyAccountDestination.Account(AccountSheetRoute.Inbox), LegacyAccountRoute.Inbox.destination)
+        assertEquals(LegacyAccountDestination.Account(AccountSheetRoute.Preferences), LegacyAccountRoute.Preferences.destination)
+        assertEquals(LegacyAccountDestination.Account(AccountSheetRoute.MoreOnAO3), LegacyAccountRoute.MoreOnAO3.destination)
+        assertEquals(LegacyAccountDestination.Account(AccountSheetRoute.Settings), LegacyAccountRoute.Settings.destination)
+        assertEquals(LegacyAccountDestination.Writing(WritingRoute.Works), LegacyAccountRoute.Works.destination)
+        assertEquals(LegacyAccountDestination.Writing(WritingRoute.Drafts), LegacyAccountRoute.Drafts.destination)
+        assertEquals(LegacyAccountDestination.Writing(WritingRoute.Series), LegacyAccountRoute.Series.destination)
+        assertEquals(LegacyAccountDestination.Writing(WritingRoute.CollectionsAndChallenges), LegacyAccountRoute.Collections.destination)
+        assertEquals(LegacyAccountDestination.Library(LibraryAO3Route.MarkedForLater), LegacyAccountRoute.MarkedForLater.destination)
+        assertEquals(LegacyAccountDestination.Library(LibraryAO3Route.Bookmarks), LegacyAccountRoute.Bookmarks.destination)
+        assertEquals(LegacyAccountDestination.Library(LibraryAO3Route.Subscriptions), LegacyAccountRoute.Subscriptions.destination)
+        assertEquals(LegacyAccountDestination.Library(LibraryAO3Route.History), LegacyAccountRoute.History.destination)
+
+        assertEquals(
+            LegacyAccountDestination.Writing(WritingRoute.Drafts),
+            Routes.resolveFormerAccountRoute(Routes.WritingDrafts)
+        )
+        assertEquals(
+            LegacyAccountDestination.Writing(WritingRoute.CollectionsAndChallenges),
+            Routes.resolveFormerAccountRoute(Routes.AO3Collections)
+        )
+        assertEquals(
+            LegacyAccountDestination.Writing(WritingRoute.Works),
+            Routes.resolveFormerAccountRoute(Routes.accountList("MyWorks"))
+        )
+        assertEquals(
+            LegacyAccountDestination.Library(LibraryAO3Route.MarkedForLater),
+            Routes.resolveFormerAccountRoute(Routes.accountList("MarkedForLater"))
+        )
+        assertEquals(
+            LegacyAccountDestination.Library(LibraryAO3Route.Bookmarks),
+            Routes.resolveFormerAccountRoute(Routes.accountList("Bookmarks"))
+        )
+        assertEquals(
+            LegacyAccountDestination.Library(LibraryAO3Route.Subscriptions),
+            Routes.resolveFormerAccountRoute(Routes.accountList("Subscriptions"))
+        )
+        assertEquals(
+            LegacyAccountDestination.Library(LibraryAO3Route.History),
+            Routes.resolveFormerAccountRoute(Routes.accountList("History"))
+        )
+    }
+
+    @Test
+    fun restoredAccountSelectionMigratesToHomeAndPresentsAccountSheet() {
+        assertEquals(
+            RestoredTabSelection(tabRoute = Routes.Home, presentsAccount = true, accountRoute = AccountSheetRoute.Profile),
+            Routes.restoredSelection(Routes.Account)
+        )
+        assertEquals(
+            RestoredTabSelection(tabRoute = Routes.Home, presentsAccount = true, accountRoute = AccountSheetRoute.Inbox),
+            Routes.restoredSelection(Routes.AccountInbox)
+        )
+        assertEquals(
+            RestoredTabSelection(tabRoute = Routes.Writing, presentsAccount = false, accountRoute = null),
+            Routes.restoredSelection(Routes.Writing)
+        )
+    }
+
+    @Test
+    fun accountSheetStateHandlesRoutesBackAndDeferredWebUrls() {
+        val state = AccountSheetState()
+        assertEquals(Routes.Home, state.authorNavigationTarget)
+
+        state.showAccount(AccountSheetRoute.Inbox)
+        assertTrue(state.isPresentingAccount)
+        assertEquals(Routes.Account, state.authorNavigationTarget)
+        assertEquals(AccountSheetRoute.Inbox, state.consumePendingAccountRoute())
+        assertNull(state.consumePendingAccountRoute())
+
+        state.openUrl("https://archiveofourown.org/users/someone")
+        assertFalse(state.isPresentingAccount)
+        assertFalse(state.isPresentingWebBrowser)
+        assertNull(state.pendingWebUrl)
+
+        state.accountDidDismiss()
+        assertTrue(state.isPresentingWebBrowser)
+        assertEquals("https://archiveofourown.org/users/someone", state.pendingWebUrl)
+
+        var poppedSubpage = 0
+        var poppedStack = 0
+        var dismissedSheet = 0
+        handleAccountSheetBack(
+            customOnBack = { poppedSubpage++ },
+            canPopSheetStack = true,
+            popSheetStack = { poppedStack++ },
+            dismissSheet = { dismissedSheet++ }
+        )
+        assertEquals(1, poppedSubpage)
+        assertEquals(0, poppedStack)
+        assertEquals(0, dismissedSheet)
+
+        handleAccountSheetBack(
+            customOnBack = null,
+            canPopSheetStack = true,
+            popSheetStack = { poppedStack++ },
+            dismissSheet = { dismissedSheet++ }
+        )
+        assertEquals(1, poppedStack)
+        assertEquals(0, dismissedSheet)
+
+        handleAccountSheetBack(
+            customOnBack = null,
+            canPopSheetStack = false,
+            popSheetStack = { poppedStack++ },
+            dismissSheet = { dismissedSheet++ }
+        )
+        assertEquals(1, poppedStack)
+        assertEquals(1, dismissedSheet)
+    }
+
+    @Test
+    fun profileButtonBadgeCountFormatsUnreadCountsAndInitials() {
+        assertNull(formatAccountUnreadBadge(isLoggedIn = false, unreadCount = 5))
+        assertNull(formatAccountUnreadBadge(isLoggedIn = true, unreadCount = null))
+        assertNull(formatAccountUnreadBadge(isLoggedIn = true, unreadCount = 0))
+        assertEquals("1", formatAccountUnreadBadge(isLoggedIn = true, unreadCount = 1))
+        assertEquals("42", formatAccountUnreadBadge(isLoggedIn = true, unreadCount = 42))
+        assertEquals("99", formatAccountUnreadBadge(isLoggedIn = true, unreadCount = 99))
+        assertEquals("99+", formatAccountUnreadBadge(isLoggedIn = true, unreadCount = 100))
+
+        assertEquals("", formatAccountUnreadAccessibilityValue(isLoggedIn = false, unreadCount = 3))
+        assertEquals("", formatAccountUnreadAccessibilityValue(isLoggedIn = true, unreadCount = 0))
+        assertEquals("1 unread in Inbox", formatAccountUnreadAccessibilityValue(isLoggedIn = true, unreadCount = 1))
+        assertEquals("12 unread in Inbox", formatAccountUnreadAccessibilityValue(isLoggedIn = true, unreadCount = 12))
+
+        assertEquals("A", accountAvatarInitial("  avery_archive "))
+        assertNull(accountAvatarInitial("   "))
+        assertNull(accountAvatarInitial(null))
     }
 }
