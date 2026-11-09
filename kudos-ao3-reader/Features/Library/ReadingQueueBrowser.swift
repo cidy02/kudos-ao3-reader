@@ -271,7 +271,8 @@ struct ReadingQueueBrowserView: View {
             scopedRemoval: ScopedRemoval(title: "Remove from Queue") {
                 pendingRemoval = work
             },
-            queueMenu: queueMenu(for: work)
+            queueMenu: queueMenu(for: work),
+            showsVariantLabel: false
         )
     }
 
@@ -562,6 +563,9 @@ extension ReadingQueueBrowserView {
             } else {
                 subjectHeaderSection
                 if let upNextWork {
+                    // No card-row padding on the header: it sits on its card, as on the board.
+                    queueSectionHeader("Up next")
+                        .bareListRow(verticalPadding: 0, interCardSpacing: 0)
                     upNextLinked(upNextWork)
                         .bareListRow()
                         .padding(.bottom, inLineWorks.isEmpty ? 16 : 8)
@@ -576,7 +580,7 @@ extension ReadingQueueBrowserView {
                         }
                 }
                 if !inLineWorks.isEmpty {
-                    inLineHeader
+                    queueSectionHeader("In line")
                         .bareListRow()
                     ForEach(inLineWorks) { work in
                         ledgerRow(work, position: queuePosition(of: work))
@@ -627,8 +631,8 @@ extension ReadingQueueBrowserView {
         }
     }
 
-    private var inLineHeader: some View {
-        Text("In line")
+    private func queueSectionHeader(_ title: String) -> some View {
+        Text(title)
             .font(.title3.bold())
             .foregroundStyle(.primary)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -684,10 +688,12 @@ extension ReadingQueueBrowserView {
                         .padding(.top, Self.afterRule)
                 } else {
                     if let upNextWork {
+                        queueSectionHeader("Up next")
+                            .padding(.top, Self.ruleTop)
                         upNextCompact(upNextWork)
                     }
                     if !inLineWorks.isEmpty {
-                        inLineHeader
+                        queueSectionHeader("In line")
                             .padding(.top, Self.ruleTop)
                         coverGrid(inLineWorks).padding(.top, Self.afterRule)
                     }

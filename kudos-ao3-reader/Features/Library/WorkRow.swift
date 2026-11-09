@@ -89,6 +89,7 @@ struct WorkRow: View {
     @Environment(ThemeManager.self) private var theme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @AppStorage("showsZeroStats") private var showsZeroStats = true
+    @AppStorage(WorkSymbolPlacement.storageKey) private var symbolPlacement: WorkSymbolPlacement = .beside
     @State private var internalExpanded = false
     @State private var chapterLengths: ChapterLengths?
 
@@ -212,9 +213,26 @@ struct WorkRow: View {
         isSelecting ? selectingSeparatorInset : nil
     }
 
+    static func summaryRunsFullWidth(
+        placement: WorkSymbolPlacement,
+        isStacked: Bool,
+        hasSummary: Bool
+    ) -> Bool {
+        placement == .beside && !isStacked && hasSummary
+    }
+
+    static func fullWidthSummaryLeadingPadding(isSelecting: Bool) -> CGFloat {
+        isSelecting ? WorkRowMetrics.selectingUnderTitleInset - WorkRowMetrics.screenInset : 0
+    }
+
     private var ledgerRow: some View {
-        WorkPlainRow(
-            wide: wide,
+        let summaryRunsFullWidth = Self.summaryRunsFullWidth(
+            placement: symbolPlacement,
+            isStacked: dynamicTypeSize.isAccessibilitySize,
+            hasSummary: !ledgerSummaryText.isEmpty
+        )
+        return WorkPlainRow(
+            wide: wide || summaryRunsFullWidth,
             showsSeparator: showsSeparator,
             separatorInset: Self.separatorInset(isSelecting: isSelecting)
         ) {
@@ -222,32 +240,26 @@ struct WorkRow: View {
         } symbols: { arrangement in
             symbols(arrangement)
         } heading: {
-            ledgerHeading
+            ledgerHeading(includesByline: summaryRunsFullWidth)
         } remainder: {
-            if !work.author.isEmpty {
-                AO3AuthorBylineView(
-                    displayText: work.author,
-                    identities: work.verifiedAuthorIdentities,
-                    font: .subheadline,
-                    compact: !dynamicTypeSize.isAccessibilitySize
-                )
-                .fixedSize(horizontal: false, vertical: true)
+            fullWidthSummaryRemainder(enabled: summaryRunsFullWidth) {
+                if !summaryRunsFullWidth { ledgerByline }
+                if !ledgerSummaryText.isEmpty {
+                    Text(ledgerSummaryText)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                WorkLedgerStatsLine(figures: ledgerFigures)
+                WorkChapterBarLine(items: chapterBarItems, label: chapterProgressLabel)
             }
-            if !ledgerSummaryText.isEmpty {
-                Text(ledgerSummaryText)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
-                    .multilineTextAlignment(.leading)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            WorkLedgerStatsLine(figures: ledgerFigures)
-            WorkChapterBarLine(items: chapterBarItems, label: chapterProgressLabel)
         }
     }
 
     @ViewBuilder
-    private var ledgerHeading: some View {
+    private func ledgerHeading(includesByline: Bool) -> some View {
         if let fandom = nonemptyFandomNames.first {
             WorkFandomLabel(
                 title: FandomDisplayName.bareTitle(fandom),
@@ -257,6 +269,20 @@ struct WorkRow: View {
             )
         }
         titleLine(showsFavorite: showsFavoriteStar && work.isFavorite, favoriteTint: .subjectFavoriteGold)
+        if includesByline { ledgerByline }
+    }
+
+    @ViewBuilder
+    private var ledgerByline: some View {
+        if !work.author.isEmpty {
+            AO3AuthorBylineView(
+                displayText: work.author,
+                identities: work.verifiedAuthorIdentities,
+                font: .subheadline,
+                compact: !dynamicTypeSize.isAccessibilitySize
+            )
+            .fixedSize(horizontal: false, vertical: true)
+        }
     }
 
     // MARK: - Standard
@@ -273,8 +299,13 @@ struct WorkRow: View {
         let isExpandable = Self.isExpandable(
             strippedSummary: summaryText, for: work, showsSummary: showsSummary
         )
+        let summaryRunsFullWidth = Self.summaryRunsFullWidth(
+            placement: symbolPlacement,
+            isStacked: dynamicTypeSize.isAccessibilitySize,
+            hasSummary: !summaryText.isEmpty
+        )
         WorkPlainRow(
-            wide: wide,
+            wide: wide || summaryRunsFullWidth,
             showsSeparator: showsSeparator,
             separatorInset: Self.separatorInset(isSelecting: isSelecting)
         ) {
@@ -284,8 +315,18 @@ struct WorkRow: View {
         } heading: {
             standardHeading(isExpandable: isExpandable)
         } remainder: {
-            standardRemainder(summaryText: summaryText)
+            fullWidthSummaryRemainder(enabled: summaryRunsFullWidth) {
+                standardRemainder(summaryText: summaryText)
+            }
         }
+    }
+
+    private func fullWidthSummaryRemainder<Content: View>(
+        enabled: Bool,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        content()
+            .padding(.leading, enabled ? Self.fullWidthSummaryLeadingPadding(isSelecting: isSelecting) : 0)
     }
 
     @ViewBuilder

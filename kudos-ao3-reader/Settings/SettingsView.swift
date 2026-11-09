@@ -2,6 +2,20 @@ import SwiftData
 import SwiftUI
 import UniformTypeIdentifiers
 
+struct ReaderSettingLabel: View {
+    let title: String
+    let systemImage: String
+
+    var body: some View {
+        Label {
+            Text(title).foregroundStyle(.primary)
+        } icon: {
+            Image(systemName: systemImage).foregroundStyle(.tint)
+                .frame(minWidth: 22) // one icon column, so titles line up row to row
+        }
+    }
+}
+
 /// The reader's display options — theme, text size, layout, read-aloud and font —
 /// in the reader's options sheet (iOS) and inspector (macOS).
 ///
@@ -191,15 +205,25 @@ struct ReaderLayoutSection: View {
 
     var body: some View {
         Section {
-            Picker("Layout", selection: $readingMode) {
-                ForEach(ReadingMode.allCases) { Label($0.title, systemImage: $0.symbol).tag($0) }
+            VStack(alignment: .leading, spacing: 8) {
+                ReaderSettingLabel(title: "Layout", systemImage: "book.pages")
+                    .accessibilityHidden(true) // the picker below already says "Layout"
+                Picker("Layout", selection: $readingMode) {
+                    ForEach(ReadingMode.allCases) {
+                        Label($0.title, systemImage: $0.symbol)
+                            .labelStyle(.titleOnly)
+                            .tag($0)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .accentFill()
+                .labelsHidden()
             }
-            .pickerStyle(.segmented)
-            .accentFill()
-            .labelStyle(.titleOnly)
 
             if twoPageSpreadAvailable {
-                Toggle("Two-page spread", isOn: $twoPageEnabled)
+                Toggle(isOn: $twoPageEnabled) {
+                    ReaderSettingLabel(title: "Two-page spread", systemImage: "rectangle.split.2x1")
+                }
                     .disabled(readingMode != .paged || !twoPageAvailable)
                     .accentFill()
             }
@@ -208,7 +232,10 @@ struct ReaderLayoutSection: View {
             // timer to hold open, and a switch that did nothing there
             // would be worse than its absence.
             #if os(iOS)
-            Toggle("Keep screen awake", isOn: $keepScreenAwake).accentFill()
+            Toggle(isOn: $keepScreenAwake) {
+                ReaderSettingLabel(title: "Keep screen awake", systemImage: "sun.max")
+            }
+            .accentFill()
             #endif
         } header: {
             Text("Reading")

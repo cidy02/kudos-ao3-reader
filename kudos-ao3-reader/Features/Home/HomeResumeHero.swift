@@ -236,6 +236,7 @@ struct HomeResumeHero: View {
     var onReadAloud: (() -> Void)?
     var scopedRemoval: ScopedRemoval? = nil
     var queueMenu: QueueItemMenuActions? = nil
+    var showsVariantLabel = true
 
     @Environment(PrivacyGate.self) private var gate
     @Environment(\.workCardTransitionNamespace) private var zoomNamespace
@@ -330,6 +331,7 @@ struct HomeResumeHero: View {
             isBusy: false,
             isInteractive: interactive,
             showsInitial: showsInitial,
+            showsVariantLabel: showsVariantLabel,
             onPrimary: { onPrimary?() },
             onReadAloud: { onReadAloud?() }
         )
@@ -380,6 +382,7 @@ struct WorkResumeCard: View {
     /// A hidden mature work must not draw its initial: the letter stays
     /// recognisable under the 6 pt blur. Every other card keeps it.
     var showsInitial = true
+    var showsVariantLabel = true
     let onPrimary: () -> Void
     let onReadAloud: () -> Void
     var onContents: (() -> Void)?
@@ -534,9 +537,11 @@ extension WorkResumeCard {
 
     private var nextHeader: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Up next")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(Color.white.opacity(0.9))
+            if showsVariantLabel {
+                Text("Up next")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.white.opacity(0.9))
+            }
             identity
         }
     }

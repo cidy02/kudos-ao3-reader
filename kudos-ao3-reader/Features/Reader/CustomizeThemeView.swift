@@ -71,12 +71,17 @@ struct CustomizeThemeView: View {
                 // propagate from the Form container, only from a Group/Section/ForEach.
                 Group {
                     Section("Text") {
-                        Picker("Font", selection: $fontID) {
+                        Picker(selection: $fontID) {
                             ForEach(fontOptions) { Text($0.name).tag($0.id) }
+                        } label: {
+                            ReaderSettingLabel(title: "Font", systemImage: "textformat")
                         }
                         .pickerStyle(.navigationLink)
 
-                        Toggle("Bold Text", isOn: $boldText).accentFill()
+                        Toggle(isOn: $boldText) {
+                            ReaderSettingLabel(title: "Bold Text", systemImage: "bold")
+                        }
+                        .accentFill()
                     }
 
                     Section {
@@ -86,8 +91,12 @@ struct CustomizeThemeView: View {
                         // site and a `.animation(_:value:)` modifier). SwiftUI's
                         // own `Binding.animation(_:)` already takes an optional, so
                         // passing nil is the documented way to opt out.
-                        Toggle("Customize", isOn: $customize.animation(reduceMotion ? nil : .easeInOut(duration: 0.2)))
-                            .accentFill()
+                        Toggle(
+                            isOn: $customize.animation(reduceMotion ? nil : .easeInOut(duration: 0.2))
+                        ) {
+                            ReaderSettingLabel(title: "Customize", systemImage: "slider.horizontal.3")
+                        }
+                        .accentFill()
 
                         Group {
                             sliderRow("Line Spacing", icon: "arrow.up.and.down.text.horizontal",
@@ -99,7 +108,10 @@ struct CustomizeThemeView: View {
                                       value: $wordSpacing, range: ReaderTextStyle.wordSpacingRange)
                             sliderRow("Margins", icon: "rectangle.inset.filled",
                                       value: $pageMargin, range: ReaderTextStyle.marginRange)
-                            Toggle("Justify Text", isOn: $justify).accentFill()
+                            Toggle(isOn: $justify) {
+                                ReaderSettingLabel(title: "Justify Text", systemImage: "text.justify")
+                            }
+                            .accentFill()
                         }
                         .disabled(!customize)
                     } header: {
@@ -276,13 +288,7 @@ struct CustomizeThemeView: View {
                            range: ClosedRange<Double>, valueLabel: String? = nil) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
-                Image(systemName: icon)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    // At least 22 so the titles line up; wider at the largest sizes, where a
-                    // fixed 22 let the icon spill over its title.
-                    .frame(minWidth: 22)
-                Text(title)
+                ReaderSettingLabel(title: title, systemImage: icon)
                     .font(.subheadline)
                 Spacer()
                 if let valueLabel {

@@ -103,6 +103,10 @@ struct FilterSymbolChipCard: View {
     var fullTitle: String?
     let symbol: WorkSymbolTile
     let state: FilterSelectionState
+    /// Three across: a little less padding so one-word labels ("Multi", "Other") never break mid-word.
+    var dense = false
+    /// On the sheet's own background (no Form card behind it), an unset chip needs the card surface to show its edges.
+    var sitsOnBackdrop = false
     let onCycle: () -> Void
 
     @Environment(ThemeManager.self) private var theme
@@ -113,7 +117,7 @@ struct FilterSymbolChipCard: View {
 
     var body: some View {
         Button(action: onCycle) {
-            HStack(spacing: 8) {
+            HStack(spacing: dense ? 6 : 8) {
                 WorkSymbolTileView(symbol: symbol, side: 22)
                     .opacity(state == .excluded ? 0.4 : 1.0)
 
@@ -128,7 +132,7 @@ struct FilterSymbolChipCard: View {
 
                 indicator
             }
-            .padding(.horizontal, 10)
+            .padding(.horizontal, dense ? 8 : 10)
             .padding(.vertical, 6)
             .frame(minHeight: 44)
             .background(cardBackground)
@@ -184,7 +188,7 @@ struct FilterSymbolChipCard: View {
     private var cardBackground: Color {
         switch state {
         case .clear:
-            return theme.appTheme.cardBackdrop
+            return sitsOnBackdrop ? theme.appTheme.cardSurface : theme.appTheme.cardBackdrop
         case .included:
             return theme.appTheme.includeColor.opacity(0.12)
         case .excluded:

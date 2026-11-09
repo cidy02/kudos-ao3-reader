@@ -71,11 +71,18 @@ struct LibraryFilterPanel: View {
         SubjectFieldLabel(text: text, style: .formGroup)
     }
 
-    /// One column at accessibility sizes. Two columns clip "Gen" to "Ge".
+    /// The six AO3 categories are a 3×2 grid, falling back to one column at accessibility sizes.
     private var categoryColumns: [GridItem] {
         dynamicTypeSize.isAccessibilitySize
             ? [GridItem(.flexible())]
-            : [GridItem(.flexible()), GridItem(.flexible())]
+            : Array(repeating: GridItem(.flexible()), count: 3)
+    }
+
+    /// Warnings: two columns (AO3 filter sheet), one at accessibility sizes.
+    private var warningColumns: [GridItem] {
+        dynamicTypeSize.isAccessibilitySize
+            ? [GridItem(.flexible())]
+            : Array(repeating: GridItem(.flexible()), count: 2)
     }
 
     /// Label over the value at accessibility sizes. Beside the icon, the
@@ -145,49 +152,33 @@ struct LibraryFilterPanel: View {
                             FilterSymbolChipCard(
                                 title: category.title,
                                 symbol: WorkSymbolTile.category([category.title], dark: isDark),
-                                state: categoryState(category)
+                                state: categoryState(category),
+                                dense: !dynamicTypeSize.isAccessibilitySize,
+                                sitsOnBackdrop: true
                             ) {
                                 cycle(category)
                             }
                         }
                     }
-                    .padding(.vertical, 4)
+                    .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                    .listRowBackground(Color.clear)
                 } header: {
                     groupLabel("Categories")
                 }
 
                 // MARK: Warnings
                 Section {
-                    VStack(alignment: .leading, spacing: 12) {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("Overall")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                                .textCase(.uppercase)
-                                .padding(.horizontal, 4)
-
-                            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-                                warningCard(.noWarnings, title: "No Warnings Apply")
-                                warningCard(.chooseNotTo, title: "Creator Chose Not To Use")
-                            }
-                        }
-
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("Content")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                                .textCase(.uppercase)
-                                .padding(.horizontal, 4)
-
-                            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-                                warningCard(.violence, title: "Graphic Violence")
-                                warningCard(.death, title: "Major Character Death")
-                                warningCard(.nonCon, title: "Rape/Non-Con")
-                                warningCard(.underage, title: "Underage Sex")
-                            }
-                        }
+                    // The same short titles as the AO3 filter sheet; VoiceOver reads AO3's full name.
+                    LazyVGrid(columns: warningColumns, spacing: 8) {
+                        warningCard(.noWarnings, title: "No Warnings Apply")
+                        warningCard(.chooseNotTo, title: "Creator Chose Not To Use")
+                        warningCard(.violence, title: "Graphic Violence")
+                        warningCard(.death, title: "Major Character Death")
+                        warningCard(.nonCon, title: "Rape/Non-Con")
+                        warningCard(.underage, title: "Underage Sex")
                     }
-                    .padding(.vertical, 4)
+                    .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                    .listRowBackground(Color.clear)
                 } header: {
                     groupLabel("Warnings")
                 }
@@ -299,7 +290,8 @@ struct LibraryFilterPanel: View {
             title: title,
             fullTitle: warning.title,
             symbol: symbol,
-            state: warningState(warning)
+            state: warningState(warning),
+            sitsOnBackdrop: true
         ) {
             cycle(warning)
         }

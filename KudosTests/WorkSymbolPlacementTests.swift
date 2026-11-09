@@ -22,6 +22,8 @@ struct WorkSymbolPlacementTests {
         #expect(inset(true, false, nil) == WorkRowMetrics.screenInset)
         #expect(inset(false, true, nil) == WorkRowMetrics.screenInset)
         #expect(inset(false, false, 115) == 115)
+        // A wide row selecting: its full-width text starts after the check, so the separator does too.
+        #expect(inset(false, true, 115) == WorkRowMetrics.selectingUnderTitleInset)
     }
 
     /// Under the Title the text starts at the screen inset, or past the leading check while selecting.
@@ -42,6 +44,22 @@ struct WorkSymbolPlacementTests {
     /// The row under the title is bare, like the strip.
     @Test func rowArrangementIsBare() {
         #expect(!WorkStatusIconGrid.drawsBacking(arrangement: .row, backed: true))
+    }
+
+    @Test func summaryRunsBelowTheBesideGridOnly() {
+        let runsFullWidth = { (placement: WorkSymbolPlacement, stacked: Bool, hasSummary: Bool) in
+            WorkRow.summaryRunsFullWidth(
+                placement: placement,
+                isStacked: stacked,
+                hasSummary: hasSummary
+            )
+        }
+        #expect(runsFullWidth(.beside, false, true))
+        #expect(!runsFullWidth(.beside, false, false))
+        #expect(!runsFullWidth(.beside, true, true))
+        #expect(!runsFullWidth(.underTitle, false, true))
+        #expect(WorkRow.fullWidthSummaryLeadingPadding(isSelecting: false) == 0)
+        #expect(WorkRow.fullWidthSummaryLeadingPadding(isSelecting: true) == 36)
     }
 
     @Test func settingsSearchFindsTheOption() {

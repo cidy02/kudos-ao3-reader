@@ -310,7 +310,8 @@ enum WorkRowMetrics {
     static func separatorInset(
         placement: WorkSymbolPlacement, stacked: Bool, wide: Bool, selectingInset: CGFloat?
     ) -> CGFloat {
-        if placement == .underTitle {
+        // A wide row's summary starts under the check while selecting, so its separator does too.
+        if placement == .underTitle || (wide && selectingInset != nil) {
             return selectingInset == nil ? screenInset : selectingUnderTitleInset
         }
         return selectingInset ?? (stacked || wide ? screenInset : textColumnInset)

@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Left-aligned identity header: author-colour wash lives on the screen, not
 /// on these controls. Subscribe stays AO3 red (`accentFill`); Mute and Block
-/// render as neutral pills with dark text (board 23, matching FID55 on board 35).
+/// are neutral icon-only circles with AO3's labels preserved for VoiceOver.
 struct AuthorProfileOverviewHeader: View {
     var model: AO3AuthorProfileModel
     let isOwnProfile: Bool
@@ -146,19 +146,32 @@ struct AuthorProfileOverviewHeader: View {
 
     @ViewBuilder
     private func actionRow(_ header: AO3AuthorHeader) -> some View {
-        let layout = dynamicTypeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
-            : AnyLayout(HStackLayout(spacing: 8))
-        layout {
-            if let form = header.subscriptionForm {
-                subscribeButton(form)
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 8) {
+                if let form = header.subscriptionForm {
+                    subscribeButton(form)
+                }
+                HStack(spacing: 8) {
+                    moderationButtons
+                }
             }
-            if let muteAction {
-                moderationButton(muteAction, webKind: .mute)
+        } else {
+            HStack(spacing: 8) {
+                if let form = header.subscriptionForm {
+                    subscribeButton(form)
+                }
+                moderationButtons
             }
-            if let blockAction {
-                moderationButton(blockAction, webKind: .block)
-            }
+        }
+    }
+
+    @ViewBuilder
+    private var moderationButtons: some View {
+        if let muteAction {
+            moderationButton(muteAction, webKind: .mute)
+        }
+        if let blockAction {
+            moderationButton(blockAction, webKind: .block)
         }
     }
 
@@ -192,20 +205,14 @@ struct AuthorProfileOverviewHeader: View {
         return Button {
             onModeration(action)
         } label: {
-            HStack(spacing: 5) {
-                if model.isPerformingModeration {
-                    ProgressView().controlSize(.small).accentFill()
-                } else {
-                    Image(systemName: kind?.systemImage
-                        ?? (webKind == .mute ? "speaker.slash" : "hand.raised"))
-                }
-                Text(action.label)
+            if model.isPerformingModeration {
+                ProgressView().controlSize(.small).accentFill()
+            } else {
+                Image(systemName: kind?.systemImage
+                    ?? (webKind == .mute ? "speaker.slash" : "hand.raised"))
             }
-            .frame(maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : nil)
         }
-        .buttonStyle(.bordered)
-        .buttonBorderShape(.capsule)
-        .tint(.primary)
+        .buttonStyle(.kudosSecondaryCircle)
         .disabled(actionsBusy)
         .accessibilityLabel(action.label)
     }
