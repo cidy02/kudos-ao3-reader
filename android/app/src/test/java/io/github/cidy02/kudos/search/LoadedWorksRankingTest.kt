@@ -79,7 +79,7 @@ class LoadedWorksRankingTest {
 
     private fun params(filters: AO3SearchFilters): Map<String, List<String>> {
         val url = AO3SearchUrlBuilder().buildSearchUrl(filters, page = 1).toHttpUrl()
-        return url.queryParameterNames.associateWith { url.queryParameterValues(it) }
+        return url.queryParameterNames.associateWith { name -> url.queryParameterValues(name).map { it.orEmpty() } }
     }
 
     @Test

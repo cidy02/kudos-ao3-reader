@@ -132,12 +132,9 @@ class SearchViewModel(
     }
 
     fun updateFilters(newFilters: AO3SearchFilters) {
+        // A rank choice is a sheet edit like the others: choosing it also resets AO3's
+        // direction and seeds the hits floor, so Apply runs it and dismissing drops all of it.
         _filters.value = newFilters
-        // Ranking applies to the works already loaded. Copy it onto the results immediately
-        // so a page tap does not send it as a new search, and dismissing the sheet keeps it.
-        if (newFilters.loadedWorksRanking != lastFilters.loadedWorksRanking) {
-            lastFilters = lastFilters.copy(loadedWorksRanking = newFilters.loadedWorksRanking)
-        }
     }
 
     /**

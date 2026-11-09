@@ -1120,9 +1120,8 @@ private fun SearchResultsList(
     onRefresh: suspend () -> Unit
 ) {
     val shown = works.withoutHiddenRemote(LocalWorkRowEnvironment.current, selecting)
-    val ranked = rankSearchWorks(works, filters.loadedWorksRanking, previousKudos)
-    val visibleIds = shown.map { it.remote.id }.toSet()
-    val rows = ranked.filter { it.work.remote.id in visibleIds }
+    // Rank only what is shown: a hidden work must not move the visible ones.
+    val rows = rankSearchWorks(shown, filters.loadedWorksRanking, previousKudos)
     val listState = rememberLazyListState()
     LaunchedEffect(page.currentPage) {
         listState.animateScrollToItem(0)

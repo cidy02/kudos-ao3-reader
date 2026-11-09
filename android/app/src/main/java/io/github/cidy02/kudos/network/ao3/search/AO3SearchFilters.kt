@@ -94,7 +94,8 @@ data class AO3SearchFilters(
             kudosFrom.isNotBlank() || kudosTo.isNotBlank() ||
             commentsFrom.isNotBlank() || commentsTo.isNotBlank() ||
             bookmarksFrom.isNotBlank() || bookmarksTo.isNotBlank() ||
-            dateFrom != null || dateTo != null || preservedFilterValues.isNotEmpty()
+            dateFrom != null || dateTo != null || preservedFilterValues.isNotEmpty() ||
+            loadedWorksRanking.isActive
 
     val isSearchable: Boolean
         get() = query.isNotBlank() || hasActiveFilters
