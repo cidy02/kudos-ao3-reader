@@ -14,6 +14,12 @@ nonisolated enum ReaderSpeechSessionPolicy {
         case endPreviousSession
     }
 
+    enum DetachedSaveDecision: Equatable {
+        case write
+        case endSession
+        case suspendWrites
+    }
+
     static func leaveReader(sessionActive: Bool) -> LeaveReaderAction {
         sessionActive ? .detach : .tearDown
     }
@@ -31,6 +37,28 @@ nonisolated enum ReaderSpeechSessionPolicy {
         sessionActive && !readerOpen
     }
 
+    static func showsMiniPlayer(
+        sessionActive: Bool,
+        readerOpen: Bool,
+        commentAccessoryTab: AppTab?,
+        selectedTab: AppTab
+    ) -> Bool {
+        showsMiniPlayer(sessionActive: sessionActive, readerOpen: readerOpen)
+            && commentAccessoryTab != selectedTab
+    }
+
+    static func detachedSaveDecision(
+        isPendingDeletion: Bool,
+        workProgressStamp: Date?,
+        sessionProgressStamp: Date
+    ) -> DetachedSaveDecision {
+        if isPendingDeletion { return .endSession }
+        if let workProgressStamp, workProgressStamp > sessionProgressStamp {
+            return .suspendWrites
+        }
+        return .write
+    }
+
     static func canFreeEPUB(
         workID: UUID,
         sessionActive: Bool,
@@ -38,6 +66,12 @@ nonisolated enum ReaderSpeechSessionPolicy {
     ) -> Bool {
         !sessionActive || sessionWorkID != workID
     }
+}
+
+nonisolated enum ReaderSpeechPositionSaveResult: Equatable {
+    case wrote(progressStamp: Date)
+    case endSession
+    case suspendWrites
 }
 
 /// Saves at speech boundaries and lifecycle checkpoints, never for every
@@ -49,20 +83,20 @@ nonisolated struct ReaderSpeechPositionSaveThrottle {
         case pause
         case stop
         case sessionEnd
-        case readerDetached
         case appBackground
 
         var stampsShelf: Bool {
             switch self {
             case .utteranceBoundary, .spokenRange:
                 false
-            case .pause, .stop, .sessionEnd, .readerDetached, .appBackground:
+            case .pause, .stop, .sessionEnd, .appBackground:
                 true
             }
         }
     }
 
     private var lastBoundaryLocator: String?
+    private var hasSavedDetachedProgress = false
 
     mutating func shouldSave(locatorString: String?, for event: Event) -> Bool {
         guard let locatorString, !locatorString.isEmpty else { return false }
@@ -73,14 +107,22 @@ nonisolated struct ReaderSpeechPositionSaveThrottle {
             guard locatorString != lastBoundaryLocator else { return false }
             lastBoundaryLocator = locatorString
             return true
-        case .pause, .stop, .sessionEnd, .readerDetached, .appBackground:
+        case .pause, .stop, .sessionEnd, .appBackground:
+            guard hasSavedDetachedProgress else { return false }
             lastBoundaryLocator = locatorString
             return true
         }
     }
 
+    mutating func didSave(for event: Event) {
+        if event == .utteranceBoundary {
+            hasSavedDetachedProgress = true
+        }
+    }
+
     mutating func reset() {
         lastBoundaryLocator = nil
+        hasSavedDetachedProgress = false
     }
 }
 #endif

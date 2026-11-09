@@ -113,6 +113,9 @@ enum PreservedWorkService {
     /// recovery window so restoring is instant — freeing it is `hardDelete`'s job.
     static func softDelete(_ work: SavedWork, in context: ModelContext) {
         let now = Date()
+        #if os(iOS)
+        NotificationCenter.default.post(name: .kudosWorkEPUBWillChange, object: work.id)
+        #endif
         work.isPendingDeletion = true
         work.deletedAt = now
         work.permanentDeletionScheduledAt = now.addingTimeInterval(recoveryWindow)

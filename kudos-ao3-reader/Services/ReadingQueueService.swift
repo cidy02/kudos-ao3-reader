@@ -941,6 +941,9 @@ enum ReadingQueueService {
             at: destination.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
+        #if os(iOS)
+        NotificationCenter.default.post(name: .kudosWorkEPUBWillChange, object: work.id)
+        #endif
         if FileManager.default.fileExists(atPath: destination.path) {
             _ = try FileManager.default.replaceItemAt(
                 destination,

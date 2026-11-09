@@ -112,8 +112,9 @@ final class ReaderSpeechController {
         _ locatorString: String,
         _ sections: [ReaderSection],
         _ event: ReaderSpeechPositionSaveThrottle.Event,
-        _ date: Date
-    ) -> Void)?
+        _ date: Date,
+        _ sessionProgressStamp: Date
+    ) -> ReaderSpeechPositionSaveResult)?
     /// Lets the app resume normal finished-copy cleanup after the detached
     /// controller has released the Publication that still read from that EPUB.
     var onReleaseDetachedWork: ((_ workID: UUID) -> Void)?
@@ -125,6 +126,9 @@ final class ReaderSpeechController {
     private var sections: [ReaderSection] = []
     private var chapterStartLocators: [Locator?] = []
     private var positionSaveThrottle = ReaderSpeechPositionSaveThrottle()
+    private var detachedProgressStamp: Date?
+    private var detachedWritesSuspended = false
+    private var workEPUBChangeObserver: NSObjectProtocol?
     private var ttsService: TTSService?
     private var ttsServiceKind: ReaderTTSEngineKind?
     private var ttsServiceRuntimeConfiguration: KokoroRuntimeConfiguration?
@@ -155,6 +159,7 @@ final class ReaderSpeechController {
     /// Work metadata for the system Now Playing card (title + author byline).
     private var nowPlayingTitle: String = ""
     private var nowPlayingArtist: String?
+    private var concealsNowPlayingMetadata = false
     /// Total Readium positions in the open publication — drives Now Playing
     /// duration/elapsed via `ReaderTimeEstimate` (same model as the position card).
     private var totalPositionCount: Int = 0
@@ -168,6 +173,12 @@ final class ReaderSpeechController {
     /// Mini player / fan "session on" — playing or paused, not fully stopped.
     var isSessionActive: Bool { status == .playing || status == .paused }
     var sessionTitle: String { nowPlayingTitle }
+
+    deinit {
+        if let workEPUBChangeObserver {
+            NotificationCenter.default.removeObserver(workEPUBChangeObserver)
+        }
+    }
 
     /// Voices the settings UI can offer (already filtered for long-form reading).
     var availableVoices: [TTSVoice] {
@@ -202,6 +213,7 @@ final class ReaderSpeechController {
         sections: [ReaderSection],
         chapterStartLocators: [Locator?]
     ) {
+        installWorkEPUBChangeObserverIfNeeded()
         let action = ReaderSpeechSessionPolicy.openReader(
             sessionActive: isSessionActive,
             sessionWorkID: sessionWorkID,
@@ -276,6 +288,7 @@ final class ReaderSpeechController {
         onSkipNext: @escaping () -> Void
     ) {
         guard openReaderWorkID == workID, sessionWorkID == workID else { return }
+        resetDetachedPositionSaving()
         self.onAdvance = onAdvance
         self.onSpokenRange = onSpokenRange
         self.onSessionEnded = onSessionEnded
@@ -298,7 +311,9 @@ final class ReaderSpeechController {
         let action = ReaderSpeechSessionPolicy.leaveReader(sessionActive: isSessionActive)
         switch action {
         case .detach:
-            persistPosition(for: .readerDetached)
+            detachedProgressStamp = Date()
+            detachedWritesSuspended = false
+            positionSaveThrottle.reset()
             detachReaderCallbacks()
         case .tearDown:
             tearDown()
@@ -311,6 +326,14 @@ final class ReaderSpeechController {
     func saveDetachedPositionForBackground() {
         guard !isReaderOpen else { return }
         persistPosition(for: .appBackground)
+    }
+
+    func setConcealsNowPlayingMetadata(_ concealed: Bool) {
+        guard concealsNowPlayingMetadata != concealed else { return }
+        concealsNowPlayingMetadata = concealed
+        if isSessionActive {
+            publishNowPlaying(playing: isPlaying)
+        }
     }
 
     /// Pushes the latest UserDefaults preferences into the live synthesizer.
@@ -793,9 +816,10 @@ final class ReaderSpeechController {
         resumeLocator = nil
         nowPlayingTitle = ""
         nowPlayingArtist = nil
+        concealsNowPlayingMetadata = false
         totalPositionCount = 0
         spokenText = ""
-        positionSaveThrottle.reset()
+        resetDetachedPositionSaving()
         status = .unavailable
         if !isReaderOpen, let releasedWorkID {
             onReleaseDetachedWork?(releasedWorkID)
@@ -808,11 +832,54 @@ final class ReaderSpeechController {
         at date: Date = Date()
     ) {
         guard !isReaderOpen,
+              !detachedWritesSuspended,
               let workID = sessionWorkID,
+              let detachedProgressStamp,
               let locatorString = (locator ?? resumeLocator)?.persistenceString,
               positionSaveThrottle.shouldSave(locatorString: locatorString, for: event)
         else { return }
-        onSavePosition?(workID, locatorString, sections, event, date)
+        guard let result = onSavePosition?(
+            workID,
+            locatorString,
+            sections,
+            event,
+            date,
+            detachedProgressStamp
+        ) else { return }
+        switch result {
+        case .wrote(let progressStamp):
+            self.detachedProgressStamp = progressStamp
+            positionSaveThrottle.didSave(for: event)
+        case .endSession:
+            detachedWritesSuspended = true
+            tearDown()
+        case .suspendWrites:
+            detachedWritesSuspended = true
+        }
+    }
+
+    private func resetDetachedPositionSaving() {
+        detachedProgressStamp = nil
+        detachedWritesSuspended = false
+        positionSaveThrottle.reset()
+    }
+
+    private func installWorkEPUBChangeObserverIfNeeded() {
+        guard workEPUBChangeObserver == nil else { return }
+        workEPUBChangeObserver = NotificationCenter.default.addObserver(
+            forName: .kudosWorkEPUBWillChange,
+            object: nil,
+            queue: nil
+        ) { [weak self] notification in
+            MainActor.assumeIsolated {
+                guard let self,
+                      let workID = notification.object as? UUID,
+                      workID == self.sessionWorkID
+                else { return }
+                self.detachedWritesSuspended = true
+                self.tearDown()
+            }
+        }
     }
 
     private func requestNextChapter() -> Bool {
@@ -932,12 +999,15 @@ final class ReaderSpeechController {
         installRemoteCommandsIfNeeded()
         UIApplication.shared.beginReceivingRemoteControlEvents()
 
-        let title = nowPlayingTitle.isEmpty ? "Reading aloud" : nowPlayingTitle
+        let title = concealsNowPlayingMetadata
+            ? "Reading Aloud"
+            : (nowPlayingTitle.isEmpty ? "Reading aloud" : nowPlayingTitle)
+        let artist = concealsNowPlayingMetadata ? nil : nowPlayingArtist
         if NowPlayingInfo.shared.media?.title != title
-            || NowPlayingInfo.shared.media?.artist != nowPlayingArtist {
+            || NowPlayingInfo.shared.media?.artist != artist {
             NowPlayingInfo.shared.media = .init(
                 title: title,
-                artist: nowPlayingArtist
+                artist: artist
             )
         }
 

@@ -242,9 +242,9 @@ final class AppRouter {
     /// An app-level request to reopen a local work in Home's existing reader path.
     /// Read Aloud uses this after its reader-scoped navigation has been dismissed.
     var pendingLocalWorkDestination: LocalWorkDestination?
-    /// The focused Comments screen owns the one system tab accessory while its
-    /// composer is available; app-level Read Aloud yields to it.
-    var isCommentAccessoryActive = false
+    /// The focused Comments screen owns its tab's system accessory while its
+    /// composer is available; Read Aloud remains visible on other tabs.
+    var commentAccessoryTab: AppTab?
     /// The tab that asked for it, drawn as the pushed list's kicker.
     var pendingLibrarySectionOrigin: String?
     /// A tag the Search tab should search AO3 for (e.g. a tapped fandom/character/

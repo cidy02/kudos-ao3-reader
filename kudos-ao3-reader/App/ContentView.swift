@@ -19,6 +19,7 @@ struct ContentView: View {
     @State private var downloadQueue = DownloadQueue()
     #if os(iOS)
     @State private var speech = ReaderSpeechController()
+    @AppStorage("hideMatureContent") private var hideMature = true
     #endif
     @State private var subscriptionScan = SubscriptionScanService.shared
     #if os(iOS)
@@ -104,6 +105,9 @@ struct ContentView: View {
             .environment(speech)
             .environment(mailSubscriptionDriver)
             .onAppear { installSpeechPositionSaver() }
+            .onChange(of: speechMetadataIsConcealed, initial: true) { _, concealed in
+                speech.setConcealsNowPlayingMetadata(concealed)
+            }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .background {
                     speech.saveDetachedPositionForBackground()
@@ -515,11 +519,12 @@ struct ContentView: View {
         // Owner, 2026-10-01: the tab bar shrinks while you scroll down.
         .tabBarMinimizeBehavior(.onScrollDown)
         .tabViewBottomAccessory(
-            isEnabled: !router.isCommentAccessoryActive
-                && ReaderSpeechSessionPolicy.showsMiniPlayer(
-                    sessionActive: speech.isSessionActive,
-                    readerOpen: speech.isReaderOpen
-                )
+            isEnabled: ReaderSpeechSessionPolicy.showsMiniPlayer(
+                sessionActive: speech.isSessionActive,
+                readerOpen: speech.isReaderOpen,
+                commentAccessoryTab: router.commentAccessoryTab,
+                selectedTab: router.selection
+            )
         ) {
             readerSpeechAccessory
         }
@@ -538,7 +543,7 @@ struct ContentView: View {
                 HStack(spacing: 10) {
                     Image(systemName: "waveform")
                         .foregroundStyle(.accentInk)
-                    Text(speech.sessionTitle)
+                    Text(speechAccessoryTitle)
                         .foregroundStyle(.primary)
                         .lineLimit(1)
                     Spacer(minLength: 0)
@@ -547,7 +552,7 @@ struct ContentView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Open reader for \(speech.sessionTitle)")
+            .accessibilityLabel(speechAccessoryAccessibilityLabel)
 
             Button { speech.toggle(from: nil) } label: {
                 Image(systemName: speech.isPlaying ? "pause.fill" : "play.fill")
@@ -573,13 +578,28 @@ struct ContentView: View {
 
     private func installSpeechPositionSaver() {
         let context = modelContext
-        speech.onSavePosition = { workID, locatorString, sections, event, date in
+        speech.onSavePosition = {
+            workID, locatorString, sections, event, date, sessionProgressStamp in
             let targetID = workID
             var descriptor = FetchDescriptor<SavedWork>(
                 predicate: #Predicate { $0.id == targetID }
             )
             descriptor.fetchLimit = 1
-            guard let works = try? context.fetch(descriptor), let work = works.first else { return }
+            guard let works = try? context.fetch(descriptor), let work = works.first else {
+                return .endSession
+            }
+            switch ReaderSpeechSessionPolicy.detachedSaveDecision(
+                isPendingDeletion: work.isPendingDeletion,
+                workProgressStamp: work.progressModifiedAt,
+                sessionProgressStamp: sessionProgressStamp
+            ) {
+            case .endSession:
+                return .endSession
+            case .suspendWrites:
+                return .suspendWrites
+            case .write:
+                break
+            }
             ReadiumReaderPersistence.writePosition(
                 locatorString,
                 to: work,
@@ -589,8 +609,11 @@ struct ContentView: View {
             if event.stampsShelf {
                 work.markProgressModified(date)
             }
-            context.saveBestEffort(reason: "Saving detached read-aloud position failed")
+            guard context.saveBestEffort(reason: "Saving detached read-aloud position failed") else {
+                return .suspendWrites
+            }
             FolderSyncService.markDirty()
+            return .wrote(progressStamp: work.progressModifiedAt ?? date)
         }
         speech.onReleaseDetachedWork = { workID in
             let targetID = workID
@@ -601,6 +624,27 @@ struct ContentView: View {
             guard let works = try? context.fetch(descriptor), let work = works.first else { return }
             WorkLifecycle.freeEPUBIfFinished(work, in: context)
         }
+    }
+
+    private var speechMetadataIsConcealed: Bool {
+        guard let workID = speech.sessionWorkID else { return false }
+        let targetID = workID
+        var descriptor = FetchDescriptor<SavedWork>(
+            predicate: #Predicate { $0.id == targetID }
+        )
+        descriptor.fetchLimit = 1
+        guard let work = try? modelContext.fetch(descriptor).first else { return false }
+        return privacyGate.isConcealed(work, enabled: hideMature)
+    }
+
+    private var speechAccessoryTitle: String {
+        speechMetadataIsConcealed ? "Reading Aloud" : speech.sessionTitle
+    }
+
+    private var speechAccessoryAccessibilityLabel: String {
+        speechMetadataIsConcealed
+            ? "Open reader, Reading Aloud"
+            : "Open reader for \(speech.sessionTitle)"
     }
 
     private func openSpeechReader() {
