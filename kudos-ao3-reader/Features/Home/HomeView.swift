@@ -23,6 +23,24 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
     @AppStorage(WorkSymbolPlacement.storageKey) private var symbolPlacement: WorkSymbolPlacement = .beside
+    @Environment(SubscriptionScanService.self) private var subscriptionScan
+    #if os(iOS)
+    @Environment(MailSubscriptionDriver.self) private var mailDriver
+    #endif
+
+    /// What the Subscriptions screen's Waiting tab shows, newest first: mail while it
+    /// is connected, otherwise the scan's. Hide mode's omissions as in Waiting.
+    private var recentSubscriptionUpdates: [SubscriptionUpdate] {
+        var updates = subscriptionScan.updates
+        #if os(iOS)
+        if mailDriver.isConnected { updates = mailDriver.updates }
+        #endif
+        return updates
+            .filter {
+                !gate.isHidden(remoteID: Int(clamping: $0.workID), rating: $0.rating, enabled: hideMature, mode: matureMode)
+            }
+            .sorted { $0.at > $1.at }
+    }
 
     /// New Chapters and Subscriptions dividers: under the 2×2 (79, as before), or at the
     /// screen inset when the symbols sit under the title.
@@ -682,17 +700,40 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
             ? nil
             : HomeSubscriptionsCount.itemCount(shown: visibleEntries.count, recorded: subscriptionsListCount)
         let visibleRows = Array(visibleEntries.prefix(2))
+        // Owner, canvas 2026-11-08: "update this section to look like subscriptions do
+        // now" — when Kudos knows what changed, the newest updates in Waiting's own rows.
+        let updates = recentSubscriptionUpdates
+        let updateRows = Array(updates.prefix(2))
 
         return VStack(alignment: .leading, spacing: 6) {
             SectionRuleHeader(
                 title: "Subscriptions",
-                count: totalCount,
-                actionTitle: visibleEntries.count > 2 ? "See All" : nil,
-                onSeeAll: visibleEntries.isEmpty ? nil : { path.append(SubscriptionsRoute()) }
+                count: updates.isEmpty ? totalCount : updates.count,
+                actionTitle: (updates.isEmpty ? visibleEntries.count : updates.count) > 2 ? "See All" : nil,
+                onSeeAll: visibleEntries.isEmpty && updates.isEmpty ? nil : { path.append(SubscriptionsRoute()) }
             )
             .dashboardLeadingRegion()
 
-            if showSkeleton {
+            if !updateRows.isEmpty {
+                VStack(spacing: 0) {
+                    ForEach(Array(updateRows.enumerated()), id: \.element.id) { index, update in
+                        // A tap gesture, not a Button: a concealed row's own reveal
+                        // button must win the tap.
+                        WaitingRow(
+                            update: update,
+                            position: index + 1,
+                            showsPosition: false,
+                            isFirst: index == 0,
+                            isLast: index == updateRows.count - 1
+                        )
+                        .padding(.horizontal, 16)
+                        .contentShape(Rectangle())
+                        .onTapGesture { path.append(SubscriptionsRoute()) }
+                        .accessibilityAction(named: "Open Subscriptions") { path.append(SubscriptionsRoute()) }
+                    }
+                }
+                .dashboardLeadingRegion()
+            } else if showSkeleton {
                 VStack(spacing: 8) {
                     ForEach(0 ..< 2, id: \.self) { _ in
                         AO3WorkRowSkeleton()

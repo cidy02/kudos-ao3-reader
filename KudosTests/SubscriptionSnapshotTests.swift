@@ -46,7 +46,7 @@ struct SubscriptionSnapshotTests {
         defer { UIView.setAnimationsEnabled(animationsWereEnabled) }
 
         for screen in Screen.allCases {
-            defaults.set(true, forKey: "hideMatureContent")
+            defaults.set(screen != .waitingOpen, forKey: "hideMatureContent")
             defaults.set(
                 screen == .newToYouHidden
                     ? MaturePrivacyMode.hide.rawValue
@@ -67,6 +67,8 @@ struct SubscriptionSnapshotTests {
                             .dynamicTypeSize(textSize.value)
                             .preferredColorScheme(theme.appTheme.colorScheme)
                             .tint(theme.effectiveTint)
+                            // As the app shell does, so \.accentInk is the theme's legible step.
+                            .accentTint(theme.effectiveTint, on: theme.appTheme)
 
                         let image = try await render(
                             AnyView(root),
@@ -141,6 +143,8 @@ struct SubscriptionSnapshotTests {
 private extension SubscriptionSnapshotTests {
     enum Screen: String, CaseIterable {
         case waiting
+        /// The same sample with privacy off, so the rows themselves can be reviewed.
+        case waitingOpen = "waiting-open"
         case following
         case tidyUp = "tidy-up"
         case newToYou = "new-to-you"
@@ -156,7 +160,7 @@ private extension SubscriptionSnapshotTests {
 
         var view: AnyView {
             switch self {
-            case .waiting:
+            case .waiting, .waitingOpen:
                 AnyView(NavigationStack { WaitingListView.snapshotSample })
             case .following:
                 // One still-going work, so Series and Authors land inside the snapshot frame.

@@ -112,12 +112,6 @@ struct WaitingListView: View {
                                 isFirst: index == 0,
                                 isLast: index == day.updates.count - 1
                             )
-                            .concealedForPrivacy(privacyGate.isBlurred(
-                                remoteID: Int(clamping: update.workID), rating: update.rating,
-                                enabled: hideMature, mode: matureMode
-                            )) {
-                                privacyGate.reveal(remoteID: Int(clamping: update.workID))
-                            }
                             .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
                             .listRowSeparator(.hidden)
                         }
@@ -332,12 +326,19 @@ struct WaitingGutterClock: Equatable {
     }
 }
 
-private struct WaitingRow: View {
+/// One update on the timeline. Also Home's Subscriptions rows (T-506), so it gates
+/// itself for privacy; the list that holds it omits what Hide mode hides.
+struct WaitingRow: View {
     let update: SubscriptionUpdate
     let position: Int
     let showsPosition: Bool
     let isFirst: Bool
     let isLast: Bool
+
+    @Environment(PrivacyGate.self) private var privacyGate
+    @Environment(\.accentInk) private var accentInk
+    @AppStorage("hideMatureContent") private var hideMature = true
+    @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
 
     private var isConfirmed: Bool { update.certainty == .confirmed }
 
@@ -476,23 +477,30 @@ private struct WaitingRow: View {
         }
     }
 
+    /// The text, then a dot (owner, canvas 2026-11-08: "a red dot rather than a badge,
+    /// with the info next to it", "dot to the right"). A confirmed update is a filled dot
+    /// in the app colour's legible step (`accentInk`, readable on Dark/OLED where the raw
+    /// red is not); a hedge ("Check", "Updated") is an outline.
     private var badgeLabel: some View {
+        HStack(spacing: 6) {
+            badgeText
+            Circle()
+                .fill(isConfirmed ? accentInk : Color.clear)
+                .overlay(Circle().strokeBorder(isConfirmed ? Color.clear : Color.secondary, lineWidth: 1.5))
+                .frame(width: 8, height: 8)
+                .accessibilityHidden(true)
+        }
+        .fixedSize()
+    }
+
+    private var badgeText: some View {
         Text(badge)
             .font(.caption.bold())
-            // `.primary` in both states, and neither `.tint` nor `.secondary`.
-            // `.tint` is the user's accent (AO3 red by default), a fixed hex
-            // rather than a colorScheme colour, so on `.quaternary` over the
-            // dark surface it falls under 2:1. `.secondary` is no good either:
-            // at caption size this is 12pt bold, under the 14pt that would let
-            // it pass as large text, so it needs 4.5:1 — and `.secondary` on
-            // `.quaternary` measures about 3.2:1 on light and sepia. The hedge
-            // is carried by the words ("Check" vs "+1 · Ch. 9") and by the
-            // rail's outline dot, neither of which depends on contrast ratio.
+            // `.primary` in both states: 12 pt bold is not large text, so it needs
+            // 4.5:1, which neither `.tint` (a fixed hex, under 2:1 on the dark
+            // surface) nor `.secondary` gives on every theme. The hedge is carried
+            // by the words ("Check" vs "+1 · Ch. 9") and the outline dots.
             .foregroundStyle(.primary)
-            .padding(.horizontal, 9)
-            .padding(.vertical, 4)
-            .background(.quaternary, in: Capsule())
-            .fixedSize()
     }
 
     private var titleText: some View {
@@ -542,6 +550,16 @@ private struct WaitingRow: View {
     }
 
     var body: some View {
+        rowContent
+            .concealedForPrivacy(privacyGate.isBlurred(
+                remoteID: Int(clamping: update.workID), rating: update.rating,
+                enabled: hideMature, mode: matureMode
+            )) {
+                privacyGate.reveal(remoteID: Int(clamping: update.workID))
+            }
+    }
+
+    private var rowContent: some View {
         HStack(alignment: .top, spacing: 0) {
             if !isAccessibilitySize {
                 gutter
