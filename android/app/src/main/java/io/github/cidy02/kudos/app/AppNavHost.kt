@@ -79,6 +79,7 @@ fun AppNavHost(
     startDestination: String = Routes.Home,
     shellChrome: HomeShellChrome? = null,
     libraryChrome: io.github.cidy02.kudos.library.LibraryShellChrome? = null,
+    writingChrome: io.github.cidy02.kudos.writing.WritingShellChrome? = null,
     onOpenAccount: () -> Unit = {}
 ) {
     // The only state left here (T-90): a small id-keyed cache so opening Work
@@ -217,6 +218,9 @@ fun AppNavHost(
                 onOpenComments = { workId ->
                     navController.navigate(Routes.comments(workId))
                 },
+                onOpenAO3List = { type ->
+                    navController.navigate(Routes.accountList(NavArgCodecs.encodeAccountListType(type)))
+                },
                 onOpenSection = { kind -> navController.navigate(Routes.librarySection(kind.id)) }
             )
         }
@@ -318,9 +322,36 @@ fun AppNavHost(
             }
         }
         sharedComposable(Routes.Writing) {
-            io.github.cidy02.kudos.account.WritingDraftsScreen(
-                repository = container.writingDraftsRepository,
-                onOpenWork = { navController.navigate(it) }
+            io.github.cidy02.kudos.writing.WritingScreen(
+                authRepository = container.authRepository,
+                draftsRepository = container.writingDraftsRepository,
+                authorRepository = container.authorRepository,
+                inboxRepository = container.inboxRepository,
+                countsCache = container.accountListCountsCache,
+                postingPseudStore = container.postingPseudStore,
+                shellChrome = writingChrome,
+                onNewWork = {
+                    navController.navigate(io.github.cidy02.kudos.account.WritingWorkDestination.route())
+                },
+                onOpenDraft = { workId ->
+                    navController.navigate(io.github.cidy02.kudos.account.WritingWorkDestination.route(workId))
+                },
+                onOpenDrafts = { navController.navigate(Routes.WritingDrafts) },
+                onOpenWorks = {
+                    navController.navigate(
+                        Routes.accountList(NavArgCodecs.encodeAccountListType(AccountListType.MyWorks))
+                    )
+                },
+                onOpenSeries = {
+                    container.authRepository.username()?.let { username ->
+                        navController.navigate(
+                            Routes.authorProfile(username, io.github.cidy02.kudos.author.AuthorTab.Series)
+                        )
+                    }
+                },
+                onOpenCollections = { navController.navigate(Routes.AO3Collections) },
+                onOpenInbox = { navController.navigate(Routes.AccountInbox) },
+                onLogin = { navController.navigate(Routes.AccountLogin) }
             )
         }
         sharedComposable(Routes.Browse) {

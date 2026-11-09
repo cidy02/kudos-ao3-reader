@@ -52,6 +52,7 @@ import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.BarChart
+import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.Build
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Checklist
@@ -62,6 +63,7 @@ import androidx.compose.material.icons.outlined.DownloadDone
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.NotificationsNone
 import androidx.compose.material.icons.outlined.Queue
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Star
@@ -110,6 +112,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.cidy02.kudos.core.model.SavedWork
+import io.github.cidy02.kudos.account.AccountListType
 import io.github.cidy02.kudos.core.model.WorkDownloadAction
 import io.github.cidy02.kudos.core.model.WorkDownloadSemantics
 import io.github.cidy02.kudos.core.model.WorkCollection
@@ -132,6 +135,7 @@ import io.github.cidy02.kudos.ui.subject.FilterButton
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.settings.SettingsPanel
 import io.github.cidy02.kudos.ui.subject.SubjectRowSeparator
+import io.github.cidy02.kudos.ui.subject.SubjectFormRow
 import io.github.cidy02.kudos.ui.subject.SubjectSegmentedControl
 import io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale
 import io.github.cidy02.kudos.ui.subject.SectionRuleHeader
@@ -179,6 +183,7 @@ fun LibraryScreen(
     onOpenQueue: (String) -> Unit = {},
     onOpenCollection: (String) -> Unit = {},
     onOpenComments: (Long) -> Unit = {},
+    onOpenAO3List: (AccountListType) -> Unit = {},
     section: LibrarySectionKind? = null,
     onOpenSection: (LibrarySectionKind) -> Unit = {},
     libraryChrome: LibraryShellChrome? = null,
@@ -555,6 +560,7 @@ fun LibraryScreen(
         onAddToQueue = { addToQueueWorkId = it },
         onAddToCollection = { addToCollectionWorkId = it },
         onOpenComments = onOpenComments,
+        onOpenAO3List = onOpenAO3List,
         canRebuildFromOriginal = { work ->
             workImporter?.canRebuildFromOriginal(work) == true
         },
@@ -652,6 +658,7 @@ private fun LibraryContent(
     onAddToQueue: (String) -> Unit,
     onAddToCollection: (String) -> Unit,
     onOpenComments: (Long) -> Unit,
+    onOpenAO3List: (AccountListType) -> Unit,
     canRebuildFromOriginal: suspend (SavedWork) -> Boolean,
     onRebuildFromOriginal: (SavedWork) -> Unit,
     onTogglePrivacy: () -> Unit,
@@ -899,6 +906,7 @@ private fun LibraryContent(
                         onRemoveFromAllQueues = onRemoveFromAllQueues
                     )
                 }
+                item { LibraryOnAO3Panel(onOpenAO3List) }
                 if (state.recentlyDeletedCount > 0) {
                     item {
                         RecentlyDeletedRow(
@@ -930,6 +938,40 @@ private fun LibraryContent(
                 modifier = Modifier.align(Alignment.BottomCenter)
             )
         }
+    }
+}
+
+@Composable
+private fun LibraryOnAO3Panel(onOpen: (AccountListType) -> Unit) {
+    SectionRuleHeader("On AO3", gutter = SubjectMetrics.accountGutter)
+    SettingsPanel(Modifier.padding(top = 8.dp)) {
+        SubjectFormRow(
+            "Marked for Later",
+            leadingIcon = Icons.Outlined.Schedule,
+            showsDisclosure = true,
+            onClick = { onOpen(AccountListType.MarkedForLater) }
+        )
+        SubjectRowSeparator()
+        SubjectFormRow(
+            "Bookmarks",
+            leadingIcon = Icons.Outlined.BookmarkBorder,
+            showsDisclosure = true,
+            onClick = { onOpen(AccountListType.Bookmarks) }
+        )
+        SubjectRowSeparator()
+        SubjectFormRow(
+            "Subscriptions",
+            leadingIcon = Icons.Outlined.NotificationsNone,
+            showsDisclosure = true,
+            onClick = { onOpen(AccountListType.Subscriptions) }
+        )
+        SubjectRowSeparator()
+        SubjectFormRow(
+            "AO3 History",
+            leadingIcon = Icons.Outlined.History,
+            showsDisclosure = true,
+            onClick = { onOpen(AccountListType.History) }
+        )
     }
 }
 

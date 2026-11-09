@@ -164,6 +164,10 @@ class NavigationRoutesTest {
             Routes.resolveFormerAccountRoute(Routes.AO3Collections)
         )
         assertEquals(
+            LegacyAccountDestination.Writing(WritingRoute.Series),
+            Routes.resolveFormerAccountRoute(Routes.authorSeries("writer"))
+        )
+        assertEquals(
             LegacyAccountDestination.Writing(WritingRoute.Works),
             Routes.resolveFormerAccountRoute(Routes.accountList("MyWorks"))
         )
@@ -202,24 +206,13 @@ class NavigationRoutesTest {
     }
 
     @Test
-    fun accountSheetStateHandlesRoutesBackAndDeferredWebUrls() {
+    fun accountSheetStateConsumesRoutesAndBackClosesInsideOut() {
         val state = AccountSheetState()
-        assertEquals(Routes.Home, state.authorNavigationTarget)
 
         state.showAccount(AccountSheetRoute.Inbox)
         assertTrue(state.isPresentingAccount)
-        assertEquals(Routes.Account, state.authorNavigationTarget)
         assertEquals(AccountSheetRoute.Inbox, state.consumePendingAccountRoute())
         assertNull(state.consumePendingAccountRoute())
-
-        state.openUrl("https://archiveofourown.org/users/someone")
-        assertFalse(state.isPresentingAccount)
-        assertFalse(state.isPresentingWebBrowser)
-        assertNull(state.pendingWebUrl)
-
-        state.accountDidDismiss()
-        assertTrue(state.isPresentingWebBrowser)
-        assertEquals("https://archiveofourown.org/users/someone", state.pendingWebUrl)
 
         var poppedSubpage = 0
         var poppedStack = 0

@@ -32,6 +32,7 @@ class AO3InboxRepository(
     fun cachedUnreadCount(): Int? {
         val scope = viewerScope()
         val username = scope.viewer?.takeIf { it.isNotBlank() } ?: return null
+        lastUnreadByScope.value?.takeIf { it.first == scope }?.let { return it.second }
         val url = AO3InboxParser.inboxUrl(username, 1)
         if (url != null) {
             val cached = pageCache.value(
@@ -43,7 +44,7 @@ class AO3InboxRepository(
                 if (parsed != null) return parsed
             }
         }
-        return lastUnreadByScope.value?.takeIf { it.first == scope }?.second
+        return null
     }
 
     /**
@@ -114,6 +115,7 @@ class AO3InboxRepository(
                 )
                 if (error == null) {
                     if (AO3PageCache.scope(client) == viewer) {
+                        lastUnreadByScope.value = null
                         AO3InboxParser.inboxUrl(viewer.viewer ?: "", 1)?.let {
                             pageCache.removePages(java.net.URI(it).path, viewer)
                             if (form.actionUrl != referer) {

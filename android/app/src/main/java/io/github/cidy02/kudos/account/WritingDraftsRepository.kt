@@ -24,6 +24,11 @@ class WritingDraftsRepository(
     // Compose tests pass Unconfined, as for AO3CollectionDetailRepository.
     private val parseDispatcher: CoroutineDispatcher = Dispatchers.Default
 ) {
+    data class CachedPage(val username: String, val generation: Int, val value: AO3DraftsPage)
+
+    private val mutableCachedPage = kotlinx.coroutines.flow.MutableStateFlow<CachedPage?>(null)
+    val cachedPage: kotlinx.coroutines.flow.StateFlow<CachedPage?> = mutableCachedPage
+
     suspend fun load(page: Int = 1): AO3Result<AO3DraftsPage> {
         if (!authRepository.state.value.isSignedIn) return AO3Result.Failure(AO3Error.AuthenticationRequired)
         val generation = authRepository.generation.value
@@ -38,6 +43,7 @@ class WritingDraftsRepository(
             is AO3Result.Success -> try {
                 val parsed = withContext(parseDispatcher) { parser.parse(response.value.body, page, response.value.url) }
                 if (generation != authRepository.generation.value) throw CancellationException()
+                mutableCachedPage.value = CachedPage(username, generation, parsed)
                 AO3Result.Success(parsed)
             } catch (error: CancellationException) {
                 throw error

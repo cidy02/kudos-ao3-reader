@@ -103,7 +103,7 @@ fun HomeScreen(
     )
     val state by viewModel.state.collectAsState()
     val authState by authRepository.state.collectAsState()
-    val signedInUsername = (authState as? io.github.cidy02.kudos.auth.AO3AuthState.SignedIn)?.session?.username
+    val signedInUsername = (authState as? io.github.cidy02.kudos.auth.AO3AuthState.SignedIn)?.username
     val pageCacheChanges by io.github.cidy02.kudos.network.ao3.AO3PageCache.shared.changes.collectAsState()
     val cachedAvatarUrl = remember(signedInUsername, pageCacheChanges, authorRepository) {
         signedInUsername?.let {

@@ -24,6 +24,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -72,6 +73,8 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -80,6 +83,8 @@ import io.github.cidy02.kudos.home.HomeShellChrome
 import io.github.cidy02.kudos.home.HomeToolbarActions
 import io.github.cidy02.kudos.library.LibraryShellChrome
 import io.github.cidy02.kudos.library.LibraryToolbarActions
+import io.github.cidy02.kudos.writing.WritingShellChrome
+import io.github.cidy02.kudos.writing.WritingToolbarActions
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.ToolbarCircleButton
 import io.github.cidy02.kudos.search.LocalTagSearch
@@ -176,6 +181,7 @@ fun MainScaffold(
     val chrome = remember { ShellChromeState() }
     val homeChrome = remember { HomeShellChrome() }
     val libraryChrome = remember { LibraryShellChrome() }
+    val writingChrome = remember { WritingShellChrome() }
     val pushedChrome = remember { PushedShellChrome() }
     val accountSheetState = remember { AccountSheetState() }
     LaunchedEffect(currentRoute, debugShotName) {
@@ -191,6 +197,7 @@ fun MainScaffold(
     }
     val onHome = currentRoute == Routes.Home
     val onLibrary = currentRoute == Routes.Library
+    val onWriting = currentRoute == Routes.Writing
     val homeSelecting = onHome && homeChrome.hideTabBar
     val librarySelecting = onLibrary && libraryChrome.hideTabBar
     val overlay = remember { ShellOverlayState() }
@@ -350,6 +357,7 @@ fun MainScaffold(
                             modifier = Modifier.fillMaxSize(),
                             shellChrome = homeChrome,
                             libraryChrome = libraryChrome,
+                            writingChrome = writingChrome,
                             onOpenAccount = { accountSheetState.showAccount(AccountSheetRoute.Profile) }
                         )
                     }
@@ -368,6 +376,7 @@ fun MainScaffold(
                 onHome -> 108.dp
                 onLibrary && librarySelecting -> 160.dp
                 onLibrary -> 160.dp
+                onWriting -> 64.dp
                 else -> 0.dp
             }
             AnimatedVisibility(
@@ -416,6 +425,20 @@ fun MainScaffold(
                 exit = fadeOut(ChromeMotion)
             ) {
                 LibraryToolbarActions(libraryChrome)
+            }
+        }
+
+        if (onWriting && writingChrome.mounted) {
+            AnimatedVisibility(
+                visible = !chromeHidden,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Top))
+                    .padding(top = 6.dp, end = 8.dp),
+                enter = fadeIn(ChromeMotion),
+                exit = fadeOut(ChromeMotion)
+            ) {
+                WritingToolbarActions(writingChrome)
             }
         }
 
@@ -518,12 +541,21 @@ fun MainScaffold(
         }
 
         if (accountSheetState.isPresentingAccount) {
-            AccountSheetModal(
-                container = container,
-                themeMode = themeMode,
-                onCycleTheme = onCycleTheme,
-                state = accountSheetState
-            )
+            Dialog(
+                onDismissRequest = accountSheetState::dismissAccount,
+                properties = DialogProperties(
+                    dismissOnBackPress = false,
+                    usePlatformDefaultWidth = false,
+                    decorFitsSystemWindows = false
+                )
+            ) {
+                AccountSheetModal(
+                    container = container,
+                    themeMode = themeMode,
+                    onCycleTheme = onCycleTheme,
+                    state = accountSheetState
+                )
+            }
         }
     }
     }
@@ -563,7 +595,7 @@ private fun AccountSheetModal(
             customOnBack = sheetPushedChrome.onBack.takeIf { sheetPushedChrome.mounted },
             canPopSheetStack = canPopSheetStack,
             popSheetStack = { sheetNavController.popBackStack() },
-            dismissSheet = { state.accountDidDismiss() }
+            dismissSheet = { state.dismissAccount() }
         )
     }
 
@@ -598,7 +630,7 @@ private fun AccountSheetModal(
                         fontSize = 16.sp,
                         fontWeight = FontWeight.SemiBold,
                         modifier = Modifier
-                            .clickable(onClick = { state.accountDidDismiss() })
+                            .clickable(onClick = { state.dismissAccount() })
                             .padding(horizontal = 12.dp, vertical = 8.dp)
                     )
                     Spacer(modifier = Modifier.weight(1f))

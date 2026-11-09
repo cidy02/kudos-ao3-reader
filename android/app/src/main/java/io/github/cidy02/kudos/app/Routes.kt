@@ -52,11 +52,11 @@ enum class WritingRoute {
     CollectionsAndChallenges
 }
 
-enum class LibraryAO3Route(val listTypeKey: String) {
-    MarkedForLater("MarkedForLater"),
-    Bookmarks("Bookmarks"),
-    Subscriptions("Subscriptions"),
-    History("History")
+enum class LibraryAO3Route {
+    MarkedForLater,
+    Bookmarks,
+    Subscriptions,
+    History
 }
 
 sealed interface LegacyAccountDestination {
@@ -87,23 +87,13 @@ data class RestoredTabSelection(
     val accountRoute: AccountSheetRoute? = if (presentsAccount) AccountSheetRoute.Profile else null
 )
 
-class AccountSheetState(initialTab: String = Routes.Home) {
-    var selectedTab by mutableStateOf(initialTab)
+class AccountSheetState {
     var isPresentingAccount by mutableStateOf(false)
         internal set
     var pendingAccountRoute by mutableStateOf<AccountSheetRoute?>(null)
         internal set
     var requestEpoch by mutableStateOf(0)
         private set
-    var pendingWebUrl by mutableStateOf<String?>(null)
-        internal set
-    var isPresentingWebBrowser by mutableStateOf(false)
-        internal set
-    private var deferredWebUrlAfterDismiss: String? = null
-
-    val authorNavigationTarget: String
-        get() = if (isPresentingAccount) Routes.Account else selectedTab
-
     fun showAccount(route: AccountSheetRoute = AccountSheetRoute.Profile) {
         pendingAccountRoute = route
         requestEpoch += 1
@@ -119,56 +109,6 @@ class AccountSheetState(initialTab: String = Routes.Home) {
     fun dismissAccount() {
         isPresentingAccount = false
         pendingAccountRoute = null
-    }
-
-    fun accountDidDismiss() {
-        isPresentingAccount = false
-        val deferred = deferredWebUrlAfterDismiss ?: return
-        deferredWebUrlAfterDismiss = null
-        pendingWebUrl = deferred
-        isPresentingWebBrowser = true
-    }
-
-    fun openUrl(url: String) {
-        if (isPresentingAccount) {
-            deferredWebUrlAfterDismiss = url
-            isPresentingAccount = false
-            return
-        }
-        pendingWebUrl = url
-        isPresentingWebBrowser = true
-    }
-
-    fun openLegacyRoute(route: LegacyAccountRoute) {
-        applyDestination(route.destination)
-    }
-
-    fun handleRoute(route: String?): Boolean {
-        val destination = Routes.resolveFormerAccountRoute(route) ?: return false
-        applyDestination(destination)
-        return true
-    }
-
-    fun restoreSelection(rawRoute: String?) {
-        val restored = Routes.restoredSelection(rawRoute)
-        selectedTab = restored.tabRoute
-        if (restored.presentsAccount) {
-            showAccount(restored.accountRoute ?: AccountSheetRoute.Profile)
-        }
-    }
-
-    private fun applyDestination(destination: LegacyAccountDestination) {
-        when (destination) {
-            is LegacyAccountDestination.Account -> showAccount(destination.route)
-            is LegacyAccountDestination.Writing -> {
-                dismissAccount()
-                selectedTab = Routes.Writing
-            }
-            is LegacyAccountDestination.Library -> {
-                dismissAccount()
-                selectedTab = Routes.Library
-            }
-        }
     }
 }
 
@@ -544,6 +484,7 @@ object Routes {
         return when (base) {
             WritingDrafts -> LegacyAccountDestination.Writing(WritingRoute.Drafts)
             AO3Collections -> LegacyAccountDestination.Writing(WritingRoute.CollectionsAndChallenges)
+            AuthorSeries.substringBefore("/") -> LegacyAccountDestination.Writing(WritingRoute.Series)
             "account-list" -> {
                 val arg = route.substringAfter("account-list/", missingDelimiterValue = "")
                 when (arg) {
