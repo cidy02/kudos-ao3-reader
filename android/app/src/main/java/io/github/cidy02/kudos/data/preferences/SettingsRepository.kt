@@ -610,6 +610,18 @@ class SettingsRepository(
             settings.app.restorableWorkSymbolPlacement?.let { prefs[Keys.WorkSymbolPlacement] = it }
             prefs[Keys.AutoPreserveSmallSeries] = settings.app.autoPreserveSmallSeriesOnSaveForLater
             prefs[Keys.AutoPreserveSeriesThreshold] = settings.app.autoPreserveSeriesWorkThreshold
+            // Absent or malformed leaves the local layout (iOS 557b0d18).
+            settings.app.libraryPageArrangement?.let {
+                prefs[Keys.LibraryPageArrangement] = it.toJson().toString()
+            }
+        }
+    }
+
+    /** Persist the layout and mark folder sync dirty: iOS 2407882d, the layout is a synced setting. */
+    suspend fun updateLibraryPageArrangement(arrangement: io.github.cidy02.kudos.core.model.LibraryPageArrangement) {
+        dataStore.edit {
+            it[Keys.LibraryPageArrangement] = arrangement.toJson().toString()
+            it[Keys.SyncHasPendingChanges] = true
         }
     }
 
@@ -667,7 +679,9 @@ class SettingsRepository(
                 autoPreserveSmallSeriesOnSaveForLater = preferences[Keys.AutoPreserveSmallSeries]
                     ?: defaults.app.autoPreserveSmallSeriesOnSaveForLater,
                 autoPreserveSeriesWorkThreshold = preferences[Keys.AutoPreserveSeriesThreshold]
-                    ?: defaults.app.autoPreserveSeriesWorkThreshold
+                    ?: defaults.app.autoPreserveSeriesWorkThreshold,
+                libraryPageArrangement = io.github.cidy02.kudos.core.model.LibraryPageArrangement
+                    .fromJsonString(preferences[Keys.LibraryPageArrangement])
             ),
             privacy = PrivacySettings(
                 hideMatureContent = preferences[Keys.HideMatureContent]
@@ -726,6 +740,7 @@ class SettingsRepository(
         val MatchAppReaderTheme = booleanPreferencesKey("matchAppReaderTheme")
         val AccentColorHex = stringPreferencesKey("accentColorHex")
         val WorkSymbolPlacement = stringPreferencesKey("workSymbolPlacement")
+        val LibraryPageArrangement = stringPreferencesKey("library.page.arrangement")
         val AutoPreserveSmallSeries = booleanPreferencesKey("autoPreserveSmallSeriesOnSaveForLater")
         val AutoPreserveSeriesThreshold = androidx.datastore.preferences.core.intPreferencesKey(
             "autoPreserveSeriesWorkThreshold"

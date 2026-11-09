@@ -22,7 +22,9 @@ data class BackupSettings(
     val accentColorHex: String? = null,
     val workSymbolPlacement: String? = null,
     val autoPreserveSmallSeriesOnSaveForLater: Boolean = false,
-    val autoPreserveSeriesWorkThreshold: Int = 5
+    val autoPreserveSeriesWorkThreshold: Int = 5,
+    /** Null when absent or malformed: a restore then leaves the local layout (iOS 557b0d18). */
+    val libraryPageArrangement: LibraryPageArrangement? = null
 ) {
     fun toSettings(): KudosSettings {
         return KudosSettings(
@@ -49,7 +51,8 @@ data class BackupSettings(
                 workSymbolPlacement = WorkSymbolPlacement.fromStorage(workSymbolPlacement),
                 storedWorkSymbolPlacement = workSymbolPlacement,
                 autoPreserveSmallSeriesOnSaveForLater = autoPreserveSmallSeriesOnSaveForLater,
-                autoPreserveSeriesWorkThreshold = autoPreserveSeriesWorkThreshold
+                autoPreserveSeriesWorkThreshold = autoPreserveSeriesWorkThreshold,
+                libraryPageArrangement = libraryPageArrangement
             ),
             privacy = PrivacySettings(
                 hideMatureContent = hideMatureContent,
@@ -85,7 +88,8 @@ data class BackupSettings(
                 workSymbolPlacement = settings.app.backupWorkSymbolPlacement,
                 autoPreserveSmallSeriesOnSaveForLater =
                     settings.app.autoPreserveSmallSeriesOnSaveForLater,
-                autoPreserveSeriesWorkThreshold = settings.app.autoPreserveSeriesWorkThreshold
+                autoPreserveSeriesWorkThreshold = settings.app.autoPreserveSeriesWorkThreshold,
+                libraryPageArrangement = settings.app.libraryPageArrangement
             )
         }
     }

@@ -288,7 +288,9 @@ data class BackupSettingsPayload(
     val accentColorHex: String? = null,
     val workSymbolPlacement: String? = null,
     val autoPreserveSmallSeriesOnSaveForLater: Boolean = false,
-    val autoPreserveSeriesWorkThreshold: Int = 5
+    val autoPreserveSeriesWorkThreshold: Int = 5,
+    /** iOS `libraryPageArrangement`: kept as raw JSON so an unknown shelf id survives a round trip. */
+    val libraryPageArrangement: JsonElement? = null
 )
 
 /**

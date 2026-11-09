@@ -467,7 +467,8 @@ fun CoreBackupSettings.toBackupSettingsPayload(): BackupSettingsPayload {
         accentColorHex = accentColorHex,
         workSymbolPlacement = workSymbolPlacement,
         autoPreserveSmallSeriesOnSaveForLater = autoPreserveSmallSeriesOnSaveForLater,
-        autoPreserveSeriesWorkThreshold = autoPreserveSeriesWorkThreshold
+        autoPreserveSeriesWorkThreshold = autoPreserveSeriesWorkThreshold,
+        libraryPageArrangement = libraryPageArrangement?.toJson()
     )
 }
 
@@ -494,7 +495,9 @@ fun BackupSettingsPayload.toCoreBackupSettings(): CoreBackupSettings {
         accentColorHex = accentColorHex,
         workSymbolPlacement = workSymbolPlacement,
         autoPreserveSmallSeriesOnSaveForLater = autoPreserveSmallSeriesOnSaveForLater,
-        autoPreserveSeriesWorkThreshold = autoPreserveSeriesWorkThreshold
+        autoPreserveSeriesWorkThreshold = autoPreserveSeriesWorkThreshold,
+        libraryPageArrangement = io.github.cidy02.kudos.core.model.LibraryPageArrangement
+            .fromJson(libraryPageArrangement)
     )
 }
 

@@ -112,7 +112,9 @@ data class AppSettings(
     val storedWorkSymbolPlacement: String? = null,
     /** Shared Reading queues setting; Work Detail uses it after Save for Later. */
     val autoPreserveSmallSeriesOnSaveForLater: Boolean = false,
-    val autoPreserveSeriesWorkThreshold: Int = 5
+    val autoPreserveSeriesWorkThreshold: Int = 5,
+    /** The reader's Library shelf layout; null until chosen (or restored), which shows the default. */
+    val libraryPageArrangement: LibraryPageArrangement? = null
 ) {
     val chosenAccentColorHex: String?
         get() = storedAccentColorHex ?: accentColorHex.takeIf {
