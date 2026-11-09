@@ -141,7 +141,8 @@ class AO3InboxRepository(
             val parsed = withContext(Dispatchers.Default) {
                 parser.parseInboxPage(html, page, finalUrl)
             }
-            lastUnreadByScope.value = viewerScope() to parsed.unreadCount
+            // A page without an unread count makes the count unknown, not stale.
+            lastUnreadByScope.value = parsed.unreadCount?.let { viewerScope() to it }
             AO3Result.Success(parsed)
         } catch (_: AO3InboxParseException.LoginRequired) {
             AO3Result.Failure(AO3Error.AuthenticationRequired)
