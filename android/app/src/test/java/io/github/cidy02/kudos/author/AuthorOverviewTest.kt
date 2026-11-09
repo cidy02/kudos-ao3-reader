@@ -229,13 +229,21 @@ class AuthorOverviewTest {
         assertTrue("Most kudos first", left("Mid") < left("Low"))
     }
 
-    @Test fun bookmarksOmitHiddenAndBlurUnratedButShowSafeNoteCards() {
+    // The bookmarks preview holds two cards (iOS bookmarksPreviewLimit), so each case fits in it.
+    @Test fun bookmarksOmitAHiddenWorkButShowASafeNoteCard() {
         val h = header(recentBookmarks = listOf(
             bookmark(1, work(40, "Explicit Bookmark", rating = "Explicit")),
-            bookmark(2, work(41, "Unrated Bookmark", rating = "")),
             bookmark(3, work(42, "Safe Bookmark"))))
         showItems(h)
         compose.onAllNodesWithText("Explicit Bookmark", useUnmergedTree = true).assertCountEquals(0)
+        compose.onAllNodesWithText("Safe Bookmark", useUnmergedTree = true).assertCountEquals(1)
+    }
+
+    @Test fun bookmarksBlurAnUnratedWorkWithoutNamingIt() {
+        val h = header(recentBookmarks = listOf(
+            bookmark(2, work(41, "Unrated Bookmark", rating = "")),
+            bookmark(3, work(42, "Safe Bookmark"))))
+        showItems(h)
         compose.onAllNodesWithText("Unrated Bookmark", useUnmergedTree = true).assertCountEquals(0)
         compose.onAllNodesWithText("Safe Bookmark", useUnmergedTree = true).assertCountEquals(1)
     }
