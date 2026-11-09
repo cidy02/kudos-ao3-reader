@@ -91,6 +91,7 @@ struct ReadiumReaderView: View {
     @Environment(ThemeManager.self) private var themeManager
     @Environment(AO3AuthService.self) private var auth
     @Environment(PrivacyGate.self) private var privacyGate
+    @Environment(ReaderSpeechController.self) private var speech
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -216,7 +217,6 @@ struct ReadiumReaderView: View {
     /// Title-pill → work details, as a sheet over the live reader (see the
     /// `.sheet(isPresented: $showingWorkDetail)` below for why — not a push).
     @State private var showingWorkDetail = false
-    @State private var speech = ReaderSpeechController()
     /// `startsReadAloud` fires once per open, on the first settled location
     /// after `.ready` (not at `.ready`, where `currentLocator` is only the seed).
     @State private var autoStart = ReadAloudAutoStart()
@@ -360,41 +360,7 @@ struct ReadiumReaderView: View {
             // book opens, not only when one is created.
             .onChange(of: book.phase) { _, phase in
                 guard phase == .ready else { return }
-                // Seed slider from initialLocator-backed readingPosition before
-                // the first visual JS report can briefly claim last page.
-                if !book.isLocatorIngestionBlocked {
-                    syncSliderFromPosition(book.readingPosition)
-                }
-                refreshHighlightDecorations()
-                // Tap a highlight on the page → colour / note / delete editor.
-                book.observeHighlightTaps { id in
-                    openHighlight(id: id)
-                }
-                speech.prepare(
-                    publication: book.publication,
-                    title: work.title,
-                    author: work.author,
-                    totalPositions: book.positionsByReadingOrder.reduce(0) { $0 + $1.count }
-                )
-                #if DEBUG
-                if DebugLaunchRoute.takeSheet("readerfind") {
-                    router.panel = .readerFind
-                }
-                #endif
-                // Keep the page with the voice as it moves between utterances.
-                // Blocked during dismiss freeze / successful-exit latch so TTS
-                // cannot seek the navigator (or corrupt the flushed locator).
-                speech.onAdvance = { locator in
-                    // Dismiss freeze/exit latch, and hold-to-seek — never fight
-                    // the user (or corrupt a committed exit flush) by page-follow.
-                    guard !book.isLocatorIngestionBlocked, !speechSeekHolding else { return }
-                    book.go(to: locator)
-                }
-                speech.onSpokenRange = { locator in book.applySpeechDecoration(at: locator) }
-                speech.onSessionEnded = { book.applySpeechDecoration(at: nil) }
-                // Lock Screen / Island previous-next track = chapter skip (mini player).
-                speech.onSkipPrevious = { handleSpeechSkipBack() }
-                speech.onSkipNext = { handleSpeechSkipForward() }
+                attachSpeechToReadyBook()
             }
             // Home's Resume "Read Aloud": start from the navigator-resolved
             // location, never the seeded one. Same call the fan menu makes;
@@ -463,6 +429,10 @@ struct ReadiumReaderView: View {
                 syncSliderFromPosition(newValue)
             }
             .onAppear {
+                speech.readerDidOpen(workID: work.id)
+                if book.phase == .ready {
+                    attachSpeechToReadyBook()
+                }
                 ReadingLogService.startSession(for: work, now: Date())
                 WorkLifecycle.keepIfKeepingWorksYouRead(work, in: modelContext)
                 WorkLifecycle.releaseHeldCopy(work)
@@ -499,27 +469,76 @@ struct ReadiumReaderView: View {
                 // last scroll's debounce window hadn't elapsed before we left.
                 flushProgress(shelfStamp: true)
                 ReadingLogService.endSession(for: work, now: Date())
-                WorkLifecycle.freeEPUBIfFinished(work, in: modelContext)
+                let canFreeEPUB = ReaderSpeechSessionPolicy.canFreeEPUB(
+                    workID: work.id,
+                    sessionActive: speech.isSessionActive,
+                    sessionWorkID: speech.sessionWorkID
+                )
+                speech.readerDidClose(workID: work.id)
+                // An active detached session retains this Publication. Keep its
+                // source EPUB until Stop/session end releases the publication.
+                if canFreeEPUB {
+                    WorkLifecycle.freeEPUBIfFinished(work, in: modelContext)
+                }
                 try? modelContext.save()
                 scheduleFolderSyncOnReaderClose()
                 // The lock is the reader's, not the app's — never leave the rest
                 // of the app pinned to whatever orientation reading ended in.
                 orientationLock.release()
-                // Reading aloud is bound to this reader: leaving a *work* tears
-                // down speech + remote commands + Now Playing. Backgrounding the
-                // app with the reader still open keeps TTS (system Now Playing).
-                // Mini-player stop still uses `stop()` only — see `stopReadingAloud`.
-                speech.tearDown()
                 if router.panel == .readerChapters || router.panel == .readerDisplay {
                     router.panel = .none
                 }
             }
     }
 
+    private func attachSpeechToReadyBook() {
+        // Seed slider from initialLocator-backed readingPosition before the
+        // first visual JS report can briefly claim last page.
+        if !book.isLocatorIngestionBlocked {
+            syncSliderFromPosition(book.readingPosition)
+        }
+        refreshHighlightDecorations()
+        // Tap a highlight on the page → colour / note / delete editor.
+        book.observeHighlightTaps { id in
+            openHighlight(id: id)
+        }
+        speech.prepare(
+            publication: book.publication,
+            workID: work.id,
+            title: work.title,
+            author: work.author,
+            totalPositions: book.positionsByReadingOrder.reduce(0) { $0 + $1.count },
+            sections: book.sections,
+            chapterStartLocators: book.positionsByReadingOrder.map(\.first)
+        )
+        #if DEBUG
+        if DebugLaunchRoute.takeSheet("readerfind") {
+            router.panel = .readerFind
+        }
+        #endif
+        // Keep the page with the voice as it moves between utterances.
+        // Blocked during dismiss freeze / successful-exit latch so TTS
+        // cannot seek the navigator (or corrupt the flushed locator).
+        speech.attachReader(
+            workID: work.id,
+            onAdvance: { locator in
+                // Dismiss freeze/exit latch, and hold-to-seek — never fight
+                // the user (or corrupt a committed exit flush) by page-follow.
+                guard !book.isLocatorIngestionBlocked, !speechSeekHolding else { return }
+                book.go(to: locator)
+            },
+            onSpokenRange: { locator in book.applySpeechDecoration(at: locator) },
+            onSessionEnded: { book.applySpeechDecoration(at: nil) },
+            // Lock Screen / Island previous-next track = chapter skip (mini player).
+            onSkipPrevious: { handleSpeechSkipBack() },
+            onSkipNext: { handleSpeechSkipForward() }
+        )
+    }
+
     /// Ends speech and collapses the mini-player strip. Shared by the fan-menu
     /// waveform control (when active) and the mini player's stop button.
-    /// Leaving the reader uses `speech.tearDown()` instead so remote commands
-    /// are removed (not only paused/stopped).
+    /// A detached Stop releases the publication too; an open reader keeps its
+    /// prepared engine so Read Aloud can start again without reopening the EPUB.
     private func stopReadingAloud() {
         speech.stop()
     }

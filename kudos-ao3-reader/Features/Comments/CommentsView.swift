@@ -265,6 +265,10 @@ struct CommentsView: View {
                     commentAccessoryBar
                 }
             }
+            .onAppear { router.isCommentAccessoryActive = commentAccessoryActive }
+            .onChange(of: commentAccessoryActive) { _, active in
+                router.isCommentAccessoryActive = active
+            }
             #endif
             .refreshable { await model.load(auth: auth, forceRefresh: true) }
             .task(id: readableWork?.id) { await loadReaderSectionsIfNeeded() }
@@ -353,6 +357,7 @@ struct CommentsView: View {
                 contextLoadTask?.cancel()
                 highlightClearTask?.cancel()
                 focusScrollTask?.cancel()
+                router.isCommentAccessoryActive = false
             }
             .sheet(isPresented: composerBinding, onDismiss: {
                 // When this CommentsView is itself modal, the outer sheet/full-screen
@@ -1216,6 +1221,12 @@ struct CommentsView: View {
         #else
         false
         #endif
+    }
+
+    private var commentAccessoryActive: Bool {
+        guard usesTabViewBottomAccessory else { return false }
+        if case .loaded = model.phase { return true }
+        return false
     }
 
     #if os(iOS)
