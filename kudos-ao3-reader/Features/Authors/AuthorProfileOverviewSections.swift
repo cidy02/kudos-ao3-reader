@@ -130,8 +130,10 @@ struct AuthorProfileOverviewHeader: View {
                 HStack(alignment: .firstTextBaseline, spacing: 5) {
                     // A title menu reads as the title (board 23: black name, grey chevron), not as a red link.
                     name.foregroundStyle(Color.primary)
+                    // Same font as the name, so the symbol centres on its cap height.
                     Image(systemName: "chevron.up.chevron.down")
-                        .font(.caption.weight(.semibold))
+                        .font(.title.weight(.medium))
+                        .imageScale(.small)
                         .foregroundStyle(Color.secondary)
                 }
             }

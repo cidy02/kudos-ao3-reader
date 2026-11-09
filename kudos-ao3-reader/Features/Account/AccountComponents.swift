@@ -23,7 +23,6 @@ struct AccountProfileCard: View {
     /// because here it shares the line with a 56pt avatar.
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .title2) private var nameSize: CGFloat = 27
-    @ScaledMetric(relativeTo: .footnote) private var postingAsSize: CGFloat = 13
     @ScaledMetric(relativeTo: .footnote) private var signedOutBodySize: CGFloat = 13
 
     var body: some View {
@@ -86,24 +85,15 @@ struct AccountProfileCard: View {
                 // size; above that it was cut to "AO3 ACCOU…".
                 .dynamicTypeSize(...DynamicTypeSize.accessibility3)
 
-                // 1m: name, session line, then the posting pill with the
-                // account's "…" beside it.
-                // One line: a username has no spaces, so a second line only
-                // ever split it mid-word.
-                Text(username)
-                    .font(.system(size: nameSize, weight: .bold))
-                    .tracking(-0.5)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.5)
-                    .foregroundStyle(.primary)
+                // 1m: name with the pseud chevron beside it, session line, then
+                // the account's "…". The pseud switcher is only the chevron by
+                // the name, app-wide (owner, 2026-11-09).
+                postingAsMenu(username: username)
 
                 sessionStatusLine
 
-                HStack(alignment: .center, spacing: 8) {
-                    postingAsMenu
-                    accountMenu
-                }
-                .padding(.top, 4)
+                accountMenu
+                    .padding(.top, 4)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -111,10 +101,10 @@ struct AccountProfileCard: View {
         .accessibilityElement(children: .contain)
     }
 
-    /// "Posting as <pseud>" — the identity comments are submitted under. The
-    /// choices come from the loaded profile header; "Account Default" clears the
-    /// preference so AO3's own default pseud applies.
-    private var postingAsMenu: some View {
+    /// The name and its chevron choose the pseud comments and works are posted
+    /// under. The choices come from the loaded profile header; "Account Default"
+    /// clears the preference so AO3's own default pseud applies.
+    private func postingAsMenu(username: String) -> some View {
         Menu {
             Button {
                 setPostingPseud(nil)
@@ -135,20 +125,25 @@ struct AccountProfileCard: View {
                 }
             }
         } label: {
-            Text("Posting as \(postingPseudName ?? "Account Default")")
-                .font(.system(size: postingAsSize, weight: .medium))
-                // The name is the point of the pill: one line cut it to "Posting as A…" at
-                // the accessibility sizes.
-                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
-                .foregroundStyle(.primary)
-                .padding(.horizontal, 13)
-                .padding(.vertical, 7)
-                .background(theme.appTheme.glassFill(0.12), in: SubjectMetrics.controlShape(dynamicTypeSize))
-                // 30pt drawn, 44pt to the finger, no taller row.
-                .contentShape(Capsule().inset(by: -7))
+            HStack(alignment: .firstTextBaseline, spacing: 5) {
+                // One line: a username has no spaces, so a second line only
+                // ever split it mid-word.
+                Text(username)
+                    .font(.system(size: nameSize, weight: .bold))
+                    .tracking(-0.5)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+                    .foregroundStyle(.primary)
+                // Same font as the name, so the symbol centres on its cap height.
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: nameSize, weight: .medium))
+                    .imageScale(.small)
+                    .foregroundStyle(.secondary)
+            }
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Posting as")
+        .accessibilityLabel("\(username). Posting as")
         .accessibilityValue(postingPseudName ?? "Account Default")
         .accessibilityHint("Chooses the pseud you post and comment under")
     }
