@@ -37,6 +37,19 @@ class AO3MaintenanceTest {
         assertFalse(AO3Client.isMaintenancePage("<html><body><h1>Welcome</h1></body></html>"))
     }
 
+    /** iOS parity: a 418 is maintenance even when the page is not AO3's maintenance page. */
+    @Test
+    fun any418IsMaintenance() = runTest {
+        assertTrue(AO3Client.isMaintenance(418, "<html><body>I'm a teapot</body></html>"))
+        assertFalse(AO3Client.isMaintenance(503, "<html><body>Service unavailable</body></html>"))
+        assertFalse(AO3Client.isMaintenance(200, fixture("maintenance")))
+        withServer { server ->
+            server.enqueue(MockResponse.Builder().code(418).body("I'm a teapot").build())
+            val result = makeTestClient().get(server.url("/works/1").toString())
+            assertEquals(AO3Result.Failure(AO3Error.Maintenance), result)
+        }
+    }
+
     /**
      * A rejected comment or form comes back with the reader's own words in it, escaped.
      */

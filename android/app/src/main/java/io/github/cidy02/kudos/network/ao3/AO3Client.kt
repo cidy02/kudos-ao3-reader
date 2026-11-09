@@ -75,6 +75,16 @@ interface AO3Client {
             val prefix = body.decodeToString(endIndex = minOf(body.size, 64 * 1024))
             return MAINTENANCE_H2_REGEX.containsMatchIn(prefix)
         }
+
+        /**
+         * AO3 has answered every request with 418 during maintenance (from 2026-10-31),
+         * page or not — the iOS rule (`AO3Client.isWriteMaintenance`). Otherwise the page itself.
+         */
+        fun isMaintenance(statusCode: Int, body: String): Boolean =
+            statusCode == 418 || (statusCode !in 200..299 && isMaintenancePage(body))
+
+        fun isMaintenance(statusCode: Int, body: ByteArray): Boolean =
+            statusCode == 418 || (statusCode !in 200..299 && isMaintenancePage(body))
     }
 }
 
@@ -401,7 +411,7 @@ class OkHttpAO3Client(
 
         // The maintenance page answers at the edge: the write never reached AO3.
         // Before 429, as in check.
-        if (statusCode !in 200..299 && AO3Client.isMaintenancePage(body)) {
+        if (AO3Client.isMaintenance(statusCode, body)) {
             holdForMaintenance()
             return AO3Result.Failure(AO3Error.Maintenance)
         }
@@ -447,7 +457,7 @@ class OkHttpAO3Client(
 
         // The maintenance page answers at the edge: the write never reached AO3.
         // Before 429, as in check.
-        if (statusCode !in 200..299 && AO3Client.isMaintenancePage(body)) {
+        if (AO3Client.isMaintenance(statusCode, body)) {
             holdForMaintenance()
             return AO3Result.Failure(AO3Error.Maintenance)
         }
@@ -507,7 +517,7 @@ class OkHttpAO3Client(
         }
 
         // Only a failed answer is read: a work's own text may say the words.
-        if (statusCode !in 200..299 && AO3Client.isMaintenancePage(bytes)) {
+        if (AO3Client.isMaintenance(statusCode, bytes)) {
             holdForMaintenance()
             return AO3Result.Failure(AO3Error.Maintenance)
         }
