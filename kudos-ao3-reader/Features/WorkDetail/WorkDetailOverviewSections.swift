@@ -1,8 +1,8 @@
 import SwiftUI
 
-// Blocks of board 19's page: the Summary and the Series card, plus the Library
-// rows of the ••• menu. Pure presentation over WorkDetailView's existing display
-// values and actions — no new data flow.
+// Version E's Summary and collapsible Series card, plus the Library rows of the
+// ••• menu. Pure presentation over WorkDetailView's existing display values and
+// actions — no new data flow.
 //
 // The page blocks here are deliberately not `private`: `WorkDetailView` assembles
 // the page (`pageSections`, `WorkDetailLayout`), and its blocks are spread over
@@ -11,15 +11,80 @@ import SwiftUI
 // which is the line worth keeping: a block is part of the page's contract, a
 // helper is not.
 
+enum WorkDetailDisclosure {
+    static func tagsDigest(relationships: Int, characters: Int, additional: Int) -> String {
+        var parts: [String] = []
+        if relationships > 0 {
+            parts.append("\(relationships) relationship\(relationships == 1 ? "" : "s")")
+        }
+        if characters > 0 {
+            parts.append("\(characters) character\(characters == 1 ? "" : "s")")
+        }
+        if additional > 0 {
+            parts.append("\(additional) more")
+        }
+        return parts.isEmpty ? "No AO3 tags" : parts.joined(separator: " · ")
+    }
+
+    /// The series' size and length are not known here: the device holds only the
+    /// works downloaded from it, so a count or word total would understate a
+    /// longer series. The series card says "Part N" for the same reason.
+    static func seriesDigest(title: String, position: Int) -> String {
+        position > 0 ? "\(title) · part \(position)" : title
+    }
+}
+
+struct WorkDetailDisclosureHeader: View {
+    let title: String
+    let digest: String
+    @Binding var isExpanded: Bool
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        VStack(spacing: 0) {
+            SubjectRowSeparator(inset: 0)
+            Button {
+                withAnimationUnlessReduced(reduceMotion: reduceMotion) { isExpanded.toggle() }
+            } label: {
+                HStack(spacing: 10) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(title)
+                            .font(.headline)
+                            .foregroundStyle(.primary)
+                        Text(digest)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                        .accessibilityHidden(true)
+                }
+                .frame(minHeight: 52)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(title + ", " + digest)
+            .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
+            .accessibilityHint(isExpanded ? "Collapses this section" : "Expands this section")
+            .accessibilityAddTraits(.isHeader)
+        }
+    }
+}
+
 extension WorkDetailView {
     // MARK: Summary
 
     /// Board 19's Summary: a Title 3 header, the author's text in the body face,
     /// and a Notes link. The old serif face is gone with the board's own sans.
     ///
-    /// Show More survives the restyle. The board's example summary is two
-    /// sentences; real ones run for paragraphs, and an uncollapsed wall of them
-    /// would push every fact on the page below the fold.
+    /// Version E keeps three lines in the page rhythm and expands in place.
     ///
     /// Notes: the app holds the summary but not the author's notes (AO3 prints
     /// them on the work page, and the EPUB carries them in the reader), so the
@@ -30,7 +95,6 @@ extension WorkDetailView {
         // Bound once per render: a local work's summary strips HTML on read.
         let summary = displaySummary
         if !summary.isEmpty {
-            let collapses = WorkDetailPresentation.summaryCollapses(summary)
             Section {
                 SectionRuleHeader(title: "Summary")
                     .accessibilityAddTraits(.isHeader)
@@ -40,18 +104,24 @@ extension WorkDetailView {
                     Text(summary)
                         .font(.body)
                         .fixedSize(horizontal: false, vertical: true)
-                        .lineLimit(collapses && !summaryExpanded ? 8 : nil)
-                    HStack(spacing: 16) {
-                        if collapses {
-                            Button(summaryExpanded ? "Show Less" : "Show More") {
+                        .lineLimit(summaryExpanded ? nil : 3)
+                        .background(alignment: .top) { summaryTruncationProbes(summary) }
+                    HStack(spacing: 8) {
+                        if summaryTruncates {
+                            Button(summaryExpanded ? "Less" : "More") {
                                 withAnimationUnlessReduced(reduceMotion: reduceMotion) { summaryExpanded.toggle() }
                             }
                             .buttonStyle(.plain)
+                            .minimumHitTarget()
                             .accessibilityHint("Expands or collapses the work summary")
                         }
                         if let id = ao3WorkID {
+                            if summaryTruncates {
+                                Text("·").foregroundStyle(.secondary).accessibilityHidden(true)
+                            }
                             Button("Notes") { router.open(AO3Client.workURL(workID: id)) }
                                 .buttonStyle(.plain)
+                                .minimumHitTarget()
                                 .accessibilityHint("Opens this work on AO3, where the author's notes are")
                         }
                     }
@@ -61,6 +131,25 @@ extension WorkDetailView {
                 .pageBodyRow(top: 6)
             }
         }
+    }
+
+    /// The unclamped copy being taller than the three-line copy is the only
+    /// reliable "this truncates" signal. Both are measured with their own clamp,
+    /// so the control survives expanding (it becomes "Less").
+    private var summaryTruncates: Bool { summaryFullHeight > summaryClampedHeight + 0.5 }
+
+    private func summaryTruncationProbes(_ summary: String) -> some View {
+        ZStack(alignment: .top) {
+            Text(summary).font(.body).lineLimit(3)
+                .fixedSize(horizontal: false, vertical: true)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { summaryClampedHeight = $0 }
+            Text(summary).font(.body).lineLimit(nil)
+                .fixedSize(horizontal: false, vertical: true)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { summaryFullHeight = $0 }
+        }
+        .hidden()
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 
     // MARK: Quick actions
@@ -217,20 +306,27 @@ extension WorkDetailView {
         if !displaySeriesTitle.isEmpty {
             let rows = seriesRows
             Section {
-                SectionRuleHeader(title: "Series")
-                    .accessibilityAddTraits(.isHeader)
-                    .pageBodyRow(top: 24, gutter: 0)
+                WorkDetailDisclosureHeader(
+                    title: "Series",
+                    digest: WorkDetailDisclosure.seriesDigest(
+                        title: displaySeriesTitle, position: displaySeriesPosition
+                    ),
+                    isExpanded: $seriesExpanded
+                )
+                .pageBodyRow(top: 0)
 
-                ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
-                    seriesRowView(row)
-                        .panelSegment(index, of: rows.count, gutter: SubjectMetrics.gutter)
-                }
+                if seriesExpanded {
+                    ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+                        seriesRowView(row)
+                            .panelSegment(index, of: rows.count, gutter: SubjectMetrics.gutter)
+                    }
 
-                if localWork != nil, seriesWorks.isEmpty {
-                    Text("When you download more works from this series, they will appear here.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .pageBodyRow(top: 8)
+                    if localWork != nil, seriesWorks.isEmpty {
+                        Text("When you download more works from this series, they will appear here.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .pageBodyRow(top: 8)
+                    }
                 }
             }
         }

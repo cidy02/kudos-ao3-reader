@@ -39,7 +39,7 @@ struct DemoLibraryTests {
             if work.summary.count <= 60 {
                 hasShortSummary = true
             }
-            if WorkDetailPresentation.summaryCollapses(work.summary) {
+            if work.summary.count > 600 { // well past three lines at any width
                 hasCollapsingSummary = true
             }
             if !work.seriesTitle.isEmpty {

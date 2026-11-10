@@ -2,7 +2,7 @@ import SwiftData
 import SwiftUI
 
 // The Tags, Comments, and Library sections of the Work Details hub. Tags carries
-// the AO3 classification chips (tap-to-search); Comments is the native
+// the AO3 classification links (tap-to-search); Comments is the native
 // comments entry point (no comment pages are fetched until the user opens
 // them); Library holds every piece of local/personal state — the My copy
 // sheet's rows, clearly separated from AO3 metadata.
@@ -16,8 +16,8 @@ extension WorkDetailView {
         let field: AO3TagSearch.Field
     }
 
-    /// Board 19's three groups lead; archive warnings and fandoms keep their
-    /// place after them. Fandoms are chips too: the label above the title names
+    /// Version E's three groups lead; archive warnings and fandoms keep their
+    /// place after them. Fandoms are links too: the label above the title names
     /// only the first, and these are how a reader reaches the others.
     private var tagGroups: [TagGroup] {
         let categorized: [TagGroup] = [
@@ -39,65 +39,66 @@ extension WorkDetailView {
     var tagSections: some View {
         let groups = tagGroups
         Section {
-            SectionRuleHeader(title: "Tags")
-                .accessibilityAddTraits(.isHeader)
-                .pageBodyRow(top: 24, gutter: 0)
+            WorkDetailDisclosureHeader(
+                title: "Tags", digest: tagDigest(groups), isExpanded: $tagsExpanded
+            )
+            .pageBodyRow(top: 14)
 
-            if groups.isEmpty {
-                // A plain imported EPUB has no AO3 identity, so it says why it
-                // has no AO3 tags rather than that AO3 hasn't sent them yet.
-                Text(ao3WorkID != nil
-                    ? "AO3 hasn't provided tags for this work yet."
-                    : "This imported work isn't linked to AO3, so you won't see AO3 tags here.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .pageBodyRow(top: 6)
-            } else {
-                ForEach(Array(groups.enumerated()), id: \.element.title) { index, group in
-                    tagCluster(group)
-                        .pageBodyRow(top: index == 0 ? 8 : 12)
+            if tagsExpanded {
+                if groups.isEmpty {
+                    // A plain imported EPUB has no AO3 identity, so it says why it
+                    // has no AO3 tags rather than that AO3 hasn't sent them yet.
+                    Text(ao3WorkID != nil
+                        ? "AO3 hasn't provided tags for this work yet."
+                        : "This imported work isn't linked to AO3, so you won't see AO3 tags here.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .pageBodyRow(top: 6)
+                } else {
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(groups, id: \.title) { tagRow($0) }
+                    }
+                    .padding(.bottom, 14)
+                    .pageBodyRow(top: 2)
                 }
             }
         }
     }
 
-    /// Board 19's tag cluster: the group's name in sentence case, then neutral
-    /// capsules, straight on the page.
-    ///
-    /// The count is printed only where it tells the reader something they cannot
-    /// see at a glance. Two relationships are two chips; nineteen freeforms are
-    /// a paragraph, and knowing it is nineteen is worth a line.
-    private func tagCluster(_ group: TagGroup) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                Text(group.title)
-                if group.tags.count > 4 {
-                    Text(group.tags.count.compactCount)
-                        .monospacedDigit()
-                        .opacity(0.7)
-                }
-            }
-            .font(.footnote)
-            .foregroundStyle(.secondary)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(
-                group.tags.count > 4 ? group.title + ", " + group.tags.count.formatted() : group.title
-            )
-            .accessibilityAddTraits(.isHeader)
+    private func tagDigest(_ groups: [TagGroup]) -> String {
+        let digest = WorkDetailDisclosure.tagsDigest(
+            relationships: displayRelationships.count,
+            characters: displayCharacters.count,
+            additional: displayFreeforms.count
+        )
+        let total = groups.reduce(0) { $0 + $1.tags.count }
+        guard digest == "No AO3 tags", total > 0 else { return digest }
+        return "\(total) tag\(total == 1 ? "" : "s")"
+    }
 
-            FlowLayout(spacing: 6, rowSpacing: 6) {
-                ForEach(group.tags, id: \.self) { tag in
-                    // Tap a tag → search AO3 for works carrying it.
-                    Button { router.searchAO3(group.field, tag) } label: {
-                        SubjectChip(text: tag, style: .neutral)
-                    }
-                    .buttonStyle(.plain)
-                    .minimumHitTarget(30)
-                    .accessibilityHint("Searches AO3 for works with this tag")
-                }
+    /// Version E: AO3's compact label column, then comma-separated search links.
+    @ViewBuilder
+    private func tagRow(_ group: TagGroup) -> some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 0) {
+                tagGroupLabel(group)
+                WorkDetailTagLinks(tags: group.tags, field: group.field)
+            }
+        } else {
+            HStack(alignment: .top, spacing: 10) {
+                tagGroupLabel(group)
+                    .frame(width: 92, alignment: .leading)
+                WorkDetailTagLinks(tags: group.tags, field: group.field)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func tagGroupLabel(_ group: TagGroup) -> some View {
+        Text(group.title)
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .padding(.top, 1)
+            .accessibilityAddTraits(.isHeader)
     }
 
     // MARK: - Comments
@@ -573,5 +574,55 @@ extension View {
         return listRowInsets(EdgeInsets(top: top, leading: edge, bottom: bottom, trailing: edge))
             .listRowBackground(Color.clear)
             .listRowSeparator(.hidden)
+    }
+}
+
+/// Version E: one group's tags as wrapping text with inline links, the way AO3
+/// prints them. Not a Button per tag in a flow layout: those caught taps well
+/// below their own line, on the next section's header (seen on Lane E, 11-10).
+struct WorkDetailTagLinks: View {
+    let tags: [String]
+    let field: AO3TagSearch.Field
+
+    @Environment(AppRouter.self) private var router
+    @Environment(\.accentInk) private var accentInk
+
+    var body: some View {
+        Text(WorkDetailTagLink.text(tags))
+            .font(.subheadline)
+            .tint(accentInk)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .environment(\.openURL, OpenURLAction { url in
+                guard let tag = WorkDetailTagLink.tag(from: url) else { return .discarded }
+                router.searchAO3(field, tag)
+                return .handled
+            })
+    }
+}
+
+/// The in-app link a tag carries: any tag text survives the round trip
+/// ("Tenth Doctor & Donna Noble", "Ben Solo/Rey").
+enum WorkDetailTagLink {
+    static let scheme = "kudos-tag"
+
+    static func url(for tag: String) -> URL? {
+        tag.addingPercentEncoding(withAllowedCharacters: .alphanumerics)
+            .flatMap { URL(string: scheme + ":" + $0) }
+    }
+
+    static func tag(from url: URL) -> String? {
+        guard url.scheme == scheme else { return nil }
+        return String(url.absoluteString.dropFirst(scheme.count + 1)).removingPercentEncoding
+    }
+
+    static func text(_ tags: [String]) -> AttributedString {
+        var text = AttributedString()
+        for (index, tag) in tags.enumerated() {
+            if index > 0 { text += AttributedString(", ") }
+            var link = AttributedString(tag)
+            link.link = url(for: tag)
+            text += link
+        }
+        return text
     }
 }

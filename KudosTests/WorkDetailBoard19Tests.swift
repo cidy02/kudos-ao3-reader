@@ -2,8 +2,8 @@ import Foundation
 import Testing
 @testable import Kudos
 
-/// Board 19's pure pieces: the inline symbol names, the 3×3 stats card's cells and
-/// the My copy card's rows.
+/// Work Detail's pure pieces: symbol names, the 3×3 stats card, disclosure
+/// digests and My copy models.
 struct WorkDetailBoard19Tests {
     // MARK: Inline symbols
 
@@ -33,6 +33,39 @@ struct WorkDetailBoard19Tests {
 
     @Test func inlineRunIsBareLikeAStrip() {
         #expect(!WorkStatusIconGrid.drawsBacking(arrangement: .inline, backed: true))
+        #expect(!WorkStatusIconGrid.drawsBacking(arrangement: .strip, backed: true))
+    }
+
+    // MARK: Version E disclosure digests
+
+    @Test func tagsDigestCountsTheThreeWorkGroups() {
+        #expect(WorkDetailDisclosure.tagsDigest(
+            relationships: 1, characters: 3, additional: 4
+        ) == "1 relationship · 3 characters · 4 more")
+        #expect(WorkDetailDisclosure.tagsDigest(
+            relationships: 2, characters: 1, additional: 0
+        ) == "2 relationships · 1 character")
+        #expect(WorkDetailDisclosure.tagsDigest(
+            relationships: 0, characters: 0, additional: 0
+        ) == "No AO3 tags")
+    }
+
+    @Test func tagLinksRoundTripAnyTagText() throws {
+        for tag in ["Tenth Doctor & Donna Noble", "Ben Solo/Rey", "Doctor Who (2005)", "a?b#c%d", "Café"] {
+            let url = try #require(WorkDetailTagLink.url(for: tag))
+            #expect(WorkDetailTagLink.tag(from: url) == tag)
+        }
+        #expect(WorkDetailTagLink.tag(from: URL(string: "https://archiveofourown.org")!) == nil)
+        let text = WorkDetailTagLink.text(["Tenth Doctor", "Donna Noble"])
+        #expect(String(text.characters) == "Tenth Doctor, Donna Noble")
+        #expect(text.runs.compactMap(\.link).count == 2)
+    }
+
+    @Test func seriesDigestClaimsNoSeriesSizeTheDeviceCannotKnow() {
+        #expect(WorkDetailDisclosure.seriesDigest(title: "The Coast Road", position: 2)
+            == "The Coast Road · part 2")
+        #expect(WorkDetailDisclosure.seriesDigest(title: "The Coast Road", position: 0)
+            == "The Coast Road")
     }
 
     // MARK: Stats card
@@ -122,6 +155,12 @@ struct WorkDetailBoard19Tests {
         let all = rows()
         #expect(all.map(\.label) == ["Progress", "Downloaded", "Your Tags", "Collections", "Queues", "File"])
         #expect(all.map(\.action) == [nil, .edit, .add, .add, .add, nil])
+    }
+
+    @Test func myCopyCellsMoveProgressToTheReadingCardAndKeepEveryOtherFact() {
+        let cells = WorkDetailPresentation.myCopyCells(from: rows())
+        #expect(cells.map(\.kind) == [.downloaded, .file, .tags, .collections, .queues])
+        #expect(cells.map(\.action) == [.edit, nil, .add, .add, .add])
     }
 
     @Test func myCopyProgressNamesTheChapterWhenKnown() {

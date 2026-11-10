@@ -290,12 +290,6 @@ enum WorkDetailPresentation {
         )
     }
 
-    /// Long summaries start collapsed behind a Show More affordance; short ones
-    /// render in full with no extra control.
-    static func summaryCollapses(_ summary: String) -> Bool {
-        summary.count > 600
-    }
-
     static func preservationStatusLabel(_ status: EPUBPreservationStatus) -> String {
         switch status {
         case .preserved: "Preserved offline"

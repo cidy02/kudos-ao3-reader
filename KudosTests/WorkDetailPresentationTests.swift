@@ -156,12 +156,6 @@ struct WorkDetailPresentationTests {
         #expect(WorkDetailPresentation.collectionLabel(count: 2) == "In 2 Collections")
     }
 
-    @Test func summaryCollapsesOnlyWhenLong() {
-        #expect(!WorkDetailPresentation.summaryCollapses("Short summary."))
-        #expect(!WorkDetailPresentation.summaryCollapses(String(repeating: "a", count: 600)))
-        #expect(WorkDetailPresentation.summaryCollapses(String(repeating: "a", count: 601)))
-    }
-
     @Test func preservationStatusLabelCoversEveryState() {
         #expect(WorkDetailPresentation.preservationStatusLabel(.preserved) == "Preserved offline")
         #expect(WorkDetailPresentation.preservationStatusLabel(.preserving) == "Preserving…")

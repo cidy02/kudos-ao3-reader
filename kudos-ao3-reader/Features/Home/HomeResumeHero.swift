@@ -6,8 +6,8 @@ enum ResumeCardVariant: Equatable {
     case next
     case detail
 
-    var barsHeight: CGFloat { self == .detail ? 76 : 52 }
-    var primaryHeight: CGFloat { self == .detail ? 50 : 44 }
+    var barsHeight: CGFloat { self == .detail ? 34 : 52 }
+    var primaryHeight: CGFloat { 44 }
 }
 
 struct ResumeCardModel {
@@ -190,6 +190,21 @@ struct ResumeCardModel {
             return lastReadLabel == nil ? "Not started" : "Last opened"
         }
         return "Chapter \(chapterNumber)"
+    }
+
+    /// Version E's compact reading-card title: `Ch 7, The Salt Road`.
+    var detailChapterName: String {
+        guard progress != nil else { return displayedChapterName }
+        guard let chapterName else { return "Ch \(chapterNumber)" }
+        if ["preface", "summary", "afterword"].contains(chapterName.lowercased()) {
+            return chapterName
+        }
+        let name = chapterName.replacingOccurrences(
+            of: #"(?i)^ch(?:apter)?\s*\d+\s*[:.,\-]?\s*"#,
+            with: "",
+            options: .regularExpression
+        )
+        return name.isEmpty ? "Ch \(chapterNumber)" : "Ch \(chapterNumber), \(name)"
     }
 
     var postedLabel: String {
@@ -403,7 +418,7 @@ struct WorkResumeCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: variant == .detail ? 10 : 12) {
             switch variant {
             case .home: homeHeader
             case .next: nextHeader
@@ -412,7 +427,7 @@ struct WorkResumeCard: View {
             chapterSection
             actions
         }
-        .padding(16)
+        .padding(variant == .detail ? 14 : 16)
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .foregroundStyle(.white)
         .background(cardBackground)
@@ -499,14 +514,6 @@ struct WorkResumeCard: View {
         )
     }
 
-    private var detailDates: String {
-        var parts: [String] = []
-        if !model.published.isEmpty { parts.append("Published \(model.published)") }
-        if !model.updated.isEmpty { parts.append("updated \(model.updated)") }
-        if let lastReadLabel = model.lastReadLabel { parts.append(lastReadLabel) }
-        return parts.joined(separator: " · ")
-    }
-
     private var accessibilityLabel: String {
         let prefix = variant == .next
             ? "Up next"
@@ -549,18 +556,14 @@ extension WorkResumeCard {
     private var detailHeader: some View {
         Group {
             if dynamicTypeSize.isAccessibilitySize {
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack(spacing: 12) {
-                        progressDial(diameter: 52, showsLabel: false)
-                        detailChapterLabels
-                    }
-                    contentsButton
+                HStack(spacing: 12) {
+                    progressDial(diameter: 40, showsLabel: false)
+                    detailChapterLabels
                 }
             } else {
                 HStack(spacing: 12) {
-                    progressDial(diameter: 52, showsLabel: false)
+                    progressDial(diameter: 40, showsLabel: false)
                     detailChapterLabels
-                    contentsButton
                 }
             }
         }
@@ -665,7 +668,7 @@ extension WorkResumeCard {
 
     private var detailChapterLabels: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(shown.displayedChapterName)
+            Text(shown.detailChapterName)
                 .font(.headline)
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
             if let line = model.detailProgressLine {
@@ -680,14 +683,16 @@ extension WorkResumeCard {
 
     private var contentsButton: some View {
         Button { if isInteractive { onContents?() } } label: {
-            Text(model.postedShortLabel + " ›")
-                .font(.subheadline)
+            Image(systemName: "list.bullet")
+                .font(.body.weight(.medium))
                 .foregroundStyle(.white)
-                .lineLimit(1)
+                .frame(width: updateCircleSide, height: updateCircleSide)
+                .background(Color.white.opacity(0.18), in: Circle())
         }
         .buttonStyle(.plain)
         .disabled(!isInteractive || onContents == nil)
-        .accessibilityLabel("Contents, \(model.postedShortLabel) chapters")
+        .accessibilityLabel("Contents")
+        .accessibilityValue(model.postedShortLabel + " chapters")
     }
 
     private var chapterSection: some View {
@@ -701,12 +706,6 @@ extension WorkResumeCard {
             .frame(maxWidth: barMaxWidth, alignment: .leading)
             if variant == .detail {
                 chapterLegend
-                if !detailDates.isEmpty {
-                    Text(detailDates)
-                        .font(.footnote)
-                        .foregroundStyle(Color.white.opacity(0.85))
-                        .fixedSize(horizontal: false, vertical: true)
-                }
             } else {
                 ViewThatFits(in: .horizontal) {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -740,18 +739,39 @@ extension WorkResumeCard {
     }
 
     private var chapterLegend: some View {
-        HStack(spacing: 14) {
-            legendItem("Read", fill: .white)
-            legendItem("Posted, unread", fill: Color.white.opacity(0.3))
-            HStack(spacing: 5) {
-                RoundedRectangle(cornerRadius: 2)
-                    .stroke(style: StrokeStyle(lineWidth: 1, dash: [2, 1.5]))
-                    .frame(width: 10, height: 10)
-                Text("Not posted yet")
-            }
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 14) { chapterLegendItems }
+            VStack(alignment: .leading, spacing: 5) { chapterLegendItems }
         }
         .font(.caption)
         .foregroundStyle(Color.white.opacity(0.9))
+    }
+
+    @ViewBuilder
+    private var chapterLegendItems: some View {
+        legendItem("Read", fill: .white)
+        legendItem("Posted", fill: Color.white.opacity(0.3))
+        HStack(spacing: 5) {
+            RoundedRectangle(cornerRadius: 2)
+                .stroke(style: StrokeStyle(lineWidth: 1, dash: [2, 1.5]))
+                .frame(width: 10, height: 10)
+            Text("Not posted yet")
+        }
+    }
+
+    private var actions: some View {
+        Group {
+            if variant == .detail, dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 10) {
+                    primaryButton
+                    HStack(spacing: 10) {
+                        detailCircleActions
+                    }
+                }
+            } else {
+                HStack(spacing: 10) { actionContents }
+            }
+        }
     }
 
     private func legendItem(_ title: String, fill: Color) -> some View {
@@ -761,28 +781,11 @@ extension WorkResumeCard {
         }
     }
 
-    private var actions: some View {
-        Group {
-            if dynamicTypeSize.isAccessibilitySize {
-                VStack(alignment: .leading, spacing: 10) { actionContents }
-            } else {
-                HStack(spacing: 10) { actionContents }
-            }
-        }
-    }
-
     @ViewBuilder
     private var actionContents: some View {
         if variant == .detail {
             primaryButton
-            // Board 19: the speaker sits beside Resume. Detail puts it after
-            // Resume; Home and Up next keep it before.
-            #if os(iOS)
-            readAloudCircle
-            #endif
-            if model.newChapterCount > 0, let onUpdate {
-                updateCircle(onUpdate)
-            }
+            detailCircleActions
         } else {
             WorkStatusIconGrid(
                 rating: model.rating.isEmpty ? nil : model.rating,
@@ -800,6 +803,17 @@ extension WorkResumeCard {
             readAloudCircle
             #endif
             primaryButton
+        }
+    }
+
+    @ViewBuilder
+    private var detailCircleActions: some View {
+        contentsButton
+        #if os(iOS)
+        readAloudCircle
+        #endif
+        if model.newChapterCount > 0, let onUpdate {
+            updateCircle(onUpdate)
         }
     }
 

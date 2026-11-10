@@ -78,7 +78,6 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     /// Drives artboard 1a screen 2 — everything this device holds about the
     /// work, behind the My copy row at the foot of the page.
     @State var showingMyCopy = false
-    @State var myCopyChapterPositions: [Int]?
     @State var showingDownloadedDateEditor = false
     /// The same editor, opened from the page's My copy card. A separate flag from
     /// the sheet's own: both presenters would otherwise answer to one value.
@@ -87,6 +86,11 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     @State var showingAddTag = false
     /// Long summaries start collapsed; this is the Show More toggle.
     @State var summaryExpanded = false
+    @State var summaryClampedHeight: CGFloat = 0
+    @State var summaryFullHeight: CGFloat = 0
+    @AppStorage("workDetailTagsExpanded") var tagsExpanded = false
+    @AppStorage("workDetailSeriesExpanded") var seriesExpanded = false
+    @AppStorage("workDetailMyCopyExpanded") var myCopyExpanded = false
 
     @State var newTagName = ""
     @State var showingAddToCollection = false
@@ -320,7 +324,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         )
     }
 
-    /// Board 19's identity block: header, the four symbols inline, resume card.
+    /// Version E's identity block: header, the four icon-only symbols, resume card.
     /// Each is its own row on the wash rather than one card, at the page's
     /// 16pt edge.
     var heroSection: some View {
@@ -334,17 +338,17 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             )
             .pageBodyRow(top: 20, gutter: 0)
 
-            // Rating, category, warnings and status, each named beside its tile
-            // at 20pt (the Symbols board's `inline` variant).
+            // Home's icon-only strip, with the same combined VoiceOver summary.
             WorkStatusIconGrid(
                 rating: displayRating,
                 categories: displayCategories,
                 warnings: displayWarnings,
                 completion: displayCompletionStatus,
-                tileSize: 20,
+                tileSize: 24,
                 announcesToVoiceOver: true,
-                arrangement: .inline
+                arrangement: .strip
             )
+            .fixedSize(horizontal: true, vertical: false)
             .pageBodyRow(top: 14)
 
             resumeCardRow

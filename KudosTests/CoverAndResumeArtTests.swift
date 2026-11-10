@@ -99,7 +99,7 @@ struct CoverAndResumeArtTests {
         #expect(model.figureLine == "\(84_210.formatted()) words · ♥ \(3_104.formatted())")
         #expect(ResumeCardVariant.home.barsHeight == 52)
         #expect(ResumeCardVariant.next.barsHeight == 52)
-        #expect(ResumeCardVariant.detail.barsHeight == 76)
+        #expect(ResumeCardVariant.detail.barsHeight == 34)
         let items = model.chapterItems(lengths: nil)
         #expect(items.count == 20)
         #expect(items.filter { if case .notPosted = $0.role { return true }; return false }.count == 8)
@@ -256,7 +256,21 @@ struct CoverAndResumeArtTests {
         #expect(noChapterFraction.detailPrimaryTitle(fallback: "Read").hasPrefix("Resume Chapter "))
     }
 
-    private func resume(progress: Double?, chapterProgress: Double?) -> ResumeCardModel {
+    @Test func detailChapterNameUsesTheShortNumberAndPublicationTitle() {
+        #expect(resume(
+            progress: 0.58, chapterProgress: 0.22, chapterName: "Chapter 7: The Salt Road"
+        ).detailChapterName == "Ch 7, The Salt Road")
+        #expect(resume(
+            progress: 0.58, chapterProgress: 0.22, chapterName: nil
+        ).detailChapterName.hasPrefix("Ch "))
+        #expect(resume(
+            progress: 0.02, chapterProgress: 0.5, chapterName: "Preface"
+        ).detailChapterName == "Preface")
+    }
+
+    private func resume(
+        progress: Double?, chapterProgress: Double?, chapterName: String? = nil
+    ) -> ResumeCardModel {
         ResumeCardModel(
             title: "The Salt Road",
             authors: ["wren"],
@@ -271,7 +285,7 @@ struct CoverAndResumeArtTests {
             chapters: "12/20",
             progress: progress,
             chapterProgress: chapterProgress,
-            chapterName: nil,
+            chapterName: chapterName,
             published: "",
             updated: "",
             newChapterCount: 0
