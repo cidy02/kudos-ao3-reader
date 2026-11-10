@@ -84,7 +84,7 @@ class LibraryForms3gxTest {
         compose.onNode(hasText("Story") and isToggleable()).performClick()
         compose.onNodeWithText("Add 1").performClick()
         compose.onNodeWithText("1 selected").assertExists()
-        compose.onNodeWithContentDescription("Queue cover, Picked, 1 work").assertExists()
+        compose.onNodeWithContentDescription("Queue cover, Picked, 1 work", substring = true).assertExists() // the footer may add " · next up …"
         compose.onNode(hasText("Add Works") and hasClickAction()).performClick()
         compose.onNode(hasText("Story") and isToggleable()).assertIsOn()
         compose.onNodeWithText("Add 1").performClick()
