@@ -617,6 +617,19 @@ class SettingsRepository(
         }
     }
 
+    /** Apply [transform] to the latest stored layout, so two quick edits both land. */
+    suspend fun editLibraryPageArrangement(
+        transform: (io.github.cidy02.kudos.core.model.LibraryPageArrangement) -> io.github.cidy02.kudos.core.model.LibraryPageArrangement
+    ) {
+        dataStore.edit {
+            val current = io.github.cidy02.kudos.core.model.LibraryPageArrangement
+                .fromJsonString(it[Keys.LibraryPageArrangement])
+                ?: io.github.cidy02.kudos.core.model.LibraryPageArrangement.Default
+            it[Keys.LibraryPageArrangement] = transform(current).toJson().toString()
+            it[Keys.SyncHasPendingChanges] = true
+        }
+    }
+
     /** Persist the layout and mark folder sync dirty: iOS 2407882d, the layout is a synced setting. */
     suspend fun updateLibraryPageArrangement(arrangement: io.github.cidy02.kudos.core.model.LibraryPageArrangement) {
         dataStore.edit {

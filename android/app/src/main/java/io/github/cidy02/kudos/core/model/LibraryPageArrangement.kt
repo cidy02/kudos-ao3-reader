@@ -2,6 +2,7 @@ package io.github.cidy02.kudos.core.model
 
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
@@ -101,19 +102,33 @@ data class LibraryPageArrangement(
             return LibraryPageArrangement(keptSections, keptButtons)
         }
 
-        /** Null when [element] is not an arrangement object (iOS `try?`: bad value leaves the local layout). */
+        /**
+         * Null when [element] is not an arrangement (iOS: the throwing decode inside `try?`, so the
+         * local layout stays). A present non-array list, a non-object section or a non-string style
+         * is such a failure; a section with a missing or non-string id, or a non-string button, is
+         * skipped as iOS's `FailableSection` / `FailableShelf` do.
+         */
         fun fromJson(element: JsonElement?): LibraryPageArrangement? {
             val obj = element as? JsonObject ?: return null
-            val sections = (obj["sections"] as? JsonArray).orEmpty().mapNotNull { item ->
-                val o = item as? JsonObject ?: return@mapNotNull null
-                val id = (o["id"] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull
-                    ?: return@mapNotNull null
-                val style = (o["style"] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull
-                LibraryPageSection(id, style ?: LibraryStyleCarousel)
+            fun list(key: String): List<JsonElement>? = when (val v = obj[key]) {
+                null, is JsonNull -> emptyList()
+                is JsonArray -> v
+                else -> null
             }
-            val buttons = (obj["buttons"] as? JsonArray).orEmpty().mapNotNull {
-                (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.contentOrNull
+            val rawSections = list("sections") ?: return null
+            val rawButtons = list("buttons") ?: return null
+            val sections = mutableListOf<LibraryPageSection>()
+            for (item in rawSections) {
+                val o = item as? JsonObject ?: return null
+                val style = when (val st = o["style"]) {
+                    null, is JsonNull -> null
+                    is JsonPrimitive -> if (st.isString) st.content else return null
+                    else -> return null
+                }
+                val id = (o["id"] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull ?: continue
+                sections += LibraryPageSection(id, style ?: LibraryStyleCarousel)
             }
+            val buttons = rawButtons.mapNotNull { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.contentOrNull }
             return normalized(sections, buttons)
         }
 

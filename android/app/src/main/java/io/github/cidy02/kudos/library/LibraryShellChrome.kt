@@ -50,7 +50,6 @@ class LibraryShellChrome {
     var hasSavedWorks by mutableStateOf(false)
     var filtersActive by mutableStateOf(false)
     var filterBadgeCount by mutableStateOf(0)
-    var layout by mutableStateOf(WorkSectionLayout.Shelves)
     val actions = LibraryShellActions()
 
     fun reset() {
@@ -64,14 +63,12 @@ class LibraryShellChrome {
         filtersActive = false
         filterBadgeCount = 0
         washHue = null
-        layout = WorkSectionLayout.Shelves
         actions.onNewCollection = {}
         actions.onShowFilters = {}
         actions.onClearFilters = {}
         actions.onSelectAll = {}
         actions.onEnterSelect = {}
         actions.onTogglePrivacy = {}
-        actions.onLayoutChange = {}
         actions.onOpenReadingQueues = {}
         actions.onOpenReadingStatistics = {}
         actions.onOpenRecentlyDeleted = {}
@@ -85,7 +82,6 @@ class LibraryShellActions {
     var onSelectAll: () -> Unit = {}
     var onEnterSelect: () -> Unit = {}
     var onTogglePrivacy: () -> Unit = {}
-    var onLayoutChange: (WorkSectionLayout) -> Unit = {}
     var onOpenReadingQueues: () -> Unit = {}
     var onOpenReadingStatistics: () -> Unit = {}
     var onOpenRecentlyDeleted: () -> Unit = {}
@@ -163,33 +159,6 @@ fun LibraryToolbarActions(chrome: LibraryShellChrome) {
                             }
                         )
                     }
-                    DropdownMenuItem(
-                        text = {
-                            Text(
-                                if (chrome.layout == WorkSectionLayout.Shelves) "Show Detailed List" else "Show Carousels"
-                            )
-                        },
-                        leadingIcon = {
-                            Icon(
-                                if (chrome.layout == WorkSectionLayout.Shelves) {
-                                    Icons.AutoMirrored.Outlined.List
-                                } else {
-                                    Icons.Outlined.CollectionsBookmark
-                                },
-                                contentDescription = null
-                            )
-                        },
-                        onClick = {
-                            open = false
-                            chrome.actions.onLayoutChange(
-                                if (chrome.layout == WorkSectionLayout.Shelves) {
-                                    WorkSectionLayout.Ledger
-                                } else {
-                                    WorkSectionLayout.Shelves
-                                }
-                            )
-                        }
-                    )
                     DropdownMenuItem(
                         text = { Text("Reading Queues") },
                         leadingIcon = { Icon(Icons.Outlined.Queue, contentDescription = null) },

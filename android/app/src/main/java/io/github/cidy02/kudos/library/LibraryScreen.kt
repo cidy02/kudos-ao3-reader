@@ -265,19 +265,6 @@ fun LibraryScreen(
     var confirmDeleteCollection by remember { mutableStateOf<String?>(null) }
     var confirmRemoveFromQueues by remember { mutableStateOf<String?>(null) }
     var rebuildWork by remember { mutableStateOf<SavedWork?>(null) }
-    val layoutPreferences = remember {
-        localContext.getSharedPreferences(LibraryPreferences, android.content.Context.MODE_PRIVATE)
-    }
-    var dashboardLayout by remember {
-        mutableStateOf(
-            if (layoutPreferences.getString("layout", "shelves") == "ledger") {
-                WorkSectionLayout.Ledger
-            } else {
-                WorkSectionLayout.Shelves
-            }
-        )
-    }
-
     if (libraryChrome != null && section == null) {
         val selectableIds = remember(state.items) {
             state.items.mapTo(linkedSetOf()) { it.item.work.id }
@@ -303,7 +290,6 @@ fun LibraryScreen(
             libraryChrome.hasSavedWorks = state.hasSavedWorks
             libraryChrome.filtersActive = state.hasActiveQueryOrFilters
             libraryChrome.filterBadgeCount = state.filters.activeCount + if (state.searchQuery.isBlank()) 0 else 1
-            libraryChrome.layout = dashboardLayout
             libraryChrome.washHue = state.continueReading.firstOrNull()?.item?.work
                 ?.let { io.github.cidy02.kudos.home.HomeFacts.workHue(it.workFandoms, it.title) }
             libraryChrome.actions.onNewCollection = { createCollectionName = "" }
@@ -314,13 +300,6 @@ fun LibraryScreen(
             }
             libraryChrome.actions.onEnterSelect = { viewModel.enterSelectionMode() }
             libraryChrome.actions.onTogglePrivacy = { viewModel.toggleRevealAll(activity) }
-            libraryChrome.actions.onLayoutChange = { layout ->
-                dashboardLayout = layout
-                layoutPreferences.edit().putString(
-                    "layout",
-                    if (layout == WorkSectionLayout.Ledger) "ledger" else "shelves"
-                ).apply()
-            }
             libraryChrome.actions.onOpenReadingQueues = onOpenReadingQueues
             libraryChrome.actions.onOpenReadingStatistics = onOpenReadingStatistics
             libraryChrome.actions.onOpenRecentlyDeleted = onOpenRecentlyDeleted
@@ -513,7 +492,7 @@ fun LibraryScreen(
     if (editShelvesOpen && settingsRepository != null) {
         LibraryEditShelvesDialog(
             arrangement = effectiveArrangement,
-            onChange = { scope.launch { settingsRepository.updateLibraryPageArrangement(it) } },
+            onEdit = { transform -> scope.launch { settingsRepository.editLibraryPageArrangement(transform) } },
             onDismiss = { editShelvesOpen = false }
         )
     }
@@ -523,14 +502,6 @@ fun LibraryScreen(
         onEditShelves = { editShelvesOpen = settingsRepository != null },
         state = state,
         section = section,
-        dashboardLayout = dashboardLayout,
-        onLayoutChange = { layout ->
-            dashboardLayout = layout
-            layoutPreferences.edit().putString(
-                "layout",
-                if (layout == WorkSectionLayout.Ledger) "ledger" else "shelves"
-            ).apply()
-        },
         onShowFilters = { showFilters = true },
         onFiltersChange = viewModel::updateFilters,
         onUpdateSearchQuery = viewModel::updateSearchQuery,
@@ -629,8 +600,6 @@ fun LibraryScreen(
 private fun LibraryContent(
     state: LibraryUiState,
     section: LibrarySectionKind?,
-    dashboardLayout: WorkSectionLayout,
-    onLayoutChange: (WorkSectionLayout) -> Unit,
     onShowFilters: () -> Unit,
     onFiltersChange: (LibraryFilterState) -> Unit,
     onUpdateSearchQuery: (String) -> Unit,
@@ -964,7 +933,7 @@ private fun shelfKind(id: String): LibrarySectionKind? = when (id) {
 /** Shelves that are not sections: one 48 dp row each (unknown or unsupported ids are kept, not shown). */
 @Composable
 private fun LibraryShelfButtons(buttons: List<String>, onOpen: (String) -> Unit, onEditShelves: () -> Unit) {
-    val shown = buttons.filter { LibraryShelf.fromId(it) != null && it != LibraryShelf.Imported.id }
+    val shown = buttons.filter(::isShelfSupported)
     Column(Modifier.padding(horizontal = 16.dp)) {
         shown.forEach { id ->
             TextButton(
