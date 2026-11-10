@@ -172,7 +172,11 @@ fun SubjectWorkCoverCard(
                                 state = if ((resolved ?: 0.0) >= 1.0) "Finished" else "Reading",
                                 diameter = ringDiameter
                             )
-                            footer != null -> UpdateBadge(footer)
+                            footer != null -> {
+                                val plus = updateMarkerText(footer)
+                                if (plus != null) UpdateMarker(plus, spoken = newChaptersSpoken(plus))
+                                else UpdateMarker(footer, confirmed = false)
+                            }
                         }
                     }
                     if (work.author.isNotBlank()) {
@@ -414,6 +418,43 @@ fun HomeStatusTray(
         }
     }
 }
+
+/**
+ * The app's update marker (owner, canvas v165, both apps; iOS `UpdateMarker`): the words, then
+ * an 8dp dot, filled in [KudosTokens.accentInk] for a confirmed update and outlined for a hedge
+ * ("Updated"). Primary ink: 13sp is not large text. Counts on an icon stay Material badges.
+ */
+@Composable
+internal fun UpdateMarker(text: String, confirmed: Boolean = true, spoken: String = text) {
+    val tokens = LocalKudosTokens.current
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.clearAndSetSemantics { contentDescription = spoken }
+    ) {
+        Text(text, color = tokens.primaryInk, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+        Box(
+            Modifier
+                .size(8.dp)
+                .background(if (confirmed) tokens.accentInk else Color.Transparent, CircleShape)
+                .then(if (confirmed) Modifier else Modifier.border(1.5.dp, tokens.secondaryInk, CircleShape))
+        )
+    }
+}
+
+/** iOS `WorkCoverMetadata.updateBadge(from:)`: a footer that starts with "+" shows as its "+N". */
+internal fun updateMarkerText(footer: String): String? {
+    if (!footer.startsWith("+")) return null
+    val count = footer.drop(1).takeWhile { it.isDigit() }
+    return if (count.isEmpty()) footer else "+$count"
+}
+
+internal fun newChaptersSpoken(plus: String): String =
+    when (val count = plus.drop(1).toIntOrNull()) {
+        null -> plus
+        1 -> "1 new chapter"
+        else -> "$count new chapters"
+    }
 
 @Composable
 internal fun UpdateBadge(text: String) {
