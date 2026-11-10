@@ -497,6 +497,14 @@ enum ReadingLogService {
 
     // MARK: Fandom watermarks
 
+    /// When the reader last opened `fandom`'s works — read before `markVisited`
+    /// overwrites it, so a screen can mark what is new since then.
+    static func lastVisit(fandom: String, in context: ModelContext) -> Date? {
+        let name = fandom.trimmingCharacters(in: .whitespacesAndNewlines)
+        let all = (try? context.fetch(FetchDescriptor<FandomReadWatermark>())) ?? []
+        return all.first { $0.fandomName == name }?.lastVisitedAt
+    }
+
     /// Records that the reader visited `fandom` (raw AO3 tag name). Updates the
     /// existing row for that name rather than inserting a second watermark.
     static func markVisited(

@@ -150,6 +150,16 @@ struct AO3AuthorBylineView: View {
                 // column, two names were cut to "Writ…" and "ond P…". One name to a line.
                 // A built-in stack, not a custom layout (see 3 above).
                 VStack(alignment: .leading, spacing: 2) { nameTokens }
+            } else if !compact, tokens.count > 1 {
+                // AO3 writes a pseud as "pseud (login)", so co-authors can outgrow the
+                // line even at standard sizes: then one name to a line rather than each
+                // wrapping inside its own column. Built-in containers only (see 3).
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .firstTextBaseline, spacing: 0) { nameTokens }
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                    VStack(alignment: .leading, spacing: 2) { nameTokens }
+                }
             } else {
                 nameTokens
             }

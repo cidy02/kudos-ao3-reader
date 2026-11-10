@@ -335,11 +335,11 @@ struct AO3WorkRow: View {
     @ViewBuilder
     private var authorByline: some View {
         if !work.authors.isEmpty {
+            // Two lines: AO3 writes a pseud as "pseud (login)", so co-authors outgrow one line.
             AO3AuthorBylineView(
                 names: work.authors,
                 identities: work.authorIdentities,
-                font: .subheadline,
-                compact: !dynamicTypeSize.isAccessibilitySize
+                font: .subheadline
             )
             .fixedSize(horizontal: false, vertical: true)
         }
@@ -833,11 +833,11 @@ extension AO3WorkRow {
                 WorkPlusBadge(count: badgeCount)
                 Spacer(minLength: 4)
             }
+            // Two lines: AO3 writes a pseud as "pseud (login)", so co-authors outgrow one line.
             AO3AuthorBylineView(
                 names: work.authors,
                 identities: work.authorIdentities,
-                font: .subheadline,
-                compact: !dynamicTypeSize.isAccessibilitySize
+                font: .subheadline
             )
             .fixedSize(horizontal: false, vertical: true)
         }
@@ -906,11 +906,11 @@ extension AO3WorkRow {
                 }
                 Spacer(minLength: 4)
             }
+            // Two lines: AO3 writes a pseud as "pseud (login)", so co-authors outgrow one line.
             AO3AuthorBylineView(
                 names: work.authors,
                 identities: work.authorIdentities,
-                font: .subheadline,
-                compact: !dynamicTypeSize.isAccessibilitySize
+                font: .subheadline
             )
             .fixedSize(horizontal: false, vertical: true)
         }

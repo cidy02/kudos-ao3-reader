@@ -88,6 +88,8 @@ nonisolated struct AO3SearchPage: Sendable {
     /// Marked for Later are both `/users/:id/readings`, whose blurbs carry a
     /// `div.user.module` no other listing has. Empty everywhere else.
     var readingEntries: [AO3ReadingEntry] = []
+    /// The works-filter sidebar's include lists, on tag/fandom works pages. Empty elsewhere.
+    var facets = AO3SearchFacets()
 }
 
 /// The count line AO3 prints above a works list — "92,495 Found",

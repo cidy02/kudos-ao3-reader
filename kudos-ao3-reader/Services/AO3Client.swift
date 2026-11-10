@@ -2054,7 +2054,8 @@ actor AO3Client { // swiftlint:disable:this type_body_length
             works: works,
             currentPage: page,
             totalPages: totalPages,
-            summary: try? Self.resultSummary(in: doc)
+            summary: try? Self.resultSummary(in: doc),
+            facets: Self.parseFacets(in: doc)
         )
     }
 

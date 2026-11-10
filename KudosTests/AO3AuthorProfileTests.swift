@@ -243,7 +243,7 @@ struct AO3AuthorProfileParserTests {
         #expect(page.works.count == 3)
         #expect(page.totalPages == 3)
         let coauthored = try #require(page.works.first)
-        #expect(coauthored.authors == ["Avery Writes", "Second Pseud"])
+        #expect(coauthored.authors == ["Avery Writes (Avery_Archive)", "Second Pseud (SecondAccount)"])
         #expect(coauthored.authorIdentities.map(\.route?.pseud)
             == ["Avery Writes", "Second Pseud"])
         #expect(coauthored.authorIdentities.map(\.route?.username)

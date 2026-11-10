@@ -34,16 +34,20 @@ struct BrowseView: View {
     private struct FandomRoute: Hashable {
         let names: [String]
         let title: String
+        /// The reader's visit before this one, for the "New since" divider.
+        let previousVisit: Date?
     }
 
     // ponytail: a sibling family records only its first tag; give families their
     // own Jump Back In card if that reads wrong.
     /// Opens a fandom's works and records the visit, which orders Jump Back In.
     private func openFandom(_ names: [String], _ title: String) {
+        var previousVisit: Date?
         if let first = names.first {
+            previousVisit = ReadingLogService.lastVisit(fandom: first, in: modelContext)
             ReadingLogService.markVisited(fandom: first, newestWork: nil, in: modelContext)
         }
-        path.append(FandomRoute(names: names, title: title))
+        path.append(FandomRoute(names: names, title: title, previousVisit: previousVisit))
     }
 
     var body: some View {
@@ -58,7 +62,9 @@ struct BrowseView: View {
                     FandomListView(category: category, onSelect: openFandom)
                 }
                 .navigationDestination(for: FandomRoute.self) { route in
-                    FandomWorksView(fandom: route.title, includedFandoms: route.names)
+                    FandomWorksView(
+                        fandom: route.title, includedFandoms: route.names, previousVisit: route.previousVisit
+                    )
                 }
                 .navigationDestination(for: AO3TagWorksRequest.self) { request in
                     TagWorksView(request: request)
@@ -113,6 +119,8 @@ struct FandomWorksView: View {
     let fandom: String
     /// Raw original tag names included in the search. Identity lives here.
     let includedFandoms: [String]
+    /// When the reader last opened this fandom, read before this visit overwrote it.
+    let previousVisit: Date?
 
     /// The other half of the fandom-row zoom — set by BrowseView on the stack.
     @Environment(\.workCardTransitionNamespace) private var zoomNamespace
@@ -138,6 +146,8 @@ struct FandomWorksView: View {
     @State private var lastAppendError: String?
     /// AO3's own result-count heading for these results, when it sent one.
     @State private var resultSummary: AO3ResultSummary?
+    /// The sidebar's most-used tags for these results, for the Insights row.
+    @State private var facets = AO3SearchFacets()
     @State private var phase: Phase = .loading
     /// Each load takes the next number; only the newest may write to the screen. A sort
     /// change or a pull to refresh while a page was on its way used to leave whichever
@@ -158,8 +168,9 @@ struct FandomWorksView: View {
 
     private enum Phase: Equatable { case loading, loaded, failed(String) }
 
-    init(fandom: String, includedFandoms: [String]? = nil) {
+    init(fandom: String, includedFandoms: [String]? = nil, previousVisit: Date? = nil) {
         self.fandom = fandom
+        self.previousVisit = previousVisit
         let names = includedFandoms ?? [fandom]
         self.includedFandoms = names
         _filters = State(initialValue: Self.baseline(for: names))
@@ -233,6 +244,12 @@ struct FandomWorksView: View {
                             .pageBodyRow(top: 8, gutter: 0)
                         }
                     }
+                    if !facets.isEmpty {
+                        Section {
+                            InsightsRow(facets: facets, palette: resultsPalette, onSelect: addInsightFilter)
+                                .pageBodyRow(top: 8, gutter: 0)
+                        }
+                    }
                     if rankTop100.showsStatusLine {
                         Section {
                             RankTop100ProgressCard(
@@ -243,6 +260,8 @@ struct FandomWorksView: View {
                         }
                     }
                     let partition = ranking.partitioned(results)
+                    // Once per render: each call re-parses every date on the page.
+                    let dividerID = dividerAfterWorkID
                     Section {
                         ForEach(partition.ranked) { entry in
                             SelectableAO3WorkRow(
@@ -264,6 +283,10 @@ struct FandomWorksView: View {
                                     && bulkSelection.selection.contains(entry.id),
                                 chrome: .plain
                             )
+                            if let previousVisit, entry.work.id == dividerID {
+                                NewSinceLastVisitDivider(previousVisit: previousVisit, palette: resultsPalette)
+                                    .bareListRow()
+                            }
                         }
                     }
                     if !partition.unranked.isEmpty {
@@ -376,6 +399,16 @@ struct FandomWorksView: View {
         Task { await load(page: page) }
     }
 
+    /// A tapped Insights chip: the same include filter the Filters sheet would set.
+    private func addInsightFilter(_ entry: AO3FacetEntry, _ kind: AO3SearchFacets.Kind) {
+        guard phase != .loading else { return }
+        let updated = filters.including(entry, as: kind)
+        guard updated != filters else { return }
+        filters = updated
+        bulkSelection.selection.removeAll()
+        reload()
+    }
+
     private func loadPage(_ page: Int) {
         guard phase != .loading, page >= 1, page <= totalPages, page != currentPage else { return }
         bulkSelection.selection.removeAll()
@@ -415,6 +448,19 @@ struct FandomWorksView: View {
         default:
             EmptyView()
         }
+    }
+
+    /// The work the "New since your last visit" divider follows, if any.
+    private var dividerAfterWorkID: Int? {
+        let applied = loadedFilters ?? filters
+        guard !showsRankedResults, !ranking.settings.isActive,
+              let index = NewSinceLastVisit.dividerIndex(
+                  updatedDates: results.map(\.dateUpdated),
+                  previousVisit: previousVisit,
+                  page: currentPage,
+                  newestFirstByUpdated: applied.sort == .dateUpdated && applied.sortDirection == .descending
+              ) else { return nil }
+        return results[index].id
     }
 
     /// `FandomWorksView` runs a `/works/search`, whose heading is a bare count —
@@ -541,6 +587,7 @@ struct FandomWorksView: View {
             currentPage = result.currentPage
             totalPages = AO3ResultListPaging.clampedTotalPages(result.totalPages)
             resultSummary = result.summary
+            facets = result.facets
             requestedPage = nil
             failedPage = nil
             lastAppendError = nil
@@ -725,6 +772,8 @@ struct TagWorksView: View {
     @State private var lastAppendError: String?
     /// AO3's own result-count heading for these results, when it sent one.
     @State private var resultSummary: AO3ResultSummary?
+    /// The sidebar's most-used tags for these results, for the Insights row.
+    @State private var facets = AO3SearchFacets()
     @State private var phase: Phase = .loading
     /// Each load takes the next number; only the newest may write to the screen. A sort
     /// change or a pull to refresh while a page was on its way used to leave whichever
@@ -783,6 +832,12 @@ struct TagWorksView: View {
                                 rankedResultCount: showsRankedResults ? results.count : nil
                             )
                             .pageBodyRow(top: 8, gutter: 0)
+                        }
+                    }
+                    if !facets.isEmpty {
+                        Section {
+                            InsightsRow(facets: facets, palette: resultsPalette, onSelect: addInsightFilter)
+                                .pageBodyRow(top: 8, gutter: 0)
                         }
                     }
                     if rankTop100.showsStatusLine {
@@ -956,6 +1011,16 @@ struct TagWorksView: View {
         Task { await load(page: page) }
     }
 
+    /// A tapped Insights chip: the same include filter the Filters sheet would set.
+    private func addInsightFilter(_ entry: AO3FacetEntry, _ kind: AO3SearchFacets.Kind) {
+        guard phase != .loading else { return }
+        let updated = filters.including(entry, as: kind)
+        guard updated != filters else { return }
+        filters = updated
+        bulkSelection.selection.removeAll()
+        reload()
+    }
+
     private func loadPage(_ page: Int) {
         guard phase != .loading, page >= 1, page <= totalPages, page != currentPage else { return }
         bulkSelection.selection.removeAll()
@@ -1094,6 +1159,7 @@ struct TagWorksView: View {
             currentPage = result.currentPage
             totalPages = AO3ResultListPaging.clampedTotalPages(result.totalPages)
             resultSummary = result.summary
+            facets = result.facets
             requestedPage = nil
             failedPage = nil
             lastAppendError = nil
