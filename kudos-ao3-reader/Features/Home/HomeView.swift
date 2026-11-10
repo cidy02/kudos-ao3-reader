@@ -1274,15 +1274,7 @@ private struct HomeNewChapterRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            if newCount > 0 {
-                Text("+\(newCount)")
-                    .font(.caption2.monospacedDigit().weight(.bold))
-                    .foregroundStyle(.white)
-                    .frame(minHeight: 16)
-                    .padding(.horizontal, 6)
-                    .background(.accentFill, in: Capsule())
-                    .accessibilityLabel("\(newCount) new chapter\(newCount == 1 ? "" : "s")")
-            }
+            WorkPlusBadge(count: newCount)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)

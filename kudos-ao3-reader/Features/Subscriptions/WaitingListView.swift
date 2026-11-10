@@ -336,7 +336,6 @@ struct WaitingRow: View {
     let isLast: Bool
 
     @Environment(PrivacyGate.self) private var privacyGate
-    @Environment(\.accentInk) private var accentInk
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
 
@@ -478,29 +477,10 @@ struct WaitingRow: View {
     }
 
     /// The text, then a dot (owner, canvas 2026-11-08: "a red dot rather than a badge,
-    /// with the info next to it", "dot to the right"). A confirmed update is a filled dot
-    /// in the app colour's legible step (`accentInk`, readable on Dark/OLED where the raw
-    /// red is not); a hedge ("Check", "Updated") is an outline.
+    /// with the info next to it"), now the app-wide `UpdateMarker`; a hedge ("Check",
+    /// "Updated") is an outline.
     private var badgeLabel: some View {
-        HStack(spacing: 6) {
-            badgeText
-            Circle()
-                .fill(isConfirmed ? accentInk : Color.clear)
-                .overlay(Circle().strokeBorder(isConfirmed ? Color.clear : Color.secondary, lineWidth: 1.5))
-                .frame(width: 8, height: 8)
-                .accessibilityHidden(true)
-        }
-        .fixedSize()
-    }
-
-    private var badgeText: some View {
-        Text(badge)
-            .font(.caption.bold())
-            // `.primary` in both states: 12 pt bold is not large text, so it needs
-            // 4.5:1, which neither `.tint` (a fixed hex, under 2:1 on the dark
-            // surface) nor `.secondary` gives on every theme. The hedge is carried
-            // by the words ("Check" vs "+1 · Ch. 9") and the outline dots.
-            .foregroundStyle(.primary)
+        UpdateMarker(text: badge, isConfirmed: isConfirmed)
     }
 
     private var titleText: some View {

@@ -261,14 +261,7 @@ struct WorkCoverCard: View {
     }
 
     private func updateBadge(_ text: String) -> some View {
-        Text(text)
-            .font(.caption2.monospacedDigit().weight(.bold))
-            .lineLimit(1)
-            .foregroundStyle(.white)
-            .frame(minHeight: 16)
-            .padding(.horizontal, 6)
-            .background(.accentFill, in: Capsule())
-            .combinedAccessibilityRow(text)
+        UpdateMarker(text: text)
     }
 }
 

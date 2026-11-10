@@ -85,31 +85,46 @@ struct WorkUpdatedDateBadge: View {
     }
 }
 
-/// I-8: one "+N" for new chapters. Caption 2 bold, 16 pt tall at the default
-/// size, 6 pt on the sides, fully round, app colour, white text. The ring is
-/// only for a badge that sits on top of a button. The height is a minimum so
-/// an accessibility size can grow instead of clipping the digits.
+/// The app's update marker (owner, canvas v165: "use this style of badge app
+/// wide"): the words, then an 8 pt dot. A confirmed update is a filled dot in
+/// the app colour's legible step (`accentInk`, readable on Dark/OLED where the
+/// raw red is not); a hedge ("Check") is an outline. The text is `.primary`:
+/// 13 pt is not large text, and `.secondary` misses 4.5:1 on some themes (T-506).
+/// Counts on top of an icon (tab bar, a button) stay iOS-standard pills.
+struct UpdateMarker: View {
+    let text: String
+    var isConfirmed = true
+    var spokenLabel: String?
+
+    @Environment(\.accentInk) private var accentInk
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(text)
+                .font(.footnote.weight(.medium))
+                .monospacedDigit()
+                .foregroundStyle(.primary)
+            Circle()
+                .fill(isConfirmed ? accentInk : Color.clear)
+                .overlay(Circle().strokeBorder(isConfirmed ? Color.clear : Color.secondary, lineWidth: 1.5))
+                .frame(width: 8, height: 8)
+        }
+        .fixedSize()
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(spokenLabel ?? text)
+    }
+}
+
+/// I-8: one "+N" for new chapters, drawn as the app's `UpdateMarker`.
 struct WorkPlusBadge: View {
     var count: Int
-    var showsRing = false
-
-    @Environment(\.accentFill) private var accentFill
 
     var body: some View {
         if count > 0 {
-            Text("+\(count)")
-                .font(.caption2.bold())
-                .foregroundStyle(ThemeManager.label(on: accentFill))
-                .padding(.horizontal, 6)
-                .frame(minHeight: 16)
-                .background(accentFill, in: Capsule())
-                .overlay {
-                    if showsRing {
-                        Capsule().strokeBorder(.white, lineWidth: 1)
-                    }
-                }
-                .fixedSize()
-                .accessibilityLabel(count == 1 ? "1 new chapter" : "\(count) new chapters")
+            UpdateMarker(
+                text: "+\(count)",
+                spokenLabel: count == 1 ? "1 new chapter" : "\(count) new chapters"
+            )
         }
     }
 }
