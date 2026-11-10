@@ -47,7 +47,7 @@ internal fun shelfTitle(id: String): String = LibraryShelf.fromId(id)?.title ?: 
 internal fun isShelfSupported(id: String): Boolean =
     LibraryShelf.fromId(id) != null && id != LibraryShelf.Imported.id
 
-private typealias ArrangementEdit = (LibraryPageArrangement) -> LibraryPageArrangement
+internal typealias ArrangementEdit = (LibraryPageArrangement) -> LibraryPageArrangement
 
 /** Move the shelf [id] to where [targetId] is, in whatever the latest stored layout is. */
 internal fun moveSectionTo(id: String, targetId: String): ArrangementEdit = { cur ->
