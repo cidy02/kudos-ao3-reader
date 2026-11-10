@@ -65,6 +65,7 @@ struct AO3WorkRow: View {
     @Environment(ThemeManager.self) private var themeManager
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @AppStorage("showsZeroStats") private var showsZeroStats = true
+    @AppStorage(WorkSymbolPlacement.storageKey) private var symbolPlacement: WorkSymbolPlacement = .beside
     @ScaledMetric(relativeTo: .title3) private var bookmarkTitleSize: CGFloat = 19
     @State private var internalExpanded = false
     @State private var showingResponseSheet = false
@@ -164,94 +165,124 @@ struct AO3WorkRow: View {
         }
     }
 
+    /// 2×2 grid beside the title + a summary: what follows the heading runs full width under the grid,
+    /// as in `WorkRow` (owner, 2026-11-09).
+    private var summaryRunsFullWidth: Bool {
+        WorkRow.summaryRunsFullWidth(
+            placement: symbolPlacement,
+            isStacked: dynamicTypeSize.isAccessibilitySize,
+            hasSummary: showsSummary && !work.summary.isEmpty
+        )
+    }
+
+    private var fullWidthLeadingPadding: CGFloat {
+        summaryRunsFullWidth ? WorkRow.fullWidthSummaryLeadingPadding(isSelecting: isSelecting) : 0
+    }
+
     private var standardCard: some View {
-        WorkPlainRow(wide: wide, showsSeparator: showsSeparator, separatorInset: rowSeparatorInset) {
+        WorkPlainRow(
+            wide: wide || summaryRunsFullWidth,
+            showsSeparator: showsSeparator,
+            separatorInset: rowSeparatorInset
+        ) {
             selectionCheck
         } symbols: { arrangement in
             symbols(arrangement)
         } heading: {
             standardHeading
         } remainder: {
-            if !expanded {
-                WorkTagLineView(
-                    relationships: work.relationships,
-                    characters: work.characters,
-                    freeforms: additionalTags,
-                    onTap: { tag, field in router.searchAO3(field, tag) }
-                )
-            }
-            if showsSummary, !work.summary.isEmpty {
-                Text(work.summary)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(expanded || dynamicTypeSize.isAccessibilitySize ? nil : 3)
-                    .multilineTextAlignment(.leading)
-                    .animation(nil, value: expanded)
-            }
-            if expanded {
-                WorkRowExpandedDetails(animate: !expandAll) {
-                    VStack(alignment: .leading, spacing: 12) {
-                        if presentation == .fandomTop {
-                            chipGroup("Fandoms", Array(nonemptyFandoms.dropFirst()), field: .fandom)
+            Group {
+                if !expanded {
+                    WorkTagLineView(
+                        relationships: work.relationships,
+                        characters: work.characters,
+                        freeforms: additionalTags,
+                        onTap: { tag, field in router.searchAO3(field, tag) }
+                    )
+                }
+                if showsSummary, !work.summary.isEmpty {
+                    Text(work.summary)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(expanded || dynamicTypeSize.isAccessibilitySize ? nil : 3)
+                        .multilineTextAlignment(.leading)
+                        .animation(nil, value: expanded)
+                }
+                if expanded {
+                    WorkRowExpandedDetails(animate: !expandAll) {
+                        VStack(alignment: .leading, spacing: 12) {
+                            if presentation == .fandomTop {
+                                chipGroup("Fandoms", Array(nonemptyFandoms.dropFirst()), field: .fandom)
+                            }
+                            // No "Archive Warnings" group: expanding turns the stats row's
+                            // warning chip into the warnings themselves.
+                            chipGroup("Relationships", work.relationships, field: .relationship)
+                            chipGroup("Characters", work.characters, field: .character)
+                            chipGroup("Additional Tags", additionalTags, field: .freeform)
                         }
-                        // No "Archive Warnings" group: expanding turns the stats row's
-                        // warning chip into the warnings themselves.
-                        chipGroup("Relationships", work.relationships, field: .relationship)
-                        chipGroup("Characters", work.characters, field: .character)
-                        chipGroup("Additional Tags", additionalTags, field: .freeform)
                     }
                 }
+                statsRow
+                if showsPerformance {
+                    AO3AuthorPerformanceStrip(work: work)
+                }
             }
-            statsRow
-            if showsPerformance {
-                AO3AuthorPerformanceStrip(work: work)
-            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.leading, fullWidthLeadingPadding)
         }
     }
 
     /// Fandom label, title, author, summary, every stat, and equal chapter bars.
     /// A remote work has no downloaded lengths and no reading progress.
     private var searchLedgerCard: some View {
-        WorkPlainRow(wide: wide, showsSeparator: showsSeparator, separatorInset: rowSeparatorInset) {
+        WorkPlainRow(
+            wide: wide || summaryRunsFullWidth,
+            showsSeparator: showsSeparator,
+            separatorInset: rowSeparatorInset
+        ) {
             selectionCheck
         } symbols: { arrangement in
             symbols(arrangement)
         } heading: {
             searchLedgerIdentity
         } remainder: {
-            if !expanded {
-                WorkTagLineView(
-                    relationships: work.relationships,
-                    characters: work.characters,
-                    freeforms: additionalTags,
-                    onTap: { tag, field in router.searchAO3(field, tag) }
-                )
-            }
-            if expanded {
-                WorkRowExpandedDetails(animate: !expandAll) {
-                    VStack(alignment: .leading, spacing: 12) {
-                        chipGroup("Fandoms", Array(nonemptyFandoms.dropFirst()), field: .fandom)
-                        chipGroup("Archive Warnings", work.warnings, field: .warning)
-                        chipGroup("Relationships", work.relationships, field: .relationship)
-                        chipGroup("Characters", work.characters, field: .character)
-                        chipGroup("Additional Tags", additionalTags, field: .freeform)
+            Group {
+                if !expanded {
+                    WorkTagLineView(
+                        relationships: work.relationships,
+                        characters: work.characters,
+                        freeforms: additionalTags,
+                        onTap: { tag, field in router.searchAO3(field, tag) }
+                    )
+                }
+                if expanded {
+                    WorkRowExpandedDetails(animate: !expandAll) {
+                        VStack(alignment: .leading, spacing: 12) {
+                            chipGroup("Fandoms", Array(nonemptyFandoms.dropFirst()), field: .fandom)
+                            chipGroup("Archive Warnings", work.warnings, field: .warning)
+                            chipGroup("Relationships", work.relationships, field: .relationship)
+                            chipGroup("Characters", work.characters, field: .character)
+                            chipGroup("Additional Tags", additionalTags, field: .freeform)
+                        }
                     }
                 }
+                if showsSummary, !work.summary.isEmpty {
+                    Text(work.summary)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(expanded || dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .animation(nil, value: expanded)
+                }
+                ledgerFacts
+                searchLedgerSignal
+                if showsPerformance {
+                    AO3AuthorPerformanceStrip(work: work)
+                }
             }
-            if showsSummary, !work.summary.isEmpty {
-                Text(work.summary)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(expanded || dynamicTypeSize.isAccessibilitySize ? nil : 2)
-                    .multilineTextAlignment(.leading)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .animation(nil, value: expanded)
-            }
-            ledgerFacts
-            searchLedgerSignal
-            if showsPerformance {
-                AO3AuthorPerformanceStrip(work: work)
-            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.leading, fullWidthLeadingPadding)
         }
     }
 

@@ -258,8 +258,9 @@ struct WorkRow: View {
         }
     }
 
+    /// The fandom above the title, on every row (owner, 2026-11-09): the first fandom, "+N" for the rest.
     @ViewBuilder
-    private func ledgerHeading(includesByline: Bool) -> some View {
+    private var fandomLabel: some View {
         if let fandom = nonemptyFandomNames.first {
             WorkFandomLabel(
                 title: FandomDisplayName.bareTitle(fandom),
@@ -268,6 +269,11 @@ struct WorkRow: View {
                 action: { router.searchAO3(.fandom, fandom) }
             )
         }
+    }
+
+    @ViewBuilder
+    private func ledgerHeading(includesByline: Bool) -> some View {
+        fandomLabel
         titleLine(showsFavorite: showsFavoriteStar && work.isFavorite, favoriteTint: .subjectFavoriteGold)
         if includesByline { ledgerByline }
     }
@@ -326,11 +332,13 @@ struct WorkRow: View {
         @ViewBuilder content: () -> Content
     ) -> some View {
         content()
+            .frame(maxWidth: .infinity, alignment: .leading) // full width: keep chip rows on the leading edge
             .padding(.leading, enabled ? Self.fullWidthSummaryLeadingPadding(isSelecting: isSelecting) : 0)
     }
 
     @ViewBuilder
     private func standardHeading(isExpandable: Bool) -> some View {
+        fandomLabel
         titleLine(
             showsFavorite: work.isFavorite,
             favoriteTint: theme.appTheme.favoriteColor,
@@ -444,44 +452,24 @@ struct WorkRow: View {
         }
     }
 
+    /// The author; the fandoms are the label above the title. An expanded row
+    /// still names every fandom, so "+N" never hides one for good.
     @ViewBuilder
     private var authorAndFandoms: some View {
-        if !work.author.isEmpty || !nonemptyFandomNames.isEmpty {
-            ViewThatFits(in: .horizontal) {
-                byline(wraps: false)
-                byline(wraps: true)
-            }
+        if !work.author.isEmpty {
+            AO3AuthorBylineView(
+                displayText: work.author,
+                identities: work.verifiedAuthorIdentities,
+                font: .subheadline,
+                compact: !dynamicTypeSize.isAccessibilitySize
+            )
         }
-    }
-
-    private func byline(wraps: Bool) -> some View {
-        let layout = wraps
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
-            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 4))
-        return layout {
-            if !work.author.isEmpty {
-                AO3AuthorBylineView(
-                    displayText: work.author,
-                    identities: work.verifiedAuthorIdentities,
-                    font: .subheadline,
-                    compact: !dynamicTypeSize.isAccessibilitySize
-                )
-            }
-            // Only between them on one line: stacked, the dot was a line of its own.
-            if !wraps, !work.author.isEmpty, !nonemptyFandomNames.isEmpty {
-                Text("·")
-                    .font(.subheadline)
-                    .foregroundStyle(.tertiary)
-            }
-            if !nonemptyFandomNames.isEmpty {
-                Text(nonemptyFandomNames.joined(separator: ", "))
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(expandedBinding.wrappedValue || dynamicTypeSize.isAccessibilitySize ? nil : 1)
-                    .animation(nil, value: expandedBinding.wrappedValue)
-            }
+        if expandedBinding.wrappedValue, nonemptyFandomNames.count > 1 {
+            Text(nonemptyFandomNames.joined(separator: ", "))
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .fixedSize(horizontal: false, vertical: true)
     }
 
     private var expandButton: some View {

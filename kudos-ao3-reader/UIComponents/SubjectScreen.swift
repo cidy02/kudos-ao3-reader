@@ -443,7 +443,9 @@ struct WorkPlainRow<Leading: View, Symbols: View, Heading: View, Remainder: View
                 } else if wide {
                     HStack(alignment: .top, spacing: WorkRowMetrics.columnGap) {
                         besideColumn
-                        heading()
+                        // One column, as in the default branch: a heading of several views
+                        // (fandom label, title, byline) otherwise shared the line side by side.
+                        VStack(alignment: .leading, spacing: 12) { heading() }
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     remainder()
