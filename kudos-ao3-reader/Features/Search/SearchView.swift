@@ -3,7 +3,7 @@ import SwiftUI
 
 // Lint: this existing screen coordinates local and remote search state.
 /// Native AO3 work search. A search field with an adjacent filter button, results
-/// appended one page at a time on explicit request, and a filter sidebar for
+/// paged through explicitly, and a filter sidebar for
 /// fandom, rating, sort, and completion.
 struct SearchView: View { // swiftlint:disable:this type_body_length
     @AppStorage("hideMatureContent") private var hideMature = true
@@ -13,6 +13,8 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     @Environment(AppRouter.self) private var router
     @Environment(AO3AuthService.self) private var auth
     @Environment(ThemeManager.self) private var themeManager
+    #if os(iOS)
+    #endif
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
 
@@ -38,10 +40,13 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     @State private var results: [AO3WorkSummary] = []
     @State private var rankTop100 = RankTop100Controller()
     @State private var rankTop100Pages: [Int: AO3SearchPage] = [:]
+    @State private var showsRankedResults = false
+    @State private var libraryIndex = WorkIdentityIndex([])
     @State private var currentPage = 1
     /// The page the latest load asked for, until it lands — so Try Again after a
     /// failed next-page request retries that page instead of `runSearch`'s page 1.
     @State private var requestedPage: Int?
+    @State private var failedPage: Int?
     /// The filters the results on screen were loaded with; nil while a new
     /// search has none yet. The panel edits the live `filters` before Apply, so
     /// they can differ from what is showing.
@@ -249,7 +254,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                         // Save and Filter sit directly visible after the search field —
                         // everything else (Select, Expand/Collapse) lives behind "...".
                         ActionToolbar(items: [
-                            (phase == .loaded && !results.isEmpty)
+                            (!results.isEmpty && (phase == .loaded || phase == .loading))
                                 ? AnyView(ToolbarIconButton(
                                     title: "Save Search",
                                     // Board 18's bookmark glyph. ("bookmark.badge.plus" is not an SF
@@ -258,13 +263,12 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                                     action: presentResultsSaveDialog
                                 ))
                                 : nil,
-                            // 1k: "an accent filter button with its count" — the same
-                            // number as the hero's Filters capsule (`SearchFilterBadge`).
+                            // The toolbar owns the one filter control and its active count.
                             AnyView(FilterButton(filtersActive: filters.hasActiveFilters,
                                                   showingFilters: router.isShowing(.searchFilters),
                                                   onClearFilters: clearAllFilters,
                                                   badgeCount: SearchFilterBadge.count(for: filters))),
-                            (phase == .loaded && !results.isEmpty)
+                            (!results.isEmpty && (phase == .loaded || phase == .loading))
                                 ? AnyView(WorkListMoreMenu {
                                     if hideMature {
                                         MatureRevealToggle()
@@ -274,6 +278,12 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                                     }
                                     ShowSummariesMenuItem(isOn: $showSummaries)
                                     ExpandAllMenuItem(expandAll: $expandAllCards)
+                                    RankTop100MenuItems(
+                                        controller: rankTop100,
+                                        totalPages: totalPages,
+                                        isPageLoading: phase == .loading,
+                                        start: startRankTop100
+                                    )
                                 })
                                 : (showsLocalResults && !localWorks.isEmpty)
                                     ? AnyView(WorkListMoreMenu {
@@ -353,6 +363,14 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                     resetRankTop100()
                 }
                 .onDisappear { rankTop100.cancel() }
+                .task { await rankTop100.refreshAvailability() }
+                .onChange(of: savedWorks.map(\.id), initial: true) { _, _ in
+                    libraryIndex = WorkIdentityIndex(savedWorks)
+                }
+        }
+        // A floating pill above the tab bar on every platform: a child's tabViewBottomAccessory drew nothing on Lane E.
+        .safeAreaInset(edge: .bottom) {
+            if showPagination { paginationBar.padding(.horizontal, SubjectMetrics.gutter) }
         }
     }
 
@@ -373,7 +391,6 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
             // First load of an AO3 search without library matches: show the shape of the incoming results.
             AO3WorkRowSkeletonList(count: 7)
         } else {
-            let libraryIDs = localAO3WorkIDs
             List {
                 if hasLibrarySections {
                     libraryMatchesSections
@@ -411,9 +428,9 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                                     runSearch()
                                 }
                             ),
-                            showSummaries: $showSummaries,
                             query: filters.query,
-                            showsOnAO3Header: hasLibrarySections
+                            showsOnAO3Header: hasLibrarySections,
+                            rankedResultCount: showsRankedResults ? results.count : nil
                         )
                         // Its own gutters, like every page header: bareListRow's
                         // card insets on top of them pushed it 26pt right of the cards.
@@ -450,7 +467,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                         .bareListRow()
                     }
                 } else {
-                    if totalPages > 1 {
+                    if rankTop100.showsStatusLine {
                         Section {
                             RankTop100ProgressCard(
                                 controller: rankTop100,
@@ -469,11 +486,13 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                                 work: entry.work,
                                 expandAll: expandAllCards,
                                 controller: bulkSelection,
-                                presentation: .searchLedger,
+                                presentation: .fandomTop,
                                 signal: ranking.signal(for: entry),
                                 qualitySignal: ranking.qualitySignal(for: entry),
                                 rankedContext: entry,
-                                badgeTitle: libraryIDs.contains(entry.id) ? "In Library" : nil,
+                                badgeTitle: AO3WorkRow.localStatus(
+                                    for: libraryIndex.existingWork(for: entry.work)
+                                ),
                                 showsSummary: showSummaries,
                                 wide: true
                             )
@@ -491,11 +510,13 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                                     work: entry.work,
                                     expandAll: expandAllCards,
                                     controller: bulkSelection,
-                                    presentation: .searchLedger,
+                                    presentation: .fandomTop,
                                     signal: ranking.signal(for: entry),
                                     qualitySignal: ranking.qualitySignal(for: entry),
                                     rankedContext: entry,
-                                    badgeTitle: libraryIDs.contains(entry.id) ? "In Library" : nil,
+                                    badgeTitle: AO3WorkRow.localStatus(
+                                        for: libraryIndex.existingWork(for: entry.work)
+                                    ),
                                     showsSummary: showSummaries,
                                     wide: true
                                 )
@@ -509,32 +530,18 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                         }
                     }
 
-                    if totalPages > 1 {
+                    if (phase == .loading && !results.isEmpty) || lastAppendError != nil {
                         Section {
-                            RankTop100Controls(
-                                controller: rankTop100,
+                            AO3ResultListEndFooter(
+                                currentPage: currentPage,
                                 totalPages: totalPages,
-                                loadedWorks: results.count,
-                                totalWorks: resultSummary?.total ?? results.count,
-                                isPageLoading: phase == .loading,
-                                start: startRankTop100
+                                isLoading: phase == .loading,
+                                targetPage: requestedPage,
+                                errorMessage: lastAppendError,
+                                loadNextPage: retryFailedPage
                             )
                             .bareListRow()
                         }
-                    }
-
-                    Section {
-                        AO3ResultListEndFooter(
-                            loadedCount: results.count,
-                            totalCount: resultSummary?.total ?? results.count,
-                            currentPage: currentPage,
-                            totalPages: totalPages,
-                            isLoading: phase == .loading,
-                            targetPage: requestedPage,
-                            errorMessage: lastAppendError,
-                            loadNextPage: loadNextPage
-                        )
-                        .bareListRow()
                     }
                 }
             }
@@ -1135,10 +1142,18 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         try? context.save()
     }
 
-    private func loadNextPage() {
-        guard phase != .loading, currentPage < totalPages else { return }
+    private func retryFailedPage() {
+        let page = failedPage ?? (currentPage + 1)
+        guard phase != .loading, page <= totalPages else { return }
         lastAppendError = nil
-        load(page: currentPage + 1)
+        load(page: page)
+    }
+
+    private func loadPage(_ page: Int) {
+        guard phase != .loading, page >= 1, page <= totalPages, page != currentPage else { return }
+        bulkSelection.selection.removeAll()
+        lastAppendError = nil
+        load(page: page)
     }
 
     private func load(page: Int) {
@@ -1151,6 +1166,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
             return
         }
         phase = .loading
+        failedPage = nil
         requestedPage = page
         loadToken += 1
         let token = loadToken
@@ -1173,17 +1189,15 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 guard token == loadToken else { return }
                 // Noted in Momentum's record on the way in (T-473).
                 let newWorks = ranking.noting(result.works)
-                if page == 1 {
-                    results = newWorks
-                } else {
-                    results = AO3ResultListPaging.appendUnique(newWorks: newWorks, to: results)
-                }
+                results = newWorks
+                showsRankedResults = false
                 rankTop100Pages[result.currentPage] = result
                 currentPage = result.currentPage
-                totalPages = result.totalPages
+                totalPages = AO3ResultListPaging.clampedTotalPages(result.totalPages)
                 resultSummary = result.summary
                 loadedFilters = current
                 requestedPage = nil
+                failedPage = nil
                 lastAppendError = nil
                 if let url = RankTop100URLSource.search(
                     filters: current,
@@ -1212,21 +1226,25 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 return
             } catch let error as AO3Error {
                 guard token == loadToken else { return }
-                if page == 1 {
+                if results.isEmpty {
                     phase = .failed(error.errorDescription ?? "Something went wrong.")
+                    failedPage = nil
                 } else {
                     phase = .loaded
                     lastAppendError = error.errorDescription ?? "Something went wrong."
+                    failedPage = page
                 }
                 requestedPage = nil
             } catch {
                 guard token == loadToken else { return }
                 let msg = UserFacingError.message(for: error)
-                if page == 1 {
+                if results.isEmpty {
                     phase = .failed(msg)
+                    failedPage = nil
                 } else {
                     phase = .loaded
                     lastAppendError = msg
+                    failedPage = page
                 }
                 requestedPage = nil
             }
@@ -1240,6 +1258,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     private func resetRankTop100() {
         rankTop100.cancel()
         rankTop100Pages = [:]
+        showsRankedResults = false
     }
 
     private func startRankTop100() {
@@ -1262,10 +1281,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
             onPages: { pages in
                 rankTop100Pages = pages
                 results = ranking.noting(RankTop100Pages.works(in: pages))
-                currentPage = AO3ResultListPaging.furthestLoadedPage(
-                    currentPage: currentPage,
-                    loadedPages: Array(pages.keys)
-                )
+                showsRankedResults = true
             }
         )
     }
@@ -1288,12 +1304,22 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         resultSummary?.completing(
             subject: filters.searchSubject.text,
             page: currentPage,
-            onPageCount: results.count
+            onPageCount: min(results.count, AO3ResultSummary.worksPerPage)
         )
     }
 
-    private var localAO3WorkIDs: Set<Int> {
-        Set(savedWorks.compactMap { $0.ao3WorkID ?? WorkTags.ao3WorkID(from: $0.sourceURL) })
+    private var showPagination: Bool {
+        totalPages > 1 && !results.isEmpty && phase != .idle
+    }
+
+    private var paginationBar: some View {
+        SearchPaginationBar(
+            currentPage: currentPage,
+            totalPages: totalPages,
+            isLoading: phase == .loading,
+            palette: resultsPalette,
+            onSelect: loadPage
+        )
     }
 
     private func refreshCurrentResults() async {
@@ -1303,7 +1329,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         await AO3Client.shared.invalidateCachedResponses()
         phase = .loading
         // Reuses `load(page:)` rather than repeating it: that keeps the refresh in
-        // the *same* `loadTask` slot, so tapping Load Page mid-refresh cancels the
+        // the *same* `loadTask` slot, so paging mid-refresh cancels the
         // refresh instead of leaving it to finish and spend a paced request slot
         // ahead of the page the user is actually waiting for. Awaiting the task
         // holds the pull-to-refresh spinner until the load it started is done.

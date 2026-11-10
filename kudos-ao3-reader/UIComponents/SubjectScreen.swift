@@ -408,6 +408,7 @@ struct WorkPlainRow<Leading: View, Symbols: View, Heading: View, Remainder: View
     var wide = false
     var showsSeparator = true
     var separatorInset: CGFloat? = nil
+    var placementOverride: WorkSymbolPlacement?
     /// The selection check (or its placeholder) while selecting; nothing otherwise.
     @ViewBuilder var leading: () -> Leading
     /// The four symbols in the arrangement asked for: `.grid` beside, `.row` under the title.
@@ -419,11 +420,12 @@ struct WorkPlainRow<Leading: View, Symbols: View, Heading: View, Remainder: View
     @AppStorage(WorkSymbolPlacement.storageKey) private var placement: WorkSymbolPlacement = .beside
 
     private var stacked: Bool { dynamicTypeSize.isAccessibilitySize }
+    private var resolvedPlacement: WorkSymbolPlacement { placementOverride ?? placement }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 12) {
-                if placement == .underTitle {
+                if resolvedPlacement == .underTitle {
                     HStack(alignment: .center, spacing: WorkRowMetrics.columnGap) {
                         leading()
                         VStack(alignment: .leading, spacing: 12) {
@@ -467,7 +469,7 @@ struct WorkPlainRow<Leading: View, Symbols: View, Heading: View, Remainder: View
             if showsSeparator {
                 WorkRowSeparator(
                     inset: WorkRowMetrics.separatorInset(
-                        placement: placement, stacked: stacked, wide: wide, selectingInset: separatorInset
+                        placement: resolvedPlacement, stacked: stacked, wide: wide, selectingInset: separatorInset
                     )
                 )
             }

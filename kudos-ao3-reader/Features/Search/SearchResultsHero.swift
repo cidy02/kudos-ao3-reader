@@ -3,6 +3,8 @@ import SwiftUI
 /// Pure logic for AO3 result lists (search results, fandom works, tag works).
 /// Covers header copy, loading footer status, and unique work appending.
 enum AO3ResultListPaging {
+    static let maximumResults = 100_000
+
     static func title(subject: String?, query: String?, hasLibrarySections: Bool = false) -> String {
         if hasLibrarySections {
             return "On AO3"
@@ -26,12 +28,30 @@ enum AO3ResultListPaging {
         return "\(count) \(total == 1 ? "work" : "works") on AO3"
     }
 
+    static func rangeSubtitle(total: Int, range: ClosedRange<Int>?, rankedCount: Int? = nil) -> String {
+        let rankedRange: ClosedRange<Int>?
+        if let rankedCount, total > 0, rankedCount > 0 {
+            rankedRange = 1 ... min(rankedCount, total)
+        } else {
+            rankedRange = nil
+        }
+        guard let range = rankedRange ?? range else { return subtitle(total: total) }
+        return "\(range.lowerBound.formatted())–\(range.upperBound.formatted()) of "
+            + "\(total.formatted()) \(total == 1 ? "work" : "works") on AO3"
+    }
+
+    static func clampedTotalPages(_ totalPages: Int) -> Int {
+        let pageSize = AO3ResultSummary.worksPerPage
+        let maximumPages = (maximumResults + pageSize - 1) / pageSize
+        return min(max(1, totalPages), maximumPages)
+    }
+
     static func countText(total: Int) -> String {
         "\(total.formatted()) \(total == 1 ? "work" : "works")"
     }
 
-    static func footerLoadingText(loaded: Int, total: Int, page: Int) -> String {
-        "\(loaded.formatted()) of \(total.formatted()) · loading page \(page)"
+    static func footerLoadingText(page: Int, totalPages: Int) -> String {
+        "Loading page \(page.formatted()) of \(totalPages.formatted())"
     }
 
     static func footerLoadedText(loaded: Int, total: Int) -> String {
@@ -52,9 +72,6 @@ enum AO3ResultListPaging {
         return combined
     }
 
-    static func furthestLoadedPage(currentPage: Int, loadedPages: [Int]) -> Int {
-        max(currentPage, loadedPages.max() ?? currentPage)
-    }
 }
 
 /// AO3's own result-count line plus the filters producing it:
@@ -77,10 +94,8 @@ struct SearchResultsHero: View {
     /// `.card` is the established one: a tappable card sitting in the list, with
     /// the count, the subject and the filter chips stacked inside it.
     ///
-    /// `.subjectPage` is the redesign header (T-492, boards 15 and 18):
-    /// the query or fandom as a Large Title, with "N works on AO3",
-    /// Sort (T-473), Filters (filled with a count when active) and layout capsules,
-    /// followed by active-filter chips.
+    /// `.subjectPage` is the redesign header: the query or fandom, its AO3
+    /// result range, Sort, and the active-filter chips.
     enum Presentation: Equatable {
         case card
         case subjectPage
@@ -104,15 +119,17 @@ struct SearchResultsHero: View {
     /// The orders the menu offers. A tag listing has no relevance order, so
     /// Browse's pages leave Best Match out.
     var sortOptions: [AO3SearchFilters.Sort] = AO3SearchFilters.Sort.allCases
-    /// Toggles summaries in wide ledger rows (T-492).
-    var showSummaries: Binding<Bool>?
     /// Query string for search results title display.
     var query: String?
     /// Redesigned header variant: when library sections are shown above on the combined
     /// search page (Board 11), the title reads "On AO3" with the count beside it.
     var showsOnAO3Header: Bool = false
+    /// Rank Top 100 temporarily shows pages 1…N together while the pager remains
+    /// on the reader's original page.
+    var rankedResultCount: Int?
     @Environment(ThemeManager.self) private var themeManager
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .title2) private var subjectTitleSize: CGFloat = 24
 
     /// Beyond this the chips would crowd out the works. The overflow is *counted*
     /// rather than silently dropped, so the card never implies it listed everything.
@@ -142,10 +159,13 @@ struct SearchResultsHero: View {
         let displayTitle = showsOnAO3Header
             ? "On AO3"
             : AO3ResultListPaging.title(subject: summary.subject, query: query)
-        let countFact = showsOnAO3Header
-            ? AO3ResultListPaging.countText(total: summary.total)
-            : AO3ResultListPaging.subtitle(total: summary.total)
-        let filterCount = nonSortFilterLabels.count
+        let countFact = rankedResultCount != nil || !showsOnAO3Header
+            ? AO3ResultListPaging.rangeSubtitle(
+                total: summary.total,
+                range: summary.range,
+                rankedCount: rankedResultCount
+            )
+            : AO3ResultListPaging.countText(total: summary.total)
 
         return VStack(alignment: .leading, spacing: 10) {
             if showsOnAO3Header {
@@ -154,26 +174,21 @@ struct SearchResultsHero: View {
                         onAO3TitleBlock(title: displayTitle, count: countFact)
                         Spacer(minLength: 0)
                         sortControl
-                        filterControl(count: filterCount)
-                        layoutControl
                     }
                     VStack(alignment: .leading, spacing: 10) {
                         onAO3TitleBlock(title: displayTitle, count: countFact)
                         HStack(spacing: 8) {
                             sortControl
-                            filterControl(count: filterCount)
                             Spacer(minLength: 0)
-                            layoutControl
                         }
                     }
                 }
             } else {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(displayTitle)
-                        .font(.largeTitle.weight(.bold))
+                        .font(.system(size: subjectTitleSize, weight: .bold))
                         .foregroundStyle(Color.primary)
-                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
-                        .minimumScaleFactor(0.85)
+                        .fixedSize(horizontal: false, vertical: true)
                         .accessibilityAddTraits(.isHeader)
 
                     Text(countFact)
@@ -184,14 +199,10 @@ struct SearchResultsHero: View {
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 8) {
                         sortControl
-                        filterControl(count: filterCount)
                         Spacer(minLength: 0)
-                        layoutControl
                     }
                     FlowLayout(spacing: 8, rowSpacing: 8) {
                         sortControl
-                        filterControl(count: filterCount)
-                        layoutControl
                     }
                 }
             }
@@ -292,46 +303,6 @@ struct SearchResultsHero: View {
             .background(themeManager.appTheme.glassFill(0.12))
             .foregroundStyle(Color.primary)
             .clipShape(SubjectMetrics.controlShape(dynamicTypeSize))
-        }
-    }
-
-    private func filterControl(count: Int) -> some View {
-        Button {
-            onEditFilters?()
-        } label: {
-            HStack(spacing: 5) {
-                Image(systemName: "line.3.horizontal.decrease")
-                    .font(.caption.weight(.semibold))
-                Text(count > 0 ? "Filters · \(count)" : "Filters")
-                    .font(.subheadline.weight(count > 0 ? .semibold : .regular))
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .frame(minHeight: 32)
-            .background(count > 0 ? themeManager.effectiveTint : themeManager.appTheme.glassFill(0.12))
-            .foregroundStyle(count > 0 ? ThemeManager.label(on: themeManager.effectiveTint) : Color.primary)
-            .clipShape(SubjectMetrics.controlShape(dynamicTypeSize))
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(count > 0 ? "Filters, \(count) active" : "Filters")
-    }
-
-    @ViewBuilder
-    private var layoutControl: some View {
-        if let showSummaries {
-            Button {
-                showSummaries.wrappedValue.toggle()
-            } label: {
-                Image(systemName: showSummaries.wrappedValue ? "text.alignleft" : "rectangle.grid.1x2")
-                    .font(.subheadline)
-                    .frame(width: 32, height: 32)
-                    .background(themeManager.appTheme.glassFill(0.12))
-                    .foregroundStyle(Color.primary)
-                    .clipShape(Circle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(showSummaries.wrappedValue ? "Layout: rows with summaries" : "Layout: compact rows")
-            .accessibilityHint("Toggles summaries in search results")
         }
     }
 
@@ -502,11 +473,9 @@ enum SearchFilterBadge {
     }
 }
 
-/// Redesigned loading footer at the end of AO3 search and fandom result lists (T-492).
-/// Replaces the old SearchPaginationBar with an explicit next-page action.
+/// Loading and retry status below AO3 search and fandom result lists. Page
+/// movement itself lives in `SearchPaginationBar`.
 struct AO3ResultListEndFooter: View {
-    let loadedCount: Int
-    let totalCount: Int
     let currentPage: Int
     let totalPages: Int
     let isLoading: Bool
@@ -514,45 +483,40 @@ struct AO3ResultListEndFooter: View {
     var errorMessage: String?
     let loadNextPage: () -> Void
 
+    @ViewBuilder
     var body: some View {
-        VStack(spacing: 8) {
-            if isLoading {
-                HStack(spacing: 8) {
-                    ProgressView()
-                        .controlSize(.small)
-                    Text(AO3ResultListPaging.footerLoadingText(
-                        loaded: loadedCount,
-                        total: totalCount,
-                        page: targetPage ?? (currentPage + 1)
-                    ))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                }
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel("Loading page \(targetPage ?? (currentPage + 1)), \(loadedCount) of \(totalCount) works loaded so far")
-            } else if let errorMessage {
-                VStack(spacing: 6) {
-                    Text(errorMessage)
-                        .font(.caption)
+        if isLoading || errorMessage != nil {
+            VStack(spacing: 8) {
+                if isLoading {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text(AO3ResultListPaging.footerLoadingText(
+                            page: targetPage ?? (currentPage + 1),
+                            totalPages: totalPages
+                        ))
+                        .font(.footnote)
                         .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                    Button("Try Again", action: loadNextPage)
-                        .buttonStyle(.kudosSecondary)
+                    }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel(AO3ResultListPaging.footerLoadingText(
+                        page: targetPage ?? (currentPage + 1),
+                        totalPages: totalPages
+                    ))
+                } else if let errorMessage {
+                    VStack(spacing: 6) {
+                        Text(errorMessage)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                        Button("Try Again", action: loadNextPage)
+                            .buttonStyle(.kudosSecondary)
+                    }
                 }
-            } else if currentPage < totalPages {
-                Text(AO3ResultListPaging.footerLoadedText(loaded: loadedCount, total: totalCount))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                Button("Load Page \(currentPage + 1)", action: loadNextPage)
-                    .buttonStyle(.kudosSecondary)
-            } else {
-                Text(AO3ResultListPaging.footerLoadedText(loaded: loadedCount, total: totalCount))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
             }
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.vertical, 12)
+            .padding(.horizontal, SubjectMetrics.gutter)
         }
-        .frame(maxWidth: .infinity, alignment: .center)
-        .padding(.vertical, 12)
-        .padding(.horizontal, SubjectMetrics.gutter)
     }
 }

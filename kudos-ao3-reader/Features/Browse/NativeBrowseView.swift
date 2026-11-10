@@ -121,13 +121,19 @@ struct FandomWorksView: View {
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var themeManager
     @Environment(\.scenePhase) private var scenePhase
+    #if os(iOS)
+    #endif
+    @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }) private var savedWorks: [SavedWork]
     @State private var results: [AO3WorkSummary] = []
     @State private var ranking = SearchRankingSession()
     @State private var rankTop100 = RankTop100Controller()
     @State private var rankTop100Pages: [Int: AO3SearchPage] = [:]
+    @State private var showsRankedResults = false
+    @State private var libraryIndex = WorkIdentityIndex([])
     @State private var rankTop100Source: RankTop100URLSource?
     @State private var currentPage = 1
     @State private var requestedPage: Int?
+    @State private var failedPage: Int?
     @State private var totalPages = 1
     @State private var lastAppendError: String?
     /// AO3's own result-count heading for these results, when it sent one.
@@ -221,13 +227,13 @@ struct FandomWorksView: View {
                                 presentation: .subjectPage,
                                 sortSelection: sortSelection,
                                 sortOptions: AO3SearchFilters.Sort.allCases.filter { $0 != .relevance },
-                                showSummaries: $showSummaries,
-                                query: nil
+                                query: nil,
+                                rankedResultCount: showsRankedResults ? results.count : nil
                             )
                             .pageBodyRow(top: 8, gutter: 0)
                         }
                     }
-                    if totalPages > 1 {
+                    if rankTop100.showsStatusLine {
                         Section {
                             RankTop100ProgressCard(
                                 controller: rankTop100,
@@ -247,7 +253,11 @@ struct FandomWorksView: View {
                                 signal: ranking.signal(for: entry),
                                 qualitySignal: ranking.qualitySignal(for: entry),
                                 rankedContext: entry,
-                                showsSummary: showSummaries
+                                badgeTitle: AO3WorkRow.localStatus(
+                                    for: libraryIndex.existingWork(for: entry.work)
+                                ),
+                                showsSummary: showSummaries,
+                                wide: true
                             )
                             .cardRow(
                                 isSelected: bulkSelection.isSelecting
@@ -267,7 +277,11 @@ struct FandomWorksView: View {
                                     signal: ranking.signal(for: entry),
                                     qualitySignal: ranking.qualitySignal(for: entry),
                                     rankedContext: entry,
-                                    showsSummary: showSummaries
+                                    badgeTitle: AO3WorkRow.localStatus(
+                                        for: libraryIndex.existingWork(for: entry.work)
+                                    ),
+                                    showsSummary: showSummaries,
+                                    wide: true
                                 )
                                 .cardRow(
                                     isSelected: bulkSelection.isSelecting
@@ -280,31 +294,18 @@ struct FandomWorksView: View {
                                 .listRowInsets(EdgeInsets())
                         }
                     }
-                    if totalPages > 1 {
+                    if (phase == .loading && !results.isEmpty) || lastAppendError != nil {
                         Section {
-                            RankTop100Controls(
-                                controller: rankTop100,
+                            AO3ResultListEndFooter(
+                                currentPage: currentPage,
                                 totalPages: totalPages,
-                                loadedWorks: results.count,
-                                totalWorks: resultSummary?.total ?? results.count,
-                                isPageLoading: phase == .loading,
-                                start: startRankTop100
+                                isLoading: phase == .loading,
+                                targetPage: requestedPage,
+                                errorMessage: lastAppendError,
+                                loadNextPage: retryFailedPage
                             )
                             .bareListRow()
                         }
-                    }
-                    Section {
-                        AO3ResultListEndFooter(
-                            loadedCount: results.count,
-                            totalCount: resultSummary?.total ?? results.count,
-                            currentPage: currentPage,
-                            totalPages: totalPages,
-                            isLoading: phase == .loading,
-                            targetPage: requestedPage,
-                            errorMessage: lastAppendError,
-                            loadNextPage: loadNextPage
-                        )
-                        .bareListRow()
                     }
                 }
                 .cardList()
@@ -346,6 +347,10 @@ struct FandomWorksView: View {
             }
             .remoteWorkSelectionChrome(bulkSelection)
             .task { await load(page: 1) }
+            .task { await rankTop100.refreshAvailability() }
+            .onChange(of: savedWorks.map(\.id), initial: true) { _, _ in
+                libraryIndex = WorkIdentityIndex(savedWorks)
+            }
             .onDisappear { rankTop100.cancel() }
             .onChange(of: router.selection) { _, selection in
                 if selection != .browse { rankTop100.cancel() }
@@ -356,13 +361,26 @@ struct FandomWorksView: View {
             .onChange(of: auth.sessionGeneration) { _, _ in
                 rankTop100.cancel()
                 rankTop100Pages = [:]
+                showsRankedResults = false
+            }
+            // A floating pill above the tab bar on every platform: a child's tabViewBottomAccessory drew nothing on Lane E.
+            .safeAreaInset(edge: .bottom) {
+                if showPagination { paginationBar.padding(.horizontal, SubjectMetrics.gutter) }
             }
     }
 
-    private func loadNextPage() {
-        guard phase != .loading, currentPage < totalPages else { return }
+    private func retryFailedPage() {
+        let page = failedPage ?? (currentPage + 1)
+        guard phase != .loading, page <= totalPages else { return }
         lastAppendError = nil
-        Task { await load(page: currentPage + 1) }
+        Task { await load(page: page) }
+    }
+
+    private func loadPage(_ page: Int) {
+        guard phase != .loading, page >= 1, page <= totalPages, page != currentPage else { return }
+        bulkSelection.selection.removeAll()
+        lastAppendError = nil
+        Task { await load(page: page) }
     }
 
     @ViewBuilder
@@ -403,12 +421,30 @@ struct FandomWorksView: View {
     /// but this screen *is* this fandom's works list, so it can name its own
     /// subject and work out which slice of the total is on screen.
     private var heroSummary: AO3ResultSummary? {
-        resultSummary?.completing(subject: fandom, page: currentPage, onPageCount: results.count)
+        resultSummary?.completing(
+            subject: fandom,
+            page: currentPage,
+            onPageCount: min(results.count, AO3ResultSummary.worksPerPage)
+        )
     }
 
     /// The subject's colour, as Search derives it for its own results.
     private var resultsPalette: SubjectPalette {
         themeManager.appTheme.subjectPalette(hue: CoverArt.hue(for: heroSummary?.subject ?? fandom))
+    }
+
+    private var showPagination: Bool {
+        totalPages > 1 && !results.isEmpty
+    }
+
+    private var paginationBar: some View {
+        SearchPaginationBar(
+            currentPage: currentPage,
+            totalPages: totalPages,
+            isLoading: phase == .loading,
+            palette: resultsPalette,
+            onSelect: loadPage
+        )
     }
 
     /// The hero's sort menu applies at once and starts again from page 1, like
@@ -447,6 +483,7 @@ struct FandomWorksView: View {
         let cacheScope = rankTop100Scope
         let authenticatedRequest = auth.authenticatedRequest()
         phase = .loading
+        failedPage = nil
         requestedPage = page
         if loadedFilters == nil { loadedFilters = filters }
         loadToken += 1
@@ -497,17 +534,15 @@ struct FandomWorksView: View {
             }
             guard token == loadToken else { return }
             let newWorks = ranking.noting(result.works)
-            if page == 1 {
-                results = newWorks
-            } else {
-                results = AO3ResultListPaging.appendUnique(newWorks: newWorks, to: results)
-            }
+            results = newWorks
+            showsRankedResults = false
             rankTop100Pages[result.currentPage] = result
             rankTop100Source = source
             currentPage = result.currentPage
-            totalPages = result.totalPages
+            totalPages = AO3ResultListPaging.clampedTotalPages(result.totalPages)
             resultSummary = result.summary
             requestedPage = nil
+            failedPage = nil
             lastAppendError = nil
             if let url = source.url(page: result.currentPage) {
                 await RankTop100Store.shared.remember(
@@ -536,21 +571,25 @@ struct FandomWorksView: View {
             }
         } catch let error as AO3Error {
             guard token == loadToken else { return }
-            if page == 1 {
+            if results.isEmpty {
                 phase = .failed(error.errorDescription ?? "Something went wrong.")
+                failedPage = nil
             } else {
                 phase = .loaded
                 lastAppendError = error.errorDescription ?? "Something went wrong."
+                failedPage = page
             }
             requestedPage = nil
         } catch {
             guard token == loadToken else { return }
             let msg = UserFacingError.message(for: error)
-            if page == 1 {
+            if results.isEmpty {
                 phase = .failed(msg)
+                failedPage = nil
             } else {
                 phase = .loaded
                 lastAppendError = msg
+                failedPage = page
             }
             requestedPage = nil
         }
@@ -562,6 +601,7 @@ struct FandomWorksView: View {
     private func reload() {
         rankTop100.cancel()
         rankTop100Pages = [:]
+        showsRankedResults = false
         rankTop100Source = nil
         loadedFilters = filters
         lastAppendError = nil
@@ -594,10 +634,7 @@ struct FandomWorksView: View {
             onPages: { pages in
                 rankTop100Pages = pages
                 results = ranking.noting(RankTop100Pages.works(in: pages))
-                currentPage = AO3ResultListPaging.furthestLoadedPage(
-                    currentPage: currentPage,
-                    loadedPages: Array(pages.keys)
-                )
+                showsRankedResults = true
             }
         )
     }
@@ -622,7 +659,7 @@ struct FandomWorksView: View {
             RemoteWorkSelectionToolbar(controller: bulkSelection, selectable: { results }) {
                 bulkSelection.selected(in: results)
             }
-        } else if phase == .loaded, !results.isEmpty {
+        } else if !results.isEmpty && (phase == .loaded || phase == .loading) {
             ActionToolbar(items: [
                 AnyView(FilterButton(filtersActive: hasExtraFilters,
                                       showingFilters: $showingFilters,
@@ -637,6 +674,12 @@ struct FandomWorksView: View {
                     }
                     ShowSummariesMenuItem(isOn: $showSummaries)
                     ExpandAllMenuItem(expandAll: $expandAll)
+                    RankTop100MenuItems(
+                        controller: rankTop100,
+                        totalPages: totalPages,
+                        isPageLoading: phase == .loading,
+                        start: startRankTop100
+                    )
                 })
             ])
         }
@@ -666,12 +709,18 @@ struct TagWorksView: View {
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var themeManager
     @Environment(\.scenePhase) private var scenePhase
+    #if os(iOS)
+    #endif
+    @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }) private var savedWorks: [SavedWork]
     @State private var results: [AO3WorkSummary] = []
     @State private var ranking = SearchRankingSession()
     @State private var rankTop100 = RankTop100Controller()
     @State private var rankTop100Pages: [Int: AO3SearchPage] = [:]
+    @State private var showsRankedResults = false
+    @State private var libraryIndex = WorkIdentityIndex([])
     @State private var currentPage = 1
     @State private var requestedPage: Int?
+    @State private var failedPage: Int?
     @State private var totalPages = 1
     @State private var lastAppendError: String?
     /// AO3's own result-count heading for these results, when it sent one.
@@ -730,13 +779,13 @@ struct TagWorksView: View {
                                 presentation: .subjectPage,
                                 sortSelection: sortSelection,
                                 sortOptions: AO3SearchFilters.Sort.allCases.filter { $0 != .relevance },
-                                showSummaries: $showSummaries,
-                                query: nil
+                                query: nil,
+                                rankedResultCount: showsRankedResults ? results.count : nil
                             )
                             .pageBodyRow(top: 8, gutter: 0)
                         }
                     }
-                    if totalPages > 1 {
+                    if rankTop100.showsStatusLine {
                         Section {
                             RankTop100ProgressCard(
                                 controller: rankTop100,
@@ -752,10 +801,13 @@ struct TagWorksView: View {
                                 work: entry.work,
                                 expandAll: expandAll,
                                 controller: bulkSelection,
-                                presentation: .searchLedger,
+                                presentation: .fandomTop,
                                 signal: ranking.signal(for: entry),
                                 qualitySignal: ranking.qualitySignal(for: entry),
                                 rankedContext: entry,
+                                badgeTitle: AO3WorkRow.localStatus(
+                                    for: libraryIndex.existingWork(for: entry.work)
+                                ),
                                 showsSummary: showSummaries,
                                 wide: true
                             )
@@ -773,10 +825,13 @@ struct TagWorksView: View {
                                     work: entry.work,
                                     expandAll: expandAll,
                                     controller: bulkSelection,
-                                    presentation: .searchLedger,
+                                    presentation: .fandomTop,
                                     signal: ranking.signal(for: entry),
                                     qualitySignal: ranking.qualitySignal(for: entry),
                                     rankedContext: entry,
+                                    badgeTitle: AO3WorkRow.localStatus(
+                                        for: libraryIndex.existingWork(for: entry.work)
+                                    ),
                                     showsSummary: showSummaries,
                                     wide: true
                                 )
@@ -791,31 +846,18 @@ struct TagWorksView: View {
                                 .listRowInsets(EdgeInsets())
                         }
                     }
-                    if totalPages > 1 {
+                    if (phase == .loading && !results.isEmpty) || lastAppendError != nil {
                         Section {
-                            RankTop100Controls(
-                                controller: rankTop100,
+                            AO3ResultListEndFooter(
+                                currentPage: currentPage,
                                 totalPages: totalPages,
-                                loadedWorks: results.count,
-                                totalWorks: resultSummary?.total ?? results.count,
-                                isPageLoading: phase == .loading,
-                                start: startRankTop100
+                                isLoading: phase == .loading,
+                                targetPage: requestedPage,
+                                errorMessage: lastAppendError,
+                                loadNextPage: retryFailedPage
                             )
                             .bareListRow()
                         }
-                    }
-                    Section {
-                        AO3ResultListEndFooter(
-                            loadedCount: results.count,
-                            totalCount: resultSummary?.total ?? results.count,
-                            currentPage: currentPage,
-                            totalPages: totalPages,
-                            isLoading: phase == .loading,
-                            targetPage: requestedPage,
-                            errorMessage: lastAppendError,
-                            loadNextPage: loadNextPage
-                        )
-                        .bareListRow()
                     }
                 }
                 .cardList()
@@ -854,6 +896,10 @@ struct TagWorksView: View {
             }
             .remoteWorkSelectionChrome(bulkSelection)
             .task { await load(page: 1) }
+            .task { await rankTop100.refreshAvailability() }
+            .onChange(of: savedWorks.map(\.id), initial: true) { _, _ in
+                libraryIndex = WorkIdentityIndex(savedWorks)
+            }
             .onDisappear { rankTop100.cancel() }
             .onChange(of: router.selection) { _, selection in
                 if selection != .browse { rankTop100.cancel() }
@@ -864,6 +910,11 @@ struct TagWorksView: View {
             .onChange(of: auth.sessionGeneration) { _, _ in
                 rankTop100.cancel()
                 rankTop100Pages = [:]
+                showsRankedResults = false
+            }
+            // A floating pill above the tab bar on every platform: a child's tabViewBottomAccessory drew nothing on Lane E.
+            .safeAreaInset(edge: .bottom) {
+                if showPagination { paginationBar.padding(.horizontal, SubjectMetrics.gutter) }
             }
     }
 
@@ -873,7 +924,7 @@ struct TagWorksView: View {
             RemoteWorkSelectionToolbar(controller: bulkSelection, selectable: { results }) {
                 bulkSelection.selected(in: results)
             }
-        } else if phase == .loaded, !results.isEmpty {
+        } else if !results.isEmpty && (phase == .loaded || phase == .loading) {
             ActionToolbar(items: [
                 AnyView(FilterButton(filtersActive: hasExtraFilters,
                                       showingFilters: $showingFilters,
@@ -887,15 +938,29 @@ struct TagWorksView: View {
                     }
                     ShowSummariesMenuItem(isOn: $showSummaries)
                     ExpandAllMenuItem(expandAll: $expandAll)
+                    RankTop100MenuItems(
+                        controller: rankTop100,
+                        totalPages: totalPages,
+                        isPageLoading: phase == .loading,
+                        start: startRankTop100
+                    )
                 })
             ])
         }
     }
 
-    private func loadNextPage() {
-        guard phase != .loading, currentPage < totalPages else { return }
+    private func retryFailedPage() {
+        let page = failedPage ?? (currentPage + 1)
+        guard phase != .loading, page <= totalPages else { return }
         lastAppendError = nil
-        Task { await load(page: currentPage + 1) }
+        Task { await load(page: page) }
+    }
+
+    private func loadPage(_ page: Int) {
+        guard phase != .loading, page >= 1, page <= totalPages, page != currentPage else { return }
+        bulkSelection.selection.removeAll()
+        lastAppendError = nil
+        Task { await load(page: page) }
     }
 
     @ViewBuilder
@@ -935,13 +1000,29 @@ struct TagWorksView: View {
     /// resolves to a URL whose heading is a bare count.
     private var heroSummary: AO3ResultSummary? {
         resultSummary?.completing(
-            subject: request.title, page: currentPage, onPageCount: results.count
+            subject: request.title,
+            page: currentPage,
+            onPageCount: min(results.count, AO3ResultSummary.worksPerPage)
         )
     }
 
     /// The subject's colour, as Search derives it for its own results.
     private var resultsPalette: SubjectPalette {
         themeManager.appTheme.subjectPalette(hue: CoverArt.hue(for: heroSummary?.subject ?? request.title))
+    }
+
+    private var showPagination: Bool {
+        totalPages > 1 && !results.isEmpty
+    }
+
+    private var paginationBar: some View {
+        SearchPaginationBar(
+            currentPage: currentPage,
+            totalPages: totalPages,
+            isLoading: phase == .loading,
+            palette: resultsPalette,
+            onSelect: loadPage
+        )
     }
 
     /// The hero's sort menu applies at once and starts again from page 1, like
@@ -977,6 +1058,7 @@ struct TagWorksView: View {
     private func reload() {
         rankTop100.cancel()
         rankTop100Pages = [:]
+        showsRankedResults = false
         loadedFilters = filters
         lastAppendError = nil
         phase = .loading
@@ -993,6 +1075,7 @@ struct TagWorksView: View {
         let cacheScope = rankTop100Scope
         let authenticatedRequest = auth.authenticatedRequest()
         phase = .loading
+        failedPage = nil
         requestedPage = page
         if loadedFilters == nil { loadedFilters = filters }
         loadToken += 1
@@ -1005,16 +1088,14 @@ struct TagWorksView: View {
             }
             guard token == loadToken else { return }
             let newWorks = ranking.noting(result.works)
-            if page == 1 {
-                results = newWorks
-            } else {
-                results = AO3ResultListPaging.appendUnique(newWorks: newWorks, to: results)
-            }
+            results = newWorks
+            showsRankedResults = false
             rankTop100Pages[result.currentPage] = result
             currentPage = result.currentPage
-            totalPages = result.totalPages
+            totalPages = AO3ResultListPaging.clampedTotalPages(result.totalPages)
             resultSummary = result.summary
             requestedPage = nil
+            failedPage = nil
             lastAppendError = nil
             let source = RankTop100URLSource.tag(request.url, filters: filters)
             if let url = source.url(page: result.currentPage) {
@@ -1031,21 +1112,25 @@ struct TagWorksView: View {
             phase = .loaded
         } catch let error as AO3Error {
             guard token == loadToken else { return }
-            if page == 1 {
+            if results.isEmpty {
                 phase = .failed(error.errorDescription ?? "Something went wrong.")
+                failedPage = nil
             } else {
                 phase = .loaded
                 lastAppendError = error.errorDescription ?? "Something went wrong."
+                failedPage = page
             }
             requestedPage = nil
         } catch {
             guard token == loadToken else { return }
             let msg = UserFacingError.message(for: error)
-            if page == 1 {
+            if results.isEmpty {
                 phase = .failed(msg)
+                failedPage = nil
             } else {
                 phase = .loaded
                 lastAppendError = msg
+                failedPage = page
             }
             requestedPage = nil
         }
@@ -1072,10 +1157,7 @@ struct TagWorksView: View {
             onPages: { pages in
                 rankTop100Pages = pages
                 results = ranking.noting(RankTop100Pages.works(in: pages))
-                currentPage = AO3ResultListPaging.furthestLoadedPage(
-                    currentPage: currentPage,
-                    loadedPages: Array(pages.keys)
-                )
+                showsRankedResults = true
             }
         )
     }

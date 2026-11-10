@@ -450,84 +450,66 @@ final class RankTop100Controller {
             "The 10-page budget renews at \(date.formatted(date: .omitted, time: .shortened))."
         }
     }
+
+    var showsStatusLine: Bool {
+        progress != nil || message != nil || availabilityText != nil
+    }
 }
 
-/// Running state above the result rows, as Quality-RankDeeper draws it.
+/// One slim running, failure, or throttle caption above the result rows.
 struct RankTop100ProgressCard: View {
     let controller: RankTop100Controller
     let totalPages: Int
 
     @ViewBuilder
     var body: some View {
-        if RankTop100Feature.isEnabled, let progress = controller.progress {
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 12) {
-                    progressDetails(progress)
-                    Button("Cancel", action: controller.cancel)
-                        .buttonStyle(.kudosSecondary)
-                }
-                VStack(alignment: .leading, spacing: 10) {
-                    progressDetails(progress)
-                    Button("Cancel", action: controller.cancel)
-                        .buttonStyle(.kudosSecondary)
-                }
-            }
-            .padding(12)
-            .background(.quaternary, in: RoundedRectangle(cornerRadius: 14))
-            .accessibilityElement(children: .contain)
-            .accessibilityLabel(
-                "Ranking the top 100, page \(progress.page) of \(min(totalPages, 5)), "
-                    + "\(progress.loadedWorks) works loaded"
-            )
-            .accessibilityAddTraits(.updatesFrequently)
-        }
-    }
-
-    private func progressDetails(_ progress: RankTop100Progress) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Ranking the top 100 · page \(progress.page) of \(min(totalPages, 5))")
-                .font(.subheadline.weight(.semibold))
-            ProgressView(value: Double(progress.page), total: Double(min(totalPages, 5)))
-            Text("One page every 3 seconds · \(progress.loadedWorks) works so far")
+        if let progress = controller.progress {
+            Text("\(progress.loadedWorks.formatted()) loaded · ranking updates as each page arrives")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityLabel(
+                    "Ranking the top 100, page \(progress.page) of \(min(totalPages, 5)), "
+                        + "\(progress.loadedWorks) works loaded"
+                )
+                .accessibilityAddTraits(.updatesFrequently)
+        } else if let message = controller.message ?? controller.availabilityText {
+            Text(message)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
-/// Idle controls and loaded-count footnote below the result rows.
-struct RankTop100Controls: View {
+/// The results menu's ranking action, including every prior unavailable state.
+struct RankTop100MenuItems: View {
     let controller: RankTop100Controller
     let totalPages: Int
-    let loadedWorks: Int
-    let totalWorks: Int
     let isPageLoading: Bool
     let start: () -> Void
 
     @ViewBuilder
     var body: some View {
-        if RankTop100Feature.isEnabled {
-            VStack(alignment: .leading, spacing: 8) {
-                if controller.progress == nil {
-                    Button(action: start) {
-                        Label("Rank Top 100", systemImage: "arrow.up.arrow.down")
-                    }
-                    .buttonStyle(.kudosSecondary)
-                    .disabled(!controller.canStart || isPageLoading || totalPages < 2)
-                }
-                if let message = controller.message ?? controller.availabilityText {
-                    Text(message)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Text("\(loadedWorks.formatted()) of \(totalWorks.formatted()) loaded · "
-                    + "ranking updates as each page arrives")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        Group {
+            Button(action: start) {
+                Label("Rank Top 100", systemImage: "arrow.up.arrow.down")
             }
-            .task { await controller.refreshAvailability() }
+            .disabled(!RankTop100Feature.isEnabled || !controller.canStart
+                || isPageLoading || totalPages < 2 || controller.progress != nil)
+
+            if controller.progress != nil {
+                Button(action: controller.cancel) {
+                    Label("Cancel Ranking", systemImage: "xmark")
+                }
+            }
+            if let message = controller.message ?? controller.availabilityText {
+                Text(message)
+            }
         }
     }
-
 }

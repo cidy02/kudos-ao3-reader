@@ -134,9 +134,7 @@ struct AO3WorkRow: View {
             switch presentation {
             case .standard:
                 standardCard
-            case .fandomTop:
-                standardCard
-            case .searchLedger:
+            case .fandomTop, .searchLedger:
                 searchLedgerCard
             }
         }
@@ -169,7 +167,7 @@ struct AO3WorkRow: View {
     /// as in `WorkRow` (owner, 2026-11-09).
     private var summaryRunsFullWidth: Bool {
         WorkRow.summaryRunsFullWidth(
-            placement: symbolPlacement,
+            placement: presentation == .fandomTop ? .underTitle : symbolPlacement,
             isStacked: dynamicTypeSize.isAccessibilitySize,
             hasSummary: showsSummary && !work.summary.isEmpty
         )
@@ -238,13 +236,14 @@ struct AO3WorkRow: View {
         WorkPlainRow(
             wide: wide || summaryRunsFullWidth,
             showsSeparator: showsSeparator,
-            separatorInset: rowSeparatorInset
+            separatorInset: rowSeparatorInset,
+            placementOverride: presentation == .fandomTop ? .underTitle : nil
         ) {
             selectionCheck
         } symbols: { arrangement in
             symbols(arrangement)
         } heading: {
-            searchLedgerIdentity
+            ledgerIdentity
         } remainder: {
             Group {
                 if !expanded {
@@ -257,12 +256,22 @@ struct AO3WorkRow: View {
                 }
                 if expanded {
                     WorkRowExpandedDetails(animate: !expandAll) {
-                        VStack(alignment: .leading, spacing: 12) {
-                            chipGroup("Fandoms", Array(nonemptyFandoms.dropFirst()), field: .fandom)
-                            chipGroup("Archive Warnings", work.warnings, field: .warning)
-                            chipGroup("Relationships", work.relationships, field: .relationship)
-                            chipGroup("Characters", work.characters, field: .character)
-                            chipGroup("Additional Tags", additionalTags, field: .freeform)
+                        if presentation == .fandomTop {
+                            VStack(alignment: .leading, spacing: 6) {
+                                inlineTagGroup("Fandoms", nonemptyFandoms, field: .fandom)
+                                inlineTagGroup("Warnings", work.warnings, field: .warning)
+                                inlineTagGroup("Relationships", work.relationships, field: .relationship)
+                                inlineTagGroup("Characters", work.characters, field: .character)
+                                inlineTagGroup("Additional tags", additionalTags, field: .freeform)
+                            }
+                        } else {
+                            VStack(alignment: .leading, spacing: 12) {
+                                chipGroup("Fandoms", Array(nonemptyFandoms.dropFirst()), field: .fandom)
+                                chipGroup("Archive Warnings", work.warnings, field: .warning)
+                                chipGroup("Relationships", work.relationships, field: .relationship)
+                                chipGroup("Characters", work.characters, field: .character)
+                                chipGroup("Additional Tags", additionalTags, field: .freeform)
+                            }
                         }
                     }
                 }
@@ -270,12 +279,19 @@ struct AO3WorkRow: View {
                     Text(work.summary)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
-                        .lineLimit(expanded || dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                        .lineLimit(expanded || dynamicTypeSize.isAccessibilitySize
+                            ? nil
+                            : (presentation == .fandomTop ? 3 : 2))
                         .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
                         .animation(nil, value: expanded)
                 }
-                ledgerFacts
+                if presentation == .fandomTop {
+                    seriesLine
+                    searchStatsGrid
+                } else {
+                    ledgerFacts
+                }
                 searchLedgerSignal
                 if showsPerformance {
                     AO3AuthorPerformanceStrip(work: work)
@@ -432,7 +448,52 @@ struct AO3WorkRow: View {
         )
     }
 
-    /// Series, Private and Rec sit on the kicker's line. Without a fandom there was
+    private var searchStatsGrid: some View {
+        let isFullBlurb = work.words != nil
+        func count(_ value: Int?) -> Int? {
+            value ?? (isFullBlurb ? 0 : nil)
+        }
+        return WorkListStatsGrid(cells: WorkListStatsGrid.cells(
+            words: work.words,
+            chapters: work.chapters,
+            kudos: count(work.kudos),
+            hits: count(work.hits),
+            comments: count(work.comments),
+            bookmarks: count(work.bookmarks),
+            language: work.language,
+            dateUpdated: work.dateUpdated
+        ))
+    }
+
+    @ViewBuilder
+    private var seriesLine: some View {
+        if let title = work.seriesTitle?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty {
+            let position = work.seriesPosition.map { String($0) } ?? "—"
+            if let rawURL = work.seriesURL, let url = URL(string: rawURL) {
+                Button { router.open(url) } label: {
+                    seriesLabel(position: position, title: title)
+                }
+                .buttonStyle(.borderless)
+                .minimumHitTarget()
+            } else {
+                seriesLabel(position: position, title: title)
+            }
+        }
+    }
+
+    private func seriesLabel(position: String, title: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 3) {
+            Text("Part \(position) of")
+                .foregroundStyle(.secondary)
+            Text(title)
+                .foregroundStyle(themeManager.accentInk)
+        }
+        .font(.footnote)
+        .fixedSize(horizontal: false, vertical: true)
+        .accessibilityElement(children: .combine)
+    }
+
+    /// Series, Private and Rec sit on bookmark kickers. Without a fandom there was
     /// no line, so a private bookmark of a work that names none did not say so.
     private var hasLedgerBadges: Bool {
         work.seriesTitle != nil || bookmark?.isPrivate == true || bookmark?.isRecommendation == true
@@ -519,6 +580,43 @@ struct AO3WorkRow: View {
         return metadata
     }
 
+    static func crossoverAccessibilityLabel(fandoms: [String]) -> String? {
+        let names = fandoms
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard names.count > 1 else { return nil }
+        return "Crossover with \(names.dropFirst().joined(separator: ", "))"
+    }
+
+    static func statusText(
+        readingState: SavedWork.ReadingState,
+        chapterLabel: String?,
+        isWantToRead: Bool,
+        queueCount: Int,
+        isInLibrary: Bool
+    ) -> String? {
+        if readingState == .finished { return "Finished" }
+        if readingState == .inProgress {
+            let chapter = chapterLabel?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return chapter.flatMap { $0.isEmpty ? nil : "Reading · \($0)" } ?? "Reading"
+        }
+        if isWantToRead { return "Want to Read" }
+        if queueCount > 0 { return "In a queue" }
+        return isInLibrary ? "In Library" : nil
+    }
+
+    static func localStatus(for work: SavedWork?) -> String? {
+        guard let work else { return nil }
+        let chapter = work.readingProgressLabel.flatMap { $0.hasPrefix("Ch ") ? $0 : nil }
+        return statusText(
+            readingState: work.readingState,
+            chapterLabel: chapter,
+            isWantToRead: work.isOnSavedForLaterShelf,
+            queueCount: work.activeQueueMemberships.count,
+            isInLibrary: !work.isQueueOnlyWork
+        )
+    }
+
     private static func ledgerCount(
         _ value: Int?,
         singular: String,
@@ -546,10 +644,8 @@ struct AO3WorkRow: View {
         themeManager.appTheme.subjectPalette(hue: workHue)
     }
 
-    /// Expand/collapse control, bottom-right of the card. A bordered circular
-    /// button (not plain text) so it reads as a tappable affordance; borderless
-    /// interaction would blend into the background. Captures its own tap so it
-    /// never triggers the row's navigation link.
+    /// Expand/collapse control. Search/fandom rows place the plain chevron on the
+    /// kicker line; established rows retain their circular control.
     @ViewBuilder
     private var expandButton: some View {
         let button = Button {
@@ -557,13 +653,19 @@ struct AO3WorkRow: View {
         } label: {
             // No rotation animation (see WorkRowExpandButton).
             Image(systemName: expanded ? "chevron.up" : "chevron.down")
-                .font(.caption.weight(.semibold))
+                .font(presentation == .fandomTop
+                    ? .system(size: 14, weight: .semibold)
+                    : .caption.weight(.semibold))
         }
-        if presentation == .searchLedger {
-            // Spec 1k draws this inline with the kicker as a bare 20pt glyph; it is
-            // a control, so it takes the app colour. It gets a 30pt hit target rather
-            // than the full 44: the fandom button sits 5pt to its left, and a
-            // 44pt region here reached back over that button's own label.
+        if presentation == .fandomTop {
+            button
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+                .accessibilityLabel(expanded ? "Show less" : "Show more")
+                .accessibilityValue(expanded ? "Expanded" : "Collapsed")
+        } else if presentation == .searchLedger {
             button
                 .buttonStyle(.plain)
                 .foregroundStyle(themeManager.accentInk)
@@ -629,6 +731,32 @@ struct AO3WorkRow: View {
             .padding(.top, 2)
         }
     }
+
+    @ViewBuilder
+    private func inlineTagGroup(_ label: String, _ tags: [String], field: AO3TagSearch.Field) -> some View {
+        if !tags.isEmpty {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 0) {
+                    inlineTagLabel(label)
+                    WorkDetailTagLinks(tags: tags, field: field)
+                }
+            } else {
+                HStack(alignment: .top, spacing: 10) {
+                    inlineTagLabel(label)
+                        .frame(width: 84, alignment: .leading)
+                    WorkDetailTagLinks(tags: tags, field: field)
+                }
+            }
+        }
+    }
+
+    private func inlineTagLabel(_ label: String) -> some View {
+        Text(label)
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .padding(.top, 1)
+            .accessibilityAddTraits(.isHeader)
+    }
 }
 
 // Its own extension so the type body stays within the lint limit.
@@ -648,6 +776,73 @@ extension AO3WorkRow {
 
     private var rowSeparatorInset: CGFloat? {
         Self.separatorInset(isSelecting: isSelecting)
+    }
+
+    @ViewBuilder
+    private var ledgerIdentity: some View {
+        if presentation == .fandomTop {
+            resultListIdentity
+        } else {
+            searchLedgerIdentity
+        }
+    }
+
+    private var resultListIdentity: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            if primaryFandom != nil || isExpandable || badgeTitle != nil {
+                if dynamicTypeSize.isAccessibilitySize {
+                    // Beside the badges the kicker stayed one line and was cut
+                    // ("THE LOCKED T…"). It takes the width and wraps, as a
+                    // page kicker does; the badges wrap under it.
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(alignment: .firstTextBaseline, spacing: 5) {
+                            fandomLabel
+                            crossoverMark
+                        }
+                        if isExpandable || badgeTitle != nil {
+                            HStack(spacing: 5) {
+                                if let badgeTitle { UpdateMarker(text: badgeTitle) }
+                                if isExpandable && showsExpandButton {
+                                    Spacer(minLength: 0)
+                                    expandButton
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    HStack(alignment: .center, spacing: 5) {
+                        fandomLabel
+                        crossoverMark
+                        Spacer(minLength: 0)
+                        if let badgeTitle { UpdateMarker(text: badgeTitle) }
+                        if isExpandable && showsExpandButton {
+                            expandButton
+                        }
+                    }
+                }
+            }
+            HStack(alignment: .top, spacing: 6) {
+                Text(work.title)
+                    .font(bookmark == nil
+                        ? .headline.weight(.semibold)
+                        : .system(size: bookmarkTitleSize, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .layoutPriority(1)
+                WorkPlusBadge(count: badgeCount)
+                Spacer(minLength: 4)
+            }
+            AO3AuthorBylineView(
+                names: work.authors,
+                identities: work.authorIdentities,
+                font: .subheadline,
+                compact: !dynamicTypeSize.isAccessibilitySize
+            )
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .layoutPriority(1)
     }
 
     private var searchLedgerIdentity: some View {
@@ -679,8 +874,6 @@ extension AO3WorkRow {
                 } else {
                     HStack(alignment: .top, spacing: 5) {
                         fandomLabel
-                        // 1u row 2: "Series" beside the kicker. Gift is drawn
-                        // too, but no gift flag is parsed onto the summary yet.
                         if work.seriesTitle != nil {
                             SubjectStateBadge(title: "Series", color: palette.accent)
                         }
@@ -731,9 +924,42 @@ extension AO3WorkRow {
             WorkFandomLabel(
                 title: FandomDisplayName.bareTitle(fandom),
                 palette: palette,
-                additionalCount: expanded ? 0 : max(0, nonemptyFandoms.count - 1),
+                additionalCount: presentation == .fandomTop
+                    ? 0
+                    : (expanded ? 0 : max(0, nonemptyFandoms.count - 1)),
                 action: { router.searchAO3(.fandom, fandom) }
             )
         }
+    }
+
+    @ViewBuilder
+    private var crossoverMark: some View {
+        if let label = Self.crossoverAccessibilityLabel(fandoms: nonemptyFandoms) {
+            WorkCrossoverMark(color: palette.accent, accessibilityLabel: label)
+        }
+    }
+}
+
+private struct WorkCrossoverMark: View {
+    let color: Color
+    let accessibilityLabel: String
+
+    @ScaledMetric(relativeTo: .caption) private var size: CGFloat = 12
+    @ScaledMetric(relativeTo: .caption) private var stroke: CGFloat = 1.5
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(color, lineWidth: stroke)
+                .frame(width: size, height: size)
+                .offset(x: -size * 0.22)
+            Circle()
+                .stroke(color, lineWidth: stroke)
+                .frame(width: size, height: size)
+                .offset(x: size * 0.22)
+        }
+        .frame(width: size * 1.45, height: size)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityLabel)
     }
 }

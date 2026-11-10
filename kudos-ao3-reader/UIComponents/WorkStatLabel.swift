@@ -147,6 +147,95 @@ struct WorkLedgerStatsLine: View {
     }
 }
 
+/// Search/fandom result figures as the board's two rows of four labelled cells.
+struct WorkListStatsGrid: View {
+    struct Cell: Equatable, Identifiable {
+        let label: String?
+        let value: String
+        let accessibilityText: String
+
+        var id: String { label ?? accessibilityText }
+    }
+
+    let cells: [Cell]
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    static func cells(
+        words: Int?, chapters: String, kudos: Int?, hits: Int?, comments: Int?,
+        bookmarks: Int?, language: String, dateUpdated: String
+    ) -> [Cell] {
+        let unknown = "—"
+        let chapterText = chapters.trimmingCharacters(in: .whitespacesAndNewlines)
+        let languageText = language.trimmingCharacters(in: .whitespacesAndNewlines)
+        let dateText = dateUpdated.isEmpty ? unknown : WorkStat.displayDate(dateUpdated)
+        return [
+            Cell(
+                label: "Words", value: words?.formatted() ?? unknown,
+                accessibilityText: words.map { "\($0.formatted()) words" } ?? "Words unknown"
+            ),
+            Cell(
+                label: "Ch", value: chapterText.isEmpty ? unknown : chapterText,
+                accessibilityText: chapterText.isEmpty ? "Chapters unknown" : "Chapters \(chapterText)"
+            ),
+            Cell(
+                label: "Kudos", value: kudos?.formatted() ?? unknown,
+                accessibilityText: kudos.map { "\($0.formatted()) kudos" } ?? "Kudos unknown"
+            ),
+            Cell(
+                label: "Hits", value: hits?.compactCount ?? unknown,
+                accessibilityText: hits.map { "\($0.formatted()) hits" } ?? "Hits unknown"
+            ),
+            Cell(
+                label: "Comments", value: comments?.formatted() ?? unknown,
+                accessibilityText: comments.map { "\($0.formatted()) comments" } ?? "Comments unknown"
+            ),
+            Cell(
+                label: "Bookmarks", value: bookmarks?.formatted() ?? unknown,
+                accessibilityText: bookmarks.map { "\($0.formatted()) bookmarks" } ?? "Bookmarks unknown"
+            ),
+            Cell(
+                label: nil, value: languageText.isEmpty ? unknown : languageText,
+                accessibilityText: languageText.isEmpty ? "Language unknown" : "Language \(languageText)"
+            ),
+            Cell(
+                label: nil, value: dateText,
+                accessibilityText: dateUpdated.isEmpty ? "Updated date unknown" : "Updated \(dateText)"
+            ),
+        ]
+    }
+
+    var body: some View {
+        LazyVGrid(
+            columns: Array(
+                repeating: GridItem(.flexible(minimum: 0), spacing: 12, alignment: .leading),
+                count: dynamicTypeSize.isAccessibilitySize ? 2 : 4
+            ),
+            alignment: .leading,
+            spacing: 2
+        ) {
+            ForEach(cells) { cell in
+                HStack(alignment: .firstTextBaseline, spacing: 3) {
+                    if let label = cell.label {
+                        Text(label)
+                            .foregroundStyle(.secondary)
+                        Text(cell.value)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.primary)
+                    } else {
+                        Text(cell.value)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .font(.caption)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+                .combinedAccessibilityRow(cell.accessibilityText)
+            }
+        }
+    }
+}
+
 /// One collapsed tag on a work row, before the "+N" overflow.
 struct WorkTagChip: Identifiable, Equatable {
     var text: String

@@ -40,12 +40,8 @@ struct AO3ResultListPagingTests {
 
     @Test func footerLoadingTextMatchesBoard18() {
         #expect(
-            AO3ResultListPaging.footerLoadingText(loaded: 120, total: 2_431, page: 2)
-            == "120 of 2,431 · loading page 2"
-        )
-        #expect(
-            AO3ResultListPaging.footerLoadingText(loaded: 20, total: 1_284, page: 2)
-            == "20 of 1_284 · loading page 2".replacingOccurrences(of: "1_284", with: 1284.formatted())
+            AO3ResultListPaging.footerLoadingText(page: 2, totalPages: 5_000)
+                == "Loading page 2 of 5,000"
         )
     }
 
@@ -68,12 +64,6 @@ struct AO3ResultListPagingTests {
         #expect(combined.count == 3)
         #expect(combined.map(\.id) == [101, 102, 103])
         #expect(combined[1].title == "Work 2")
-    }
-
-    @Test func rankLookaheadAdvancesOrdinaryPagingPastItsLoadedPages() {
-        #expect(AO3ResultListPaging.furthestLoadedPage(currentPage: 1, loadedPages: [1, 2, 3, 4, 5]) == 5)
-        #expect(AO3ResultListPaging.furthestLoadedPage(currentPage: 4, loadedPages: [1, 2]) == 4)
-        #expect(AO3ResultListPaging.furthestLoadedPage(currentPage: 2, loadedPages: []) == 2)
     }
 
     private func makeWork(id: Int, title: String) -> AO3WorkSummary {
