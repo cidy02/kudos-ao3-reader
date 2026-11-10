@@ -114,6 +114,13 @@ class ReadingQueueRepositoryTest {
     }
 
     @Test
+    fun customQueueNameTakenSeesACollisionIgnoringCase() = runTest {
+        repository.createQueue("Weekend")
+        assertTrue(repository.customQueueNameTaken("  weekend "))
+        assertFalse(repository.customQueueNameTaken("Other"))
+    }
+
+    @Test
     fun addWorkListWorksAndRemoveWorkRoundTrip() = runTest {
         val workA = savedWork("work-a", title = "Alpha")
         val workB = savedWork("work-b", title = "Beta")

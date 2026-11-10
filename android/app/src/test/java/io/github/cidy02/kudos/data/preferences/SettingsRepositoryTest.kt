@@ -150,6 +150,15 @@ class SettingsRepositoryTest {
         assertNull(repository.snapshot().reader.readerCustomPaperHex)
     }
 
+    @Test fun malformedCustomPaperKeepsTheStoredColourAndOnlyNullClearsIt() = runBlocking {
+        repository.updateReaderCustomPaperHex("#A1B2C3")
+        repository.updateReaderCustomPaperHex("-12345A")
+        repository.updateReaderCustomPaperHex("junk")
+        assertEquals("#A1B2C3", repository.snapshot().reader.readerCustomPaperHex)
+        repository.updateReaderCustomPaperHex(null)
+        assertNull(repository.snapshot().reader.readerCustomPaperHex)
+    }
+
     @After
     fun tearDown() {
         scope.cancel()

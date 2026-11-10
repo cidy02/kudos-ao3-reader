@@ -258,6 +258,14 @@ class ReadingQueueRepository(
      * [seedFromSavedForLater] copies that queue's works and leaves them there;
      * [seedWorkIds] adds chosen Library works in the same transaction.
      */
+    /** True when a custom queue already has [name] (case-insensitive); [createQueue] would reuse it. */
+    suspend fun customQueueNameTaken(name: String): Boolean {
+        val trimmed = name.trim()
+        return queueDao.getActiveQueues().any {
+            it.name.equals(trimmed, ignoreCase = true) && it.kindRaw == ReadingQueueKind.CUSTOM
+        }
+    }
+
     suspend fun createQueue(
         name: String,
         hue: Double? = null,

@@ -477,9 +477,9 @@ private fun carouselTint(theme: ReaderTheme, hue: Double): Color =
 
 fun parseStoredColor(hex: String): Color? {
     val raw = hex.trim().removePrefix("#")
-    if (raw.length != 6 && raw.length != 8) return null
-    val value = raw.toLongOrNull(16) ?: return null
-    val rgb = if (raw.length == 8) value and 0xFFFFFF else value
+    // Six hex digits exactly: toLongOrNull(16) would also take a sign such as "-12345A".
+    if (raw.length != 6 || !raw.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }) return null
+    val rgb = raw.toLong(16)
     return Color(
         red = ((rgb shr 16) and 0xFF) / 255f,
         green = ((rgb shr 8) and 0xFF) / 255f,

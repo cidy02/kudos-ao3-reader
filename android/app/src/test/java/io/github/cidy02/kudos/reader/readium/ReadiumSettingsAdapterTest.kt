@@ -36,6 +36,18 @@ class ReadiumSettingsAdapterTest {
     }
 
     @Test
+    fun customPaperPicksTheReadiumThemeFromItsLuminance() {
+        val lightOverDark = ReadiumSettingsAdapter.toEpubPreferences(
+            ReaderPreferences(theme = ReaderColorTheme.Dark, pageBackgroundColor = Color(0xFFFFF8E7))
+        )
+        val darkOverLight = ReadiumSettingsAdapter.toEpubPreferences(
+            ReaderPreferences(theme = ReaderColorTheme.Light, pageBackgroundColor = Color(0xFF193B97))
+        )
+        assertEquals(org.readium.r2.navigator.preferences.Theme.LIGHT, lightOverDark.theme)
+        assertEquals(org.readium.r2.navigator.preferences.Theme.DARK, darkOverLight.theme)
+    }
+
+    @Test
     fun customPaperOverridesThePresetInReadium() {
         val prefs = ReadiumSettingsAdapter.toEpubPreferences(
             ReaderPreferences(

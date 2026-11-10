@@ -6,6 +6,7 @@ import io.github.cidy02.kudos.reader.settings.ReaderColorTheme
 import io.github.cidy02.kudos.reader.settings.ReaderPreferences
 import io.github.cidy02.kudos.reader.settings.backgroundColor
 import io.github.cidy02.kudos.reader.settings.textColor
+import io.github.cidy02.kudos.ui.subject.relativeLuminance
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.navigator.epub.EpubPreferences
 import org.readium.r2.navigator.preferences.Color
@@ -30,7 +31,11 @@ object ReadiumSettingsAdapter {
     fun toEpubPreferences(prefs: ReaderPreferences): EpubPreferences {
         return EpubPreferences(
             // Readium has no OLED case; Oled is DARK with its own black page.
-            theme = when (prefs.theme) {
+            // A custom paper picks light/dark from its own luminance (iOS `appearanceTheme`),
+            // so Readium's injected CSS matches the paper rather than the preset underneath.
+            theme = prefs.pageBackgroundColor?.let {
+                if (it.relativeLuminance() > 0.179) Theme.LIGHT else Theme.DARK
+            } ?: when (prefs.theme) {
                 ReaderColorTheme.Light -> Theme.LIGHT
                 ReaderColorTheme.Sepia -> Theme.SEPIA
                 ReaderColorTheme.Dark, ReaderColorTheme.Oled -> Theme.DARK

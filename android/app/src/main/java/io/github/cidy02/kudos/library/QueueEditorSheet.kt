@@ -130,6 +130,10 @@ fun QueueEditorSheet(
                         )
                         repository.getQueue(existing.id)
                     } else {
+                        // createQueue reuses a same-named queue and would drop the picked works.
+                        require(!repository.customQueueNameTaken(name)) {
+                            "A queue named \"${name.trim()}\" already exists. Choose a different name."
+                        }
                         repository.createQueue(
                             name = name,
                             hue = hue,

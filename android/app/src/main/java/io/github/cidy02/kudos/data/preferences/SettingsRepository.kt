@@ -324,8 +324,9 @@ class SettingsRepository(
     suspend fun updateReaderCustomPaperHex(hex: String?) {
         dataStore.edit { prefs ->
             val normalized = io.github.cidy02.kudos.reader.ReadingAnnotationColor.customHex(hex)
-            if (normalized == null) prefs.remove(Keys.ReaderCustomPaperHex)
-            else prefs[Keys.ReaderCustomPaperHex] = normalized
+            // Only an explicit null clears; a malformed value keeps the stored paper.
+            if (hex == null) prefs.remove(Keys.ReaderCustomPaperHex)
+            else if (normalized != null) prefs[Keys.ReaderCustomPaperHex] = normalized
         }
     }
 
