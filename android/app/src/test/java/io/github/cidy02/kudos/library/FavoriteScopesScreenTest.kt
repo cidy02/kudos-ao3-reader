@@ -266,6 +266,12 @@ class FavoriteScopesScreenTest {
     }
 
     @Test fun additionalTagRequestUsesTheLibraryDashboardPredicateRatherThanPersonalTags() {
+        // A-472: Reading Now is a shelf button by default; the reader puts it on the page first.
+        runBlocking {
+            settings.updateLibraryPageArrangement(
+                io.github.cidy02.kudos.core.model.LibraryPageArrangement.Default.addingToPage("readingNow")
+            )
+        }
         show(); selectScope(FavoriteScope.Tags)
         compose.runOnIdle {
             LibraryFilterRequest.requestFreeform("Slow Burn")
