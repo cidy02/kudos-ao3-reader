@@ -1,5 +1,7 @@
 package io.github.cidy02.kudos.reader.settings
 
+import androidx.compose.ui.graphics.Color
+
 /**
  * Engine-agnostic declaration of an imported custom font file on disk.
  */
@@ -19,6 +21,9 @@ data class CustomFontDeclaration(
  */
 data class ReaderPreferences(
     val theme: ReaderColorTheme = ReaderColorTheme.Light,
+    /** Exact custom paper/body colours; null keeps [theme]'s preset colours. */
+    val pageBackgroundColor: Color? = null,
+    val pageTextColor: Color? = null,
     /** true = continuous scroll, false = paged. */
     val scroll: Boolean = true,
     /** 1 or 2 columns (two-page only meaningful in paged mode). */

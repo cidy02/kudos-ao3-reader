@@ -16,6 +16,7 @@ import io.github.cidy02.kudos.ui.components.SensitiveWorkRow
 import io.github.cidy02.kudos.ui.theme.KudosTheme
 import io.github.cidy02.kudos.works.detail.LocalOpenAuthor
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -61,5 +62,32 @@ class WorkCardActionParityTest {
         } }
         compose.onNodeWithText("Pen Name").performClick()
         compose.runOnIdle { assertEquals(listOf("dismiss", "Pen Name (account)"), events) }
+    }
+
+    @Test fun queueMenuLeadsWithReadMovesAndShareBeforeItsExistingActions() {
+        var movedTop = 0
+        val actions = LibraryCardActions(
+            onOpenWork = {}, onOpenReader = {}, onToggleFavorite = {}, onToggleFinished = {},
+            onRemove = {}, onDownloadAction = { _, _ -> }, onSelect = {}, onReveal = {},
+            onAddToQueue = {}, onAddToCollection = {}, onOpenComments = {}
+        )
+        compose.setContent { KudosTheme(themeMode = io.github.cidy02.kudos.ui.theme.KudosThemeMode.Light) {
+            LibraryWorkMenu(
+                expanded = true,
+                onDismiss = {},
+                work = work.copy(id = "queued", hasEpub = true, ao3WorkID = 123,
+                    sourceUrl = "https://archiveofourown.org/works/123"),
+                actions = actions,
+                queueActions = QueueItemMenuActions(
+                    moveToTop = { movedTop++ }, moveToBottom = {}, share = {}
+                )
+            )
+        } }
+        val labels = listOf("Read", "To Top", "To Bottom", "Share", "Comments")
+        val tops = labels.map { compose.onNodeWithText(it).fetchSemanticsNode().boundsInRoot.top }
+        assertEquals(tops.sorted(), tops)
+        assertTrue(tops.zipWithNext().all { (before, after) -> before < after })
+        compose.onNodeWithText("To Top").performClick()
+        compose.runOnIdle { assertEquals(1, movedTop) }
     }
 }

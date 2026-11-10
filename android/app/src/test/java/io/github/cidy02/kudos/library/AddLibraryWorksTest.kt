@@ -95,4 +95,13 @@ class AddLibraryWorksTest {
         assertEquals("Add", AddLibraryWorks.confirmationTitle(0))
         assertEquals("Add 3", AddLibraryWorks.confirmationTitle(3))
     }
+
+    @Test fun queueMenuMovesOnlyToARealDifferentEnd() {
+        assertEquals(listOf("mature", "tame", "explicit"),
+            moveWorkToIndex(all, index = 2, target = 0)!!.map { it.id })
+        assertEquals(listOf("explicit", "mature", "tame"),
+            moveWorkToIndex(all, index = 0, target = 2)!!.map { it.id })
+        assertEquals(null, moveWorkToIndex(all, index = 0, target = 0))
+        assertEquals(null, moveWorkToIndex(all, index = -1, target = 0))
+    }
 }

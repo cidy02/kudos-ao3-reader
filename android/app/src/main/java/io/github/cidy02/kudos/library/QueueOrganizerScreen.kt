@@ -97,6 +97,7 @@ fun QueueOrganizerScreen(
     privacyGate: io.github.cidy02.kudos.app.PrivacyGate? = null
 ) {
     val tokens = LocalKudosTokens.current
+    val activity = androidx.compose.ui.platform.LocalContext.current as? androidx.fragment.app.FragmentActivity
     // Without a settings store (a test host) the setting's own default stands: mature works kept back.
     val privacy by remember(settingsRepository) {
         settingsRepository?.settings?.map { it.privacy }
@@ -316,7 +317,10 @@ fun QueueOrganizerScreen(
                 creating = false
                 editing = null
                 reload += 1
-            }
+            },
+            privacy = privacy,
+            reveal = reveal,
+            onToggleMature = { privacyGate?.toggleRevealAll(activity) }
         )
     }
     if (tagging) {

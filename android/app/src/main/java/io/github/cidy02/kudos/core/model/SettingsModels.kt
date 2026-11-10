@@ -77,6 +77,8 @@ data class ReaderSettings(
     val readerJustify: Boolean = false,
     val readerTheme: ReaderThemeSetting = ReaderThemeSetting.Light,
     val matchAppReaderTheme: Boolean = true,
+    /** Exact reader paper colour from the custom well; device-local like iOS. */
+    val readerCustomPaperHex: String? = null,
     /** iOS "keepScreenAwake" (KeepScreenAwake.swift): device-local, not in backups. */
     val keepScreenAwake: Boolean = false
 )

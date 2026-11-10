@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.reader.readium
 
+import androidx.compose.ui.graphics.Color
 import io.github.cidy02.kudos.reader.settings.CustomFontDeclaration
 import io.github.cidy02.kudos.reader.settings.ReaderColorTheme
 import io.github.cidy02.kudos.reader.settings.ReaderPreferences
@@ -32,6 +33,20 @@ class ReadiumSettingsAdapterTest {
             assertEquals("$theme page", colours.first.toInt(), prefs.backgroundColor?.int)
             assertEquals("$theme text", colours.second.toInt(), prefs.textColor?.int)
         }
+    }
+
+    @Test
+    fun customPaperOverridesThePresetInReadium() {
+        val prefs = ReadiumSettingsAdapter.toEpubPreferences(
+            ReaderPreferences(
+                theme = ReaderColorTheme.Sepia,
+                pageBackgroundColor = Color(0xFF193B97),
+                pageTextColor = Color.White
+            )
+        )
+
+        assertEquals(0xFF193B97.toInt(), prefs.backgroundColor?.int)
+        assertEquals(0xFFFFFFFF.toInt(), prefs.textColor?.int)
     }
 
     @Test

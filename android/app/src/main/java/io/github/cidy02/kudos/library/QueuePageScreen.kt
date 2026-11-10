@@ -174,7 +174,9 @@ fun QueuePageScreen(
         onBackToOrganizer?.invoke()
     }
 
-    val activity = LocalContext.current as? FragmentActivity
+    val context = LocalContext.current
+    val activity = context as? FragmentActivity
+    val shareActions = remember(context) { io.github.cidy02.kudos.reader.ReaderWorkActions(context) }
     val shownSettings by remember(settingsRepository) {
         settingsRepository?.settings ?: flowOf(
             KudosSettings(privacy = PrivacySettings(hideMatureContent = false))
@@ -232,6 +234,20 @@ fun QueuePageScreen(
             isObscuredMature(work, shownSettings, reveal) -> privacyGate?.reveal(work.id, activity)
             else -> openWork(work, onOpenReader, onOpenWork)
         }
+    }
+
+    fun queueActions(work: SavedWork): QueueItemMenuActions {
+        val index = works.indexOfFirst { it.id == work.id }
+        fun moveTo(target: Int) {
+            val next = moveWorkToIndex(works, index, target) ?: return
+            works = next
+            scope.launch { repository.updateSortOrder(queueId, next.map { it.id }) }
+        }
+        return QueueItemMenuActions(
+            moveToTop = if (index > 0) ({ moveTo(0) }) else null,
+            moveToBottom = if (index in 0 until works.lastIndex) ({ moveTo(works.lastIndex) }) else null,
+            share = if (shareActions.shareIntent(work) != null) ({ shareActions.share(work) }) else null
+        )
     }
 
     ProvidePushedShellChrome(
@@ -404,6 +420,7 @@ fun QueuePageScreen(
                                     work = work,
                                     downloadQueue = downloadQueue,
                                     actions = workActions,
+                                    queueActions = queueActions(work),
                                     detailed = displayMode == QueueDisplayMode.Detailed, expandAll = expandAll,
                                     onRemove = { removeOne = work },
                                     obscured = isObscuredMature(work, shownSettings, reveal),
@@ -429,6 +446,7 @@ fun QueuePageScreen(
                                     work = work,
                                     downloadQueue = downloadQueue,
                                     actions = workActions,
+                                    queueActions = queueActions(work),
                                     detailed = displayMode == QueueDisplayMode.Detailed, expandAll = expandAll,
                                     onRemove = { removeOne = work },
                                     obscured = isObscuredMature(work, shownSettings, reveal),
@@ -453,7 +471,8 @@ fun QueuePageScreen(
                                                         QueueWorkItem(
                                                             work, workActions, selecting || reordering,
                                                             isObscuredMature(work, shownSettings, reveal),
-                                                            onClick = { activate(work) }, onRemove = { removeOne = work }
+                                                            onClick = { activate(work) }, onRemove = { removeOne = work },
+                                                            queueActions = queueActions(work)
                                                         ) { _ ->
                                                             SubjectWorkCoverCard(
                                                                 work = work,
@@ -478,6 +497,7 @@ fun QueuePageScreen(
                                             work = work,
                                             downloadQueue = downloadQueue,
                                             actions = workActions,
+                                            queueActions = queueActions(work),
                                             detailed = displayMode == QueueDisplayMode.Detailed, expandAll = expandAll,
                                             onRemove = { removeOne = work },
                                             obscured = isObscuredMature(work, shownSettings, reveal),
@@ -558,7 +578,10 @@ fun QueuePageScreen(
             repository = repository,
             existing = current,
             onDismiss = { showEdit = false },
-            onSaved = { showEdit = false; reload += 1 }
+            onSaved = { showEdit = false; reload += 1 },
+            privacy = shownSettings.privacy,
+            reveal = reveal,
+            onToggleMature = { privacyGate?.toggleRevealAll(activity) }
         )
     }
     if (showTag && current != null) {
@@ -728,6 +751,7 @@ private fun WorkRow(
     work: SavedWork,
     downloadQueue: DownloadQueue?,
     actions: LibraryCardActions?,
+    queueActions: QueueItemMenuActions?,
     detailed: Boolean,
     expandAll: Boolean,
     onRemove: () -> Unit,
@@ -738,7 +762,7 @@ private fun WorkRow(
     onClick: () -> Unit,
     onStep: (Int) -> Unit
 ) {
-    QueueWorkItem(work, actions, selecting || drag, obscured, onClick, onRemove) { openMenu ->
+    QueueWorkItem(work, actions, selecting || drag, obscured, onClick, onRemove, queueActions) { openMenu ->
         if (detailed && !drag) io.github.cidy02.kudos.ui.components.SensitiveWorkRow(
             work = work, onOpenWork = { onClick() }, onLongClick = openMenu,
             expandAll = expandAll, selecting = selecting, selected = selected, obscured = obscured,
@@ -767,6 +791,7 @@ private fun QueueWorkItem(
     obscured: Boolean,
     onClick: () -> Unit,
     onRemove: () -> Unit,
+    queueActions: QueueItemMenuActions? = null,
     content: @Composable (() -> Unit) -> Unit
 ) {
     var menuOpen by remember(work.id) { mutableStateOf(false) }
@@ -776,7 +801,8 @@ private fun QueueWorkItem(
             content { if (!editing && !obscured) menuOpen = true }
             if (actions != null) LibraryWorkMenu(
                 menuOpen, { menuOpen = false }, work, actions,
-                scopedRemovalLabel = "Remove from Queue", onScopedRemove = onRemove
+                scopedRemovalLabel = "Remove from Queue", onScopedRemove = onRemove,
+                queueActions = queueActions
             )
         }
     }
@@ -826,6 +852,14 @@ private fun toggleId(selected: Set<String>, id: String): Set<String> {
 private fun moveWork(works: List<SavedWork>, index: Int, delta: Int): List<SavedWork>? {
     val target = index + delta
     if (target !in works.indices) return null
+    val next = works.toMutableList()
+    val item = next.removeAt(index)
+    next.add(target, item)
+    return next
+}
+
+internal fun moveWorkToIndex(works: List<SavedWork>, index: Int, target: Int): List<SavedWork>? {
+    if (index !in works.indices || target !in works.indices || index == target) return null
     val next = works.toMutableList()
     val item = next.removeAt(index)
     next.add(target, item)

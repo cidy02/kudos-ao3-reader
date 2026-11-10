@@ -73,10 +73,11 @@ internal fun AddLibraryWorksSheet(
     reveal: PrivacyRevealState,
     onToggleMature: () -> Unit,
     onDismiss: () -> Unit,
-    onAdd: (List<SavedWork>) -> Unit
+    onAdd: (List<SavedWork>) -> Unit,
+    initialSelection: Set<String> = emptySet()
 ) {
     var query by remember { mutableStateOf("") }
-    var selection by remember { mutableStateOf(emptySet<String>()) }
+    var selection by remember(initialSelection) { mutableStateOf(initialSelection) }
     val openAuthor = io.github.cidy02.kudos.works.detail.LocalOpenAuthor.current
     val eligible = remember(candidates, privacy, reveal) { AddLibraryWorks.eligible(candidates, privacy, reveal) }
     val matches = remember(eligible, query) { AddLibraryWorks.matching(eligible, query) }

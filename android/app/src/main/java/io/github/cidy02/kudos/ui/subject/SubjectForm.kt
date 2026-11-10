@@ -22,7 +22,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
@@ -38,11 +37,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -54,10 +51,12 @@ import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.max
@@ -235,10 +234,7 @@ fun SubjectFormRow(
     }
 }
 
-/**
- * Five preset hues plus a dashed "+" that opens [HsvColorDialog].
- * A preset clears [colorHex]. The "+" stores the picked colour exactly.
- */
+/** Five preset hues followed by the shared custom colour well. */
 @Composable
 fun SubjectHueSwatchRow(
     hue: Double?,
@@ -247,7 +243,6 @@ fun SubjectHueSwatchRow(
     modifier: Modifier = Modifier
 ) {
     val tokens = LocalKudosTokens.current
-    var picking by remember { mutableStateOf(false) }
     val custom = colorHex != null || (hue != null && !SubjectHueSwatches.isPreset(hue))
     Row(
         modifier.horizontalScroll(rememberScrollState()),
@@ -266,53 +261,68 @@ fun SubjectHueSwatchRow(
                 }
             )
         }
-        if (custom && hue != null) {
-            val picked = colorHex?.let(::parseStoredColor)
-            SwatchCircle(
-                color = picked ?: carouselTint(tokens.theme, hue),
-                stroke = SubjectPalette.fromHue(hue, tokens.theme).accent,
-                selected = true,
-                label = "Custom colour",
-                onClick = { picking = true }
-            )
-        } else {
-            Box(
-                Modifier
-                    .size(34.dp)
-                    .clickable { picking = true }
-                    .semantics { contentDescription = "Custom colour" },
-                contentAlignment = Alignment.Center
-            ) {
-                val dash = tokens.secondaryInk
-                Box(
-                    Modifier
-                        .size(28.dp)
-                        .drawBehind {
-                            drawCircle(
-                                color = dash,
-                                radius = size.minDimension / 2f - 0.5.dp.toPx(),
-                                style = Stroke(
-                                    width = 1.dp.toPx(),
-                                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(3.dp.toPx(), 2.5.dp.toPx()))
-                                )
-                            )
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(Icons.Filled.Add, contentDescription = null, tint = dash, modifier = Modifier.size(12.dp))
-                }
-            }
-        }
+        val picked = colorHex?.let(::parseStoredColor)
+        CustomColorWell(
+            color = picked,
+            fallback = picked ?: hsb(hue ?: SubjectHueSwatches.all.first().hue, 0.55, 0.78),
+            selected = custom,
+            onConfirm = { color -> onChange(color.hueComponent(), color.toStoredHex()) }
+        )
+    }
+}
+
+/**
+ * The one custom colour well used by highlights, queue/collection swatches and reader paper.
+ * Its dialog keeps edits local until Done, so Cancel leaves the caller's stored colour untouched.
+ */
+@Composable
+fun CustomColorWell(
+    color: Color?,
+    fallback: Color,
+    selected: Boolean,
+    onConfirm: (Color) -> Unit,
+    modifier: Modifier = Modifier,
+    label: String = "Custom colour",
+    wellSize: Dp = 28.dp
+) {
+    var picking by remember { mutableStateOf(false) }
+    val tokens = LocalKudosTokens.current
+    Box(
+        modifier
+            .size(maxOf(48.dp, wellSize + 6.dp))
+            .clickable(role = androidx.compose.ui.semantics.Role.RadioButton) { picking = true }
+            .semantics {
+                contentDescription = label
+                this.selected = selected
+                stateDescription = color?.toStoredHex().orEmpty()
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            Modifier
+                .size(wellSize + 6.dp)
+                .background(
+                    Brush.sweepGradient(
+                        listOf(Color.Red, Color.Yellow, Color.Green, Color.Cyan, Color.Blue, Color.Magenta, Color.Red)
+                    ),
+                    CircleShape
+                )
+                .padding(3.dp)
+                .background(color ?: fallback, CircleShape)
+                .border(
+                    if (selected) 2.5.dp else 0.5.dp,
+                    if (selected) tokens.accent else tokens.primaryInk.copy(alpha = 0.18f),
+                    CircleShape
+                )
+        )
     }
     if (picking) {
-        val initial = colorHex?.let(::parseStoredColor)
-            ?: hsb(hue ?: SubjectHueSwatches.all.first().hue, 0.55, 0.78)
         HsvColorDialog(
-            initial = initial,
+            initial = color ?: fallback,
             onDismiss = { picking = false },
-            onConfirm = { color ->
+            onConfirm = {
                 picking = false
-                onChange(color.hueComponent(), color.toStoredHex())
+                onConfirm(it)
             }
         )
     }
@@ -372,7 +382,7 @@ private fun SwatchCircle(
 ) {
     Box(
         Modifier
-            .size(34.dp)
+            .size(48.dp)
             .clickable(onClick = onClick)
             .semantics { contentDescription = label },
         contentAlignment = Alignment.Center

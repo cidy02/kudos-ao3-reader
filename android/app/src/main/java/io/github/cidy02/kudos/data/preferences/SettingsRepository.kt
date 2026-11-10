@@ -279,16 +279,25 @@ class SettingsRepository(
     }
 
     suspend fun updateAppTheme(theme: AppThemeSetting) {
-        dataStore.edit { it[Keys.AppTheme] = theme.storageValue }
+        dataStore.edit {
+            it[Keys.AppTheme] = theme.storageValue
+            if (it[Keys.MatchAppReaderTheme] ?: KudosSettings.Defaults.reader.matchAppReaderTheme) {
+                it.remove(Keys.ReaderCustomPaperHex)
+            }
+        }
     }
 
     suspend fun updateReaderTheme(theme: ReaderThemeSetting) {
-        dataStore.edit { it[Keys.ReaderTheme] = theme.storageValue }
+        dataStore.edit {
+            it[Keys.ReaderTheme] = theme.storageValue
+            it.remove(Keys.ReaderCustomPaperHex)
+        }
     }
 
     /** iOS ThemeManager.readerTheme: swatches write to the app too while linked. */
     suspend fun updateEffectiveReaderTheme(theme: ReaderThemeSetting) {
         dataStore.edit { prefs ->
+            prefs.remove(Keys.ReaderCustomPaperHex)
             if (prefs[Keys.MatchAppReaderTheme] ?: KudosSettings.Defaults.reader.matchAppReaderTheme) {
                 prefs[Keys.AppTheme] = theme.storageValue
             } else {
@@ -300,6 +309,7 @@ class SettingsRepository(
     /** iOS CustomizeThemeView.reset: text size, selected theme and reading mode stay put. */
     suspend fun resetReaderTheme() {
         dataStore.edit { prefs ->
+            prefs.remove(Keys.ReaderCustomPaperHex)
             prefs[Keys.ReaderCustomize] = false
             prefs[Keys.ReaderBoldText] = false
             prefs[Keys.ReaderFontId] = "system"
@@ -308,6 +318,14 @@ class SettingsRepository(
             prefs[Keys.ReaderWordSpacing] = 0.0
             prefs[Keys.ReaderMargin] = 28.0
             prefs[Keys.ReaderJustify] = false
+        }
+    }
+
+    suspend fun updateReaderCustomPaperHex(hex: String?) {
+        dataStore.edit { prefs ->
+            val normalized = io.github.cidy02.kudos.reader.ReadingAnnotationColor.customHex(hex)
+            if (normalized == null) prefs.remove(Keys.ReaderCustomPaperHex)
+            else prefs[Keys.ReaderCustomPaperHex] = normalized
         }
     }
 
@@ -601,6 +619,8 @@ class SettingsRepository(
             prefs[Keys.AppTheme] = settings.app.appTheme.storageValue
             prefs[Keys.ReaderTheme] = settings.reader.readerTheme.storageValue
             prefs[Keys.MatchAppReaderTheme] = settings.reader.matchAppReaderTheme
+            // iOS does not back up readerCustomPaperHex; a restore returns to the preset.
+            prefs.remove(Keys.ReaderCustomPaperHex)
             // Absent (or JSON null) leaves the local accent. #990000 in any case is the
             // pre-2026-10-29 default, not a choice. Any other present value applies as stored.
             val incomingAccent = settings.app.chosenAccentColorHex
@@ -671,6 +691,9 @@ class SettingsRepository(
                 readerTheme = ReaderThemeSetting.fromStorage(preferences[Keys.ReaderTheme]),
                 matchAppReaderTheme = preferences[Keys.MatchAppReaderTheme]
                     ?: defaults.reader.matchAppReaderTheme,
+                readerCustomPaperHex = io.github.cidy02.kudos.reader.ReadingAnnotationColor.customHex(
+                    preferences[Keys.ReaderCustomPaperHex]
+                ),
                 keepScreenAwake = preferences[Keys.KeepScreenAwake]
                     ?: defaults.reader.keepScreenAwake
             ),
@@ -751,6 +774,7 @@ class SettingsRepository(
         val AppTheme = stringPreferencesKey("appTheme")
         val ReaderTheme = stringPreferencesKey("readerTheme")
         val MatchAppReaderTheme = booleanPreferencesKey("matchAppReaderTheme")
+        val ReaderCustomPaperHex = stringPreferencesKey("readerCustomPaperHex")
         val AccentColorHex = stringPreferencesKey("accentColorHex")
         val WorkSymbolPlacement = stringPreferencesKey("workSymbolPlacement")
         val LibraryPageArrangement = stringPreferencesKey("library.page.arrangement")

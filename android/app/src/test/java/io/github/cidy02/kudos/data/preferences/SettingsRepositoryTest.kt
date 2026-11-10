@@ -31,6 +31,7 @@ import kotlinx.serialization.encodeToString
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -122,6 +123,31 @@ class SettingsRepositoryTest {
         assertEquals(AppThemeSetting.Oled, repository.snapshot().app.appTheme)
         assertEquals(ReaderThemeSetting.Sepia, repository.snapshot().reader.readerTheme)
         assertFalse(repository.snapshot().reader.matchAppReaderTheme)
+    }
+
+    @Test fun customReaderPaperIsUppercaseDeviceLocalAndPresetResetRestoreClearIt() = runBlocking {
+        repository.updateReaderCustomPaperHex("  #a1b2c3 ")
+        assertEquals("#A1B2C3", repository.snapshot().reader.readerCustomPaperHex)
+        val backup = BackupJson.encodeToString(
+            BackupSettings.fromSettings(repository.snapshot()).toBackupSettingsPayload()
+        )
+        assertFalse(backup.contains("readerCustomPaperHex"))
+
+        repository.updateAppTheme(AppThemeSetting.Dark)
+        assertNull(repository.snapshot().reader.readerCustomPaperHex)
+        repository.updateMatchAppReaderTheme(false)
+        repository.updateReaderCustomPaperHex("#010203")
+        repository.updateAppTheme(AppThemeSetting.Sepia)
+        assertEquals("#010203", repository.snapshot().reader.readerCustomPaperHex)
+
+        repository.updateEffectiveReaderTheme(ReaderThemeSetting.Dark)
+        assertNull(repository.snapshot().reader.readerCustomPaperHex)
+        repository.updateReaderCustomPaperHex("#112233")
+        repository.resetReaderTheme()
+        assertNull(repository.snapshot().reader.readerCustomPaperHex)
+        repository.updateReaderCustomPaperHex("#445566")
+        repository.replaceAll(KudosSettings.Defaults)
+        assertNull(repository.snapshot().reader.readerCustomPaperHex)
     }
 
     @After

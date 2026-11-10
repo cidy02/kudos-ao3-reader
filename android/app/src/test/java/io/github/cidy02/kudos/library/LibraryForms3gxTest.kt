@@ -68,6 +68,31 @@ class LibraryForms3gxTest {
         choice.assertIsNotSelected().performClick().assertIsSelected()
     }
 
+    @Test fun newQueueCanKeepAWorkPickerSelectionBeforeCreate() {
+        var saved: ReadingQueue? = null
+        runBlocking { works.upsert(SavedWork(id = "one", title = "Story", author = "Writer")) }
+        show { QueueEditorSheet(queues, existing = null, onDismiss = {}, onSaved = { saved = it }) }
+        compose.onNodeWithContentDescription("Queue cover, New queue, 0 works").assertExists()
+        compose.onNodeWithContentDescription("Name").performTextInput("Picked")
+        compose.onNodeWithContentDescription("Queue cover, Picked, 0 works").assertExists()
+        compose.waitUntil(5_000) {
+            compose.onAllNodes(hasText("Add Works") and hasClickAction()).fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNode(hasText("Add Works") and hasClickAction()).performClick()
+        compose.onNodeWithText("Add to Picked").assertExists()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("Story").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(hasText("Story") and isToggleable()).performClick()
+        compose.onNodeWithText("Add 1").performClick()
+        compose.onNodeWithText("1 selected").assertExists()
+        compose.onNodeWithContentDescription("Queue cover, Picked, 1 work").assertExists()
+        compose.onNode(hasText("Add Works") and hasClickAction()).performClick()
+        compose.onNode(hasText("Story") and isToggleable()).assertIsOn()
+        compose.onNodeWithText("Add 1").performClick()
+        compose.onNodeWithText("Create").performClick()
+        compose.waitUntil(5_000) { saved != null }
+        assertEquals(listOf("one"), runBlocking { queues.listWorks(saved!!.id).mapNotNull { it.work?.id } })
+    }
+
     @Test fun queueDetailsUseTheirOriginAndMarkTheCurrentPreset() {
         val queue = runBlocking { queues.createQueue("Rereads", hue = 0.4424) }
         show { QueueSettingsScreen(queue.id, queues, origin = "Library") }
@@ -75,6 +100,7 @@ class LibraryForms3gxTest {
         compose.onNodeWithText("LIBRARY › QUEUES › QUEUE DETAILS").assertExists()
         compose.onNodeWithText("Colour").performScrollTo().performClick()
         compose.onNode(hasText("Mint") and SemanticsMatcher.expectValue(SemanticsProperties.Selected, true)).assertExists()
+        compose.onNodeWithContentDescription("Custom colour").assertExists()
     }
 
     @Test fun collectionPickerShowsNewestCreatedFirst() {

@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.reader.settings
 
+import androidx.compose.ui.graphics.Color
 import io.github.cidy02.kudos.core.model.AppSettings
 import io.github.cidy02.kudos.core.model.AppThemeSetting
 import io.github.cidy02.kudos.core.model.ReaderMode
@@ -22,6 +23,21 @@ class ReaderSettingsMapperTest {
         assertEquals(100, prefs.fontSizePercent)
         assertFalse(prefs.publisherStyles) // iOS applies comfortable defaults with Customize off
         assertFalse(prefs.justify)
+    }
+
+    @Test
+    fun customPaperUsesExactRgbAndLuminanceSelectedBodyText() {
+        val darkPaper = mapper.map(ReaderSettings(readerCustomPaperHex = "#112233"), AppSettings())
+        assertEquals(Color(0xFF112233), darkPaper.pageBackgroundColor)
+        assertEquals(Color.White, darkPaper.pageTextColor)
+
+        val lightPaper = mapper.map(ReaderSettings(readerCustomPaperHex = "#F0E0D0"), AppSettings())
+        assertEquals(Color(0xFFF0E0D0), lightPaper.pageBackgroundColor)
+        assertEquals(Color.Black, lightPaper.pageTextColor)
+
+        val malformed = mapper.map(ReaderSettings(readerCustomPaperHex = "112233"), AppSettings())
+        assertEquals(null, malformed.pageBackgroundColor)
+        assertEquals(null, malformed.pageTextColor)
     }
 
     @Test

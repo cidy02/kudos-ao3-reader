@@ -69,6 +69,7 @@ import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.NotificationsNone
 import androidx.compose.material.icons.outlined.Queue
 import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material.icons.automirrored.outlined.Undo
@@ -1208,7 +1209,8 @@ internal fun LibraryWorkMenu(
     onScopedRemove: () -> Unit = {},
     showSelect: Boolean = true,
     remote: Boolean = false,
-    showDelete: Boolean = true
+    showDelete: Boolean = true,
+    queueActions: QueueItemMenuActions? = null
 ) {
     val ao3Id = io.github.cidy02.kudos.works.WorkIdentityIndex.ao3WorkId(work)
     var inSavedForLater by remember(work.id, work.isQueuedForLater) { mutableStateOf(work.isQueuedForLater) }
@@ -1223,6 +1225,22 @@ internal fun LibraryWorkMenu(
                 onDismiss(); actions.onOpenReader(work.id)
             })
         }
+        queueActions?.moveToTop?.let { move ->
+            ContextMenuItem(Icons.Filled.KeyboardArrowUp, "To Top", {
+                onDismiss(); move()
+            })
+        }
+        queueActions?.moveToBottom?.let { move ->
+            ContextMenuItem(Icons.Filled.KeyboardArrowDown, "To Bottom", {
+                onDismiss(); move()
+            })
+        }
+        queueActions?.share?.let { share ->
+            ContextMenuItem(Icons.Outlined.Share, "Share", {
+                onDismiss(); share()
+            })
+        }
+        if (queueActions != null) HorizontalDivider()
         if (ao3Id != null) {
             ContextMenuItem(Icons.Outlined.Info, "Comments", {
                 onDismiss(); actions.onOpenComments(ao3Id)
@@ -1283,6 +1301,12 @@ internal fun LibraryWorkMenu(
         }, destructive = true)
     }
 }
+
+internal data class QueueItemMenuActions(
+    val moveToTop: (() -> Unit)?,
+    val moveToBottom: (() -> Unit)?,
+    val share: (() -> Unit)?
+)
 
 private val LibrarySectionKind.emptyStateIcon: ImageVector
     get() = when (this) {

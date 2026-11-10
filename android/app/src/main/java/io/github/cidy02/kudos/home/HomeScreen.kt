@@ -216,7 +216,10 @@ fun HomeScreen(
                 showNewQueue = false
                 editingQueue = null
                 queueReload += 1
-            }
+            },
+            privacy = state.privacy,
+            reveal = privacyState,
+            onToggleMature = { privacyGate.toggleRevealAll(activity) }
         )
     }
 

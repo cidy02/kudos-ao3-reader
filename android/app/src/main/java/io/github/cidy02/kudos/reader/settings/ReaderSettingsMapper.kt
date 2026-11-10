@@ -28,8 +28,12 @@ class ReaderSettingsMapper(private val baseFontPt: Double = DEFAULT_BASE_FONT_PT
         val scroll = reader.readerMode == ReaderMode.Scroll
         val fontDeclarations = buildFontDeclarations(reader.readerFontId, customFonts, fontPathResolver)
         val layout = if (reader.readerCustomize) reader else ReaderSettings()
+        val theme = resolveTheme(reader, app)
+        val page = theme.pageColors(reader.readerCustomPaperHex)
         return ReaderPreferences(
-            theme = resolveTheme(reader, app),
+            theme = theme,
+            pageBackgroundColor = page.background.takeIf { page.isCustom },
+            pageTextColor = page.text.takeIf { page.isCustom },
             scroll = scroll,
             columnCount = if (!scroll && reader.readerTwoPage) 2 else 1,
             fontSizePercent = fontSizePercent(reader.readerFontPt),

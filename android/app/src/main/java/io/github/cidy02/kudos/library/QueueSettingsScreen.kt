@@ -59,6 +59,7 @@ import io.github.cidy02.kudos.core.model.ReadingQueue
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
+import io.github.cidy02.kudos.ui.subject.CustomColorWell
 import io.github.cidy02.kudos.ui.subject.SubjectChip
 import io.github.cidy02.kudos.ui.subject.SubjectChipStyle
 import io.github.cidy02.kudos.ui.subject.SubjectFieldLabel
@@ -67,6 +68,9 @@ import io.github.cidy02.kudos.ui.subject.SubjectHeaderBlock
 import io.github.cidy02.kudos.ui.subject.SubjectHueSwatches
 import io.github.cidy02.kudos.ui.subject.SubjectRowSeparator
 import io.github.cidy02.kudos.ui.subject.SubjectToggle
+import io.github.cidy02.kudos.ui.subject.hueComponent
+import io.github.cidy02.kudos.ui.subject.parseStoredColor
+import io.github.cidy02.kudos.ui.subject.toStoredHex
 import io.github.cidy02.kudos.ui.subject.subjectPanel
 import io.github.cidy02.kudos.ui.subject.subjectScreenWash
 import kotlinx.coroutines.Dispatchers
@@ -289,6 +293,29 @@ fun QueueSettingsScreen(
                     )
                 }
             }
+            SubjectRowSeparator()
+            SubjectFormRow(
+                label = "Custom colour",
+                trailing = {
+                    CustomColorWell(
+                        color = current.colorHex?.let(::parseStoredColor),
+                        fallback = palette.accent,
+                        selected = current.colorHex != null,
+                        onConfirm = { color ->
+                            scope.launch {
+                                writeQueue(
+                                    repository,
+                                    current,
+                                    tags,
+                                    hue = color.hueComponent(),
+                                    colorHex = color.toStoredHex()
+                                )
+                                reload += 1
+                            }
+                        }
+                    )
+                }
+            )
             SubjectRowSeparator()
             SubjectFormRow(
                 label = "Keep works offline",

@@ -551,6 +551,50 @@ class ReadingQueueRepositoryTest {
         assertEquals(listOf(work.id), repository.listWorks(saved.id).map { it.work?.id })
     }
 
+    @Test
+    fun createQueueSeedsChosenLibraryWorksInPickerOrder() = runTest {
+        val first = savedWork("first-seed", "First")
+        val second = savedWork("second-seed", "Second")
+        val deleted = savedWork("deleted-seed", "Deleted").copy(isDeleted = true)
+        val queueOnly = savedWork("queue-only-seed", "Queue only")
+            .copy(isSaved = false, isQueuedForLater = true)
+        listOf(first, second, deleted, queueOnly).forEach { database.workDao().upsert(it.toEntity()) }
+
+        val queue = repository.createQueue(
+            "Picked",
+            seedWorkIds = listOf(second.id, first.id, second.id, deleted.id, queueOnly.id)
+        )
+
+        assertEquals(listOf(second.id, first.id), repository.listWorks(queue.id).mapNotNull { it.work?.id })
+    }
+
+    @Test
+    fun failedSeededCreateRollsBackTheQueueAndEveryMembership() = runTest {
+        val first = savedWork("rollback-one", "One")
+        val second = savedWork("rollback-two", "Two")
+        database.workDao().upsert(first.toEntity())
+        database.workDao().upsert(second.toEntity())
+        val calls = AtomicInteger(0)
+        val failing = ReadingQueueRepository(
+            database = database,
+            clock = { now },
+            uuidFactory = {
+                if (calls.incrementAndGet() == 3) error("seed failed")
+                "atomic-${calls.get()}"
+            }
+        )
+
+        val result = runCatching {
+            failing.createQueue("Atomic", seedWorkIds = listOf(first.id, second.id))
+        }
+
+        assertTrue(result.isFailure)
+        assertTrue(failing.listQueues().isEmpty())
+        assertTrue(database.readingQueueDao().getAllMemberships().isEmpty())
+        assertFalse(database.workDao().getById(first.id)!!.isQueuedForLater)
+        assertFalse(database.workDao().getById(second.id)!!.isQueuedForLater)
+    }
+
     /** Brief 3ck, iOS 1bg's "Move to": add, then remove, and only what joined leaves. */
     @Test
     fun moveToPutsWorksInTheOtherQueueAndTakesThemOutOfThisOne() = runTest {

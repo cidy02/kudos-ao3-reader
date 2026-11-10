@@ -25,7 +25,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Icon
@@ -52,7 +51,7 @@ import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.core.model.ReadingAnnotation
 import io.github.cidy02.kudos.settings.SettingsActionRow
 import io.github.cidy02.kudos.settings.SettingsSection
-import io.github.cidy02.kudos.ui.subject.HsvColorDialog
+import io.github.cidy02.kudos.ui.subject.CustomColorWell
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SubjectMetrics
 import io.github.cidy02.kudos.ui.subject.ToolbarCircleButton
@@ -142,7 +141,6 @@ internal fun ReadingAnnotationColorPicker(selectedRaw: String, onColorChange: (S
     val tokens = LocalKudosTokens.current
     val selectedHex = ReadingAnnotationColor.customHex(selectedRaw)
     val selectedColor = ReadingAnnotationColor.fromRaw(selectedRaw)
-    var pickingCustom by remember { mutableStateOf(false) }
     Row(
         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(9.dp),
         horizontalArrangement = Arrangement.spacedBy(2.dp)
@@ -150,7 +148,7 @@ internal fun ReadingAnnotationColorPicker(selectedRaw: String, onColorChange: (S
         ReadingAnnotationColor.entries.forEach { option ->
             val selected = selectedHex == null && selectedColor == option
             Box(
-                Modifier.size(44.dp)
+                Modifier.size(48.dp)
                     .selectable(selected = selected, role = Role.RadioButton,
                         onClick = { onColorChange(option.raw) })
                     .semantics { contentDescription = option.displayName },
@@ -171,37 +169,12 @@ internal fun ReadingAnnotationColorPicker(selectedRaw: String, onColorChange: (S
                 }
             }
         }
-        Box(
-            Modifier.size(44.dp)
-                .selectable(selected = selectedHex != null, role = Role.RadioButton,
-                    onClick = { pickingCustom = true })
-                .semantics { contentDescription = "Custom colour" },
-            contentAlignment = Alignment.Center
-        ) {
-            Box(
-                Modifier.size(32.dp)
-                    .then(if (selectedHex == null) Modifier else Modifier.background(
-                        ReadingAnnotationColor.displayColor(selectedHex), CircleShape))
-                    .border(if (selectedHex != null) 3.dp else 1.dp,
-                        if (selectedHex != null) tokens.accent else tokens.primaryInk.copy(alpha = 0.35f),
-                        CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                if (selectedHex == null) {
-                    Icon(Icons.Filled.Add, contentDescription = null, tint = tokens.secondaryInk,
-                        modifier = Modifier.size(16.dp))
-                }
-            }
-        }
-    }
-    if (pickingCustom) {
-        HsvColorDialog(
-            initial = ReadingAnnotationColor.displayColor(selectedRaw),
-            onDismiss = { pickingCustom = false },
-            onConfirm = { color ->
-                pickingCustom = false
-                onColorChange(color.toStoredHex())
-            }
+        CustomColorWell(
+            color = selectedHex?.let { ReadingAnnotationColor.displayColor(it) },
+            fallback = ReadingAnnotationColor.displayColor(selectedRaw),
+            selected = selectedHex != null,
+            wellSize = 32.dp,
+            onConfirm = { onColorChange(it.toStoredHex()) }
         )
     }
 }

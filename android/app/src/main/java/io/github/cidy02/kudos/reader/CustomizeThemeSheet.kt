@@ -41,6 +41,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -65,6 +66,7 @@ import io.github.cidy02.kudos.reader.settings.backgroundColor
 import io.github.cidy02.kudos.reader.settings.textColor
 import io.github.cidy02.kudos.reader.settings.ReaderColorTheme
 import io.github.cidy02.kudos.reader.settings.ReaderSettingsMapper
+import io.github.cidy02.kudos.reader.settings.pageColors
 import io.github.cidy02.kudos.settings.SettingsActionRow
 import io.github.cidy02.kudos.settings.SettingsSection
 import io.github.cidy02.kudos.settings.SubjectSliderRow
@@ -76,11 +78,13 @@ import io.github.cidy02.kudos.ui.subject.ReaderTheme
 import io.github.cidy02.kudos.ui.subject.SubjectFormRow
 import io.github.cidy02.kudos.ui.subject.SubjectRowSeparator
 import io.github.cidy02.kudos.ui.subject.SubjectToggle
+import io.github.cidy02.kudos.ui.subject.CustomColorWell
 import io.github.cidy02.kudos.ui.subject.ToolbarCircleButton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import io.github.cidy02.kudos.ui.subject.toStoredHex
 
 /** Presentation is separate so the production content can be tested without a dialog window. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -113,6 +117,7 @@ internal fun CustomizeThemeContent(
     val scope = rememberCoroutineScope()
     val reader = settings.reader
     val theme = ReaderSettingsMapper().resolveTheme(reader, settings.app)
+    val page = theme.pageColors(reader.readerCustomPaperHex)
     val tokens = customizeThemeTokens(theme, settings)
     var choosingFont by remember { mutableStateOf(false) }
     val selectedFont = fonts.firstOrNull { it.selectionId == reader.readerFontId }
@@ -185,12 +190,12 @@ internal fun CustomizeThemeContent(
                             modifier = Modifier.fillMaxWidth().height(previewHeight)
                         )
                         Box(Modifier.fillMaxWidth().height(36.dp).align(Alignment.BottomCenter)
-                            .background(Brush.verticalGradient(listOf(theme.backgroundColor().copy(alpha = 0f), theme.backgroundColor()))))
+                            .background(Brush.verticalGradient(listOf(page.background.copy(alpha = 0f), page.background))))
                     }
                     Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
                         ReaderColorTheme.entries.forEach { option ->
-                            val selected = option == theme
+                            val selected = !page.isCustom && option == theme
                             val title = if (option == ReaderColorTheme.Oled) "OLED" else option.name
                             Column(Modifier.weight(1f)
                                 .selectable(selected = selected, role = Role.RadioButton) {
@@ -216,6 +221,30 @@ internal fun CustomizeThemeContent(
                                     maxLines = 1, autoSize = TextAutoSize.StepBased(minFontSize = 6.sp, maxFontSize = 11.sp),
                                     modifier = Modifier.clearAndSetSemantics {})
                             }
+                        }
+                        Column(
+                            Modifier.weight(1f),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(7.dp)
+                        ) {
+                            CustomColorWell(
+                                color = page.background.takeIf { page.isCustom },
+                                fallback = theme.backgroundColor(),
+                                selected = page.isCustom,
+                                label = "More colours",
+                                wellSize = 54.dp,
+                                onConfirm = { color ->
+                                    scope.launch { repository.updateReaderCustomPaperHex(color.toStoredHex()) }
+                                }
+                            )
+                            Text(
+                                "More",
+                                color = if (page.isCustom) tokens.primaryInk else tokens.secondaryInk,
+                                fontSize = 11.sp,
+                                fontWeight = if (page.isCustom) FontWeight.SemiBold else FontWeight.Normal,
+                                maxLines = 1,
+                                modifier = Modifier.clearAndSetSemantics {}
+                            )
                         }
                     }
                     Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
@@ -282,5 +311,8 @@ private fun ThemeSlider(label: String, value: Double, range: ClosedFloatingPoint
 
 internal fun customizeThemeTokens(theme: ReaderColorTheme, settings: KudosSettings): KudosTokens {
     val userAccent = settings.app.chosenAccentColorHex?.let(::parseAccentColor) ?: ActiveAppAccent.value
-    return KudosTokens.of(ReaderTheme.valueOf(theme.name), userAccent)
+    val page = theme.pageColors(settings.reader.readerCustomPaperHex)
+    val chromeTheme = if (!page.isCustom) ReaderTheme.valueOf(theme.name)
+        else if (page.background.luminance() > 0.179f) ReaderTheme.Light else ReaderTheme.Dark
+    return KudosTokens.of(chromeTheme, userAccent)
 }

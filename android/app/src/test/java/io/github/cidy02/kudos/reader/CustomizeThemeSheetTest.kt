@@ -93,6 +93,7 @@ class CustomizeThemeSheetTest {
     private fun openAndCheckSharedSheet() {
         compose.onNodeWithText("Customize Theme…").performScrollTo().performClick()
         compose.onNodeWithText("Customize Theme").assertExists()
+        compose.onNodeWithContentDescription("More colours").assertExists()
         compose.onNodeWithText("Bold Text").assertExists()
         compose.onNodeWithText("Customize").performScrollTo().assertExists()
         compose.onNodeWithText("Character Spacing").performScrollTo().assertExists()
@@ -116,6 +117,10 @@ class CustomizeThemeSheetTest {
         assertTrue(on.contains("word-spacing: 0.6em"))
         assertTrue(on.contains("0.5em 64.0px"))
         assertTrue(on.contains("text-align: justify"))
+        val customPaper = readerThemePreviewHTML(
+            saved.copy(reader = saved.reader.copy(readerCustomPaperHex = "#112233"))
+        )
+        assertTrue(customPaper.contains("background: #112233; color: #FFFFFF"))
     }
 
     @Test fun readerAndCustomizeThemeTokensUseChosenAccentExceptSepia() {
@@ -134,5 +139,11 @@ class CustomizeThemeSheetTest {
             customizeThemeTokens(io.github.cidy02.kudos.reader.settings.ReaderColorTheme.Dark, plum).accentInk)
         org.junit.Assert.assertEquals(io.github.cidy02.kudos.ui.theme.SepiaTint,
             customizeThemeTokens(io.github.cidy02.kudos.reader.settings.ReaderColorTheme.Sepia, plum).accent)
+
+        val customPaper = plum.copy(reader = plum.reader.copy(readerCustomPaperHex = "#101820"))
+        org.junit.Assert.assertEquals(ReaderTheme.Dark,
+            readerChromeTokens(io.github.cidy02.kudos.reader.settings.ReaderColorTheme.Sepia, customPaper).theme)
+        org.junit.Assert.assertEquals(ReaderTheme.Dark,
+            customizeThemeTokens(io.github.cidy02.kudos.reader.settings.ReaderColorTheme.Sepia, customPaper).theme)
     }
 }

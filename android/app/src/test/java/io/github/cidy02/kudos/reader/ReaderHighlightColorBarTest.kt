@@ -9,6 +9,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.assertHeightIsAtLeast
+import androidx.compose.ui.test.assertWidthIsAtLeast
+import androidx.compose.ui.unit.dp
 import io.github.cidy02.kudos.ui.subject.KudosTokens
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.ReaderTheme
@@ -33,7 +36,10 @@ class ReaderHighlightColorBarTest {
                     onSelect = { picked = it; showing = false }, onDismiss = { showing = false })
             }
         }
-        ReadingAnnotationColor.entries.forEach { compose.onNodeWithContentDescription(it.displayName).assertExists() }
+        ReadingAnnotationColor.entries.forEach {
+            compose.onNodeWithContentDescription(it.displayName)
+                .assertWidthIsAtLeast(48.dp).assertHeightIsAtLeast(48.dp)
+        }
         compose.onNodeWithContentDescription("Custom colour").assertExists()
         compose.onNodeWithContentDescription("Underline").performClick()
         compose.onNodeWithContentDescription("Highlight colour").assertDoesNotExist()

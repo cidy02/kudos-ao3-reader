@@ -204,6 +204,10 @@ class Brief3gzContentTest {
             KudosThemeMode.Sepia to floatArrayOf(0.34f, 0.70f, 0.22f),
             KudosThemeMode.Dark to floatArrayOf(0.38f, 0.78f, 0.30f),
             KudosThemeMode.Oled to floatArrayOf(0.38f, 0.78f, 0.30f))
+        listOf("Violet", "Mint", "Rose", "Amber", "Blue", "Custom colour").forEach {
+            compose.onNodeWithContentDescription(it)
+                .assertWidthIsAtLeast(48.dp).assertHeightIsAtLeast(48.dp)
+        }
         for ((theme, hsv) in cases) {
             compose.runOnIdle { mode = theme }
             val background = when (theme) {
@@ -221,6 +225,34 @@ class Brief3gzContentTest {
         }
         compose.onNodeWithContentDescription("Mint").performClick()
         compose.runOnIdle { assertEquals(0.4424, hue!!, 0.0001); assertNull(hex) }
+    }
+
+    @Test fun customWellHasATouchTargetAndCancelDiscardsItsDraft() {
+        val opening = Color(0xFF123456)
+        val committed = mutableListOf<Color>()
+        show {
+            CustomColorWell(
+                color = committed.lastOrNull() ?: opening,
+                fallback = opening,
+                selected = true,
+                onConfirm = { committed += it }
+            )
+        }
+        val well = compose.onNodeWithContentDescription("Custom colour")
+        well.assertWidthIsAtLeast(48.dp).assertHeightIsAtLeast(48.dp).performClick()
+        compose.onNodeWithContentDescription("Hue")
+            .performSemanticsAction(SemanticsActions.SetProgress) { it(0.5f) }
+        compose.onNodeWithText("Cancel").performClick()
+        compose.runOnIdle { assertTrue(committed.isEmpty()) }
+
+        well.performClick()
+        compose.onNodeWithContentDescription("Hue")
+            .performSemanticsAction(SemanticsActions.SetProgress) { it(0.5f) }
+        compose.onNodeWithText("Done").performClick()
+        compose.runOnIdle {
+            assertEquals(1, committed.size)
+            assertNotEquals(opening.toStoredHex(), committed.single().toStoredHex())
+        }
     }
 
     @Test fun nearbyTilesUseTheScopePaletteAndOledHasAnUnselectedFill() {

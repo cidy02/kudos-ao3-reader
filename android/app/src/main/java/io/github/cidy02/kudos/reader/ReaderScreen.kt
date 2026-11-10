@@ -116,6 +116,7 @@ import io.github.cidy02.kudos.reader.settings.ReaderColorTheme
 import io.github.cidy02.kudos.reader.settings.ReaderPreferences
 import io.github.cidy02.kudos.reader.settings.ReaderSettingsMapper
 import io.github.cidy02.kudos.reader.settings.backgroundColor
+import io.github.cidy02.kudos.reader.settings.pageColors
 import io.github.cidy02.kudos.reader.settings.ReaderSpeechPreferences
 import io.github.cidy02.kudos.reader.speech.ReaderSpeechController
 import io.github.cidy02.kudos.reader.speech.ReaderSpeechSeekSession
@@ -159,8 +160,9 @@ fun ReaderScreen(
     val settings by (settingsRepository ?: viewModel.readerSettingsRepository)
         .settings.collectAsState(initial = io.github.cidy02.kudos.core.model.KudosSettings.Defaults)
 
-    val backgroundColor = (uiState as? ReaderUiState.Reading)
-        ?.preferences?.theme?.backgroundColor()
+    val backgroundColor = (uiState as? ReaderUiState.Reading)?.preferences?.let {
+        it.pageBackgroundColor ?: it.theme.backgroundColor()
+    }
         ?: MaterialTheme.colorScheme.background
 
     // The reader owns the whole window, as on iOS: its page colour runs under the status and
@@ -170,7 +172,7 @@ fun ReaderScreen(
     // The bars' icons follow the page while the reader is open; the app's theme takes them
     // back when it closes.
     val view = LocalView.current
-    val lightPage = backgroundColor.luminance() > 0.5f
+    val lightPage = backgroundColor.luminance() > 0.179f
     val lightApp by rememberUpdatedState(!LocalKudosTokens.current.theme.isDarkFamily)
     if (!view.isInEditMode) {
         SideEffect { view.setLightSystemBars(lightPage) }
@@ -354,7 +356,8 @@ private fun ReaderReading(
     when (val result = opening) {
         null -> ReaderPageSkeleton(
             message = "Opening “${state.work.title}”…",
-            backgroundColor = state.preferences.theme.backgroundColor()
+            backgroundColor = state.preferences.pageBackgroundColor
+                ?: state.preferences.theme.backgroundColor()
         )
         is ReadiumOpenResult.Failure -> ReaderErrorView(
             error = result.error,
@@ -1254,7 +1257,10 @@ internal fun readerChromeTokens(
     settings: io.github.cidy02.kudos.core.model.KudosSettings,
     fallbackAccent: androidx.compose.ui.graphics.Color = ActiveAppAccent.value
 ): KudosTokens {
-    val readerTheme = when (theme) {
+    val page = theme.pageColors(settings.reader.readerCustomPaperHex)
+    val readerTheme = if (page.isCustom) {
+        if (page.background.luminance() > 0.179f) ReaderTheme.Light else ReaderTheme.Dark
+    } else when (theme) {
         ReaderColorTheme.Light -> ReaderTheme.Light
         ReaderColorTheme.Sepia -> ReaderTheme.Sepia
         ReaderColorTheme.Dark -> ReaderTheme.Dark

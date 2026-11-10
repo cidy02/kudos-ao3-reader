@@ -340,6 +340,46 @@ class BackupPhase2FieldsTest {
     }
 
     @Test
+    fun iosCustomQueueAndCollectionColoursSurviveImportThenExportVerbatim() {
+        val queue = BackupReadingQueue(
+            id = QUEUE_ID,
+            name = "Night queue",
+            kindRaw = "custom",
+            sortOrder = 0,
+            dateCreated = DATE_STRING,
+            dateUpdated = DATE_STRING,
+            hue = 0.61,
+            colorHex = "#193B97"
+        )
+        val collection = BackupCollection(
+            id = COLLECTION_ID,
+            name = "Blue shelf",
+            dateAdded = DATE_STRING,
+            hue = 0.61,
+            colorHex = "#193B97"
+        )
+        val wire = BackupJson.encodeToString(sampleManifest(
+            works = emptyList(),
+            collections = listOf(collection),
+            readingQueues = listOf(queue)
+        ))
+        val imported = BackupJson.decodeFromString<KudosBackupManifest>(wire)
+
+        val restored = BackupMergeService.merge(
+            current = BackupLibrarySnapshot(),
+            backup = samplePackage(manifest = imported),
+            now = Instant.parse("2026-09-01T00:00:00Z")
+        ).snapshot
+        val exportedQueue = restored.queues.single().toBackupReadingQueue()
+        val exportedCollection = restored.collections.single().toBackupCollection()
+
+        assertEquals("#193B97", exportedQueue.colorHex)
+        assertEquals("#193B97", exportedCollection.colorHex)
+        assertTrue(BackupJson.encodeToString(exportedQueue).contains("\"colorHex\": \"#193B97\""))
+        assertTrue(BackupJson.encodeToString(exportedCollection).contains("\"colorHex\": \"#193B97\""))
+    }
+
+    @Test
     fun collectionOlderArchiveWithoutHueDoesNotClearLocalColour() {
         val local = WorkCollection(
             id = COLLECTION_ID,

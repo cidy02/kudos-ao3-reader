@@ -2,12 +2,12 @@ package io.github.cidy02.kudos.library
 
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.clearAndSetSemantics
 
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -29,7 +30,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -44,11 +44,15 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import io.github.cidy02.kudos.core.model.ReadingQueue
 import io.github.cidy02.kudos.core.model.ReadingQueueKind
+import io.github.cidy02.kudos.core.model.PrivacySettings
+import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.core.model.Tag
+import io.github.cidy02.kudos.app.PrivacyRevealState
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SubjectChip
 import io.github.cidy02.kudos.ui.subject.SubjectChipStyle
 import io.github.cidy02.kudos.ui.subject.SubjectFieldLabel
+import io.github.cidy02.kudos.ui.subject.SubjectFormRow
 import io.github.cidy02.kudos.ui.subject.SubjectHueSwatchRow
 import io.github.cidy02.kudos.ui.subject.SubjectPalette
 import io.github.cidy02.kudos.ui.subject.SubjectPaletteTheme
@@ -69,7 +73,10 @@ fun QueueEditorSheet(
     repository: ReadingQueueRepository,
     existing: ReadingQueue?,
     onDismiss: () -> Unit,
-    onSaved: (ReadingQueue) -> Unit
+    onSaved: (ReadingQueue) -> Unit,
+    privacy: PrivacySettings = PrivacySettings(),
+    reveal: PrivacyRevealState = PrivacyRevealState(),
+    onToggleMature: () -> Unit = {}
 ) {
     val tokens = LocalKudosTokens.current
     val scope = rememberCoroutineScope()
@@ -83,6 +90,9 @@ fun QueueEditorSheet(
     var newTag by remember { mutableStateOf<String?>(null) }
     var seed by remember(existing?.id) { mutableStateOf(false) }
     var seedCount by remember(existing?.id) { mutableStateOf<Int?>(null) }
+    var seedWorkIds by remember(existing?.id) { mutableStateOf<Set<String>>(emptySet()) }
+    var libraryWorks by remember(existing?.id) { mutableStateOf<List<SavedWork>>(emptyList()) }
+    var showingAddWorks by remember(existing?.id) { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
@@ -93,6 +103,7 @@ fun QueueEditorSheet(
         }
         if (!editing) {
             seedCount = runCatching { repository.savedForLaterSeedCount() }.getOrDefault(0)
+            libraryWorks = runCatching { repository.libraryWorksForNewQueue() }.getOrDefault(emptyList())
         }
     }
 
@@ -125,7 +136,8 @@ fun QueueEditorSheet(
                             colorHex = colorHex,
                             keepsWorksOffline = keep,
                             tagNames = tags,
-                            seedFromSavedForLater = seed
+                            seedFromSavedForLater = seed,
+                            seedWorkIds = seedWorkIds.toList()
                         )
                     }
                 }
@@ -180,21 +192,44 @@ fun QueueEditorSheet(
                     .padding(bottom = 28.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                val previewName = name.trim().ifEmpty { "Reading Queue" }
-                val previewHue = hue ?: ReadingQueueFacts.coverHue(previewName)
-                Box(
-                    Modifier.fillMaxWidth().padding(top = 8.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    io.github.cidy02.kudos.ui.components.CoverStack(
-                        kind = io.github.cidy02.kudos.ui.components.CoverStackKind.Queue,
-                        name = previewName,
-                        hue = previewHue,
-                        pickedHex = colorHex,
-                        backs = emptyList(),
-                        width = 88.dp,
-                        height = 120.dp
+                if (!editing) {
+                    val trimmedName = name.trim()
+                    val previewName = trimmedName.ifEmpty { "New queue" }
+                    val previewHue = hue ?: ReadingQueueFacts.coverHue(
+                        trimmedName.ifEmpty { "Reading Queue" }
                     )
+                    val previewWorks = seedWorkIds.mapNotNull { id -> libraryWorks.firstOrNull { it.id == id } }
+                    val previewBacks = previewWorks.filter {
+                        LibraryPrivacy.visibility(it, privacy, reveal) == LibraryPrivacyVisibility.Visible
+                    }.take(io.github.cidy02.kudos.ui.components.CoverStackLayout.maxBacks)
+                    val previewFooter = io.github.cidy02.kudos.home.HomeFacts.queueCardFooter(previewWorks)
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp)
+                            .clearAndSetSemantics {
+                                contentDescription = "Queue cover, $previewName, $previewFooter"
+                            },
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        io.github.cidy02.kudos.ui.components.CoverStack(
+                            kind = io.github.cidy02.kudos.ui.components.CoverStackKind.Queue,
+                            name = previewName,
+                            hue = previewHue,
+                            pickedHex = colorHex,
+                            backs = previewBacks,
+                            width = 88.dp,
+                            height = 120.dp
+                        )
+                        Text(
+                            previewName,
+                            color = tokens.primaryInk,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(previewFooter, color = tokens.secondaryInk, fontSize = 12.sp)
+                    }
                 }
                 SubjectFieldLabel("Name", Modifier.padding(top = 12.dp))
                 OutlinedTextField(
@@ -247,6 +282,15 @@ fun QueueEditorSheet(
                         seedCount = seedCount,
                         onSeedChange = { seed = it }
                     )
+                    SubjectFieldLabel("Add works", Modifier.padding(top = 14.dp))
+                    SubjectFormRow(
+                        label = "Add Works",
+                        value = if (seedWorkIds.isEmpty()) "Choose works" else "${seedWorkIds.size} selected",
+                        showsDisclosure = true,
+                        onClick = { showingAddWorks = true },
+                        modifier = Modifier.subjectPanel().heightIn(min = 48.dp)
+                    )
+                    FormFootnote("Chosen from your library. They are added when you create the queue.")
                 }
             }
         }
@@ -277,6 +321,22 @@ fun QueueEditorSheet(
             title = { Text("Could not save") },
             text = { Text(error.orEmpty()) },
             confirmButton = { TextButton(onClick = { error = null }) { Text("OK") } }
+        )
+    }
+    if (showingAddWorks) {
+        AddLibraryWorksSheet(
+            destinationName = name.trim().ifEmpty { "New queue" },
+            scopeName = "queue",
+            candidates = libraryWorks,
+            privacy = privacy,
+            reveal = reveal,
+            onToggleMature = onToggleMature,
+            onDismiss = { showingAddWorks = false },
+            onAdd = { chosen ->
+                seedWorkIds = chosen.mapTo(linkedSetOf()) { it.id }
+                showingAddWorks = false
+            },
+            initialSelection = seedWorkIds
         )
     }
     }

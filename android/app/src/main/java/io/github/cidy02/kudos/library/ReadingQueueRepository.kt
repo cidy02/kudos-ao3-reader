@@ -255,7 +255,8 @@ class ReadingQueueRepository(
      * The New Queue sheet has asked, so [keepsWorksOffline] is the reader's
      * choice (`true` or `false`), not "never asked". [colorHex] is stored
      * exactly as picked. [tagNames] are looked up before they are created.
-     * [seedFromSavedForLater] copies that queue's works and leaves them there.
+     * [seedFromSavedForLater] copies that queue's works and leaves them there;
+     * [seedWorkIds] adds chosen Library works in the same transaction.
      */
     suspend fun createQueue(
         name: String,
@@ -264,42 +265,60 @@ class ReadingQueueRepository(
         keepsWorksOffline: Boolean? = null,
         notes: String? = null,
         tagNames: List<String> = emptyList(),
-        seedFromSavedForLater: Boolean = false
+        seedFromSavedForLater: Boolean = false,
+        seedWorkIds: List<String> = emptyList()
     ): ReadingQueue {
         val trimmed = name.trim()
         require(trimmed.isNotEmpty()) { "Queue name must not be blank." }
-        val existing = queueDao.getActiveQueues().firstOrNull {
-            it.name.equals(trimmed, ignoreCase = true) &&
-                it.kindRaw == ReadingQueueKind.CUSTOM
-        }
-        if (existing != null) return existing.toDomain()
+        var seededWorks = emptyList<SavedWork>()
+        val queue = database.withTransaction {
+            val existing = queueDao.getActiveQueues().firstOrNull {
+                it.name.equals(trimmed, ignoreCase = true) &&
+                    it.kindRaw == ReadingQueueKind.CUSTOM
+            }
+            if (existing != null) return@withTransaction existing.toDomain()
 
-        val now = clock()
-        val nextOrder = (queueDao.getActiveQueues().maxOfOrNull { it.sortOrder } ?: -1) + 1
-        val queue = ReadingQueue(
-            id = uuidFactory(),
-            name = trimmed,
-            kindRaw = ReadingQueueKind.CUSTOM,
-            sortOrder = nextOrder,
-            dateCreated = now,
-            dateUpdated = now,
-            hue = hue,
-            colorHex = colorHex,
-            keepsWorksOffline = keepsWorksOffline,
-            notes = notes
-        )
-        queueDao.upsertQueue(queue.toEntity())
-        if (tagNames.isNotEmpty()) replaceQueueTags(queue.id, tagNames)
-        if (seedFromSavedForLater) {
-            val source = queueDao.getActiveQueueByKind(ReadingQueueKind.SAVED_FOR_LATER)
-            if (source != null) {
-                for (item in listWorks(source.id)) {
-                    val work = item.work ?: continue
-                    addWork(queue.id, work.id)
+            val now = clock()
+            val nextOrder = (queueDao.getActiveQueues().maxOfOrNull { it.sortOrder } ?: -1) + 1
+            val created = ReadingQueue(
+                id = uuidFactory(),
+                name = trimmed,
+                kindRaw = ReadingQueueKind.CUSTOM,
+                sortOrder = nextOrder,
+                dateCreated = now,
+                dateUpdated = now,
+                hue = hue,
+                colorHex = colorHex,
+                keepsWorksOffline = keepsWorksOffline,
+                notes = notes
+            )
+            queueDao.upsertQueue(created.toEntity())
+            if (tagNames.isNotEmpty()) replaceQueueTags(created.id, tagNames)
+
+            val seeds = LinkedHashMap<String, SavedWork>()
+            if (seedFromSavedForLater) {
+                queueDao.getActiveQueueByKind(ReadingQueueKind.SAVED_FOR_LATER)?.let { source ->
+                    for (item in listWorks(source.id)) {
+                        item.work?.let { seeds.putIfAbsent(it.id, it) }
+                    }
                 }
             }
+            if (seedWorkIds.isNotEmpty()) {
+                val libraryById = workDao.getAll().associateBy { it.id }
+                for (id in seedWorkIds) {
+                    val work = libraryById[id]?.toDomain()
+                        ?.takeIf { !it.isDeleted && !it.isQueueOnlyWork }
+                    if (work != null) seeds.putIfAbsent(work.id, work)
+                }
+            }
+            seededWorks = seeds.values.toList()
+            for (work in seededWorks) addWork(created.id, work.id, enqueueMissingEpub = false)
+            getQueue(created.id) ?: created
         }
-        return getQueue(queue.id) ?: queue
+        if (seededWorks.isNotEmpty() && KeepOffline.queueKeeps(queue.keepsWorksOffline)) {
+            enqueueMissing(seededWorks)
+        }
+        return queue
     }
 
     /**
@@ -583,6 +602,10 @@ class ReadingQueueRepository(
             !work.isDeleted && !work.isQueueOnlyWork && work.id !in memberIds
         }
     }
+
+    /** Library candidates for New Queue's pre-create picker; no queue exists to subtract yet. */
+    suspend fun libraryWorksForNewQueue(): List<SavedWork> = workDao.getAll().map { it.toDomain() }
+        .filter { !it.isDeleted && !it.isQueueOnlyWork }
 
     private suspend fun findOrCreateTag(raw: String): TagEntity? {
         val trimmed = raw.trim()

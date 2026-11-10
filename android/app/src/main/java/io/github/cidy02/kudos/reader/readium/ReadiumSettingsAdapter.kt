@@ -38,8 +38,8 @@ object ReadiumSettingsAdapter {
             // Every theme's exact page and text colours, as iOS gives them
             // (`ReadiumReaderStyleMapper`). Left to its own, Readium draws Dark on pure black,
             // the same as OLED, and no theme's page matched the ground around it.
-            backgroundColor = Color(prefs.theme.backgroundColor().toArgb()),
-            textColor = Color(prefs.theme.textColor().toArgb()),
+            backgroundColor = Color((prefs.pageBackgroundColor ?: prefs.theme.backgroundColor()).toArgb()),
+            textColor = Color((prefs.pageTextColor ?: prefs.theme.textColor()).toArgb()),
             scroll = prefs.scroll,
             columnCount = if (!prefs.scroll && prefs.columnCount >= 2) ColumnCount.TWO else ColumnCount.AUTO,
             fontSize = prefs.fontSizePercent / 100.0,
