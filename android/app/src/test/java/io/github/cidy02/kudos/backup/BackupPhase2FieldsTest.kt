@@ -370,7 +370,7 @@ class BackupPhase2FieldsTest {
             backup = samplePackage(manifest = imported),
             now = Instant.parse("2026-09-01T00:00:00Z")
         ).snapshot
-        val exportedQueue = restored.queues.single().toBackupReadingQueue()
+        val exportedQueue = restored.readingQueues.single().toBackupReadingQueue()
         val exportedCollection = restored.collections.single().toBackupCollection()
 
         assertEquals("#193B97", exportedQueue.colorHex)
