@@ -198,9 +198,13 @@ fun SensitiveWorkRow(
     LaunchedEffect(expandAll) { expanded = expandAll }
     
     val savedCard = savedWork && !ledger
+    // A-509 gave saved cards the same "+N" kicker as the others, so a saved card with
+    // several fandoms must be expandable too — otherwise it advertises more fandoms and
+    // offers no way to reach them. Warnings stay behind `!savedCard` as before: that
+    // predates A-509 and is not what this fixes.
     val expandable = summary.length > 120 || discoveryTags.isNotEmpty() ||
         relationships.isNotEmpty() || characters.isNotEmpty() || freeforms.isNotEmpty() ||
-        (!savedCard && (fandoms.size > 1 || warnings.any { it.isNotBlank() }))
+        fandoms.size > 1 || (!savedCard && warnings.any { it.isNotBlank() })
     
     val tokens = LocalKudosTokens.current
     val palette = SubjectPalette.fromHue(HomeFacts.workHue(fandoms, title), tokens.theme)
