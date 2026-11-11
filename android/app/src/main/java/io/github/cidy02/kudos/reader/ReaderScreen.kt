@@ -9,6 +9,9 @@ import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material.icons.automirrored.outlined.MenuBook
+import androidx.compose.material.icons.outlined.LightMode
+import androidx.compose.material.icons.outlined.ViewColumn
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.ui.input.pointer.pointerInput
@@ -96,6 +99,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -1154,6 +1158,11 @@ internal fun ReaderDisplaySheet(
                     "Choose whether you turn pages or scroll while reading."
                 }
             ) {
+                SubjectFormRow(
+                    "Layout",
+                    leadingIcon = Icons.AutoMirrored.Outlined.MenuBook,
+                    modifier = Modifier.clearAndSetSemantics {}
+                )
                 CompositionLocalProvider(LocalSettingsFormGround provides true) {
                     SubjectSegmentedControl(
                         options = listOf(true, false),
@@ -1168,6 +1177,7 @@ internal fun ReaderDisplaySheet(
                     SubjectRowSeparator()
                     SubjectFormRow(
                         "Two-page spread",
+                        leadingIcon = Icons.Outlined.ViewColumn,
                         trailing = {
                             SubjectToggle(
                                 checked = twoPage,
@@ -1180,6 +1190,7 @@ internal fun ReaderDisplaySheet(
                 SubjectRowSeparator()
                 SubjectFormRow(
                     "Keep screen awake",
+                    leadingIcon = Icons.Outlined.LightMode,
                     trailing = { SubjectToggle(checked = keepScreenAwake, onCheckedChange = onKeepScreenAwakeChange, contentDescription = "Keep screen awake") }
                 )
             }

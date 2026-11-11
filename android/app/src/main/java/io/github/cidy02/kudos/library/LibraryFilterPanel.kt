@@ -52,6 +52,8 @@ import io.github.cidy02.kudos.network.ao3.search.AO3Completion
 import io.github.cidy02.kudos.network.ao3.search.AO3Rating
 import io.github.cidy02.kudos.network.ao3.search.AO3Warning
 import io.github.cidy02.kudos.ui.components.GlassFieldBar
+import io.github.cidy02.kudos.ui.components.WorkSymbolTile
+import io.github.cidy02.kudos.search.FilterFacetRow
 import io.github.cidy02.kudos.ui.subject.LocalAppPalette
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SubjectFieldLabel
@@ -62,6 +64,7 @@ import io.github.cidy02.kudos.ui.subject.SubjectToggle
 import io.github.cidy02.kudos.ui.subject.subjectPanel
 import io.github.cidy02.kudos.ui.subject.SubjectPalette
 import io.github.cidy02.kudos.ui.subject.SubjectPaletteTheme
+import io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale
 import io.github.cidy02.kudos.works.WorkSearchIndex
 
 /** Live local filters, in iOS LibraryFilterPanel's order, with Android's extra controls retained. */
@@ -130,21 +133,24 @@ fun LibraryFilterPanel(
                         onFiltersChange(filters.copy(rating = it))
                     }
                 }
-                LibraryFilterGroup("Warnings") {
-                    AO3Warning.entries.forEachIndexed { index, warning ->
-                        if (index > 0) SubjectRowSeparator()
-                        LibrarySelectableRow(warning.title, warning.title in filters.warnings) {
-                            onFiltersChange(filters.copy(warnings = filters.warnings.toggled(warning.title)))
-                        }
-                    }
+                val darkSymbols = tokens.theme.isDarkFamily
+                LibraryFilterGrid("Categories", if (isAccessibilityFontScale()) 1 else 3, AO3Category.entries) { category ->
+                    FilterFacetRow(
+                        title = category.title,
+                        state = filters.categorySelection(category),
+                        symbol = WorkSymbolTile.category(listOf(category.title), darkSymbols),
+                        dense = !isAccessibilityFontScale(),
+                        onBackdrop = true
+                    ) { onFiltersChange(filters.cycleCategory(category)) }
                 }
-                LibraryFilterGroup("Categories") {
-                    AO3Category.entries.forEachIndexed { index, category ->
-                        if (index > 0) SubjectRowSeparator()
-                        LibrarySelectableRow(category.title, category.title in filters.categories) {
-                            onFiltersChange(filters.copy(categories = filters.categories.toggled(category.title)))
-                        }
-                    }
+                LibraryFilterGrid("Warnings", if (isAccessibilityFontScale()) 1 else 2, AO3Warning.entries) { warning ->
+                    FilterFacetRow(
+                        title = warning.shortTitle,
+                        state = filters.warningSelection(warning),
+                        symbol = WorkSymbolTile.warnings(listOf(warning.title), darkSymbols),
+                        accessibilityTitle = warning.title,
+                        onBackdrop = true
+                    ) { onFiltersChange(filters.cycleWarning(warning)) }
                 }
                 Column(Modifier.subjectPanel()) {
                     LibraryChoiceRow(
@@ -231,6 +237,34 @@ fun LibraryFilterPanel(
         }
     }
 }
+
+@Composable
+private fun <T> LibraryFilterGrid(
+    title: String,
+    columns: Int,
+    items: List<T>,
+    content: @Composable (T) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        SubjectFieldLabel(title)
+        items.chunked(columns).forEach { rowItems ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                rowItems.forEach { item -> Box(Modifier.weight(1f)) { content(item) } }
+                repeat(columns - rowItems.size) { Box(Modifier.weight(1f)) }
+            }
+        }
+    }
+}
+
+private val AO3Warning.shortTitle: String
+    get() = when (this) {
+        AO3Warning.NO_WARNINGS -> "No Warnings Apply"
+        AO3Warning.CHOOSE_NOT_TO -> "Creator Chose Not To Use"
+        AO3Warning.VIOLENCE -> "Graphic Violence"
+        AO3Warning.DEATH -> "Major Character Death"
+        AO3Warning.NON_CON -> "Rape/Non-Con"
+        AO3Warning.UNDERAGE -> "Underage Sex"
+    }
 
 @Composable
 private fun LibraryFilterGroup(title: String, note: String? = null, content: @Composable () -> Unit) {

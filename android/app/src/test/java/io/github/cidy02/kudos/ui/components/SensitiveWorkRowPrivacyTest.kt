@@ -107,7 +107,9 @@ class SensitiveWorkRowPrivacyTest {
                 )
             }
         }
-        compose.onNodeWithText("A Fandom", substring = true, useUnmergedTree = true).performClick()
+        // The kicker renders the fandom through SubjectKicker, which uppercases it for
+        // display; the contentDescription keeps the real casing, so match on that.
+        compose.onNodeWithContentDescription("Fandom: A Fandom", useUnmergedTree = true).performClick()
         assertEquals(1, selections)
         assertEquals(0, searched)
     }
@@ -167,7 +169,9 @@ class SensitiveWorkRowPrivacyTest {
                 SensitiveWorkRow(work = work, onOpenWork = {}, onTagSearch = { _, _ -> searched++ })
             }
         }
-        compose.onNodeWithText("A Fandom", substring = true, useUnmergedTree = true).performClick()
+        // The kicker renders the fandom through SubjectKicker, which uppercases it for
+        // display; the contentDescription keeps the real casing, so match on that.
+        compose.onNodeWithContentDescription("Fandom: A Fandom", useUnmergedTree = true).performClick()
         assertEquals(1, searched)
     }
 }

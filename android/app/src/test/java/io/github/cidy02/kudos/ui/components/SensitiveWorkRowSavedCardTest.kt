@@ -36,6 +36,7 @@ class SensitiveWorkRowSavedCardTest {
     private var verified by mutableStateOf(false)
     private var named by mutableStateOf(true)
     private var tagged by mutableStateOf(false)
+    private var multipleFandoms by mutableStateOf(false)
     private var opened = ""
     private var secondary = Color.Unspecified
     private var cardFill = Color.Unspecified
@@ -53,6 +54,7 @@ class SensitiveWorkRowSavedCardTest {
             CompositionLocalProvider(LocalOpenAuthor provides { opened = it }) {
                 SensitiveWorkRow(
                     work = work.copy(author = if (named) work.author else "",
+                        workFandoms = if (multipleFandoms) listOf("Doctor Who", "Torchwood") else work.workFandoms,
                         workFreeforms = if (tagged) listOf("Found Family") else emptyList(),
                         authorIdentitiesJSON = if (verified)
                             """[{"username":"Writer","displayName":"A writer","kind":"registered"}]""" else ""),
@@ -85,6 +87,19 @@ class SensitiveWorkRowSavedCardTest {
         assertTrue(unfold.top < title.bottom && unfold.bottom > title.top)
         compose.onNodeWithContentDescription("Show more").performClick()
         compose.onNodeWithText("Found Family").assertExists()
+    }
+
+    @Test fun fandomKickerLeadsTheTitleAndExpansionNamesEveryFandom() {
+        tagged = true
+        multipleFandoms = true
+        show()
+        val kicker = compose.onNodeWithText("DOCTOR WHO", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val title = compose.onNodeWithText("A saved work", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val author = compose.onNodeWithText("A writer", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        assertTrue(kicker.top < title.top && title.top < author.top)
+        compose.onNodeWithText("Doctor Who, Torchwood").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Show more").performClick()
+        compose.onNodeWithText("Doctor Who, Torchwood").assertExists()
     }
 
     @Test fun knownZerosKeepTheirPlacesButAShortUntaggedCardDoesNotUnfold() {

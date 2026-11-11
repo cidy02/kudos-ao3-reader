@@ -25,6 +25,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.outlined.FormatAlignJustify
+import androidx.compose.material.icons.outlined.FormatBold
+import androidx.compose.material.icons.outlined.FormatLineSpacing
+import androidx.compose.material.icons.outlined.SpaceBar
+import androidx.compose.material.icons.outlined.TextFields
+import androidx.compose.material.icons.outlined.TextFormat
+import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material.icons.outlined.ViewWeek
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
@@ -252,9 +260,10 @@ internal fun CustomizeThemeContent(
                         SettingsSection(footnote = null, top = 0.dp) {
                             SubjectFormRow("Font", modifier = Modifier.testTag("Theme font row"),
                                 value = ReaderFontCatalog.name(reader.readerFontId, fonts), showsDisclosure = true,
+                                leadingIcon = Icons.Outlined.TextFields,
                                 onClick = { choosingFont = true })
                             SubjectRowSeparator()
-                            SubjectFormRow("Bold Text", trailing = {
+                            SubjectFormRow("Bold Text", leadingIcon = Icons.Outlined.FormatBold, trailing = {
                                 SubjectToggle(reader.readerBoldText,
                                     onCheckedChange = { scope.launch { repository.updateReaderBoldText(it) } },
                                     contentDescription = "Bold Text")
@@ -263,29 +272,33 @@ internal fun CustomizeThemeContent(
                         SettingsGroupLabel("Accessibility & Layout", Modifier.padding(vertical = 10.dp))
                         SettingsSection(top = 0.dp,
                             footnote = "Turn Customize off to use comfortable defaults. Your Bold Text and font choices still apply.") {
-                            SubjectFormRow("Customize", trailing = {
+                            SubjectFormRow("Customize", leadingIcon = Icons.Outlined.Tune, trailing = {
                                 SubjectToggle(reader.readerCustomize,
                                     onCheckedChange = { scope.launch { repository.updateReaderCustomize(it) } },
                                     contentDescription = "Customize")
                             })
                             SubjectRowSeparator()
-                            ThemeSlider("Line Spacing", reader.readerLineHeight, 1.2f..2.4f, reader.readerCustomize) {
+                            ThemeSlider("Line Spacing", Icons.Outlined.FormatLineSpacing,
+                                reader.readerLineHeight, 1.2f..2.4f, reader.readerCustomize) {
                                 scope.launch { repository.updateReaderLineHeight(it) }
                             }
                             SubjectRowSeparator()
-                            ThemeSlider("Character Spacing", reader.readerLetterSpacing, 0f..0.12f, reader.readerCustomize) {
+                            ThemeSlider("Character Spacing", Icons.Outlined.TextFormat,
+                                reader.readerLetterSpacing, 0f..0.12f, reader.readerCustomize) {
                                 scope.launch { repository.updateReaderLetterSpacing(it) }
                             }
                             SubjectRowSeparator()
-                            ThemeSlider("Word Spacing", reader.readerWordSpacing, 0f..0.6f, reader.readerCustomize) {
+                            ThemeSlider("Word Spacing", Icons.Outlined.SpaceBar,
+                                reader.readerWordSpacing, 0f..0.6f, reader.readerCustomize) {
                                 scope.launch { repository.updateReaderWordSpacing(it) }
                             }
                             SubjectRowSeparator()
-                            ThemeSlider("Margins", reader.readerMargin, 8f..64f, reader.readerCustomize) {
+                            ThemeSlider("Margins", Icons.Outlined.ViewWeek,
+                                reader.readerMargin, 8f..64f, reader.readerCustomize) {
                                 scope.launch { repository.updateReaderMargin(it) }
                             }
                             SubjectRowSeparator()
-                            SubjectFormRow("Justify Text", trailing = {
+                            SubjectFormRow("Justify Text", leadingIcon = Icons.Outlined.FormatAlignJustify, trailing = {
                                 SubjectToggle(reader.readerJustify, enabled = reader.readerCustomize,
                                     onCheckedChange = { scope.launch { repository.updateReaderJustify(it) } },
                                     contentDescription = "Justify Text")
@@ -302,10 +315,12 @@ internal fun CustomizeThemeContent(
 }
 
 @Composable
-private fun ThemeSlider(label: String, value: Double, range: ClosedFloatingPointRange<Float>,
+private fun ThemeSlider(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector,
+                        value: Double, range: ClosedFloatingPointRange<Float>,
                         enabled: Boolean, onChange: (Double) -> Unit) {
     SubjectSliderRow(label, value.toFloat().coerceIn(range), range, steps = 0,
         formatValue = { "%.2f".format(it) }, onValueChangeFinished = {}, enabled = enabled,
+        leadingIcon = icon,
         onValueChange = { onChange(it.toDouble()) })
 }
 

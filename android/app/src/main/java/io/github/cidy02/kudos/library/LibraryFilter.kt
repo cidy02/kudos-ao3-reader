@@ -1,6 +1,9 @@
 package io.github.cidy02.kudos.library
 
 import io.github.cidy02.kudos.network.ao3.search.AO3Rating
+import io.github.cidy02.kudos.network.ao3.search.AO3Category
+import io.github.cidy02.kudos.network.ao3.search.AO3Warning
+import io.github.cidy02.kudos.search.FilterSelectionState
 
 enum class LibraryFinishedFilter { Any, Finished, Unfinished }
 
@@ -17,7 +20,9 @@ data class LibraryFilterState(
     val collectionIds: Set<String> = emptySet(),
     val ratings: Set<String> = emptySet(),
     val warnings: Set<String> = emptySet(),
+    val excludedWarnings: Set<String> = emptySet(),
     val categories: Set<String> = emptySet(),
+    val excludedCategories: Set<String> = emptySet(),
     val fandoms: Set<String> = emptySet(),
     val relationships: Set<String> = emptySet(),
     val characters: Set<String> = emptySet(),
@@ -38,10 +43,53 @@ data class LibraryFilterState(
             language.isNotEmpty(),
             wordsFrom.isNotBlank() || wordsTo.isNotBlank()
         ).count { it } + userTagIds.size + collectionIds.size + ratings.size + warnings.size +
-            categories.size + fandoms.size + relationships.size + characters.size + freeforms.size + excludeTags.size
+            excludedWarnings.size + categories.size + excludedCategories.size + fandoms.size +
+            relationships.size + characters.size + freeforms.size + excludeTags.size
 
     val hasActiveFilters: Boolean
         get() = activeCount > 0
+}
+
+fun LibraryFilterState.warningSelection(warning: AO3Warning): FilterSelectionState = when (warning.title) {
+    in warnings -> FilterSelectionState.INCLUDED
+    in excludedWarnings -> FilterSelectionState.EXCLUDED
+    else -> FilterSelectionState.CLEAR
+}
+
+fun LibraryFilterState.cycleWarning(warning: AO3Warning): LibraryFilterState = when (warningSelection(warning).next) {
+    FilterSelectionState.INCLUDED -> copy(
+        warnings = warnings + warning.title,
+        excludedWarnings = excludedWarnings - warning.title
+    )
+    FilterSelectionState.EXCLUDED -> copy(
+        warnings = warnings - warning.title,
+        excludedWarnings = excludedWarnings + warning.title
+    )
+    FilterSelectionState.CLEAR -> copy(
+        warnings = warnings - warning.title,
+        excludedWarnings = excludedWarnings - warning.title
+    )
+}
+
+fun LibraryFilterState.categorySelection(category: AO3Category): FilterSelectionState = when (category.title) {
+    in categories -> FilterSelectionState.INCLUDED
+    in excludedCategories -> FilterSelectionState.EXCLUDED
+    else -> FilterSelectionState.CLEAR
+}
+
+fun LibraryFilterState.cycleCategory(category: AO3Category): LibraryFilterState = when (categorySelection(category).next) {
+    FilterSelectionState.INCLUDED -> copy(
+        categories = categories + category.title,
+        excludedCategories = excludedCategories - category.title
+    )
+    FilterSelectionState.EXCLUDED -> copy(
+        categories = categories - category.title,
+        excludedCategories = excludedCategories + category.title
+    )
+    FilterSelectionState.CLEAR -> copy(
+        categories = categories - category.title,
+        excludedCategories = excludedCategories - category.title
+    )
 }
 
 /** iOS LibraryFilters.FilterDrop; sort deliberately lives outside the predicates. */
@@ -77,13 +125,19 @@ private fun LibraryFilterState.activeMembers(
     for (name in freeforms.sorted()) add("tag", name, name) { it.copy(freeforms = it.freeforms - name) }
     for (name in excludeTags.sorted()) add("excluded tag", name, "−$name") { it.copy(excludeTags = it.excludeTags - name) }
     if (rating != AO3Rating.ANY) add("rating", rating.appleCaseName, rating.title) { it.copy(rating = AO3Rating.ANY) }
-    val warningOrder = io.github.cidy02.kudos.network.ao3.search.AO3Warning.entries.map { it.title }
+    val warningOrder = AO3Warning.entries.map { it.title }
     for (name in warnings.sortedWith(compareBy<String> { warningOrder.indexOf(it) }.thenBy { it })) {
         add("warning", name, name) { it.copy(warnings = it.warnings - name) }
     }
-    val categoryOrder = io.github.cidy02.kudos.network.ao3.search.AO3Category.entries.map { it.title }
+    for (name in excludedWarnings.sortedWith(compareBy<String> { warningOrder.indexOf(it) }.thenBy { it })) {
+        add("excluded warning", name, "−$name") { it.copy(excludedWarnings = it.excludedWarnings - name) }
+    }
+    val categoryOrder = AO3Category.entries.map { it.title }
     for (name in categories.sortedWith(compareBy<String> { categoryOrder.indexOf(it) }.thenBy { it })) {
         add("category", name, name) { it.copy(categories = it.categories - name) }
+    }
+    for (name in excludedCategories.sortedWith(compareBy<String> { categoryOrder.indexOf(it) }.thenBy { it })) {
+        add("excluded category", name, "−$name") { it.copy(excludedCategories = it.excludedCategories - name) }
     }
     if (completion != LibraryCompletionFilter.Any) {
         val label = if (completion == LibraryCompletionFilter.Complete) "Complete" else "In Progress"

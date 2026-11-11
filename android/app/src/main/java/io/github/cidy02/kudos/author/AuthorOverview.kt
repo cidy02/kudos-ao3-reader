@@ -37,7 +37,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -245,11 +244,8 @@ internal fun AuthorOverviewHeader(
             ErrorStateCard("Couldn't load About", aboutLoad.message, primaryActionLabel = "Retry", onPrimaryAction = onRetryAbout)
         }
         if (showsAccountActions && (header.subscriptionForm != null || mute != null || block != null)) {
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                itemVerticalAlignment = Alignment.CenterVertically
-            ) {
+            val large = isAccessibilityFontScale()
+            val subscribeButton: @Composable () -> Unit = {
                 header.subscriptionForm?.let { form ->
                     Button(
                         onClick = { onSubscription(form) },
@@ -257,7 +253,7 @@ internal fun AuthorOverviewHeader(
                         colors = ButtonDefaults.buttonColors(
                             containerColor = tokens.accent, contentColor = SubjectPalette.label(tokens.accent)),
                         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
-                        modifier = Modifier.heightIn(min = 40.dp)
+                        modifier = Modifier.heightIn(min = 48.dp).then(if (large) Modifier.fillMaxWidth() else Modifier)
                     ) {
                         Icon(
                             if (form.isSubscribed) Icons.Outlined.NotificationsOff else Icons.Outlined.Notifications,
@@ -266,27 +262,19 @@ internal fun AuthorOverviewHeader(
                         Text(if (form.isSubscribed) "Unsubscribe" else "Subscribe", fontSize = 14.sp)
                     }
                 }
-                mute?.let { AuthorModerationPill(it, Icons.Outlined.VolumeOff, !moderationBusy) { onModeration(it) } }
-                block?.let { AuthorModerationPill(it, Icons.Outlined.PanTool, !moderationBusy) { onModeration(it) } }
+            }
+            val moderationButtons: @Composable () -> Unit = {
+                mute?.let { AuthorModerationButton(it, Icons.Outlined.VolumeOff, !moderationBusy) { onModeration(it) } }
+                block?.let { AuthorModerationButton(it, Icons.Outlined.PanTool, !moderationBusy) { onModeration(it) } }
+            }
+            if (large) Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                subscribeButton()
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { moderationButtons() }
+            } else Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                subscribeButton()
+                moderationButtons()
             }
         }
-    }
-}
-
-@Composable
-private fun AuthorModerationPill(
-    action: AO3AuthorWebAction, icon: androidx.compose.ui.graphics.vector.ImageVector,
-    enabled: Boolean, onClick: () -> Unit
-) {
-    val tokens = LocalKudosTokens.current
-    OutlinedButton(
-        onClick = onClick, enabled = enabled,
-        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
-        modifier = Modifier.heightIn(min = 40.dp)
-    ) {
-        Icon(icon, null, Modifier.size(16.dp), tint = tokens.primaryInk)
-        Spacer(Modifier.width(6.dp))
-        Text(action.label, color = tokens.primaryInk, fontSize = 14.sp)
     }
 }
 

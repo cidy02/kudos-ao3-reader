@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.outlined.Event
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
@@ -99,7 +98,7 @@ fun Modifier.hiddenMatureWorkSemantics(
  * Dense AO3 work summary for Search / Browse / Account lists.
  *
  * Material 3 [Card] expressing Apple `AO3WorkRow` hierarchy:
- * title → author → fandom → summary → status chips → list stats.
+ * fandom → title → author → summary → status chips → list stats.
  * Tags use progressive disclosure (expand) so the default row stays scannable.
  *
  * [expandAll] is a batch seed from the parent (Search "Expand all" / "Collapse
@@ -307,6 +306,21 @@ fun SensitiveWorkRow(
                                     modifier = Modifier.weight(1f),
                                     verticalArrangement = Arrangement.spacedBy(2.dp)
                                 ) {
+                                    val namedFandoms = fandoms.filter { it.isNotBlank() }
+                                    namedFandoms.firstOrNull()?.let { fandom ->
+                                        SubjectKicker(
+                                            text = HomeFacts.primaryFandom(namedFandoms) ?: fandom,
+                                            palette = palette,
+                                            trailingCount = if (expanded) 0 else namedFandoms.size - 1,
+                                            size = 9.sp,
+                                            ruleSpacing = 5.dp,
+                                            modifier = Modifier
+                                                .semantics { contentDescription = "Fandom: $fandom" }
+                                                .clickable(onClickLabel = "search this fandom") {
+                                                    tagSearch(SearchSubjectField.FANDOM, fandom)
+                                                }
+                                        )
+                                    }
                                     Text(
                                         text = title,
                                         style = MaterialTheme.typography.titleMedium,
@@ -317,6 +331,13 @@ fun SensitiveWorkRow(
                                     io.github.cidy02.kudos.works.detail.VerifiedAuthorByline(
                                         author, authorIdentities, authorNames, includesBy = true
                                     )
+                                    if (expanded && namedFandoms.size > 1) {
+                                        Text(
+                                            text = namedFandoms.joinToString(", "),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
                                 }
                                 if (isFavorite && !selecting) {
                                     Icon(
@@ -360,35 +381,6 @@ fun SensitiveWorkRow(
                                     arrangement = HomeStatusArrangement.Row,
                                     tileSize = 24.dp
                                 )
-                            }
-
-                            if (fandoms.isNotEmpty() && savedCard) {
-                                // iOS `WorkRow`: the fandoms on one line, all of them.
-                                CardMetaLine(
-                                    text = fandoms.joinToString(", "),
-                                    icon = Icons.AutoMirrored.Outlined.MenuBook,
-                                    accessibilityLabel = "Fandom: ${fandoms.joinToString(", ")}",
-                                    color = if (mutedHistory) tokens.secondaryInk else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.clickable { tagSearch(SearchSubjectField.FANDOM, fandoms.first()) }
-                                )
-                            } else if (fandoms.isNotEmpty()) {
-                                val hidden = if (expanded) 0 else fandoms.size - 1
-                                val visibleFandoms = if (expanded) fandoms else fandoms.take(1)
-                                visibleFandoms.forEachIndexed { index, fandom ->
-                                    CardMetaLine(
-                                        text = if (index == 0 && hidden > 0) {
-                                            "$fandom  +$hidden other${if (hidden == 1) "" else "s"}"
-                                        } else {
-                                            fandom
-                                        },
-                                        icon = Icons.AutoMirrored.Outlined.MenuBook,
-                                        accessibilityLabel = "Fandom: $fandom",
-                                        color = if (mutedHistory) tokens.secondaryInk else MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.clickable {
-                                            tagSearch(SearchSubjectField.FANDOM, fandom)
-                                        }
-                                    )
-                                }
                             }
 
                             if (summary.isNotBlank()) {
@@ -469,7 +461,7 @@ fun SensitiveWorkRow(
                                     if (dateText.isNotBlank()) {
                                         CardMetaLine(
                                             text = dateText,
-                                            icon = androidx.compose.material.icons.Icons.Outlined.Event,
+                                            icon = Icons.Outlined.Event,
                                             accessibilityLabel = "Updated $dateText",
                                             color = if (mutedHistory) tokens.secondaryInk else MaterialTheme.colorScheme.onSurfaceVariant
                                         )

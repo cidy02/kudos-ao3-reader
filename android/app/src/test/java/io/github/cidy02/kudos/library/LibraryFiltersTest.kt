@@ -3,6 +3,9 @@ package io.github.cidy02.kudos.library
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.core.model.Tag
 import io.github.cidy02.kudos.network.ao3.search.AO3Rating
+import io.github.cidy02.kudos.network.ao3.search.AO3Category
+import io.github.cidy02.kudos.network.ao3.search.AO3Warning
+import io.github.cidy02.kudos.search.FilterSelectionState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -119,6 +122,28 @@ class LibraryFiltersTest {
             workWarnings = emptyList(), workCategories = emptyList(),
             workTags = listOf("Underage", "Major Character Death", "F/F", "Multi")
         )))
+    }
+
+    @Test
+    fun warningAndCategoryChipsCycleClearIncludeExcludeAndExcludedFacetsRejectMatches() {
+        val warning = AO3Warning.UNDERAGE
+        val category = AO3Category.FF
+        val included = LibraryFilterState().cycleWarning(warning).cycleCategory(category)
+        assertEquals(FilterSelectionState.INCLUDED, included.warningSelection(warning))
+        assertEquals(FilterSelectionState.INCLUDED, included.categorySelection(category))
+
+        val excluded = included.cycleWarning(warning).cycleCategory(category)
+        assertEquals(FilterSelectionState.EXCLUDED, excluded.warningSelection(warning))
+        assertEquals(FilterSelectionState.EXCLUDED, excluded.categorySelection(category))
+        assertEquals(2, excluded.activeCount)
+        val matchedWork = work("Matching").copy(workWarnings = listOf("Underage"), workCategories = listOf("F/F"))
+        val clear = work("Clear").copy(workWarnings = listOf("No Archive Warnings Apply"), workCategories = listOf("Gen"))
+        assertEquals(listOf("Clear"), matching(excluded, matchedWork, clear))
+
+        val cleared = excluded.cycleWarning(warning).cycleCategory(category)
+        assertEquals(FilterSelectionState.CLEAR, cleared.warningSelection(warning))
+        assertEquals(FilterSelectionState.CLEAR, cleared.categorySelection(category))
+        assertFalse(cleared.hasActiveFilters)
     }
 
     @Test

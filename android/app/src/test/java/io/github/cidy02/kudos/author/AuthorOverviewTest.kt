@@ -165,13 +165,19 @@ class AuthorOverviewTest {
                     onSelectScope = {}, onOpenWeb = {}, onRetryAbout = {})
             }
         }
-        val order = listOf("Subscribe", "Mute", "Block").map { left(it) }
-        assertEquals(order.sorted(), order)
+        val subscribeLeft = left("Subscribe")
+        val muteBounds = compose.onNodeWithContentDescription("Mute").fetchSemanticsNode().boundsInRoot
+        val blockBounds = compose.onNodeWithContentDescription("Block").fetchSemanticsNode().boundsInRoot
+        assertTrue(subscribeLeft < muteBounds.left && muteBounds.left < blockBounds.left)
+        assertTrue(muteBounds.width >= 48f && muteBounds.height >= 48f)
+        assertTrue(blockBounds.width >= 48f && blockBounds.height >= 48f)
+        compose.onAllNodesWithText("Mute").assertCountEquals(0)
+        compose.onAllNodesWithText("Block").assertCountEquals(0)
         assertTrue("Nothing is sent before a tap", moderations.isEmpty() && subscriptions.isEmpty())
-        compose.onNodeWithText("Block").performClick()
+        compose.onNodeWithContentDescription("Block").performClick()
         // The screen turns this into AO3's own confirm dialog; the header itself submits nothing.
         assertEquals(listOf(block), moderations)
-        compose.onNodeWithText("Mute").performClick()
+        compose.onNodeWithContentDescription("Mute").performClick()
         assertEquals(listOf(block, mute), moderations)
         assertTrue(subscriptions.isEmpty())
     }
@@ -185,7 +191,7 @@ class AuthorOverviewTest {
                     onSubscription = {}, onModeration = {}, onSelectScope = {}, onOpenWeb = {}, onRetryAbout = {})
             }
         }
-        compose.onAllNodesWithText("Block").assertCountEquals(0)
+        compose.onAllNodesWithContentDescription("Block").assertCountEquals(0)
         compose.onAllNodesWithText("Subscribe").assertCountEquals(0)
     }
 

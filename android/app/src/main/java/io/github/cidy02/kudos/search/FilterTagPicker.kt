@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.RemoveCircle
 import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.RadioButtonUnchecked
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -39,7 +40,6 @@ import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -49,6 +49,8 @@ import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.search.AO3SearchFilters
 import io.github.cidy02.kudos.network.ao3.search.AO3TagAutocompleteRepository
 import io.github.cidy02.kudos.ui.components.GlassFieldBar
+import io.github.cidy02.kudos.ui.components.WorkSymbolTile
+import io.github.cidy02.kudos.ui.components.WorkSymbolTileView
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.ReaderTheme
 import io.github.cidy02.kudos.ui.subject.SubjectFieldLabel
@@ -197,35 +199,56 @@ internal fun FilterTagRow(
     }
 }
 
-/** Same three-state rendering as iOS cyclingFacetRow and TagPickerView.tagRows. */
+/** Same three-state rendering as iOS cyclingFacetRow, symbol cards and TagPickerView.tagRows. */
 @Composable
-internal fun FilterFacetRow(title: String, state: FilterSelectionState, onClick: () -> Unit) {
+internal fun FilterFacetRow(
+    title: String,
+    state: FilterSelectionState,
+    symbol: WorkSymbolTile? = null,
+    accessibilityTitle: String = title,
+    dense: Boolean = false,
+    onBackdrop: Boolean = false,
+    onClick: () -> Unit
+) {
     val tokens = LocalKudosTokens.current
     val color = selectionColor(state)
+    val shape = RoundedCornerShape(10.dp)
+    val stateFill = when (state) {
+        FilterSelectionState.CLEAR -> Color.Transparent
+        FilterSelectionState.INCLUDED, FilterSelectionState.EXCLUDED -> color.copy(alpha = 0.10f)
+    }
     Row(
         Modifier.fillMaxWidth()
-            .background(if (state == FilterSelectionState.INCLUDED) color.copy(alpha = 0.10f) else Color.Transparent)
+            .heightIn(min = 48.dp)
+            .then(if (onBackdrop) Modifier.clip(shape).background(tokens.cardFill, shape) else Modifier)
+            .background(stateFill, shape)
             .clickable(role = Role.Button, onClickLabel = state.nextActionLabel.lowercase(), onClick = onClick)
             // The title is the label (kept as text); the state is iOS's "Included" / "Excluded",
             // none when clear. The visible status word below is not spoken a second time.
             .semantics(mergeDescendants = true) {
+                contentDescription = accessibilityTitle
                 if (state != FilterSelectionState.CLEAR) stateDescription =
                     if (state == FilterSelectionState.INCLUDED) "Included" else "Excluded"
             }
-            .padding(horizontal = 13.dp, vertical = 11.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+            .padding(horizontal = if (dense) 8.dp else 10.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(if (dense) 6.dp else 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        if (symbol != null) WorkSymbolTileView(symbol, 22.dp)
         Text(title, Modifier.weight(1f),
             color = if (state == FilterSelectionState.EXCLUDED) tokens.secondaryInk else tokens.primaryInk,
-            fontSize = 14.5.sp,
+            fontSize = if (dense) 13.sp else 14.sp,
             textDecoration = if (state == FilterSelectionState.EXCLUDED) TextDecoration.LineThrough else null)
-        if (state != FilterSelectionState.CLEAR) {
-            Icon(if (state == FilterSelectionState.INCLUDED) Icons.Default.AddCircle else Icons.Default.RemoveCircle,
-                null, tint = color, modifier = Modifier.size(16.dp))
-            Text(state.status, color = color, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.clearAndSetSemantics {})
-        }
+        Icon(
+            when (state) {
+                FilterSelectionState.CLEAR -> Icons.Outlined.RadioButtonUnchecked
+                FilterSelectionState.INCLUDED -> Icons.Default.AddCircle
+                FilterSelectionState.EXCLUDED -> Icons.Default.RemoveCircle
+            },
+            null,
+            tint = if (state == FilterSelectionState.CLEAR) tokens.tertiaryInk else color,
+            modifier = Modifier.size(16.dp)
+        )
     }
 }
 
@@ -264,10 +287,3 @@ private fun selectionColor(state: FilterSelectionState): Color {
         ReaderTheme.Dark, ReaderTheme.Oled -> Color(0.40f, 0.78f, 0.45f)
     }
 }
-
-private val FilterSelectionState.status: String
-    get() = when (this) {
-        FilterSelectionState.CLEAR -> "Clear"
-        FilterSelectionState.INCLUDED -> "Include"
-        FilterSelectionState.EXCLUDED -> "Exclude"
-    }

@@ -40,7 +40,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedIconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -168,13 +168,8 @@ internal fun AO3AuthorHero(
                 Text(profileTitle, color = tokens.primaryInk, fontSize = 15.sp, fontWeight = FontWeight.Medium)
             }
             if (showsActionRow) {
-                @OptIn(ExperimentalLayoutApi::class)
-                FlowRow(
-                    modifier = Modifier.padding(top = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    itemVerticalAlignment = Alignment.CenterVertically
-                ) {
+                val large = io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale()
+                val subscribeButton: @Composable () -> Unit = {
                     header.subscriptionForm?.let { form ->
                         Button(
                             onClick = { onSubscription(form) },
@@ -184,7 +179,7 @@ internal fun AO3AuthorHero(
                                 contentColor = SubjectPalette.label(tokens.scopePalette.tint)
                             ),
                             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                            modifier = Modifier.heightIn(min = 32.dp)
+                            modifier = Modifier.heightIn(min = 48.dp).then(if (large) Modifier.fillMaxWidth() else Modifier)
                         ) {
                             Icon(
                                 imageVector = if (form.isSubscribed) Icons.Outlined.NotificationsOff else Icons.Outlined.Notifications,
@@ -195,6 +190,8 @@ internal fun AO3AuthorHero(
                             Text(if (form.isSubscribed) "Unsubscribe" else "Subscribe", fontSize = 13.sp)
                         }
                     }
+                }
+                val moderationButtons: @Composable () -> Unit = {
                     mute?.let { action ->
                         AuthorModerationButton(action, Icons.Outlined.VolumeOff, !moderationBusy) { onModeration(action) }
                     }
@@ -202,23 +199,37 @@ internal fun AO3AuthorHero(
                         AuthorModerationButton(action, Icons.Outlined.PanTool, !moderationBusy) { onModeration(action) }
                     }
                 }
+                val actionsModifier = Modifier.padding(top = 4.dp)
+                if (large) Column(
+                    actionsModifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    subscribeButton()
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { moderationButtons() }
+                } else Row(
+                    actionsModifier,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    subscribeButton()
+                    moderationButtons()
+                }
             }
         }
     }
 }
 
 @Composable
-private fun AuthorModerationButton(
+internal fun AuthorModerationButton(
     action: AO3AuthorWebAction,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     enabled: Boolean = true,
     onClick: () -> Unit
 ) {
-    OutlinedButton(
+    OutlinedIconButton(
         onClick = onClick,
         enabled = enabled,
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
-        modifier = Modifier.size(40.dp).semantics { contentDescription = action.label }
+        modifier = Modifier.size(48.dp).semantics { contentDescription = action.label }
     ) {
         Icon(icon, contentDescription = null, modifier = Modifier.size(17.dp))
     }

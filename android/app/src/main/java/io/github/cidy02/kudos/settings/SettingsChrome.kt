@@ -393,13 +393,22 @@ fun SubjectSliderRow(
     onValueChangeFinished: (Float) -> Unit,
     accessibilityLabel: String = label,
     enabled: Boolean = true,
+    leadingIcon: ImageVector? = null,
     onValueChange: ((Float) -> Unit)? = null
 ) {
     val tokens = LocalKudosTokens.current
     var sliderValue by remember(value) { mutableStateOf(value) }
     Column(Modifier.fillMaxWidth().padding(horizontal = 13.dp, vertical = 8.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(label, color = tokens.primaryInk, fontSize = 16.sp, lineHeight = 22.sp)
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (leadingIcon != null) Icon(
+                leadingIcon, null, tint = LocalSubjectPalette.current.controlInk,
+                modifier = Modifier.size(with(LocalDensity.current) { 18.sp.toDp() })
+            )
+            Text(label, Modifier.weight(1f), color = tokens.primaryInk, fontSize = 16.sp, lineHeight = 22.sp)
             Text(formatValue(sliderValue), color = tokens.secondaryInk, fontSize = 15.sp, lineHeight = 21.sp)
         }
         Slider(

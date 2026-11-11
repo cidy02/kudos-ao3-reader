@@ -266,11 +266,14 @@ object LibraryQuery {
         if (!matchesTextSet(listOf(work.rating), filters.ratings)) return false
         if (!filters.rating.matchesRatingText(work.rating)) return false
         val warnings = tagSource(work.workWarnings, work.workTags)
-        if (!filters.warnings.all { title ->
-                val warning = AO3Warning.entries.firstOrNull { it.title.equals(title, ignoreCase = true) }
-                warning?.matchesWarningText(warnings) ?: matchesFacetText(warnings, title)
-            }) return false
-        if (!filters.categories.all { matchesFacetText(tagSource(work.workCategories, work.workTags), it) }) return false
+        fun matchesWarning(title: String): Boolean {
+            val warning = AO3Warning.entries.firstOrNull { it.title.equals(title, ignoreCase = true) }
+            return warning?.matchesWarningText(warnings) ?: matchesFacetText(warnings, title)
+        }
+        if (!filters.warnings.all(::matchesWarning) || filters.excludedWarnings.any(::matchesWarning)) return false
+        val categories = tagSource(work.workCategories, work.workTags)
+        if (!filters.categories.all { matchesFacetText(categories, it) } ||
+            filters.excludedCategories.any { matchesFacetText(categories, it) }) return false
         // iOS compares fandom families, and other tag categories as exact set members.
         if (filters.fandoms.isNotEmpty()) {
             val fandoms = tagSource(work.workFandoms, work.workTags).map { FandomDisplayName.bareTitle(it) }.toSet()
