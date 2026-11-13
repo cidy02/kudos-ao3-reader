@@ -136,13 +136,13 @@ Only for WIPs with `chaptersPosted ≥ 2` and a known posting date:
 interval = spanDays / (chaptersPosted − 1)
 late     = daysSinceUpdate / max(14, interval)
 ```
-`late ≤ 1.5` **On schedule** · `≤ 4` **Running late** · otherwise or `daysSinceUpdate > 365` **Long pause**.
+`late ≤ 1.5` **On schedule** · `≤ 4` **Slower than usual** · otherwise or `daysSinceUpdate > 365` **Long pause**.
 **Nearly done**: on schedule and `chaptersExpected` known and `posted / expected ≥ 0.8`.
 One chapter: **Just started** (no interval). Thresholds are judgment (*start*); tune on real lists.
 
 ### 4.7 Unusual stats (guard)
 
-A work is **unusual** when `kudos > hits` (with `hits ≥ 20`), or `kudos ≥ 1,000` and both
+A work is **unusual** when `kudos ≥ hits + 20` (with `hits ≥ 20`; the margin of 20 was added in the 2026-11-13 review, Appendix D), or `kudos ≥ 1,000` and both
 `bookmarks / kudos < 0.002` and `comments / kudos < 0.002`.
 Unusual works are listed under **"Not ranked · N"** after the ranked ones (or hidden when the user turns
 off "Set aside unusual stats"… no: when on, they're set aside; when off they are ranked like any other).
@@ -242,7 +242,8 @@ Put in `KudosTests/ReaderResponseTests.swift` (Swift Testing), per `docs/REGRESS
 | Case | Input | Expect |
 |---|---|---|
 | Adjusted, steady | K 1,804 · H 19,200 · typical 0.039 | shown 2.3725 · ranked 2.3025 |
-| Adjusted, early | K 312 · H 2,900 · typical 0.056 | shown 1.8202 · ranked 1.6967 |
+| Adjusted, steady (2) | K 312 · H 2,900 · typical 0.056 | shown 1.8202 · ranked 1.6967 · Steady (kudos ≥ 200) |
+| Adjusted, early | K 48 · H 300 · typical 0.056 | shown 1.8478 · ranked 1.5822 · Early (kudos < 50) |
 | Adjusted | K 960 · H 14,100 · typical 0.043 | shown 1.5647 · ranked 1.5021 |
 | Tiny upload | K 3 · H 3 · typical 0.08 | below 50 hits → no signal; formula alone: 1.1364 / 0.8702 |
 | Zero kudos | K 0 · H 800 · typical 0.05 | shown 0.3333 |
@@ -250,7 +251,7 @@ Put in `KudosTests/ReaderResponseTests.swift` (Swift Testing), per `docs/REGRESS
 | Comments | C 74 · K 1,804 · c 0.03 | 0.0408 |
 | WIP | 15 posted · span 126 d · 8 d since · of 30 | interval 9.0 · late 0.571 · On schedule |
 | WIP | 18 of 20 · span 238 d · 12 d since | interval 14.0 · late 0.857 · Nearly done |
-| WIP | 6/? · span 60 d · 31 d since | interval 12.0 · late 2.214 · Running late |
+| WIP | 6/? · span 60 d · 31 d since | interval 12.0 · late 2.214 · Slower than usual |
 | WIP | 1/? | Just started |
 | WIP | 10/? · span 90 d · 400 d since | Long pause |
 | Unusual | K 40,674 · H 1,105 | unusual (kudos > hits) |
@@ -492,3 +493,71 @@ AO3 "responding too slowly" (503), so they were stopped after four.
 | `-series.title:* kudos_count:>100000` | kudos_count | 5, none in a series |
 | tag page, a 15,288-work fandom | — | `#work-filters` present with category and relationship counts |
 | `/works/search` results page | — | no `#work-filters` |
+
+## Appendix D: statistical review (2026-11-13)
+
+Asked for by the owner ("errors, assumptions, oversights"), with one rule from them: **where the spec meets a
+gap in what the app records or can do, add the capability; do not drop the data point or thin the spec.**
+Board changes: Quality-Method (box "Review, 13 Nov 2026"), Quality-Results, Quality-WIPs, Quality-Response.
+
+**Errors corrected**
+
+1. Confidence words. §4.2 says kudos < 50 Early, 50–199 Settling, ≥ 200 Steady, but the 312-kudos example was
+   labelled Early on the board and in §10. It is Steady. The Early example is now K 48 · H 300 (§10 has both).
+2. The sheet named a band that does not exist ("6 to 10 chapters · 15,000 to 30,000 words · posted 2026").
+   It now reads the §4.1 band: 6 to 20 chapters · 20,000 to 60,000 words · complete · posted 2025 or later.
+3. "Good for a posting date to within days" holds only with the quarterly anchors of §3. With the four
+   anchors of §2 the error is months.
+4. "Kudos per 1,000 Words" is offered on the Sort screen (§6) and defined nowhere. See D8.
+
+**Assumptions to test, not to trust**
+
+5. One `typical` per band assumes kudos ÷ hits does not depend on hits inside a band. Hits are reader-days and
+   keep accruing from rereads; kudos stop at one per reader. If the ratio falls as hits rise, every low-hit
+   work reads above typical and Hidden Gems (hits 300–5,000) wins by construction. Calibration must measure
+   it: fit `ln(kudos) = α_band + β·ln(hits)`. β = 1 is today's assumption; if the fitted β differs from 1 by
+   more than 0.05, ship β and use `expected = e^α · hits^β`.
+6. The same for age. Early readers are followers, and kudos ÷ hits drifts down as casual traffic arrives.
+   Inside the newest year band a six-week-old work and a two-year-old one are not comparable, which favours
+   New and Loved. Add `ln(ageDays)` as a covariate for works under two years old.
+7. Rating. Appendix A turned the Explicit and Gen multipliers into "a table measured from a sample", but the
+   band of §4.1 has no rating in it, so nothing measures that effect. Add rating to the shape.
+8. WIP cadence treats the lifetime mean interval as the author's schedule. If gaps vary like a memoryless
+   process, a work is past 1.5 × its mean on e^−1.5 = 22% of days with nothing wrong. Hence "Slower than
+   usual", not "Running late" (§1, respect for authors). No cadence before 3 chapters and 7 days: the
+   work-number clock is off by days, and a draft can precede posting by weeks.
+9. `kudos > hits` flags honest small works read through downloads and apps (Kudos included), which add kudos
+   and no hits. Margin added: `kudos ≥ hits + 20`.
+
+**Capabilities to add**
+
+- **D1. A sample that fills the table.** About 7,000 works cannot fill 4 × 5 × 2 × 7 = 280 cells: most works
+  are short, complete one-shots. Keep the table and grow the sample. Stratify by length × status × year
+  (70 strata) with exact clauses (`word_count:[a TO b] complete:… created_at:[…]`), still by random creation
+  day, 20 pages each: about 1,400 requests at ≥ 5 s, two hours of requests spread over several days, with the
+  owner's approval as in §9. Chapters and rating are observed inside each stratum. A sparse cell leans on an
+  additive model (band effects summed in logs) instead of on its parent band:
+  `(n·m_cell + 30·m_model) / (n + 30)` at every n, so there is no step at n = 30.
+- **D2. Random pages, not the first two.** "Sort Date Posted ascending, read 2 pages" takes the first 40 works
+  posted after 00:00 UTC, which is one part of the world's evening. Read random pages of the day instead (the
+  result count gives the range). Same number of requests.
+- **D3. Hold-out checks**, added to §9: (a) the adjusted signal's correlation with ln(hits) inside a band is
+  within ±0.1; (b) the same against ln(age); (c) multipliers centre on 1.0× in every band; (d) the share of
+  each Way to Find's first 100 results set aside as unusual, recorded on first run. If (d) passes a third for
+  Hidden Gems, add `bookmarks_count:>=3` to its clause: exact, and unusual works have almost none.
+- **D4. Cautious ranking for the other signals.** Saves and comments per kudos rank by the posterior mean
+  only. With "Rank cautiously" on, multiply by `exp(−1.28 / √(count + 30·typical))`, as kudos per hit does.
+- **D5. Comments per kudos, readers only.** The blurb count includes the creator's replies. Where a work's
+  comments have been opened in Kudos, who wrote each one is known, so the sheet can show the readers-only
+  rate beside the blurb one. No new requests.
+- **D6. Real chapter gaps.** `/works/<id>/navigate` carries each chapter's `published_at`, and the app
+  already fetches it (`AO3Client.chapterIndex`; its parser keeps titles and ids only). Where the index is
+  held, cadence = the median of the last five gaps, not span ÷ (chapters − 1).
+- **D7. Momentum.** Stretching a one-day change to a week turns +3 into "+21 this week". Under 3 days apart
+  or under 10 new kudos, show the plain change. Ranking by momentum covers only works seen twice: say
+  "N of 40 seen before". Rank by growth relative to the earlier count (floor 20 kudos); raw kudos a week
+  only re-sorts by size.
+- **D8. Kudos per 1,000 words** = kudos ÷ max(words, 1,000) × 1,000. It favours short works by arithmetic;
+  the row says so. The version against the length band's typical is a P2 candidate.
+- **D9. Uncertainty the reader cannot see.** `ranked` carries sampling noise only; `typical` has its own
+  error (roughly ±10% in a 100-work cell). The explainer treats differences under 10% as ties.
