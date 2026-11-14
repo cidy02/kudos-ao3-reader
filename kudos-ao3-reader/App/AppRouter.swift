@@ -229,7 +229,7 @@ nonisolated struct WritingTabRule: Equatable, Sendable {
         if (workCount ?? 0) > 0 || (seriesCount ?? 0) > 0 || (draftCount ?? 0) > 0 {
             return true
         }
-        if workCount != nil || seriesCount != nil || draftCount != nil {
+        if workCount == 0, seriesCount == 0, draftCount == 0 {
             return false
         }
         return lastKnownWrites
@@ -335,13 +335,19 @@ final class AppRouter {
     }
 
     @ObservationIgnored private var writingStateStore: WritingTabStateStore
+    @ObservationIgnored private var recoveryStore: WritingTextRecovery
     @ObservationIgnored private var activeUsername: String?
+    @ObservationIgnored private var evaluatedAccount: String?
     @ObservationIgnored private var activeAuthenticationScope: String?
     @ObservationIgnored private var restoredWritingSelection = false
     @ObservationIgnored private var writingTabObserver: NSObjectProtocol?
 
-    init(writingStateStore: WritingTabStateStore = WritingTabStateStore()) {
+    init(
+        writingStateStore: WritingTabStateStore = WritingTabStateStore(),
+        recoveryStore: WritingTextRecovery = WritingTextRecovery()
+    ) {
         self.writingStateStore = writingStateStore
+        self.recoveryStore = recoveryStore
         writingTabObserver = NotificationCenter.default.addObserver(
             forName: WritingTabEvents.notificationName,
             object: nil,
@@ -585,13 +591,29 @@ final class AppRouter {
         workCount: Int? = nil,
         seriesCount: Int? = nil,
         draftCount: Int? = nil,
-        hasLocalDrafts: Bool = false
+        hasLocalDrafts: Bool? = nil
     ) -> Bool {
         let effectiveUsername = username ?? activeUsername
+        let normalizedUser = Self.normalizedAccount(effectiveUsername)
+        let accountSwitched = isSignedIn
+            && evaluatedAccount != nil
+            && normalizedUser != evaluatedAccount
         if isSignedIn {
-            if hasLocalDrafts || (workCount ?? 0) > 0 || (seriesCount ?? 0) > 0 || (draftCount ?? 0) > 0 {
+            evaluatedAccount = normalizedUser
+        } else {
+            evaluatedAccount = nil
+        }
+        if accountSwitched {
+            restoredWritingSelection = false
+            pendingWritingRoute = nil
+        }
+        let resolvedHasLocalDrafts = isSignedIn
+            ? (hasLocalDrafts ?? recoveryStore.hasLocalDrafts(for: effectiveUsername))
+            : false
+        if isSignedIn {
+            if resolvedHasLocalDrafts || (workCount ?? 0) > 0 || (seriesCount ?? 0) > 0 || (draftCount ?? 0) > 0 {
                 writingStateStore.setLastKnownWrites(true, for: effectiveUsername)
-            } else if workCount != nil || seriesCount != nil || draftCount != nil {
+            } else if workCount == 0, seriesCount == 0, draftCount == 0 {
                 writingStateStore.setLastKnownWrites(false, for: effectiveUsername)
             }
         }
@@ -600,9 +622,9 @@ final class AppRouter {
             workCount: workCount,
             seriesCount: seriesCount,
             draftCount: draftCount,
-            hasLocalDrafts: hasLocalDrafts,
+            hasLocalDrafts: resolvedHasLocalDrafts,
             lastKnownWrites: writingStateStore.lastKnownWrites(for: effectiveUsername),
-            alreadyShownThisRun: showsWritingTab
+            alreadyShownThisRun: accountSwitched ? false : showsWritingTab
         )
         return applyWritingTabRule(rule)
     }
@@ -619,16 +641,17 @@ final class AppRouter {
         username: String?,
         isSignedIn: Bool
     ) -> Bool {
-        let workCount = header.listCount(for: .works, route: route) ?? header.recentWorks?.count
-        let seriesCount = header.listCount(for: .series, route: route) ?? header.recentSeries?.count
+        let effectiveUsername = username ?? route.username
+        let workCount = header.listCount(for: .works, route: route)
+        let seriesCount = header.listCount(for: .series, route: route)
         let draftCount = header.draftsListCount()
         return evaluateWritingTab(
             isSignedIn: isSignedIn,
-            username: username ?? route.username,
+            username: effectiveUsername,
             workCount: workCount,
             seriesCount: seriesCount,
             draftCount: draftCount,
-            hasLocalDrafts: WritingTextRecovery().hasLocalDrafts
+            hasLocalDrafts: recoveryStore.hasLocalDrafts(for: effectiveUsername)
         )
     }
 
@@ -643,10 +666,16 @@ final class AppRouter {
         )
     }
 
+    /// Shows the Writing tab for the current session without writing to
+    /// persistent account defaults (used by DEBUG screenshot routes).
+    func revealWritingTabForSession() {
+        showsWritingTab = true
+    }
+
     private func applyWritingTabRule(_ rule: WritingTabRule) -> Bool {
         let next = rule.showsWritingTab
-        showsWritingTab = next
         if next {
+            showsWritingTab = true
             if (restoredWritingSelection || pendingWritingRoute != nil),
                selection == .home,
                !isPresentingAccount {
@@ -657,11 +686,19 @@ final class AppRouter {
             if selection == .writing {
                 selection = .home
             }
+            showsWritingTab = false
             if !rule.isSignedIn {
                 restoredWritingSelection = false
             }
         }
         return next
+    }
+
+    private static func normalizedAccount(_ username: String?) -> String? {
+        guard let trimmed = username?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+              !trimmed.isEmpty
+        else { return nil }
+        return trimmed
     }
 
     private func handleWritingTabPayload(_ payload: WritingTabEvents.Payload) {
@@ -688,7 +725,7 @@ final class AppRouter {
                 workCount: workCount,
                 seriesCount: seriesCount,
                 draftCount: draftCount,
-                hasLocalDrafts: WritingTextRecovery().hasLocalDrafts
+                hasLocalDrafts: recoveryStore.hasLocalDrafts(for: username)
             )
         case let .countsChanged(authenticationScope):
             guard let username = activeUsername else { return }
@@ -703,9 +740,13 @@ final class AppRouter {
                 workCount: workCount,
                 seriesCount: seriesCount,
                 draftCount: draftCount,
-                hasLocalDrafts: WritingTextRecovery().hasLocalDrafts
+                hasLocalDrafts: recoveryStore.hasLocalDrafts(for: username)
             )
         case let .draftSaved(username):
+            if let username, let activeUsername,
+               Self.normalizedAccount(username) != Self.normalizedAccount(activeUsername) {
+                return
+            }
             guard activeUsername != nil || username != nil else { return }
             noteDraftSaved(username: username ?? activeUsername)
         }
