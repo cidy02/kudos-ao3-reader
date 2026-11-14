@@ -2,7 +2,7 @@ import SwiftUI
 import Testing
 @testable import Kudos
 
-/// Settings › Appearance › Work Symbols (T-504): the 2×2 beside the title, or a row under it.
+/// Settings › Appearance › Work Symbols (T-504, T-523): the 2×2 beside the title, or a row under it.
 struct WorkSymbolPlacementTests {
     /// The stored values are what `@AppStorage` keeps; renaming one would reset everyone's choice.
     @Test func storedValuesAreStable() {
@@ -11,6 +11,31 @@ struct WorkSymbolPlacementTests {
         #expect(WorkSymbolPlacement.underTitle.rawValue == "underTitle")
         #expect(WorkSymbolPlacement(rawValue: "unknown") == nil)
         #expect(WorkSymbolPlacement.allCases == [.beside, .underTitle])
+    }
+
+    /// A reader who never chose gets Under the Title. A stored `.beside` is a different raw value, so it still wins.
+    @Test func underTitleIsTheUnchosenDefault() {
+        #expect(WorkSymbolPlacement.defaultValue == .underTitle)
+        #expect(WorkSymbolPlacement.defaultValue.rawValue == "underTitle")
+        #expect(WorkSymbolPlacement.beside.rawValue != WorkSymbolPlacement.defaultValue.rawValue)
+    }
+
+    /// `WorkPlainRow` lays an Under the Title column out in this order. The strip
+    /// sits between the title and the author; moving it back under the author fails this.
+    @Test func underTitlePutsTheStripBetweenTitleAndAuthor() throws {
+        let lines = WorkSymbolPlacement.underTitleLines
+        let kinds = lines.map(\.kind)
+        #expect(kinds == [.heading, .symbols, .byline, .remainder])
+        let title = try #require(kinds.firstIndex(of: .heading))
+        let symbols = try #require(kinds.firstIndex(of: .symbols))
+        let author = try #require(kinds.firstIndex(of: .byline))
+        let rest = try #require(kinds.firstIndex(of: .remainder))
+        #expect(title < symbols)
+        #expect(symbols < author)
+        #expect(author < rest)
+        // 6pt was already the gap under the title block; 12pt is the column gap before the rest.
+        // The board's column is 2pt. This row keeps the gaps it already used.
+        #expect(lines.map(\.spacingBefore) == [0, 6, 6, 12])
     }
 
     /// Beside keeps every inset the row had before the setting.

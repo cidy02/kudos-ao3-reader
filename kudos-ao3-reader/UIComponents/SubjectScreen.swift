@@ -351,12 +351,12 @@ nonisolated enum WorkSymbolPlacement: String, CaseIterable, Identifiable, Sendab
     /// exports nothing unless the key was stored.
     static let defaultValue: WorkSymbolPlacement = .underTitle
 
-    /// Under the Title, top to bottom. The 6pt is the gap the strip already had
-    /// under the title block; the 12pt is the column gap under that block.
+    /// Under the Title, top to bottom. Title, strip and author stay in the 6pt
+    /// group the strip already used; the rest keeps the 12pt column gap.
     static let underTitleLines: [WorkUnderTitleLine] = [
         WorkUnderTitleLine(kind: .heading, spacingBefore: 0),
         WorkUnderTitleLine(kind: .symbols, spacingBefore: 6),
-        WorkUnderTitleLine(kind: .byline, spacingBefore: 12),
+        WorkUnderTitleLine(kind: .byline, spacingBefore: 6),
         WorkUnderTitleLine(kind: .remainder, spacingBefore: 12)
     ]
 
@@ -444,8 +444,8 @@ struct WorkPlainRow<Leading: View, Symbols: View, Heading: View, Byline: View, R
     var separatorInset: CGFloat? = nil
     var placementOverride: WorkSymbolPlacement?
     /// Under the Title draws `byline` on its own line. False where the author is
-    /// already the first line of `remainder` (the library ledger), so the 12pt
-    /// under the strip is not applied twice.
+    /// already the first line of `remainder` (the library ledger), so that line
+    /// is not drawn twice.
     var insertsByline = false
     /// The selection check (or its placeholder) while selecting; nothing otherwise.
     @ViewBuilder var leading: () -> Leading
@@ -530,9 +530,10 @@ struct WorkPlainRow<Leading: View, Symbols: View, Heading: View, Byline: View, R
     private var underTitleColumn: some View {
         let lines = underTitleLines
         return VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(lines.enumerated()), id: \.offset) { pair in
-                underTitleLine(pair.element.kind)
-                    .padding(.top, pair.offset == 0 ? 0 : pair.element.spacingBefore)
+            ForEach(Array(lines.indices), id: \.self) { index in
+                let line = lines[index]
+                underTitleLine(line.kind)
+                    .padding(.top, index == 0 ? 0 : line.spacingBefore)
             }
         }
     }
