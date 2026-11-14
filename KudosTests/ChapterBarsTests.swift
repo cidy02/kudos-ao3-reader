@@ -189,7 +189,7 @@ struct ChapterBarsTests {
         #expect(!layout.showsOpenTotalDots)
         #expect(layout.chaptersPerBar == 1)
         #expect(layout.groupNote == nil)
-        #expect(layout.metrics.width == (326 - 19 * 4) / 20)
+        #expect(layout.metrics.width == CGFloat(326 - 19 * 4) / 20) // 12.5: unrounded, as before T-514
 
         let model = ResumeCardModel(
             title: "The Cartographer's Daughter",
