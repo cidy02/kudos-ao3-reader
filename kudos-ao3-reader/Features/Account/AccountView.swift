@@ -60,6 +60,16 @@ struct AccountView: View {
         case mySeries
         /// Artboard 1l.
         case inbox
+        /// T-513: opens the new-work editor while the Writing tab is hidden.
+        case startWriting
+    }
+
+    static func showsStartWritingRow(showsWritingTab: Bool) -> Bool {
+        !showsWritingTab
+    }
+
+    static func startWritingRoute(showsWritingTab: Bool) -> Route? {
+        showsStartWritingRow(showsWritingTab: showsWritingTab) ? .startWriting : nil
     }
 
     enum AccountTab: String, CaseIterable, Identifiable {
@@ -234,6 +244,15 @@ struct AccountView: View {
                 .onChange(of: auth.username, initial: true) { _, username in
                     syncProfileModel(username: username)
                 }
+                .onChange(of: profileModel?.header, initial: true) { _, header in
+                    guard let model = profileModel, let header else { return }
+                    router.evaluateWritingTab(
+                        from: header,
+                        route: model.route,
+                        username: auth.username,
+                        isSignedIn: auth.isLoggedIn
+                    )
+                }
                 .onChange(of: auth.sessionGeneration, initial: true) { _, _ in
                     // Reset private Inbox state immediately on logout/session replacement.
                     inboxModel.syncAuthenticationContext(auth: auth)
@@ -337,6 +356,10 @@ struct AccountView: View {
         case .drafts: WritingDraftsView()
         case .myWorks: ownProfile(title: "Works", tab: .works)
         case .mySeries: ownProfile(title: "Series", tab: .series)
+        case .startWriting:
+            WritingWorkDestination(workID: nil) {
+                router.noteDraftSaved(username: auth.username)
+            }
         case .inbox:
             AccountInboxScreen(
                 model: inboxModel,
@@ -650,6 +673,14 @@ struct AccountView: View {
     private var accountAO3Section: some View {
         Section {
             VStack(spacing: 0) {
+                if Self.showsStartWritingRow(showsWritingTab: router.showsWritingTab) {
+                    panelNavRow(
+                        title: "Start Writing",
+                        systemImage: "square.and.pencil",
+                        value: Route.startWriting
+                    )
+                    SubjectRowSeparator()
+                }
                 panelNavRow(
                     title: "Inbox",
                     systemImage: "tray",

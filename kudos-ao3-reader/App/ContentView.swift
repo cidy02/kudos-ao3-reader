@@ -469,7 +469,7 @@ struct ContentView: View {
     private var sidebarSplit: some View {
         NavigationSplitView {
             List(selection: sidebarSelection) {
-                ForEach(AppTab.mainTabs) { tab in
+                ForEach(router.mainTabs) { tab in
                     Label(tab.title, systemImage: tab.symbol).tag(tab)
                 }
             }
@@ -499,7 +499,7 @@ struct ContentView: View {
 
     private var tabs: some View {
         TabView(selection: $router.selection) {
-            ForEach(AppTab.mainTabs) { tab in
+            ForEach(router.mainTabs) { tab in
                 Tab(tab.title, systemImage: tab.symbol, value: tab) {
                     destination(for: tab)
                 }

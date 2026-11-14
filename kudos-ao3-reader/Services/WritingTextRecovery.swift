@@ -33,8 +33,14 @@ nonisolated struct WritingTextRecovery {
             .sorted { $0.entry.savedAt > $1.entry.savedAt }
     }
 
-    var directory: URL = URL.applicationSupportDirectory
+    static let defaultDirectory: URL = URL.applicationSupportDirectory
         .appendingPathComponent("WritingTextRecovery", isDirectory: true)
+
+    var directory: URL = Self.defaultDirectory
+
+    var hasLocalDrafts: Bool {
+        !allCopyURLs().isEmpty
+    }
 
     func fileURL(account: String, target: String, field: String) -> URL {
         // Length-delimited components prevent ambiguous account/target pairs.
@@ -65,6 +71,9 @@ nonisolated struct WritingTextRecovery {
         let entry = Entry(text: text, originalDigest: originalDigest, savedAt: Date())
         try JSONEncoder().encode(entry).write(to: url, options: .atomic)
         try? prune(around: url)
+        if directory == Self.defaultDirectory {
+            WritingTabEvents.notifyDraftSaved()
+        }
     }
 
     /// Keeps `url` and the newest `copyLimit - 1` other copies of the same

@@ -325,7 +325,27 @@ nonisolated struct AO3SeriesWrite: Equatable, Sendable {
 @MainActor
 @Observable
 final class AO3AuthService {
-    private(set) var status: AO3AuthStatus = .restoring
+    private(set) var status: AO3AuthStatus = .restoring {
+        didSet {
+            guard status != oldValue else { return }
+            switch status {
+            case let .signedIn(username):
+                WritingTabEvents.notifyAuthChanged(
+                    isSignedIn: true,
+                    username: username,
+                    authenticationScope: AO3AuthorProfileFetcher.sessionScopedCacheScope(for: self)
+                )
+            case .signedOut:
+                WritingTabEvents.notifyAuthChanged(
+                    isSignedIn: false,
+                    username: nil,
+                    authenticationScope: nil
+                )
+            case .restoring, .signingIn, .usingFallback:
+                break
+            }
+        }
+    }
     private(set) var errorMessage: String?
     private(set) var noticeMessage: String?
     private(set) var fallbackMessage: String?
