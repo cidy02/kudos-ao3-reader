@@ -1133,6 +1133,21 @@ struct AO3CommentsParseTests {
         // AO3's default "Chapter N" title doesn't repeat in the display name.
         #expect(chapters[1].displayName == "Chapter 2")
         #expect(chapters[2].dateText == "2026-07-05")
+        #expect(chapters[2].publishedOn == AO3ChapterRef.date(from: "2026-07-05"))
+    }
+
+    @Test func parsesNavigateFixturePostingDates() throws {
+        let chapters = try AO3Client.parseChapterIndex(fixture("ao3_chapter_navigate"))
+        #expect(chapters.map(\.id) == [9001, 9002, 9003])
+        #expect(chapters.map(\.position) == [1, 2, 3])
+        #expect(chapters.map(\.dateText) == ["2026-07-01", "2026-07-05", "2026-07-08"])
+        #expect(chapters.map(\.publishedOn) == [
+            AO3ChapterRef.date(from: "2026-07-01"),
+            AO3ChapterRef.date(from: "2026-07-05"),
+            AO3ChapterRef.date(from: "2026-07-08"),
+        ])
+        #expect(AO3ChapterRef.date(from: "2026-02-31") == nil)
+        #expect(AO3ChapterRef.date(from: "") == nil)
     }
 
     @Test func emptyChapterIndexIsRecognized() throws {
