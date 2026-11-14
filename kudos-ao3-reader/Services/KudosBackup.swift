@@ -1296,11 +1296,14 @@ nonisolated struct KudosBackupReadingSession: Codable, Equatable {
         tzOffsetSeconds = session.tzOffsetSeconds
         startProgress = session.startProgress
         startSpineIndex = session.startSpineIndex
-        modeRaw = session.modeRaw
+        // A sitting from before T-516, an older build or Android (rulesVersion 0) recorded none of
+        // these. Leave the keys out, so such an archive re-exports unchanged.
+        let recorded = session.rulesVersion > 0
+        modeRaw = recorded ? session.modeRaw : nil
         playbackRate = session.playbackRate
         activeSeconds = session.activeSeconds
-        deviceID = session.deviceID
-        rulesVersion = session.rulesVersion
+        deviceID = session.deviceID.isEmpty ? nil : session.deviceID
+        rulesVersion = recorded ? session.rulesVersion : nil
         lastSpineIndex = session.lastSpineIndex
         chapterTitle = session.chapterTitle
         endingProgress = session.endingProgress
