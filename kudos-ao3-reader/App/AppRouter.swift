@@ -640,8 +640,12 @@ final class AppRouter {
         isSignedIn: Bool
     ) -> Bool {
         let effectiveUsername = username ?? route.username
+        // A header with no count but a recent work or series is still proof of writing;
+        // an empty list without a count proves nothing (unknown, never zero).
         let workCount = header.listCount(for: .works, route: route)
+            ?? header.recentWorks.flatMap { $0.isEmpty ? nil : $0.count }
         let seriesCount = header.listCount(for: .series, route: route)
+            ?? header.recentSeries.flatMap { $0.isEmpty ? nil : $0.count }
         let draftCount = header.draftsListCount()
         return evaluateWritingTab(
             isSignedIn: isSignedIn,
