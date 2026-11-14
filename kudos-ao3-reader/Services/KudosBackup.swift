@@ -1259,6 +1259,14 @@ nonisolated struct KudosBackupReadingSession: Codable, Equatable {
     let startedAt: Date
     let endedAt: Date
     let durationSeconds: Double
+    let tzOffsetSeconds: Int?
+    let startProgress: Double?
+    let startSpineIndex: Int?
+    let modeRaw: String?
+    let playbackRate: Double?
+    let activeSeconds: Double?
+    let deviceID: String?
+    let rulesVersion: Int?
     let lastSpineIndex: Int
     let chapterTitle: String
     let endingProgress: Double
@@ -1270,6 +1278,8 @@ nonisolated struct KudosBackupReadingSession: Codable, Equatable {
     private enum CodingKeys: String, CodingKey {
         case id, workID, ao3WorkID, sourceURL, workTitle, startedAt, endedAt
         case durationSeconds, lastSpineIndex, chapterTitle, endingProgress
+        case tzOffsetSeconds, startProgress, startSpineIndex, modeRaw
+        case playbackRate, activeSeconds, deviceID, rulesVersion
         case wordCount, chapterCountAtVisit, didFinish, lastModifiedAt
     }
 
@@ -1283,6 +1293,14 @@ nonisolated struct KudosBackupReadingSession: Codable, Equatable {
         startedAt = session.startedAt
         endedAt = session.endedAt
         durationSeconds = session.durationSeconds
+        tzOffsetSeconds = session.tzOffsetSeconds
+        startProgress = session.startProgress
+        startSpineIndex = session.startSpineIndex
+        modeRaw = session.modeRaw
+        playbackRate = session.playbackRate
+        activeSeconds = session.activeSeconds
+        deviceID = session.deviceID
+        rulesVersion = session.rulesVersion
         lastSpineIndex = session.lastSpineIndex
         chapterTitle = session.chapterTitle
         endingProgress = session.endingProgress
@@ -1302,6 +1320,14 @@ nonisolated struct KudosBackupReadingSession: Codable, Equatable {
         startedAt = try container.decodeIfPresent(Date.self, forKey: .startedAt) ?? Date()
         endedAt = try container.decodeIfPresent(Date.self, forKey: .endedAt) ?? startedAt
         durationSeconds = try container.decodeIfPresent(Double.self, forKey: .durationSeconds) ?? 0
+        tzOffsetSeconds = try container.decodeIfPresent(Int.self, forKey: .tzOffsetSeconds)
+        startProgress = try container.decodeIfPresent(Double.self, forKey: .startProgress)
+        startSpineIndex = try container.decodeIfPresent(Int.self, forKey: .startSpineIndex)
+        modeRaw = try container.decodeIfPresent(String.self, forKey: .modeRaw)
+        playbackRate = try container.decodeIfPresent(Double.self, forKey: .playbackRate)
+        activeSeconds = try container.decodeIfPresent(Double.self, forKey: .activeSeconds)
+        deviceID = try container.decodeIfPresent(String.self, forKey: .deviceID)
+        rulesVersion = try container.decodeIfPresent(Int.self, forKey: .rulesVersion)
         lastSpineIndex = try container.decodeIfPresent(Int.self, forKey: .lastSpineIndex) ?? 0
         chapterTitle = try container.decodeIfPresent(String.self, forKey: .chapterTitle) ?? ""
         endingProgress = try container.decodeIfPresent(Double.self, forKey: .endingProgress) ?? 0
@@ -3598,6 +3624,14 @@ enum KudosBackupService {
                     startedAt: archived.startedAt,
                     endedAt: archived.endedAt,
                     durationSeconds: archived.durationSeconds,
+                    tzOffsetSeconds: archived.tzOffsetSeconds,
+                    startProgress: archived.startProgress,
+                    startSpineIndex: archived.startSpineIndex,
+                    modeRaw: archived.modeRaw ?? "read",
+                    playbackRate: archived.playbackRate,
+                    activeSeconds: archived.activeSeconds,
+                    deviceID: archived.deviceID ?? "",
+                    rulesVersion: archived.rulesVersion ?? 0,
                     lastSpineIndex: archived.lastSpineIndex,
                     chapterTitle: archived.chapterTitle,
                     endingProgress: archived.endingProgress,
@@ -3667,6 +3701,14 @@ enum KudosBackupService {
         session.startedAt = archived.startedAt
         session.endedAt = archived.endedAt
         session.durationSeconds = max(0, archived.durationSeconds)
+        session.tzOffsetSeconds = archived.tzOffsetSeconds ?? session.tzOffsetSeconds
+        session.startProgress = archived.startProgress ?? session.startProgress
+        session.startSpineIndex = archived.startSpineIndex ?? session.startSpineIndex
+        session.modeRaw = archived.modeRaw ?? session.modeRaw
+        session.playbackRate = archived.playbackRate ?? session.playbackRate
+        session.activeSeconds = archived.activeSeconds ?? session.activeSeconds
+        session.deviceID = archived.deviceID ?? session.deviceID
+        session.rulesVersion = archived.rulesVersion ?? session.rulesVersion
         session.lastSpineIndex = archived.lastSpineIndex
         session.chapterTitle = archived.chapterTitle
         session.endingProgress = min(1, max(0, archived.endingProgress))

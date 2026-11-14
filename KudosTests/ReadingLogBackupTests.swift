@@ -45,6 +45,14 @@ struct ReadingLogBackupTests {
             startedAt: Date(timeIntervalSince1970: 1_000),
             endedAt: Date(timeIntervalSince1970: 1_200),
             durationSeconds: 200,
+            tzOffsetSeconds: -18_000,
+            startProgress: 0.2,
+            startSpineIndex: 1,
+            modeRaw: "listen",
+            playbackRate: 1.4,
+            activeSeconds: 140,
+            deviceID: "install-1",
+            rulesVersion: 1,
             lastSpineIndex: 3,
             chapterTitle: "Chapter 4",
             endingProgress: 0.55,
@@ -100,6 +108,75 @@ struct ReadingLogBackupTests {
         #expect(restoredSession.wordCount == 80_000)
         #expect(restoredSession.didFinish)
         #expect(restoredSession.chapterTitle == "Chapter 4")
+        #expect(restoredSession.tzOffsetSeconds == -18_000)
+        #expect(restoredSession.startProgress == 0.2)
+        #expect(restoredSession.startSpineIndex == 1)
+        #expect(restoredSession.mode == .listen)
+        #expect(restoredSession.playbackRate == 1.4)
+        #expect(restoredSession.activeSeconds == 140)
+        #expect(restoredSession.deviceID == "install-1")
+        #expect(restoredSession.rulesVersion == 1)
+
+        // Reconcile must update an existing row, including every new fact.
+        restoredSession.tzOffsetSeconds = nil
+        restoredSession.startProgress = nil
+        restoredSession.startSpineIndex = nil
+        restoredSession.modeRaw = "read"
+        restoredSession.playbackRate = nil
+        restoredSession.activeSeconds = nil
+        restoredSession.deviceID = "old-install"
+        restoredSession.rulesVersion = 0
+        restoredSession.lastModifiedAt = Date(timeIntervalSince1970: 1_100)
+        try target.save()
+        _ = try KudosBackupService.restore(contents, into: target, defaults: try testDefaults())
+        let updated = try #require(try target.fetch(FetchDescriptor<ReadingSession>()).first)
+        #expect(updated.tzOffsetSeconds == -18_000)
+        #expect(updated.startProgress == 0.2)
+        #expect(updated.startSpineIndex == 1)
+        #expect(updated.mode == .listen)
+        #expect(updated.playbackRate == 1.4)
+        #expect(updated.activeSeconds == 140)
+        #expect(updated.deviceID == "install-1")
+        #expect(updated.rulesVersion == 1)
+
+        var object = try #require(
+            JSONSerialization.jsonObject(with: contents.manifestData()) as? [String: Any]
+        )
+        var archived = try #require(object["readingSessions"] as? [[String: Any]])
+        for key in ["tzOffsetSeconds", "startProgress", "startSpineIndex", "modeRaw",
+                    "playbackRate", "activeSeconds", "deviceID", "rulesVersion"] {
+            archived[0].removeValue(forKey: key)
+        }
+        object["readingSessions"] = archived
+        let legacy = try KudosBackupContents.decodeManifest(
+            JSONSerialization.data(withJSONObject: object)
+        )
+        // An Android/old-build archive may have the same timestamp but no new keys.
+        _ = try KudosBackupService.restore(
+            KudosBackupContents(manifest: legacy), into: target, defaults: try testDefaults()
+        )
+        let preserved = try #require(try target.fetch(FetchDescriptor<ReadingSession>()).first)
+        #expect(preserved.tzOffsetSeconds == -18_000)
+        #expect(preserved.startProgress == 0.2)
+        #expect(preserved.startSpineIndex == 1)
+        #expect(preserved.mode == .listen)
+        #expect(preserved.playbackRate == 1.4)
+        #expect(preserved.activeSeconds == 140)
+        #expect(preserved.deviceID == "install-1")
+        #expect(preserved.rulesVersion == 1)
+        let legacyTarget = try context(schema)
+        _ = try KudosBackupService.restore(
+            KudosBackupContents(manifest: legacy), into: legacyTarget, defaults: try testDefaults()
+        )
+        let old = try #require(try legacyTarget.fetch(FetchDescriptor<ReadingSession>()).first)
+        #expect(old.tzOffsetSeconds == nil)
+        #expect(old.startProgress == nil)
+        #expect(old.startSpineIndex == nil)
+        #expect(old.playbackRate == nil)
+        #expect(old.activeSeconds == nil)
+        #expect(old.mode == .read)
+        #expect(old.deviceID.isEmpty)
+        #expect(old.rulesVersion == 0)
 
         let restoredFavorite = try #require(try target.fetch(FetchDescriptor<ReadingFavorite>()).first)
         #expect(restoredFavorite.kind == .fandom)
