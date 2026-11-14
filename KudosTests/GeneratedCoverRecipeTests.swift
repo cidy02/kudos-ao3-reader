@@ -100,6 +100,8 @@ struct GeneratedCoverRecipeTests {
     @Test func embeddedArtPrefersFrontMatterThenLargest() {
         #expect(EmbeddedWorkCoverImage.accepts(width: 320, height: 800))
         #expect(EmbeddedWorkCoverImage.accepts(width: 740, height: 400))
+        #expect(!EmbeddedWorkCoverImage.accepts(width: 320, height: 801))
+        #expect(!EmbeddedWorkCoverImage.accepts(width: 741, height: 400))
         #expect(!EmbeddedWorkCoverImage.accepts(width: 319, height: 800))
         #expect(!EmbeddedWorkCoverImage.accepts(width: 800, height: 320))
         #expect(!EmbeddedWorkCoverImage.accepts(width: 0, height: 500))
@@ -109,5 +111,60 @@ struct GeneratedCoverRecipeTests {
             EmbeddedWorkCoverImage.Candidate(data: Data([3]), frontMatter: true, pixelArea: 1_000_000)
         ]
         #expect(EmbeddedWorkCoverImage.preferred(images) == Data([3]))
+    }
+
+    @Test func postingYearIsMonotoneAndClamped() {
+        #expect(GeneratedCoverRecipe.year(for: -1) == 2010)
+        #expect(GeneratedCoverRecipe.year(for: 0) == 2010)
+        #expect(GeneratedCoverRecipe.year(for: 72_000_000) == 2026)
+        #expect(GeneratedCoverRecipe.year(for: 90_000_000) == 2026)
+        var previous = 2010.0
+        for id in stride(from: 0, through: 72_000_000, by: 100_000) {
+            let year = GeneratedCoverRecipe.year(for: id)
+            #expect(year >= previous)
+            previous = year
+        }
+    }
+
+    @Test func coverArtLoaderScansOneFileOnce() async throws {
+        final class Count: @unchecked Sendable {
+            private let lock = NSLock()
+            private var scans = 0
+            func hit() {
+                lock.lock(); scans += 1; lock.unlock()
+                Thread.sleep(forTimeInterval: 0.03)
+            }
+            var value: Int {
+                lock.lock(); defer { lock.unlock() }
+                return scans
+            }
+        }
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let file = directory.appendingPathComponent("work.epub")
+        try Data([1]).write(to: file)
+        let workID = UUID()
+        let count = Count()
+        let cache = directory.appendingPathComponent("GeneratedCoverArt")
+        let loader = GeneratedCoverArtLoader(directory: cache, scan: { _ in count.hit(); return nil })
+        async let first = loader.image(workID: workID, fileURL: file)
+        async let second = loader.image(workID: workID, fileURL: file)
+        let results = await (first, second)
+        #expect(results.0 == nil && results.1 == nil)
+        #expect(count.value == 1)
+        let cached = await loader.image(workID: workID, fileURL: file)
+        #expect(cached == nil)
+        let restarted = GeneratedCoverArtLoader(directory: cache, scan: { _ in count.hit(); return nil })
+        let fromDisk = await restarted.image(workID: workID, fileURL: file)
+        #expect(fromDisk == nil)
+        #expect(count.value == 1)
+        try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(10)],
+                                              ofItemAtPath: file.path)
+        let refreshed = await restarted.image(workID: workID, fileURL: file)
+        #expect(refreshed == nil)
+        #expect(count.value == 2)
+        let cacheFiles = try FileManager.default.contentsOfDirectory(atPath: cache.path)
+        #expect(cacheFiles.count == 1)
     }
 }

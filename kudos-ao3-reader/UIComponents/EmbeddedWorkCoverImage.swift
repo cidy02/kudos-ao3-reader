@@ -1,6 +1,7 @@
 import Foundation
 import ImageIO
 import SwiftSoup
+import UniformTypeIdentifiers
 
 /// Finds author-supplied art already inside a downloaded EPUB. Never requests remote images.
 nonisolated enum EmbeddedWorkCoverImage {
@@ -71,5 +72,21 @@ nonisolated enum EmbeddedWorkCoverImage {
             }
         }
         return best?.data
+    }
+
+    static func downsampledJPEG(_ data: Data?) -> Data? {
+        guard let data,
+              let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceThumbnailMaxPixelSize: 600
+              ] as CFDictionary) else { return nil }
+        let output = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(
+            output, UTType.jpeg.identifier as CFString, 1, nil
+        ) else { return nil }
+        CGImageDestinationAddImage(destination, thumbnail, nil)
+        return CGImageDestinationFinalize(destination) ? output as Data : nil
     }
 }

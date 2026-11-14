@@ -1,32 +1,40 @@
 import SwiftUI
-import ImageIO
 
 /// A cover in its own 112-unit coordinate system. Wordless instances are decorative.
 struct GeneratedCoverView: View {
     let recipe: GeneratedCoverRecipe
     let width: CGFloat
     var epubURL: URL?
+    var epubWorkID: UUID?
     var height: CGFloat?
     var showsWords = true
     var showsArt = true
-    @State private var loadedURL: URL?
+    @State private var loadedRevision: String?
     @State private var embeddedImage: Image?
 
-    init(recipe: GeneratedCoverRecipe, width: CGFloat, epubURL: URL? = nil, height: CGFloat? = nil,
+    init(recipe: GeneratedCoverRecipe, width: CGFloat, epubURL: URL? = nil, epubWorkID: UUID? = nil,
+         height: CGFloat? = nil,
          showsWords: Bool = true, showsArt: Bool = true) {
         self.recipe = recipe
         self.width = width
         self.epubURL = epubURL
+        self.epubWorkID = epubWorkID
         self.height = height
         self.showsWords = showsWords
         self.showsArt = showsArt
     }
 
     private var coverHeight: CGFloat { height ?? width * 1.42 }
+    private var imageRevision: String? {
+        guard let epubURL, let epubWorkID,
+              let date = (try? FileManager.default.attributesOfItem(atPath: epubURL.path))?[.modificationDate] as? Date
+        else { return nil }
+        return epubWorkID.uuidString + "|" + epubURL.path + "|" + String(date.timeIntervalSince1970.bitPattern)
+    }
 
     var body: some View {
         ZStack {
-            if showsArt, let epubURL, loadedURL == epubURL, let embeddedImage {
+            if showsArt, let imageRevision, loadedRevision == imageRevision, let embeddedImage {
                 embeddedImage.resizable().scaledToFill()
                     .frame(width: width, height: coverHeight).clipped()
             } else {
@@ -46,18 +54,14 @@ struct GeneratedCoverView: View {
         .accessibilityLabel([recipe.title, recipe.author, recipe.fandom]
             .filter { !$0.isEmpty }.joined(separator: ", "))
         .accessibilityHidden(!showsWords)
-        .task(id: epubURL) {
-            loadedURL = nil
+        .task(id: imageRevision) {
+            loadedRevision = nil
             embeddedImage = nil
-            guard showsArt, let epubURL else { return }
-            let data = await Task.detached(priority: .utility) {
-                EmbeddedWorkCoverImage.data(at: epubURL)
-            }.value
-            guard !Task.isCancelled, let data,
-                  let source = CGImageSourceCreateWithData(data as CFData, nil),
-                  let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { return }
+            guard showsArt, let epubURL, let epubWorkID, let imageRevision else { return }
+            let image = await GeneratedCoverArtLoader.shared.image(workID: epubWorkID, fileURL: epubURL)
+            guard !Task.isCancelled, let image else { return }
             embeddedImage = Image(decorative: image, scale: 1)
-            loadedURL = epubURL
+            loadedRevision = imageRevision
         }
     }
 

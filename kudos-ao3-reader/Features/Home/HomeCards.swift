@@ -121,6 +121,7 @@ struct WorkCoverCard: View {
             author: work.author,
             fandom: primaryFandom,
             epubURL: work.hasEPUB ? work.fileURL : nil,
+            epubWorkID: work.id,
             showsInitial: showsInitial,
             isMatureObscured: isMatureObscured,
             showsMatureRevealCapsule: showsMatureRevealCapsule
@@ -451,6 +452,7 @@ private struct WorkSummaryCardSurface<Content: View>: View {
     let author: String
     let fandom: String?
     var epubURL: URL?
+    var epubWorkID: UUID?
     var showsInitial: Bool = true
     var isMatureObscured: Bool = false
     var showsMatureRevealCapsule: Bool = true
@@ -468,6 +470,7 @@ private struct WorkSummaryCardSurface<Content: View>: View {
         VStack(alignment: .leading, spacing: 6) {
             GeneratedCoverView(recipe: recipe, width: cardSize.width,
                                epubURL: showsInitial ? epubURL : nil,
+                               epubWorkID: showsInitial ? epubWorkID : nil,
                                showsWords: showsInitial, showsArt: showsInitial)
             .frame(width: cardSize.width, height: cardSize.width * 1.42)
             .blur(radius: isMatureObscured ? 6 : 0)

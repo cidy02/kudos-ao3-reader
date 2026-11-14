@@ -43,13 +43,17 @@ nonisolated struct GeneratedCoverRecipe: Equatable, Sendable {
         "Case Fic": "orderly", "Mystery": "orderly", "Politics": "orderly", "Character Study": "orderly",
         "Fantasy": "celestial", "Magic": "celestial", "Science Fiction": "celestial"
     ]
-    // Cover-Spec supplies the 2010/2026 shade endpoints; CoverArt.dc.html supplies
-    // explicit mock years and a hash fallback, but no real AO3 ID/year pairs.
-    // TODO: replace these provisional ID guesses with measured (AO3 work ID, first-posted year)
-    // breakpoints spanning 2010–2026; updated dates and synthetic shelf IDs are not evidence.
-    private static let idYears = [(0, 2010), (1_000_000, 2013), (5_000_000, 2016),
-                                  (10_000_000, 2019), (20_000_000, 2021),
-                                  (40_000_000, 2023), (65_000_000, 2026)]
+    // Approximate posting dates of well-known works and round-number IDs, supplied
+    // by the orchestrator from memory on 2026-11-14 while AO3 was down; not verified
+    // against AO3. A year of error shifts the 16-year, 0.14-lightness ramp by <0.01.
+    // Fixed and monotone matters; changing these anchors changes the renderer version.
+    private static let idYears: [(id: Int, year: Double)] = [
+        (0, 2010.0), (540_000, 2012.8), (1_000_000, 2013.8), (5_000_000, 2015.8),
+        (8_340_000, 2016.8), (10_060_000, 2017.2), (14_450_000, 2018.3),
+        (20_000_000, 2019.6), (26_600_000, 2020.7), (34_500_000, 2021.8),
+        (40_000_000, 2022.5), (50_000_000, 2023.7), (60_000_000, 2024.8),
+        (72_000_000, 2026.0)
+    ]
 
     static func hash(_ text: String) -> UInt32 {
         text.utf8.reduce(2_166_136_261) { ($0 ^ UInt32($1)) &* 16_777_619 }
@@ -69,11 +73,12 @@ nonisolated struct GeneratedCoverRecipe: Equatable, Sendable {
         return source == fandom ? base : base + (Int(hash("fandom:" + fandom) % 5) - 2) * 9
     }
 
-    private static func year(for id: Int?) -> Double {
+    static func year(for id: Int?) -> Double {
         guard let id else { return 2018 }
-        for index in 1..<idYears.count where id < idYears[index].0 {
+        if id <= idYears[0].id { return idYears[0].year }
+        for index in 1..<idYears.count where id < idYears[index].id {
             let lower = idYears[index - 1], upper = idYears[index]
-            return Double(lower.1) + Double(id - lower.0) / Double(upper.0 - lower.0) * Double(upper.1 - lower.1)
+            return lower.year + Double(id - lower.id) / Double(upper.id - lower.id) * (upper.year - lower.year)
         }
         return 2026
     }

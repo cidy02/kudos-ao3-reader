@@ -220,7 +220,8 @@ struct StackedWorkCover<Face: View>: View {
                                           fandoms: work.workFandoms, tags: work.workTags,
                                           words: work.wordCount, complete: work.isComplete, width: Double(width))
         return GeneratedCoverView(recipe: recipe, width: width,
-                                  epubURL: work.hasEPUB ? work.fileURL : nil, showsWords: false)
+                                  epubURL: work.hasEPUB ? work.fileURL : nil,
+                                  epubWorkID: work.id, showsWords: false)
             .brightness(-dimming)
             .accessibilityHidden(true)
     }
