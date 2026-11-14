@@ -4,9 +4,12 @@ import Testing
 
 @MainActor
 struct AppRouterTests {
-    @Test func mainTabsMatchTheT460InformationArchitecture() {
-        #expect(AppTab.mainTabs == [.home, .library, .writing, .browse])
-        #expect(!AppTab.mainTabs.contains(.account))
+    @Test func mainTabsFollowTheWritingTabRule() {
+        #expect(AppTab.mainTabs == [.home, .library, .browse])
+        #expect(AppTab.mainTabs(showsWriting: false) == [.home, .library, .browse])
+        #expect(AppTab.mainTabs(showsWriting: true) == [.home, .library, .writing, .browse])
+        #expect(!AppTab.mainTabs(showsWriting: false).contains(.account))
+        #expect(!AppTab.mainTabs(showsWriting: true).contains(.account))
     }
 
     @Test func legacyAccountRoutesMapToTheirNewHomes() {
@@ -41,6 +44,11 @@ struct AppRouterTests {
     @Test func legacyRouteUpdatesTheOwningTabState() {
         let router = AppRouter()
         router.openLegacyAccountRoute(.drafts)
+        #expect(router.selection == .home)
+        #expect(router.consumePendingWritingRoute() == .drafts)
+
+        router.evaluateWritingTab(isSignedIn: true, draftCount: 1)
+        router.openLegacyAccountRoute(.drafts)
         #expect(router.selection == .writing)
         #expect(router.consumePendingWritingRoute() == .drafts)
 
@@ -52,6 +60,197 @@ struct AppRouterTests {
         #expect(router.selection == .home)
         #expect(router.isPresentingAccount)
         #expect(router.consumePendingAccountRoute() == .inbox)
+    }
+
+    // MARK: - T-513 Writing tab rule
+
+    @Test func writingTabRuleSignedOut() {
+        let rule = WritingTabRule(
+            isSignedIn: false,
+            workCount: 4,
+            seriesCount: 2,
+            draftCount: 1,
+            hasLocalDrafts: true,
+            lastKnownWrites: true,
+            alreadyShownThisRun: false
+        )
+        #expect(rule.showsWritingTab == false)
+    }
+
+    @Test func writingTabRuleSignedInWithNothing() {
+        let rule = WritingTabRule(
+            isSignedIn: true,
+            workCount: 0,
+            seriesCount: 0,
+            draftCount: 0,
+            hasLocalDrafts: false,
+            lastKnownWrites: true,
+            alreadyShownThisRun: false
+        )
+        #expect(rule.showsWritingTab == false)
+    }
+
+    @Test func writingTabRuleWithWork() {
+        let rule = WritingTabRule(
+            isSignedIn: true,
+            workCount: 1,
+            seriesCount: 0,
+            draftCount: 0,
+            hasLocalDrafts: false,
+            lastKnownWrites: false,
+            alreadyShownThisRun: false
+        )
+        #expect(rule.showsWritingTab == true)
+    }
+
+    @Test func writingTabRuleWithSeries() {
+        let rule = WritingTabRule(
+            isSignedIn: true,
+            workCount: 0,
+            seriesCount: 1,
+            draftCount: 0,
+            hasLocalDrafts: false,
+            lastKnownWrites: false,
+            alreadyShownThisRun: false
+        )
+        #expect(rule.showsWritingTab == true)
+    }
+
+    @Test func writingTabRuleWithAO3Draft() {
+        let rule = WritingTabRule(
+            isSignedIn: true,
+            workCount: 0,
+            seriesCount: 0,
+            draftCount: 1,
+            hasLocalDrafts: false,
+            lastKnownWrites: false,
+            alreadyShownThisRun: false
+        )
+        #expect(rule.showsWritingTab == true)
+    }
+
+    @Test func writingTabRuleWithOnlyLocalDraft() {
+        let rule = WritingTabRule(
+            isSignedIn: true,
+            workCount: 0,
+            seriesCount: 0,
+            draftCount: 0,
+            hasLocalDrafts: true,
+            lastKnownWrites: false,
+            alreadyShownThisRun: false
+        )
+        #expect(rule.showsWritingTab == true)
+    }
+
+    @Test func writingTabRuleOfflineUsesLastKnownAnswer() {
+        let offlineWriter = WritingTabRule(
+            isSignedIn: true,
+            workCount: nil,
+            seriesCount: nil,
+            draftCount: nil,
+            hasLocalDrafts: false,
+            lastKnownWrites: true,
+            alreadyShownThisRun: false
+        )
+        #expect(offlineWriter.showsWritingTab == true)
+
+        let offlineReader = WritingTabRule(
+            isSignedIn: true,
+            workCount: nil,
+            seriesCount: nil,
+            draftCount: nil,
+            hasLocalDrafts: false,
+            lastKnownWrites: false,
+            alreadyShownThisRun: false
+        )
+        #expect(offlineReader.showsWritingTab == false)
+    }
+
+    @Test func writingTabRuleNeverRemovedWhileOpen() {
+        let rule = WritingTabRule(
+            isSignedIn: true,
+            workCount: 0,
+            seriesCount: 0,
+            draftCount: 0,
+            hasLocalDrafts: false,
+            lastKnownWrites: false,
+            alreadyShownThisRun: true
+        )
+        #expect(rule.showsWritingTab == true)
+
+        let suiteName = "AppRouterTests.neverRemoved.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let store = WritingTabStateStore(defaults: defaults)
+        let router = AppRouter(writingStateStore: store)
+        #expect(router.mainTabs == [.home, .library, .browse])
+
+        router.evaluateWritingTab(isSignedIn: true, username: "saltwindow", workCount: 1)
+        #expect(router.showsWritingTab == true)
+        #expect(router.mainTabs == [.home, .library, .writing, .browse])
+        #expect(store.lastKnownWrites(for: "saltwindow") == true)
+
+        // Deleting the last work/draft while open keeps the tab for this run,
+        // while updating the stored answer to false for the next launch.
+        router.evaluateWritingTab(
+            isSignedIn: true,
+            username: "saltwindow",
+            workCount: 0,
+            seriesCount: 0,
+            draftCount: 0,
+            hasLocalDrafts: false
+        )
+        #expect(router.showsWritingTab == true)
+        #expect(router.mainTabs == [.home, .library, .writing, .browse])
+        #expect(store.lastKnownWrites(for: "saltwindow") == false)
+
+        // Next launch offline uses the updated stored answer (false).
+        let nextLaunchRouter = AppRouter(writingStateStore: store)
+        nextLaunchRouter.evaluateWritingTab(isSignedIn: true, username: "saltwindow")
+        #expect(nextLaunchRouter.showsWritingTab == false)
+        #expect(nextLaunchRouter.mainTabs == [.home, .library, .browse])
+    }
+
+    @Test func restoredWritingSelectionFallsBackToHomeWithoutLosingRouteWhenHidden() {
+        let hiddenRestored = AppRouter.restoredSelection(from: AppTab.writing.rawValue, showsWriting: false)
+        #expect(hiddenRestored == .init(tab: .home, presentsAccount: false))
+
+        let visibleRestored = AppRouter.restoredSelection(from: AppTab.writing.rawValue, showsWriting: true)
+        #expect(visibleRestored == .init(tab: .writing, presentsAccount: false))
+
+        let router = AppRouter()
+        router.pendingWritingRoute = .drafts
+        router.restoreSelection(from: AppTab.writing.rawValue)
+        #expect(router.selection == .home)
+        #expect(router.pendingWritingRoute == .drafts)
+
+        // Once the account answers as a writer, the restored route lands on Writing
+        // with its pending destination intact.
+        router.evaluateWritingTab(isSignedIn: true, username: "saltwindow", workCount: 6)
+        #expect(router.selection == .writing)
+        #expect(router.consumePendingWritingRoute() == .drafts)
+    }
+
+    @Test func startWritingRowShowsOnlyWhileWritingTabIsHiddenAndOpensEditor() {
+        let suiteName = "AppRouterTests.startWriting.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let store = WritingTabStateStore(defaults: defaults)
+        let router = AppRouter(writingStateStore: store)
+        router.evaluateWritingTab(isSignedIn: true, username: "newreader", workCount: 0)
+        #expect(router.showsWritingTab == false)
+        #expect(AccountView.showsStartWritingRow(showsWritingTab: router.showsWritingTab) == true)
+        #expect(AccountView.startWritingRoute(showsWritingTab: router.showsWritingTab) == .startWriting)
+
+        // Saving the first draft from the editor reveals the Writing tab and hides Start Writing.
+        router.noteDraftSaved(username: "newreader")
+        #expect(router.showsWritingTab == true)
+        #expect(router.mainTabs == [.home, .library, .writing, .browse])
+        #expect(AccountView.showsStartWritingRow(showsWritingTab: router.showsWritingTab) == false)
+        #expect(AccountView.startWritingRoute(showsWritingTab: router.showsWritingTab) == nil)
+        #expect(store.lastKnownWrites(for: "newreader") == true)
     }
 
     @Test func unmungesTagSlug() {
