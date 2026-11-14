@@ -22,7 +22,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
-    @AppStorage(WorkSymbolPlacement.storageKey) private var symbolPlacement: WorkSymbolPlacement = .beside
+    @AppStorage(WorkSymbolPlacement.storageKey) private var symbolPlacement: WorkSymbolPlacement = .defaultValue
     @Environment(SubscriptionScanService.self) private var subscriptionScan
     #if os(iOS)
     @Environment(MailSubscriptionDriver.self) private var mailDriver
@@ -993,7 +993,7 @@ private struct HomeNewChapterRow: View {
     @Environment(PrivacyGate.self) private var gate
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var mode: MaturePrivacyMode = .obscure
-    @AppStorage(WorkSymbolPlacement.storageKey) private var symbolPlacement: WorkSymbolPlacement = .beside
+    @AppStorage(WorkSymbolPlacement.storageKey) private var symbolPlacement: WorkSymbolPlacement = .defaultValue
 
     @State private var enrichedRemote: AO3WorkSummary?
     /// Measured chapter lengths for a downloaded work (word-count bar heights).

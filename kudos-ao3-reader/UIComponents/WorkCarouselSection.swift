@@ -197,7 +197,7 @@ struct WorkLedgerListSection<Rows: View, Empty: View>: View {
     private let emptyState: () -> Empty
     private let topSpacing: CGFloat
 
-    @AppStorage(WorkSymbolPlacement.storageKey) private var symbolPlacement: WorkSymbolPlacement = .beside
+    @AppStorage(WorkSymbolPlacement.storageKey) private var symbolPlacement: WorkSymbolPlacement = .defaultValue
 
     init(
         title: String,
