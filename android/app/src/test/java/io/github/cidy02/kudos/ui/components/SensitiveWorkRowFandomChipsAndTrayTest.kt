@@ -1,0 +1,82 @@
+package io.github.cidy02.kudos.ui.components
+
+import android.app.Application
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import io.github.cidy02.kudos.core.model.SavedWork
+import io.github.cidy02.kudos.search.SearchSubjectField
+import io.github.cidy02.kudos.ui.theme.KudosTheme
+import io.github.cidy02.kudos.ui.theme.KudosThemeMode
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+
+/**
+ * A-509c items 2 and 4 (iOS T-509 / `AO3WorkRow.chipGroup("Fandoms", dropFirst)`, `WorkRow.symbols`).
+ */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34], application = Application::class, qualifiers = "w411dp-h1600dp")
+class SensitiveWorkRowFandomChipsAndTrayTest {
+    @get:Rule val compose = createComposeRule()
+    private var searched: Pair<SearchSubjectField, String>? = null
+
+    private val groups = { saved: Boolean ->
+        standardExpandedTagGroups(
+            savedCard = saved, fandoms = listOf("Doctor Who", "", "Torchwood", "Sherlock"),
+            warnings = listOf("No Archive Warnings Apply"), relationships = listOf("A/B"),
+            characters = emptyList(), freeforms = emptyList(), discoveryTags = emptyList()
+        )
+    }
+
+    @Test fun anAo3CardLeadsItsExpandedGroupsWithItsOtherFandomsAsTappableChips() {
+        val all = groups(false)
+        assertEquals(Triple("Fandoms", listOf("Torchwood", "Sherlock"), SearchSubjectField.FANDOM), all.first())
+        assertEquals(listOf("Fandoms", "Archive Warnings", "Relationships"), all.map { it.first })
+    }
+
+    @Test fun aSavedCardNamesEveryFandomInTextSoItHasNoFandomChips() {
+        assertTrue(groups(true).none { it.third == SearchSubjectField.FANDOM })
+    }
+
+    @Test fun anExpandedAo3CardsOtherFandomsAreChipsThatSearchThatFandom() {
+        compose.setContent {
+            KudosTheme(KudosThemeMode.Light) {
+                SensitiveWorkRow(
+                    id = "1", title = "Sodium Lights", author = "nine_of_wands",
+                    fandoms = listOf("Doctor Who", "Torchwood"), summary = "A city that never sleeps.",
+                    discoveryTags = emptyList(), warnings = emptyList(), categories = emptyList(),
+                    rating = "General Audiences", isComplete = true, wordCount = 1200, chapters = "1/1",
+                    kudos = 3, expandAll = true,
+                    onClick = {}, onTagSearch = { field, tag -> searched = field to tag }
+                )
+            }
+        }
+        compose.onNodeWithText("Fandoms").assertExists()
+        // Not "Doctor Who, Torchwood" in one plain line.
+        compose.onAllNodesWithText("Doctor Who, Torchwood").assertCountEquals(0)
+        compose.onNodeWithText("Torchwood").performClick()
+        assertEquals(SearchSubjectField.FANDOM to "Torchwood", searched)
+    }
+
+    @Test fun aLocalStandardRowDrawsTheTwoByTwoSymbolGrid() {
+        compose.setContent {
+            KudosTheme(KudosThemeMode.Light) {
+                SensitiveWorkRow(
+                    work = SavedWork(id = "saved", title = "A saved work", author = "A writer",
+                        summary = "A short summary.", wordCount = 1200, chapters = "1/1", comments = 0,
+                        bookmarks = 0, workFandoms = listOf("Doctor Who"), rating = "Teen And Up Audiences"),
+                    onOpenWork = {}
+                )
+            }
+        }
+        compose.onNodeWithTag(WORK_STATUS_TRAY_TAG, useUnmergedTree = true).assertExists()
+    }
+}

@@ -13,6 +13,7 @@ import io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -168,7 +169,7 @@ fun SensitiveWorkRow(
     footer: (@Composable () -> Unit)? = null,
     /**
      * The tray of four symbols beside the title of the detailed card. iOS draws it on an AO3
-     * work's card (`AO3WorkRow.standardCard`) and not on a saved work's (`WorkRow`).
+     * work's card (`AO3WorkRow.standardCard`) and on a saved work's (`WorkRow.standardRow`) alike.
      */
     showsStatusTray: Boolean = false,
     /**
@@ -330,7 +331,9 @@ fun SensitiveWorkRow(
                                     io.github.cidy02.kudos.works.detail.VerifiedAuthorByline(
                                         author, authorIdentities, authorNames, includesBy = true
                                     )
-                                    if (expanded && namedFandoms.size > 1) {
+                                    // A saved work's expanded row still names every fandom (iOS `WorkRow`).
+                                    // An AO3 work's row lists the others as tappable chips below instead.
+                                    if (savedCard && expanded && namedFandoms.size > 1) {
                                         Text(
                                             text = namedFandoms.joinToString(", "),
                                             style = MaterialTheme.typography.bodyMedium,
@@ -365,7 +368,8 @@ fun SensitiveWorkRow(
                                         warnings = warnings,
                                         isComplete = isComplete,
                                         arrangement = HomeStatusArrangement.Grid,
-                                        tileSize = 24.dp
+                                        tileSize = 24.dp,
+                                        modifier = Modifier.testTag(WORK_STATUS_TRAY_TAG)
                                     )
                                 }
                             }
@@ -378,7 +382,8 @@ fun SensitiveWorkRow(
                                     warnings = warnings,
                                     isComplete = isComplete,
                                     arrangement = HomeStatusArrangement.Row,
-                                    tileSize = 24.dp
+                                    tileSize = 24.dp,
+                                    modifier = Modifier.testTag(WORK_STATUS_TRAY_TAG)
                                 )
                             }
 
@@ -393,25 +398,11 @@ fun SensitiveWorkRow(
                             }
 
                             if (expanded) {
-                                val hasCategorizedDiscoveryTags = relationships.isNotEmpty() ||
-                                    characters.isNotEmpty() || freeforms.isNotEmpty()
-                                val groups = buildList {
-                                    if (warnings.isNotEmpty() && !savedCard) {
-                                        add(Triple("Archive Warnings", warnings, SearchSubjectField.WARNING))
-                                    }
-                                    if (relationships.isNotEmpty()) {
-                                        add(Triple("Relationships", relationships, SearchSubjectField.RELATIONSHIP))
-                                    }
-                                    if (characters.isNotEmpty()) {
-                                        add(Triple("Characters", characters, SearchSubjectField.CHARACTER))
-                                    }
-                                    if (freeforms.isNotEmpty()) {
-                                        add(Triple("Additional Tags", freeforms, SearchSubjectField.FREEFORM))
-                                    }
-                                    if (!hasCategorizedDiscoveryTags && discoveryTags.isNotEmpty()) {
-                                        add(Triple("Tags", discoveryTags, SearchSubjectField.FREEFORM))
-                                    }
-                                }
+                                val groups = standardExpandedTagGroups(
+                                    savedCard = savedCard, fandoms = fandoms, warnings = warnings,
+                                    relationships = relationships, characters = characters,
+                                    freeforms = freeforms, discoveryTags = discoveryTags
+                                )
                                 groups.forEach { (label, tags, field) ->
                                     Text(
                                         text = label,
@@ -525,6 +516,46 @@ class LedgerBookmark(
     val localFootnote: (@Composable () -> Unit)? = null,
     val footnote: @Composable () -> Unit
 )
+
+/** The standard card's 2x2 symbol tray, so a test can tell whether a row drew it. */
+internal const val WORK_STATUS_TRAY_TAG = "workStatusTray"
+
+/**
+ * The labelled chip groups an expanded standard card draws, in order. An AO3 work's card leads
+ * with its other fandoms as tappable chips (iOS `AO3WorkRow.chipGroup("Fandoms", dropFirst)`);
+ * the first is the label above the title. A saved work's card names every fandom in text
+ * instead (iOS `WorkRow`), keeps warnings in its stats, and so has neither group.
+ */
+internal fun standardExpandedTagGroups(
+    savedCard: Boolean,
+    fandoms: List<String>,
+    warnings: List<String>,
+    relationships: List<String>,
+    characters: List<String>,
+    freeforms: List<String>,
+    discoveryTags: List<String>
+): List<Triple<String, List<String>, SearchSubjectField>> = buildList {
+    val otherFandoms = fandoms.filter { it.isNotBlank() }.drop(1)
+    if (!savedCard && otherFandoms.isNotEmpty()) {
+        add(Triple("Fandoms", otherFandoms, SearchSubjectField.FANDOM))
+    }
+    if (warnings.isNotEmpty() && !savedCard) {
+        add(Triple("Archive Warnings", warnings, SearchSubjectField.WARNING))
+    }
+    if (relationships.isNotEmpty()) {
+        add(Triple("Relationships", relationships, SearchSubjectField.RELATIONSHIP))
+    }
+    if (characters.isNotEmpty()) {
+        add(Triple("Characters", characters, SearchSubjectField.CHARACTER))
+    }
+    if (freeforms.isNotEmpty()) {
+        add(Triple("Additional Tags", freeforms, SearchSubjectField.FREEFORM))
+    }
+    val hasCategorizedDiscoveryTags = relationships.isNotEmpty() || characters.isNotEmpty() || freeforms.isNotEmpty()
+    if (!hasCategorizedDiscoveryTags && discoveryTags.isNotEmpty()) {
+        add(Triple("Tags", discoveryTags, SearchSubjectField.FREEFORM))
+    }
+}
 
 /**
  * iOS `AO3WorkRow.searchLedgerCard`, which Search, Browse and the AO3 lists draw: the fandom
@@ -870,6 +901,8 @@ fun SensitiveWorkRow(
         footer = footer,
         rankingSignal = rankingSignal,
         savedWork = true,
+        // iOS `WorkRow.standardRow` hands `WorkPlainRow` the same 2x2 grid as an AO3 card.
+        showsStatusTray = true,
         modifier = modifier.downloadDimmed(if (downloadFraction != null) 1f else 0f),
         leadingProgress = if (downloadFraction != null || work.hasStartedReading) {
             {
