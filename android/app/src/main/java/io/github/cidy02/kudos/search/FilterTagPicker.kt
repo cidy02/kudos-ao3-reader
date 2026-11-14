@@ -3,6 +3,11 @@ package io.github.cidy02.kudos.search
 import io.github.cidy02.kudos.app.DebugShotEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.draw.alpha
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -199,7 +204,31 @@ internal fun FilterTagRow(
     }
 }
 
-/** Same three-state rendering as iOS cyclingFacetRow, symbol cards and TagPickerView.tagRows. */
+/** The stroke round a set facet: iOS `FilterSymbolChipCard` draws 1.5 pt, and none while clear. */
+internal fun facetBorderWidth(state: FilterSelectionState): Dp =
+    if (state == FilterSelectionState.CLEAR) 0.dp else 1.5.dp
+
+/** An excluded facet's symbol is drawn at 0.4 (iOS `.opacity(state == .excluded ? 0.4 : 1.0)`). */
+internal fun facetSymbolAlpha(state: FilterSelectionState): Float =
+    if (state == FilterSelectionState.EXCLUDED) 0.4f else 1f
+
+/** iOS `TagPickerView.selectionLabel`: the word a set tag row prints, none while clear. */
+internal fun facetStatusWord(state: FilterSelectionState): String? = when (state) {
+    FilterSelectionState.CLEAR -> null
+    FilterSelectionState.INCLUDED -> "Include"
+    FilterSelectionState.EXCLUDED -> "Exclude"
+}
+
+/** Tags the status word, so a test can find it: it is read out by nothing (see [FilterFacetRow]). */
+internal const val FACET_STATUS_WORD_TAG = "facetStatusWord"
+
+/**
+ * Same three-state rendering as iOS cyclingFacetRow, symbol cards and TagPickerView.tagRows.
+ * A set facet has the include or exclude colour on its label and a 1.5 dp border in it; an
+ * excluded facet's symbol is dimmed to 0.4. A row without a symbol (a tag, a list facet) also
+ * prints the "Include" / "Exclude" word, as iOS tag rows do; a symbol card keeps iOS's
+ * indicator alone, so one-word labels in a three-across grid never break.
+ */
 @Composable
 internal fun FilterFacetRow(
     title: String,
@@ -212,19 +241,24 @@ internal fun FilterFacetRow(
 ) {
     val tokens = LocalKudosTokens.current
     val color = selectionColor(state)
-    val shape = RoundedCornerShape(10.dp)
+    val shape = RoundedCornerShape(if (symbol != null) 12.dp else 10.dp)
+    val set = state != FilterSelectionState.CLEAR
     val stateFill = when (state) {
         FilterSelectionState.CLEAR -> Color.Transparent
-        FilterSelectionState.INCLUDED, FilterSelectionState.EXCLUDED -> color.copy(alpha = 0.10f)
+        FilterSelectionState.INCLUDED -> color.copy(alpha = 0.12f)
+        FilterSelectionState.EXCLUDED -> color.copy(alpha = 0.08f)
     }
+    val word = if (symbol == null) facetStatusWord(state) else null
     Row(
         Modifier.fillMaxWidth()
             .heightIn(min = 48.dp)
             .then(if (onBackdrop) Modifier.clip(shape).background(tokens.cardFill, shape) else Modifier)
             .background(stateFill, shape)
+            .then(if (set) Modifier.border(facetBorderWidth(state), color, shape) else Modifier)
             .clickable(role = Role.Button, onClickLabel = state.nextActionLabel.lowercase(), onClick = onClick)
-            // The title is the label (kept as text); the state is iOS's "Included" / "Excluded",
-            // none when clear. The visible status word below is not spoken a second time.
+            // The title is the label, spoken once (the merged node's description is the title
+            // alone); the state is iOS's "Included" / "Excluded", none when clear. The visible
+            // "Include" / "Exclude" word is cleared from the semantics: it is not read a second time.
             .semantics(mergeDescendants = true) {
                 contentDescription = accessibilityTitle
                 if (state != FilterSelectionState.CLEAR) stateDescription =
@@ -234,21 +268,29 @@ internal fun FilterFacetRow(
         horizontalArrangement = Arrangement.spacedBy(if (dense) 6.dp else 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        if (symbol != null) WorkSymbolTileView(symbol, 22.dp)
+        if (symbol != null) WorkSymbolTileView(symbol, 22.dp, Modifier.alpha(facetSymbolAlpha(state)))
         Text(title, Modifier.weight(1f),
-            color = if (state == FilterSelectionState.EXCLUDED) tokens.secondaryInk else tokens.primaryInk,
+            color = if (set) color else tokens.primaryInk,
             fontSize = if (dense) 13.sp else 14.sp,
             textDecoration = if (state == FilterSelectionState.EXCLUDED) TextDecoration.LineThrough else null)
-        Icon(
-            when (state) {
-                FilterSelectionState.CLEAR -> Icons.Outlined.RadioButtonUnchecked
-                FilterSelectionState.INCLUDED -> Icons.Default.AddCircle
-                FilterSelectionState.EXCLUDED -> Icons.Default.RemoveCircle
-            },
-            null,
-            tint = if (state == FilterSelectionState.CLEAR) tokens.tertiaryInk else color,
-            modifier = Modifier.size(16.dp)
-        )
+        val indicator = when (state) {
+            FilterSelectionState.CLEAR -> Icons.Outlined.RadioButtonUnchecked
+            FilterSelectionState.INCLUDED -> Icons.Default.AddCircle
+            FilterSelectionState.EXCLUDED -> Icons.Default.RemoveCircle
+        }
+        val indicatorTint = if (set) color else tokens.tertiaryInk
+        if (word == null) {
+            Icon(indicator, null, tint = indicatorTint, modifier = Modifier.size(16.dp))
+        } else {
+            Row(
+                Modifier.testTag(FACET_STATUS_WORD_TAG).clearAndSetSemantics { },
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(indicator, null, tint = indicatorTint, modifier = Modifier.size(16.dp))
+                Text(word, color = color, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            }
+        }
     }
 }
 
