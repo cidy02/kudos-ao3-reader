@@ -213,6 +213,42 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
 
     /// 1ai Abandoned is derived (mid-way and untouched past a threshold).
     /// Setting this true is the undo: the threshold must not re-abandon it.
+    var readingStatusRaw: String = ""
+    var statusChangedAt: Date?
+    var stoppedAt: Date?
+    var stopReasonRaw: String = ""
+    var stopTag: String = ""
+    var stopNote: String = ""
+    var stackThreshold: Int = 3
+
+    enum ExplicitReadingStatus: String { case reading, onHold, stacking, stopped }
+    enum InsightsReadingStatus: String, CaseIterable {
+        case stopped, onHold, stacking, finished, caughtUp, reading, savedForLater
+    }
+
+    var insightsReadingStatus: InsightsReadingStatus {
+        switch ExplicitReadingStatus(rawValue: readingStatusRaw) {
+        case .stopped: return .stopped
+        case .onHold: return .onHold
+        case .stacking: return .stacking
+        case .reading, .none: break
+        }
+        if isFinished { return .finished }
+        if !isComplete && hasStartedReading && readingProgress == 1 && !hasUpdate {
+            return .caughtUp
+        }
+        if readingStatusRaw == ExplicitReadingStatus.reading.rawValue || hasStartedReading {
+            return .reading
+        }
+        return .savedForLater
+    }
+
+    func shouldResumeStacking(postedChapters: Int) -> Bool {
+        readingStatusRaw == ExplicitReadingStatus.stacking.rawValue
+            && statusChangedAt != nil && knownChapterCount > 0
+            && postedChapters - knownChapterCount >= max(1, stackThreshold)
+    }
+
     var keepInProgressOverride: Bool = false
 
     /// 1ah's "Remove from history": when the reader took this work off History.

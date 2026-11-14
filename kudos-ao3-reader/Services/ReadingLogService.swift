@@ -204,6 +204,7 @@ enum ReadingLogService {
         ).first
 
         if let existing {
+            if !existing.hasMetadataSnapshot { existing.snapshot(from: work) }
             existing.endedAt = now
             existing.durationSeconds = durationSeconds
             existing.activeSeconds = session.activeSeconds
@@ -219,7 +220,7 @@ enum ReadingLogService {
             existing.didFinish = existing.didFinish || didFinish
             existing.lastModifiedAt = now
         } else {
-            context.insert(ReadingSession(
+            let newSession = ReadingSession(
                 id: recordID,
                 workID: session.workID,
                 ao3WorkID: work.ao3WorkID ?? session.ao3WorkID,
@@ -243,7 +244,9 @@ enum ReadingLogService {
                 chapterCountAtVisit: work.postedChapterCount,
                 didFinish: didFinish,
                 lastModifiedAt: now
-            ))
+            )
+            newSession.snapshot(from: work)
+            context.insert(newSession)
         }
         FolderSyncService.markDirty()
         context.saveBestEffort(reason: "Saving reading session failed")
@@ -384,7 +387,8 @@ enum ReadingLogService {
                 durationSeconds: session.durationSeconds,
                 wordCount: session.wordCount,
                 didFinish: session.didFinish,
-                fandom: work?.workFandoms.first(where: { !$0.isEmpty }) ?? "",
+                fandom: session.fandoms.first(where: { !$0.isEmpty })
+                    ?? work?.workFandoms.first(where: { !$0.isEmpty }) ?? "",
                 wordsRead: read[session.id] ?? 0,
                 sessionID: session.id,
                 title: session.workTitle.isEmpty ? work?.title ?? "" : session.workTitle,

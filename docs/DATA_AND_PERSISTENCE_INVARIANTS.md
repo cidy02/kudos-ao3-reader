@@ -70,3 +70,9 @@ Rules that protect user data. Breaking any of these is a regression even if test
 - Folder sync ships all EPUB blobs both directions (full-package model); metadata+sidecar redesign is planned, own branch.
 - Orphaned EPUB files (file exists, no record) are not swept.
 - All list surfaces `@Query` the full table; fine to low thousands.
+
+## Insights data snapshots and status (T-534)
+
+- Each `ReadingSession` stores the work's categorized tags, rating, warnings, categories, author account names, language, completion, series identity/position and publication year at the visit. A one-time model-actor pass fills older empty rows only while the work still exists; deleted works stay unknown. Snapshot fields take precedence over live work metadata in facts.
+- `SavedWork.readingStatusRaw` is empty for derived status. The Insights partition uses Stopped → On Hold → Stacking → Finished → Caught Up → Reading → Saved for Later, assigning exactly one status per work. Only an explicit action marks a work stopped. Stacking resumes reading when posted chapters exceed `knownChapterCount` by `stackThreshold`; the status action must baseline `knownChapterCount` when entering Stacking.
+- Backup v8 adds optional keys for every field above. Missing keys in older or Android payloads must leave an existing row unchanged; do not raise the manifest version for additive fields.

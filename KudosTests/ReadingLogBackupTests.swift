@@ -35,6 +35,13 @@ struct ReadingLogBackupTests {
         let source = try context(schema)
         let work = SavedWork(title: "Logged Work", author: "Archivist")
         work.keepInProgressOverride = true
+        work.readingStatusRaw = "stopped"
+        work.statusChangedAt = Date(timeIntervalSince1970: 900)
+        work.stoppedAt = Date(timeIntervalSince1970: 950)
+        work.stopReasonRaw = "tagDealbreaker"
+        work.stopTag = "Tag"
+        work.stopNote = "Reason"
+        work.stackThreshold = 5
         work.isSaved = true
         source.insert(work)
         let session = ReadingSession(
@@ -61,6 +68,19 @@ struct ReadingLogBackupTests {
             didFinish: true,
             lastModifiedAt: Date(timeIntervalSince1970: 1_200)
         )
+        session.fandoms = ["Fandom"]
+        session.relationships = ["A/B"]
+        session.characters = ["A"]
+        session.freeformTags = ["Tag"]
+        session.rating = "Mature"
+        session.warnings = ["Warning"]
+        session.categories = ["M/M"]
+        session.authorAccounts = ["writer"]
+        session.language = "English"
+        session.isCompleteAtVisit = true
+        session.ao3SeriesID = 99
+        session.seriesPosition = 2
+        session.publishedYear = 2020
         let favorite = ReadingFavorite(
             kind: .fandom,
             targetKey: "The Untamed (TV)",
@@ -100,6 +120,13 @@ struct ReadingLogBackupTests {
 
         let restoredWork = try #require(try target.fetch(FetchDescriptor<SavedWork>()).first)
         #expect(restoredWork.keepInProgressOverride)
+        #expect(restoredWork.readingStatusRaw == "stopped")
+        #expect(restoredWork.statusChangedAt == Date(timeIntervalSince1970: 900))
+        #expect(restoredWork.stoppedAt == Date(timeIntervalSince1970: 950))
+        #expect(restoredWork.stopReasonRaw == "tagDealbreaker")
+        #expect(restoredWork.stopTag == "Tag")
+        #expect(restoredWork.stopNote == "Reason")
+        #expect(restoredWork.stackThreshold == 5)
 
         let restoredSession = try #require(try target.fetch(FetchDescriptor<ReadingSession>()).first)
         #expect(restoredSession.id == session.id)
@@ -116,6 +143,19 @@ struct ReadingLogBackupTests {
         #expect(restoredSession.activeSeconds == 140)
         #expect(restoredSession.deviceID == "install-1")
         #expect(restoredSession.rulesVersion == 1)
+        #expect(restoredSession.fandoms == ["Fandom"])
+        #expect(restoredSession.relationships == ["A/B"])
+        #expect(restoredSession.characters == ["A"])
+        #expect(restoredSession.freeformTags == ["Tag"])
+        #expect(restoredSession.rating == "Mature")
+        #expect(restoredSession.warnings == ["Warning"])
+        #expect(restoredSession.categories == ["M/M"])
+        #expect(restoredSession.authorAccounts == ["writer"])
+        #expect(restoredSession.language == "English")
+        #expect(restoredSession.isCompleteAtVisit)
+        #expect(restoredSession.ao3SeriesID == 99)
+        #expect(restoredSession.seriesPosition == 2)
+        #expect(restoredSession.publishedYear == 2020)
 
         // Reconcile must update an existing row, including every new fact.
         restoredSession.tzOffsetSeconds = nil
@@ -144,10 +184,19 @@ struct ReadingLogBackupTests {
         )
         var archived = try #require(object["readingSessions"] as? [[String: Any]])
         for key in ["tzOffsetSeconds", "startProgress", "startSpineIndex", "modeRaw",
-                    "playbackRate", "activeSeconds", "deviceID", "rulesVersion"] {
+                    "playbackRate", "activeSeconds", "deviceID", "rulesVersion",
+                    "fandoms", "relationships", "characters", "freeformTags", "rating",
+                    "warnings", "categories", "authorAccounts", "language", "isCompleteAtVisit",
+                    "ao3SeriesID", "seriesPosition", "publishedYear"] {
             archived[0].removeValue(forKey: key)
         }
         object["readingSessions"] = archived
+        var legacyWorks = try #require(object["works"] as? [[String: Any]])
+        for key in ["readingStatusRaw", "statusChangedAt", "stoppedAt", "stopReasonRaw",
+                    "stopTag", "stopNote", "stackThreshold"] {
+            legacyWorks[0].removeValue(forKey: key)
+        }
+        object["works"] = legacyWorks
         let legacy = try KudosBackupContents.decodeManifest(
             JSONSerialization.data(withJSONObject: object)
         )
@@ -157,6 +206,12 @@ struct ReadingLogBackupTests {
         )
         let preserved = try #require(try target.fetch(FetchDescriptor<ReadingSession>()).first)
         #expect(preserved.tzOffsetSeconds == -18_000)
+        #expect(preserved.fandoms == ["Fandom"])
+        #expect(preserved.authorAccounts == ["writer"])
+        #expect(preserved.freeformTags == ["Tag"])
+        #expect(restoredWork.readingStatusRaw == "stopped")
+        #expect(restoredWork.stopReasonRaw == "tagDealbreaker")
+        #expect(restoredWork.stackThreshold == 5)
         #expect(preserved.startProgress == 0.2)
         #expect(preserved.startSpineIndex == 1)
         #expect(preserved.mode == .listen)
