@@ -13,7 +13,7 @@ nonisolated struct WritingTextRecovery {
         var text: String
         var originalDigest: String
         var savedAt: Date
-        var accountDigest: String? = nil
+        var accountDigest: String?
     }
 
     struct Copy: Identifiable {

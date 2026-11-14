@@ -523,9 +523,7 @@ extension AO3AuthService {
             referer: form.actionURL,
             using: client
         )
-        let preview = try AO3Client.parsePreviewHTML(from: body)
-        WritingTabEvents.notifyDraftSaved(username: username)
-        return preview
+        return try AO3Client.parsePreviewHTML(from: body)
     }
 
     func previewChapter(_ form: AO3ChapterForm, using client: AO3Client = .shared) async throws -> AO3PreviewHTML {
@@ -536,9 +534,7 @@ extension AO3AuthService {
             referer: form.actionURL,
             using: client
         )
-        let preview = try AO3Client.parsePreviewHTML(from: body)
-        WritingTabEvents.notifyDraftSaved(username: username)
-        return preview
+        return try AO3Client.parsePreviewHTML(from: body)
     }
 
     // MARK: - Internals

@@ -64,12 +64,12 @@ struct AccountView: View {
         case startWriting
     }
 
-    static func showsStartWritingRow(showsWritingTab: Bool) -> Bool {
-        !showsWritingTab
+    static func showsStartWritingRow(isSignedIn: Bool = true, showsWritingTab: Bool) -> Bool {
+        isSignedIn && !showsWritingTab
     }
 
-    static func startWritingRoute(showsWritingTab: Bool) -> Route? {
-        showsStartWritingRow(showsWritingTab: showsWritingTab) ? .startWriting : nil
+    static func startWritingRoute(isSignedIn: Bool = true, showsWritingTab: Bool) -> Route? {
+        showsStartWritingRow(isSignedIn: isSignedIn, showsWritingTab: showsWritingTab) ? .startWriting : nil
     }
 
     enum AccountTab: String, CaseIterable, Identifiable {
@@ -673,7 +673,7 @@ struct AccountView: View {
     private var accountAO3Section: some View {
         Section {
             VStack(spacing: 0) {
-                if Self.showsStartWritingRow(showsWritingTab: router.showsWritingTab) {
+                if Self.showsStartWritingRow(isSignedIn: auth.isLoggedIn, showsWritingTab: router.showsWritingTab) {
                     panelNavRow(
                         title: "Start Writing",
                         systemImage: "square.and.pencil",

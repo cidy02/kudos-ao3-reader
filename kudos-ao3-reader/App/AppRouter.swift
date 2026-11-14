@@ -22,8 +22,6 @@ enum AppTab: String, Hashable, CaseIterable, Identifiable {
         showsWriting ? [.home, .library, .writing, .browse] : [.home, .library, .browse]
     }
 
-    static let mainTabs: [AppTab] = mainTabs(showsWriting: false)
-
     var title: String {
         switch self {
         case .home: "Home"
@@ -215,9 +213,9 @@ struct AO3TagWorksRequest: Hashable {
 /// never removed while the app remains open; logging out removes it.
 nonisolated struct WritingTabRule: Equatable, Sendable {
     var isSignedIn: Bool
-    var workCount: Int? = nil
-    var seriesCount: Int? = nil
-    var draftCount: Int? = nil
+    var workCount: Int?
+    var seriesCount: Int?
+    var draftCount: Int?
     var hasLocalDrafts: Bool = false
     var lastKnownWrites: Bool = false
     var alreadyShownThisRun: Bool = false
@@ -731,9 +729,10 @@ final class AppRouter {
             guard let username = activeUsername else { return }
             let scope = activeAuthenticationScope ?? authenticationScope
             guard scope == authenticationScope else { return }
-            let workCount = AO3AccountListCountsCache.shared.count(for: .myWorks, authenticationScope: scope)?.knownCount
-            let seriesCount = AO3AccountListCountsCache.shared.count(for: .series, authenticationScope: scope)?.knownCount
-            let draftCount = AO3AccountListCountsCache.shared.count(for: .drafts, authenticationScope: scope)?.knownCount
+            let cache = AO3AccountListCountsCache.shared
+            let workCount = cache.count(for: .myWorks, authenticationScope: scope)?.knownCount
+            let seriesCount = cache.count(for: .series, authenticationScope: scope)?.knownCount
+            let draftCount = cache.count(for: .drafts, authenticationScope: scope)?.knownCount
             _ = evaluateWritingTab(
                 isSignedIn: true,
                 username: username,
