@@ -115,11 +115,12 @@ struct WorkCoverCard: View {
             recipe: GeneratedCoverRecipe(id: work.ao3WorkID, title: work.title, author: work.author,
                                          fandoms: work.workFandoms, tags: work.workTags,
                                          words: work.wordCount, complete: work.isComplete,
-                                         seriesID: URL(string: work.seriesURL)?.lastPathComponent.flatMap(Int.init),
+                                         seriesID: URL(string: work.seriesURL).flatMap { Int($0.lastPathComponent) },
                                          part: work.seriesPosition),
             title: work.title,
             author: work.author,
             fandom: primaryFandom,
+            epubURL: work.hasEPUB ? work.fileURL : nil,
             showsInitial: showsInitial,
             isMatureObscured: isMatureObscured,
             showsMatureRevealCapsule: showsMatureRevealCapsule
@@ -299,7 +300,7 @@ struct AO3WorkCoverCard: View {
             recipe: GeneratedCoverRecipe(id: work.id, title: work.title, author: work.authorText,
                                          fandoms: work.fandoms, tags: work.tags,
                                          words: work.words, complete: work.isComplete ?? true,
-                                         seriesID: work.seriesURL.flatMap { URL(string: $0)?.lastPathComponent.flatMap(Int.init) },
+                                         seriesID: work.seriesURL.flatMap { URL(string: $0).flatMap { Int($0.lastPathComponent) } },
                                          part: work.seriesPosition ?? 0),
             title: work.title,
             author: work.authorText,
@@ -449,6 +450,7 @@ private struct WorkSummaryCardSurface<Content: View>: View {
     let title: String
     let author: String
     let fandom: String?
+    var epubURL: URL?
     var showsInitial: Bool = true
     var isMatureObscured: Bool = false
     var showsMatureRevealCapsule: Bool = true
@@ -465,6 +467,7 @@ private struct WorkSummaryCardSurface<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             GeneratedCoverView(recipe: recipe, width: cardSize.width,
+                               epubURL: showsInitial ? epubURL : nil,
                                showsWords: showsInitial, showsArt: showsInitial)
             .frame(width: cardSize.width, height: cardSize.width * 1.42)
             .blur(radius: isMatureObscured ? 6 : 0)

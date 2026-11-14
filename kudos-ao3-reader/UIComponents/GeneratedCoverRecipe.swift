@@ -43,7 +43,10 @@ nonisolated struct GeneratedCoverRecipe: Equatable, Sendable {
         "Case Fic": "orderly", "Mystery": "orderly", "Politics": "orderly", "Character Study": "orderly",
         "Fantasy": "celestial", "Magic": "celestial", "Science Fiction": "celestial"
     ]
-    // shortcut: coarse AO3 posting-order anchors until the owner supplies measured ID breakpoints.
+    // Cover-Spec supplies the 2010/2026 shade endpoints; CoverArt.dc.html supplies
+    // explicit mock years and a hash fallback, but no real AO3 ID/year pairs.
+    // TODO: replace these provisional ID guesses with measured (AO3 work ID, first-posted year)
+    // breakpoints spanning 2010–2026; updated dates and synthetic shelf IDs are not evidence.
     private static let idYears = [(0, 2010), (1_000_000, 2013), (5_000_000, 2016),
                                   (10_000_000, 2019), (20_000_000, 2021),
                                   (40_000_000, 2023), (65_000_000, 2026)]
@@ -111,7 +114,8 @@ nonisolated struct GeneratedCoverRecipe: Equatable, Sendable {
         hasRing = true
         shapeSeed = Self.hash((seriesKey == nil ? "shape:" : "series-shape:") + key)
         var random = Random(seed: Self.hash((seriesKey == nil ? "fine:" : "series-fine:") + key))
-        ground = names.count > 1 ? .crossover : Ground(rawValue: random.integer(0, 3)) ?? .solid
+        let treatment = Ground(rawValue: random.integer(0, 3)) ?? .solid
+        ground = names.count > 1 ? .crossover : treatment
         rotation = Self.round2((["sprig", "waves", "chevrons", "truchet", "halftone"].contains(motif)
                                 ? random.between(-12, 12) : random.between(0, 360)))
         scale = Self.round2(random.between(0.85, 1.2))

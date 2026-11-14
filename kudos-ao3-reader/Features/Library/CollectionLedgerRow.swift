@@ -109,7 +109,8 @@ private struct MiniatureWorkCover: View {
             id: work.ao3WorkID, title: work.title, author: work.author,
             fandoms: work.workFandoms, tags: work.workTags, words: work.wordCount,
             complete: work.isComplete, width: 61
-        ), width: 61, height: 54, showsWords: false)
+        ), width: 61, epubURL: work.hasEPUB ? work.fileURL : nil,
+           height: 54, showsWords: false)
     }
 }
 

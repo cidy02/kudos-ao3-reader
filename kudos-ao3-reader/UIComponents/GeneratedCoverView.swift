@@ -1,25 +1,44 @@
 import SwiftUI
+import ImageIO
 
 /// A cover in its own 112-unit coordinate system. Wordless instances are decorative.
 struct GeneratedCoverView: View {
     let recipe: GeneratedCoverRecipe
     let width: CGFloat
+    var epubURL: URL?
     var height: CGFloat?
     var showsWords = true
     var showsArt = true
+    @State private var loadedURL: URL?
+    @State private var embeddedImage: Image?
+
+    init(recipe: GeneratedCoverRecipe, width: CGFloat, epubURL: URL? = nil, height: CGFloat? = nil,
+         showsWords: Bool = true, showsArt: Bool = true) {
+        self.recipe = recipe
+        self.width = width
+        self.epubURL = epubURL
+        self.height = height
+        self.showsWords = showsWords
+        self.showsArt = showsArt
+    }
 
     private var coverHeight: CGFloat { height ?? width * 1.42 }
 
     var body: some View {
         ZStack {
-            Canvas(opaque: true) { context, size in
-                let unit = size.width / 112
-                context.scaleBy(x: unit, y: unit)
-                let h = size.height / unit
-                drawGround(in: &context, height: h)
-                if showsArt { drawMotif(in: &context, height: h, sparse: width < 64) }
+            if showsArt, let epubURL, loadedURL == epubURL, let embeddedImage {
+                embeddedImage.resizable().scaledToFill()
+                    .frame(width: width, height: coverHeight).clipped()
+            } else {
+                Canvas(opaque: true) { context, size in
+                    let unit = size.width / 112
+                    context.scaleBy(x: unit, y: unit)
+                    let h = size.height / unit
+                    drawGround(in: &context, height: h)
+                    if showsArt { drawMotif(in: &context, height: h, sparse: width < 64) }
+                }
+                if showsWords { words }
             }
-            if showsWords { words }
         }
         .frame(width: width, height: coverHeight)
         .clipShape(RoundedRectangle(cornerRadius: width * 0.125, style: .continuous))
@@ -27,6 +46,19 @@ struct GeneratedCoverView: View {
         .accessibilityLabel([recipe.title, recipe.author, recipe.fandom]
             .filter { !$0.isEmpty }.joined(separator: ", "))
         .accessibilityHidden(!showsWords)
+        .task(id: epubURL) {
+            loadedURL = nil
+            embeddedImage = nil
+            guard showsArt, let epubURL else { return }
+            let data = await Task.detached(priority: .utility) {
+                EmbeddedWorkCoverImage.data(at: epubURL)
+            }.value
+            guard !Task.isCancelled, let data,
+                  let source = CGImageSourceCreateWithData(data as CFData, nil),
+                  let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { return }
+            embeddedImage = Image(decorative: image, scale: 1)
+            loadedURL = epubURL
+        }
     }
 
     private func drawGround(in context: inout GraphicsContext, height: CGFloat) {

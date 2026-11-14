@@ -430,6 +430,7 @@ struct WorkResumeCard: View {
         .padding(variant == .detail ? 14 : 16)
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .foregroundStyle(.white)
+        .opacity(showsInitial ? 1 : 0)
         .background(cardBackground)
         .contentShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
         .environment(\.colorScheme, .dark)
@@ -439,6 +440,7 @@ struct WorkResumeCard: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(accessibilityLabel)
+        .accessibilityHidden(!showsInitial)
     }
 
     /// The queue's fraction while a download or restore is in flight

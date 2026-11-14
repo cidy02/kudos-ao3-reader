@@ -8,10 +8,10 @@ struct GeneratedCoverRecipeTests {
         // Values came from executing CoverArt.dc.html's renderVals with row C's work inputs and years.
         let cases: [(Int, String, String, String, Int, Bool, Int, [String], Int?, Int,
                      String, Int, Double, GeneratedCoverRecipe.Ground, Int, Double, Double, Double, Double)] = [
-            (1001, "The Long Frost", "fogandlamplight", "Sherlock Holmes", 92_000, true, 2013, [], 77, 1,
-             "sigil", 55, 0.35, .gradient, 1, 284.36, 1.03, 1.01, 0.47),
-            (1002, "Thaw", "fogandlamplight", "Sherlock Holmes", 41_000, true, 2014, [], 77, 2,
-             "sigil", 73, 0.36, .gradient, 1, 284.36, 1.03, 1.01, 0.47),
+            (1001, "The Long Frost", "fogandlamplight", "Sherlock Holmes", 92_000, true, 2019, ["Slow Burn", "Angst"], 77, 1,
+             "sigil", 55, 0.40, .gradient, 1, 284.36, 1.03, 1.01, 0.47),
+            (1002, "Thaw", "fogandlamplight", "Sherlock Holmes", 41_000, true, 2020, ["Fluff"], 77, 2,
+             "sigil", 73, 0.41, .gradient, 1, 284.36, 1.03, 1.01, 0.47),
             (1004, "The Lamplight Cases", "gaslitgrey", "Sherlock Holmes", 30_000, true, 2016, ["Case Fic"], 91, 1,
              "petals", 55, 0.37, .split, 0, 310.17, 0.96, 1.36, 0.45),
             (1007, "A Study in Small Hours", "baskervilled", "Sherlock Holmes", 3_100, true, 2023, ["Fluff", "Domestic Fluff"], nil, 0,
@@ -95,5 +95,19 @@ struct GeneratedCoverRecipeTests {
     @Test func collectionColourSnapsToPalette() {
         #expect(GeneratedCoverRecipe.collectionHue("#808080", fallback: 20) == 260)
         #expect(GeneratedCoverRecipe(collection: "Next", hue: 150).hasRing == false)
+    }
+
+    @Test func embeddedArtPrefersFrontMatterThenLargest() {
+        #expect(EmbeddedWorkCoverImage.accepts(width: 320, height: 800))
+        #expect(EmbeddedWorkCoverImage.accepts(width: 740, height: 400))
+        #expect(!EmbeddedWorkCoverImage.accepts(width: 319, height: 800))
+        #expect(!EmbeddedWorkCoverImage.accepts(width: 800, height: 320))
+        #expect(!EmbeddedWorkCoverImage.accepts(width: 0, height: 500))
+        let images = [
+            EmbeddedWorkCoverImage.Candidate(data: Data([1]), frontMatter: false, pixelArea: 3_000_000),
+            EmbeddedWorkCoverImage.Candidate(data: Data([2]), frontMatter: true, pixelArea: 500_000),
+            EmbeddedWorkCoverImage.Candidate(data: Data([3]), frontMatter: true, pixelArea: 1_000_000)
+        ]
+        #expect(EmbeddedWorkCoverImage.preferred(images) == Data([3]))
     }
 }

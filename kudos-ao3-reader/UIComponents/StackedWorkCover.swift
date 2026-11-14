@@ -219,7 +219,8 @@ struct StackedWorkCover<Face: View>: View {
         let recipe = GeneratedCoverRecipe(id: work.ao3WorkID, title: work.title, author: work.author,
                                           fandoms: work.workFandoms, tags: work.workTags,
                                           words: work.wordCount, complete: work.isComplete, width: Double(width))
-        return GeneratedCoverView(recipe: recipe, width: width, showsWords: false)
+        return GeneratedCoverView(recipe: recipe, width: width,
+                                  epubURL: work.hasEPUB ? work.fileURL : nil, showsWords: false)
             .brightness(-dimming)
             .accessibilityHidden(true)
     }
