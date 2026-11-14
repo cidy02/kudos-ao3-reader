@@ -77,10 +77,11 @@ struct LoadedWorksRankingTests {
             #expect(ranked.last?.signal == "Not enough figures to rank")
             #expect(ranked.compactMap(\.score).allSatisfy { $0.isFinite })
         }
-        // Kudos with no hits at all is "more kudos than hits": set aside, or, with
-        // that off, still unranked rather than infinite.
+        // Four kudos and no hits used to be set aside as "more kudos than hits".
+        // The margin (hits ≥ 20 and kudos ≥ hits + 20) leaves it in the list, and
+        // hits of 0 still cannot be divided, so it stays unranked.
         let odd = [work(1, kudos: 4, hits: 0), work(2, kudos: 10, hits: 100)]
-        #expect(LoadedWorksRanker.rank(odd, by: settings(.kudosPerHitAdjusted), now: now).last?.isSetAside == true)
+        #expect(LoadedWorksRanker.rank(odd, by: settings(.kudosPerHitAdjusted), now: now).last?.isSetAside == false)
         let kept = LoadedWorksRanker.rank(odd, by: settings(.kudosPerHitAdjusted, setAside: false), now: now)
         #expect(ids(kept) == [2, 1])
         #expect(kept.last?.score == nil)
@@ -108,8 +109,11 @@ struct LoadedWorksRankingTests {
     @Test func wordsAndMissingFiguresNeverDivideByZero() {
         let figures = LoadedWorksRanker.Figures(work(1, kudos: 100, hits: 1_000, words: 2_000), now: now)
         #expect(isClose(LoadedWorksRanker.rawFigure(.kudosPerThousandWords, figures), 50))
+        // Zero words is under the 1,000-word floor, so the figure is the kudos count.
         let noWords = LoadedWorksRanker.Figures(work(2, kudos: 100, hits: 1_000, words: 0), now: now)
-        #expect(LoadedWorksRanker.rawFigure(.kudosPerThousandWords, noWords) == nil)
+        #expect(isClose(LoadedWorksRanker.rawFigure(.kudosPerThousandWords, noWords), 100))
+        let unknownWords = LoadedWorksRanker.Figures(work(5, kudos: 100, hits: 1_000, words: nil), now: now)
+        #expect(LoadedWorksRanker.rawFigure(.kudosPerThousandWords, unknownWords) == nil)
         // A sparse row (no word count) has unknown figures, not zeros.
         let sparse = LoadedWorksRanker.Figures(work(3, kudos: nil, hits: nil, words: nil), now: now)
         #expect(sparse.kudos == nil && sparse.hits == nil)
@@ -284,7 +288,7 @@ struct LoadedWorksRankingTests {
 
     @Test func cautiousShrinksLowHitWorksTowardTheMedian() {
         let works = [
-            work(1, kudos: 50, hits: 60, bookmarks: 30),          // 0.6 from 60 hits
+            work(1, kudos: 50, hits: 60, bookmarks: 30),          // 0.6 from 50 kudos
             work(2, kudos: 1_000, hits: 20_000, bookmarks: 400),  // 0.4 from 20,000 hits
             work(3, kudos: 500, hits: 10_000, bookmarks: 100),    // 0.2
             work(4, kudos: 500, hits: 10_000, bookmarks: 50),     // 0.1
@@ -293,9 +297,10 @@ struct LoadedWorksRankingTests {
         #expect(ids(plain) == [1, 2, 3, 4])
         let cautious = LoadedWorksRanker.rank(works, by: settings(.savesPerKudos, cautious: true), now: now)
         #expect(ids(cautious) == [2, 1, 3, 4])
-        // Median 0.3; work 1 keeps 60 of 560 parts of its own figure.
+        // Median 0.3. Saves per kudos weighs the 50 kudos, not the 60 hits:
+        // 50 of 550 parts of its own figure.
         let first = cautious.first { $0.work.id == 1 }
-        #expect(isClose(first?.score, (60 * 0.6 + 500 * 0.3) / 560))
+        #expect(isClose(first?.score, (50 * 0.6 + 500 * 0.3) / 550))
         // The signal states the work's own figure, not the shrunk one.
         #expect(first?.signal?.hasSuffix("saves per 100 kudos") == true)
         #expect(first?.signal?.hasPrefix("60") == true)

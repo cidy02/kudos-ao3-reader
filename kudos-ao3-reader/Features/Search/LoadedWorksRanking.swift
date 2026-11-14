@@ -332,9 +332,9 @@ enum LoadedWorksRanker {
         return hits >= unusualHitsFloor && kudos >= hits + unusualKudosMargin
     }
 
-    /// The work's own ratio for `rank`, never dividing by zero: a zero or unknown
-    /// denominator gives nil, and the work is left unranked. Momentum is not a
-    /// ratio — see `momentum(kudos:previous:)`.
+    /// The work's own ratio for `rank`. A zero or unknown denominator gives nil,
+    /// except kudos per 1,000 words, which floors the denominator at 1,000.
+    /// Momentum is not computed here — see `momentum(kudos:previous:)`.
     static func rawFigure(_ rank: LoadedWorksRank, _ figures: Figures) -> Double? {
         func ratio(_ numerator: Int?, _ denominator: Int?, per scale: Double = 1) -> Double? {
             guard let numerator, let denominator, denominator > 0 else { return nil }
