@@ -22,7 +22,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
-    @AppStorage(WorkSymbolPlacement.storageKey) private var symbolPlacement: WorkSymbolPlacement = .beside
+    @AppStorage(WorkSymbolPlacement.storageKey) private var symbolPlacement: WorkSymbolPlacement = .defaultValue
     @Environment(SubscriptionScanService.self) private var subscriptionScan
     #if os(iOS)
     @Environment(MailSubscriptionDriver.self) private var mailDriver
@@ -993,7 +993,7 @@ private struct HomeNewChapterRow: View {
     @Environment(PrivacyGate.self) private var gate
     @AppStorage("hideMatureContent") private var hideMature = true
     @AppStorage("matureContentMode") private var mode: MaturePrivacyMode = .obscure
-    @AppStorage(WorkSymbolPlacement.storageKey) private var symbolPlacement: WorkSymbolPlacement = .beside
+    @AppStorage(WorkSymbolPlacement.storageKey) private var symbolPlacement: WorkSymbolPlacement = .defaultValue
 
     @State private var enrichedRemote: AO3WorkSummary?
     /// Measured chapter lengths for a downloaded work (word-count bar heights).
@@ -1110,27 +1110,28 @@ private struct HomeNewChapterRow: View {
         return ""
     }
 
-    private var chapterBarItems: [ChapterBarItem] {
+    private var chapterBarLayout: ChapterBarLayout {
         if let work {
-            return ChapterBarModel.items(
+            return ChapterBarModel.layout(
                 chapters: work.chapters,
                 progress: work.readingProgress,
                 isFinished: work.isFinished,
                 weights: chapterLengths?.positions,
                 heights: chapterLengths?.words,
-                newChapterCount: newCount
+                newChapterCount: newCount,
+                scale: .row
             )
         }
         if let remote = displayedRemote {
-            return ChapterBarModel.items(
+            return ChapterBarModel.layout(
                 chapters: remote.chapters,
                 progress: nil,
-                isFinished: remote.isComplete == true,
                 weights: nil,
-                newChapterCount: newCount
+                newChapterCount: newCount,
+                scale: .row
             )
         }
-        return []
+        return ChapterBarLayout()
     }
 
     var body: some View {
@@ -1256,7 +1257,7 @@ private struct HomeNewChapterRow: View {
                 }
 
                 ChapterBars(
-                    items: chapterBarItems,
+                    layout: chapterBarLayout,
                     scale: .row,
                     height: 16
                 )

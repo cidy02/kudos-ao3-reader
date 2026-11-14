@@ -295,4 +295,151 @@ struct QualitySignalsTests {
 
         #expect(ranked.map(\.work.id) == (partition.ranked + partition.unranked).map(\.work.id))
     }
+
+    // MARK: - T-520 review fixes
+
+    @Test func kudos312IsSteadyAndKudos48IsEarly() {
+        #expect(QualitySignalTones.confidenceWord(forKudos: 312) == "Steady")
+        #expect(QualitySignalTones.confidenceWord(forKudos: 48) == "Early")
+        // The cut-offs themselves: 49/50 and 199/200.
+        #expect(QualitySignalTones.confidenceWord(forKudos: 49) == "Early")
+        #expect(QualitySignalTones.confidenceWord(forKudos: 50) == "Settling")
+        #expect(QualitySignalTones.confidenceWord(forKudos: 199) == "Settling")
+        #expect(QualitySignalTones.confidenceWord(forKudos: 200) == "Steady")
+
+        let steady = QualitySignalTones.chooseTone(
+            rank: .kudosPerHitAdjusted,
+            shown: 1.8,
+            figures: LoadedWorksRanker.Figures(work(1, kudos: 312, hits: 2_900), now: now),
+            setAside: false
+        )
+        #expect(steady?.note?.hasPrefix("Steady") == true)
+
+        let early = QualitySignalTones.chooseTone(
+            rank: .kudosPerHitAdjusted,
+            shown: 1.8,
+            figures: LoadedWorksRanker.Figures(work(2, kudos: 48, hits: 300, bookmarks: 0), now: now),
+            setAside: false
+        )
+        #expect(early?.note?.hasPrefix("Early") == true)
+    }
+
+    /// (a) `kudos ≥ hits + 20` with `hits ≥ 20`. One under either cut is not unusual,
+    /// and a work set aside for bookmarks does not get the hits note inside the margin.
+    @Test func unusualStatsNeedAMarginOf20() {
+        let atMargin = LoadedWorksRanker.Figures(work(1, kudos: 40, hits: 20, bookmarks: 20), now: now)
+        let oneKudoUnder = LoadedWorksRanker.Figures(work(2, kudos: 39, hits: 20, bookmarks: 20), now: now)
+        let hitsUnder = LoadedWorksRanker.Figures(work(3, kudos: 100, hits: 19, bookmarks: 50), now: now)
+        #expect(LoadedWorksRanker.isUnusual(atMargin))
+        #expect(!LoadedWorksRanker.isUnusual(oneKudoUnder))
+        #expect(!LoadedWorksRanker.isUnusual(hitsUnder))
+
+        let note = QualitySignalTones.chooseTone(
+            rank: .kudosPerHitAdjusted, shown: nil, figures: atMargin, setAside: true
+        )
+        #expect(note?.note == "More kudos than hits")
+
+        let insideTheMargin = LoadedWorksRanker.Figures(
+            work(4, kudos: 1_000, hits: 990, bookmarks: 1), now: now
+        )
+        #expect(LoadedWorksRanker.isUnusual(insideTheMargin))
+        let bookmarkNote = QualitySignalTones.chooseTone(
+            rank: .kudosPerHitAdjusted, shown: nil, figures: insideTheMargin, setAside: true
+        )
+        #expect(bookmarkNote?.note == "Thousands of kudos and almost no bookmarks")
+    }
+
+    /// (b) Words under 1,000 use 1,000 as the denominator. 999 used to score just over 10.
+    @Test func kudosPerThousandWordsFloorsTheDenominatorAt1000() {
+        let justUnder = LoadedWorksRanker.Figures(work(1, kudos: 10, hits: 200, words: 999), now: now)
+        let atFloor = LoadedWorksRanker.Figures(work(2, kudos: 10, hits: 200, words: 1_000), now: now)
+        let longer = LoadedWorksRanker.Figures(work(3, kudos: 10, hits: 200, words: 2_000), now: now)
+        #expect(isClose(LoadedWorksRanker.rawFigure(.kudosPerThousandWords, justUnder), 10))
+        #expect(isClose(LoadedWorksRanker.rawFigure(.kudosPerThousandWords, atFloor), 10))
+        #expect(isClose(LoadedWorksRanker.rawFigure(.kudosPerThousandWords, longer), 5))
+        #expect(LoadedWorksRank.kudosPerThousandWords.subtitle.contains("favours short works"))
+    }
+
+    /// (c) The same gain of 20 on an earlier count below 20 ties the count at 20,
+    /// and both outrank a larger absolute gain. The line says how many were seen before.
+    @Test func momentumRanksGrowthAgainstEarlierKudosFlooredAt20() {
+        let works = [
+            work(1, kudos: 30, hits: 400),
+            work(2, kudos: 40, hits: 400),
+            work(3, kudos: 140, hits: 400),
+        ]
+        let previous = [1: 10, 2: 20, 3: 100]
+        let ranked = LoadedWorksRanker.rank(
+            works, by: settings(.momentum), previousKudos: previous, now: now
+        )
+        #expect(ranked.map(\.work.id) == [1, 2, 3])
+        #expect(isClose(ranked[0].score, 1))
+        #expect(isClose(ranked[1].score, 1))
+        #expect(isClose(ranked[2].score, 0.4))
+        #expect(ranked[0].signal == "+20 kudos since you last saw it")
+
+        // Work 8 was seen before, but its current kudos are unknown, so momentum
+        // cannot rank it. Counting every previousKudos key would say 2 of 40.
+        var page = (1 ... 40).map { work($0, kudos: 10, hits: 200) }
+        page[7] = work(8, kudos: nil, hits: nil, words: nil)
+        let partition = LoadedWorksRanker.partition(
+            page, by: settings(.momentum), previousKudos: [7: 10, 8: 4], now: now
+        )
+        #expect(partition.seenBeforeLine == "1 of 40 seen before")
+    }
+
+    /// Int.max hits, and Int.max kudos against a negative earlier count, used to
+    /// trap in the addition and the subtraction. The gain line must not turn the
+    /// Double back into an Int either.
+    @Test func extremeCountsDoNotTrap() {
+        #expect(!LoadedWorksRanker.kudosExceedHits(kudos: Int.max, hits: Int.max))
+        #expect(LoadedWorksRanker.kudosExceedHits(kudos: Int.max, hits: 20))
+        #expect(LoadedWorksRanker.momentumGain(kudos: Int.max, previous: -1) == Double(Int.max))
+
+        let huge = Double(Int.max)
+        let line = LoadedWorksRanker.signal(.momentum, shown: huge, setAside: false, hasPrevious: true)
+        #expect(line?.hasPrefix("+") == true)
+        let tone = QualitySignalTones.chooseTone(
+            rank: .momentum,
+            shown: huge,
+            figures: LoadedWorksRanker.Figures(work(1, kudos: 1, hits: 100), now: now),
+            setAside: false,
+            hasPrevious: true
+        )
+        #expect(tone?.label.hasPrefix("+") == true)
+        #expect(tone?.label != "No new kudos")
+    }
+
+    /// (d) Saves and comments per kudos shrink by kudos. Hits would keep
+    /// (60 × 0.6 + 500 × 0.3) / 560.
+    @Test func cautiousPerKudosSignalsWeighByKudos() {
+        let works = [
+            work(1, kudos: 50, hits: 60, comments: 30, bookmarks: 30),
+            work(2, kudos: 1_000, hits: 20_000, comments: 400, bookmarks: 400),
+            work(3, kudos: 500, hits: 10_000, comments: 100, bookmarks: 100),
+            work(4, kudos: 500, hits: 10_000, comments: 50, bookmarks: 50),
+        ]
+        let expected = (50 * 0.6 + 500 * 0.3) / 550
+        for rank in [LoadedWorksRank.savesPerKudos, .commentsPerKudos] {
+            let ranked = LoadedWorksRanker.rank(works, by: settings(rank, cautious: true), now: now)
+            let score = ranked.first { $0.work.id == 1 }?.score
+            #expect(isClose(score, expected), "\(rank)")
+        }
+
+        // Kudos per hit still shrinks by the 60 hits. Weighing it by the 50 kudos
+        // would move this score, so the evidence switch cannot be flattened.
+        let own = 50.0 / 60.0
+        let typical = 1_000.0 / 20_000.0
+        let shrunkByHits = (60 * own + 500 * typical) / (60 + 500)
+        let adjusted = LoadedWorksRanker.rank(
+            works, by: settings(.kudosPerHitAdjusted, cautious: true), now: now
+        )
+        let adjustedScore = adjusted.first { $0.work.id == 1 }?.score
+        #expect(isClose(adjustedScore, shrunkByHits / typical))
+    }
+
+    private func isClose(_ value: Double?, _ expected: Double) -> Bool {
+        guard let value else { return false }
+        return abs(value - expected) < 1e-9
+    }
 }
