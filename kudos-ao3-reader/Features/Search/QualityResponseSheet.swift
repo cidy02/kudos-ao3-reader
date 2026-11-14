@@ -41,10 +41,7 @@ struct QualityResponseSheet: View {
     }
 
     private var confidenceWord: String {
-        let kudos = figures.kudos ?? 0
-        if kudos >= 200 { return "Steady" }
-        if kudos >= 50 { return "Settling" }
-        return "Early"
+        QualitySignalTones.confidenceWord(forKudos: figures.kudos ?? 0)
     }
 
     private var confidenceSubtitle: String {
