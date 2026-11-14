@@ -70,7 +70,11 @@ import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.ReaderTheme
 import io.github.cidy02.kudos.ui.subject.SubjectChip
 import io.github.cidy02.kudos.ui.subject.SubjectChipStyle
+import io.github.cidy02.kudos.ui.subject.LedgerAuthorLine
 import io.github.cidy02.kudos.ui.subject.SubjectKicker
+import io.github.cidy02.kudos.ui.subject.WorkFandomKicker
+import io.github.cidy02.kudos.ui.subject.fandomOpener
+import io.github.cidy02.kudos.search.LocalTagSearch
 import io.github.cidy02.kudos.ui.subject.SubjectMetrics
 import io.github.cidy02.kudos.ui.subject.SubjectPalette
 import io.github.cidy02.kudos.ui.subject.downloadDimmed
@@ -192,8 +196,8 @@ fun WorkLedgerCard(work: SavedWork, modifier: Modifier = Modifier, content: @Com
 
 /**
  * Up Next, and In Line while the page is a list. Port of `WorkRow(.ledger)` on
- * `WorkLedgerCardBackground`: ring, fandom kicker, title, author · words ·
- * chapters, and Home's status tray.
+ * `WorkLedgerCardBackground`: ring, fandom kicker (a link; none when the work has no fandom),
+ * title, the author under it, words · chapters on a line of their own, and Home's status tray.
  */
 @Composable
 fun QueueLedgerCard(
@@ -209,14 +213,14 @@ fun QueueLedgerCard(
     val tokens = LocalKudosTokens.current
     val symbolPlacement = LocalWorkSymbolPlacement.current
     val fandoms = work.workFandoms.filter { it.isNotBlank() }
-    val kicker = HomeFacts.primaryFandom(work.workFandoms)
+    val openFandom = fandomOpener(interactive = !obscured && !selecting && !drag, search = LocalTagSearch.current)
     val fraction = work.readingProgressFraction() ?: if (work.isFinished) 1.0 else 0.0
     val state = when {
         fraction >= 1.0 -> "Finished"
         fraction > 0.0 -> "Reading"
         else -> null
     }
-    val metadata = HomeFacts.localWorkMetadata(work.author, work.wordCount, work.chapters)
+    val figures = HomeFacts.localWorkFigures(work.wordCount, work.chapters)
     val tile = 24.dp
     WorkLedgerCard(work, modifier.downloadDimmed(if (downloadFraction != null) 1f else 0f)) {
         Box {
@@ -236,16 +240,14 @@ fun QueueLedgerCard(
                     diameter = tile * 2.12f
                 )
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                    SubjectKicker(
-                        text = kicker ?: " ",
+                    // No fandom, no label: nothing is drawn, and no line is held open for it.
+                    WorkFandomKicker(
+                        fandoms = fandoms,
                         palette = SubjectPalette.fromHue(
                             ReadingQueueFacts.coverHue(fandoms.firstOrNull() ?: work.title),
                             tokens.theme
                         ),
-                        trailingCount = (fandoms.size - 1).coerceAtLeast(0),
-                        size = 9.sp,
-                        ruleSpacing = 5.dp,
-                        modifier = Modifier.alpha(if (kicker == null) 0f else 1f)
+                        onOpenFandom = openFandom
                     )
                     Text(
                         text = work.title,
@@ -255,6 +257,7 @@ fun QueueLedgerCard(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
+                    LedgerAuthorLine(work.author, wraps = false)
                     if (symbolPlacement == WorkSymbolPlacement.UnderTitle) {
                         HomeStatusTray(
                             rating = work.rating,
@@ -266,9 +269,9 @@ fun QueueLedgerCard(
                             announces = true
                         )
                     }
-                    if (metadata.isNotEmpty()) {
+                    if (figures.isNotEmpty()) {
                         Text(
-                            text = metadata.joinToString("  ·  "),
+                            text = figures.joinToString("  ·  "),
                             color = tokens.secondaryInk,
                             fontSize = 11.5.sp,
                             maxLines = 1,

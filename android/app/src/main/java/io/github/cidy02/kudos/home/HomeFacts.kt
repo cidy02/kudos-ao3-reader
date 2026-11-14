@@ -175,6 +175,14 @@ object HomeFacts {
         return segments
     }
 
+    /**
+     * Words · chapters: [localWorkMetadata] without the author. A ledger row or queue card
+     * prints the author on the line under the title and the figures on a line of their own
+     * (iOS T-509: the grey line is the author only), so the author is never in both.
+     */
+    fun localWorkFigures(wordCount: Int, chapters: String): List<String> =
+        localWorkMetadata(author = "", wordCount = wordCount, chapters = chapters)
+
     fun compactWordCount(count: Int): String = compactFigure(count) + " words"
 
     /** 999 → "999", 1_250 → "1.25K", 1_200_000 → "1.2M". */

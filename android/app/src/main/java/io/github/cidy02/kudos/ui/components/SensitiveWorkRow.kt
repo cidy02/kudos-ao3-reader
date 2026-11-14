@@ -6,6 +6,8 @@ import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.ui.subject.HomeStatusArrangement
 import io.github.cidy02.kudos.ui.subject.HomeStatusTray
 import io.github.cidy02.kudos.ui.subject.SubjectKicker
+import io.github.cidy02.kudos.ui.subject.WorkFandomKicker
+import io.github.cidy02.kudos.ui.subject.fandomOpener
 import io.github.cidy02.kudos.ui.subject.SubjectStateBadge
 import io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -311,20 +313,13 @@ fun SensitiveWorkRow(
                                     verticalArrangement = Arrangement.spacedBy(2.dp)
                                 ) {
                                     val namedFandoms = fandoms.filter { it.isNotBlank() }
-                                    namedFandoms.firstOrNull()?.let { fandom ->
-                                        SubjectKicker(
-                                            text = HomeFacts.primaryFandom(namedFandoms) ?: fandom,
-                                            palette = palette,
-                                            trailingCount = if (expanded) 0 else namedFandoms.size - 1,
-                                            size = 9.sp,
-                                            ruleSpacing = 5.dp,
-                                            modifier = Modifier
-                                                .semantics { contentDescription = "Fandom: $fandom" }
-                                                .clickable(onClickLabel = "search this fandom") {
-                                                    tagSearch(SearchSubjectField.FANDOM, fandom)
-                                                }
-                                        )
-                                    }
+                                    // The fandom is a link (opens that fandom), 48 dp to hit; none, no label.
+                                    WorkFandomKicker(
+                                        fandoms = namedFandoms,
+                                        palette = palette,
+                                        onOpenFandom = fandomOpener(interactive = true, search = tagSearch),
+                                        expanded = expanded
+                                    )
                                     Text(
                                         text = title,
                                         style = MaterialTheme.typography.titleMedium,
@@ -572,20 +567,16 @@ private fun LedgerBody(
             // say "Private" on, and said nothing.
             if (named.isNotEmpty() || badges.isNotEmpty()) {
                 Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.Top) {
-                    named.firstOrNull()?.let { fandom ->
-                        SubjectKicker(
-                            text = HomeFacts.primaryFandom(named) ?: fandom,
-                            palette = palette,
-                            trailingCount = if (expanded) 0 else named.size - 1,
-                            maxLines = if (accessibility) Int.MAX_VALUE else 1,
-                            modifier = Modifier
-                                .weight(1f, fill = false)
-                                .semantics { contentDescription = "Fandom: $fandom" }
-                                .clickable(onClickLabel = "search this fandom") {
-                                    tagSearch(SearchSubjectField.FANDOM, fandom)
-                                }
-                        )
-                    }
+                    WorkFandomKicker(
+                        fandoms = named,
+                        palette = palette,
+                        onOpenFandom = fandomOpener(interactive = true, search = tagSearch),
+                        expanded = expanded,
+                        size = 10.sp,
+                        ruleSpacing = 6.dp,
+                        maxLines = if (accessibility) Int.MAX_VALUE else 1,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
                     // iOS draws Private and Rec as `SubjectStateBadge`s in the secondary colour (A70).
                     badges.forEach { badge -> SubjectStateBadge(text = badge, color = tokens.secondaryInk) }
                 }

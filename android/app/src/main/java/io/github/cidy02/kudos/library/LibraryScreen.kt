@@ -1066,7 +1066,7 @@ internal fun LibrarySubjectLedgerRow(
                     title = work.title,
                     author = work.author.ifBlank { "Anonymous" },
                     fandoms = work.workFandoms,
-                    metadata = HomeFacts.localWorkMetadata(work.author, work.wordCount, work.chapters).joinToString(" · "),
+                    metadata = HomeFacts.localWorkFigures(work.wordCount, work.chapters).joinToString(" · "),
                     progress = progress,
                     downloadFraction = io.github.cidy02.kudos.ui.subject.rememberWorkDownloadFraction(work),
                     progressState = if (progress <= 0.0) null else if (progress >= 1.0) "Finished" else "Reading",

@@ -873,7 +873,7 @@ private fun CollectionWorkListItem(
                         title = work.title,
                         author = work.author.ifBlank { "Anonymous" },
                         fandoms = work.workFandoms,
-                        metadata = HomeFacts.localWorkMetadata(work.author, work.wordCount, work.chapters)
+                        metadata = HomeFacts.localWorkFigures(work.wordCount, work.chapters)
                             .joinToString(" · "),
                         progress = work.readingProgressFraction() ?: 0.0,
                         progressState = when {

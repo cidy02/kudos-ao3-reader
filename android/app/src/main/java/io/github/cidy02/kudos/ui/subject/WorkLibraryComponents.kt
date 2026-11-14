@@ -54,6 +54,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.home.HomeFacts
 import io.github.cidy02.kudos.core.model.WorkSymbolPlacement
+import io.github.cidy02.kudos.search.LocalTagSearch
 import io.github.cidy02.kudos.ui.components.LocalWorkSymbolPlacement
 import kotlinx.coroutines.launch
 
@@ -138,6 +139,10 @@ fun WorkLedgerRow(
     title: String,
     author: String,
     fandoms: List<String>,
+    /**
+     * The figures line (words · chapters), without the author: the author is [author], on the
+     * line under the title (iOS T-509). Blank draws no figures line.
+     */
     metadata: String,
     progress: Double,
     progressState: String?,
@@ -160,6 +165,9 @@ fun WorkLedgerRow(
     val fontScale = LocalDensity.current.fontScale
     val accessibilityFontScale = isAccessibilityFontScale()
     val symbolPlacement = LocalWorkSymbolPlacement.current
+    // The fandom label opens that fandom, except where the card owns the tap: a hidden row
+    // reveals, a selecting row selects.
+    val openFandom = fandomOpener(interactive = !obscured && !selecting, search = LocalTagSearch.current)
     // iOS CoverArt.workHue, as every other work surface uses.
     val palette = remember(fandoms, title, tokens.theme) {
         SubjectPalette.fromHue(HomeFacts.workHue(fandoms, title), tokens.theme)
@@ -174,7 +182,7 @@ fun WorkLedgerRow(
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .then(
                 if (obscured) Modifier.hiddenMatureWorkSemantics(true, selecting, selected)
-                else Modifier.semantics { contentDescription = "$title, by $author" }
+                else Modifier.semantics { contentDescription = "$title, by ${author.ifBlank { "Anonymous" }}" }
             )
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -197,13 +205,7 @@ fun WorkLedgerRow(
                             .padding(horizontal = 14.dp, vertical = 13.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        SubjectKicker(
-                            text = HomeFacts.primaryFandom(fandoms) ?: "Library",
-                            palette = palette,
-                            trailingCount = (fandoms.count { it.isNotBlank() } - 1).coerceAtLeast(0),
-                            size = 9.sp,
-                            ruleSpacing = 4.dp
-                        )
+                        WorkFandomKicker(fandoms, palette, openFandom, ruleSpacing = 4.dp)
                         WorkReadingOrDownloadRing(downloadFraction, progress, state = if (downloadFraction != null) "Downloading" else progressState, diameter = 44.dp * fontScale, showsZeroPercent = true)
                         Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(
@@ -215,11 +217,12 @@ fun WorkLedgerRow(
                             )
                             if (favorite) Text("★", color = Color(0xFFFFC107), fontSize = 13.sp)
                         }
+                        LedgerAuthorLine(author, wraps = true)
                         if (symbolPlacement == WorkSymbolPlacement.UnderTitle) {
                             HomeStatusTray(rating, categories, warnings, isComplete, HomeStatusArrangement.Row,
                                 tileSize = 24.dp, announces = true)
                         }
-                        Text(metadata, color = tokens.secondaryInk, fontSize = 11.5.sp)
+                        if (metadata.isNotBlank()) Text(metadata, color = tokens.secondaryInk, fontSize = 11.5.sp)
                         if (symbolPlacement == WorkSymbolPlacement.Beside) {
                             HomeStatusTray(rating, categories, warnings, isComplete, HomeStatusArrangement.Grid,
                                 tileSize = 24.dp, announces = true)
@@ -234,13 +237,7 @@ fun WorkLedgerRow(
                 ) {
                     WorkReadingOrDownloadRing(downloadFraction, progress, state = if (downloadFraction != null) "Downloading" else progressState, diameter = 44.dp * fontScale, showsZeroPercent = true)
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                        SubjectKicker(
-                            text = HomeFacts.primaryFandom(fandoms) ?: "Library",
-                            palette = palette,
-                            trailingCount = (fandoms.count { it.isNotBlank() } - 1).coerceAtLeast(0),
-                            size = 9.sp,
-                            ruleSpacing = 4.dp
-                        )
+                        WorkFandomKicker(fandoms, palette, openFandom, ruleSpacing = 4.dp)
                         Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 title,
@@ -253,11 +250,12 @@ fun WorkLedgerRow(
                             )
                             if (favorite) Text("★", color = Color(0xFFFFC107), fontSize = 13.sp)
                         }
+                        LedgerAuthorLine(author, wraps = false)
                         if (symbolPlacement == WorkSymbolPlacement.UnderTitle) {
                             HomeStatusTray(rating, categories, warnings, isComplete, HomeStatusArrangement.Row,
                                 tileSize = 24.dp, announces = true)
                         }
-                        Text(
+                        if (metadata.isNotBlank()) Text(
                             metadata,
                             color = tokens.secondaryInk,
                             fontSize = 11.5.sp,
@@ -274,6 +272,23 @@ fun WorkLedgerRow(
         }
         if (obscured && !selecting) RevealCapsule(Modifier.align(Alignment.Center))
     }
+}
+
+/**
+ * The grey line under a ledger row's title: the author and nothing else (iOS `ledgerByline`).
+ * No author, no line. [wraps] lets it run to several lines at accessibility font scales.
+ */
+@Composable
+internal fun LedgerAuthorLine(author: String, wraps: Boolean, modifier: Modifier = Modifier) {
+    if (author.isBlank()) return
+    Text(
+        text = author.trim(),
+        color = LocalKudosTokens.current.secondaryInk,
+        fontSize = 12.5.sp,
+        maxLines = if (wraps) Int.MAX_VALUE else 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = modifier
+    )
 }
 
 data class SwipeAction(
