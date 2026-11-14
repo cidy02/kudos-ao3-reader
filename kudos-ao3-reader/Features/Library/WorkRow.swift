@@ -174,14 +174,15 @@ struct WorkRow: View {
         )
     }
 
-    private var chapterBarItems: [ChapterBarItem] {
-        ChapterBarModel.items(
+    private var chapterBarLayout: ChapterBarLayout {
+        ChapterBarModel.layout(
             chapters: work.chapters,
             progress: work.readingProgress,
             isFinished: work.isFinished,
             weights: chapterLengths?.positions,
             heights: chapterLengths?.words,
-            newChapterCount: badgeCount
+            newChapterCount: badgeCount,
+            scale: .row
         )
     }
 
@@ -257,7 +258,7 @@ struct WorkRow: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 WorkLedgerStatsLine(figures: ledgerFigures)
-                WorkChapterBarLine(items: chapterBarItems, label: chapterProgressLabel)
+                WorkChapterBarLine(layout: chapterBarLayout, label: chapterProgressLabel)
             }
         }
     }

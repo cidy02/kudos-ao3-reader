@@ -1110,27 +1110,28 @@ private struct HomeNewChapterRow: View {
         return ""
     }
 
-    private var chapterBarItems: [ChapterBarItem] {
+    private var chapterBarLayout: ChapterBarLayout {
         if let work {
-            return ChapterBarModel.items(
+            return ChapterBarModel.layout(
                 chapters: work.chapters,
                 progress: work.readingProgress,
                 isFinished: work.isFinished,
                 weights: chapterLengths?.positions,
                 heights: chapterLengths?.words,
-                newChapterCount: newCount
+                newChapterCount: newCount,
+                scale: .row
             )
         }
         if let remote = displayedRemote {
-            return ChapterBarModel.items(
+            return ChapterBarModel.layout(
                 chapters: remote.chapters,
                 progress: nil,
-                isFinished: remote.isComplete == true,
                 weights: nil,
-                newChapterCount: newCount
+                newChapterCount: newCount,
+                scale: .row
             )
         }
-        return []
+        return ChapterBarLayout()
     }
 
     var body: some View {
@@ -1256,7 +1257,7 @@ private struct HomeNewChapterRow: View {
                 }
 
                 ChapterBars(
-                    items: chapterBarItems,
+                    layout: chapterBarLayout,
                     scale: .row,
                     height: 16
                 )

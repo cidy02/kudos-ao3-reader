@@ -33,13 +33,13 @@ struct ChapterBarsTests {
     }
 
     @Test func barsMarkReadCurrentUnreadAndUnposted() {
-        let oneRead = ChapterBarGeometry.items(planned: 1, posted: 1, progress: 1, weights: nil)
+        let oneRead = ChapterBarGeometry.items(planned: nil, posted: 1, progress: 1, weights: nil)
         #expect(oneRead == [ChapterBarItem(role: .read, weight: 1)])
 
-        let oneCurrent = ChapterBarGeometry.items(planned: 1, posted: 1, progress: 0.4, weights: nil)
+        let oneCurrent = ChapterBarGeometry.items(planned: nil, posted: 1, progress: 0.4, weights: nil)
         #expect(oneCurrent == [ChapterBarItem(role: .current(fill: 0.4), weight: 1)])
 
-        let oneUnread = ChapterBarGeometry.items(planned: 1, posted: 1, progress: nil, weights: nil)
+        let oneUnread = ChapterBarGeometry.items(planned: nil, posted: 1, progress: nil, weights: nil)
         #expect(oneUnread == [ChapterBarItem(role: .postedUnread, weight: 1)])
 
         let seven = ChapterBarGeometry.items(planned: 7, posted: 5, progress: 0.5, weights: nil)
@@ -169,5 +169,222 @@ struct ChapterBarsTests {
         #expect(lengths.words.count == 2)
         #expect(lengths.words[1] - lengths.words[0] == 799)
         #expect(ChapterLengthCache.lengths(workID: id, fileURL: file, directory: directory) == lengths)
+    }
+
+    @Test func defaultTwelveOfTwentyCardIsUnchanged() {
+        let layout = ChapterBarGeometry.layout(
+            planned: 20,
+            posted: 12,
+            read: 6,
+            chapterProgress: 0.22,
+            scale: .card,
+            availableWidth: 326
+        )
+        #expect(layout.bars.count == 20)
+        #expect(layout.bars.prefix(6).allSatisfy { $0.role == .read })
+        #expect(layout.bars[6].role == .current(fill: 0.22))
+        #expect(layout.bars[7 ..< 12].allSatisfy { $0.role == .postedUnread })
+        #expect(layout.bars.dropFirst(12).allSatisfy { $0.role == .notPosted })
+        #expect(layout.trackFill == nil)
+        #expect(!layout.showsOpenTotalDots)
+        #expect(layout.chaptersPerBar == 1)
+        #expect(layout.groupNote == nil)
+        #expect(layout.metrics.width == (326 - 19 * 4) / 20)
+
+        let model = ResumeCardModel(
+            title: "The Cartographer's Daughter",
+            authors: ["inkwell_moth"],
+            authorIdentities: [],
+            fandoms: ["Original Work"],
+            rating: "T",
+            categories: ["F/M"],
+            warnings: [],
+            completion: .inProgress,
+            words: 84_210,
+            kudos: 3_104,
+            chapters: "12/20",
+            progress: 0.58,
+            chapterProgress: 0.22,
+            chapterName: "Ch 7, The Salt Road",
+            published: "Mar 3",
+            updated: "Oct 21",
+            newChapterCount: 0
+        )
+        let cardLayout = model.chapterBarLayout(lengths: nil)
+        #expect(cardLayout.bars.count == 20)
+        #expect(cardLayout.bars.prefix(6).allSatisfy { $0.role == .read })
+        #expect(cardLayout.bars.dropFirst(12).allSatisfy { $0.role == .notPosted })
+        #expect(!cardLayout.showsOpenTotalDots)
+        #expect(cardLayout.trackFill == nil)
+        #expect(model.postedLabel == "12 of 20 posted")
+        #expect(model.postedShortLabel == "12 of 20")
+        #expect(model.detailPrimaryTitle(fallback: "Read") == "Resume Chapter 7")
+    }
+
+    @Test func unknownTotalDrawsPostedBarsAndThreeFadingDotsWithoutDashedBars() {
+        let layout = ChapterBarModel.layout(
+            chapters: "12/?",
+            read: 6,
+            chapterProgress: 0.22,
+            progress: nil,
+            weights: nil,
+            scale: .card
+        )
+        #expect(layout.bars.count == 12)
+        #expect(!layout.bars.contains { $0.role == .notPosted })
+        #expect(layout.bars.prefix(6).allSatisfy { $0.role == .read })
+        #expect(layout.bars[6].role == .current(fill: 0.22))
+        #expect(layout.bars.dropFirst(7).allSatisfy { $0.role == .postedUnread })
+        #expect(layout.showsOpenTotalDots)
+        #expect(layout.trackFill == nil)
+        #expect(layout.accessibilityLabel == "Chapters: 6 read, 12 posted, total not set by the author")
+    }
+
+    @Test func oneChapterWorkDrawsATrackWithNoBarsAndButtonReadsResume() {
+        let card = ChapterBarModel.layout(
+            chapters: "1/1",
+            progress: 0.38,
+            weights: nil,
+            scale: .card
+        )
+        #expect(card.bars.isEmpty)
+        #expect(card.trackFill == 0.38)
+        #expect(!card.showsOpenTotalDots)
+        #expect(card.accessibilityLabel == "One chapter, 38 percent read")
+
+        let row = ChapterBarModel.layout(
+            chapters: "1/1",
+            progress: nil,
+            weights: nil,
+            newChapterCount: 1,
+            scale: .row
+        )
+        #expect(row.bars.isEmpty)
+        #expect(row.trackFill == 1)
+        #expect(row.accessibilityLabel == "New work, one chapter")
+
+        let model = ResumeCardModel(
+            title: "One-shot",
+            authors: ["wren"],
+            authorIdentities: [],
+            fandoms: ["Original Work"],
+            rating: "G",
+            categories: ["Gen"],
+            warnings: [],
+            completion: .complete,
+            words: 4_200,
+            kudos: 120,
+            chapters: "1/1",
+            progress: 0.38,
+            chapterProgress: 0.38,
+            chapterName: "Chapter 1",
+            published: "Mar 3",
+            updated: "Mar 3",
+            newChapterCount: 0
+        )
+        #expect(model.detailPrimaryTitle(fallback: "Read") == "Resume")
+        #expect(model.postedLabel == "One chapter")
+    }
+
+    @Test func moreChaptersThanFitGroupIntoEqualBarsWithANote() {
+        let longCard = ChapterBarGeometry.layout(
+            planned: 200,
+            posted: 143,
+            read: 61,
+            chapterProgress: 0.40,
+            scale: .card,
+            fit: 37
+        )
+        #expect(longCard.chaptersPerBar == 6)
+        #expect(longCard.bars.count == 34)
+        #expect(longCard.groupNote == "Each bar is 6 chapters")
+        #expect(!longCard.showsOpenTotalDots)
+        #expect(longCard.bars.prefix(10).allSatisfy { $0.role == .read })
+        #expect(longCard.bars[10].role == .current(fill: 1.4 / 6.0))
+        // Group 23 covers chapters 138..<144 (5 posted, 1 unposted) and counts as posted.
+        #expect(longCard.bars[23].role == .postedUnread)
+        #expect(longCard.bars.dropFirst(24).allSatisfy { $0.role == .notPosted })
+
+        let longOpen = ChapterBarGeometry.layout(
+            planned: nil,
+            posted: 312,
+            read: 100,
+            scale: .card
+        )
+        #expect(longOpen.chaptersPerBar == 7)
+        #expect(longOpen.bars.count == 45)
+        #expect(longOpen.showsOpenTotalDots)
+        #expect(!longOpen.bars.contains { $0.role == .notPosted })
+        #expect(longOpen.groupNote == "Each bar is 7 chapters")
+
+        let longRow = ChapterBarGeometry.layout(
+            planned: nil,
+            posted: 214,
+            newChapterCount: 2,
+            scale: .row,
+            availableWidth: 204
+        )
+        #expect(longRow.chaptersPerBar == 6)
+        #expect(longRow.bars.count == 36)
+        #expect(longRow.showsOpenTotalDots)
+        #expect(longRow.bars.last?.role == .current(fill: 0.5))
+    }
+
+    @Test func fewChaptersCapBarWidthAtTwentySevenPoints() {
+        let layout = ChapterBarGeometry.layout(
+            planned: 4,
+            posted: 3,
+            read: 1,
+            chapterProgress: 0.60,
+            scale: .card,
+            availableWidth: 326
+        )
+        #expect(layout.bars.count == 4)
+        #expect(layout.bars.map(\.role) == [.read, .current(fill: 0.60), .postedUnread, .notPosted])
+        #expect(layout.metrics.width == 27)
+    }
+
+    @Test func unknownLengthsGiveEveryBarOneHeight() {
+        let layout = ChapterBarGeometry.layout(
+            planned: 20,
+            posted: 12,
+            read: 0,
+            weights: nil,
+            heights: nil,
+            scale: .card
+        )
+        #expect(layout.bars.count == 20)
+        #expect(layout.bars.allSatisfy { $0.weight == 1 })
+    }
+
+    @Test func readCountIsCappedAtPostedChapters() {
+        let layout = ChapterBarGeometry.layout(
+            planned: 20,
+            posted: 12,
+            read: 16,
+            chapterProgress: 0.5,
+            scale: .card
+        )
+        #expect(layout.bars.count == 20)
+        #expect(layout.bars.prefix(12).allSatisfy { $0.role == .read })
+        #expect(layout.bars.dropFirst(12).allSatisfy { $0.role == .notPosted })
+        #expect(layout.accessibilityLabel == "Chapters: 12 read, 12 posted, 8 not posted yet")
+    }
+
+    @Test func voiceOverSummaryDescribesTheWholeImage() {
+        let usual = ChapterBarGeometry.layout(planned: 20, posted: 12, read: 6, scale: .card)
+        #expect(usual.accessibilityLabel == "Chapters: 6 read, 12 posted, 8 not posted yet")
+
+        let openTotal = ChapterBarGeometry.layout(planned: nil, posted: 12, read: 6, scale: .card)
+        #expect(openTotal.accessibilityLabel == "Chapters: 6 read, 12 posted, total not set by the author")
+
+        let grouped = ChapterBarGeometry.layout(planned: 200, posted: 143, read: 61, scale: .card, fit: 37)
+        #expect(grouped.accessibilityLabel == "Chapters: 61 read, 143 posted, 57 not posted yet. Each bar is 6 chapters")
+
+        let rowFresh = ChapterBarGeometry.layout(planned: 30, posted: 15, newChapterCount: 3, scale: .row)
+        #expect(rowFresh.accessibilityLabel == "3 new chapters, 15 posted, 15 not posted yet")
+
+        let rowOpenFresh = ChapterBarGeometry.layout(planned: nil, posted: 5, newChapterCount: 1, scale: .row)
+        #expect(rowOpenFresh.accessibilityLabel == "1 new chapter, 5 posted, total not set by the author")
     }
 }

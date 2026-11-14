@@ -155,14 +155,26 @@ struct ResumeCardModel {
         return "\(chapterPercent)% of the chapter · \(work)"
     }
 
-    /// "Read" (the caller's title) until there is a position to resume.
+    /// "Read" (the caller's title) until there is a position to resume; "Resume" for a 1/1 work.
     func detailPrimaryTitle(fallback: String) -> String {
         guard progress != nil else { return fallback }
+        if isOneChapter { return "Resume" }
         return "Resume Chapter \(chapterNumber)"
     }
     var postedChapters: Int { SavedWork.postedChapterCount(from: chapters) }
+    var totalChapters: Int? {
+        guard let total = SavedWork.totalChapterCount(from: chapters),
+              total >= postedChapters,
+              total > 0 else {
+            return nil
+        }
+        return total
+    }
     var plannedChapters: Int {
-        max(SavedWork.totalChapterCount(from: chapters) ?? postedChapters, postedChapters)
+        totalChapters ?? postedChapters
+    }
+    var isOneChapter: Bool {
+        postedChapters == 1 && totalChapters == 1
     }
 
     var chapterNumber: Int {
@@ -172,7 +184,7 @@ struct ResumeCardModel {
                options: .regularExpression
            ),
            let number = Int(chapterName[match].filter(\.isNumber)) {
-            return number
+            return postedChapters > 0 ? min(number, postedChapters) : number
         }
         return ChapterBarGeometry.readingChapter(
             posted: postedChapters,
@@ -208,16 +220,21 @@ struct ResumeCardModel {
     }
 
     var postedLabel: String {
-        guard plannedChapters > 0 else { return chapters }
+        guard postedChapters > 0 else { return chapters }
+        guard let total = totalChapters else { return "\(postedChapters) posted" }
         let unread = (progress ?? 0) <= 0
-        if plannedChapters == postedChapters && unread {
+        if total == postedChapters && unread {
             return "\(postedChapters) chapter\(postedChapters == 1 ? "" : "s")"
         }
-        return "\(postedChapters) of \(plannedChapters) posted"
+        if isOneChapter {
+            return "One chapter"
+        }
+        return "\(postedChapters) of \(total) posted"
     }
 
     var postedShortLabel: String {
-        plannedChapters > 0 ? "\(postedChapters) of \(plannedChapters)" : chapters
+        guard postedChapters > 0 else { return chapters }
+        return "\(postedChapters) of \(totalChapters.map(String.init) ?? "?")"
     }
 
     var figureLine: String? {
@@ -228,15 +245,20 @@ struct ResumeCardModel {
         return text.isEmpty ? nil : text
     }
 
-    /// Bar heights from word counts; read / current / unread from positions.
-    func chapterItems(lengths: ChapterLengths?) -> [ChapterBarItem] {
-        ChapterBarModel.items(
+    func chapterBarLayout(lengths: ChapterLengths?) -> ChapterBarLayout {
+        ChapterBarModel.layout(
             chapters: chapters,
             progress: progress,
             isFinished: progress == 1,
             weights: lengths?.positions,
-            heights: lengths?.words
+            heights: lengths?.words,
+            scale: .card
         )
+    }
+
+    /// Bar heights from word counts; read / current / unread from positions.
+    func chapterItems(lengths: ChapterLengths?) -> [ChapterBarItem] {
+        chapterBarLayout(lengths: lengths).bars
     }
 }
 
@@ -698,12 +720,11 @@ extension WorkResumeCard {
     private var chapterSection: some View {
         VStack(alignment: .leading, spacing: 6) {
             ChapterBars(
-                items: model.chapterItems(lengths: chapterLengths),
+                layout: model.chapterBarLayout(lengths: chapterLengths),
                 scale: .card,
                 onGradient: true,
                 height: variant.barsHeight
             )
-            .frame(maxWidth: barMaxWidth, alignment: .leading)
             if variant == .detail {
                 chapterLegend
             } else {
@@ -730,14 +751,6 @@ extension WorkResumeCard {
         }
     }
 
-    /// A short work must not stretch one bar across the card. The export caps
-    /// fewer than ten chapters at 30 pt each; the card gap stays ChapterBars'.
-    private var barMaxWidth: CGFloat {
-        let planned = model.plannedChapters
-        guard planned > 0, planned < 10 else { return .infinity }
-        return CGFloat(planned) * 30
-    }
-
     private var chapterLegend: some View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: 14) { chapterLegendItems }
@@ -751,11 +764,22 @@ extension WorkResumeCard {
     private var chapterLegendItems: some View {
         legendItem("Read", fill: .white)
         legendItem("Posted", fill: Color.white.opacity(0.3))
-        HStack(spacing: 5) {
-            RoundedRectangle(cornerRadius: 2)
-                .stroke(style: StrokeStyle(lineWidth: 1, dash: [2, 1.5]))
-                .frame(width: 10, height: 10)
-            Text("Not posted yet")
+        if model.totalChapters == nil, model.postedChapters > 0 {
+            HStack(spacing: 5) {
+                HStack(spacing: 2) {
+                    Circle().fill(Color.white).frame(width: 4, height: 4)
+                    Circle().fill(Color.white.opacity(0.7)).frame(width: 4, height: 4)
+                    Circle().fill(Color.white.opacity(0.4)).frame(width: 4, height: 4)
+                }
+                Text("More to come, total not set")
+            }
+        } else if !model.isOneChapter {
+            HStack(spacing: 5) {
+                RoundedRectangle(cornerRadius: 2)
+                    .stroke(style: StrokeStyle(lineWidth: 1, dash: [2, 1.5]))
+                    .frame(width: 10, height: 10)
+                Text("Not posted yet")
+            }
         }
     }
 
