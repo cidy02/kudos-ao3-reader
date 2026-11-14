@@ -93,4 +93,5 @@ internal fun WorkFandomKicker(
 internal fun fandomOpener(
     interactive: Boolean,
     search: (SearchSubjectField, String) -> Unit
-): ((String) -> Unit)? = if (interactive) { fandom -> search(SearchSubjectField.FANDOM, fandom) } else null
+): ((String) -> Unit)? =
+    if (interactive) ({ fandom: String -> search(SearchSubjectField.FANDOM, fandom) }) else null

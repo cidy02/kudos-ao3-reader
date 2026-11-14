@@ -156,8 +156,8 @@ class WorkFandomKickerTest {
         KudosTheme(KudosThemeMode.Light) {
             Column {
                 Text("above", Modifier.testTag("above"))
-                WorkFandomKicker(listOf("Doctor Who"), palette, if (linked) ({ }) else null,
-                    Modifier.testTag("kicker"))
+                // No semantics modifier of the caller's before the link: bounds are read at the first.
+                WorkFandomKicker(listOf("Doctor Who"), palette, if (linked) ({ }) else null)
                 Text("below", Modifier.testTag("below"))
             }
         }
