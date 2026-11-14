@@ -52,12 +52,13 @@ import SwiftData
     var authorAccounts: [String] = []
     var language: String = ""
     var isCompleteAtVisit: Bool = false
+    var metadataSnapshotRecorded: Bool = false
     var ao3SeriesID: Int? = nil
     var seriesPosition: Int = 0
     var publishedYear: Int? = nil
 
     var hasMetadataSnapshot: Bool {
-        !fandoms.isEmpty || !relationships.isEmpty || !characters.isEmpty
+        metadataSnapshotRecorded || !fandoms.isEmpty || !relationships.isEmpty || !characters.isEmpty
             || !freeformTags.isEmpty || !rating.isEmpty || !warnings.isEmpty
             || !categories.isEmpty || !authorAccounts.isEmpty || !language.isEmpty
             || isCompleteAtVisit || ao3SeriesID != nil || seriesPosition > 0
@@ -65,6 +66,7 @@ import SwiftData
     }
 
     func snapshot(from work: SavedWork) {
+        metadataSnapshotRecorded = true
         fandoms = work.workFandoms
         relationships = work.workRelationships
         characters = work.workCharacters

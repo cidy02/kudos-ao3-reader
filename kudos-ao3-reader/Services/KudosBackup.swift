@@ -979,13 +979,15 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         isSaved = work.isSaved
         isFinished = work.isFinished
         keepInProgressOverride = work.keepInProgressOverride
-        readingStatusRaw = work.readingStatusRaw
-        statusChangedAt = .some(work.statusChangedAt)
-        stoppedAt = .some(work.stoppedAt)
-        stopReasonRaw = work.stopReasonRaw
-        stopTag = work.stopTag
-        stopNote = work.stopNote
-        stackThreshold = work.stackThreshold
+        readingStatusRaw = work.readingStatusRaw.isEmpty ? nil : work.readingStatusRaw
+        statusChangedAt = work.statusChangedAt.map(Optional.some)
+        stoppedAt = work.stoppedAt.map(Optional.some)
+        stopReasonRaw = work.stopReasonRaw.isEmpty ? nil : work.stopReasonRaw
+        stopTag = work.stopTag.isEmpty ? nil : work.stopTag
+        stopNote = work.stopNote.isEmpty ? nil : work.stopNote
+        // An explicit status can deliberately use the default threshold.
+        stackThreshold = work.stackThreshold == 3 && work.readingStatusRaw.isEmpty
+            ? nil : work.stackThreshold
         // `|| remoteEPUBPending`: a device that was promised a book and has
         // not received it yet must not publish its absence as fact. The remote
         // file is still there — the prune keeps assets by manifest work id —
@@ -1307,6 +1309,7 @@ nonisolated struct KudosBackupReadingSession: Codable, Equatable {
     let authorAccounts: [String]?
     let language: String?
     let isCompleteAtVisit: Bool?
+    let metadataSnapshotRecorded: Bool?
     let ao3SeriesID: Int?
     let seriesPosition: Int?
     let publishedYear: Int?
@@ -1333,6 +1336,7 @@ nonisolated struct KudosBackupReadingSession: Codable, Equatable {
         case authorAccounts
         case language
         case isCompleteAtVisit
+        case metadataSnapshotRecorded
         case ao3SeriesID
         case seriesPosition
         case publishedYear
@@ -1357,18 +1361,19 @@ nonisolated struct KudosBackupReadingSession: Codable, Equatable {
         activeSeconds = session.activeSeconds
         deviceID = session.deviceID
         rulesVersion = session.rulesVersion
-        fandoms = session.fandoms
-        relationships = session.relationships
-        characters = session.characters
-        freeformTags = session.freeformTags
-        rating = session.rating
-        warnings = session.warnings
-        categories = session.categories
-        authorAccounts = session.authorAccounts
-        language = session.language
-        isCompleteAtVisit = session.isCompleteAtVisit
+        fandoms = session.fandoms.isEmpty ? nil : session.fandoms
+        relationships = session.relationships.isEmpty ? nil : session.relationships
+        characters = session.characters.isEmpty ? nil : session.characters
+        freeformTags = session.freeformTags.isEmpty ? nil : session.freeformTags
+        rating = session.rating.isEmpty ? nil : session.rating
+        warnings = session.warnings.isEmpty ? nil : session.warnings
+        categories = session.categories.isEmpty ? nil : session.categories
+        authorAccounts = session.authorAccounts.isEmpty ? nil : session.authorAccounts
+        language = session.language.isEmpty ? nil : session.language
+        metadataSnapshotRecorded = session.metadataSnapshotRecorded ? true : nil
+        isCompleteAtVisit = session.hasMetadataSnapshot ? session.isCompleteAtVisit : nil
         ao3SeriesID = session.ao3SeriesID
-        seriesPosition = session.seriesPosition
+        seriesPosition = session.seriesPosition == 0 ? nil : session.seriesPosition
         publishedYear = session.publishedYear
         lastSpineIndex = session.lastSpineIndex
         chapterTitle = session.chapterTitle
@@ -1407,6 +1412,7 @@ nonisolated struct KudosBackupReadingSession: Codable, Equatable {
         authorAccounts = try container.decodeIfPresent([String].self, forKey: .authorAccounts)
         language = try container.decodeIfPresent(String.self, forKey: .language)
         isCompleteAtVisit = try container.decodeIfPresent(Bool.self, forKey: .isCompleteAtVisit)
+        metadataSnapshotRecorded = try container.decodeIfPresent(Bool.self, forKey: .metadataSnapshotRecorded)
         ao3SeriesID = try container.decodeIfPresent(Int.self, forKey: .ao3SeriesID)
         seriesPosition = try container.decodeIfPresent(Int.self, forKey: .seriesPosition)
         publishedYear = try container.decodeIfPresent(Int.self, forKey: .publishedYear)
@@ -3732,6 +3738,8 @@ enum KudosBackupService {
                 session.authorAccounts = archived.authorAccounts ?? session.authorAccounts
                 session.language = archived.language ?? session.language
                 session.isCompleteAtVisit = archived.isCompleteAtVisit ?? session.isCompleteAtVisit
+                session.metadataSnapshotRecorded = archived.metadataSnapshotRecorded
+                    ?? session.metadataSnapshotRecorded
                 session.ao3SeriesID = archived.ao3SeriesID ?? session.ao3SeriesID
                 session.seriesPosition = archived.seriesPosition ?? session.seriesPosition
                 session.publishedYear = archived.publishedYear ?? session.publishedYear
@@ -3814,6 +3822,8 @@ enum KudosBackupService {
         session.authorAccounts = archived.authorAccounts ?? session.authorAccounts
         session.language = archived.language ?? session.language
         session.isCompleteAtVisit = archived.isCompleteAtVisit ?? session.isCompleteAtVisit
+        session.metadataSnapshotRecorded = archived.metadataSnapshotRecorded
+            ?? session.metadataSnapshotRecorded
         session.ao3SeriesID = archived.ao3SeriesID ?? session.ao3SeriesID
         session.seriesPosition = archived.seriesPosition ?? session.seriesPosition
         session.publishedYear = archived.publishedYear ?? session.publishedYear

@@ -30,6 +30,60 @@ struct ReadingLogBackupTests {
         return defaults
     }
 
+    @Test func defaultInsightsFieldsAreAbsentFromManifest() throws {
+        let schema = schema()
+        let source = try context(schema)
+        let work = SavedWork(title: "Default", author: "Writer")
+        let session = ReadingSession(
+            workID: work.id, startedAt: Date(timeIntervalSince1970: 1_000),
+            endedAt: Date(timeIntervalSince1970: 1_020), durationSeconds: 20
+        )
+        source.insert(work)
+        source.insert(session)
+        try source.save()
+        let contents = try KudosBackupService.makeContents(
+            works: [work], bookmarks: [], fonts: [], readingQueues: [],
+            readingSessions: [session], defaults: try testDefaults()
+        )
+        let root = try #require(
+            JSONSerialization.jsonObject(with: contents.manifestData()) as? [String: Any]
+        )
+        let archivedWork = try #require((root["works"] as? [[String: Any]])?.first)
+        let archivedSession = try #require((root["readingSessions"] as? [[String: Any]])?.first)
+        for key in ["readingStatusRaw", "statusChangedAt", "stoppedAt", "stopReasonRaw",
+                    "stopTag", "stopNote", "stackThreshold"] {
+            #expect(archivedWork[key] == nil)
+        }
+        for key in ["fandoms", "relationships", "characters", "freeformTags",
+                    "rating", "warnings", "categories", "authorAccounts", "language",
+                    "isCompleteAtVisit", "metadataSnapshotRecorded", "ao3SeriesID",
+                    "seriesPosition", "publishedYear"] {
+            #expect(archivedSession[key] == nil)
+        }
+        // A real WIP visit is false, while an old row with no snapshot is unknown.
+        session.snapshot(from: work)
+        let recorded = try KudosBackupService.makeContents(
+            works: [work], bookmarks: [], fonts: [], readingQueues: [],
+            readingSessions: [session], defaults: try testDefaults()
+        )
+        let recordedRoot = try #require(
+            JSONSerialization.jsonObject(with: recorded.manifestData()) as? [String: Any]
+        )
+        let recordedSession = try #require((recordedRoot["readingSessions"] as? [[String: Any]])?.first)
+        #expect(recordedSession["metadataSnapshotRecorded"] as? Bool == true)
+        #expect(recordedSession["isCompleteAtVisit"] as? Bool == false)
+        work.readingStatusRaw = "stacking"
+        let stacking = try KudosBackupService.makeContents(
+            works: [work], bookmarks: [], fonts: [], readingQueues: [],
+            readingSessions: [session], defaults: try testDefaults()
+        )
+        let stackingRoot = try #require(
+            JSONSerialization.jsonObject(with: stacking.manifestData()) as? [String: Any]
+        )
+        let stackingWork = try #require((stackingRoot["works"] as? [[String: Any]])?.first)
+        #expect(stackingWork["stackThreshold"] as? Int == 3)
+    }
+
     @Test func sessionsFavoritesAndWatermarksRoundTrip() throws {
         let schema = schema()
         let source = try context(schema)
@@ -187,7 +241,7 @@ struct ReadingLogBackupTests {
                     "playbackRate", "activeSeconds", "deviceID", "rulesVersion",
                     "fandoms", "relationships", "characters", "freeformTags", "rating",
                     "warnings", "categories", "authorAccounts", "language", "isCompleteAtVisit",
-                    "ao3SeriesID", "seriesPosition", "publishedYear"] {
+                    "metadataSnapshotRecorded", "ao3SeriesID", "seriesPosition", "publishedYear"] {
             archived[0].removeValue(forKey: key)
         }
         object["readingSessions"] = archived
