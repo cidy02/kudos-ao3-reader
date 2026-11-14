@@ -487,13 +487,23 @@ struct WorkPlainRow<Leading: View, Symbols: View, Heading: View, Remainder: View
 
 /// Chapter bars and the "Ch 7 · 58%" label. Empty when the work has no chapter plan.
 struct WorkChapterBarLine: View {
-    var items: [ChapterBarItem]
+    var layout: ChapterBarLayout
     var label: String?
 
+    init(layout: ChapterBarLayout, label: String? = nil) {
+        self.layout = layout
+        self.label = label
+    }
+
+    init(items: [ChapterBarItem], label: String? = nil) {
+        self.layout = ChapterBarLayout(items: items, scale: .row)
+        self.label = label
+    }
+
     var body: some View {
-        if !items.isEmpty {
+        if !layout.isEmpty {
             HStack(alignment: .center, spacing: 8) {
-                ChapterBars(items: items, scale: .row, accessibilityLabel: spoken)
+                ChapterBars(layout: layout, scale: .row, accessibilityLabel: spoken)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if let label {
                     Text(label)
@@ -507,7 +517,7 @@ struct WorkChapterBarLine: View {
     }
 
     private var spoken: String {
-        var parts = [ChapterBarGeometry.accessibilityLabel(for: items)]
+        var parts = [layout.accessibilityLabel]
         if let label { parts.append(label) }
         return parts.joined(separator: ", ")
     }

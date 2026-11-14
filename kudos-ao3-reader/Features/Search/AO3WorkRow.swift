@@ -438,11 +438,12 @@ struct AO3WorkRow: View {
     private var ledgerFacts: some View {
         WorkLedgerStatsLine(figures: remoteFigures)
         WorkChapterBarLine(
-            items: ChapterBarModel.items(
+            layout: ChapterBarModel.layout(
                 chapters: work.chapters,
                 progress: nil,
                 weights: nil,
-                newChapterCount: badgeCount
+                newChapterCount: badgeCount,
+                scale: .row
             ),
             label: nil
         )
