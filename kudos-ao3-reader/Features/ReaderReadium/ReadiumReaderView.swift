@@ -383,9 +383,11 @@ struct ReadiumReaderView: View {
             }
             // Voice changes from the Display sheet apply on the next utterance.
             .onChange(of: speechVoiceID) { _, _ in speech.applyPreferences() }
-            .onChange(of: speechRate) { _, rate in
+            .onChange(of: speechRate) { _, _ in
                 if speech.status == .playing {
-                    ReadingLogService.setMode(.listen, for: work, playbackRate: rate)
+                    ReadingLogService.setMode(
+                        .listen, for: work, playbackRate: ReaderSpeechPreferences.rateMultiplier
+                    )
                 }
             }
             .onChange(of: chromeVisible) { _, visible in
