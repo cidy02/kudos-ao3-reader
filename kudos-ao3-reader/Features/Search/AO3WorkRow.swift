@@ -65,7 +65,7 @@ struct AO3WorkRow: View {
     @Environment(ThemeManager.self) private var themeManager
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @AppStorage("showsZeroStats") private var showsZeroStats = true
-    @AppStorage(WorkSymbolPlacement.storageKey) private var symbolPlacement: WorkSymbolPlacement = .beside
+    @AppStorage(WorkSymbolPlacement.storageKey) private var symbolPlacement: WorkSymbolPlacement = .defaultValue
     @ScaledMetric(relativeTo: .title3) private var bookmarkTitleSize: CGFloat = 19
     @State private var internalExpanded = false
     @State private var showingResponseSheet = false
@@ -143,12 +143,16 @@ struct AO3WorkRow: View {
     /// 1q keeps the bookmark's note where the summary would be. The rest of the
     /// ledger — fandom, title, author, every stat, chapter bars — stays.
     private var bookmarkCard: some View {
-        WorkPlainRow(wide: wide, showsSeparator: showsSeparator, separatorInset: rowSeparatorInset) {
+        WorkPlainRow(
+            wide: wide, showsSeparator: showsSeparator, separatorInset: rowSeparatorInset, insertsByline: true
+        ) {
             selectionCheck
         } symbols: { arrangement in
             symbols(arrangement)
-        } heading: {
-            searchLedgerIdentity
+        } heading: { includesByline in
+            searchLedgerIdentity(includesByline: includesByline)
+        } byline: {
+            identityByline
         } remainder: {
             if let bookmark, !bookmark.notes.isEmpty || !bookmark.tags.isEmpty {
                 AO3BookmarkFootnote(bookmark: bookmark)
@@ -181,13 +185,16 @@ struct AO3WorkRow: View {
         WorkPlainRow(
             wide: wide || summaryRunsFullWidth,
             showsSeparator: showsSeparator,
-            separatorInset: rowSeparatorInset
+            separatorInset: rowSeparatorInset,
+            insertsByline: hasStandardByline
         ) {
             selectionCheck
         } symbols: { arrangement in
             symbols(arrangement)
-        } heading: {
-            standardHeading
+        } heading: { includesByline in
+            standardHeading(includesByline: includesByline)
+        } byline: {
+            standardByline
         } remainder: {
             Group {
                 if !expanded {
@@ -237,13 +244,16 @@ struct AO3WorkRow: View {
             wide: wide || summaryRunsFullWidth,
             showsSeparator: showsSeparator,
             separatorInset: rowSeparatorInset,
-            placementOverride: presentation == .fandomTop ? .underTitle : nil
+            placementOverride: presentation == .fandomTop ? .underTitle : nil,
+            insertsByline: true
         ) {
             selectionCheck
         } symbols: { arrangement in
             symbols(arrangement)
-        } heading: {
-            ledgerIdentity
+        } heading: { includesByline in
+            ledgerIdentity(includesByline: includesByline)
+        } byline: {
+            identityByline
         } remainder: {
             Group {
                 if !expanded {
@@ -302,7 +312,16 @@ struct AO3WorkRow: View {
         }
     }
 
-    private var standardHeading: some View {
+    /// What `standardByline` draws. An empty byline is not a line, so the 12pt
+    /// under the strip is not left blank.
+    private var hasStandardByline: Bool {
+        if presentation == .fandomTop {
+            return !work.authors.isEmpty
+        }
+        return !work.authors.isEmpty || !nonemptyFandoms.isEmpty
+    }
+
+    private func standardHeading(includesByline: Bool) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             if presentation == .fandomTop {
                 fandomLabel
@@ -324,11 +343,16 @@ struct AO3WorkRow: View {
                 }
                 if isExpandable && showsExpandButton { expandButton }
             }
-            if presentation == .fandomTop {
-                authorByline
-            } else {
-                authorAndFandoms
-            }
+            if includesByline { standardByline }
+        }
+    }
+
+    @ViewBuilder
+    private var standardByline: some View {
+        if presentation == .fandomTop {
+            authorByline
+        } else {
+            authorAndFandoms
         }
     }
 
@@ -779,15 +803,15 @@ extension AO3WorkRow {
     }
 
     @ViewBuilder
-    private var ledgerIdentity: some View {
+    private func ledgerIdentity(includesByline: Bool) -> some View {
         if presentation == .fandomTop {
-            resultListIdentity
+            resultListIdentity(includesByline: includesByline)
         } else {
-            searchLedgerIdentity
+            searchLedgerIdentity(includesByline: includesByline)
         }
     }
 
-    private var resultListIdentity: some View {
+    private func resultListIdentity(includesByline: Bool) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             if primaryFandom != nil || isExpandable || badgeTitle != nil {
                 if dynamicTypeSize.isAccessibilitySize {
@@ -833,19 +857,13 @@ extension AO3WorkRow {
                 WorkPlusBadge(count: badgeCount)
                 Spacer(minLength: 4)
             }
-            // Two lines: AO3 writes a pseud as "pseud (login)", so co-authors outgrow one line.
-            AO3AuthorBylineView(
-                names: work.authors,
-                identities: work.authorIdentities,
-                font: .subheadline
-            )
-            .fixedSize(horizontal: false, vertical: true)
+            if includesByline { identityByline }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .layoutPriority(1)
     }
 
-    private var searchLedgerIdentity: some View {
+    private func searchLedgerIdentity(includesByline: Bool) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             if primaryFandom != nil || isExpandable || hasLedgerBadges {
                 if dynamicTypeSize.isAccessibilitySize {
@@ -906,16 +924,20 @@ extension AO3WorkRow {
                 }
                 Spacer(minLength: 4)
             }
-            // Two lines: AO3 writes a pseud as "pseud (login)", so co-authors outgrow one line.
-            AO3AuthorBylineView(
-                names: work.authors,
-                identities: work.authorIdentities,
-                font: .subheadline
-            )
-            .fixedSize(horizontal: false, vertical: true)
+            if includesByline { identityByline }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .layoutPriority(1)
+    }
+
+    /// Two lines: AO3 writes a pseud as "pseud (login)", so co-authors outgrow one line.
+    private var identityByline: some View {
+        AO3AuthorBylineView(
+            names: work.authors,
+            identities: work.authorIdentities,
+            font: .subheadline
+        )
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     @ViewBuilder

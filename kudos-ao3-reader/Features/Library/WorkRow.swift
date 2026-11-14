@@ -89,7 +89,7 @@ struct WorkRow: View {
     @Environment(ThemeManager.self) private var theme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @AppStorage("showsZeroStats") private var showsZeroStats = true
-    @AppStorage(WorkSymbolPlacement.storageKey) private var symbolPlacement: WorkSymbolPlacement = .beside
+    @AppStorage(WorkSymbolPlacement.storageKey) private var symbolPlacement: WorkSymbolPlacement = .defaultValue
     @State private var internalExpanded = false
     @State private var chapterLengths: ChapterLengths?
 
@@ -239,8 +239,12 @@ struct WorkRow: View {
             selectionCheck
         } symbols: { arrangement in
             symbols(arrangement)
-        } heading: {
-            ledgerHeading(includesByline: summaryRunsFullWidth)
+        } heading: { includesByline in
+            // The author already leads the remainder unless the summary runs full
+            // width, which is Beside the Title only. Leave it there.
+            ledgerHeading(includesByline: includesByline && summaryRunsFullWidth)
+        } byline: {
+            EmptyView()
         } remainder: {
             fullWidthSummaryRemainder(enabled: summaryRunsFullWidth) {
                 if !summaryRunsFullWidth { ledgerByline }
@@ -313,13 +317,16 @@ struct WorkRow: View {
         WorkPlainRow(
             wide: wide || summaryRunsFullWidth,
             showsSeparator: showsSeparator,
-            separatorInset: Self.separatorInset(isSelecting: isSelecting)
+            separatorInset: Self.separatorInset(isSelecting: isSelecting),
+            insertsByline: hasStandardByline
         ) {
             selectionCheck
         } symbols: { arrangement in
             symbols(arrangement)
-        } heading: {
-            standardHeading(isExpandable: isExpandable)
+        } heading: { includesByline in
+            standardHeading(isExpandable: isExpandable, includesByline: includesByline)
+        } byline: {
+            authorAndFandoms
         } remainder: {
             fullWidthSummaryRemainder(enabled: summaryRunsFullWidth) {
                 standardRemainder(summaryText: summaryText)
@@ -336,8 +343,14 @@ struct WorkRow: View {
             .padding(.leading, enabled ? Self.fullWidthSummaryLeadingPadding(isSelecting: isSelecting) : 0)
     }
 
+    /// Author, plus every fandom once the row is expanded. Empty when there is
+    /// nothing to move under the symbol row.
+    private var hasStandardByline: Bool {
+        !work.author.isEmpty || (expandedBinding.wrappedValue && nonemptyFandomNames.count > 1)
+    }
+
     @ViewBuilder
-    private func standardHeading(isExpandable: Bool) -> some View {
+    private func standardHeading(isExpandable: Bool, includesByline: Bool) -> some View {
         fandomLabel
         titleLine(
             showsFavorite: work.isFavorite,
@@ -346,7 +359,7 @@ struct WorkRow: View {
             datePublished: work.datePublished,
             showsExpand: isExpandable && showsExpandButton && showsTags
         )
-        authorAndFandoms
+        if includesByline { authorAndFandoms }
     }
 
     @ViewBuilder

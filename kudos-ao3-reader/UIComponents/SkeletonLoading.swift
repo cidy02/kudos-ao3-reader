@@ -81,7 +81,7 @@ extension View {
 /// Wireframe roughly matching `AO3WorkRow` / `WorkRow`: title, author, fandom,
 /// summary lines, and a stats row.
 struct AO3WorkRowSkeleton: View {
-    @AppStorage(WorkSymbolPlacement.storageKey) private var symbolPlacement: WorkSymbolPlacement = .beside
+    @AppStorage(WorkSymbolPlacement.storageKey) private var symbolPlacement: WorkSymbolPlacement = .defaultValue
 
     var body: some View {
         // Matches the plain work row: the 24 pt grid leads (or, Under the Title,

@@ -798,7 +798,7 @@ struct RecentlyDeletedRow: View {
                 announcesToVoiceOver: true,
                 arrangement: arrangement
             )
-        } heading: {
+        } heading: { _ in
             VStack(alignment: .leading, spacing: 6) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(entry.title)
@@ -818,6 +818,8 @@ struct RecentlyDeletedRow: View {
                 warningNote
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+        } byline: {
+            EmptyView()
         } remainder: {
             EmptyView()
         }

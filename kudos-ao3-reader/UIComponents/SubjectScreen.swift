@@ -318,6 +318,25 @@ enum WorkRowMetrics {
     }
 }
 
+/// One line of an Under the Title work row. `WorkPlainRow` lays these out in
+/// `WorkSymbolPlacement.underTitleLines` order, so that array is the order.
+struct WorkUnderTitleLine: Equatable, Sendable {
+    enum Kind: String, Equatable, Sendable {
+        /// Fandom label and the title, including the title's badge.
+        case heading
+        /// The 1×4 symbol row.
+        case symbols
+        /// The author.
+        case byline
+        /// Tags, summary, figures, progress.
+        case remainder
+    }
+
+    var kind: Kind
+    /// Points above this line. Unused on the first line.
+    var spacingBefore: CGFloat
+}
+
 /// Where a work row draws its four symbols. Settings › Appearance › Work Symbols.
 nonisolated enum WorkSymbolPlacement: String, CaseIterable, Identifiable, Sendable {
     /// The backed 2×2 grid in its own column beside the title block, as the boards draw it.
@@ -326,6 +345,20 @@ nonisolated enum WorkSymbolPlacement: String, CaseIterable, Identifiable, Sendab
     case underTitle
 
     static let storageKey = "workSymbolPlacement"
+
+    /// What a reader who never chose gets. A stored raw value always wins:
+    /// `@AppStorage` uses this only when the key is absent, and backup still
+    /// exports nothing unless the key was stored.
+    static let defaultValue: WorkSymbolPlacement = .underTitle
+
+    /// Under the Title, top to bottom. The 6pt is the gap the strip already had
+    /// under the title block; the 12pt is the column gap under that block.
+    static let underTitleLines: [WorkUnderTitleLine] = [
+        WorkUnderTitleLine(kind: .heading, spacingBefore: 0),
+        WorkUnderTitleLine(kind: .symbols, spacingBefore: 6),
+        WorkUnderTitleLine(kind: .byline, spacingBefore: 12),
+        WorkUnderTitleLine(kind: .remainder, spacingBefore: 12)
+    ]
 
     var id: String { rawValue }
 
@@ -344,7 +377,7 @@ struct WorkRowSeparator: View {
     /// Past the leading selection check (only used when `inset` is nil).
     var selecting = false
 
-    @AppStorage(WorkSymbolPlacement.storageKey) private var placement: WorkSymbolPlacement = .beside
+    @AppStorage(WorkSymbolPlacement.storageKey) private var placement: WorkSymbolPlacement = .defaultValue
 
     var body: some View {
         Rectangle()
@@ -402,25 +435,40 @@ struct WorkFandomLabel: View {
 /// The plain work row: a leading grid, the title block, and whatever sits under
 /// it. Wide results keep the grid beside the title block and let the rest run
 /// the full width. An accessibility size stacks the grid above the text.
-/// With Work Symbols set to Under the Title, the symbols are a row under the
-/// title and only the selection check keeps a leading column.
-struct WorkPlainRow<Leading: View, Symbols: View, Heading: View, Remainder: View>: View {
+/// With Work Symbols set to Under the Title, the column is
+/// `WorkSymbolPlacement.underTitleLines`: fandom and title, the symbol row,
+/// the author, then the rest. Only the selection check keeps a leading column.
+struct WorkPlainRow<Leading: View, Symbols: View, Heading: View, Byline: View, Remainder: View>: View {
     var wide = false
     var showsSeparator = true
     var separatorInset: CGFloat? = nil
     var placementOverride: WorkSymbolPlacement?
+    /// Under the Title draws `byline` on its own line. False where the author is
+    /// already the first line of `remainder` (the library ledger), so the 12pt
+    /// under the strip is not applied twice.
+    var insertsByline = false
     /// The selection check (or its placeholder) while selecting; nothing otherwise.
     @ViewBuilder var leading: () -> Leading
     /// The four symbols in the arrangement asked for: `.grid` beside, `.row` under the title.
     @ViewBuilder var symbols: (WorkStatusIconGrid.Arrangement) -> Symbols
-    @ViewBuilder var heading: () -> Heading
+    /// Fandom and title. Beside the Title passes true and the author stays in
+    /// this block. Under the Title passes false.
+    @ViewBuilder var heading: (_ includesByline: Bool) -> Heading
+    /// The author. Drawn only Under the Title, and only when `insertsByline`.
+    @ViewBuilder var byline: () -> Byline
     @ViewBuilder var remainder: () -> Remainder
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @AppStorage(WorkSymbolPlacement.storageKey) private var placement: WorkSymbolPlacement = .beside
+    @AppStorage(WorkSymbolPlacement.storageKey) private var placement: WorkSymbolPlacement = .defaultValue
 
     private var stacked: Bool { dynamicTypeSize.isAccessibilitySize }
     private var resolvedPlacement: WorkSymbolPlacement { placementOverride ?? placement }
+
+    /// Under the Title lines this row actually draws. The author line is omitted
+    /// when it already leads `remainder`.
+    private var underTitleLines: [WorkUnderTitleLine] {
+        WorkSymbolPlacement.underTitleLines.filter { insertsByline || $0.kind != .byline }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -428,26 +476,19 @@ struct WorkPlainRow<Leading: View, Symbols: View, Heading: View, Remainder: View
                 if resolvedPlacement == .underTitle {
                     HStack(alignment: .center, spacing: WorkRowMetrics.columnGap) {
                         leading()
-                        VStack(alignment: .leading, spacing: 12) {
-                            VStack(alignment: .leading, spacing: 6) {
-                                // Own stack, so the heading's parts keep their 12 pt spacing.
-                                VStack(alignment: .leading, spacing: 12) { heading() }
-                                symbols(.row)
-                            }
-                            remainder()
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        underTitleColumn
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 } else if stacked {
                     besideColumn
-                    heading()
+                    heading(true)
                     remainder()
                 } else if wide {
                     HStack(alignment: .top, spacing: WorkRowMetrics.columnGap) {
                         besideColumn
                         // One column, as in the default branch: a heading of several views
                         // (fandom label, title, byline) otherwise shared the line side by side.
-                        VStack(alignment: .leading, spacing: 12) { heading() }
+                        VStack(alignment: .leading, spacing: 12) { heading(true) }
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     remainder()
@@ -455,7 +496,7 @@ struct WorkPlainRow<Leading: View, Symbols: View, Heading: View, Remainder: View
                     HStack(alignment: .top, spacing: WorkRowMetrics.columnGap) {
                         besideColumn
                         VStack(alignment: .leading, spacing: 12) {
-                            heading()
+                            heading(true)
                             remainder()
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -481,6 +522,33 @@ struct WorkPlainRow<Leading: View, Symbols: View, Heading: View, Remainder: View
         HStack(alignment: .center, spacing: 12) {
             leading()
             symbols(.grid)
+        }
+    }
+
+    /// Fandom and title, the strip, the author, then the rest — the order in
+    /// `underTitleLines`, with each line's own gap above it.
+    private var underTitleColumn: some View {
+        let lines = underTitleLines
+        return VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(lines.enumerated()), id: \.offset) { pair in
+                underTitleLine(pair.element.kind)
+                    .padding(.top, pair.offset == 0 ? 0 : pair.element.spacingBefore)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func underTitleLine(_ kind: WorkUnderTitleLine.Kind) -> some View {
+        switch kind {
+        case .heading:
+            // Own stack, so the heading's parts keep their 12 pt spacing.
+            VStack(alignment: .leading, spacing: 12) { heading(false) }
+        case .symbols:
+            symbols(.row)
+        case .byline:
+            VStack(alignment: .leading, spacing: 12) { byline() }
+        case .remainder:
+            remainder()
         }
     }
 }
