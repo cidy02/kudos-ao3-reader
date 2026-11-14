@@ -37,7 +37,7 @@ enum LoadedWorksRank: String, CaseIterable, Identifiable {
         case .kudosPerHitAdjusted: "Against loaded works of similar length and age"
         case .savesPerKudos: "Public bookmarks ÷ kudos"
         case .commentsPerKudos: "Comments ÷ kudos"
-        case .momentum: "Kudos gained since you last saw each work"
+        case .momentum: "Kudos growth since you last saw each work"
         case .kudosPerThousandWords: "Kudos ÷ max(words, 1,000) × 1,000; favours short works"
         }
     }
@@ -253,7 +253,9 @@ enum LoadedWorksRanker {
         let unranked = (unscored + aside).map { $0.entry }
         let seenBeforeLine = settings.rank == .momentum
             ? Self.seenBeforeLine(
-                seenBefore: works.filter { previousKudos[$0.id] != nil }.count,
+                seenBefore: zip(works, figures).filter { work, figure in
+                    figure.kudos != nil && previousKudos[work.id] != nil
+                }.count,
                 loaded: works.count
             )
             : nil
@@ -326,10 +328,11 @@ enum LoadedWorksRanker {
         return false
     }
 
-    /// `kudos ≥ hits + 20` with `hits ≥ 20`. The note on an unusual row uses the same cut.
+    /// `kudos ≥ hits + 20` with `hits ≥ 20`. The margin comes off kudos, after a
+    /// guard, so a hit count near `Int.max` cannot overflow the addition.
     static func kudosExceedHits(kudos: Int, hits: Int?) -> Bool {
-        guard let hits else { return false }
-        return hits >= unusualHitsFloor && kudos >= hits + unusualKudosMargin
+        guard let hits, hits >= unusualHitsFloor, kudos >= unusualKudosMargin else { return false }
+        return kudos - unusualKudosMargin >= hits
     }
 
     /// The work's own ratio for `rank`. A zero or unknown denominator gives nil,
@@ -352,10 +355,13 @@ enum LoadedWorksRanker {
     }
 
     /// Kudos gained since the work was last seen. nil when it has not been seen
-    /// before; never negative (AO3 drops kudos from deleted accounts).
+    /// before; never negative (AO3 drops kudos from deleted accounts). A negative
+    /// earlier count counts as zero, and the subtraction only runs when it fits.
     static func momentumGain(kudos: Int?, previous: Int?) -> Double? {
         guard let kudos, let previous else { return nil }
-        return Double(max(0, kudos - previous))
+        let earlier = max(previous, 0)
+        let gained = kudos >= earlier ? kudos - earlier : 0
+        return Double(gained)
     }
 
     /// Growth relative to the earlier count, and never to fewer than
@@ -430,9 +436,9 @@ enum LoadedWorksRanker {
             return nil
         case .momentum:
             guard hasPrevious, let gained = shown else { return "First time in your results" }
-            return gained > 0
-                ? "+\(Int(gained).formatted()) kudos since you last saw it"
-                : "No new kudos since you last saw it"
+            guard gained > 0 else { return "No new kudos since you last saw it" }
+            let gainText = gained.formatted(.number.precision(.fractionLength(0)))
+            return "+\(gainText) kudos since you last saw it"
         case .kudosPerHitAdjusted, .savesPerKudos, .commentsPerKudos, .kudosPerThousandWords:
             guard let value = shown else { return "Not enough figures to rank" }
             return switch rank {

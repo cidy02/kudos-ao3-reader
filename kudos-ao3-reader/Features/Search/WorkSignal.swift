@@ -116,9 +116,9 @@ enum QualitySignalTones {
 
         case .momentum:
             if hasPrevious {
-                let gained = Int(shown)
-                let label = gained > 0 ? "+\(gained.formatted()) kudos" : "No new kudos"
-                let tone: WorkSignal.Tone = gained > 0 ? .high : .neutral
+                let gainText = shown.formatted(.number.precision(.fractionLength(0)))
+                let label = shown > 0 ? "+\(gainText) kudos" : "No new kudos"
+                let tone: WorkSignal.Tone = shown > 0 ? .high : .neutral
                 return WorkSignal(label: label, note: "Since you last saw it", tone: tone)
             } else {
                 return WorkSignal(label: "First time seen", note: "No earlier sighting", tone: .neutral)

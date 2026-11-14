@@ -378,11 +378,36 @@ struct QualitySignalsTests {
         #expect(isClose(ranked[2].score, 0.4))
         #expect(ranked[0].signal == "+20 kudos since you last saw it")
 
-        let page = (1 ... 40).map { work($0, kudos: 10, hits: 200) }
+        // Work 8 was seen before, but its current kudos are unknown, so momentum
+        // cannot rank it. Counting every previousKudos key would say 2 of 40.
+        var page = (1 ... 40).map { work($0, kudos: 10, hits: 200) }
+        page[7] = work(8, kudos: nil, hits: nil, words: nil)
         let partition = LoadedWorksRanker.partition(
-            page, by: settings(.momentum), previousKudos: [7: 10], now: now
+            page, by: settings(.momentum), previousKudos: [7: 10, 8: 4], now: now
         )
         #expect(partition.seenBeforeLine == "1 of 40 seen before")
+    }
+
+    /// Int.max hits, and Int.max kudos against a negative earlier count, used to
+    /// trap in the addition and the subtraction. The gain line must not turn the
+    /// Double back into an Int either.
+    @Test func extremeCountsDoNotTrap() {
+        #expect(!LoadedWorksRanker.kudosExceedHits(kudos: Int.max, hits: Int.max))
+        #expect(LoadedWorksRanker.kudosExceedHits(kudos: Int.max, hits: 20))
+        #expect(LoadedWorksRanker.momentumGain(kudos: Int.max, previous: -1) == Double(Int.max))
+
+        let huge = Double(Int.max)
+        let line = LoadedWorksRanker.signal(.momentum, shown: huge, setAside: false, hasPrevious: true)
+        #expect(line?.hasPrefix("+") == true)
+        let tone = QualitySignalTones.chooseTone(
+            rank: .momentum,
+            shown: huge,
+            figures: LoadedWorksRanker.Figures(work(1, kudos: 1, hits: 100), now: now),
+            setAside: false,
+            hasPrevious: true
+        )
+        #expect(tone?.label.hasPrefix("+") == true)
+        #expect(tone?.label != "No new kudos")
     }
 
     /// (d) Saves and comments per kudos shrink by kudos. Hits would keep
@@ -400,6 +425,17 @@ struct QualitySignalsTests {
             let score = ranked.first { $0.work.id == 1 }?.score
             #expect(isClose(score, expected), "\(rank)")
         }
+
+        // Kudos per hit still shrinks by the 60 hits. Weighing it by the 50 kudos
+        // would move this score, so the evidence switch cannot be flattened.
+        let own = 50.0 / 60.0
+        let typical = 1_000.0 / 20_000.0
+        let shrunkByHits = (60 * own + 500 * typical) / (60 + 500)
+        let adjusted = LoadedWorksRanker.rank(
+            works, by: settings(.kudosPerHitAdjusted, cautious: true), now: now
+        )
+        let adjustedScore = adjusted.first { $0.work.id == 1 }?.score
+        #expect(isClose(adjustedScore, shrunkByHits / typical))
     }
 
     private func isClose(_ value: Double?, _ expected: Double) -> Bool {
