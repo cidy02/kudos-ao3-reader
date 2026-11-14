@@ -117,6 +117,28 @@ struct ReadingLogBackupTests {
         #expect(restoredSession.deviceID == "install-1")
         #expect(restoredSession.rulesVersion == 1)
 
+        // Reconcile must update an existing row, including every new fact.
+        restoredSession.tzOffsetSeconds = nil
+        restoredSession.startProgress = nil
+        restoredSession.startSpineIndex = nil
+        restoredSession.modeRaw = "read"
+        restoredSession.playbackRate = nil
+        restoredSession.activeSeconds = nil
+        restoredSession.deviceID = "old-install"
+        restoredSession.rulesVersion = 0
+        restoredSession.lastModifiedAt = Date(timeIntervalSince1970: 1_100)
+        try target.save()
+        _ = try KudosBackupService.restore(contents, into: target, defaults: try testDefaults())
+        let updated = try #require(try target.fetch(FetchDescriptor<ReadingSession>()).first)
+        #expect(updated.tzOffsetSeconds == -18_000)
+        #expect(updated.startProgress == 0.2)
+        #expect(updated.startSpineIndex == 1)
+        #expect(updated.mode == .listen)
+        #expect(updated.playbackRate == 1.4)
+        #expect(updated.activeSeconds == 140)
+        #expect(updated.deviceID == "install-1")
+        #expect(updated.rulesVersion == 1)
+
         var object = try #require(
             JSONSerialization.jsonObject(with: contents.manifestData()) as? [String: Any]
         )
@@ -129,6 +151,19 @@ struct ReadingLogBackupTests {
         let legacy = try KudosBackupContents.decodeManifest(
             JSONSerialization.data(withJSONObject: object)
         )
+        // An Android/old-build archive may have the same timestamp but no new keys.
+        _ = try KudosBackupService.restore(
+            KudosBackupContents(manifest: legacy), into: target, defaults: try testDefaults()
+        )
+        let preserved = try #require(try target.fetch(FetchDescriptor<ReadingSession>()).first)
+        #expect(preserved.tzOffsetSeconds == -18_000)
+        #expect(preserved.startProgress == 0.2)
+        #expect(preserved.startSpineIndex == 1)
+        #expect(preserved.mode == .listen)
+        #expect(preserved.playbackRate == 1.4)
+        #expect(preserved.activeSeconds == 140)
+        #expect(preserved.deviceID == "install-1")
+        #expect(preserved.rulesVersion == 1)
         let legacyTarget = try context(schema)
         _ = try KudosBackupService.restore(
             KudosBackupContents(manifest: legacy), into: legacyTarget, defaults: try testDefaults()

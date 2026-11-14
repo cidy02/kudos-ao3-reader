@@ -23,7 +23,7 @@ enum ReadingLogService {
 
     nonisolated static func activeGap(from previous: Date, to now: Date) -> Double {
         let seconds = now.timeIntervalSince(previous)
-        return seconds >= 0 && seconds <= 300 ? seconds : 0
+        return min(300, max(0, seconds))
     }
 
     /// 1ai default: mid-way and untouched for this long, and no manual override.
@@ -82,7 +82,11 @@ enum ReadingLogService {
             accumulatedSeconds: 0,
             isPaused: false,
             tzOffsetSeconds: timeZone.secondsFromGMT(for: now),
-            startProgress: work.readingProgress,
+            // A stored overall fraction is trustworthy; chapter-count fallbacks are not.
+            startProgress: work.publicationProgress ?? (
+                work.readiumLocator.isEmpty && work.lastSpineIndex == 0
+                    && work.lastScrollFraction == 0 ? 0 : nil
+            ),
             startSpineIndex: work.lastSpineIndex,
             mode: .read,
             playbackRate: nil,
@@ -94,7 +98,8 @@ enum ReadingLogService {
     }
 
     static func noteActivity(for work: SavedWork, now: Date = Date()) {
-        guard var session = openSessions[work.id], !session.isPaused else { return }
+        guard var session = openSessions[work.id], !session.isPaused,
+              now >= session.lastActivityAt else { return }
         session.activeSeconds += activeGap(from: session.lastActivityAt, to: now)
         session.lastActivityAt = now
         openSessions[work.id] = session
@@ -105,6 +110,7 @@ enum ReadingLogService {
         playbackRate: Double? = nil
     ) {
         guard var session = openSessions[work.id] else { return }
+        // One mode per sitting: any Read Aloud playback makes this a listening visit.
         session.mode = mode
         session.playbackRate = mode == .listen ? playbackRate : nil
         openSessions[work.id] = session
@@ -151,7 +157,7 @@ enum ReadingLogService {
     static func resumeSession(for work: SavedWork, now: Date = Date()) {
         guard var session = openSessions[work.id], session.isPaused else { return }
         session.lastResumedAt = now
-        session.lastActivityAt = now
+        session.lastActivityAt = max(session.lastActivityAt, now)
         session.isPaused = false
         openSessions[work.id] = session
     }

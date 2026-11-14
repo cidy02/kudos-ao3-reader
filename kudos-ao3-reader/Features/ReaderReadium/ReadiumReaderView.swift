@@ -120,6 +120,7 @@ struct ReadiumReaderView: View {
     @AppStorage("readerJustify") private var justifyText = false
     /// Voice id only — rate/pitch are read live from UserDefaults per utterance.
     @AppStorage(ReaderSpeechPreferences.voiceIDKey) private var speechVoiceID = ""
+    @AppStorage(ReaderSpeechPreferences.rateKey) private var speechRate = ReaderSpeechPreferences.defaultRate
 
     /// The reader-scoped rotation lock. Shared (not per-view) because iOS asks
     /// the app delegate, not this view, which orientations are supported.
@@ -296,7 +297,7 @@ struct ReadiumReaderView: View {
             // Display panel happened to be opened.
             .sheet(isPresented: $showingSpeechSettings, onDismiss: {
                 speech.applyPreferences()
-                if speech.isSessionActive {
+                if speech.status == .playing {
                     ReadingLogService.setMode(
                         .listen, for: work, playbackRate: ReaderSpeechPreferences.rateMultiplier
                     )
@@ -382,6 +383,11 @@ struct ReadiumReaderView: View {
             }
             // Voice changes from the Display sheet apply on the next utterance.
             .onChange(of: speechVoiceID) { _, _ in speech.applyPreferences() }
+            .onChange(of: speechRate) { _, rate in
+                if speech.status == .playing {
+                    ReadingLogService.setMode(.listen, for: work, playbackRate: rate)
+                }
+            }
             .onChange(of: chromeVisible) { _, visible in
                 if !visible {
                     colorBarAnnotationID = nil
@@ -431,11 +437,10 @@ struct ReadiumReaderView: View {
             .onChange(of: book.readingPosition) { _, newValue in
                 // Dismiss freeze / exit latch: never move the scrub bar.
                 guard !book.isLocatorIngestionBlocked else { return }
-                ReadingLogService.noteActivity(for: work)
                 syncSliderFromPosition(newValue)
             }
             .onChange(of: speech.status) { _, status in
-                if status == .playing || status == .paused {
+                if status == .playing {
                     ReadingLogService.setMode(
                         .listen, for: work, playbackRate: ReaderSpeechPreferences.rateMultiplier
                     )
@@ -447,7 +452,7 @@ struct ReadiumReaderView: View {
                     attachSpeechToReadyBook()
                 }
                 ReadingLogService.startSession(for: work, now: Date())
-                if speech.isSessionActive {
+                if speech.status == .playing {
                     ReadingLogService.setMode(
                         .listen, for: work, playbackRate: ReaderSpeechPreferences.rateMultiplier
                     )
@@ -486,10 +491,7 @@ struct ReadiumReaderView: View {
                 // Flush the exact final position so resume lands precisely, even if the
                 // last scroll's debounce window hadn't elapsed before we left.
                 flushProgress(shelfStamp: true)
-                // Detached Read Aloud keeps this visit open until speech releases the work.
-                if !(speech.isSessionActive && speech.sessionWorkID == work.id) {
-                    ReadingLogService.endSession(for: work, now: Date())
-                }
+                ReadingLogService.endSession(for: work, now: Date())
                 let canFreeEPUB = ReaderSpeechSessionPolicy.canFreeEPUB(
                     workID: work.id,
                     sessionActive: speech.isSessionActive,
@@ -546,6 +548,7 @@ struct ReadiumReaderView: View {
                 // Dismiss freeze/exit latch, and hold-to-seek — never fight
                 // the user (or corrupt a committed exit flush) by page-follow.
                 guard !book.isLocatorIngestionBlocked, !speechSeekHolding else { return }
+                ReadingLogService.noteActivity(for: work)
                 book.go(to: locator)
             },
             onSpokenRange: { locator in book.applySpeechDecoration(at: locator) },
@@ -1512,6 +1515,7 @@ struct ReadiumReaderView: View {
         book.onLocatorChange = { locator in
             guard let string = locator.persistenceString else { return }
             guard initialPositionPersistence.allowsPersistence else { return }
+            ReadingLogService.noteActivity(for: work)
             // note() may call onDebouncedWrite immediately or schedule a trailing write.
             progressPersistence.note(
                 locatorString: string,

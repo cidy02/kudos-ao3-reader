@@ -606,7 +606,6 @@ struct ContentView: View {
                 sections: sections,
                 at: date
             )
-            ReadingLogService.noteActivity(for: work, now: date)
             if event.stampsShelf {
                 work.markProgressModified(date)
             }
@@ -623,7 +622,6 @@ struct ContentView: View {
             )
             descriptor.fetchLimit = 1
             guard let works = try? context.fetch(descriptor), let work = works.first else { return }
-            ReadingLogService.endSession(for: work)
             WorkLifecycle.freeEPUBIfFinished(work, in: context)
         }
     }
