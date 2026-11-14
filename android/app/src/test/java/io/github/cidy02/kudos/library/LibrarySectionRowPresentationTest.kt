@@ -55,7 +55,10 @@ class LibrarySectionRowPresentationTest {
             val compact = section == LibrarySectionKind.History || section == LibrarySectionKind.Favorites
             if (compact) {
                 compose.onNodeWithText("42%", substring = true).assertExists()
-                compose.onNodeWithText("A writer · 1.2K words · 1/1").assertExists() // compact figures, as iOS
+                // iOS T-509: the grey line is the author alone; the compact figures keep a line of their own.
+                compose.onNodeWithText("A writer").assertExists()
+                compose.onNodeWithText("1.2K words · 1/1").assertExists()
+                compose.onNodeWithText("A writer · 1.2K words · 1/1").assertDoesNotExist()
                 compose.onNodeWithText("A summary shown only by detailed cards.").assertDoesNotExist()
                 compose.onNodeWithContentDescription("Show more").assertDoesNotExist()
             } else {
