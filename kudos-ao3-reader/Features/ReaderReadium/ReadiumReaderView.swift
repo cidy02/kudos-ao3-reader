@@ -296,6 +296,11 @@ struct ReadiumReaderView: View {
             // Display panel happened to be opened.
             .sheet(isPresented: $showingSpeechSettings, onDismiss: {
                 speech.applyPreferences()
+                if speech.isSessionActive {
+                    ReadingLogService.setMode(
+                        .listen, for: work, playbackRate: ReaderSpeechPreferences.rateMultiplier
+                    )
+                }
             }) {
                 ReaderSpeechSettingsSheet(
                     characterTags: speechCastTags,
@@ -426,7 +431,15 @@ struct ReadiumReaderView: View {
             .onChange(of: book.readingPosition) { _, newValue in
                 // Dismiss freeze / exit latch: never move the scrub bar.
                 guard !book.isLocatorIngestionBlocked else { return }
+                ReadingLogService.noteActivity(for: work)
                 syncSliderFromPosition(newValue)
+            }
+            .onChange(of: speech.status) { _, status in
+                if status == .playing || status == .paused {
+                    ReadingLogService.setMode(
+                        .listen, for: work, playbackRate: ReaderSpeechPreferences.rateMultiplier
+                    )
+                }
             }
             .onAppear {
                 speech.readerDidOpen(workID: work.id)
@@ -434,6 +447,11 @@ struct ReadiumReaderView: View {
                     attachSpeechToReadyBook()
                 }
                 ReadingLogService.startSession(for: work, now: Date())
+                if speech.isSessionActive {
+                    ReadingLogService.setMode(
+                        .listen, for: work, playbackRate: ReaderSpeechPreferences.rateMultiplier
+                    )
+                }
                 WorkLifecycle.keepIfKeepingWorksYouRead(work, in: modelContext)
                 WorkLifecycle.releaseHeldCopy(work)
             }
@@ -468,7 +486,10 @@ struct ReadiumReaderView: View {
                 // Flush the exact final position so resume lands precisely, even if the
                 // last scroll's debounce window hadn't elapsed before we left.
                 flushProgress(shelfStamp: true)
-                ReadingLogService.endSession(for: work, now: Date())
+                // Detached Read Aloud keeps this visit open until speech releases the work.
+                if !(speech.isSessionActive && speech.sessionWorkID == work.id) {
+                    ReadingLogService.endSession(for: work, now: Date())
+                }
                 let canFreeEPUB = ReaderSpeechSessionPolicy.canFreeEPUB(
                     workID: work.id,
                     sessionActive: speech.isSessionActive,

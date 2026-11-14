@@ -555,6 +555,7 @@ struct ReaderView: View {
         // track it in memory on every report, write it through only on the
         // bridge's debounce so scrolling doesn't hammer SwiftData.
         controller.onProgressFraction = { fraction in
+            ReadingLogService.noteActivity(for: work)
             if currentIndex < chapterCount - 1 || (readingMode == .paged && controller.page < controller.pageTotal) {
                 isAtEnd = false
             } else if isAtEnd && fraction < endFraction - 0.02 {

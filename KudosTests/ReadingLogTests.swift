@@ -30,6 +30,64 @@ struct ReadingLogTests {
         """
     }
 
+    @Test func activeGapsAndPauseResume() throws {
+        ReadingLogService.resetOpenSessionsForTests()
+        let context = try context()
+        let work = SavedWork(title: "Active", author: "A")
+        context.insert(work)
+        let t0 = Date(timeIntervalSince1970: 10_000)
+        #expect(ReadingLogService.activeGap(from: t0, to: t0.addingTimeInterval(100)) == 100)
+        #expect(ReadingLogService.activeGap(from: t0, to: t0.addingTimeInterval(300)) == 300)
+        #expect(ReadingLogService.activeGap(from: t0, to: t0.addingTimeInterval(301)) == 0)
+
+        ReadingLogService.startSession(for: work, now: t0)
+        ReadingLogService.noteActivity(for: work, now: t0.addingTimeInterval(100))
+        ReadingLogService.noteActivity(for: work, now: t0.addingTimeInterval(400))
+        ReadingLogService.noteActivity(for: work, now: t0.addingTimeInterval(701))
+        ReadingLogService.pauseSession(for: work, now: t0.addingTimeInterval(730))
+        ReadingLogService.resumeSession(for: work, now: t0.addingTimeInterval(1_000))
+        ReadingLogService.noteActivity(for: work, now: t0.addingTimeInterval(1_030))
+        ReadingLogService.endSession(for: work, now: t0.addingTimeInterval(1_060))
+        let session = try #require(try context.fetch(FetchDescriptor<ReadingSession>()).first)
+        #expect(session.activeSeconds == 489)
+        #expect(session.durationSeconds == 790)
+    }
+
+    @Test func startFactsKeepTheirOriginalValuesAndInstallID() throws {
+        ReadingLogService.resetOpenSessionsForTests()
+        let context = try context()
+        let work = SavedWork(title: "Start", author: "A")
+        work.readiumLocator = locator(progress: 0.25)
+        work.lastSpineIndex = 3
+        context.insert(work)
+        let suiteName = "ReadingLogTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        let firstID = ReadingLogService.deviceID(defaults: defaults)
+        let relaunchedDefaults = try #require(UserDefaults(suiteName: suiteName))
+        #expect(ReadingLogService.deviceID(defaults: relaunchedDefaults) == firstID)
+        let t0 = Date(timeIntervalSince1970: 10_000)
+        let zone = try #require(TimeZone(secondsFromGMT: 5 * 3600 + 1800))
+        ReadingLogService.startSession(for: work, now: t0, timeZone: zone, defaults: defaults)
+        work.readiumLocator = locator(progress: 0.75)
+        work.lastSpineIndex = 8
+        ReadingLogService.setMode(.listen, for: work, playbackRate: 1.25)
+        ReadingLogService.endSession(for: work, now: t0.addingTimeInterval(60))
+        let session = try #require(try context.fetch(FetchDescriptor<ReadingSession>()).first)
+        #expect(session.tzOffsetSeconds == 19_800)
+        #expect(session.startProgress == 0.25)
+        #expect(session.startSpineIndex == 3)
+        #expect(session.mode == .listen)
+        #expect(session.playbackRate == 1.25)
+        #expect(session.activeSeconds == 60)
+        #expect(session.deviceID == firstID)
+        #expect(session.rulesVersion == 1)
+        let settingsJSON = try String(decoding: JSONEncoder().encode(
+            KudosBackupSettings.capture(defaults: defaults)
+        ), as: UTF8.self)
+        #expect(!settingsJSON.contains(firstID))
+        #expect(!settingsJSON.contains("readingLogDeviceID"))
+    }
+
     @Test func startEndPersistsDurationAndDropsSub15s() throws {
         ReadingLogService.resetOpenSessionsForTests()
         let context = try context()

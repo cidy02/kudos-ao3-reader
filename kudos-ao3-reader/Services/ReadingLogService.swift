@@ -11,6 +11,21 @@ import SwiftData
 enum ReadingLogService {
     /// Accidental opens (tap-and-back) are not history.
     static let minimumPersistableDuration: TimeInterval = 15
+    static let currentRulesVersion = 1
+    private static let deviceIDKey = "readingLogDeviceID"
+
+    static func deviceID(defaults: UserDefaults = .standard) -> String {
+        if let value = defaults.string(forKey: deviceIDKey), !value.isEmpty { return value }
+        let value = UUID().uuidString
+        defaults.set(value, forKey: deviceIDKey)
+        return value
+    }
+
+    nonisolated static func activeGap(from previous: Date, to now: Date) -> Double {
+        let seconds = now.timeIntervalSince(previous)
+        return seconds >= 0 && seconds <= 300 ? seconds : 0
+    }
+
     /// 1ai default: mid-way and untouched for this long, and no manual override.
     nonisolated static let defaultAbandonedThreshold: TimeInterval = 21 * 24 * 3600
 
@@ -27,6 +42,14 @@ enum ReadingLogService {
         var lastResumedAt: Date
         var accumulatedSeconds: Double
         var isPaused: Bool
+        var tzOffsetSeconds: Int
+        var startProgress: Double?
+        var startSpineIndex: Int
+        var mode: ReadingSession.Mode
+        var playbackRate: Double?
+        var activeSeconds: Double
+        var lastActivityAt: Date
+        var deviceID: String
         /// Whether the work was already finished when this visit opened.
         ///
         /// Held here so the service can work out for itself whether *this* visit
@@ -42,7 +65,10 @@ enum ReadingLogService {
     /// Opens a session for `work` if one is not already open. A second call for
     /// the same work is a no-op so SwiftUI re-appear / book-reload cannot
     /// double-count.
-    static func startSession(for work: SavedWork, now: Date = Date()) {
+    static func startSession(
+        for work: SavedWork, now: Date = Date(), timeZone: TimeZone = .current,
+        defaults: UserDefaults = .standard
+    ) {
         let workID = work.id
         guard openSessions[workID] == nil else { return }
         openSessions[workID] = OpenSession(
@@ -55,8 +81,33 @@ enum ReadingLogService {
             lastResumedAt: now,
             accumulatedSeconds: 0,
             isPaused: false,
+            tzOffsetSeconds: timeZone.secondsFromGMT(for: now),
+            startProgress: work.readingProgress,
+            startSpineIndex: work.lastSpineIndex,
+            mode: .read,
+            playbackRate: nil,
+            activeSeconds: 0,
+            lastActivityAt: now,
+            deviceID: deviceID(defaults: defaults),
             wasFinishedAtStart: work.isFinished
         )
+    }
+
+    static func noteActivity(for work: SavedWork, now: Date = Date()) {
+        guard var session = openSessions[work.id], !session.isPaused else { return }
+        session.activeSeconds += activeGap(from: session.lastActivityAt, to: now)
+        session.lastActivityAt = now
+        openSessions[work.id] = session
+    }
+
+    static func setMode(
+        _ mode: ReadingSession.Mode, for work: SavedWork,
+        playbackRate: Double? = nil
+    ) {
+        guard var session = openSessions[work.id] else { return }
+        session.mode = mode
+        session.playbackRate = mode == .listen ? playbackRate : nil
+        openSessions[work.id] = session
     }
 
     /// Whether this visit is the one that finished the work — the reread signal.
@@ -81,6 +132,7 @@ enum ReadingLogService {
     /// same reason ("force-quit safety" in `ReadiumReaderView`); the log now
     /// does too.
     static func pauseSession(for work: SavedWork, now: Date = Date()) {
+        noteActivity(for: work, now: now)
         guard var session = openSessions[work.id], !session.isPaused else { return }
         session.accumulatedSeconds += max(0, now.timeIntervalSince(session.lastResumedAt))
         session.lastResumedAt = now
@@ -99,6 +151,7 @@ enum ReadingLogService {
     static func resumeSession(for work: SavedWork, now: Date = Date()) {
         guard var session = openSessions[work.id], session.isPaused else { return }
         session.lastResumedAt = now
+        session.lastActivityAt = now
         session.isPaused = false
         openSessions[work.id] = session
     }
@@ -109,6 +162,7 @@ enum ReadingLogService {
     /// `didFinish(_:for:)`. Callers used to pass it and all three wrote the same
     /// expression, which is how `pauseSession` came to write a fourth, wrong one.
     static func endSession(for work: SavedWork, now: Date = Date()) {
+        noteActivity(for: work, now: now)
         guard var session = openSessions.removeValue(forKey: work.id) else { return }
         if !session.isPaused {
             session.accumulatedSeconds += max(0, now.timeIntervalSince(session.lastResumedAt))
@@ -146,6 +200,9 @@ enum ReadingLogService {
         if let existing {
             existing.endedAt = now
             existing.durationSeconds = durationSeconds
+            existing.activeSeconds = session.activeSeconds
+            existing.modeRaw = session.mode.rawValue
+            existing.playbackRate = session.playbackRate
             existing.lastSpineIndex = work.lastSpineIndex
             existing.chapterTitle = chapterTitle
             existing.endingProgress = endingProgress
@@ -165,6 +222,14 @@ enum ReadingLogService {
                 startedAt: session.startedAt,
                 endedAt: now,
                 durationSeconds: durationSeconds,
+                tzOffsetSeconds: session.tzOffsetSeconds,
+                startProgress: session.startProgress,
+                startSpineIndex: session.startSpineIndex,
+                modeRaw: session.mode.rawValue,
+                playbackRate: session.playbackRate,
+                activeSeconds: session.activeSeconds,
+                deviceID: session.deviceID,
+                rulesVersion: currentRulesVersion,
                 lastSpineIndex: work.lastSpineIndex,
                 chapterTitle: chapterTitle,
                 endingProgress: endingProgress,

@@ -45,6 +45,14 @@ struct ReadingLogBackupTests {
             startedAt: Date(timeIntervalSince1970: 1_000),
             endedAt: Date(timeIntervalSince1970: 1_200),
             durationSeconds: 200,
+            tzOffsetSeconds: -18_000,
+            startProgress: 0.2,
+            startSpineIndex: 1,
+            modeRaw: "listen",
+            playbackRate: 1.4,
+            activeSeconds: 140,
+            deviceID: "install-1",
+            rulesVersion: 1,
             lastSpineIndex: 3,
             chapterTitle: "Chapter 4",
             endingProgress: 0.55,
@@ -100,6 +108,40 @@ struct ReadingLogBackupTests {
         #expect(restoredSession.wordCount == 80_000)
         #expect(restoredSession.didFinish)
         #expect(restoredSession.chapterTitle == "Chapter 4")
+        #expect(restoredSession.tzOffsetSeconds == -18_000)
+        #expect(restoredSession.startProgress == 0.2)
+        #expect(restoredSession.startSpineIndex == 1)
+        #expect(restoredSession.mode == .listen)
+        #expect(restoredSession.playbackRate == 1.4)
+        #expect(restoredSession.activeSeconds == 140)
+        #expect(restoredSession.deviceID == "install-1")
+        #expect(restoredSession.rulesVersion == 1)
+
+        var object = try #require(
+            JSONSerialization.jsonObject(with: contents.manifestData()) as? [String: Any]
+        )
+        var archived = try #require(object["readingSessions"] as? [[String: Any]])
+        for key in ["tzOffsetSeconds", "startProgress", "startSpineIndex", "modeRaw",
+                    "playbackRate", "activeSeconds", "deviceID", "rulesVersion"] {
+            archived[0].removeValue(forKey: key)
+        }
+        object["readingSessions"] = archived
+        let legacy = try KudosBackupContents.decodeManifest(
+            JSONSerialization.data(withJSONObject: object)
+        )
+        let legacyTarget = try context(schema)
+        _ = try KudosBackupService.restore(
+            KudosBackupContents(manifest: legacy), into: legacyTarget, defaults: try testDefaults()
+        )
+        let old = try #require(try legacyTarget.fetch(FetchDescriptor<ReadingSession>()).first)
+        #expect(old.tzOffsetSeconds == nil)
+        #expect(old.startProgress == nil)
+        #expect(old.startSpineIndex == nil)
+        #expect(old.playbackRate == nil)
+        #expect(old.activeSeconds == nil)
+        #expect(old.mode == .read)
+        #expect(old.deviceID.isEmpty)
+        #expect(old.rulesVersion == 0)
 
         let restoredFavorite = try #require(try target.fetch(FetchDescriptor<ReadingFavorite>()).first)
         #expect(restoredFavorite.kind == .fandom)
