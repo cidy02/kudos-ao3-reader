@@ -302,10 +302,10 @@ struct LoadedWorksRankingTests {
     }
 
     @Test func shrinkWeighsHitsAgainstThePseudoCount() {
-        #expect(isClose(LoadedWorksRanker.shrink(0.6, toward: 0.3, hits: 0), 0.3))
-        #expect(isClose(LoadedWorksRanker.shrink(0.6, toward: 0.3, hits: nil), 0.3))
-        #expect(isClose(LoadedWorksRanker.shrink(0.6, toward: 0.3, hits: 500), 0.45))
-        #expect(LoadedWorksRanker.shrink(0.6, toward: 0.3, hits: 1_000_000) > 0.599)
+        #expect(isClose(LoadedWorksRanker.shrink(0.6, toward: 0.3, count: 0), 0.3))
+        #expect(isClose(LoadedWorksRanker.shrink(0.6, toward: 0.3, count: nil), 0.3))
+        #expect(isClose(LoadedWorksRanker.shrink(0.6, toward: 0.3, count: 500), 0.45))
+        #expect(LoadedWorksRanker.shrink(0.6, toward: 0.3, count: 1_000_000) > 0.599)
     }
 
     // MARK: - Set aside unusual stats

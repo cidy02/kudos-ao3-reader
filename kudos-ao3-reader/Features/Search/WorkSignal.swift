@@ -34,6 +34,17 @@ extension WorkSignal: ExpressibleByStringLiteral {
 
 /// Pure logic for choosing signal tone, label, and secondary note (FID40).
 enum QualitySignalTones {
+    /// §4.2. Under 50 is Early, 50–199 is Settling, 200 and up is Steady.
+    static let settlingKudos = 50
+    static let steadyKudos = 200
+
+    /// The one confidence cut-off. The row note and the Reader Response sheet both call this.
+    static func confidenceWord(forKudos kudos: Int) -> String {
+        if kudos >= steadyKudos { return "Steady" }
+        if kudos >= settlingKudos { return "Settling" }
+        return "Early"
+    }
+
     /// Evaluates the tone and visible copy from a work's figures and ranking state.
     ///
     /// Hard rule: every number, label and confidence word comes strictly from existing
@@ -49,7 +60,7 @@ enum QualitySignalTones {
 
         if setAside {
             let note: String
-            if let kudos = figures.kudos, let hits = figures.hits, kudos > hits {
+            if let kudos = figures.kudos, LoadedWorksRanker.kudosExceedHits(kudos: kudos, hits: figures.hits) {
                 note = "More kudos than hits"
             } else if let kudos = figures.kudos, kudos >= LoadedWorksRanker.unusualKudosFloor,
                       let bookmarks = figures.bookmarks, bookmarks * 100 < kudos {
@@ -65,11 +76,7 @@ enum QualitySignalTones {
         }
 
         let kudos = figures.kudos ?? 0
-        let confidenceWord: String = {
-            if kudos >= 200 { return "Steady" }
-            if kudos >= 50 { return "Settling" }
-            return "Early"
-        }()
+        let confidenceWord = confidenceWord(forKudos: kudos)
 
         switch rank {
         case .ao3Order:
