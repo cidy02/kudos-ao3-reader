@@ -13,11 +13,14 @@ enum AppTab: String, Hashable, CaseIterable, Identifiable {
         rawValue
     }
 
-    /// The four core tabs in the main tab bar / sidebar. `search` is a global action
+    /// The core tabs in the main tab bar / sidebar. `search` is a global action
     /// presented separately (the iOS search-role slot / a macOS sidebar button).
     /// `account` remains as the Account sheet's navigation scope and to migrate
     /// old restored selections; it is not a tab-bar item.
-    static let mainTabs: [AppTab] = [.home, .library, .writing, .browse]
+    /// `writing` appears only when the Writing-tab rule says the account writes.
+    static func mainTabs(showsWriting: Bool) -> [AppTab] {
+        showsWriting ? [.home, .library, .writing, .browse] : [.home, .library, .browse]
+    }
 
     var title: String {
         switch self {
@@ -201,6 +204,107 @@ struct AO3TagWorksRequest: Hashable {
     }
 }
 
+/// Pure rule for whether the Writing tab appears in the tab bar / sidebar (T-513).
+///
+/// The Writing tab is shown only when a signed-in AO3 account has at least one
+/// work, series or draft, or Kudos holds a local draft. Offline or before the
+/// account answers, the stored last-known answer is used (never guessing `true`
+/// for an account never seen to write). Once shown during an app run, the tab is
+/// never removed while the app remains open; logging out removes it.
+nonisolated struct WritingTabRule: Equatable, Sendable {
+    var isSignedIn: Bool
+    var workCount: Int?
+    var seriesCount: Int?
+    var draftCount: Int?
+    var hasLocalDrafts: Bool = false
+    var lastKnownWrites: Bool = false
+    var alreadyShownThisRun: Bool = false
+
+    var showsWritingTab: Bool {
+        guard isSignedIn else { return false }
+        if alreadyShownThisRun { return true }
+        if hasLocalDrafts { return true }
+        if (workCount ?? 0) > 0 || (seriesCount ?? 0) > 0 || (draftCount ?? 0) > 0 {
+            return true
+        }
+        if workCount == 0, seriesCount == 0, draftCount == 0 {
+            return false
+        }
+        return lastKnownWrites
+    }
+}
+
+/// Persists the last-known "writes" answer per AO3 username so offline launches
+/// and pre-response states match the account's last observed writing state
+/// without guessing `true` for an unseen account.
+nonisolated struct WritingTabStateStore {
+    private static let key = "ao3LastKnownWritesByUsername"
+    private let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
+
+    func lastKnownWrites(for username: String?) -> Bool {
+        guard let username = normalized(username) else { return false }
+        return values[username] ?? false
+    }
+
+    func setLastKnownWrites(_ writes: Bool, for username: String?) {
+        guard let username = normalized(username) else { return }
+        var next = values
+        next[username] = writes
+        defaults.set(next, forKey: Self.key)
+    }
+
+    private var values: [String: Bool] {
+        defaults.dictionary(forKey: Self.key) as? [String: Bool] ?? [:]
+    }
+
+    private func normalized(_ username: String?) -> String? {
+        guard let trimmed = username?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+              !trimmed.isEmpty
+        else { return nil }
+        return trimmed
+    }
+}
+
+nonisolated enum WritingTabEvents {
+    enum Payload: Sendable {
+        case authChanged(isSignedIn: Bool, username: String?, authenticationScope: String?)
+        case countsChanged(authenticationScope: String)
+        case draftSaved(username: String?)
+    }
+
+    static let notificationName = Notification.Name("KudosWritingTabInputsDidChange")
+
+    static func notifyAuthChanged(isSignedIn: Bool, username: String?, authenticationScope: String?) {
+        post(.authChanged(
+            isSignedIn: isSignedIn,
+            username: username,
+            authenticationScope: authenticationScope
+        ))
+    }
+
+    static func notifyCountsChanged(authenticationScope: String) {
+        post(.countsChanged(authenticationScope: authenticationScope))
+    }
+
+    static func notifyDraftSaved(username: String? = nil) {
+        post(.draftSaved(username: username))
+    }
+
+    private static func post(_ payload: Payload) {
+        if Thread.isMainThread {
+            NotificationCenter.default.post(name: notificationName, object: payload)
+        } else {
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: notificationName, object: payload)
+            }
+        }
+    }
+}
+
 /// Shared navigation state so other tabs can hand a URL to the browser and
 /// switch to it (e.g. opening a saved bookmark).
 @Observable
@@ -215,6 +319,46 @@ final class AppRouter {
             // Remember where we came from so the focused Search mode's Back button
             // can return there (iOS). Never record Search itself as the target.
             if oldValue != .search { lastNonSearchTab = oldValue }
+            if selection != .home, selection != .writing {
+                restoredWritingSelection = false
+            }
+        }
+    }
+
+    /// Whether the Writing tab is currently in `mainTabs`.
+    private(set) var showsWritingTab = false
+    /// Active core tabs derived from `showsWritingTab`.
+    var mainTabs: [AppTab] {
+        AppTab.mainTabs(showsWriting: showsWritingTab)
+    }
+
+    @ObservationIgnored private var writingStateStore: WritingTabStateStore
+    @ObservationIgnored private var recoveryStore: WritingTextRecovery
+    @ObservationIgnored private var activeUsername: String?
+    @ObservationIgnored private var evaluatedAccount: String?
+    @ObservationIgnored private var activeAuthenticationScope: String?
+    @ObservationIgnored private var restoredWritingSelection = false
+    @ObservationIgnored private var writingTabObserver: NSObjectProtocol?
+
+    init(
+        writingStateStore: WritingTabStateStore = WritingTabStateStore(),
+        recoveryStore: WritingTextRecovery = WritingTextRecovery()
+    ) {
+        self.writingStateStore = writingStateStore
+        self.recoveryStore = recoveryStore
+        writingTabObserver = NotificationCenter.default.addObserver(
+            forName: WritingTabEvents.notificationName,
+            object: nil,
+            queue: nil
+        ) { [weak self] notification in
+            guard let payload = notification.object as? WritingTabEvents.Payload else { return }
+            self?.handleWritingTabPayload(payload)
+        }
+    }
+
+    deinit {
+        if let writingTabObserver {
+            NotificationCenter.default.removeObserver(writingTabObserver)
         }
     }
 
@@ -414,21 +558,197 @@ final class AppRouter {
         return route
     }
 
-    /// Migrates a persisted Account-tab selection to Home + the Account sheet.
-    static func restoredSelection(from rawValue: String?) -> RestoredSelection {
+    /// Migrates a persisted Account-tab selection to Home + the Account sheet,
+    /// and falls back to Home when a persisted Writing-tab selection is restored
+    /// while the Writing tab is hidden.
+    static func restoredSelection(from rawValue: String?, showsWriting: Bool = false) -> RestoredSelection {
         guard let rawValue, let tab = AppTab(rawValue: rawValue) else {
             return RestoredSelection(tab: .home, presentsAccount: false)
         }
         if tab == .account {
             return RestoredSelection(tab: .home, presentsAccount: true)
         }
+        if tab == .writing, !showsWriting {
+            return RestoredSelection(tab: .home, presentsAccount: false)
+        }
         return RestoredSelection(tab: tab, presentsAccount: false)
     }
 
     func restoreSelection(from rawValue: String?) {
-        let restored = Self.restoredSelection(from: rawValue)
+        let wantsWriting = (rawValue == AppTab.writing.rawValue)
+        let restored = Self.restoredSelection(from: rawValue, showsWriting: showsWritingTab)
         selection = restored.tab
         isPresentingAccount = restored.presentsAccount
+        restoredWritingSelection = wantsWriting && !showsWritingTab
+    }
+
+    @discardableResult
+    func evaluateWritingTab(
+        isSignedIn: Bool,
+        username: String? = nil,
+        workCount: Int? = nil,
+        seriesCount: Int? = nil,
+        draftCount: Int? = nil,
+        hasLocalDrafts: Bool? = nil
+    ) -> Bool {
+        let effectiveUsername = username ?? activeUsername
+        let normalizedUser = Self.normalizedAccount(effectiveUsername)
+        let accountSwitched = isSignedIn
+            && evaluatedAccount != nil
+            && normalizedUser != evaluatedAccount
+        if isSignedIn {
+            evaluatedAccount = normalizedUser
+        } else {
+            evaluatedAccount = nil
+        }
+        if accountSwitched {
+            restoredWritingSelection = false
+            pendingWritingRoute = nil
+        }
+        let resolvedHasLocalDrafts = isSignedIn
+            ? (hasLocalDrafts ?? recoveryStore.hasLocalDrafts(for: effectiveUsername))
+            : false
+        if isSignedIn {
+            if resolvedHasLocalDrafts || (workCount ?? 0) > 0 || (seriesCount ?? 0) > 0 || (draftCount ?? 0) > 0 {
+                writingStateStore.setLastKnownWrites(true, for: effectiveUsername)
+            } else if workCount == 0, seriesCount == 0, draftCount == 0 {
+                writingStateStore.setLastKnownWrites(false, for: effectiveUsername)
+            }
+        }
+        let rule = WritingTabRule(
+            isSignedIn: isSignedIn,
+            workCount: workCount,
+            seriesCount: seriesCount,
+            draftCount: draftCount,
+            hasLocalDrafts: resolvedHasLocalDrafts,
+            lastKnownWrites: writingStateStore.lastKnownWrites(for: effectiveUsername),
+            alreadyShownThisRun: accountSwitched ? false : showsWritingTab
+        )
+        return applyWritingTabRule(rule)
+    }
+
+    @discardableResult
+    func evaluateWritingTab(_ rule: WritingTabRule) -> Bool {
+        applyWritingTabRule(rule)
+    }
+
+    @discardableResult
+    func evaluateWritingTab(
+        from header: AO3AuthorHeader,
+        route: AO3AuthorRoute,
+        username: String?,
+        isSignedIn: Bool
+    ) -> Bool {
+        let effectiveUsername = username ?? route.username
+        let workCount = header.listCount(for: .works, route: route)
+        let seriesCount = header.listCount(for: .series, route: route)
+        let draftCount = header.draftsListCount()
+        return evaluateWritingTab(
+            isSignedIn: isSignedIn,
+            username: effectiveUsername,
+            workCount: workCount,
+            seriesCount: seriesCount,
+            draftCount: draftCount,
+            hasLocalDrafts: recoveryStore.hasLocalDrafts(for: effectiveUsername)
+        )
+    }
+
+    func noteDraftSaved(username: String? = nil) {
+        let effectiveUsername = username ?? activeUsername
+        writingStateStore.setLastKnownWrites(true, for: effectiveUsername)
+        _ = evaluateWritingTab(
+            isSignedIn: true,
+            username: effectiveUsername,
+            draftCount: 1,
+            hasLocalDrafts: true
+        )
+    }
+
+    /// Shows the Writing tab for the current session without writing to
+    /// persistent account defaults (used by DEBUG screenshot routes).
+    func revealWritingTabForSession() {
+        showsWritingTab = true
+    }
+
+    private func applyWritingTabRule(_ rule: WritingTabRule) -> Bool {
+        let next = rule.showsWritingTab
+        if next {
+            showsWritingTab = true
+            if (restoredWritingSelection || pendingWritingRoute != nil),
+               selection == .home,
+               !isPresentingAccount {
+                selection = .writing
+            }
+            restoredWritingSelection = false
+        } else {
+            if selection == .writing {
+                selection = .home
+            }
+            showsWritingTab = false
+            if !rule.isSignedIn {
+                restoredWritingSelection = false
+            }
+        }
+        return next
+    }
+
+    private static func normalizedAccount(_ username: String?) -> String? {
+        guard let trimmed = username?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+              !trimmed.isEmpty
+        else { return nil }
+        return trimmed
+    }
+
+    private func handleWritingTabPayload(_ payload: WritingTabEvents.Payload) {
+        switch payload {
+        case let .authChanged(isSignedIn, username, authenticationScope):
+            activeUsername = isSignedIn ? username : nil
+            activeAuthenticationScope = isSignedIn ? authenticationScope : nil
+            guard isSignedIn else {
+                _ = evaluateWritingTab(isSignedIn: false)
+                return
+            }
+            let workCount = authenticationScope.flatMap {
+                AO3AccountListCountsCache.shared.count(for: .myWorks, authenticationScope: $0)?.knownCount
+            }
+            let seriesCount = authenticationScope.flatMap {
+                AO3AccountListCountsCache.shared.count(for: .series, authenticationScope: $0)?.knownCount
+            }
+            let draftCount = authenticationScope.flatMap {
+                AO3AccountListCountsCache.shared.count(for: .drafts, authenticationScope: $0)?.knownCount
+            }
+            _ = evaluateWritingTab(
+                isSignedIn: true,
+                username: username,
+                workCount: workCount,
+                seriesCount: seriesCount,
+                draftCount: draftCount,
+                hasLocalDrafts: recoveryStore.hasLocalDrafts(for: username)
+            )
+        case let .countsChanged(authenticationScope):
+            guard let username = activeUsername else { return }
+            let scope = activeAuthenticationScope ?? authenticationScope
+            guard scope == authenticationScope else { return }
+            let cache = AO3AccountListCountsCache.shared
+            let workCount = cache.count(for: .myWorks, authenticationScope: scope)?.knownCount
+            let seriesCount = cache.count(for: .series, authenticationScope: scope)?.knownCount
+            let draftCount = cache.count(for: .drafts, authenticationScope: scope)?.knownCount
+            _ = evaluateWritingTab(
+                isSignedIn: true,
+                username: username,
+                workCount: workCount,
+                seriesCount: seriesCount,
+                draftCount: draftCount,
+                hasLocalDrafts: recoveryStore.hasLocalDrafts(for: username)
+            )
+        case let .draftSaved(username):
+            if let username, let activeUsername,
+               Self.normalizedAccount(username) != Self.normalizedAccount(activeUsername) {
+                return
+            }
+            guard activeUsername != nil || username != nil else { return }
+            noteDraftSaved(username: username ?? activeUsername)
+        }
     }
 
     func showAccount(_ route: AccountSheetRoute? = nil) {
@@ -461,7 +781,7 @@ final class AppRouter {
             showAccount(destination)
         case let .writing(destination):
             pendingWritingRoute = destination
-            selection = .writing
+            selection = showsWritingTab ? .writing : .home
         case let .library(destination):
             pendingLibraryAO3Route = destination
             selection = .library

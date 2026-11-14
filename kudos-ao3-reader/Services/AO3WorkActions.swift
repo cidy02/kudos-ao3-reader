@@ -139,9 +139,11 @@ extension AO3AuthService {
                 throw AO3WorkWriteError.missingRequiredFields(missing)
             }
         }
-        return try await submitWorkForm(
+        let response = try await submitWorkForm(
             form.actionURL, form.parameters(submit: submit), referer: form.actionURL, using: client
         )
+        WritingTabEvents.notifyDraftSaved(username: username)
+        return response
     }
 
     /// GET `/works/:id/edit_tags` is its own page so a tag fix never opens the
