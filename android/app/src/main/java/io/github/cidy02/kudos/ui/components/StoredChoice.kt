@@ -30,3 +30,23 @@ inline fun <reified T : Enum<T>> rememberStoredChoice(key: String, default: T): 
         }
     }
 }
+
+/**
+ * Persists a device-local boolean habit (such as Work Detail disclosure states) in `"layout-choices"`.
+ */
+@Composable
+fun rememberStoredBool(key: String, default: Boolean = false): MutableState<Boolean> {
+    val context = LocalContext.current
+    return remember(context, key) {
+        val preferences = context.getSharedPreferences("layout-choices", Context.MODE_PRIVATE)
+        val state = mutableStateOf(preferences.getBoolean(key, default))
+        object : MutableState<Boolean> by state {
+            override var value: Boolean
+                get() = state.value
+                set(choice) {
+                    state.value = choice
+                    preferences.edit().putBoolean(key, choice).apply()
+                }
+        }
+    }
+}

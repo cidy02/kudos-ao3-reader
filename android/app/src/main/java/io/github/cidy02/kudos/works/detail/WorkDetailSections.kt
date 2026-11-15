@@ -2,23 +2,22 @@ package io.github.cidy02.kudos.works.detail
 
 import io.github.cidy02.kudos.works.finishedActionLabel
 import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.outlined.Smartphone
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -30,14 +29,22 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.core.model.SavedWork
@@ -45,14 +52,14 @@ import io.github.cidy02.kudos.search.LocalTagSearch
 import io.github.cidy02.kudos.search.SearchSubjectField
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SectionRuleHeader
-import io.github.cidy02.kudos.ui.subject.SubjectChip
-import io.github.cidy02.kudos.ui.subject.SubjectChipStyle
-import io.github.cidy02.kudos.ui.subject.SubjectFieldLabel
 import io.github.cidy02.kudos.ui.subject.SubjectFormRow
 import io.github.cidy02.kudos.ui.subject.SubjectMetrics
 import io.github.cidy02.kudos.ui.subject.SubjectPalette
 import io.github.cidy02.kudos.ui.subject.SubjectRowSeparator
+import io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale
 import io.github.cidy02.kudos.ui.subject.subjectPanel
+import java.net.URLDecoder
+import java.net.URLEncoder
 import java.text.NumberFormat
 
 /**
@@ -162,10 +169,108 @@ fun WorkDetailSummarySection(
 }
 
 /**
- * Artboard 1a's tag clusters (`WorkDetailSections.swift:12`).
- * Categorized AO3 tags. Exactly one cluster — Relationships — is tinted.
+ * Pure Version E disclosure digest helpers (`WorkDetailOverviewSections.swift`).
  */
-@OptIn(ExperimentalLayoutApi::class)
+object WorkDetailDisclosure {
+    fun tagsDigest(relationships: Int, characters: Int, additional: Int): String {
+        val parts = buildList {
+            if (relationships > 0) {
+                add("$relationships relationship${if (relationships == 1) "" else "s"}")
+            }
+            if (characters > 0) {
+                add("$characters character${if (characters == 1) "" else "s"}")
+            }
+            if (additional > 0) {
+                add("$additional more")
+            }
+        }
+        return if (parts.isEmpty()) "No AO3 tags" else parts.joinToString(" · ")
+    }
+
+    /** Device only knows downloaded parts, so Series claims no total work or word count. */
+    fun seriesDigest(title: String, position: Int): String =
+        if (position > 0) "$title · part $position" else title
+}
+
+/** Round-trip tag link encoding matching iOS `WorkDetailTagLink`. */
+object WorkDetailTagLink {
+    const val SCHEME = "kudos-tag"
+
+    fun url(tag: String): String =
+        "$SCHEME:${URLEncoder.encode(tag, "UTF-8").replace("+", "%20")}"
+
+    fun tagFromUrl(url: String): String? {
+        if (!url.startsWith("$SCHEME:")) return null
+        return runCatching { URLDecoder.decode(url.removePrefix("$SCHEME:"), "UTF-8") }.getOrNull()
+    }
+
+    fun joinedText(tags: List<String>): String = tags.joinToString(", ")
+}
+
+@Composable
+fun WorkDetailDisclosureHeader(
+    title: String,
+    digest: String,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val tokens = LocalKudosTokens.current
+    val accessible = isAccessibilityFontScale()
+    Column(modifier = modifier.fillMaxWidth()) {
+        SubjectRowSeparator(inset = 0.dp)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .defaultMinSize(minHeight = 52.dp)
+                .clickable(
+                    role = Role.Button,
+                    onClickLabel = if (expanded) "Collapse $title" else "Expand $title",
+                    onClick = onToggle
+                )
+                .padding(vertical = 10.dp)
+                .semantics(mergeDescendants = true) {
+                    heading()
+                    contentDescription = "$title, $digest"
+                    stateDescription = if (expanded) "Expanded" else "Collapsed"
+                },
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = title,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = tokens.primaryInk
+                )
+                Text(
+                    text = digest,
+                    fontSize = 12.5.sp,
+                    color = tokens.secondaryInk,
+                    maxLines = if (accessible) Int.MAX_VALUE else 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Icon(
+                imageVector = Icons.Filled.KeyboardArrowDown,
+                contentDescription = null,
+                tint = tokens.secondaryInk,
+                modifier = Modifier
+                    .size(18.dp)
+                    .rotate(if (expanded) 180f else 0f)
+            )
+        }
+    }
+}
+
+/**
+ * Version E's Tags section (`WorkDetailSections.swift`): collapsible with persisted app-wide
+ * state, opening to AO3-style rows (grey category label column + comma-separated inline links).
+ */
 @Composable
 fun WorkDetailTagSections(
     warnings: List<String>,
@@ -175,72 +280,141 @@ fun WorkDetailTagSections(
     freeforms: List<String>,
     palette: SubjectPalette,
     modifier: Modifier = Modifier,
-    hasAo3WorkId: Boolean = true
+    hasAo3WorkId: Boolean = true,
+    flatTags: List<String> = emptyList(),
+    expanded: Boolean = true,
+    onToggleExpanded: (() -> Unit)? = null
 ) {
     val searchTag = LocalTagSearch.current
     val tokens = LocalKudosTokens.current
+    val accessible = isAccessibilityFontScale()
 
-    data class TagCluster(
+    data class TagGroup(
         val title: String,
         val tags: List<String>,
-        val field: SearchSubjectField,
-        val isTinted: Boolean = false
+        val field: SearchSubjectField
     )
 
-    val clusters = listOf(
-        TagCluster("Archive Warnings", warnings, SearchSubjectField.WARNING),
-        TagCluster("Fandoms", fandoms, SearchSubjectField.FANDOM),
-        TagCluster("Relationships", relationships, SearchSubjectField.RELATIONSHIP, isTinted = true),
-        TagCluster("Characters", characters, SearchSubjectField.CHARACTER),
-        TagCluster("Additional Tags", freeforms, SearchSubjectField.FREEFORM)
+    val categorized = listOf(
+        TagGroup("Relationships", relationships, SearchSubjectField.RELATIONSHIP),
+        TagGroup("Characters", characters, SearchSubjectField.CHARACTER),
+        TagGroup("Additional tags", freeforms, SearchSubjectField.FREEFORM),
+        TagGroup("Warnings", warnings, SearchSubjectField.WARNING),
+        TagGroup("Fandoms", fandoms, SearchSubjectField.FANDOM)
     ).filter { it.tags.isNotEmpty() }
 
-    if (clusters.isEmpty()) {
-        Text(
-            text = noWorkTagsMessage(hasAo3WorkId),
-            color = tokens.secondaryInk,
-            fontSize = 15.sp,
-            modifier = modifier.fillMaxWidth().padding(horizontal = SubjectMetrics.panelGutter)
-        )
-        return
+    val groups = when {
+        categorized.isNotEmpty() -> categorized
+        flatTags.isNotEmpty() -> listOf(TagGroup("Tags", flatTags, SearchSubjectField.FREEFORM))
+        else -> emptyList()
+    }
+
+    val baseDigest = WorkDetailDisclosure.tagsDigest(
+        relationships = relationships.size,
+        characters = characters.size,
+        additional = freeforms.size
+    )
+    val totalTags = groups.sumOf { it.tags.size }
+    val digest = if (baseDigest == "No AO3 tags" && totalTags > 0) {
+        "$totalTags tag${if (totalTags == 1) "" else "s"}"
+    } else {
+        baseDigest
     }
 
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = SubjectMetrics.panelGutter),
-        verticalArrangement = Arrangement.spacedBy(20.dp)
+            .padding(horizontal = SubjectMetrics.panelGutter)
     ) {
-        clusters.forEachIndexed { index, cluster ->
-            Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    SubjectFieldLabel(text = cluster.title)
-                    if (cluster.tags.size > 4) {
-                        Text(
-                            text = "${cluster.tags.size}",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = tokens.tertiaryInk
-                        )
-                    }
-                }
+        if (onToggleExpanded != null) {
+            WorkDetailDisclosureHeader(
+                title = "Tags",
+                digest = digest,
+                expanded = expanded,
+                onToggle = onToggleExpanded
+            )
+        }
 
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(7.dp),
-                    verticalArrangement = Arrangement.spacedBy(7.dp)
+        if (expanded) {
+            if (groups.isEmpty()) {
+                Text(
+                    text = noWorkTagsMessage(hasAo3WorkId),
+                    color = tokens.secondaryInk,
+                    fontSize = 15.sp,
+                    modifier = Modifier.padding(top = 6.dp, bottom = 8.dp)
+                )
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = if (onToggleExpanded != null) 2.dp else 0.dp, bottom = 14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    cluster.tags.forEach { tag ->
-                        SubjectChip(
-                            text = tag,
-                            style = if (cluster.isTinted) SubjectChipStyle.Tinted else SubjectChipStyle.Neutral,
-                            palette = palette,
-                            modifier = Modifier.clickable(onClickLabel = "search AO3 for works with this tag") {
-                                searchTag(cluster.field, tag)
+                    groups.forEach { group ->
+                        val annotated = buildAnnotatedString {
+                            val linkStyles = TextLinkStyles(
+                                style = SpanStyle(
+                                    color = palette.controlInk,
+                                    fontWeight = FontWeight.Normal
+                                )
+                            )
+                            group.tags.forEachIndexed { index, tag ->
+                                if (index > 0) append(", ")
+                                withLink(
+                                    LinkAnnotation.Clickable(
+                                        tag = WorkDetailTagLink.url(tag),
+                                        styles = linkStyles
+                                    ) {
+                                        searchTag(group.field, tag)
+                                    }
+                                ) {
+                                    append(tag)
+                                }
                             }
-                        )
+                        }
+
+                        if (accessible) {
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                Text(
+                                    text = group.title,
+                                    fontSize = 13.sp,
+                                    color = tokens.secondaryInk,
+                                    modifier = Modifier.semantics { heading() }
+                                )
+                                Text(
+                                    text = annotated,
+                                    fontSize = 15.sp,
+                                    lineHeight = 21.sp,
+                                    color = tokens.secondaryInk
+                                )
+                            }
+                        } else {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                Text(
+                                    text = group.title,
+                                    fontSize = 13.sp,
+                                    color = tokens.secondaryInk,
+                                    modifier = Modifier
+                                        .width(92.dp)
+                                        .padding(top = 1.dp)
+                                        .semantics { heading() }
+                                )
+                                Text(
+                                    text = annotated,
+                                    fontSize = 15.sp,
+                                    lineHeight = 20.sp,
+                                    color = tokens.secondaryInk,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -355,7 +529,8 @@ fun WorkDetailOutlineButton(
 }
 
 /**
- * Artboard 1a's Series section (`WorkDetailOverviewSections.swift:145`).
+ * Version E's collapsible Series section (`WorkDetailOverviewSections.swift`).
+ * Digest claims only `<series> · part N`; the device lists only downloaded works it knows.
  */
 @Composable
 fun WorkDetailSeriesSection(
@@ -363,6 +538,10 @@ fun WorkDetailSeriesSection(
     seriesPosition: Int,
     seriesUrl: String,
     queuingSeries: Boolean,
+    currentWorkTitle: String = "",
+    hasLocalWork: Boolean = true,
+    expanded: Boolean = true,
+    onToggleExpanded: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     onDownloadSeries: () -> Unit,
     onOpenSeries: (String) -> Unit,
@@ -374,125 +553,283 @@ fun WorkDetailSeriesSection(
     if (seriesTitle.isBlank()) return
     val tokens = LocalKudosTokens.current
 
+    data class SeriesEntry(
+        val id: String,
+        val position: Int,
+        val title: String,
+        val work: SavedWork?
+    )
+
+    val sortedEntries = remember(seriesWorksKey(localWorks), seriesPosition, currentWorkTitle) {
+        val raw = buildList {
+            localWorks.forEach { add(SeriesEntry(it.id, it.seriesPosition, it.title, it)) }
+            add(SeriesEntry("current", seriesPosition, currentWorkTitle.ifBlank { seriesTitle }, null))
+        }
+        raw.withIndex()
+            .sortedWith(
+                compareBy<IndexedValue<SeriesEntry>>(
+                    { if (it.value.position > 0) it.value.position else Int.MAX_VALUE },
+                    { it.index }
+                )
+            )
+            .map { it.value }
+    }
+
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = SubjectMetrics.panelGutter),
-        verticalArrangement = Arrangement.spacedBy(9.dp)
+            .padding(horizontal = SubjectMetrics.panelGutter)
     ) {
-        SubjectFieldLabel(text = "SERIES")
-
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .subjectPanel(cornerRadius = 14.dp)
-        ) {
-            val partText = if (seriesPosition > 0) "Part $seriesPosition" else ""
-            SubjectFormRow(
-                label = seriesTitle,
-                value = partText
+        if (onToggleExpanded != null) {
+            WorkDetailDisclosureHeader(
+                title = "Series",
+                digest = WorkDetailDisclosure.seriesDigest(seriesTitle, seriesPosition),
+                expanded = expanded,
+                onToggle = onToggleExpanded
             )
-
-            localWorks.forEach { work ->
-                val obscured = isObscured(work)
-                SubjectRowSeparator(inset = 14.dp)
-                SubjectFormRow(
-                    label = if (obscured) "Hidden mature work" else
-                        (if (work.seriesPosition > 0) "${work.seriesPosition}. " else "") + work.title,
-                    onClick = { if (obscured) onReveal(work) else onOpenLocalWork(work.id) }
-                )
-            }
-
-            if (seriesUrl.isNotBlank()) {
-                SubjectRowSeparator(inset = 14.dp)
-                SubjectFormRow(
-                    label = if (queuingSeries) "Fetching series…" else "Download Whole Series",
-                    value = null,
-                    showsDisclosure = false,
-                    onClick = onDownloadSeries,
-                    trailing = if (queuingSeries) {
-                        { CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp) }
-                    } else null
-                )
-
-                SubjectRowSeparator(inset = 14.dp)
-                SubjectFormRow(
-                    label = "View Full Series on AO3",
-                    value = null,
-                    showsDisclosure = true,
-                    onClick = { onOpenSeries(seriesUrl) }
-                )
-            }
         }
 
-        Text(
-            text = "When you download more works from this series, they will appear here.",
-            fontSize = 12.sp,
-            color = tokens.secondaryInk
-        )
+        if (expanded) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp, bottom = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .subjectPanel(cornerRadius = 14.dp)
+                ) {
+                    SubjectFormRow(
+                        label = seriesTitle,
+                        value = if (seriesPosition > 0) "Part $seriesPosition" else null,
+                        showsDisclosure = seriesUrl.isNotBlank(),
+                        onClick = if (seriesUrl.isNotBlank()) {
+                            { onOpenSeries(seriesUrl) }
+                        } else null
+                    )
+
+                    sortedEntries.forEach { entry ->
+                        SubjectRowSeparator(inset = 14.dp)
+                        val numberPrefix = if (entry.position > 0) "${entry.position}. " else ""
+                        val other = entry.work
+                        if (other == null) {
+                            SubjectFormRow(
+                                label = numberPrefix + entry.title,
+                                value = "This work"
+                            )
+                        } else {
+                            val obscured = isObscured(other)
+                            SubjectFormRow(
+                                label = if (obscured) "Hidden mature work" else numberPrefix + other.title,
+                                showsDisclosure = !obscured,
+                                onClick = { if (obscured) onReveal(other) else onOpenLocalWork(other.id) }
+                            )
+                        }
+                    }
+
+                    if (seriesUrl.isNotBlank()) {
+                        if (hasLocalWork) {
+                            SubjectRowSeparator(inset = 14.dp)
+                            SubjectFormRow(
+                                label = if (queuingSeries) "Fetching series…" else "Download Whole Series",
+                                value = null,
+                                showsDisclosure = false,
+                                onClick = onDownloadSeries,
+                                trailing = if (queuingSeries) {
+                                    { CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp) }
+                                } else null
+                            )
+                        }
+
+                        SubjectRowSeparator(inset = 14.dp)
+                        SubjectFormRow(
+                            label = "View Full Series on AO3",
+                            value = null,
+                            showsDisclosure = true,
+                            onClick = { onOpenSeries(seriesUrl) }
+                        )
+                    }
+                }
+
+                if (hasLocalWork && localWorks.isEmpty()) {
+                    Text(
+                        text = "When you download more works from this series, they will appear here.",
+                        fontSize = 12.sp,
+                        color = tokens.secondaryInk
+                    )
+                }
+            }
+        }
     }
 }
 
+private fun seriesWorksKey(works: List<SavedWork>): List<String> =
+    works.map { "${it.id}:${it.seriesPosition}:${it.title}" }
+
 /**
- * Artboard 1a's My copy row (`WorkDetailFactsSections.swift:252`).
- * Smartphone icon, "My copy", summary subtitle, and chevron into local details sheet.
+ * Version E's collapsible My copy section (`WorkDetailFactsSections.swift`):
+ * two-column compact cells (single-column at accessibility sizes) without the repeated Progress
+ * row, plus `"Storage and History"` opening the My copy detail sheet.
  */
 @Composable
-fun WorkDetailMyCopyRow(
+fun WorkDetailMyCopySection(
+    cells: List<WorkDetailPresentation.MyCopyRow>,
     summary: String,
-    onClick: () -> Unit,
+    palette: SubjectPalette,
+    expanded: Boolean,
+    onToggleExpanded: () -> Unit,
+    onCellAction: (WorkDetailPresentation.MyCopyKind) -> Unit,
+    onOpenSheet: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val tokens = LocalKudosTokens.current
+    val accessible = isAccessibilityFontScale()
+    val storageCell = WorkDetailPresentation.MyCopyRow(
+        kind = WorkDetailPresentation.MyCopyKind.File,
+        label = "Storage and History",
+        value = "View details",
+        action = null
+    )
+    val allItems = cells.map { it to { onCellAction(it.kind) } } + listOf(storageCell to onOpenSheet)
 
-    Box(
+    Column(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = SubjectMetrics.panelGutter)
-            .subjectPanel(cornerRadius = 14.dp)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 14.dp)
-            .semantics { contentDescription = "My copy: $summary" }
+    ) {
+        WorkDetailDisclosureHeader(
+            title = "My copy",
+            digest = "Private to this device",
+            expanded = expanded,
+            onToggle = onToggleExpanded
+        )
+
+        if (expanded) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp, bottom = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (accessible) {
+                    allItems.forEachIndexed { index, (cell, action) ->
+                        val isStorage = index == allItems.lastIndex
+                        WorkDetailMyCopyCell(
+                            cell = cell,
+                            palette = palette,
+                            accessible = true,
+                            tokensFill = tokens.glassFill(0.09),
+                            primaryInk = tokens.primaryInk,
+                            secondaryInk = tokens.secondaryInk,
+                            onClick = if (isStorage || cell.action != null) action else null,
+                            accessibilityOverride = if (isStorage) "Storage and History, $summary" else null
+                        )
+                    }
+                } else {
+                    allItems.chunked(2).forEach { pair ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            pair.forEach { (cell, action) ->
+                                val isStorage = cell === storageCell
+                                WorkDetailMyCopyCell(
+                                    cell = cell,
+                                    palette = palette,
+                                    accessible = false,
+                                    tokensFill = tokens.glassFill(0.09),
+                                    primaryInk = tokens.primaryInk,
+                                    secondaryInk = tokens.secondaryInk,
+                                    onClick = if (isStorage || cell.action != null) action else null,
+                                    accessibilityOverride = if (isStorage) "Storage and History, $summary" else null,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                            if (pair.size == 1) {
+                                Spacer(modifier = Modifier.weight(1f))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun WorkDetailMyCopyCell(
+    cell: WorkDetailPresentation.MyCopyRow,
+    palette: SubjectPalette,
+    accessible: Boolean,
+    tokensFill: Color,
+    primaryInk: Color,
+    secondaryInk: Color,
+    onClick: (() -> Unit)?,
+    accessibilityOverride: String?,
+    modifier: Modifier = Modifier
+) {
+    val shape = RoundedCornerShape(12.dp)
+    val baseModifier = modifier
+        .fillMaxWidth()
+        .defaultMinSize(minHeight = 56.dp)
+        .clip(shape)
+        .background(tokensFill, shape)
+        .then(
+            if (onClick != null) {
+                Modifier.clickable(
+                    role = Role.Button,
+                    onClickLabel = cell.action?.let { "${it.title} ${cell.label.lowercase()}" },
+                    onClick = onClick
+                )
+            } else {
+                Modifier
+            }
+        )
+        .padding(horizontal = 12.dp, vertical = 8.dp)
+        .let { mod ->
+            if (accessibilityOverride != null) {
+                mod.clearAndSetSemantics { contentDescription = accessibilityOverride }
+            } else {
+                mod.semantics(mergeDescendants = true) {}
+            }
+        }
+
+    Column(
+        modifier = baseModifier,
+        verticalArrangement = Arrangement.spacedBy(3.dp, Alignment.CenterVertically)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = Icons.Outlined.Smartphone,
-                contentDescription = null,
-                tint = tokens.secondaryInk,
-                modifier = Modifier.size(20.dp)
+            Text(
+                text = cell.label,
+                fontSize = 12.sp,
+                color = secondaryInk,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
             )
-
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
+            cell.action?.let { action ->
                 Text(
-                    text = "My copy",
-                    fontSize = 15.sp,
+                    text = action.title,
+                    fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
-                    color = tokens.primaryInk,
+                    color = palette.controlInk,
                     maxLines = 1
                 )
-                Text(
-                    text = summary,
-                    fontSize = 12.sp,
-                    color = tokens.secondaryInk,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
             }
-
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = null,
-                tint = tokens.secondaryInk.copy(alpha = 0.7f),
-                modifier = Modifier.size(16.dp)
-            )
         }
+        Text(
+            text = cell.value,
+            fontSize = 14.5.sp,
+            color = primaryInk,
+            maxLines = if (accessible) Int.MAX_VALUE else 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 

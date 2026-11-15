@@ -75,6 +75,7 @@ import io.github.cidy02.kudos.core.model.readingProgress
 import io.github.cidy02.kudos.core.strippingHtml
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.home.HomeFacts
+import io.github.cidy02.kudos.library.ReadingQueueFacts
 import io.github.cidy02.kudos.library.ReadingQueueRepository
 import io.github.cidy02.kudos.library.SeriesPreservationPrompt
 import io.github.cidy02.kudos.library.SeriesPreservationResult
@@ -102,6 +103,7 @@ import io.github.cidy02.kudos.ui.components.ErrorStateCard
 import io.github.cidy02.kudos.ui.components.KudosRefreshBox
 import io.github.cidy02.kudos.ui.components.LoadingStateCard
 import io.github.cidy02.kudos.ui.components.StatusBadge
+import io.github.cidy02.kudos.ui.components.rememberStoredBool
 import io.github.cidy02.kudos.ui.components.workCardZoomDestination
 import io.github.cidy02.kudos.ui.subject.HomeStatusArrangement
 import io.github.cidy02.kudos.ui.subject.HomeStatusTray
@@ -112,11 +114,12 @@ import io.github.cidy02.kudos.ui.subject.ToolbarCircleButton
 import io.github.cidy02.kudos.ui.subject.subjectScreenWash
 import io.github.cidy02.kudos.works.detail.ChapterLengthCache
 import io.github.cidy02.kudos.works.detail.ChapterLengths
+import io.github.cidy02.kudos.works.detail.DownloadedDateEditorDialog
 import io.github.cidy02.kudos.works.detail.ResumeCardModel
 import io.github.cidy02.kudos.works.detail.WorkDetailCommentsSection
 import io.github.cidy02.kudos.works.detail.WorkDetailFigures
 import io.github.cidy02.kudos.works.detail.WorkDetailIdentityHeader
-import io.github.cidy02.kudos.works.detail.WorkDetailMyCopyRow
+import io.github.cidy02.kudos.works.detail.WorkDetailMyCopySection
 import io.github.cidy02.kudos.works.detail.WorkDetailMyCopySheet
 import io.github.cidy02.kudos.works.detail.WorkDetailPresentation
 import io.github.cidy02.kudos.works.detail.WorkDetailResumeCard
@@ -162,6 +165,9 @@ fun WorkDetailScreen(
     var newTagName by remember { mutableStateOf("") }
     var confirmRemove by remember { mutableStateOf(false) }
     var showingMyCopy by remember { mutableStateOf(false) }
+    var showingPageDateEditor by remember { mutableStateOf(false) }
+    var showingPageAddTag by remember { mutableStateOf(false) }
+    var pageNewTagName by remember { mutableStateOf("") }
     var bookmarkDialog by remember { mutableStateOf(false) }
     var bookmarkIsEdit by remember { mutableStateOf(false) }
     var bookmarkNotes by remember { mutableStateOf("") }
@@ -1138,6 +1144,78 @@ fun WorkDetailScreen(
         )
     }
 
+    if (showingPageDateEditor) {
+        val localWork = state.local
+        if (localWork != null) {
+            val workHue = remember(state.fandoms, state.title) {
+                HomeFacts.workHue(state.fandoms, state.title)
+            }
+            val pagePalette = remember(workHue, LocalKudosTokens.current.theme) {
+                SubjectPalette.fromHue(workHue, LocalKudosTokens.current.theme)
+            }
+            DownloadedDateEditorDialog(
+                initialDate = localWork.downloadedAt ?: localWork.dateAdded,
+                palette = pagePalette,
+                onDismiss = { showingPageDateEditor = false },
+                onSave = { downloadedAt ->
+                    showingPageDateEditor = false
+                    runWorkAction {
+                        val updated = workRepository.updateDownloadedAt(localWork.id, downloadedAt)
+                        if (updated != null) refreshLocal(updated.id, state.remote)
+                    }
+                }
+            )
+        }
+    }
+
+    if (showingPageAddTag) {
+        AlertDialog(
+            onDismissRequest = {
+                showingPageAddTag = false
+                pageNewTagName = ""
+            },
+            title = { Text("Add a tag") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Tags are private to this device.")
+                    OutlinedTextField(
+                        value = pageNewTagName,
+                        onValueChange = { pageNewTagName = it },
+                        label = { Text("Tag name") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = pageNewTagName.isNotBlank() && !state.working,
+                    onClick = {
+                        val trimmed = pageNewTagName.trim()
+                        showingPageAddTag = false
+                        pageNewTagName = ""
+                        ensureLocalThen { work ->
+                            val tags = workRepository.addUserTag(work.id, trimmed)
+                            state = state.copy(local = workRepository.getWork(work.id), userTags = tags)
+                        }
+                    }
+                ) {
+                    Text("Add")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showingPageAddTag = false
+                        pageNewTagName = ""
+                    }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     fun launchReading(openContents: Boolean = false, startReadAloud: Boolean = false) {
         if (state.working) return
         scope.launch {
@@ -1309,7 +1387,9 @@ fun WorkDetailScreen(
             io.github.cidy02.kudos.library.LibraryPrivacyVisibility.Obscured },
         onOpenLocalWork = onOpenLocalWork,
         onRevealSeriesWork = { privacyGate.reveal(it.id, activity) },
-        onOpenMyCopy = { showingMyCopy = true }
+        onOpenMyCopy = { showingMyCopy = true },
+        onEditDownloadedDate = { showingPageDateEditor = true },
+        onAddPageTag = { showingPageAddTag = true }
     )
 }
 
@@ -1348,6 +1428,8 @@ private fun WorkDetailContent(
     onOpenAuthor: (String) -> Unit,
     onOpenSeries: (String) -> Unit,
     onOpenMyCopy: () -> Unit,
+    onEditDownloadedDate: () -> Unit,
+    onAddPageTag: () -> Unit,
     seriesWorks: List<SavedWork>,
     seriesObscured: (SavedWork) -> Boolean,
     onOpenLocalWork: (String) -> Unit,
@@ -1366,6 +1448,9 @@ private fun WorkDetailContent(
     val local = state.local
     val isFavorite = local?.isFavorite == true
     var menuExpanded by remember { mutableStateOf(false) }
+    var tagsExpanded by rememberStoredBool("workDetailTagsExpanded", false)
+    var seriesExpanded by rememberStoredBool("workDetailSeriesExpanded", false)
+    var myCopyExpanded by rememberStoredBool("workDetailMyCopyExpanded", false)
 
     ProvidePushedShellChrome(
         hasSubjectHeader = true,
@@ -1760,7 +1845,7 @@ private fun WorkDetailContent(
                 ao3WorkId = state.ao3WorkId
             )
 
-            // 7. Categorized Tags
+            // 7. Categorized Tags (collapsible, persisted app-wide)
             Spacer(Modifier.height(14.dp))
             WorkDetailTagSections(
                 warnings = state.warnings,
@@ -1769,20 +1854,26 @@ private fun WorkDetailContent(
                 characters = state.characters,
                 freeforms = state.freeforms,
                 hasAo3WorkId = state.ao3WorkId != null,
+                flatTags = local?.workTags.orEmpty(),
+                expanded = tagsExpanded,
+                onToggleExpanded = { tagsExpanded = !tagsExpanded },
                 palette = palette
             )
 
-            // 8. Series Section
+            // 8. Series Section (collapsible, persisted app-wide)
             val hasSeries = state.seriesUrl.isNotBlank() ||
                 (state.local?.seriesTitle?.isNotBlank() == true) ||
                 (state.remote?.seriesTitle?.isNotBlank() == true)
             if (hasSeries) {
-                Spacer(Modifier.height(14.dp))
                 WorkDetailSeriesSection(
                     seriesTitle = state.local?.seriesTitle?.takeIf { it.isNotBlank() } ?: state.remote?.seriesTitle.orEmpty(),
                     seriesPosition = state.local?.seriesPosition?.takeIf { it > 0 } ?: state.remote?.seriesPosition ?: 0,
                     seriesUrl = state.seriesUrl,
                     queuingSeries = state.queuingSeries,
+                    currentWorkTitle = state.title,
+                    hasLocalWork = local != null,
+                    expanded = seriesExpanded,
+                    onToggleExpanded = { seriesExpanded = !seriesExpanded },
                     onDownloadSeries = onDownloadSeries,
                     onOpenSeries = onOpenSeries,
                     localWorks = seriesWorks, isObscured = seriesObscured,
@@ -1790,12 +1881,41 @@ private fun WorkDetailContent(
                 )
             }
 
-            // 9. My Copy
-            Spacer(Modifier.height(14.dp))
-            WorkDetailMyCopyRow(
-                summary = state.myCopySummary,
-                onClick = onOpenMyCopy
-            )
+            // 9. My Copy (collapsible, persisted app-wide, shown only for local copies)
+            if (local != null) {
+                val fileSize = epubFile?.takeIf { it.exists() && it.length() > 0 }?.let {
+                    ReadingQueueFacts.byteCountString(it.length())
+                }
+                val myCopyRows = WorkDetailPresentation.myCopyRows(
+                    progress = null,
+                    chapterNumber = null,
+                    downloadedAt = local.downloadedAt,
+                    tags = state.userTags.map { it.name }.sorted(),
+                    collections = state.collections.map { it.name }.sorted(),
+                    queues = (state.queueMemberships.map { it.name } +
+                        if (state.inSavedForLater) listOf("Saved for Later") else emptyList()).sorted(),
+                    hasFile = epubFile?.exists() == true,
+                    fileSize = fileSize
+                )
+                WorkDetailMyCopySection(
+                    cells = WorkDetailPresentation.myCopyCells(myCopyRows),
+                    summary = state.myCopySummary,
+                    palette = palette,
+                    expanded = myCopyExpanded,
+                    onToggleExpanded = { myCopyExpanded = !myCopyExpanded },
+                    onCellAction = { kind ->
+                        when (kind) {
+                            WorkDetailPresentation.MyCopyKind.Downloaded -> onEditDownloadedDate()
+                            WorkDetailPresentation.MyCopyKind.Tags -> onAddPageTag()
+                            WorkDetailPresentation.MyCopyKind.Collections -> onAddToCollection()
+                            WorkDetailPresentation.MyCopyKind.Queues -> onAddToQueue()
+                            WorkDetailPresentation.MyCopyKind.Progress,
+                            WorkDetailPresentation.MyCopyKind.File -> Unit
+                        }
+                    },
+                    onOpenSheet = onOpenMyCopy
+                )
+            }
 
             // 10. Comments Row
             if (state.ao3WorkId != null) {
