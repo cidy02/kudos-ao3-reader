@@ -211,7 +211,7 @@ class WorkFandomKickerTest {
         val minimum = with(compose.density) { 48.dp.toPx() }
         assertTrue("drag grip ${grip.boundsInRoot.width}x${grip.boundsInRoot.height}px < ${minimum}px",
             grip.boundsInRoot.width >= minimum - 1f && grip.boundsInRoot.height >= minimum - 1f)
-        val actions = grip.config.getOrNull(SemanticsProperties.CustomActions).orEmpty()
+        val actions = grip.config.getOrNull(SemanticsActions.CustomActions).orEmpty()
         assertEquals(listOf("Move up", "Move down"), actions.map { it.label })
         actions.forEach { it.action() }
         assertEquals(listOf(-1, 1), steps)
