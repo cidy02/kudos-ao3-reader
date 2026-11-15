@@ -6,13 +6,22 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -21,9 +30,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -31,16 +45,17 @@ import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.home.HomeFacts
 import io.github.cidy02.kudos.ui.components.AO3StatusTint
 import io.github.cidy02.kudos.ui.components.AO3TagPalette
-import io.github.cidy02.kudos.ui.subject.ReaderTheme
+import io.github.cidy02.kudos.ui.components.ChapterBarRole
+import io.github.cidy02.kudos.ui.components.ChapterBarScale
+import io.github.cidy02.kudos.ui.components.ChapterBars
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
+import io.github.cidy02.kudos.ui.subject.ReaderTheme
 import io.github.cidy02.kudos.ui.subject.SubjectHeaderBlock
 import io.github.cidy02.kudos.ui.subject.SubjectMetrics
 import io.github.cidy02.kudos.ui.subject.SubjectPalette
-import io.github.cidy02.kudos.ui.subject.SubjectStatCell
-import io.github.cidy02.kudos.ui.subject.SubjectStatStrip
-import io.github.cidy02.kudos.ui.subject.downloadDimmed
 import io.github.cidy02.kudos.ui.subject.WorkReadingOrDownloadRing
-import java.time.Instant
+import io.github.cidy02.kudos.ui.subject.downloadDimmed
+import io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale
 
 /**
  * Port of iOS `WorkWarningStatus` (`WorkStatLabel.swift:857`).
@@ -246,98 +261,30 @@ private fun AuthorBylineRow(
 }
 
 /**
- * Artboard 1a's WorkDetailFigureStrip (`WorkDetailIdentityBlock.swift:76`).
- * Four-cell strip: Rating, Warnings, Category, Chapters / Complete.
+ * Owner's Version E short reading card (`WorkDetailIdentityBlock.swift`): dark fandom-hue
+ * gradient surface, optional 40dp dial, `Ch N, <name>` title, chapter bars + legend, and
+ * primary pill beside circular `Contents` / `Read Aloud` / optional `Update download` actions.
  */
-@Composable
-fun WorkDetailFigureStrip(
-    rating: String,
-    warnings: List<String>,
-    categories: List<String>,
-    chapters: String,
-    isComplete: Boolean?,
-    palette: SubjectPalette,
-    modifier: Modifier = Modifier
-) {
-    val tokens = LocalKudosTokens.current
-    val warningStatus = WorkWarningStatus.from(warnings)
-
-    val ratingCell = SubjectStatCell(
-        value = WorkStatRating.letter(rating),
-        label = "Rating",
-        tint = WorkStatRating.color(rating, tokens.theme.isDarkFamily)
-    )
-
-    val warningsCell = SubjectStatCell(
-        value = warningStatus.figureText,
-        label = "Warnings",
-        tint = warningStatus.figureColor(tokens.theme)
-    )
-
-    val namedCategories = categories.filter { it.isNotBlank() }
-    val categoryValue = when {
-        namedCategories.isEmpty() -> "—"
-        namedCategories.size == 1 -> namedCategories.first()
-        else -> "${namedCategories.first()} +${namedCategories.size - 1}"
-    }
-    val categoryCell = SubjectStatCell(
-        value = categoryValue,
-        label = "Category"
-    )
-
-    val completionStatus = WorkCompletionStatus.from(isComplete)
-    val chaptersValue = chapters.trim().ifEmpty { completionStatus.shortText }
-    val completionCell = SubjectStatCell(
-        value = chaptersValue,
-        label = "Complete"
-    )
-
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = SubjectMetrics.panelGutter)
-    ) {
-        SubjectStatStrip(
-            cells = listOf(ratingCell, warningsCell, categoryCell, completionCell),
-            palette = palette
-        )
-    }
-}
-
-/**
- * Artboard 1a's WorkDetailResumeCard (`WorkDetailIdentityBlock.swift:163`).
- * 20dp corner radius glass panel, progress ring, primary/secondary reading labels,
- * and 42dp solid filled accent circle play control.
- */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun WorkDetailResumeCard(
     actionTitle: String,
+    model: ResumeCardModel,
+    chapterLengths: ChapterLengths?,
     isBusy: Boolean,
     downloadFraction: Double?,
-    readingProgress: Double?,
-    savedPositionTitle: String?,
-    lastReadDate: Instant?,
-    palette: SubjectPalette,
-    onClick: () -> Unit,
+    canUpdateDownload: Boolean,
+    onPrimaryClick: () -> Unit,
+    onContentsClick: () -> Unit,
+    onReadAloudClick: () -> Unit,
+    onUpdateDownloadClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    val tokens = LocalKudosTokens.current
-    val clampedProgress = readingProgress?.coerceIn(0.0, 1.0)
-    val hasReadingState = clampedProgress != null
-
-    val primaryLine = if (hasReadingState) {
-        savedPositionTitle ?: "Reading"
-    } else {
-        actionTitle
-    }
-
-    val secondaryLine = if (hasReadingState && lastReadDate != null) {
-        HomeFacts.relativeNamed(lastReadDate, Instant.now())
-    } else {
-        null
-    }
-
-    val shape = RoundedCornerShape(20.dp)
+    val accessible = isAccessibilityFontScale()
+    val (startColor, endColor) = workArtGradientColors(model.fandoms, model.title)
+    val items = model.chapterItems(chapterLengths)
+    val initial = model.title.trim().firstOrNull()?.uppercaseChar()?.toString()
+    val shape = RoundedCornerShape(16.dp)
 
     Box(
         modifier = modifier
@@ -345,71 +292,327 @@ fun WorkDetailResumeCard(
             .downloadDimmed(if (downloadFraction != null) 1f else 0f)
             .padding(horizontal = SubjectMetrics.panelGutter)
             .clip(shape)
-            .background(tokens.glassFill(0.10), shape)
-            .border(0.5.dp, tokens.glassStroke(0.14), shape)
-            .clickable(enabled = !isBusy, onClick = onClick)
-            .padding(horizontal = 18.dp, vertical = 16.dp)
-            .semantics { contentDescription = "$actionTitle: $primaryLine" }
+            .background(Brush.linearGradient(listOf(startColor, endColor)), shape)
+            .border(0.5.dp, Color.White.copy(alpha = 0.14f), shape)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(15.dp)
-        ) {
-            if (downloadFraction != null || clampedProgress != null) {
-                WorkReadingOrDownloadRing(
-                    downloadFraction = downloadFraction,
-                    progress = clampedProgress,
-                    state = null,
-                    diameter = 48.dp
-                )
-            }
+        if (initial != null) {
+            Text(
+                text = initial,
+                fontFamily = FontFamily.Serif,
+                fontWeight = FontWeight.Bold,
+                fontSize = 112.sp,
+                color = Color.White.copy(alpha = 0.08f),
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .offset(x = (-10).dp, y = 14.dp)
+                    .clearAndSetSemantics {}
+            )
+        }
 
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(3.dp)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(
-                    text = primaryLine,
-                    fontSize = 16.5.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = tokens.primaryInk,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                if (secondaryLine != null) {
+                if (downloadFraction != null || model.progress != null) {
+                    WorkReadingOrDownloadRing(
+                        downloadFraction = downloadFraction,
+                        progress = model.progress,
+                        state = null,
+                        diameter = if (accessible) 54.dp else 40.dp,
+                        tint = Color.White
+                    )
+                }
+
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
                     Text(
-                        text = secondaryLine,
-                        fontSize = 12.5.sp,
-                        color = tokens.primaryInk.copy(alpha = 0.6f),
-                        maxLines = 1,
+                        text = model.detailChapterName,
+                        fontSize = 15.5.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White,
+                        maxLines = if (accessible) 3 else 1,
                         overflow = TextOverflow.Ellipsis
                     )
+                    model.detailProgressLine?.let { line ->
+                        Text(
+                            text = line,
+                            fontSize = 12.5.sp,
+                            color = Color.White.copy(alpha = 0.78f),
+                            maxLines = if (accessible) 3 else 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
             }
 
-            Box(
-                modifier = Modifier
-                    .size(42.dp)
-                    .clip(CircleShape)
-                    .background(palette.solidButtonFill),
-                contentAlignment = Alignment.Center
-            ) {
-                if (isBusy) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(18.dp),
-                        color = palette.solidButtonLabel,
-                        strokeWidth = 2.dp
+            if (items.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    val barsModifier = if (items.size in 1..9) {
+                        Modifier
+                            .widthIn(max = (items.size * 30).dp)
+                            .fillMaxWidth()
+                    } else {
+                        Modifier.fillMaxWidth()
+                    }
+                    ChapterBars(
+                        items = items,
+                        scale = ChapterBarScale.Card,
+                        onGradient = true,
+                        height = 34.dp,
+                        modifier = barsModifier
                     )
-                } else {
-                    Icon(
-                        imageVector = Icons.Filled.PlayArrow,
-                        contentDescription = null,
-                        tint = palette.solidButtonLabel,
-                        modifier = Modifier.size(20.dp)
+                    ChapterBarsLegend(hasUnposted = items.any { it.role is ChapterBarRole.NotPosted })
+                }
+            }
+
+            val circleButtons: @Composable () -> Unit = {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    ResumeCircleAction(
+                        icon = Icons.AutoMirrored.Filled.List,
+                        accessibilityLabel = "Contents",
+                        enabled = !isBusy,
+                        badge = null,
+                        badgeInk = startColor,
+                        onClick = onContentsClick
                     )
+                    ResumeCircleAction(
+                        icon = Icons.AutoMirrored.Filled.VolumeUp,
+                        accessibilityLabel = "Read Aloud",
+                        enabled = !isBusy,
+                        badge = null,
+                        badgeInk = startColor,
+                        onClick = onReadAloudClick
+                    )
+                    if (canUpdateDownload && onUpdateDownloadClick != null) {
+                        val spoken = "Update download, ${model.updateChapterValue}"
+                        ResumeCircleAction(
+                            icon = Icons.Filled.Download,
+                            accessibilityLabel = spoken,
+                            enabled = !isBusy,
+                            badge = model.clampedNewChapterCount.takeIf { it > 0 }?.toString(),
+                            badgeInk = startColor,
+                            onClick = onUpdateDownloadClick
+                        )
+                    }
+                }
+            }
+
+            if (accessible) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    ResumePrimaryPill(
+                        actionTitle = actionTitle,
+                        spokenTitle = "$actionTitle, ${model.detailChapterName}",
+                        ink = startColor,
+                        isBusy = isBusy,
+                        accessible = true,
+                        onClick = onPrimaryClick,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    circleButtons()
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    ResumePrimaryPill(
+                        actionTitle = actionTitle,
+                        spokenTitle = "$actionTitle, ${model.detailChapterName}",
+                        ink = startColor,
+                        isBusy = isBusy,
+                        accessible = false,
+                        onClick = onPrimaryClick,
+                        modifier = Modifier.weight(1f)
+                    )
+                    circleButtons()
                 }
             }
         }
     }
+}
+
+@Composable
+private fun ResumePrimaryPill(
+    actionTitle: String,
+    spokenTitle: String,
+    ink: Color,
+    isBusy: Boolean,
+    accessible: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .heightIn(min = 48.dp)
+            .clip(CircleShape)
+            .background(Color.White, CircleShape)
+            .clickable(enabled = !isBusy, role = Role.Button, onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 10.dp)
+            .semantics { contentDescription = spokenTitle },
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (isBusy) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(16.dp),
+                color = ink,
+                strokeWidth = 2.dp
+            )
+        } else {
+            Icon(
+                imageVector = Icons.Filled.PlayArrow,
+                contentDescription = null,
+                tint = ink,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+        Text(
+            text = actionTitle,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = ink,
+            maxLines = if (accessible) 2 else 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(start = 6.dp)
+        )
+    }
+}
+
+@Composable
+private fun ResumeCircleAction(
+    icon: ImageVector,
+    accessibilityLabel: String,
+    enabled: Boolean,
+    badge: String?,
+    badgeInk: Color,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+            .clip(CircleShape)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .semantics(mergeDescendants = true) { contentDescription = accessibilityLabel },
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(CircleShape)
+                .background(Color.White.copy(alpha = 0.16f), CircleShape)
+                .border(1.dp, Color.White.copy(alpha = 0.24f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = Color.White.copy(alpha = if (enabled) 1f else 0.55f),
+                modifier = Modifier.size(20.dp)
+            )
+        }
+        if (badge != null) {
+            Text(
+                text = badge,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                color = badgeInk,
+                maxLines = 1,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .background(Color.White, CircleShape)
+                    .padding(horizontal = 4.dp, vertical = 1.dp)
+                    .clearAndSetSemantics {}
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ChapterBarsLegend(hasUnposted: Boolean) {
+    FlowRow(
+        modifier = Modifier.clearAndSetSemantics {},
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        LegendChip(
+            swatch = {
+                Box(
+                    Modifier
+                        .size(width = 7.dp, height = 7.dp)
+                        .background(Color.White, RoundedCornerShape(1.5.dp))
+                )
+            },
+            label = "Read"
+        )
+        LegendDot()
+        LegendChip(
+            swatch = {
+                Box(
+                    Modifier
+                        .size(width = 3.dp, height = 7.dp)
+                        .background(Color.White.copy(alpha = 0.42f), RoundedCornerShape(1.dp))
+                )
+            },
+            label = "Posted"
+        )
+        if (hasUnposted) {
+            LegendDot()
+            LegendChip(
+                swatch = {
+                    Box(
+                        Modifier
+                            .size(width = 7.dp, height = 7.dp)
+                            .border(1.dp, Color.White.copy(alpha = 0.45f), RoundedCornerShape(1.5.dp))
+                    )
+                },
+                label = "Not posted yet"
+            )
+        }
+    }
+}
+
+@Composable
+private fun LegendChip(
+    swatch: @Composable () -> Unit,
+    label: String
+) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        swatch()
+        Text(
+            text = label,
+            fontSize = 11.sp,
+            color = Color.White.copy(alpha = 0.78f),
+            maxLines = 1
+        )
+    }
+}
+
+@Composable
+private fun LegendDot() {
+    Text(
+        text = "·",
+        fontSize = 11.sp,
+        color = Color.White.copy(alpha = 0.6f),
+        maxLines = 1
+    )
 }

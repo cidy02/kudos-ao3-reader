@@ -292,6 +292,12 @@ private fun ReaderReading(
     val speechController = remember(context) { ReaderSpeechController(context) }
     val speechStatus by speechController.status.collectAsState()
     val spokenText by speechController.spokenText.collectAsState()
+    var launchNonce by remember { mutableIntStateOf(0) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        if (io.github.cidy02.kudos.app.ReaderLaunchRequest.peek(state.work.id) != null) {
+            launchNonce++
+        }
+    }
     val writeMessage by viewModel.writeMessage.collectAsState()
     val kudosWorking by viewModel.kudosWorking.collectAsState()
 
@@ -383,6 +389,26 @@ private fun ReaderReading(
             }
             val tocEntries = remember(publication) { ReadiumTocAdapter.entries(publication) }
             val sections = remember(publication) { ReadiumTocAdapter.sections(publication) }
+            LaunchedEffect(publication, launchNonce) {
+                val launch = io.github.cidy02.kudos.app.ReaderLaunchRequest.consume(state.work.id)
+                    ?: return@LaunchedEffect
+                if (launch.openContents) {
+                    tocInitialTab = 0
+                    showTocSheet = true
+                }
+                if (launch.startReadAloud && ReaderContentText.isAvailable(publication)) {
+                    val active = speechStatus == SpeechStatus.PLAYING || speechStatus == SpeechStatus.PAUSED
+                    if (speechStatus == SpeechStatus.MODEL_NOT_DOWNLOADED) {
+                        showTtsControls = true
+                    } else if (!active && speechStatus != SpeechStatus.UNAVAILABLE) {
+                        val from = state.liveProgress?.locatorJson
+                            ?.let { ReadiumNavigatorController.locatorFromJson(it) }
+                        speechController.startReading(
+                            ReaderContentText.source(publication, from, viewModel.readsAuthorNotes())
+                        )
+                    }
+                }
+            }
             DebugShotEffect("reader", ready = state.liveProgress != null) { name ->
                 when (name) {
                     "readercontents" -> showTocSheet = true

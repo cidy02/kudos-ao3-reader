@@ -62,6 +62,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import io.github.cidy02.kudos.app.ProvidePushedShellChrome
+import io.github.cidy02.kudos.app.ReaderLaunchRequest
 import io.github.cidy02.kudos.core.model.KudosSettings
 import io.github.cidy02.kudos.core.model.ReadingQueue
 import io.github.cidy02.kudos.core.model.ReadingQueueKind
@@ -102,17 +103,21 @@ import io.github.cidy02.kudos.ui.components.KudosRefreshBox
 import io.github.cidy02.kudos.ui.components.LoadingStateCard
 import io.github.cidy02.kudos.ui.components.StatusBadge
 import io.github.cidy02.kudos.ui.components.workCardZoomDestination
+import io.github.cidy02.kudos.ui.subject.HomeStatusArrangement
+import io.github.cidy02.kudos.ui.subject.HomeStatusTray
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SubjectMetrics
 import io.github.cidy02.kudos.ui.subject.SubjectPalette
 import io.github.cidy02.kudos.ui.subject.ToolbarCircleButton
 import io.github.cidy02.kudos.ui.subject.subjectScreenWash
+import io.github.cidy02.kudos.works.detail.ChapterLengthCache
+import io.github.cidy02.kudos.works.detail.ChapterLengths
+import io.github.cidy02.kudos.works.detail.ResumeCardModel
 import io.github.cidy02.kudos.works.detail.WorkDetailAo3ActionChips
 import io.github.cidy02.kudos.works.detail.WorkDetailArchiveStatsStrip
 import io.github.cidy02.kudos.works.detail.WorkDetailCommentsSection
 import io.github.cidy02.kudos.works.detail.WorkDetailFactsCard
 import io.github.cidy02.kudos.works.detail.WorkDetailFigures
-import io.github.cidy02.kudos.works.detail.WorkDetailFigureStrip
 import io.github.cidy02.kudos.works.detail.WorkDetailIdentityHeader
 import io.github.cidy02.kudos.works.detail.WorkDetailMyCopyRow
 import io.github.cidy02.kudos.works.detail.WorkDetailMyCopySheet
@@ -123,6 +128,8 @@ import io.github.cidy02.kudos.works.detail.WorkDetailSeriesSection
 import io.github.cidy02.kudos.works.detail.WorkDetailSummarySection
 import io.github.cidy02.kudos.works.detail.WorkDetailTagSections
 import io.github.cidy02.kudos.works.detail.WorkQueueLine
+import io.github.cidy02.kudos.works.detail.WorkReadingPosition
+import java.io.File
 import java.time.Instant
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
@@ -1133,6 +1140,36 @@ fun WorkDetailScreen(
         )
     }
 
+    fun launchReading(openContents: Boolean = false, startReadAloud: Boolean = false) {
+        if (state.working) return
+        scope.launch {
+            state = state.copy(working = true, error = null)
+            try {
+                val result = state.local?.let { workImporter.prepareForReading(it) }
+                    ?: state.remote?.let { workImporter.prepareForReading(it) }
+                when (result) {
+                    is WorkImportResult.Success -> {
+                        ReaderLaunchRequest.request(
+                            workId = result.work.id,
+                            openContents = openContents,
+                            startReadAloud = startReadAloud
+                        )
+                        refreshLocal(result.work.id, state.remote)
+                        onOpenReader(result.work.id)
+                    }
+                    is WorkImportResult.Failure -> state = state.copy(error = result.error.displayMessage())
+                    null -> state = state.copy(error = "No work selected.")
+                }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                state = state.copy(error = failure.message ?: "Couldn't open this work.")
+            } finally {
+                state = state.copy(working = false)
+            }
+        }
+    }
+
     WorkDetailContent(
         state = state,
         downloadFraction = downloadFraction,
@@ -1266,29 +1303,9 @@ fun WorkDetailScreen(
         },
         onChapterComments = { state.ao3WorkId?.let(onOpenChapterComments) },
         onWriteComment = { state.ao3WorkId?.let(onComposeComment) },
-        onResumeClick = {
-            if (!state.working) scope.launch {
-                state = state.copy(working = true, error = null)
-                try {
-                    val result = state.local?.let { workImporter.prepareForReading(it) }
-                        ?: state.remote?.let { workImporter.prepareForReading(it) }
-                    when (result) {
-                        is WorkImportResult.Success -> {
-                            refreshLocal(result.work.id, state.remote)
-                            onOpenReader(result.work.id)
-                        }
-                        is WorkImportResult.Failure -> state = state.copy(error = result.error.displayMessage())
-                        null -> state = state.copy(error = "No work selected.")
-                    }
-                } catch (cancelled: kotlinx.coroutines.CancellationException) {
-                    throw cancelled
-                } catch (failure: Exception) {
-                    state = state.copy(error = failure.message ?: "Couldn't open this work.")
-                } finally {
-                    state = state.copy(working = false)
-                }
-            }
-        },
+        onResumeClick = { launchReading() },
+        onContentsClick = { launchReading(openContents = true) },
+        onReadAloudClick = { launchReading(startReadAloud = true) },
         onOpenAuthor = onOpenAuthor,
         onOpenSeries = onOpenSeries,
         seriesWorks = seriesWorks,
@@ -1332,6 +1349,8 @@ private fun WorkDetailContent(
     onChapterComments: () -> Unit,
     onWriteComment: () -> Unit,
     onResumeClick: () -> Unit,
+    onContentsClick: () -> Unit,
+    onReadAloudClick: () -> Unit,
     onOpenAuthor: (String) -> Unit,
     onOpenSeries: (String) -> Unit,
     onOpenMyCopy: () -> Unit,
@@ -1613,39 +1632,80 @@ private fun WorkDetailContent(
                 onOpenAuthor = { name -> onOpenAuthor(state.accountByline(name)) }
             )
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(10.dp))
 
-            // 2. Figure Strip: Rating, Warnings, Category, Complete
-            WorkDetailFigureStrip(
-                rating = state.rating,
-                warnings = state.warnings,
-                categories = state.categories,
-                chapters = state.chapters,
-                isComplete = state.local?.let { it.knownCompletion } ?: state.remote?.isComplete,
-                palette = palette
-            )
+            // 2. Tight four-symbol strip (Rating, Category, Warnings, Complete)
+            val knownCompletion = if (state.ao3WorkId != null) {
+                local?.isComplete ?: state.remote?.isComplete
+            } else {
+                state.remote?.isComplete
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = SubjectMetrics.panelGutter)
+            ) {
+                HomeStatusTray(
+                    rating = state.rating,
+                    categories = state.categories,
+                    warnings = state.warnings,
+                    isComplete = knownCompletion,
+                    arrangement = HomeStatusArrangement.Row,
+                    tileSize = 24.dp,
+                    announces = true,
+                    backed = false
+                )
+            }
 
             Spacer(Modifier.height(14.dp))
 
-            // 3. Resume Card: Progress ring, primary/secondary reading labels, 42dp play button
-            val actionTitle = when {
+            // 3. Version E Short Reading Card
+            val epubFile = remember(local?.id, local?.hasEpub) {
+                local?.takeIf { it.hasEpub }?.let { File(File(context.filesDir, "works"), "${it.id}.epub") }
+            }
+            val chapterLengthsKey = ChapterLengthCache.taskKey(local, epubFile)
+            var chapterLengths by remember(chapterLengthsKey) { mutableStateOf<ChapterLengths?>(null) }
+            LaunchedEffect(chapterLengthsKey) {
+                val work = local ?: return@LaunchedEffect
+                chapterLengths = ChapterLengthCache.lengths(context, work)
+            }
+            val startedReading = local?.hasStartedReading == true
+            val readingProgress = if (startedReading) {
+                if (local?.isFinished == true) 1.0 else (local?.readingProgress ?: 0.0)
+            } else null
+            val newChapterCount = if (local?.hasUpdate == true) {
+                maxOf(0, local.postedChapterCount - (local.knownChapterCount ?: local.postedChapterCount))
+            } else 0
+            val canUpdateDownload = local?.hasUpdate == true && epubFile?.exists() == true
+            val resumeModel = ResumeCardModel(
+                title = state.title,
+                fandoms = state.fandoms,
+                chapters = state.chapters,
+                rawProgress = readingProgress,
+                rawChapterProgress = if (startedReading) WorkReadingPosition.chapterProgress(local?.readiumLocator) else null,
+                chapterName = WorkReadingPosition.title(local?.readiumLocator),
+                newChapterCount = newChapterCount,
+                lastReadLabel = local?.lastReadDate?.let { HomeFacts.relativeNamed(it, Instant.now()) },
+                chapterPositions = chapterLengths?.positions
+            )
+            val fallbackActionTitle = when {
                 busy -> "Opening…"
-                (state.local?.hasStartedReading == true) && !(state.local.isFinished) -> "Continue Reading"
+                startedReading && !(local?.isFinished == true) -> "Continue Reading"
                 else -> "Read"
             }
-            val readingProgress = if (state.local?.hasStartedReading == true) {
-                state.local.readingProgress ?: 0.0
-            } else null
+            val actionTitle = if (busy) "Opening…" else resumeModel.detailPrimaryTitle(fallbackActionTitle)
 
             WorkDetailResumeCard(
                 actionTitle = actionTitle,
+                model = resumeModel,
+                chapterLengths = chapterLengths,
                 isBusy = state.working,
                 downloadFraction = downloadFraction,
-                readingProgress = readingProgress,
-                savedPositionTitle = HomeFacts.locatorTitle(state.local?.readiumLocator),
-                lastReadDate = state.local?.lastReadDate,
-                palette = palette,
-                onClick = onResumeClick
+                canUpdateDownload = canUpdateDownload,
+                onPrimaryClick = onResumeClick,
+                onContentsClick = onContentsClick,
+                onReadAloudClick = onReadAloudClick,
+                onUpdateDownloadClick = if (canUpdateDownload) onDownload else null
             )
 
             // WorkDetailView.swift:328–356: progress, result and Cancel stay in Detail.
