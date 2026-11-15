@@ -678,33 +678,71 @@ struct SectionRuleHeader: View {
 
     @ViewBuilder
     private var titleBlock: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(title)
-                .font(.title3.weight(.bold))
-                // Color.primary, not `.primary`: the hierarchical style resolves against the inherited
-                // foreground, which a List section header sets to grey (Writing's headers rendered grey).
-                .foregroundStyle(Color.primary)
-                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
-                .fixedSize(horizontal: false, vertical: true)
-                .layoutPriority(1)
-
-            if let countText {
-                Text(countText)
-                    .font(.subheadline)
-                    .foregroundStyle(Color.secondary)
-                    .lineLimit(1)
-            } else if let count {
-                Text(count.formatted())
-                    .font(.subheadline)
-                    .foregroundStyle(Color.secondary)
-                    .lineLimit(1)
+        if SectionHeaderLayout.stacksCount(dynamicTypeSize) {
+            // layoutPriority keeps the title at its ideal width beside the count.
+            // "Reading Queues" at Title 3, AX5, plus the gutters, is wider than a
+            // phone, and that width becomes the whole Home column. The count
+            // drops under the title so the title wraps in the width it is given.
+            VStack(alignment: .leading, spacing: 2) {
+                Text(AccessibilitySoftBreak.opportunities(in: title))
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(Color.primary)
+                    .lineLimit(nil)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if let countText {
+                    Text(AccessibilitySoftBreak.opportunities(in: countText))
+                        .font(.subheadline)
+                        .foregroundStyle(Color.secondary)
+                        .lineLimit(nil)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else if let count {
+                    Text(count.formatted())
+                        .font(.subheadline)
+                        .foregroundStyle(Color.secondary)
+                        .lineLimit(nil)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if let note {
+                    Text(AccessibilitySoftBreak.opportunities(in: "· " + note))
+                        .font(.subheadline)
+                        .foregroundStyle(Color.secondary)
+                        .lineLimit(nil)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
-
-            if let note {
-                Text("· " + note)
-                    .font(.subheadline)
-                    .foregroundStyle(Color.secondary)
+        } else {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(title)
+                    .font(.title3.weight(.bold))
+                    // Color.primary, not `.primary`: the hierarchical style resolves against the inherited
+                    // foreground, which a List section header sets to grey (Writing's headers rendered grey).
+                    .foregroundStyle(Color.primary)
                     .lineLimit(1)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .layoutPriority(1)
+
+                if let countText {
+                    Text(countText)
+                        .font(.subheadline)
+                        .foregroundStyle(Color.secondary)
+                        .lineLimit(1)
+                } else if let count {
+                    Text(count.formatted())
+                        .font(.subheadline)
+                        .foregroundStyle(Color.secondary)
+                        .lineLimit(1)
+                }
+
+                if let note {
+                    Text("· " + note)
+                        .font(.subheadline)
+                        .foregroundStyle(Color.secondary)
+                        .lineLimit(1)
+                }
             }
         }
     }
