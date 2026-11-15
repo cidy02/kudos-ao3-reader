@@ -246,7 +246,7 @@ enum FolderSyncService {
     ) throws -> FolderSyncResult {
         var result = FolderSyncResult()
         for contents in conflictContents {
-            let summary = try KudosBackupService.restore(contents, into: context, defaults: defaults)
+            let summary = try KudosBackupService.restore(contents, into: context, defaults: defaults, fromSync: true)
             result.absorb(summary)
             result.foldedConflicts += 1
         }
@@ -354,7 +354,7 @@ enum FolderSyncService {
                     fontFiles: assets.fontFiles,
                     originalFiles: assets.originalFiles
                 )
-                let summary = try KudosBackupService.restore(contents, into: context, defaults: defaults)
+                let summary = try KudosBackupService.restore(contents, into: context, defaults: defaults, fromSync: true)
                 result.absorb(summary)
             }
             assets.epubFiles.removeAll(keepingCapacity: false)
@@ -511,7 +511,7 @@ enum FolderSyncService {
             let contents = try await Task.detached {
                 try coordinatedReadLegacyContents(from: legacyURL)
             }.value
-            let summary = try KudosBackupService.restore(contents, into: context, defaults: defaults)
+            let summary = try KudosBackupService.restore(contents, into: context, defaults: defaults, fromSync: true)
             result.absorb(summary)
             result.didReadRemoteFile = true
             let conflictFold = try await foldConflictVersions(
@@ -571,7 +571,8 @@ enum FolderSyncService {
             let summary = try KudosBackupService.restore(
                 readResult.contents,
                 into: context,
-                defaults: defaults
+                defaults: defaults,
+                fromSync: true
             )
             outcome.result.absorb(summary)
             outcome.result.foldedConflicts += 1

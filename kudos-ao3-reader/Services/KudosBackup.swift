@@ -754,6 +754,9 @@ nonisolated struct KudosBackupPronunciations: Codable, Equatable {
     var global: [String: String]
     var fandoms: [String: [String: String]]
     var works: [String: [String: String]]
+    /// When the reader last edited a correction on the device that wrote this (T-541). Nil
+    /// from an older build or Android.
+    var modifiedAt: Date?
 
     var isEmpty: Bool { global.isEmpty && fandoms.isEmpty && works.isEmpty }
 
@@ -773,9 +776,11 @@ nonisolated struct KudosBackupPronunciations: Codable, Equatable {
         store: KokoroPronunciationStore = KokoroPronunciationStore()
     ) -> KudosBackupPronunciations {
         let file = store.load()
-        return KudosBackupPronunciations(
+        var captured = KudosBackupPronunciations(
             global: file.global, fandoms: file.fandoms, works: file.works
         )
+        captured.modifiedAt = file.modifiedAt
+        return captured
     }
 
     /// Merge restored corrections into whatever is already on this device.
@@ -785,16 +790,27 @@ nonisolated struct KudosBackupPronunciations: Codable, Equatable {
     /// corrections in it. Entries only on this device are kept, because losing
     /// a correction that the archive simply never knew about would be a silent
     /// deletion of hand-made work.
-    func apply(to store: KokoroPronunciationStore = KokoroPronunciationStore()) throws {
+    ///
+    /// T-541: that holds for a restore the reader asked for. A sync is not an explicit act,
+    /// and it used to put the folder's older correction back over one edited here. On a sync
+    /// the archive wins a conflict only when its corrections were edited more recently; an
+    /// entry this device does not have is still added either way.
+    func apply(
+        to store: KokoroPronunciationStore = KokoroPronunciationStore(), fromSync: Bool = false
+    ) throws {
         guard !isEmpty else { return }
         var file = store.load()
-        global.forEach { file.global[$0.key] = $0.value }
-        for (fandom, entries) in fandoms {
-            entries.forEach { file.fandoms[fandom, default: [:]][$0.key] = $0.value }
+        let incomingStamp = modifiedAt.map { KudosBackupContents.clampedArchiveDate($0) }
+        let archiveWins = SyncedSettingsClock.incomingWins(
+            localStamp: file.modifiedAt, incomingStamp: incomingStamp, fromSync: fromSync
+        )
+        func merge(_ incoming: [String: String], into local: inout [String: String]) {
+            for (word, ipa) in incoming where archiveWins || local[word] == nil { local[word] = ipa }
         }
-        for (work, entries) in works {
-            entries.forEach { file.works[work, default: [:]][$0.key] = $0.value }
-        }
+        merge(global, into: &file.global)
+        for (fandom, entries) in fandoms { merge(entries, into: &file.fandoms[fandom, default: [:]]) }
+        for (work, entries) in works { merge(entries, into: &file.works[work, default: [:]]) }
+        if let incomingStamp { file.modifiedAt = max(file.modifiedAt ?? incomingStamp, incomingStamp) }
         try store.save(file)
     }
 
@@ -1647,6 +1663,57 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
     /// that never chose cannot reset one that did through folder sync. Apply writes only a
     /// value this build knows. Additive — no manifest version bump.
     var workSymbolPlacement: String?
+    /// When each setting last changed on the device that wrote this (T-541), keyed by its
+    /// `UserDefaults` key. Nil from an older build or Android. See `SyncedSettingsClock`.
+    var modifiedAt: [String: Date]?
+    /// Settings carried by key rather than as a named field (T-541): only stored choices, and
+    /// only keys on `extraKeys`.
+    var extras: [String: KudosBackupSettingValue]?
+
+    /// Settings a restore assigns by recency. The four privacy gates are not here: a restore
+    /// may tighten them and never loosen them, whatever its date. `readerFontID` is local.
+    static let recencyKeys = [
+        "readerMode", "readerTwoPage", "readerCustomize", "readerBoldText", "readerFontPt",
+        "readerLineHeight", "readerLetterSpacing", "readerWordSpacing", "readerMargin",
+        "readerJustify", "appTheme", "readerTheme", "matchAppReaderTheme", "accentColorHex",
+        "autoPreserveSmallSeriesOnSaveForLater", "autoPreserveSeriesWorkThreshold",
+        "library.page.arrangement", "workSymbolPlacement"
+    ]
+
+    /// Preferences that were never backed up or synced until T-541. Literal keys: the types
+    /// that own them are main-actor, and `SyncedSettingsTests` checks each against its owner.
+    static let extraKeys: [String: KudosBackupSettingValue.Kind] = [
+        "keepScreenAwake": .bool,
+        "showsZeroStats": .bool,
+        "downloadOnSubscribe": .bool,
+        "keepsWorksYouRead": .bool,
+        "kudos.insights.discreetMode": .bool,
+        "kudos.insights.hideReadingTime": .bool,
+        "browse.fandoms.groupsVariants": .bool,
+        "search.showSummaries": .bool,
+        "browse.fandomWorks.showSummaries": .bool,
+        "browse.tagWorks.showSummaries": .bool,
+        "author.lists.showSummaries": .bool,
+        "series.showSummaries": .bool,
+        "account.yourWorks.arrangement": .string,
+        "readerSpeechRate": .number,
+        "readerSpeechPitch": .number,
+        "readerSpeechReadAuthorNotes": .bool,
+        "workDetailTagsExpanded": .bool,
+        "workDetailSeriesExpanded": .bool,
+        "workDetailMyCopyExpanded": .bool,
+        "readerCustomPaperHex": .string,
+        "account.markedForLater.arrangement": .string,
+        "account.bookmarks.arrangement": .string,
+        "account.ao3History.arrangement": .string,
+        "library.allWorks.arrangement": .string,
+        "library.imported.arrangement": .string,
+        "account.displayMode": .string,
+        "authorProfile.displayMode": .string,
+        "collection.displayMode": .string,
+        "library.favorites.order": .string,
+        "library.favorites.scope": .string
+    ]
 
     init(
         readerFontID: String,
@@ -1722,6 +1789,8 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         case autoPreserveSeriesWorkThreshold
         case libraryPageArrangement
         case workSymbolPlacement
+        case modifiedAt
+        case extras
     }
 
     init(from decoder: Decoder) throws {
@@ -1775,9 +1844,29 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
                 forKey: .workSymbolPlacement
             )) ?? nil
         )
+        modifiedAt = (try? container.decodeIfPresent([String: Date].self, forKey: .modifiedAt)) ?? nil
+        extras = (try? container.decodeIfPresent(
+            [String: KudosBackupSettingValue].self,
+            forKey: .extras
+        )) ?? nil
     }
 
     static func capture(defaults: UserDefaults = .standard) -> Self {
+        var settings = values(defaults: defaults)
+        // Stamp what changed here since the last export or restore, then send the stamps
+        // with the values so the reader's other devices can tell newer from older.
+        let keys = recencyKeys + extraKeys.keys.sorted()
+        let stamps = SyncedSettingsClock.noteLocalChanges(keys: keys, in: defaults)
+            .filter { keys.contains($0.key) }
+        settings.modifiedAt = stamps.isEmpty ? nil : stamps
+        let extras = extraKeys.reduce(into: [String: KudosBackupSettingValue]()) { found, entry in
+            found[entry.key] = KudosBackupSettingValue.stored(entry.key, kind: entry.value, in: defaults)
+        }
+        settings.extras = extras.isEmpty ? nil : extras
+        return settings
+    }
+
+    private static func values(defaults: UserDefaults) -> Self {
         Self(
             readerFontID: defaults.string(forKey: "readerFontID") ?? "system",
             readerMode: defaults.string(forKey: "readerMode") ?? ReadingMode.scroll.rawValue,
@@ -1834,7 +1923,21 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         )
     }
 
-    func apply(to defaults: UserDefaults = .standard) {
+    func apply(to defaults: UserDefaults = .standard, fromSync: Bool = false) {
+        // T-541. Until now every restore assigned every setting, so each sync-down put the
+        // folder's copy over whatever had been changed here since. Now a sync writes a setting
+        // only when its stamp is newer than this device's (`SyncedSettingsClock.incomingWins`).
+        let keys = Self.recencyKeys + Self.extraKeys.keys.sorted()
+        let localStamps = SyncedSettingsClock.noteLocalChanges(keys: keys, in: defaults)
+        let now = Date()
+        func write(_ value: Any, _ key: String) {
+            let incomingStamp = modifiedAt?[key].map { KudosBackupContents.clampedArchiveDate($0, now: now) }
+            guard SyncedSettingsClock.incomingWins(
+                localStamp: localStamps[key], incomingStamp: incomingStamp, fromSync: fromSync
+            ) else { return }
+            defaults.set(value, forKey: key)
+            SyncedSettingsClock.adopt(key: key, stamp: incomingStamp, in: defaults)
+        }
         // M21. Never assign the archive's readerFontID — the font selection is local-only.
         // A custom font refers to a file name that may not exist on this device (the
         // archive might carry a font the user never installed here, or folder-sync
@@ -1842,16 +1945,16 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         // to a missing font breaks rendering until the user notices and resets it in
         // Settings. The user picks their font on each device; sync carries the *files*,
         // not the selection.
-        defaults.set(readerMode, forKey: "readerMode")
-        defaults.set(readerTwoPage, forKey: "readerTwoPage")
-        defaults.set(readerCustomize, forKey: "readerCustomize")
-        defaults.set(readerBoldText, forKey: "readerBoldText")
-        defaults.set(readerFontPt, forKey: "readerFontPt")
-        defaults.set(readerLineHeight, forKey: "readerLineHeight")
-        defaults.set(readerLetterSpacing, forKey: "readerLetterSpacing")
-        defaults.set(readerWordSpacing, forKey: "readerWordSpacing")
-        defaults.set(readerMargin, forKey: "readerMargin")
-        defaults.set(readerJustify, forKey: "readerJustify")
+        write(readerMode, "readerMode")
+        write(readerTwoPage, "readerTwoPage")
+        write(readerCustomize, "readerCustomize")
+        write(readerBoldText, "readerBoldText")
+        write(readerFontPt, "readerFontPt")
+        write(readerLineHeight, "readerLineHeight")
+        write(readerLetterSpacing, "readerLetterSpacing")
+        write(readerWordSpacing, "readerWordSpacing")
+        write(readerMargin, "readerMargin")
+        write(readerJustify, "readerJustify")
         // M3. These four are safety gates, and until the 2026-08 audit an archive could
         // *relax* every one of them by blind assignment. That is not only an import-time
         // problem: `KudosBackupService.restore` always ends here (it is the last thing it
@@ -1882,25 +1985,29 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
             let stricter = (localMode == .hide || incomingMode == .hide) ? MaturePrivacyMode.hide : incomingMode
             defaults.set(stricter.rawValue, forKey: "matureContentMode")
         }
-        defaults.set(appTheme, forKey: "appTheme")
-        defaults.set(readerTheme, forKey: "readerTheme")
-        defaults.set(matchAppReaderTheme, forKey: "matchAppReaderTheme")
+        write(appTheme, "appTheme")
+        write(readerTheme, "readerTheme")
+        write(matchAppReaderTheme, "matchAppReaderTheme")
         // Absent (or JSON null, which decodes as nil) leaves the local accent.
         // `#990000` in any case is the pre-2026-10-29 default, not a choice.
         // Any other present value is applied as stored, including a custom colour.
         if let accentColorHex, !ThemeManager.isLegacyUnchosenAccent(accentColorHex) {
-            defaults.set(accentColorHex, forKey: "accentColorHex")
+            write(accentColorHex, "accentColorHex")
         }
-        defaults.set(autoPreserveSmallSeriesOnSaveForLater, forKey: "autoPreserveSmallSeriesOnSaveForLater")
-        defaults.set(autoPreserveSeriesWorkThreshold, forKey: "autoPreserveSeriesWorkThreshold")
+        write(autoPreserveSmallSeriesOnSaveForLater, "autoPreserveSmallSeriesOnSaveForLater")
+        write(autoPreserveSeriesWorkThreshold, "autoPreserveSeriesWorkThreshold")
         // An absent or malformed key stays nil. An older archive, or a folder
         // sync from Android, must leave the reader's own Library layout alone.
         if let libraryPageArrangement {
-            defaults.set(libraryPageArrangement.rawValue, forKey: LibraryPageArrangement.storageKey)
+            write(libraryPageArrangement.rawValue, LibraryPageArrangement.storageKey)
         }
         // Same rule; a value this build does not know is ignored.
         if let workSymbolPlacement, WorkSymbolPlacement(rawValue: workSymbolPlacement) != nil {
-            defaults.set(workSymbolPlacement, forKey: WorkSymbolPlacement.storageKey)
+            write(workSymbolPlacement, WorkSymbolPlacement.storageKey)
+        }
+        // Only keys this build knows, and only a value of the kind it expects.
+        for (key, value) in extras ?? [:] where Self.extraKeys[key] == value.kind {
+            write(value.object, key)
         }
     }
 
@@ -2181,7 +2288,8 @@ enum KudosBackupService {
         _ contents: KudosBackupContents,
         into context: ModelContext,
         defaults: UserDefaults = .standard,
-        mode: BackupImportMode = .reconcile
+        mode: BackupImportMode = .reconcile,
+        fromSync: Bool = false
     ) throws -> KudosBackupRestoreSummary {
         // Flush anything the caller had pending, so the rollback below can only ever
         // discard changes this restore made.
@@ -2200,7 +2308,8 @@ enum KudosBackupService {
         let journal = EPUBDisplacementJournal()
         do {
             let summary = try restoreIsolatedContents(
-                contents, into: context, defaults: defaults, mode: mode, journal: journal
+                contents, into: context, defaults: defaults, mode: mode, fromSync: fromSync,
+                journal: journal
             )
             journal.discard()
             return summary
@@ -2322,6 +2431,7 @@ enum KudosBackupService {
         into context: ModelContext,
         defaults: UserDefaults,
         mode: BackupImportMode,
+        fromSync: Bool,
         journal: EPUBDisplacementJournal
     ) throws -> KudosBackupRestoreSummary {
         let existingWorks = try context.fetch(FetchDescriptor<SavedWork>())
@@ -3539,7 +3649,7 @@ enum KudosBackupService {
                     settings.readerFontID = "system"
                 }
             }
-            settings.apply(to: defaults)
+            settings.apply(to: defaults, fromSync: fromSync)
         }
         // Applied on every mode, including replaceLibrary. Corrections are not
         // library content — they are how the reader wants words said — so a
@@ -3547,7 +3657,7 @@ enum KudosBackupService {
         // swallowed for the same reason the export tolerates a missing file:
         // losing a restore over a pronunciation write would be the worse
         // outcome by a wide margin.
-        try? contents.manifest.pronunciations.apply()
+        try? contents.manifest.pronunciations.apply(fromSync: fromSync)
         return KudosBackupRestoreSummary(
             // Count what was actually applied — tombstone-suppressed works are skipped
             // and must not inflate the user-facing "N works restored" confirmation.

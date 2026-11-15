@@ -598,6 +598,8 @@ struct ReaderView: View {
     private func autoFinishIfComplete() {
         guard work.isComplete, !work.isFinished else { return }
         work.isFinished = true
+        // Without a stamp a sync could not tell this from the older copy in the folder (T-541).
+        work.markModified()
         try? modelContext.save()
     }
 

@@ -11,6 +11,9 @@ nonisolated struct KokoroPronunciationStore: Sendable {
         var global: [String: String]
         var fandoms: [String: [String: String]]
         var works: [String: [String: String]]
+        /// When the reader last edited a correction here (T-541). A sync uses it to tell a
+        /// newer edit from an older one. Nil in a file written before it existed.
+        var modifiedAt: Date?
     }
 
     static let empty = File(version: 1, global: [:], fandoms: [:], works: [:])
@@ -85,6 +88,7 @@ nonisolated struct KokoroPronunciationStore: Sendable {
         var file = try loadForEditing()
         for word in words { file.global[word] = nil }
         file.global.merge(overrides) { _, new in new }
+        file.modifiedAt = Date()
         try save(file)
     }
 
@@ -118,6 +122,7 @@ nonisolated struct KokoroPronunciationStore: Sendable {
         case .fandom(let key): file.fandoms[key, default: [:]][word] = ipa
         case .work(let key): file.works[key, default: [:]][word] = ipa
         }
+        file.modifiedAt = Date()
         try save(file)
     }
 
@@ -135,6 +140,7 @@ nonisolated struct KokoroPronunciationStore: Sendable {
             file.works[key]?[word] = nil
             if file.works[key]?.isEmpty == true { file.works[key] = nil }
         }
+        file.modifiedAt = Date()
         try save(file)
     }
 
