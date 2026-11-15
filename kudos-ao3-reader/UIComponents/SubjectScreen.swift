@@ -360,6 +360,15 @@ nonisolated enum WorkSymbolPlacement: String, CaseIterable, Identifiable, Sendab
         WorkUnderTitleLine(kind: .remainder, spacingBefore: 12)
     ]
 
+    /// Under the Title, the star and the expand control sit beside these lines,
+    /// top-aligned. The strip is one of them, so a 44 pt target cannot push it
+    /// down from the title. Beside the Title keeps those controls in the title line.
+    static let underTitleTrailingCluster: [WorkUnderTitleLine.Kind] = [.heading, .symbols, .byline]
+
+    /// Beside the Title the star and chevron stay in the title line. Under the
+    /// Title they use `underTitleTrailingCluster` instead.
+    var keepsTrailingControlsInTitleLine: Bool { self == .beside }
+
     var id: String { rawValue }
 
     var title: String {
@@ -438,7 +447,9 @@ struct WorkFandomLabel: View {
 /// With Work Symbols set to Under the Title, the column is
 /// `WorkSymbolPlacement.underTitleLines`: fandom and title, the symbol row,
 /// the author, then the rest. Only the selection check keeps a leading column.
-struct WorkPlainRow<Leading: View, Symbols: View, Heading: View, Byline: View, Remainder: View>: View {
+/// Trailing controls passed for that placement sit beside the title block, not
+/// in the title line, so the strip keeps the 6 pt under the title.
+struct WorkPlainRow<Leading: View, Symbols: View, Heading: View, Byline: View, Remainder: View, Trailing: View>: View {
     var wide = false
     var showsSeparator = true
     var separatorInset: CGFloat? = nil
@@ -447,6 +458,9 @@ struct WorkPlainRow<Leading: View, Symbols: View, Heading: View, Byline: View, R
     /// already the first line of `remainder` (the library ledger), so that line
     /// is not drawn twice.
     var insertsByline = false
+    /// Under the Title, `trailing` sits at the top trailing edge beside the
+    /// title block. False leaves the column full width. Ignored Beside the Title.
+    var showsUnderTitleTrailing = false
     /// The selection check (or its placeholder) while selecting; nothing otherwise.
     @ViewBuilder var leading: () -> Leading
     /// The four symbols in the arrangement asked for: `.grid` beside, `.row` under the title.
@@ -457,6 +471,9 @@ struct WorkPlainRow<Leading: View, Symbols: View, Heading: View, Byline: View, R
     /// The author. Drawn only Under the Title, and only when `insertsByline`.
     @ViewBuilder var byline: () -> Byline
     @ViewBuilder var remainder: () -> Remainder
+    /// Star and expand control. Drawn only Under the Title, and only when
+    /// `showsUnderTitleTrailing`.
+    @ViewBuilder var trailing: () -> Trailing
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @AppStorage(WorkSymbolPlacement.storageKey) private var placement: WorkSymbolPlacement = .defaultValue
@@ -526,14 +543,33 @@ struct WorkPlainRow<Leading: View, Symbols: View, Heading: View, Byline: View, R
     }
 
     /// Fandom and title, the strip, the author, then the rest — the order in
-    /// `underTitleLines`, with each line's own gap above it.
+    /// `underTitleLines`, with each line's own gap above it. Trailing controls
+    /// sit beside the title block, so they are not part of the title's height.
     private var underTitleColumn: some View {
         let lines = underTitleLines
+        let clusterKind = WorkSymbolPlacement.underTitleTrailingCluster
+        let cluster = lines.filter { clusterKind.contains($0.kind) }
+        let rest = lines.filter { !clusterKind.contains($0.kind) }
         return VStack(alignment: .leading, spacing: 0) {
+            if showsUnderTitleTrailing {
+                HStack(alignment: .top, spacing: 6) {
+                    underTitleStack(cluster, padFirst: false)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    trailing()
+                }
+            } else {
+                underTitleStack(cluster, padFirst: false)
+            }
+            underTitleStack(rest, padFirst: !cluster.isEmpty)
+        }
+    }
+
+    private func underTitleStack(_ lines: [WorkUnderTitleLine], padFirst: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(lines.indices), id: \.self) { index in
                 let line = lines[index]
                 underTitleLine(line.kind)
-                    .padding(.top, index == 0 ? 0 : line.spacingBefore)
+                    .padding(.top, index == 0 && !padFirst ? 0 : line.spacingBefore)
             }
         }
     }
@@ -551,6 +587,37 @@ struct WorkPlainRow<Leading: View, Symbols: View, Heading: View, Byline: View, R
         case .remainder:
             remainder()
         }
+    }
+}
+
+extension WorkPlainRow where Trailing == EmptyView {
+    init(
+        wide: Bool = false,
+        showsSeparator: Bool = true,
+        separatorInset: CGFloat? = nil,
+        placementOverride: WorkSymbolPlacement? = nil,
+        insertsByline: Bool = false,
+        showsUnderTitleTrailing: Bool = false,
+        @ViewBuilder leading: @escaping () -> Leading,
+        @ViewBuilder symbols: @escaping (WorkStatusIconGrid.Arrangement) -> Symbols,
+        @ViewBuilder heading: @escaping (_ includesByline: Bool) -> Heading,
+        @ViewBuilder byline: @escaping () -> Byline,
+        @ViewBuilder remainder: @escaping () -> Remainder
+    ) {
+        self.init(
+            wide: wide,
+            showsSeparator: showsSeparator,
+            separatorInset: separatorInset,
+            placementOverride: placementOverride,
+            insertsByline: insertsByline,
+            showsUnderTitleTrailing: showsUnderTitleTrailing,
+            leading: leading,
+            symbols: symbols,
+            heading: heading,
+            byline: byline,
+            remainder: remainder,
+            trailing: { EmptyView() }
+        )
     }
 }
 
