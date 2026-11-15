@@ -450,13 +450,13 @@ struct ReadingInsightsTests {
             facts: [fact(on: 2, minutes: 60, words: 1_000)],
             previousPeriodFacts: july, dayRange: tenDays, calendar: calendar
         )
-        #expect(insights.previousPeriodSeconds == 10 * 3_600)
+        #expect(insights.previousPeriodSeconds == Double(10 * 3_600))
         #expect(insights.previousPeriodWordsRead == 10_000)
         // No day range (a year): the earlier period stays whole.
         let whole = ReadingInsights.make(
             facts: [fact(on: 2, minutes: 60)], previousPeriodFacts: july, calendar: calendar
         )
-        #expect(whole.previousPeriodSeconds == 31 * 3_600)
+        #expect(whole.previousPeriodSeconds == Double(31 * 3_600))
         // Nothing read in those ten days last month: no delta, not a delta against zero.
         let none = ReadingInsights.make(
             facts: [fact(on: 2, minutes: 60)], previousPeriodFacts: [julyFact(20)],
