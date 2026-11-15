@@ -338,17 +338,41 @@ nonisolated struct ReadingInsights: Equatable, Sendable {
         return shares
     }
 
-    /// Median of the session durations. An even count takes the mean of the
-    /// middle two — the ordinary definition, and the one a reader checking the
-    /// figure by hand would use.
+    /// Visits closer together than this are one sitting for the median.
+    static let sittingMergeGapSeconds: Double = 5 * 60
+
+    /// Median of the sitting durations. Visits (of any work) that start
+    /// under 5 minutes after the one before ended are one sitting here (a view over the
+    /// stored rows; nothing is merged or rewritten). An even count takes the mean of the
+    /// middle two — the ordinary definition, and the one a reader checking the figure by
+    /// hand would use.
     static func medianSeconds(of facts: [ReadingSessionFacts]) -> Double {
-        let durations = facts.map(\.durationSeconds).filter { $0 > 0 }.sorted()
+        let durations = mergedSittingDurations(of: facts).sorted()
         guard !durations.isEmpty else { return 0 }
         let middle = durations.count / 2
         if durations.count.isMultiple(of: 2) {
             return (durations[middle - 1] + durations[middle]) / 2
         }
         return durations[middle]
+    }
+
+    /// Durations of the sittings once visits under 5 minutes apart are joined; the joined
+    /// sitting's length is the sum of its visits' reading time.
+    static func mergedSittingDurations(of facts: [ReadingSessionFacts]) -> [Double] {
+        var merged: [Double] = []
+        var currentEnd: Date?
+        for fact in facts.filter({ $0.durationSeconds > 0 }).sorted(by: sittingOrder) {
+            let end = fact.startedAt.addingTimeInterval(fact.durationSeconds)
+            if let last = currentEnd, !merged.isEmpty,
+               fact.startedAt.timeIntervalSince(last) < sittingMergeGapSeconds {
+                merged[merged.count - 1] += fact.durationSeconds
+                currentEnd = max(last, end)
+            } else {
+                merged.append(fact.durationSeconds)
+                currentEnd = end
+            }
+        }
+        return merged
     }
 
     /// Words per hour over the whole period, weighted by time rather than
