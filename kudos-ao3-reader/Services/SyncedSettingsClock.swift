@@ -26,24 +26,40 @@ nonisolated enum SyncedSettingsClock {
     ) -> [String: Date] {
         var baseline = (defaults.dictionary(forKey: baselineKey) as? [String: String]) ?? [:]
         var stamps = (defaults.dictionary(forKey: stampsKey) as? [String: Double]) ?? [:]
+        var baselineMoved = false
+        var stamped = false
         for key in keys {
             let current = fingerprint(of: key, in: defaults)
-            if let seen = baseline[key], seen != current {
+            guard baseline[key] != current else { continue }
+            if baseline[key] != nil {
                 stamps[key] = now.timeIntervalSince1970
+                stamped = true
             }
             baseline[key] = current
+            baselineMoved = true
         }
-        defaults.set(baseline, forKey: baselineKey)
-        defaults.set(stamps, forKey: stampsKey)
+        // Nothing written when nothing moved: this runs on every `UserDefaults` change, and
+        // writing here would announce another change.
+        if baselineMoved { defaults.set(baseline, forKey: baselineKey) }
+        if stamped { defaults.set(stamps, forKey: stampsKey) }
         return stamps.mapValues { Date(timeIntervalSince1970: $0) }
+    }
+
+    /// The same check, for the observer that runs as settings change: true when a setting
+    /// was stamped, so the caller can schedule an upload.
+    static func stampChanges(keys: [String], in defaults: UserDefaults, now: Date = Date()) -> Bool {
+        let before = defaults.dictionary(forKey: stampsKey) as? [String: Double] ?? [:]
+        noteLocalChanges(keys: keys, in: defaults, now: now)
+        return (defaults.dictionary(forKey: stampsKey) as? [String: Double] ?? [:]) != before
     }
 
     /// Whether a value that arrived from elsewhere may replace the one here.
     ///
     /// A restore the reader asked for takes the file's settings, as it always did. A sync
-    /// takes a setting only when it is newer than the local change. A copy with no stamp was
-    /// written by an older build or by Android: it applies only where nothing has been
-    /// changed on this device, so it can no longer undo a choice made here.
+    /// takes a setting only when it is newer than the local change. The caller passes the
+    /// value's own stamp, or for a copy written by an older build or Android, which has none,
+    /// the time that copy was exported: so the newest of several stampless copies wins, and an
+    /// old conflict copy cannot replace what a newer manifest just set.
     static func incomingWins(localStamp: Date?, incomingStamp: Date?, fromSync: Bool) -> Bool {
         guard fromSync else { return true }
         guard let incomingStamp else { return localStamp == nil }

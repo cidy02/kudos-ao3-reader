@@ -754,9 +754,10 @@ nonisolated struct KudosBackupPronunciations: Codable, Equatable {
     var global: [String: String]
     var fandoms: [String: [String: String]]
     var works: [String: [String: String]]
-    /// When the reader last edited a correction on the device that wrote this (T-541). Nil
+    /// When each correction was last set or removed on the device that wrote this (T-541),
+    /// keyed by `KokoroPronunciationStore.entryID`. A stamp with no entry is a removal. Nil
     /// from an older build or Android.
-    var modifiedAt: Date?
+    var stamps: [String: Date]?
 
     var isEmpty: Bool { global.isEmpty && fandoms.isEmpty && works.isEmpty }
 
@@ -779,7 +780,7 @@ nonisolated struct KudosBackupPronunciations: Codable, Equatable {
         var captured = KudosBackupPronunciations(
             global: file.global, fandoms: file.fandoms, works: file.works
         )
-        captured.modifiedAt = file.modifiedAt
+        captured.stamps = file.stamps
         return captured
     }
 
@@ -793,25 +794,58 @@ nonisolated struct KudosBackupPronunciations: Codable, Equatable {
     ///
     /// T-541: that holds for a restore the reader asked for. A sync is not an explicit act,
     /// and it used to put the folder's older correction back over one edited here. On a sync
-    /// the archive wins a conflict only when its corrections were edited more recently; an
-    /// entry this device does not have is still added either way.
+    /// each correction is judged on its own: the incoming one replaces the local one only
+    /// when it was set more recently, and a correction removed elsewhere is removed here. A
+    /// correction with no stamp of its own is as old as the copy it came in.
     func apply(
-        to store: KokoroPronunciationStore = KokoroPronunciationStore(), fromSync: Bool = false
+        to store: KokoroPronunciationStore = KokoroPronunciationStore(),
+        fromSync: Bool = false,
+        archiveDate: Date? = nil
     ) throws {
-        guard !isEmpty else { return }
+        guard !isEmpty || !(stamps ?? [:]).isEmpty else { return }
         var file = store.load()
-        let incomingStamp = modifiedAt.map { KudosBackupContents.clampedArchiveDate($0) }
-        let archiveWins = SyncedSettingsClock.incomingWins(
-            localStamp: file.modifiedAt, incomingStamp: incomingStamp, fromSync: fromSync
-        )
-        func merge(_ incoming: [String: String], into local: inout [String: String]) {
-            for (word, ipa) in incoming where archiveWins || local[word] == nil { local[word] = ipa }
+        var localStamps = file.stamps ?? [:]
+        let now = Date()
+        func incomingStamp(_ id: String) -> Date? {
+            (stamps?[id] ?? (fromSync ? archiveDate : nil))
+                .map { KudosBackupContents.clampedArchiveDate($0, now: now) }
         }
-        merge(global, into: &file.global)
-        for (fandom, entries) in fandoms { merge(entries, into: &file.fandoms[fandom, default: [:]]) }
-        for (work, entries) in works { merge(entries, into: &file.works[work, default: [:]]) }
-        if let incomingStamp { file.modifiedAt = max(file.modifiedAt ?? incomingStamp, incomingStamp) }
+        // Also true for an entry this device has no stamp for: nobody is known to have
+        // touched it here, so the old rule holds and the archive wins.
+        func wins(_ id: String) -> Bool {
+            guard fromSync, let local = localStamps[id] else { return true }
+            guard let incoming = incomingStamp(id) else { return false }
+            return incoming > local
+        }
+        func take(_ ipa: String, _ layer: KokoroPronunciationStore.Layer, _ word: String) {
+            let id = KokoroPronunciationStore.entryID(layer, word)
+            guard wins(id) else { return }
+            file.set(ipa, for: word, in: layer)
+            if let stamp = incomingStamp(id) { localStamps[id] = stamp }
+        }
+        for (word, ipa) in global { take(ipa, .global, word) }
+        for (fandom, entries) in fandoms { for (word, ipa) in entries { take(ipa, .fandom(fandom), word) } }
+        for (work, entries) in works { for (word, ipa) in entries { take(ipa, .work(work), word) } }
+        if fromSync {
+            for id in (stamps ?? [:]).keys {
+                guard let (layer, word) = KokoroPronunciationStore.entry(from: id),
+                      value(for: word, in: layer) == nil,
+                      file.value(for: word, in: layer) != nil,
+                      wins(id) else { continue }
+                file.set(nil, for: word, in: layer)
+                if let stamp = incomingStamp(id) { localStamps[id] = stamp }
+            }
+        }
+        file.stamps = localStamps.isEmpty ? nil : localStamps
         try store.save(file)
+    }
+
+    private func value(for word: String, in layer: KokoroPronunciationStore.Layer) -> String? {
+        switch layer {
+        case .global: global[word]
+        case .fandom(let key): fandoms[key]?[word]
+        case .work(let key): works[key]?[word]
+        }
     }
 
     init(from decoder: Decoder) throws {
@@ -823,6 +857,7 @@ nonisolated struct KudosBackupPronunciations: Codable, Equatable {
         works = try container.decodeIfPresent(
             [String: [String: String]].self, forKey: .works
         ) ?? [:]
+        stamps = (try? container.decodeIfPresent([String: Date].self, forKey: .stamps)) ?? nil
     }
 }
 
@@ -1682,6 +1717,8 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
 
     /// Preferences that were never backed up or synced until T-541. Literal keys: the types
     /// that own them are main-actor, and `SyncedSettingsTests` checks each against its owner.
+    static var syncedKeys: [String] { recencyKeys + extraKeys.keys.sorted() }
+
     static let extraKeys: [String: KudosBackupSettingValue.Kind] = [
         "keepScreenAwake": .bool,
         "showsZeroStats": .bool,
@@ -1923,18 +1960,26 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         )
     }
 
-    func apply(to defaults: UserDefaults = .standard, fromSync: Bool = false) {
+    func apply(to defaults: UserDefaults = .standard, fromSync: Bool = false, archiveDate: Date? = nil) {
         // T-541. Until now every restore assigned every setting, so each sync-down put the
         // folder's copy over whatever had been changed here since. Now a sync writes a setting
         // only when its stamp is newer than this device's (`SyncedSettingsClock.incomingWins`).
-        let keys = Self.recencyKeys + Self.extraKeys.keys.sorted()
-        let localStamps = SyncedSettingsClock.noteLocalChanges(keys: keys, in: defaults)
+        let localStamps = SyncedSettingsClock.noteLocalChanges(keys: Self.syncedKeys, in: defaults)
         let now = Date()
-        func write(_ value: Any, _ key: String) {
-            let incomingStamp = modifiedAt?[key].map { KudosBackupContents.clampedArchiveDate($0, now: now) }
-            guard SyncedSettingsClock.incomingWins(
+        // A setting with no stamp of its own (an older build, Android) is as old as the copy
+        // it came in. Explicit restores have no use for a date: the file wins.
+        func stamp(_ key: String) -> Date? {
+            (modifiedAt?[key] ?? (fromSync ? archiveDate : nil))
+                .map { KudosBackupContents.clampedArchiveDate($0, now: now) }
+        }
+        func wins(_ key: String, _ incomingStamp: Date?) -> Bool {
+            SyncedSettingsClock.incomingWins(
                 localStamp: localStamps[key], incomingStamp: incomingStamp, fromSync: fromSync
-            ) else { return }
+            )
+        }
+        func write(_ value: Any, _ key: String) {
+            let incomingStamp = stamp(key)
+            guard wins(key, incomingStamp) else { return }
             defaults.set(value, forKey: key)
             SyncedSettingsClock.adopt(key: key, stamp: incomingStamp, in: defaults)
         }
@@ -2008,6 +2053,16 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         // Only keys this build knows, and only a value of the kind it expects.
         for (key, value) in extras ?? [:] where Self.extraKeys[key] == value.kind {
             write(value.object, key)
+        }
+        // A choice reset on another device arrives as a stamp with no value. Only a sync
+        // removes one, and only on the key's own stamp: a copy that does not know the key
+        // carries neither, and that is not a reset.
+        guard fromSync else { return }
+        for key in Self.extraKeys.keys where extras?[key] == nil && defaults.object(forKey: key) != nil {
+            guard let own = modifiedAt?[key].map({ KudosBackupContents.clampedArchiveDate($0, now: now) }),
+                  wins(key, own) else { continue }
+            defaults.removeObject(forKey: key)
+            SyncedSettingsClock.adopt(key: key, stamp: own, in: defaults)
         }
     }
 
@@ -3649,7 +3704,7 @@ enum KudosBackupService {
                     settings.readerFontID = "system"
                 }
             }
-            settings.apply(to: defaults, fromSync: fromSync)
+            settings.apply(to: defaults, fromSync: fromSync, archiveDate: contents.manifest.exportedAt)
         }
         // Applied on every mode, including replaceLibrary. Corrections are not
         // library content — they are how the reader wants words said — so a
@@ -3657,7 +3712,9 @@ enum KudosBackupService {
         // swallowed for the same reason the export tolerates a missing file:
         // losing a restore over a pronunciation write would be the worse
         // outcome by a wide margin.
-        try? contents.manifest.pronunciations.apply(fromSync: fromSync)
+        try? contents.manifest.pronunciations.apply(
+            fromSync: fromSync, archiveDate: contents.manifest.exportedAt
+        )
         return KudosBackupRestoreSummary(
             // Count what was actually applied — tombstone-suppressed works are skipped
             // and must not inflate the user-facing "N works restored" confirmation.

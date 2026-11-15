@@ -155,10 +155,61 @@ struct SyncedSettingsTests {
         #expect(decoded.extras == nil)
     }
 
+    // MARK: Review round (Codex, 2026-11-15)
+
+    @Test func anOlderConflictCopyCannotReplaceWhatANewerManifestJustSet() {
+        let defaults = freshDefaults()
+        defaults.set(18.0, forKey: "readerFontPt")
+        let live = folderCopy(of: defaults, fontPt: 20)      // no stamps: Android or an older build
+        let conflict = folderCopy(of: defaults, fontPt: 14)
+        let liveExported = Date(timeIntervalSince1970: 1_700_000_600)
+
+        live.apply(to: defaults, fromSync: true, archiveDate: liveExported)
+        conflict.apply(to: defaults, fromSync: true, archiveDate: liveExported.addingTimeInterval(-600))
+
+        #expect(defaults.double(forKey: "readerFontPt") == 20)
+    }
+
+    @Test func aChoiceResetOnAnotherDeviceIsRemovedHere() {
+        let defaults = freshDefaults()
+        defaults.set("#F4ECD8", forKey: "readerCustomPaperHex")
+        var incoming = KudosBackupSettings.capture(defaults: defaults)
+        incoming.extras?["readerCustomPaperHex"] = nil
+        incoming.modifiedAt = ["readerCustomPaperHex": Date().addingTimeInterval(-5)]
+
+        incoming.apply(to: defaults, fromSync: true, archiveDate: Date().addingTimeInterval(-5))
+        #expect(defaults.object(forKey: "readerCustomPaperHex") == nil)
+
+        // A copy that does not know the key carries no stamp for it: that is not a reset.
+        defaults.set("#F4ECD8", forKey: "readerCustomPaperHex")
+        var unaware = KudosBackupSettings.capture(defaults: defaults)
+        unaware.extras = nil
+        unaware.modifiedAt = nil
+        unaware.apply(to: defaults, fromSync: true, archiveDate: Date())
+        #expect(defaults.string(forKey: "readerCustomPaperHex") == "#F4ECD8")
+    }
+
+    @Test func checkingForChangesWritesNothingWhenNothingChanged() {
+        let defaults = freshDefaults()
+        defaults.set(18.0, forKey: "readerFontPt")
+        #expect(!SyncedSettingsClock.stampChanges(keys: KudosBackupSettings.syncedKeys, in: defaults))
+        #expect(!SyncedSettingsClock.stampChanges(keys: KudosBackupSettings.syncedKeys, in: defaults))
+        defaults.set(22.0, forKey: "readerFontPt")
+        #expect(SyncedSettingsClock.stampChanges(keys: KudosBackupSettings.syncedKeys, in: defaults))
+        #expect(SyncedSettingsClock.stamps(in: defaults)["readerFontPt"] != nil)
+    }
+
     private func pronunciationStore() -> KokoroPronunciationStore {
         KokoroPronunciationStore(url: FileManager.default.temporaryDirectory
             .appendingPathComponent("SyncedSettingsTests-\(UUID().uuidString).json"))
     }
+
+    /// Through JSON, as a manifest travels: the first version of T-541 never decoded the stamps.
+    private func throughJSON(_ value: KudosBackupPronunciations) throws -> KudosBackupPronunciations {
+        try JSONDecoder().decode(KudosBackupPronunciations.self, from: JSONEncoder().encode(value))
+    }
+
+    private func id(_ word: String) -> String { KokoroPronunciationStore.entryID(.global, word) }
 
     @Test func aCorrectionEditedHereSurvivesAnOlderCopyFromTheFolder() throws {
         let store = pronunciationStore()
@@ -166,9 +217,10 @@ struct SyncedSettingsTests {
         var stale = KudosBackupPronunciations.capture(store: store)   // what the folder holds
         stale.global["Maren"] = "added elsewhere"
         try store.setOverride("new", for: "Wren")                     // edited here afterwards
-        stale.modifiedAt = store.load().modifiedAt?.addingTimeInterval(-60)
+        let editedHere = try #require(store.load().stamps?[id("Wren")])
+        stale.stamps = [id("Wren"): editedHere.addingTimeInterval(-60)]
 
-        try stale.apply(to: store, fromSync: true)
+        try throughJSON(stale).apply(to: store, fromSync: true, archiveDate: editedHere.addingTimeInterval(-30))
 
         #expect(store.load().global["Wren"] == "new")
         #expect(store.load().global["Maren"] == "added elsewhere")   // an entry only the folder had still arrives
@@ -177,13 +229,59 @@ struct SyncedSettingsTests {
     @Test func aNewerCorrectionFromTheFolderReplacesTheOneHere() throws {
         let store = pronunciationStore()
         try store.setOverride("mine", for: "Wren")
+        let editedHere = try #require(store.load().stamps?[id("Wren")])
         var newer = KudosBackupPronunciations.capture(store: store)
         newer.global["Wren"] = "theirs"
-        newer.modifiedAt = store.load().modifiedAt?.addingTimeInterval(60)
+        newer.stamps = [id("Wren"): editedHere.addingTimeInterval(-1)]
+        try throughJSON(newer).apply(to: store, fromSync: true)
+        #expect(store.load().global["Wren"] == "mine")               // older by a second: stays
 
-        try newer.apply(to: store, fromSync: true)
-
+        // Set here a minute ago; the folder's is from just now.
+        var file = store.load()
+        file.stamp(["Wren"], in: .global, at: Date().addingTimeInterval(-60))
+        try store.save(file)
+        newer.stamps = [id("Wren"): Date().addingTimeInterval(-1)]
+        try throughJSON(newer).apply(to: store, fromSync: true)
         #expect(store.load().global["Wren"] == "theirs")
+    }
+
+    @Test func twoDevicesEditingDifferentWordsBothKeepTheirEdit() throws {
+        let start = Date().addingTimeInterval(-600)
+        let here = pronunciationStore()
+        var file = KokoroPronunciationStore.empty
+        file.global = ["Wren": "old", "Maren": "old"]
+        try here.save(file)
+        // This device corrects Wren. The other, which still has the old Wren, corrects Maren later.
+        var mine = here.load()
+        mine.global["Wren"] = "fixed here"
+        mine.stamp(["Wren"], in: .global, at: start.addingTimeInterval(60))
+        try here.save(mine)
+        var theirs = KudosBackupPronunciations(global: ["Wren": "old", "Maren": "fixed there"], fandoms: [:], works: [:])
+        theirs.stamps = [id("Maren"): start.addingTimeInterval(120)]
+
+        try throughJSON(theirs).apply(to: here, fromSync: true, archiveDate: start)
+
+        #expect(here.load().global["Wren"] == "fixed here")
+        #expect(here.load().global["Maren"] == "fixed there")
+    }
+
+    @Test func aCorrectionRemovedElsewhereIsRemovedHereAndOneRemovedHereStaysRemoved() throws {
+        let store = pronunciationStore()
+        try store.setOverride("x", for: "Wren")
+        var file = store.load()
+        file.stamp(["Wren"], in: .global, at: Date().addingTimeInterval(-600))
+        try store.save(file)
+        var removedThere = KudosBackupPronunciations(global: [:], fandoms: [:], works: [:])
+        removedThere.stamps = [id("Wren"): Date().addingTimeInterval(-60)]
+        try throughJSON(removedThere).apply(to: store, fromSync: true)
+        #expect(store.load().global["Wren"] == nil)
+
+        try store.setOverride("y", for: "Maren")
+        try store.removeOverride(for: "Maren")                        // removed here, just now
+        var stale = KudosBackupPronunciations(global: ["Maren": "y"], fandoms: [:], works: [:])
+        stale.stamps = [id("Maren"): Date().addingTimeInterval(-300)]
+        try throughJSON(stale).apply(to: store, fromSync: true)
+        #expect(store.load().global["Maren"] == nil)
     }
 
     @Test func aRestoreTheReaderAskedForStillTakesTheFilesCorrections() throws {
@@ -191,9 +289,9 @@ struct SyncedSettingsTests {
         try store.setOverride("mine", for: "Wren")
         var file = KudosBackupPronunciations.capture(store: store)
         file.global["Wren"] = "from the backup"
-        file.modifiedAt = nil
+        file.stamps = nil
 
-        try file.apply(to: store)
+        try throughJSON(file).apply(to: store)
 
         #expect(store.load().global["Wren"] == "from the backup")
     }

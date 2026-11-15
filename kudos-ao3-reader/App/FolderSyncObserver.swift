@@ -1,3 +1,4 @@
+import Combine
 import SwiftData
 import SwiftUI
 
@@ -82,6 +83,21 @@ struct FolderSyncObserver: View {
             // SettingsView's own @AppStorage bindings — it marks sync dirty itself via
             // NotificationCenter since it isn't always mounted while ContentView is.
             .onReceive(NotificationCenter.default.publisher(for: .kudosSyncRelevantSettingChanged)) { _ in
+                FolderSyncService.markDirty()
+                scheduleFolderSyncUp()
+            }
+            // T-541. Every synced setting, wherever its control lives: stamp it when it
+            // changes, so a sync can tell this device's newer choice from the folder's older
+            // one, and upload it. Before this, most settings never marked sync dirty, so a
+            // changed setting sat here until another device's write came down over it.
+            // Debounced onto the main run loop, so a restore's own writes are adopted first.
+            .onReceive(
+                NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
+                    .debounce(for: .seconds(1), scheduler: RunLoop.main)
+            ) { _ in
+                guard SyncedSettingsClock.stampChanges(
+                    keys: KudosBackupSettings.syncedKeys, in: .standard
+                ) else { return }
                 FolderSyncService.markDirty()
                 scheduleFolderSyncUp()
             }

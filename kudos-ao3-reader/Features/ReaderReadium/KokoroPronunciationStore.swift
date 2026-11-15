@@ -11,9 +11,59 @@ nonisolated struct KokoroPronunciationStore: Sendable {
         var global: [String: String]
         var fandoms: [String: [String: String]]
         var works: [String: [String: String]]
-        /// When the reader last edited a correction here (T-541). A sync uses it to tell a
-        /// newer edit from an older one. Nil in a file written before it existed.
-        var modifiedAt: Date?
+        /// When each correction was last set or removed here (T-541), keyed by `entryID`.
+        /// A sync uses it to tell a newer edit from an older one, entry by entry; a stamp
+        /// with no entry records a removal. Nil in a file written before it existed.
+        var stamps: [String: Date]?
+
+        func value(for word: String, in layer: Layer) -> String? {
+            switch layer {
+            case .global: global[word]
+            case .fandom(let key): fandoms[key]?[word]
+            case .work(let key): works[key]?[word]
+            }
+        }
+
+        /// Sets or (with nil) removes one entry, dropping a layer's dictionary when it empties.
+        mutating func set(_ ipa: String?, for word: String, in layer: Layer) {
+            switch layer {
+            case .global:
+                global[word] = ipa
+            case .fandom(let key):
+                fandoms[key, default: [:]][word] = ipa
+                if fandoms[key]?.isEmpty == true { fandoms[key] = nil }
+            case .work(let key):
+                works[key, default: [:]][word] = ipa
+                if works[key]?.isEmpty == true { works[key] = nil }
+            }
+        }
+
+        mutating func stamp(_ words: [String], in layer: Layer, at date: Date = Date()) {
+            var all = stamps ?? [:]
+            for word in words { all[KokoroPronunciationStore.entryID(layer, word)] = date }
+            stamps = all
+        }
+    }
+
+    private static let idSeparator = "\u{1F}"
+
+    /// One correction's identity across devices: its layer, the layer's key, and the word.
+    static func entryID(_ layer: Layer, _ word: String) -> String {
+        switch layer {
+        case .global: ["g", word].joined(separator: idSeparator)
+        case .fandom(let key): ["f", key, word].joined(separator: idSeparator)
+        case .work(let key): ["w", key, word].joined(separator: idSeparator)
+        }
+    }
+
+    static func entry(from id: String) -> (Layer, String)? {
+        let parts = id.components(separatedBy: idSeparator)
+        switch (parts.first, parts.count) {
+        case ("g", 2): return (.global, parts[1])
+        case ("f", 3): return (.fandom(parts[1]), parts[2])
+        case ("w", 3): return (.work(parts[1]), parts[2])
+        default: return nil
+        }
     }
 
     static let empty = File(version: 1, global: [:], fandoms: [:], works: [:])
@@ -88,7 +138,7 @@ nonisolated struct KokoroPronunciationStore: Sendable {
         var file = try loadForEditing()
         for word in words { file.global[word] = nil }
         file.global.merge(overrides) { _, new in new }
-        file.modifiedAt = Date()
+        file.stamp(words + Array(overrides.keys), in: .global)
         try save(file)
     }
 
@@ -122,7 +172,7 @@ nonisolated struct KokoroPronunciationStore: Sendable {
         case .fandom(let key): file.fandoms[key, default: [:]][word] = ipa
         case .work(let key): file.works[key, default: [:]][word] = ipa
         }
-        file.modifiedAt = Date()
+        file.stamp([word], in: layer)
         try save(file)
     }
 
@@ -140,7 +190,7 @@ nonisolated struct KokoroPronunciationStore: Sendable {
             file.works[key]?[word] = nil
             if file.works[key]?.isEmpty == true { file.works[key] = nil }
         }
-        file.modifiedAt = Date()
+        file.stamp([word], in: layer)
         try save(file)
     }
 
