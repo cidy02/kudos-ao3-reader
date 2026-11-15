@@ -1,6 +1,9 @@
 package io.github.cidy02.kudos.ui.components
 
 import android.app.Application
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -78,5 +81,24 @@ class SensitiveWorkRowFandomChipsAndTrayTest {
             }
         }
         compose.onNodeWithTag(WORK_STATUS_TRAY_TAG, useUnmergedTree = true).assertExists()
+    }
+
+    @Test fun aLocalStandardRowKeepsTheGridAtTwoHundredPercentStackedAboveTheTitle() {
+        compose.setContent {
+            KudosTheme(KudosThemeMode.Light) {
+                val density = LocalDensity.current
+                CompositionLocalProvider(LocalDensity provides Density(density.density, 2f)) {
+                    SensitiveWorkRow(
+                        work = SavedWork(id = "saved", title = "A saved work", author = "A writer",
+                            summary = "A short summary.", wordCount = 1200, chapters = "1/1", comments = 0,
+                            bookmarks = 0, workFandoms = listOf("Doctor Who"), rating = "Teen And Up Audiences"),
+                        onOpenWork = {}
+                    )
+                }
+            }
+        }
+        val tray = compose.onNodeWithTag(WORK_STATUS_TRAY_TAG, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val title = compose.onNodeWithText("A saved work", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        assertTrue("grid ${tray.bottom} not above the title ${title.top}", tray.bottom <= title.top + 0.5f)
     }
 }

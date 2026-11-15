@@ -171,7 +171,7 @@ fun SensitiveWorkRow(
      * The tray of four symbols beside the title of the detailed card. iOS draws it on an AO3
      * work's card (`AO3WorkRow.standardCard`) and on a saved work's (`WorkRow.standardRow`) alike.
      */
-    showsStatusTray: Boolean = false,
+    showsStatusTray: Boolean = true,
     /**
      * A saved work's detailed card, iOS `WorkRow`: every fandom is on its line, and the card
      * unfolds beside its title only for a long summary or for tags. An AO3 work's card (`AO3WorkRow`) names one
@@ -305,6 +305,23 @@ fun SensitiveWorkRow(
                                 rankingSignal = rankingSignal
                             )
                         } else {
+                            // iOS `WorkPlainRow`: the 2x2 grid beside the title; at an accessibility size
+                            // it stacks above the text instead of leaving, and "under the title" is a row.
+                            val stacked = isAccessibilityFontScale()
+                            val statusTray: @Composable (HomeStatusArrangement) -> Unit = { arrangement ->
+                                HomeStatusTray(
+                                    rating = rating,
+                                    categories = categories,
+                                    warnings = warnings,
+                                    isComplete = isComplete,
+                                    arrangement = arrangement,
+                                    tileSize = 24.dp,
+                                    modifier = Modifier.testTag(WORK_STATUS_TRAY_TAG)
+                                )
+                            }
+                            if (showsStatusTray && stacked && symbolPlacement == WorkSymbolPlacement.Beside) {
+                                statusTray(HomeStatusArrangement.Grid)
+                            }
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -365,32 +382,13 @@ fun SensitiveWorkRow(
                                     }
                                 }
                                 // iOS `standardCard`: AO3's required-tag grid beside the title.
-                                // It remains one accessible summary and moves out at large text.
-                                if (showsStatusTray && !isAccessibilityFontScale() &&
-                                    symbolPlacement == WorkSymbolPlacement.Beside) {
-                                    HomeStatusTray(
-                                        rating = rating,
-                                        categories = categories,
-                                        warnings = warnings,
-                                        isComplete = isComplete,
-                                        arrangement = HomeStatusArrangement.Grid,
-                                        tileSize = 24.dp,
-                                        modifier = Modifier.testTag(WORK_STATUS_TRAY_TAG)
-                                    )
+                                if (showsStatusTray && !stacked && symbolPlacement == WorkSymbolPlacement.Beside) {
+                                    statusTray(HomeStatusArrangement.Grid)
                                 }
                             }
 
-                            if (showsStatusTray && !isAccessibilityFontScale() &&
-                                symbolPlacement == WorkSymbolPlacement.UnderTitle) {
-                                HomeStatusTray(
-                                    rating = rating,
-                                    categories = categories,
-                                    warnings = warnings,
-                                    isComplete = isComplete,
-                                    arrangement = HomeStatusArrangement.Row,
-                                    tileSize = 24.dp,
-                                    modifier = Modifier.testTag(WORK_STATUS_TRAY_TAG)
-                                )
+                            if (showsStatusTray && symbolPlacement == WorkSymbolPlacement.UnderTitle) {
+                                statusTray(HomeStatusArrangement.Row)
                             }
 
                             if (summary.isNotBlank()) {
