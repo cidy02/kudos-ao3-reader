@@ -22,6 +22,9 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.home.HomeFacts
@@ -157,6 +160,36 @@ class WorkFandomKickerTest {
         queueCard(listOf("Doctor Who"))
         compose.onNodeWithContentDescription("Fandom: Doctor Who").performClick()
         assertEquals(SearchSubjectField.FANDOM to "Doctor Who", searched)
+    }
+
+    @Test fun aQueueCardStacksAndUnclampsTitleAtTwoHundredPercent() {
+        val longTitle = "A very long queued work title that wraps across multiple lines at large text sizes"
+        compose.setContent {
+            KudosTheme(KudosThemeMode.Light) {
+                val density = androidx.compose.ui.platform.LocalDensity.current
+                CompositionLocalProvider(
+                    androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density.density, 2f)
+                ) {
+                    Box(Modifier.width(320.dp)) {
+                        QueueLedgerCard(
+                            work = SavedWork(id = "queued-ax", title = longTitle, author = "A writer",
+                                summary = "", wordCount = 1200, chapters = "1/1", comments = 0, bookmarks = 0,
+                                workFandoms = listOf("Doctor Who")),
+                            downloadFraction = null, obscured = false
+                        )
+                    }
+                }
+            }
+        }
+        val kicker = compose.onNodeWithText("DOCTOR WHO", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val title = compose.onNodeWithText(longTitle, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val author = compose.onNodeWithText("A writer", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val titleLayout = mutableListOf<TextLayoutResult>()
+        compose.onNodeWithText(longTitle, useUnmergedTree = true)
+            .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(titleLayout) }
+        assertTrue("title should wrap at 200% without ellipsis", titleLayout.single().lineCount > 1 && !titleLayout.single().hasVisualOverflow)
+        assertTrue("stacked order kicker (${kicker.bottom}) -> title (${title.top}) -> author (${author.top})",
+            kicker.bottom <= title.top + 0.5f && title.bottom <= author.top + 0.5f)
     }
 
     // --- item 5: a 48 dp target that overlaps nothing ----------------------------------------

@@ -74,6 +74,7 @@ import io.github.cidy02.kudos.ui.subject.LedgerAuthorLine
 import io.github.cidy02.kudos.ui.subject.SubjectKicker
 import io.github.cidy02.kudos.ui.subject.WorkFandomKicker
 import io.github.cidy02.kudos.ui.subject.fandomOpener
+import io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale
 import io.github.cidy02.kudos.search.LocalTagSearch
 import io.github.cidy02.kudos.ui.subject.SubjectMetrics
 import io.github.cidy02.kudos.ui.subject.SubjectPalette
@@ -211,9 +212,17 @@ fun QueueLedgerCard(
     onStep: (Int) -> Unit = {}
 ) {
     val tokens = LocalKudosTokens.current
+    val accessibility = isAccessibilityFontScale()
+    val fontScale = LocalDensity.current.fontScale
     val symbolPlacement = LocalWorkSymbolPlacement.current
     val fandoms = work.workFandoms.filter { it.isNotBlank() }
     val openFandom = fandomOpener(interactive = !obscured && !selecting && !drag, search = LocalTagSearch.current)
+    val kickerPalette = remember(fandoms, work.title, tokens.theme) {
+        SubjectPalette.fromHue(
+            ReadingQueueFacts.coverHue(fandoms.firstOrNull() ?: work.title),
+            tokens.theme
+        )
+    }
     val fraction = work.readingProgressFraction() ?: if (work.isFinished) 1.0 else 0.0
     val state = when {
         fraction >= 1.0 -> "Finished"
@@ -224,7 +233,80 @@ fun QueueLedgerCard(
     val tile = 24.dp
     WorkLedgerCard(work, modifier.downloadDimmed(if (downloadFraction != null) 1f else 0f)) {
         Box {
-            Row(
+            if (accessibility) {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .then(if (obscured) Modifier.blur(8.dp) else Modifier)
+                        .padding(horizontal = 16.dp, vertical = 15.dp)
+                        .hiddenMatureWorkSemantics(obscured, selecting, selected),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    // No fandom, no label: nothing is drawn, and no line is held open for it.
+                    WorkFandomKicker(
+                        fandoms = fandoms,
+                        palette = kickerPalette,
+                        onOpenFandom = openFandom
+                    )
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        WorkReadingOrDownloadRing(
+                            downloadFraction = downloadFraction,
+                            progress = fraction,
+                            state = state,
+                            diameter = tile * 2.12f * fontScale.coerceAtMost(1.8f)
+                        )
+                        if (selecting || drag) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (selecting) SelectionBubble(selected)
+                                if (drag) DragGrip(Modifier.queueDragHandle(true, onStep))
+                            }
+                        }
+                    }
+                    Text(
+                        text = work.title,
+                        color = tokens.primaryInk,
+                        fontSize = 16.5.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    LedgerAuthorLine(work.author, wraps = true)
+                    if (symbolPlacement == WorkSymbolPlacement.UnderTitle) {
+                        HomeStatusTray(
+                            rating = work.rating,
+                            categories = work.workCategories,
+                            warnings = work.workWarnings,
+                            isComplete = work.knownCompletion,
+                            arrangement = HomeStatusArrangement.Row,
+                            tileSize = tile,
+                            announces = true
+                        )
+                    }
+                    if (figures.isNotEmpty()) {
+                        Text(
+                            text = figures.joinToString("  ·  "),
+                            color = tokens.secondaryInk,
+                            fontSize = 11.5.sp
+                        )
+                    }
+                    if (symbolPlacement == WorkSymbolPlacement.Beside) {
+                        HomeStatusTray(
+                            rating = work.rating,
+                            categories = work.workCategories,
+                            warnings = work.workWarnings,
+                            isComplete = work.knownCompletion,
+                            arrangement = HomeStatusArrangement.Grid,
+                            tileSize = tile,
+                            announces = true
+                        )
+                    }
+                }
+            } else Row(
                 Modifier
                     .fillMaxWidth()
                     .then(if (obscured) Modifier.blur(8.dp) else Modifier)
@@ -243,10 +325,7 @@ fun QueueLedgerCard(
                     // No fandom, no label: nothing is drawn, and no line is held open for it.
                     WorkFandomKicker(
                         fandoms = fandoms,
-                        palette = SubjectPalette.fromHue(
-                            ReadingQueueFacts.coverHue(fandoms.firstOrNull() ?: work.title),
-                            tokens.theme
-                        ),
+                        palette = kickerPalette,
                         onOpenFandom = openFandom
                     )
                     Text(
@@ -254,7 +333,7 @@ fun QueueLedgerCard(
                         color = tokens.primaryInk,
                         fontSize = 16.5.sp,
                         fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
                     LedgerAuthorLine(work.author, wraps = false)
