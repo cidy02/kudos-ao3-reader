@@ -46,7 +46,8 @@ struct SyncedSettingsTests {
 
     @Test func theNewerStampWinsAndTheOlderLoses() {
         let defaults = freshDefaults()
-        let changedHere = Date(timeIntervalSince1970: 1_800_000_000)
+        // In the past: an archive date in the future is clamped to now, as every archive date is.
+        let changedHere = Date(timeIntervalSince1970: 1_700_000_000)
         defaults.set(18.0, forKey: "readerFontPt")
         SyncedSettingsClock.noteLocalChanges(keys: ["readerFontPt"], in: defaults, now: changedHere.addingTimeInterval(-600))
         defaults.set(22.0, forKey: "readerFontPt")
@@ -101,13 +102,13 @@ struct SyncedSettingsTests {
         incoming.extras = [
             "keepScreenAwake": .bool(true),
             "readerSpeechRate": .string("fast"),           // wrong kind
-            "AppleLanguages": .string("xx")                // not a Kudos setting
+            "not.a.kudos.setting": .string("xx")           // not on the allowlist
         ]
         incoming.apply(to: target, fromSync: true)
 
         #expect(target.bool(forKey: "keepScreenAwake"))
         #expect(target.object(forKey: "readerSpeechRate") == nil)
-        #expect(target.object(forKey: "AppleLanguages") == nil)
+        #expect(target.object(forKey: "not.a.kudos.setting") == nil)
     }
 
     @Test func theKeysWrittenByNameAreTheKeysTheirOwnersUse() {
