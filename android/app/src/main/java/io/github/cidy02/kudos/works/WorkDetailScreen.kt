@@ -113,18 +113,16 @@ import io.github.cidy02.kudos.ui.subject.subjectScreenWash
 import io.github.cidy02.kudos.works.detail.ChapterLengthCache
 import io.github.cidy02.kudos.works.detail.ChapterLengths
 import io.github.cidy02.kudos.works.detail.ResumeCardModel
-import io.github.cidy02.kudos.works.detail.WorkDetailAo3ActionChips
-import io.github.cidy02.kudos.works.detail.WorkDetailArchiveStatsStrip
 import io.github.cidy02.kudos.works.detail.WorkDetailCommentsSection
-import io.github.cidy02.kudos.works.detail.WorkDetailFactsCard
 import io.github.cidy02.kudos.works.detail.WorkDetailFigures
 import io.github.cidy02.kudos.works.detail.WorkDetailIdentityHeader
 import io.github.cidy02.kudos.works.detail.WorkDetailMyCopyRow
 import io.github.cidy02.kudos.works.detail.WorkDetailMyCopySheet
 import io.github.cidy02.kudos.works.detail.WorkDetailPresentation
-import io.github.cidy02.kudos.works.detail.WorkDetailPageActions
 import io.github.cidy02.kudos.works.detail.WorkDetailResumeCard
 import io.github.cidy02.kudos.works.detail.WorkDetailSeriesSection
+import io.github.cidy02.kudos.works.detail.WorkDetailStats
+import io.github.cidy02.kudos.works.detail.WorkDetailStatsCard
 import io.github.cidy02.kudos.works.detail.WorkDetailSummarySection
 import io.github.cidy02.kudos.works.detail.WorkDetailTagSections
 import io.github.cidy02.kudos.works.detail.WorkQueueLine
@@ -1301,8 +1299,6 @@ fun WorkDetailScreen(
             state.ao3WorkId?.let(onOpenComments)
                 ?: run { state = state.copy(error = "This action needs a canonical AO3 work URL.") }
         },
-        onChapterComments = { state.ao3WorkId?.let(onOpenChapterComments) },
-        onWriteComment = { state.ao3WorkId?.let(onComposeComment) },
         onResumeClick = { launchReading() },
         onContentsClick = { launchReading(openContents = true) },
         onReadAloudClick = { launchReading(startReadAloud = true) },
@@ -1346,8 +1342,6 @@ private fun WorkDetailContent(
     onAddToCollection: () -> Unit,
     onBookmark: () -> Unit,
     onComments: () -> Unit,
-    onChapterComments: () -> Unit,
-    onWriteComment: () -> Unit,
     onResumeClick: () -> Unit,
     onContentsClick: () -> Unit,
     onReadAloudClick: () -> Unit,
@@ -1405,6 +1399,14 @@ private fun WorkDetailContent(
                     expanded = menuExpanded,
                     onDismissRequest = { menuExpanded = false }
                 ) {
+                    DropdownMenuItem(
+                        text = { Text(finishedActionLabel(local?.isFinished == true)) },
+                        enabled = !busy,
+                        onClick = {
+                            menuExpanded = false
+                            onToggleFinished()
+                        }
+                    )
                     DropdownMenuItem(
                         text = { Text(WorkDetailPresentation.queueLabel(state.queueMemberships.size + if (state.inSavedForLater) 1 else 0)) },
                         enabled = !busy,
@@ -1733,33 +1735,32 @@ private fun WorkDetailContent(
                 }
             }
 
-            Spacer(Modifier.height(20.dp))
+            // 5. 3x3 Stats Card directly under Resume Card / Status
+            Spacer(Modifier.height(14.dp))
+            WorkDetailStatsCard(
+                cells = WorkDetailStats.cells(
+                    words = WorkDetailFigures.preferred(local?.wordCount, state.remote?.wordCount),
+                    chapters = state.chapters,
+                    kudos = state.kudosCount,
+                    kudosGiven = local?.hasGivenKudos == true,
+                    hits = state.hitsCount,
+                    comments = state.commentsCount,
+                    bookmarks = WorkDetailFigures.preferred(local?.bookmarks, state.remote?.bookmarks),
+                    published = state.publishedDate,
+                    updated = state.updatedDate,
+                    language = state.language
+                )
+            )
 
-            // 5. Summary Section: Serif 16sp font with 8-line collapse
+            // 6. Summary Section
+            Spacer(Modifier.height(20.dp))
             WorkDetailSummarySection(
                 summary = state.summary,
                 palette = palette
             )
 
-            // 6. ON AO3 Chips: Kudos, Subscribe, Bookmark, Mark for Later
-            if (state.ao3WorkId != null) {
-                Spacer(Modifier.height(20.dp))
-                WorkDetailAo3ActionChips(
-                    kudosCount = state.kudosCount,
-                    hasGivenKudos = state.local?.hasGivenKudos == true,
-                    isSubscribed = state.isSubscribed,
-                    isBookmarked = isBookmarked,
-                    isWorking = busy,
-                    palette = palette,
-                    onKudos = onKudos,
-                    onSubscribe = onSubscribe,
-                    onBookmark = onBookmark,
-                    onMarkForLater = onMarkForLater
-                )
-            }
-
-            // 7. Categorized Tag Clusters: Warnings, Fandoms, Relationships [tinted], Characters, Freeforms
-            Spacer(Modifier.height(20.dp))
+            // 7. Categorized Tags
+            Spacer(Modifier.height(14.dp))
             WorkDetailTagSections(
                 warnings = state.warnings,
                 fandoms = state.fandoms,
@@ -1770,59 +1771,12 @@ private fun WorkDetailContent(
                 palette = palette
             )
 
-            // 8. Facts Card: Outlined card with Series, Language · Words, Updated, Published
-            Spacer(Modifier.height(24.dp))
-            WorkDetailFactsCard(
-                seriesTitle = state.local?.seriesTitle?.takeIf { it.isNotBlank() } ?: state.remote?.seriesTitle.orEmpty(),
-                seriesPosition = state.local?.seriesPosition?.takeIf { it > 0 } ?: state.remote?.seriesPosition ?: 0,
-                seriesUrl = state.seriesUrl,
-                language = state.language,
-                wordCount = state.wordCount,
-                updatedDate = state.updatedDate,
-                publishedDate = state.publishedDate,
-                onOpenSeries = onOpenSeries
-            )
-
-            // 9. Archive Stats Strip: Kudos, Comments (highlighted), Bookmarks, Hits
-            Spacer(Modifier.height(16.dp))
-            WorkDetailArchiveStatsStrip(
-                kudosCount = state.kudosCount,
-                commentsCount = state.commentsCount,
-                bookmarksCount = WorkDetailFigures.preferred(state.local?.bookmarks, state.remote?.bookmarks),
-                hitsCount = state.hitsCount,
-                palette = palette,
-                hasAO3Work = state.ao3WorkId != null,
-                onComments = onComments
-            )
-
-            // 10. Comments Section: All comments, Chapter comments, Write a comment
-            if (state.ao3WorkId != null) {
-                Spacer(Modifier.height(24.dp))
-                WorkDetailCommentsSection(
-                    commentsCount = state.commentsCount,
-                    chapters = state.chapters,
-                    onAllComments = onComments,
-                    onChapterComments = onChapterComments,
-                    onWriteComment = onWriteComment
-                )
-            }
-
-            // 11. Page Actions: "Mark as Finished" / "Mark as Still Reading", "Open on AO3"
-            Spacer(Modifier.height(20.dp))
-            WorkDetailPageActions(
-                isFinished = state.local?.isFinished == true,
-                hasSourceUrl = state.sourceUrl.isNotBlank(),
-                isWorking = busy,
-                onToggleFinished = onToggleFinished,
-                onOpenAo3 = onOpenAo3
-            )
-
-            // 12. Series Section
+            // 8. Series Section
             val hasSeries = state.seriesUrl.isNotBlank() ||
                 (state.local?.seriesTitle?.isNotBlank() == true) ||
                 (state.remote?.seriesTitle?.isNotBlank() == true)
             if (hasSeries) {
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(14.dp))
                 WorkDetailSeriesSection(
                     seriesTitle = state.local?.seriesTitle?.takeIf { it.isNotBlank() } ?: state.remote?.seriesTitle.orEmpty(),
                     seriesPosition = state.local?.seriesPosition?.takeIf { it > 0 } ?: state.remote?.seriesPosition ?: 0,
@@ -1835,12 +1789,21 @@ private fun WorkDetailContent(
                 )
             }
 
-            // 13. My Copy Row: Entry to local device state sheet
-            Spacer(Modifier.height(20.dp))
+            // 9. My Copy
+            Spacer(Modifier.height(14.dp))
             WorkDetailMyCopyRow(
                 summary = state.myCopySummary,
                 onClick = onOpenMyCopy
             )
+
+            // 10. Comments Row
+            if (state.ao3WorkId != null) {
+                Spacer(Modifier.height(20.dp))
+                WorkDetailCommentsSection(
+                    commentsCount = state.commentsCount,
+                    onComments = onComments
+                )
+            }
 
             Spacer(Modifier.height(36.dp))
         }

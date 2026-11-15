@@ -17,13 +17,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.outlined.Bookmark
-import androidx.compose.material.icons.outlined.BookmarkBorder
-import androidx.compose.material.icons.outlined.Favorite
-import androidx.compose.material.icons.outlined.FavoriteBorder
-import androidx.compose.material.icons.outlined.Notifications
-import androidx.compose.material.icons.outlined.NotificationsOff
-import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Smartphone
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -43,7 +36,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import io.github.cidy02.kudos.home.HomeFacts
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.search.LocalTagSearch
 import io.github.cidy02.kudos.search.SearchSubjectField
@@ -55,9 +47,6 @@ import io.github.cidy02.kudos.ui.subject.SubjectFormRow
 import io.github.cidy02.kudos.ui.subject.SubjectMetrics
 import io.github.cidy02.kudos.ui.subject.SubjectPalette
 import io.github.cidy02.kudos.ui.subject.SubjectRowSeparator
-import io.github.cidy02.kudos.ui.subject.SubjectStatCell
-import io.github.cidy02.kudos.ui.subject.SubjectStatStrip
-import io.github.cidy02.kudos.ui.subject.compactCount
 import io.github.cidy02.kudos.ui.subject.subjectPanel
 import java.text.NumberFormat
 
@@ -101,79 +90,6 @@ fun WorkDetailSummarySection(
                 modifier = Modifier
                     .semantics { contentDescription = if (expanded) "Show less summary" else "Show more summary" }
                     .clickable { expanded = !expanded }
-            )
-        }
-    }
-}
-
-/**
- * Artboard 1a's ON AO3 chips (`WorkDetailAO3Actions.swift:15`).
- * Four archive actions: Kudos, Subscribe, Bookmark, Mark for Later.
- */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-fun WorkDetailAo3ActionChips(
-    kudosCount: Int?,
-    hasGivenKudos: Boolean,
-    isSubscribed: Boolean?,
-    isBookmarked: Boolean,
-    isWorking: Boolean,
-    palette: SubjectPalette,
-    onKudos: () -> Unit,
-    onSubscribe: () -> Unit,
-    onBookmark: () -> Unit,
-    onMarkForLater: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val kudosLabel = if (kudosCount != null && kudosCount > 0) {
-        "Kudos · ${HomeFacts.compactFigure(kudosCount)}"
-    } else {
-        "Kudos"
-    }
-
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = SubjectMetrics.panelGutter),
-        verticalArrangement = Arrangement.spacedBy(9.dp)
-    ) {
-        SubjectFieldLabel(text = "ON AO3")
-
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            SubjectChip(
-                text = kudosLabel,
-                style = if (hasGivenKudos) SubjectChipStyle.Tinted else SubjectChipStyle.Neutral,
-                leadingIcon = if (hasGivenKudos) Icons.Outlined.Favorite else Icons.Outlined.FavoriteBorder,
-                palette = palette,
-                modifier = Modifier.clickable(enabled = !isWorking, onClick = onKudos)
-            )
-
-            val subscribed = isSubscribed == true
-            SubjectChip(
-                text = if (subscribed) "Subscribed" else "Subscribe",
-                style = if (subscribed) SubjectChipStyle.Tinted else SubjectChipStyle.Neutral,
-                leadingIcon = if (subscribed) Icons.Outlined.NotificationsOff else Icons.Outlined.Notifications,
-                palette = palette,
-                modifier = Modifier.clickable(enabled = !isWorking, onClick = onSubscribe)
-            )
-
-            SubjectChip(
-                text = if (isBookmarked) "Edit Bookmark" else "Bookmark",
-                style = if (isBookmarked) SubjectChipStyle.Tinted else SubjectChipStyle.Neutral,
-                leadingIcon = if (isBookmarked) Icons.Outlined.Bookmark else Icons.Outlined.BookmarkBorder,
-                palette = palette,
-                modifier = Modifier.clickable(enabled = !isWorking, onClick = onBookmark)
-            )
-
-            SubjectChip(
-                text = "Mark for Later",
-                style = SubjectChipStyle.Neutral,
-                leadingIcon = Icons.Outlined.Schedule,
-                palette = palette,
-                modifier = Modifier.clickable(enabled = !isWorking, onClick = onMarkForLater)
             )
         }
     }
@@ -273,205 +189,39 @@ internal fun noWorkTagsMessage(hasAo3WorkId: Boolean): String = if (hasAo3WorkId
 }
 
 /**
- * Artboard 1a's grouped facts card (`WorkDetailFactsSections.swift:24`).
- * Outlined, unfilled panel on the wash with Series, Headline facts, and Published date.
- */
-@Composable
-fun WorkDetailFactsCard(
-    seriesTitle: String,
-    seriesPosition: Int,
-    seriesUrl: String,
-    language: String,
-    wordCount: Int,
-    updatedDate: String,
-    publishedDate: String,
-    modifier: Modifier = Modifier,
-    onOpenSeries: (String) -> Unit = {}
-) {
-    val hasSeries = seriesTitle.isNotBlank()
-    val headlineSegments = buildList {
-        if (language.isNotBlank()) add(language)
-        if (wordCount > 0) add("${NumberFormat.getIntegerInstance().format(wordCount)} words")
-    }
-    val hasHeadline = headlineSegments.isNotEmpty()
-    val hasPublished = publishedDate.isNotBlank()
-
-    if (!hasSeries && !hasHeadline && !hasPublished) return
-
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = SubjectMetrics.panelGutter)
-            .subjectPanel(cornerRadius = 16.dp, isFilled = false)
-    ) {
-        var needsDivider = false
-
-        if (hasSeries) {
-            val partText = if (seriesPosition > 0) "Part $seriesPosition" else "Series"
-            SubjectFormRow(
-                label = seriesTitle,
-                value = partText,
-                showsDisclosure = seriesUrl.isNotBlank(),
-                onClick = if (seriesUrl.isNotBlank()) {
-                    { onOpenSeries(seriesUrl) }
-                } else null
-            )
-            needsDivider = true
-        }
-
-        if (hasHeadline) {
-            if (needsDivider) SubjectRowSeparator(inset = 0.dp)
-            val updatedValue = if (updatedDate.isNotBlank()) "upd ${WorkDetailDates.displayDate(updatedDate)}" else null
-            SubjectFormRow(
-                label = headlineSegments.joinToString(" · "),
-                value = updatedValue
-            )
-            needsDivider = true
-        }
-
-        if (hasPublished) {
-            if (needsDivider) SubjectRowSeparator(inset = 0.dp)
-            SubjectFormRow(
-                label = "Published",
-                value = WorkDetailDates.displayDate(publishedDate)
-            )
-        }
-    }
-}
-
-/**
- * Artboard 1a's archive stats strip (`WorkDetailFactsSections.swift:128`).
- * Kudos, Comments (accented, opens discussion), Bookmarks, Hits.
- */
-@Composable
-fun WorkDetailArchiveStatsStrip(
-    kudosCount: Int?,
-    commentsCount: Int?,
-    bookmarksCount: Int?,
-    hitsCount: Int?,
-    palette: SubjectPalette,
-    hasAO3Work: Boolean,
-    modifier: Modifier = Modifier,
-    onComments: () -> Unit = {}
-) {
-    val cells = buildList {
-        if (kudosCount != null) {
-            add(
-                SubjectStatCell(
-                    value = kudosCount.compactCount(),
-                    label = "Kudos"
-                )
-            )
-        }
-        // iOS: only an AO3 work gets the accented, tappable cell ("—" when unknown).
-        if (hasAO3Work) {
-            add(
-                SubjectStatCell(
-                    value = commentsCount?.compactCount() ?: "—",
-                    label = "Comments",
-                    isHighlighted = true,
-                    onClick = onComments
-                )
-            )
-        } else if (commentsCount != null) {
-            add(SubjectStatCell(value = commentsCount.compactCount(), label = "Comments"))
-        }
-        if (bookmarksCount != null) {
-            add(
-                SubjectStatCell(
-                    value = bookmarksCount.compactCount(),
-                    label = "Bookmarks"
-                )
-            )
-        }
-        if (hitsCount != null) {
-            add(
-                SubjectStatCell(
-                    value = hitsCount.compactCount(),
-                    label = "Hits"
-                )
-            )
-        }
-    }
-
-    if (cells.isEmpty()) return
-
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = SubjectMetrics.panelGutter)
-    ) {
-        SubjectStatStrip(cells = cells, palette = palette)
-    }
-}
-
-/**
- * Artboard 1a's Comments section (`WorkDetailSections.swift:122`).
- * Form rows linking to All comments, Chapter comments, and Write a comment.
+ * Board 19's single Comments row (`WorkDetailSections.swift`): opens the native Comments screen
+ * (which provides By Chapter filtering and Write a comment without loading comments up front).
  */
 @Composable
 fun WorkDetailCommentsSection(
     commentsCount: Int?,
-    chapters: String,
     modifier: Modifier = Modifier,
-    onAllComments: () -> Unit,
-    onChapterComments: () -> Unit,
-    onWriteComment: () -> Unit
+    onComments: () -> Unit
 ) {
-    val tokens = LocalKudosTokens.current
-    val hasMultipleChapters = chapters.contains('/') || (chapters.toIntOrNull() ?: 1) > 1
-
-    Column(
+    val countText = commentsCount?.let { NumberFormat.getIntegerInstance(java.util.Locale.US).format(it) }.orEmpty()
+    Box(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = SubjectMetrics.panelGutter),
-        verticalArrangement = Arrangement.spacedBy(9.dp)
+            .padding(horizontal = SubjectMetrics.panelGutter)
+            .subjectPanel(cornerRadius = SubjectMetrics.panelRadius)
     ) {
-        SubjectFieldLabel(text = "COMMENTS")
-
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .subjectPanel(cornerRadius = 14.dp)
-        ) {
-            SubjectFormRow(
-                label = "All comments",
-                value = commentsCount?.compactCount() ?: "",
-                showsDisclosure = true,
-                onClick = onAllComments
-            )
-
-            if (hasMultipleChapters) {
-                SubjectRowSeparator(inset = 14.dp)
-                SubjectFormRow(
-                    label = "Chapter comments",
-                    value = "",
-                    showsDisclosure = true,
-                    onClick = onChapterComments
-                )
+        SubjectFormRow(
+            label = "Comments",
+            value = countText,
+            showsDisclosure = true,
+            onClick = onComments,
+            modifier = Modifier.semantics {
+                contentDescription = if (countText.isEmpty()) {
+                    "Comments, comments load only when you open them"
+                } else {
+                    "Comments, $countText, comments load only when you open them"
+                }
             }
-
-            SubjectRowSeparator(inset = 14.dp)
-            SubjectFormRow(
-                label = "Write a comment",
-                value = "",
-                showsDisclosure = true,
-                onClick = onWriteComment
-            )
-        }
-
-        Text(
-            text = "Comments load only when you open them.",
-            fontSize = 12.sp,
-            color = tokens.secondaryInk
         )
     }
 }
 
-/**
- * Artboard 1a's page outline buttons (`WorkDetailFactsSections.swift:182`).
- * "Mark as Finished" / "Mark as Still Reading", and "Open on AO3".
- */
+/** Retained for [io.github.cidy02.kudos.reader.ReaderFanMenuUiTest]. */
 @Composable
 fun WorkDetailPageActions(
     isFinished: Boolean,
