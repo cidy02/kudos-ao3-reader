@@ -181,10 +181,15 @@ nonisolated struct ReadingInsights: Equatable, Sendable {
         calendar: Calendar = .current
     ) -> ReadingInsights {
         var insights = ReadingInsights()
+        let comparablePrevious = comparablePreviousFacts(
+            previousPeriodFacts,
+            matching: dayRange,
+            calendar: calendar
+        )
         insights.totalSeconds = facts.reduce(0) { $0 + $1.durationSeconds }
-        insights.previousPeriodSeconds = previousPeriodFacts.isEmpty
+        insights.previousPeriodSeconds = comparablePrevious.isEmpty
             ? nil
-            : previousPeriodFacts.reduce(0) { $0 + $1.durationSeconds }
+            : comparablePrevious.reduce(0) { $0 + $1.durationSeconds }
         insights.weeklySeconds = weeklyBuckets(from: facts, calendar: calendar)
         insights.byFandom = fandomShares(from: facts)
         insights.medianSessionSeconds = medianSeconds(of: facts)
@@ -194,9 +199,9 @@ nonisolated struct ReadingInsights: Equatable, Sendable {
 
         // New redesign figures (T-497)
         insights.totalWordsRead = facts.reduce(0) { $0 + $1.wordsRead }
-        insights.previousPeriodWordsRead = previousPeriodFacts.isEmpty
+        insights.previousPeriodWordsRead = comparablePrevious.isEmpty
             ? nil
-            : previousPeriodFacts.reduce(0) { $0 + $1.wordsRead }
+            : comparablePrevious.reduce(0) { $0 + $1.wordsRead }
         insights.fandomWordsShares = fandomWordsShares(from: facts)
 
         var wordCountsByWork: [UUID: Int] = [:]
