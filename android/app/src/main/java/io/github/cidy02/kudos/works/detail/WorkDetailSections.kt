@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -29,9 +30,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -40,6 +44,7 @@ import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.search.LocalTagSearch
 import io.github.cidy02.kudos.search.SearchSubjectField
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
+import io.github.cidy02.kudos.ui.subject.SectionRuleHeader
 import io.github.cidy02.kudos.ui.subject.SubjectChip
 import io.github.cidy02.kudos.ui.subject.SubjectChipStyle
 import io.github.cidy02.kudos.ui.subject.SubjectFieldLabel
@@ -51,46 +56,107 @@ import io.github.cidy02.kudos.ui.subject.subjectPanel
 import java.text.NumberFormat
 
 /**
- * Artboard 1a's Summary section (`WorkDetailOverviewSections.swift:33`).
- * 16sp serif font, 25.6sp line-height (CSS 1.6), and 8-line collapse.
+ * Version E's Summary section (`WorkDetailOverviewSections.swift`): sans-serif body clamped to
+ * 3 lines with `More` / `Less` shown only when the 3-line layout actually truncates, plus an
+ * inline `Notes` button opening the work on AO3 when `ao3WorkId != null`.
  */
 @Composable
 fun WorkDetailSummarySection(
     summary: String,
     palette: SubjectPalette,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    ao3WorkId: Long? = null,
+    onOpenNotes: (() -> Unit)? = null
 ) {
     if (summary.isBlank()) return
     val tokens = LocalKudosTokens.current
-    var expanded by remember { mutableStateOf(false) }
-    val collapses = summary.length > 600
+    val uriHandler = LocalUriHandler.current
+    val fontScale = LocalDensity.current.fontScale
+    var expanded by remember(summary) { mutableStateOf(false) }
+    var truncated by remember(summary, fontScale) { mutableStateOf(false) }
+    val notesAction = onOpenNotes ?: ao3WorkId?.let { id ->
+        { uriHandler.openUri("https://archiveofourown.org/works/$id") }
+    }
 
     Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = SubjectMetrics.panelGutter),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        modifier = modifier.fillMaxWidth()
     ) {
-        Text(
-            text = summary,
-            fontFamily = FontFamily.Serif,
-            fontSize = 16.sp,
-            lineHeight = 25.6.sp,
-            color = tokens.primaryInk.copy(alpha = 0.82f),
-            maxLines = if (collapses && !expanded) 8 else Int.MAX_VALUE,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.animateContentSize()
-        )
-        if (collapses) {
+        SectionRuleHeader(title = "Summary")
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = SubjectMetrics.panelGutter)
+                .padding(top = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
             Text(
-                text = if (expanded) "Show Less" else "Show More",
-                fontSize = 14.5.sp,
-                fontWeight = FontWeight.Medium,
-                color = palette.controlInk,
-                modifier = Modifier
-                    .semantics { contentDescription = if (expanded) "Show less summary" else "Show more summary" }
-                    .clickable { expanded = !expanded }
+                text = summary,
+                fontSize = 15.5.sp,
+                lineHeight = 22.sp,
+                color = tokens.primaryInk,
+                maxLines = if (expanded) Int.MAX_VALUE else 3,
+                overflow = TextOverflow.Ellipsis,
+                onTextLayout = { result ->
+                    if (!expanded) {
+                        truncated = result.hasVisualOverflow
+                    }
+                },
+                modifier = Modifier.animateContentSize()
             )
+            if (truncated || notesAction != null) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (truncated) {
+                        Box(
+                            modifier = Modifier
+                                .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+                                .clickable(
+                                    role = Role.Button,
+                                    onClickLabel = if (expanded) "Collapse summary" else "Expand summary"
+                                ) { expanded = !expanded }
+                                .padding(horizontal = 2.dp),
+                            contentAlignment = Alignment.CenterStart
+                        ) {
+                            Text(
+                                text = if (expanded) "Less" else "More",
+                                fontSize = 15.5.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = palette.controlInk
+                            )
+                        }
+                    }
+                    if (truncated && notesAction != null) {
+                        Text(
+                            text = "·",
+                            fontSize = 15.5.sp,
+                            color = tokens.secondaryInk,
+                            modifier = Modifier.clearAndSetSemantics {}
+                        )
+                    }
+                    if (notesAction != null) {
+                        Box(
+                            modifier = Modifier
+                                .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+                                .clickable(
+                                    role = Role.Button,
+                                    onClickLabel = "Opens this work on AO3, where the author's notes are"
+                                ) { notesAction() }
+                                .padding(horizontal = 2.dp),
+                            contentAlignment = Alignment.CenterStart
+                        ) {
+                            Text(
+                                text = "Notes",
+                                fontSize = 15.5.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = palette.controlInk
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }

@@ -1756,7 +1756,8 @@ private fun WorkDetailContent(
             Spacer(Modifier.height(20.dp))
             WorkDetailSummarySection(
                 summary = state.summary,
-                palette = palette
+                palette = palette,
+                ao3WorkId = state.ao3WorkId
             )
 
             // 7. Categorized Tags
