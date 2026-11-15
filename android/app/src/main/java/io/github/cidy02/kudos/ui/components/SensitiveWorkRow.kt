@@ -709,14 +709,14 @@ private fun LedgerBody(
         }
         val unfold: @Composable () -> Unit = {
             if (expandable) {
-                Icon(
-                    imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
-                    contentDescription = if (expanded) "Show less" else "Show more",
-                    tint = palette.controlInk,
-                    modifier = Modifier
-                        .size(20.dp)
-                        .clickable(role = Role.Button, onClick = onToggleExpanded)
-                )
+                IconButton(onClick = onToggleExpanded) {
+                    Icon(
+                        imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                        contentDescription = if (expanded) "Show less" else "Show more",
+                        tint = palette.controlInk,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
         }
         // The date may not wrap; beside the figures at a large size it left them a column a

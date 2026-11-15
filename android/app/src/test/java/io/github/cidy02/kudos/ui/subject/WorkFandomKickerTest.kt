@@ -24,6 +24,8 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
 import io.github.cidy02.kudos.core.model.SavedWork
@@ -190,6 +192,29 @@ class WorkFandomKickerTest {
         assertTrue("title should wrap at 200% without ellipsis", titleLayout.single().lineCount > 1 && !titleLayout.single().hasVisualOverflow)
         assertTrue("stacked order kicker (${kicker.bottom}) -> title (${title.top}) -> author (${author.top})",
             kicker.bottom <= title.top + 0.5f && title.bottom <= author.top + 0.5f)
+    }
+
+    @Test fun aQueueCardDragGripIs48DpAndExposesTalkBackReorderActions() {
+        val steps = mutableListOf<Int>()
+        compose.setContent {
+            KudosTheme(KudosThemeMode.Light) {
+                QueueLedgerCard(
+                    work = SavedWork(id = "queued-drag", title = "A queued work", author = "A writer",
+                        summary = "", wordCount = 1200, chapters = "1/1", comments = 0, bookmarks = 0,
+                        workFandoms = listOf("Doctor Who")),
+                    downloadFraction = null, obscured = false,
+                    drag = true, onStep = { steps += it }
+                )
+            }
+        }
+        val grip = compose.onNodeWithContentDescription("Reorder").fetchSemanticsNode()
+        val minimum = with(compose.density) { 48.dp.toPx() }
+        assertTrue("drag grip ${grip.boundsInRoot.width}x${grip.boundsInRoot.height}px < ${minimum}px",
+            grip.boundsInRoot.width >= minimum - 1f && grip.boundsInRoot.height >= minimum - 1f)
+        val actions = grip.config.getOrNull(SemanticsProperties.CustomActions).orEmpty()
+        assertEquals(listOf("Move up", "Move down"), actions.map { it.label })
+        actions.forEach { it.action() }
+        assertEquals(listOf(-1, 1), steps)
     }
 
     // --- item 5: a 48 dp target that overlaps nothing ----------------------------------------

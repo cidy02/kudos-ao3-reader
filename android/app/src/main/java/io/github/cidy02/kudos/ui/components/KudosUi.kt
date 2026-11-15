@@ -8,9 +8,11 @@ import androidx.compose.ui.composed
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
@@ -25,6 +27,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
@@ -150,36 +153,50 @@ fun MetadataChip(
     if (label.isBlank()) return
     // MD3 assist-chip–like capsule: primaryContainer for emphasis, surface
     // container + outline for quiet tags.
-    Surface(
-        modifier = modifier.then(if (onClick != null) Modifier.clickable { onClick() } else Modifier),
-        shape = MaterialTheme.shapes.small,
-        color = if (prominent) {
-            MaterialTheme.colorScheme.primaryContainer
-        } else {
-            MaterialTheme.colorScheme.surfaceContainerHighest
-        },
-        contentColor = if (prominent) {
-            MaterialTheme.colorScheme.onPrimaryContainer
-        } else {
-            MaterialTheme.colorScheme.onSurfaceVariant
-        },
-        tonalElevation = 0.dp,
-        border = BorderStroke(
-            width = 1.dp,
+    val surface: @Composable (Modifier) -> Unit = { surfaceModifier ->
+        Surface(
+            modifier = surfaceModifier,
+            shape = MaterialTheme.shapes.small,
             color = if (prominent) {
-                MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+                MaterialTheme.colorScheme.primaryContainer
             } else {
-                MaterialTheme.colorScheme.outlineVariant
-            }
-        )
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelMedium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-        )
+                MaterialTheme.colorScheme.surfaceContainerHighest
+            },
+            contentColor = if (prominent) {
+                MaterialTheme.colorScheme.onPrimaryContainer
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+            tonalElevation = 0.dp,
+            border = BorderStroke(
+                width = 1.dp,
+                color = if (prominent) {
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+                } else {
+                    MaterialTheme.colorScheme.outlineVariant
+                }
+            )
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+            )
+        }
+    }
+    if (onClick != null) {
+        Box(
+            modifier = modifier
+                .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+                .clickable(role = Role.Button, onClick = onClick),
+            contentAlignment = Alignment.Center
+        ) {
+            surface(Modifier)
+        }
+    } else {
+        surface(modifier)
     }
 }
 

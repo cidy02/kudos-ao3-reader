@@ -11,6 +11,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.unit.dp
 import io.github.cidy02.kudos.search.SearchSubjectField
 import io.github.cidy02.kudos.ui.theme.KudosTheme
 import io.github.cidy02.kudos.ui.theme.KudosThemeMode
@@ -139,5 +140,17 @@ class SensitiveWorkRowLedgerTest {
             "Detailed card unfold control top (${unfoldBounds.top}) should be below title bottom (${titleBounds.bottom})",
             unfoldBounds.top >= titleBounds.bottom
         )
+    }
+
+    @Test fun ledgerUnfoldAndExpandedChipsMeet48DpTouchTargets() {
+        show()
+        val minimum = with(compose.density) { 48.dp.toPx() }
+        val unfold = compose.onNodeWithContentDescription("Show more").fetchSemanticsNode().boundsInRoot
+        assertTrue("unfold ${unfold.width}x${unfold.height}px < ${minimum}px",
+            unfold.width >= minimum - 1f && unfold.height >= minimum - 1f)
+        compose.onNodeWithContentDescription("Show more").performSemanticsAction(SemanticsActions.OnClick)
+        val chip = compose.onNodeWithText("Torchwood").fetchSemanticsNode().boundsInRoot
+        assertTrue("chip ${chip.width}x${chip.height}px < ${minimum}px",
+            chip.width >= minimum - 1f && chip.height >= minimum - 1f)
     }
 }

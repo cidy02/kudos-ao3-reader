@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -52,6 +53,9 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
@@ -521,31 +525,45 @@ fun QueueSwipeRow(
 
 fun Modifier.queueDragHandle(enabled: Boolean, onStep: (Int) -> Unit): Modifier {
     if (!enabled) return this
-    return pointerInput(onStep) {
-        var accrued = 0f
-        val step = 56.dp.toPx()
-        detectVerticalDragGestures { _, drag ->
-            accrued += drag
-            while (accrued >= step) {
-                onStep(1)
-                accrued -= step
-            }
-            while (accrued <= -step) {
-                onStep(-1)
-                accrued += step
+    return this
+        .semantics {
+            customActions = listOf(
+                CustomAccessibilityAction("Move up") { onStep(-1); true },
+                CustomAccessibilityAction("Move down") { onStep(1); true }
+            )
+        }
+        .pointerInput(onStep) {
+            var accrued = 0f
+            val step = 56.dp.toPx()
+            detectVerticalDragGestures { _, drag ->
+                accrued += drag
+                while (accrued >= step) {
+                    onStep(1)
+                    accrued -= step
+                }
+                while (accrued <= -step) {
+                    onStep(-1)
+                    accrued += step
+                }
             }
         }
-    }
 }
 
 @Composable
 fun DragGrip(modifier: Modifier = Modifier) {
-    androidx.compose.material3.Icon(
-        imageVector = Icons.Filled.DragHandle,
-        contentDescription = "Reorder",
-        tint = LocalKudosTokens.current.secondaryInk,
-        modifier = modifier.size(22.dp)
-    )
+    Box(
+        modifier
+            .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+            .semantics(mergeDescendants = true) { },
+        contentAlignment = Alignment.Center
+    ) {
+        androidx.compose.material3.Icon(
+            imageVector = Icons.Filled.DragHandle,
+            contentDescription = "Reorder",
+            tint = LocalKudosTokens.current.secondaryInk,
+            modifier = Modifier.size(22.dp)
+        )
+    }
 }
 
 @Composable
