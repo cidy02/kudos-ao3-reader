@@ -13,6 +13,7 @@ nonisolated struct WritingTextRecovery {
         var text: String
         var originalDigest: String
         var savedAt: Date
+        var accountDigest: String?
     }
 
     struct Copy: Identifiable {
@@ -20,6 +21,10 @@ nonisolated struct WritingTextRecovery {
         var entry: Entry
         var id: URL { url }
     }
+
+    private static let keyRegistryLock = NSLock()
+    nonisolated(unsafe) private static var accountDigestByKeyDigest: [String: String] = [:]
+    nonisolated(unsafe) private static var usernameByKeyDigest: [String: String] = [:]
 
     /// The field's readable copies, newest first. A copy that won't decode is
     /// skipped on its own: it used to make this throw, which hid every other
@@ -33,13 +38,41 @@ nonisolated struct WritingTextRecovery {
             .sorted { $0.entry.savedAt > $1.entry.savedAt }
     }
 
-    var directory: URL = URL.applicationSupportDirectory
+    static let defaultDirectory: URL = URL.applicationSupportDirectory
         .appendingPathComponent("WritingTextRecovery", isDirectory: true)
+
+    var directory: URL = Self.defaultDirectory
+
+    func hasLocalDrafts(for username: String?) -> Bool {
+        guard let normalized = Self.normalizedAccount(username) else { return false }
+        let targetDigest = Self.digest(normalized)
+        let newWorkKeys = Set(["content", "summary", "notes", "endnotes"].map { field in
+            Self.keyDigest(normalizedAccount: normalized, target: "work:new", field: field)
+        })
+        for url in allCopyURLs() {
+            guard let keyDigest = Self.keyDigestPrefix(for: url) else { continue }
+            if let entry = try? load(from: url) {
+                if let entryAccountDigest = entry.accountDigest {
+                    if entryAccountDigest == targetDigest { return true }
+                    continue
+                }
+            }
+            if Self.registeredAccountDigest(forKeyDigest: keyDigest) == targetDigest
+                || newWorkKeys.contains(keyDigest) {
+                return true
+            }
+        }
+        return false
+    }
 
     func fileURL(account: String, target: String, field: String) -> URL {
         // Length-delimited components prevent ambiguous account/target pairs.
-        let key = [account.lowercased(), target, field].map { "\($0.utf8.count):\($0)" }.joined()
-        return directory.appendingPathComponent(Self.digest(key)).appendingPathExtension("json")
+        let normalized = account.lowercased()
+        let keyDigest = Self.keyDigest(normalizedAccount: normalized, target: target, field: field)
+        if let trimmed = Self.normalizedAccount(account) {
+            Self.registerKeyDigest(keyDigest, normalizedAccount: trimmed)
+        }
+        return directory.appendingPathComponent(keyDigest).appendingPathExtension("json")
     }
 
     func load(from url: URL) throws -> Entry? {
@@ -62,9 +95,20 @@ nonisolated struct WritingTextRecovery {
     /// text is computed once per editor session, not once per save.
     func save(text: String, originalDigest: String, to url: URL) throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let entry = Entry(text: text, originalDigest: originalDigest, savedAt: Date())
+        let keyDigest = Self.keyDigestPrefix(for: url)
+        let accountDigest = keyDigest.flatMap { Self.registeredAccountDigest(forKeyDigest: $0) }
+        let entry = Entry(
+            text: text,
+            originalDigest: originalDigest,
+            savedAt: Date(),
+            accountDigest: accountDigest
+        )
         try JSONEncoder().encode(entry).write(to: url, options: .atomic)
         try? prune(around: url)
+        if directory == Self.defaultDirectory,
+           let username = keyDigest.flatMap({ Self.registeredUsername(forKeyDigest: $0) }) {
+            WritingTabEvents.notifyDraftSaved(username: username)
+        }
     }
 
     /// Keeps `url` and the newest `copyLimit - 1` other copies of the same
@@ -93,6 +137,46 @@ nonisolated struct WritingTextRecovery {
 
     static func digest(_ text: String) -> String {
         SHA256.hash(data: Data(text.utf8)).map { String(format: "%02x", $0) }.joined()
+    }
+
+    private static func normalizedAccount(_ username: String?) -> String? {
+        guard let trimmed = username?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+              !trimmed.isEmpty,
+              trimmed != "signed-out"
+        else { return nil }
+        return trimmed
+    }
+
+    private static func keyDigest(normalizedAccount: String, target: String, field: String) -> String {
+        let key = [normalizedAccount, target, field].map { "\($0.utf8.count):\($0)" }.joined()
+        return digest(key)
+    }
+
+    private static func keyDigestPrefix(for url: URL) -> String? {
+        guard let prefix = url.lastPathComponent.split(separator: ".", maxSplits: 1).first,
+              !prefix.isEmpty
+        else { return nil }
+        return String(prefix)
+    }
+
+    private static func registerKeyDigest(_ keyDigest: String, normalizedAccount: String) {
+        let accountDigest = digest(normalizedAccount)
+        keyRegistryLock.lock()
+        accountDigestByKeyDigest[keyDigest] = accountDigest
+        usernameByKeyDigest[keyDigest] = normalizedAccount
+        keyRegistryLock.unlock()
+    }
+
+    private static func registeredAccountDigest(forKeyDigest keyDigest: String) -> String? {
+        keyRegistryLock.lock()
+        defer { keyRegistryLock.unlock() }
+        return accountDigestByKeyDigest[keyDigest]
+    }
+
+    private static func registeredUsername(forKeyDigest keyDigest: String) -> String? {
+        keyRegistryLock.lock()
+        defer { keyRegistryLock.unlock() }
+        return usernameByKeyDigest[keyDigest]
     }
 
     /// `<digest>.` for a key made by `fileURL(account:target:field:)`, which

@@ -19,6 +19,16 @@ import SwiftData
     /// Wall time actually reading, clamped ≥ 0. Not a raw `endedAt - startedAt`
     /// when the session was paused in the background.
     var durationSeconds: Double = 0
+    var tzOffsetSeconds: Int? = nil
+    var startProgress: Double? = nil
+    var startSpineIndex: Int? = nil
+    var modeRaw: String = "read"
+    var playbackRate: Double? = nil
+    var activeSeconds: Double? = nil
+    var deviceID: String = ""
+    var rulesVersion: Int = 0
+    enum Mode: String, Equatable { case read, listen }
+    var mode: Mode { Mode(rawValue: modeRaw) ?? .read }
     var lastSpineIndex: Int = 0
     /// Publication label from the stored Readium locator (`WorkReadingPosition`).
     var chapterTitle: String = ""
@@ -43,6 +53,14 @@ import SwiftData
         startedAt: Date,
         endedAt: Date,
         durationSeconds: Double,
+        tzOffsetSeconds: Int? = nil,
+        startProgress: Double? = nil,
+        startSpineIndex: Int? = nil,
+        modeRaw: String = "read",
+        playbackRate: Double? = nil,
+        activeSeconds: Double? = nil,
+        deviceID: String = "",
+        rulesVersion: Int = 0,
         lastSpineIndex: Int = 0,
         chapterTitle: String = "",
         endingProgress: Double = 0,
@@ -59,6 +77,14 @@ import SwiftData
         self.startedAt = startedAt
         self.endedAt = endedAt
         self.durationSeconds = max(0, durationSeconds)
+        self.tzOffsetSeconds = tzOffsetSeconds
+        self.startProgress = startProgress
+        self.startSpineIndex = startSpineIndex
+        self.modeRaw = modeRaw
+        self.playbackRate = playbackRate
+        self.activeSeconds = activeSeconds
+        self.deviceID = deviceID
+        self.rulesVersion = rulesVersion
         self.lastSpineIndex = lastSpineIndex
         self.chapterTitle = chapterTitle
         self.endingProgress = min(1, max(0, endingProgress))

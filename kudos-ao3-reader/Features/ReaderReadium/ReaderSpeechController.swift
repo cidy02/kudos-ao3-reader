@@ -1245,7 +1245,9 @@ struct ReaderSpeechMiniPlayer: View {
         // still win hit-testing over this gesture.
         .contentShape(Rectangle())
         .onTapGesture(perform: onBackgroundTap)
-        .sheet(isPresented: $showingSpeechSettings) {
+        .sheet(isPresented: $showingSpeechSettings, onDismiss: {
+            controller.applyPreferences()
+        }) {
             ReaderSpeechSettingsSheet()
         }
     }

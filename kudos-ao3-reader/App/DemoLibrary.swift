@@ -969,8 +969,12 @@ enum DebugLaunchRoute {
             if target.hasPrefix("settings:") {
                 router.showAccount()
             } else if target.hasPrefix("ao3collection:") || target.hasPrefix("workedit:") {
+                router.revealWritingTabForSession()
                 router.selection = .writing
             } else if let route = legacyAccountRoute(target) {
+                if case .writing = route.destination {
+                    router.revealWritingTabForSession()
+                }
                 router.openLegacyAccountRoute(route)
             } else {
                 router.showAccount()
@@ -985,6 +989,9 @@ enum DebugLaunchRoute {
             // `tagsearch:<fandom>` — Search's results for a fandom tag.
             router.searchAO3(.fandom, String(value.dropFirst("tagsearch:".count)))
         } else if let tab = AppTab(rawValue: value) {
+            if tab == .writing {
+                router.revealWritingTabForSession()
+            }
             router.selection = tab
         }
     }

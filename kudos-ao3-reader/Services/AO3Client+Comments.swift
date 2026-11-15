@@ -400,7 +400,8 @@ extension AO3Client {
     }
 
     /// Parses `/works/<id>/navigate`: `ol.chapter.index.group > li > a` with the
-    /// text "N. Title" and the chapter id in the href.
+    /// text "N. Title", the chapter id in the href, and `span.datetime`
+    /// (`(YYYY-MM-DD)`, from `chapter.published_at.to_date`).
     static func parseChapterIndex(_ html: String) throws -> [AO3ChapterRef] {
         let doc = try SwiftSoup.parse(html)
         try throwIfCommentsLoginPage(doc)

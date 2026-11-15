@@ -17,7 +17,7 @@ struct SettingsAppearancePage: View {
     @State private var showCustomWarning = false
     @State private var customPick: Task<Void, Never>?
     @State private var pickerBridge = AccentColorPickerBridge()
-    @AppStorage(WorkSymbolPlacement.storageKey) private var symbolPlacement: WorkSymbolPlacement = .beside
+    @AppStorage(WorkSymbolPlacement.storageKey) private var symbolPlacement: WorkSymbolPlacement = .defaultValue
 
     /// Bindings into the central ThemeManager (an @Observable in the environment).
     private var appThemeBinding: Binding<ReaderTheme> {

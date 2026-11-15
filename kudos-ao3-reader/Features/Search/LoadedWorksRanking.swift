@@ -37,8 +37,8 @@ enum LoadedWorksRank: String, CaseIterable, Identifiable {
         case .kudosPerHitAdjusted: "Against loaded works of similar length and age"
         case .savesPerKudos: "Public bookmarks ÷ kudos"
         case .commentsPerKudos: "Comments ÷ kudos"
-        case .momentum: "Kudos gained since you last saw each work"
-        case .kudosPerThousandWords: "Kudos ÷ word count × 1,000"
+        case .momentum: "Kudos growth since you last saw each work"
+        case .kudosPerThousandWords: "Kudos ÷ max(words, 1,000) × 1,000; favours short works"
         }
     }
 }
@@ -114,12 +114,14 @@ struct RankedWork: Identifiable, Equatable {
 struct RankedWorkPartition: Equatable {
     let ranked: [RankedWork]
     let unranked: [RankedWork]
+    /// Momentum only: "12 of 40 seen before". Nil for every other rank.
+    var seenBeforeLine: String? = nil
 }
 
 enum LoadedWorksRanker {
-    /// "Rank cautiously": every ratio is pulled toward the loaded median as if the
-    /// work had this many more hits at exactly the median. A work with 50 hits keeps
-    /// a tenth of its own figure; one with 20,000 keeps nearly all of it.
+    /// "Rank cautiously": a ratio is pulled toward the loaded median as if the work
+    /// had this many more observations at exactly the median. Kudos per hit counts
+    /// hits; saves and comments per kudos count kudos.
     static let cautiousPseudoHits = 500.0
     /// A length × age group needs this many loaded works before its median means
     /// anything; smaller groups fall back to the length alone, then to every work.
@@ -127,6 +129,15 @@ enum LoadedWorksRanker {
     /// "Thousands of kudos and almost no bookmarks": at least this many kudos with
     /// fewer than one bookmark per hundred.
     static let unusualKudosFloor = 1_000
+    /// "More kudos than hits" needs at least this many hits, and kudos at least
+    /// `unusualKudosMargin` above them. A smaller gap is downloads and apps, which
+    /// add kudos and no hits.
+    static let unusualHitsFloor = 20
+    static let unusualKudosMargin = 20
+    /// Kudos per 1,000 words never divides by a shorter work than this.
+    static let kudosPerThousandWordsFloor = 1_000
+    /// Momentum's growth is relative to the earlier kudos, and never to fewer than this.
+    static let momentumEarlierFloor = 20
 
     /// Partitions `works` into ranked and unranked results by `settings` (FID40).
     ///
@@ -171,7 +182,11 @@ enum LoadedWorksRanker {
             let prior = priors[index]
             let shrunk = value.map { own in
                 guard settings.ranksCautiously, let prior else { return own }
-                return shrink(own, toward: prior, hits: figures[index].hits)
+                let evidence = switch settings.rank {
+                case .savesPerKudos, .commentsPerKudos: figures[index].kudos
+                default: figures[index].hits
+                }
+                return shrink(own, toward: prior, count: evidence)
             }
             let score: Double?
             let shown: Double?
@@ -186,7 +201,10 @@ enum LoadedWorksRanker {
                 }
             } else {
                 score = shrunk
-                shown = value
+                // Momentum ranks by relative growth. The line still states the gain.
+                shown = settings.rank == .momentum
+                    ? momentumGain(kudos: figures[index].kudos, previous: previousKudos[works[index].id])
+                    : value
             }
             let sigText = signal(
                 settings.rank,
@@ -233,8 +251,18 @@ enum LoadedWorksRanker {
         let unscored = entries.filter { !$0.entry.isSetAside && $0.entry.score == nil }
         let aside = entries.filter { $0.entry.isSetAside }
         let unranked = (unscored + aside).map { $0.entry }
+        let seenBeforeLine = settings.rank == .momentum
+            ? Self.seenBeforeLine(
+                seenBefore: zip(works, figures).filter { work, figure in
+                    figure.kudos != nil && previousKudos[work.id] != nil
+                }.count,
+                loaded: works.count
+            )
+            : nil
 
-        return RankedWorkPartition(ranked: rankedWithPositions, unranked: unranked)
+        return RankedWorkPartition(
+            ranked: rankedWithPositions, unranked: unranked, seenBeforeLine: seenBeforeLine
+        )
     }
 
     /// Orders `works` by `settings`. AO3's order is returned untouched.
@@ -292,17 +320,24 @@ enum LoadedWorksRanker {
         return days < 365 ? 0 : (days < 3 * 365 ? 1 : 2)
     }
 
-    /// More kudos than hits, or thousands of kudos with almost no bookmarks.
+    /// Kudos clear hits by the margin, or thousands of kudos with almost no bookmarks.
     static func isUnusual(_ figures: Figures) -> Bool {
         guard let kudos = figures.kudos else { return false }
-        if let hits = figures.hits, kudos > hits { return true }
+        if kudosExceedHits(kudos: kudos, hits: figures.hits) { return true }
         if kudos >= unusualKudosFloor, let bookmarks = figures.bookmarks, bookmarks * 100 < kudos { return true }
         return false
     }
 
-    /// The work's own ratio for `rank`, never dividing by zero: a zero or unknown
-    /// denominator gives nil, and the work is left unranked. Momentum is not a
-    /// ratio — see `momentum(kudos:previous:)`.
+    /// `kudos ≥ hits + 20` with `hits ≥ 20`. The margin comes off kudos, after a
+    /// guard, so a hit count near `Int.max` cannot overflow the addition.
+    static func kudosExceedHits(kudos: Int, hits: Int?) -> Bool {
+        guard let hits, hits >= unusualHitsFloor, kudos >= unusualKudosMargin else { return false }
+        return kudos - unusualKudosMargin >= hits
+    }
+
+    /// The work's own ratio for `rank`. A zero or unknown denominator gives nil,
+    /// except kudos per 1,000 words, which floors the denominator at 1,000.
+    /// Momentum is not computed here — see `momentum(kudos:previous:)`.
     static func rawFigure(_ rank: LoadedWorksRank, _ figures: Figures) -> Double? {
         func ratio(_ numerator: Int?, _ denominator: Int?, per scale: Double = 1) -> Double? {
             guard let numerator, let denominator, denominator > 0 else { return nil }
@@ -313,27 +348,44 @@ enum LoadedWorksRanker {
         case .kudosPerHitAdjusted: return ratio(figures.kudos, figures.hits)
         case .savesPerKudos: return ratio(figures.bookmarks, figures.kudos)
         case .commentsPerKudos: return ratio(figures.comments, figures.kudos)
-        case .kudosPerThousandWords: return ratio(figures.kudos, figures.words, per: 1_000)
+        case .kudosPerThousandWords:
+            guard let kudos = figures.kudos, let words = figures.words else { return nil }
+            return Double(kudos) / Double(max(words, kudosPerThousandWordsFloor)) * 1_000
         }
     }
 
-    /// Kudos gained since the work was last seen in results. nil when it has not
-    /// been seen before; never negative (AO3 drops kudos from deleted accounts).
-    static func momentum(kudos: Int?, previous: Int?) -> Double? {
+    /// Kudos gained since the work was last seen. nil when it has not been seen
+    /// before; never negative (AO3 drops kudos from deleted accounts). A negative
+    /// earlier count counts as zero, and the subtraction only runs when it fits.
+    static func momentumGain(kudos: Int?, previous: Int?) -> Double? {
         guard let kudos, let previous else { return nil }
-        return Double(max(0, kudos - previous))
+        let earlier = max(previous, 0)
+        let gained = kudos >= earlier ? kudos - earlier : 0
+        return Double(gained)
     }
 
-    /// The Bayesian pull: `hits` of evidence at the work's own figure, plus
-    /// `cautiousPseudoHits` at the prior. Unknown hits keep the prior alone.
-    static func shrink(_ value: Double, toward prior: Double, hits: Int?) -> Double {
-        let evidence = Double(max(0, hits ?? 0))
+    /// Growth relative to the earlier count, and never to fewer than
+    /// `momentumEarlierFloor` kudos. The absolute gain only re-sorts by size.
+    static func momentum(kudos: Int?, previous: Int?) -> Double? {
+        guard let gain = momentumGain(kudos: kudos, previous: previous), let previous else { return nil }
+        return gain / Double(max(previous, momentumEarlierFloor))
+    }
+
+    /// How many of the loaded works momentum can rank. Two pages is 40.
+    static func seenBeforeLine(seenBefore: Int, loaded: Int) -> String {
+        "\(seenBefore) of \(loaded) seen before"
+    }
+
+    /// The Bayesian pull: `count` of evidence at the work's own figure, plus
+    /// `cautiousPseudoHits` at the prior. Unknown evidence keeps the prior alone.
+    static func shrink(_ value: Double, toward prior: Double, count: Int?) -> Double {
+        let evidence = Double(max(0, count ?? 0))
         return (evidence * value + cautiousPseudoHits * prior) / (evidence + cautiousPseudoHits)
     }
 
     /// Each work's prior: the median of the loaded works it is compared with.
     /// Set-aside works and works with no figure are left out of every median.
-    /// Momentum is a count, not a ratio, and has no prior.
+    /// Momentum is growth since the last sighting, and has no prior.
     private static func priors(
         for rank: LoadedWorksRank,
         figures: [Figures],
@@ -384,9 +436,9 @@ enum LoadedWorksRanker {
             return nil
         case .momentum:
             guard hasPrevious, let gained = shown else { return "First time in your results" }
-            return gained > 0
-                ? "+\(Int(gained).formatted()) kudos since you last saw it"
-                : "No new kudos since you last saw it"
+            guard gained > 0 else { return "No new kudos since you last saw it" }
+            let gainText = gained.formatted(.number.precision(.fractionLength(0)))
+            return "+\(gainText) kudos since you last saw it"
         case .kudosPerHitAdjusted, .savesPerKudos, .commentsPerKudos, .kudosPerThousandWords:
             guard let value = shown else { return "Not enough figures to rank" }
             return switch rank {

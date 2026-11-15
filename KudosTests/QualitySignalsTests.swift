@@ -295,4 +295,290 @@ struct QualitySignalsTests {
 
         #expect(ranked.map(\.work.id) == (partition.ranked + partition.unranked).map(\.work.id))
     }
+
+    // MARK: - T-520 review fixes
+
+    @Test func kudos312IsSteadyAndKudos48IsEarly() {
+        #expect(QualitySignalTones.confidenceWord(forKudos: 312) == "Steady")
+        #expect(QualitySignalTones.confidenceWord(forKudos: 48) == "Early")
+        // The cut-offs themselves: 49/50 and 199/200.
+        #expect(QualitySignalTones.confidenceWord(forKudos: 49) == "Early")
+        #expect(QualitySignalTones.confidenceWord(forKudos: 50) == "Settling")
+        #expect(QualitySignalTones.confidenceWord(forKudos: 199) == "Settling")
+        #expect(QualitySignalTones.confidenceWord(forKudos: 200) == "Steady")
+
+        let steady = QualitySignalTones.chooseTone(
+            rank: .kudosPerHitAdjusted,
+            shown: 1.8,
+            figures: LoadedWorksRanker.Figures(work(1, kudos: 312, hits: 2_900), now: now),
+            setAside: false
+        )
+        #expect(steady?.note?.hasPrefix("Steady") == true)
+
+        let early = QualitySignalTones.chooseTone(
+            rank: .kudosPerHitAdjusted,
+            shown: 1.8,
+            figures: LoadedWorksRanker.Figures(work(2, kudos: 48, hits: 300, bookmarks: 0), now: now),
+            setAside: false
+        )
+        #expect(early?.note?.hasPrefix("Early") == true)
+    }
+
+    /// (a) `kudos ≥ hits + 20` with `hits ≥ 20`. One under either cut is not unusual,
+    /// and a work set aside for bookmarks does not get the hits note inside the margin.
+    @Test func unusualStatsNeedAMarginOf20() {
+        let atMargin = LoadedWorksRanker.Figures(work(1, kudos: 40, hits: 20, bookmarks: 20), now: now)
+        let oneKudoUnder = LoadedWorksRanker.Figures(work(2, kudos: 39, hits: 20, bookmarks: 20), now: now)
+        let hitsUnder = LoadedWorksRanker.Figures(work(3, kudos: 100, hits: 19, bookmarks: 50), now: now)
+        #expect(LoadedWorksRanker.isUnusual(atMargin))
+        #expect(!LoadedWorksRanker.isUnusual(oneKudoUnder))
+        #expect(!LoadedWorksRanker.isUnusual(hitsUnder))
+
+        let note = QualitySignalTones.chooseTone(
+            rank: .kudosPerHitAdjusted, shown: nil, figures: atMargin, setAside: true
+        )
+        #expect(note?.note == "More kudos than hits")
+
+        let insideTheMargin = LoadedWorksRanker.Figures(
+            work(4, kudos: 1_000, hits: 990, bookmarks: 1), now: now
+        )
+        #expect(LoadedWorksRanker.isUnusual(insideTheMargin))
+        let bookmarkNote = QualitySignalTones.chooseTone(
+            rank: .kudosPerHitAdjusted, shown: nil, figures: insideTheMargin, setAside: true
+        )
+        #expect(bookmarkNote?.note == "Thousands of kudos and almost no bookmarks")
+    }
+
+    /// (b) Words under 1,000 use 1,000 as the denominator. 999 used to score just over 10.
+    @Test func kudosPerThousandWordsFloorsTheDenominatorAt1000() {
+        let justUnder = LoadedWorksRanker.Figures(work(1, kudos: 10, hits: 200, words: 999), now: now)
+        let atFloor = LoadedWorksRanker.Figures(work(2, kudos: 10, hits: 200, words: 1_000), now: now)
+        let longer = LoadedWorksRanker.Figures(work(3, kudos: 10, hits: 200, words: 2_000), now: now)
+        #expect(isClose(LoadedWorksRanker.rawFigure(.kudosPerThousandWords, justUnder), 10))
+        #expect(isClose(LoadedWorksRanker.rawFigure(.kudosPerThousandWords, atFloor), 10))
+        #expect(isClose(LoadedWorksRanker.rawFigure(.kudosPerThousandWords, longer), 5))
+        #expect(LoadedWorksRank.kudosPerThousandWords.subtitle.contains("favours short works"))
+    }
+
+    /// (c) The same gain of 20 on an earlier count below 20 ties the count at 20,
+    /// and both outrank a larger absolute gain. The line says how many were seen before.
+    @Test func momentumRanksGrowthAgainstEarlierKudosFlooredAt20() {
+        let works = [
+            work(1, kudos: 30, hits: 400),
+            work(2, kudos: 40, hits: 400),
+            work(3, kudos: 140, hits: 400),
+        ]
+        let previous = [1: 10, 2: 20, 3: 100]
+        let ranked = LoadedWorksRanker.rank(
+            works, by: settings(.momentum), previousKudos: previous, now: now
+        )
+        #expect(ranked.map(\.work.id) == [1, 2, 3])
+        #expect(isClose(ranked[0].score, 1))
+        #expect(isClose(ranked[1].score, 1))
+        #expect(isClose(ranked[2].score, 0.4))
+        #expect(ranked[0].signal == "+20 kudos since you last saw it")
+
+        // Work 8 was seen before, but its current kudos are unknown, so momentum
+        // cannot rank it. Counting every previousKudos key would say 2 of 40.
+        var page = (1 ... 40).map { work($0, kudos: 10, hits: 200) }
+        page[7] = work(8, kudos: nil, hits: nil, words: nil)
+        let partition = LoadedWorksRanker.partition(
+            page, by: settings(.momentum), previousKudos: [7: 10, 8: 4], now: now
+        )
+        #expect(partition.seenBeforeLine == "1 of 40 seen before")
+    }
+
+    /// Int.max hits, and Int.max kudos against a negative earlier count, used to
+    /// trap in the addition and the subtraction. The gain line must not turn the
+    /// Double back into an Int either.
+    @Test func extremeCountsDoNotTrap() {
+        #expect(!LoadedWorksRanker.kudosExceedHits(kudos: Int.max, hits: Int.max))
+        #expect(LoadedWorksRanker.kudosExceedHits(kudos: Int.max, hits: 20))
+        #expect(LoadedWorksRanker.momentumGain(kudos: Int.max, previous: -1) == Double(Int.max))
+
+        let huge = Double(Int.max)
+        let line = LoadedWorksRanker.signal(.momentum, shown: huge, setAside: false, hasPrevious: true)
+        #expect(line?.hasPrefix("+") == true)
+        let tone = QualitySignalTones.chooseTone(
+            rank: .momentum,
+            shown: huge,
+            figures: LoadedWorksRanker.Figures(work(1, kudos: 1, hits: 100), now: now),
+            setAside: false,
+            hasPrevious: true
+        )
+        #expect(tone?.label.hasPrefix("+") == true)
+        #expect(tone?.label != "No new kudos")
+    }
+
+    /// (d) Saves and comments per kudos shrink by kudos. Hits would keep
+    /// (60 × 0.6 + 500 × 0.3) / 560.
+    @Test func cautiousPerKudosSignalsWeighByKudos() {
+        let works = [
+            work(1, kudos: 50, hits: 60, comments: 30, bookmarks: 30),
+            work(2, kudos: 1_000, hits: 20_000, comments: 400, bookmarks: 400),
+            work(3, kudos: 500, hits: 10_000, comments: 100, bookmarks: 100),
+            work(4, kudos: 500, hits: 10_000, comments: 50, bookmarks: 50),
+        ]
+        let expected = (50 * 0.6 + 500 * 0.3) / 550
+        for rank in [LoadedWorksRank.savesPerKudos, .commentsPerKudos] {
+            let ranked = LoadedWorksRanker.rank(works, by: settings(rank, cautious: true), now: now)
+            let score = ranked.first { $0.work.id == 1 }?.score
+            #expect(isClose(score, expected), "\(rank)")
+        }
+
+        // Kudos per hit still shrinks by the 60 hits. Weighing it by the 50 kudos
+        // would move this score, so the evidence switch cannot be flattened.
+        let own = 50.0 / 60.0
+        let typical = 1_000.0 / 20_000.0
+        let shrunkByHits = (60 * own + 500 * typical) / (60 + 500)
+        let adjusted = LoadedWorksRanker.rank(
+            works, by: settings(.kudosPerHitAdjusted, cautious: true), now: now
+        )
+        let adjustedScore = adjusted.first { $0.work.id == 1 }?.score
+        #expect(isClose(adjustedScore, shrunkByHits / typical))
+    }
+
+    private func isClose(_ value: Double?, _ expected: Double) -> Bool {
+        guard let value else { return false }
+        return abs(value - expected) < 1e-9
+    }
+
+    // MARK: - Held data (T-522)
+
+    /// Readers-only uses opened comments. An unopened thread leaves the blurb
+    /// ratio alone and does not invent the author's share.
+    @Test func readersOnlyRatioNeedsOpenedComments() {
+        let figures = LoadedWorksRanker.Figures(
+            work(1, kudos: 100, hits: 1_000, comments: 40),
+            now: now
+        )
+        let blurb = LoadedWorksRanker.rawFigure(.commentsPerKudos, figures)
+        #expect(isClose(blurb, 0.4))
+        #expect(LoadedWorksRanker.readersOnlyCommentsPerKudos(
+            openedComments: nil, kudos: 100,
+            workAuthors: ["Pen Name"], workAuthorUsernames: ["creator"]
+        ) == nil)
+        #expect(LoadedWorksRanker.rawFigure(.commentsPerKudos, figures) == blurb)
+
+        #expect(LoadedWorksRanker.readersOnlyCommentsPerKudos(
+            openedComments: [], kudos: 100,
+            workAuthors: ["Pen Name"], workAuthorUsernames: ["creator"]
+        ) == 0)
+
+        let opened = openedComments()
+        let readersOnly = LoadedWorksRanker.readersOnlyCommentsPerKudos(
+            openedComments: opened, kudos: 100,
+            workAuthors: ["Pen Name"], workAuthorUsernames: ["creator"],
+            currentUsername: "creator"
+        )
+        // Three reader comments held. Not the blurb's 40, and not that 40 scaled
+        // by the reader share of the opened thread.
+        #expect(isClose(readersOnly, 0.03))
+        #expect(!isClose(readersOnly, 0.4))
+        #expect(!isClose(readersOnly, 40.0 * (3.0 / 7.0) / 100.0))
+
+        let viewer = AO3Comment(
+            id: 70, author: "Me Pseud", isGuest: false, userPath: "/users/viewer/pseuds/viewer"
+        )
+        #expect(isClose(LoadedWorksRanker.readersOnlyCommentsPerKudos(
+            openedComments: [viewer], kudos: 100,
+            workAuthors: ["Pen Name"], workAuthorUsernames: ["creator"],
+            currentUsername: "viewer"
+        ), 0.01))
+
+        // The viewer's own comment hides Author. Without the work's accounts,
+        // that comment cannot be classified, so the rate stays unknown.
+        #expect(LoadedWorksRanker.readersOnlyCommentsPerKudos(
+            openedComments: [viewer], kudos: 100,
+            workAuthors: ["Pen Name"], workAuthorUsernames: [],
+            currentUsername: "viewer"
+        ) == nil)
+    }
+
+    @Test func chapterCadenceUsesTheLastFiveGaps() {
+        #expect(LoadedWorksRanker.chapterCadenceDays(publishedOn: [posted(0), posted(100)]) == nil)
+        #expect(LoadedWorksRanker.chapterCadenceDays(publishedOn: [posted(0), posted(3), posted(6)]) == nil)
+        // Span of 7 days is enough: gaps of 3 and 4, median 3.5. The lifetime mean is also 3.5 here.
+        #expect(LoadedWorksRanker.chapterCadenceDays(publishedOn: [posted(0), posted(3), posted(7)]) == 3.5)
+
+        // Six chapters, five gaps 10, 10, 10, 10, 60. Median 10; span ÷ (chapters − 1) is 20.
+        let six = [0, 10, 20, 30, 40, 100].map { posted($0) as Date? }
+        #expect(LoadedWorksRanker.chapterCadenceDays(publishedOn: six) == 10)
+
+        // Seven chapters. The oldest gap is 100; the last five are 1, 2, 3, 4, 100, median 3.
+        // All six gaps median to 3.5, and the lifetime mean is 35.
+        let seven = [0, 100, 101, 103, 106, 110, 210].map { posted($0) as Date? }
+        #expect(LoadedWorksRanker.chapterCadenceDays(publishedOn: seven) == 3)
+
+        var hole = six
+        hole[2] = nil
+        #expect(LoadedWorksRanker.chapterCadenceDays(publishedOn: hole) == nil)
+        var unparsed = AO3ChapterRef(id: 1, position: 2, title: "Two")
+        unparsed.dateText = "not-a-date"
+        let withUnparsed = [posted(0), unparsed.publishedOn, posted(20), posted(40)]
+        #expect(LoadedWorksRanker.chapterCadenceDays(publishedOn: withUnparsed) == nil)
+    }
+
+    /// Quality-WIPs w4: interval 12 floored at 14, 31 days since, late 2.2.
+    @Test func wipScheduleSaysSlowerThanUsual() {
+        let slower = QualitySignalTones.wipScheduleWord(
+            chaptersPosted: 6, chaptersExpected: nil, daysSinceUpdate: 31, cadenceDays: 12
+        )
+        #expect(slower == "Slower than usual")
+
+        // 21 / max(14, 12) = 1.5. Dividing by the raw 12 would say slower.
+        #expect(QualitySignalTones.wipScheduleWord(
+            chaptersPosted: 6, chaptersExpected: nil, daysSinceUpdate: 21, cadenceDays: 12
+        ) == "On schedule")
+        #expect(QualitySignalTones.wipScheduleWord(
+            chaptersPosted: 18, chaptersExpected: 20, daysSinceUpdate: 12, cadenceDays: 14
+        ) == "Nearly done")
+        #expect(QualitySignalTones.wipScheduleWord(
+            chaptersPosted: 10, chaptersExpected: nil, daysSinceUpdate: 400, cadenceDays: 12
+        ) == "Long pause")
+        #expect(QualitySignalTones.wipScheduleWord(
+            chaptersPosted: 1, chaptersExpected: nil, daysSinceUpdate: 400, cadenceDays: nil
+        ) == "Just started")
+        // No cadence, and no lifetime-mean substitute for it.
+        #expect(QualitySignalTones.wipScheduleWord(
+            chaptersPosted: 2, chaptersExpected: nil, daysSinceUpdate: 31, cadenceDays: nil
+        ) == nil)
+    }
+
+    private func posted(_ day: Int) -> Date {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .gmt
+        return calendar.date(from: DateComponents(year: 2026, month: 1, day: 1 + day))
+            ?? Date(timeIntervalSince1970: 0)
+    }
+
+    /// Three reader comments, and creator replies by username, display name,
+    /// anonymous creator, and the signed-in creator. A deleted parent keeps its
+    /// reader reply. The cutoff's "12 more" is not a count of readers.
+    private func openedComments() -> [AO3Comment] {
+        let creatorReply = AO3Comment(
+            id: 2, author: "Pen Name", isGuest: false, userPath: "/users/creator/pseuds/pen"
+        )
+        var reader = AO3Comment(
+            id: 1, author: "Reader", isGuest: false, userPath: "/users/reader/pseuds/reader"
+        )
+        reader.replies = [creatorReply]
+        var readerTwo = AO3Comment(
+            id: 4, author: "Reader Two", isGuest: false, userPath: "/users/readertwo/pseuds/readertwo"
+        )
+        var deleted = AO3Comment(id: 3, author: "", isGuest: false)
+        deleted.isDeleted = true
+        deleted.replies = [readerTwo]
+        var cutoff = AO3Comment(id: 5, author: "", isGuest: false)
+        cutoff.isThreadCutoff = true
+        cutoff.cutoffCount = 12
+        let guest = AO3Comment(id: 6, author: "Pen Name", isGuest: true)
+        let byName = AO3Comment(id: 7, author: "Pen Name", isGuest: false)
+        var anonymous = AO3Comment(id: 8, author: "Anonymous", isGuest: false)
+        anonymous.isAnonymousCreator = true
+        let mine = AO3Comment(
+            id: 9, author: "Other Pseud", isGuest: false, userPath: "/users/creator/pseuds/other"
+        )
+        return [reader, deleted, cutoff, guest, byName, anonymous, mine]
+    }
 }

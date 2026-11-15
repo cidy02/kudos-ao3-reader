@@ -68,6 +68,15 @@ nonisolated struct AO3AccountListCount: Equatable, Sendable {
         if other.exact != nil { return false }
         return (lowerBound ?? 0) >= (other.lowerBound ?? 0)
     }
+
+    /// Returns a known count only when `exact` is present (including `0`) or
+    /// `lowerBound` proves the list is non-empty (`> 0`). A weak zero lower
+    /// bound without `exact` is unknown (`nil`), never zero.
+    var knownCount: Int? {
+        if let exact { return exact }
+        if let lowerBound, lowerBound > 0 { return lowerBound }
+        return nil
+    }
 }
 
 /// In-session cache of account-list sizes, so the Account tab's Overview cards can
@@ -123,6 +132,9 @@ final class AO3AccountListCountsCache {
         let toStore = entries[key].map { $0.count.isAtLeastAsStrong(as: count) ? $0.count : count }
             ?? count
         entries[key] = Entry(count: toStore, expiresAt: now.addingTimeInterval(ttl))
+        if self === Self.shared, kind == .myWorks || kind == .series || kind == .drafts {
+            WritingTabEvents.notifyCountsChanged(authenticationScope: authenticationScope)
+        }
     }
 
     /// Seeds the lists whose exact size AO3 prints in the dashboard nav of the
