@@ -239,14 +239,14 @@ fun LibraryFilterPanel(
 }
 
 @Composable
-private fun <T> LibraryFilterGrid(
-    title: String,
+internal fun <T> LibraryFilterGrid(
+    title: String?,
     columns: Int,
     items: List<T>,
     content: @Composable (T) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        SubjectFieldLabel(title)
+        if (title != null) SubjectFieldLabel(title)
         items.chunked(columns).forEach { rowItems ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 rowItems.forEach { item -> Box(Modifier.weight(1f)) { content(item) } }
@@ -256,7 +256,8 @@ private fun <T> LibraryFilterGrid(
     }
 }
 
-private val AO3Warning.shortTitle: String
+/** The short names AO3's filter sheet prints on its warning cards (the full name is spoken). */
+internal val AO3Warning.shortTitle: String
     get() = when (this) {
         AO3Warning.NO_WARNINGS -> "No Warnings Apply"
         AO3Warning.CHOOSE_NOT_TO -> "Creator Chose Not To Use"

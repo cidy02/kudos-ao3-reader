@@ -3,6 +3,9 @@ package io.github.cidy02.kudos.search
 import io.github.cidy02.kudos.app.DebugShotEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.outlined.Remove
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.platform.testTag
@@ -204,30 +207,58 @@ internal fun FilterTagRow(
     }
 }
 
-/** The stroke round a set facet: iOS `FilterSymbolChipCard` draws 1.5 pt, and none while clear. */
-internal fun facetBorderWidth(state: FilterSelectionState): Dp =
-    if (state == FilterSelectionState.CLEAR) 0.dp else 1.5.dp
+/**
+ * How a facet row draws its state. iOS has two looks and this row is both (`rowHasSymbol`):
+ *  - a symbol card (`FilterSymbolChipCard`): 1.5 pt stroke and label in the include / exclude
+ *    colour, fill at 0.12 / 0.08, the symbol dimmed to 0.4 when excluded, a filled check or minus
+ *    circle at the end and no word;
+ *  - a word row (`TagPickerView.tagRows`, a list facet): no stroke, the label primary (secondary
+ *    and struck through once excluded), an included row washed at 0.10, and the "Include" /
+ *    "Exclude" word with its coloured circle at the end; nothing at all while clear.
+ */
+internal data class FacetLook(
+    val borderWidth: Dp,
+    val fillAlpha: Float,
+    val labelInStateColour: Boolean,
+    val symbolAlpha: Float,
+    val word: String?
+)
 
-/** An excluded facet's symbol is drawn at 0.4 (iOS `.opacity(state == .excluded ? 0.4 : 1.0)`). */
-internal fun facetSymbolAlpha(state: FilterSelectionState): Float =
-    if (state == FilterSelectionState.EXCLUDED) 0.4f else 1f
-
-/** iOS `TagPickerView.selectionLabel`: the word a set tag row prints, none while clear. */
-internal fun facetStatusWord(state: FilterSelectionState): String? = when (state) {
-    FilterSelectionState.CLEAR -> null
-    FilterSelectionState.INCLUDED -> "Include"
-    FilterSelectionState.EXCLUDED -> "Exclude"
+internal fun facetLook(state: FilterSelectionState, rowHasSymbol: Boolean): FacetLook {
+    val set = state != FilterSelectionState.CLEAR
+    val excluded = state == FilterSelectionState.EXCLUDED
+    return if (rowHasSymbol) FacetLook(
+        borderWidth = if (set) 1.5.dp else 0.dp,
+        fillAlpha = when (state) {
+            FilterSelectionState.CLEAR -> 0f
+            FilterSelectionState.INCLUDED -> 0.12f
+            FilterSelectionState.EXCLUDED -> 0.08f
+        },
+        labelInStateColour = set,
+        symbolAlpha = if (excluded) 0.4f else 1f,
+        word = null
+    ) else FacetLook(
+        borderWidth = 0.dp,
+        fillAlpha = if (state == FilterSelectionState.INCLUDED) 0.10f else 0f,
+        labelInStateColour = false,
+        symbolAlpha = 1f,
+        word = when (state) {
+            FilterSelectionState.CLEAR -> null
+            FilterSelectionState.INCLUDED -> "Include"
+            FilterSelectionState.EXCLUDED -> "Exclude"
+        }
+    )
 }
 
 /** Tags the status word, so a test can find it: it is read out by nothing (see [FilterFacetRow]). */
 internal const val FACET_STATUS_WORD_TAG = "facetStatusWord"
 
 /**
- * Same three-state rendering as iOS cyclingFacetRow, symbol cards and TagPickerView.tagRows.
- * A set facet has the include or exclude colour on its label and a 1.5 dp border in it; an
- * excluded facet's symbol is dimmed to 0.4. A row without a symbol (a tag, a list facet) also
- * prints the "Include" / "Exclude" word, as iOS tag rows do; a symbol card keeps iOS's
- * indicator alone, so one-word labels in a three-across grid never break.
+ * Same three-state rendering as iOS cyclingFacetRow, symbol cards and TagPickerView.tagRows; see
+ * [FacetLook]. TalkBack gets the label once: the title's own text when that is the name (the
+ * merged node carries it as text), or [accessibilityTitle] as the description with the drawn
+ * short title cleared when the two differ. The state is the node's stateDescription, and the
+ * drawn word is cleared from the semantics.
  */
 @Composable
 internal fun FilterFacetRow(
@@ -241,26 +272,18 @@ internal fun FilterFacetRow(
 ) {
     val tokens = LocalKudosTokens.current
     val color = selectionColor(state)
+    val look = facetLook(state, rowHasSymbol = symbol != null)
     val shape = RoundedCornerShape(if (symbol != null) 12.dp else 10.dp)
-    val set = state != FilterSelectionState.CLEAR
-    val stateFill = when (state) {
-        FilterSelectionState.CLEAR -> Color.Transparent
-        FilterSelectionState.INCLUDED -> color.copy(alpha = 0.12f)
-        FilterSelectionState.EXCLUDED -> color.copy(alpha = 0.08f)
-    }
-    val word = if (symbol == null) facetStatusWord(state) else null
+    val spokenSeparately = accessibilityTitle != title
     Row(
         Modifier.fillMaxWidth()
             .heightIn(min = 48.dp)
             .then(if (onBackdrop) Modifier.clip(shape).background(tokens.cardFill, shape) else Modifier)
-            .background(stateFill, shape)
-            .then(if (set) Modifier.border(facetBorderWidth(state), color, shape) else Modifier)
+            .background(if (look.fillAlpha > 0f) color.copy(alpha = look.fillAlpha) else Color.Transparent, shape)
+            .then(if (look.borderWidth > 0.dp) Modifier.border(look.borderWidth, color, shape) else Modifier)
             .clickable(role = Role.Button, onClickLabel = state.nextActionLabel.lowercase(), onClick = onClick)
-            // The title is the label, spoken once (the merged node's description is the title
-            // alone); the state is iOS's "Included" / "Excluded", none when clear. The visible
-            // "Include" / "Exclude" word is cleared from the semantics: it is not read a second time.
             .semantics(mergeDescendants = true) {
-                contentDescription = accessibilityTitle
+                if (spokenSeparately) contentDescription = accessibilityTitle
                 if (state != FilterSelectionState.CLEAR) stateDescription =
                     if (state == FilterSelectionState.INCLUDED) "Included" else "Excluded"
             }
@@ -268,29 +291,51 @@ internal fun FilterFacetRow(
         horizontalArrangement = Arrangement.spacedBy(if (dense) 6.dp else 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        if (symbol != null) WorkSymbolTileView(symbol, 22.dp, Modifier.alpha(facetSymbolAlpha(state)))
-        Text(title, Modifier.weight(1f),
-            color = if (set) color else tokens.primaryInk,
+        if (symbol != null) WorkSymbolTileView(symbol, 22.dp, Modifier.alpha(look.symbolAlpha))
+        Text(title,
+            Modifier.weight(1f).then(if (spokenSeparately) Modifier.clearAndSetSemantics { } else Modifier),
+            color = when {
+                look.labelInStateColour -> color
+                state == FilterSelectionState.EXCLUDED -> tokens.secondaryInk
+                else -> tokens.primaryInk
+            },
             fontSize = if (dense) 13.sp else 14.sp,
             textDecoration = if (state == FilterSelectionState.EXCLUDED) TextDecoration.LineThrough else null)
-        val indicator = when (state) {
-            FilterSelectionState.CLEAR -> Icons.Outlined.RadioButtonUnchecked
-            FilterSelectionState.INCLUDED -> Icons.Default.AddCircle
-            FilterSelectionState.EXCLUDED -> Icons.Default.RemoveCircle
-        }
-        val indicatorTint = if (set) color else tokens.tertiaryInk
-        if (word == null) {
-            Icon(indicator, null, tint = indicatorTint, modifier = Modifier.size(16.dp))
-        } else {
+        if (symbol != null) {
+            FacetIndicator(state, color)
+        } else if (look.word != null) {
             Row(
                 Modifier.testTag(FACET_STATUS_WORD_TAG).clearAndSetSemantics { },
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(indicator, null, tint = indicatorTint, modifier = Modifier.size(16.dp))
-                Text(word, color = color, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Icon(
+                    if (state == FilterSelectionState.INCLUDED) Icons.Default.AddCircle else Icons.Default.RemoveCircle,
+                    null, tint = color, modifier = Modifier.size(16.dp)
+                )
+                Text(look.word, color = color, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
             }
         }
+    }
+}
+
+/** iOS `FilterSymbolChipCard.indicator`: an empty ring, or a filled circle with a check or a minus. */
+@Composable
+private fun FacetIndicator(state: FilterSelectionState, color: Color) {
+    val tokens = LocalKudosTokens.current
+    val set = state != FilterSelectionState.CLEAR
+    Box(
+        Modifier.size(18.dp).clip(CircleShape)
+            .then(
+                if (set) Modifier.background(color, CircleShape)
+                else Modifier.border(1.5.dp, tokens.secondaryInk.copy(alpha = 0.35f), CircleShape)
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        if (set) Icon(
+            if (state == FilterSelectionState.INCLUDED) Icons.Outlined.Check else Icons.Outlined.Remove,
+            null, tint = Color.White, modifier = Modifier.size(12.dp)
+        )
     }
 }
 

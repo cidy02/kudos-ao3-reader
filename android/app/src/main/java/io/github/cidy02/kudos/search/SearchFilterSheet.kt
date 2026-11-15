@@ -59,6 +59,10 @@ import io.github.cidy02.kudos.network.ao3.search.SearchSortBySummary
 import io.github.cidy02.kudos.network.ao3.search.AO3TagAutocompleteRepository
 import io.github.cidy02.kudos.network.ao3.search.AO3Updated
 import io.github.cidy02.kudos.network.ao3.search.AO3Warning
+import io.github.cidy02.kudos.library.LibraryFilterGrid
+import io.github.cidy02.kudos.library.shortTitle
+import io.github.cidy02.kudos.ui.components.WorkSymbolTile
+import io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SubjectFieldLabel
 import io.github.cidy02.kudos.ui.subject.SubjectFormRow
@@ -201,24 +205,37 @@ fun SearchFilterSheet(
                         })
                     }
                 }
+                // iOS `AO3FilterPanel`: symbol cards, two columns (one at accessibility sizes), the
+                // warnings in AO3's "Overall" and "Content" groups.
                 item {
-                    FilterGroup("Warnings") {
-                        AO3Warning.entries.forEachIndexed { index, warning ->
-                            if (index > 0) SubjectRowSeparator()
-                            FilterFacetRow(warning.title, warningSelection(filters, warning)) {
-                                onFiltersChange(cycleWarning(filters, warning))
-                            }
-                        }
+                    val columns = if (isAccessibilityFontScale()) 1 else 2
+                    val dark = tokens.theme.isDarkFamily
+                    @Composable fun warningCard(warning: AO3Warning) {
+                        FilterFacetRow(
+                            title = warning.shortTitle,
+                            state = warningSelection(filters, warning),
+                            symbol = WorkSymbolTile.warnings(listOf(warning.title), dark),
+                            accessibilityTitle = warning.title,
+                            onBackdrop = true
+                        ) { onFiltersChange(cycleWarning(filters, warning)) }
+                    }
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SubjectFieldLabel("Warnings")
+                        FilterGridCaption("Overall")
+                        LibraryFilterGrid(null, columns, AO3Warning.entries.take(2)) { warningCard(it) }
+                        FilterGridCaption("Content")
+                        LibraryFilterGrid(null, columns, AO3Warning.entries.drop(2)) { warningCard(it) }
                     }
                 }
                 item {
-                    FilterGroup("Categories") {
-                        AO3Category.entries.forEachIndexed { index, category ->
-                            if (index > 0) SubjectRowSeparator()
-                            FilterFacetRow(category.title, categorySelection(filters, category)) {
-                                onFiltersChange(cycleCategory(filters, category))
-                            }
-                        }
+                    val dark = tokens.theme.isDarkFamily
+                    LibraryFilterGrid("Categories", if (isAccessibilityFontScale()) 1 else 2, AO3Category.entries) { category ->
+                        FilterFacetRow(
+                            title = category.title,
+                            state = categorySelection(filters, category),
+                            symbol = WorkSymbolTile.category(listOf(category.title), dark),
+                            onBackdrop = true
+                        ) { onFiltersChange(cycleCategory(filters, category)) }
                     }
                 }
                 item {
@@ -340,6 +357,13 @@ internal fun FilterGroup(title: String? = null, note: String? = null, content: @
         Column(Modifier.subjectPanel()) { content() }
         if (note != null) FilterNote(note)
     }
+}
+
+/** iOS's small uppercase caption over a group of cards ("Overall", "Content"). */
+@Composable
+private fun FilterGridCaption(text: String) {
+    Text(text.uppercase(), Modifier.padding(horizontal = 4.dp), color = LocalKudosTokens.current.secondaryInk,
+        fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
 }
 
 @Composable
