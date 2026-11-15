@@ -191,6 +191,33 @@ struct AppRouterTests {
         #expect(store.lastKnownWrites(for: "draftonlywriter") == true)
     }
 
+    @Test func headerWithARecentWorkButNoCountShowsWriting() throws {
+        let suiteName = "AppRouterTests.recentWork.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = WritingTabStateStore(defaults: defaults)
+        let route = try #require(AO3AuthorRoute(username: "latestonly"))
+        let recent = AO3WorkSummary(
+            id: 1, title: "Latest", authors: [], authorIdentities: [], fandoms: [], rating: "",
+            warnings: [], categories: [], isComplete: true, dateUpdated: "", tags: [], summary: "",
+            language: "English", words: 1_000, chapters: "1/1", comments: 0, kudos: 1, bookmarks: 0,
+            hits: 10, seriesTitle: nil, seriesURL: nil, seriesPosition: nil
+        )
+        func header(_ works: [AO3WorkSummary]) -> AO3AuthorHeader {
+            AO3AuthorHeader(identity: AO3AuthorIdentity(route: route), pseuds: [], fandoms: [],
+                            subscriptionForm: nil, actions: [], recentWorks: works, recentSeries: [])
+        }
+        // No count and nothing listed: unknown, so a first-seen account stays a reader.
+        let reader = AppRouter(writingStateStore: store)
+        reader.evaluateWritingTab(from: header([]), route: route, username: "latestonly", isSignedIn: true)
+        #expect(reader.showsWritingTab == false)
+        // No count but a work under "Your Latest": the account writes.
+        let writer = AppRouter(writingStateStore: store)
+        writer.evaluateWritingTab(from: header([recent]), route: route, username: "latestonly", isSignedIn: true)
+        #expect(writer.showsWritingTab == true)
+        #expect(store.lastKnownWrites(for: "latestonly") == true)
+    }
+
     @Test func accountSwitchWithoutSignedOutStepReEvaluatesAndMovesSelectionOffWriting() {
         let suiteName = "AppRouterTests.accountSwitch.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

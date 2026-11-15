@@ -339,13 +339,38 @@ nonisolated struct AO3ChapterRef: Identifiable, Equatable, Sendable {
     /// 1-based position in the work.
     var position: Int
     var title: String
+    /// Posting date as printed: `chapter.published_at.to_date` inside `span.datetime`
+    /// (`YYYY-MM-DD`). Empty when that span was absent. In memory only.
     var dateText: String = ""
+
+    /// The posting date, when `dateText` is AO3's `YYYY-MM-DD`. Nil otherwise —
+    /// a missing or unexpected span is not a guessed day.
+    var publishedOn: Date? { Self.date(from: dateText) }
 
     /// "Chapter 3 · Title" (or just "Chapter 3" when AO3's default title repeats).
     var displayName: String {
         let generic = "Chapter \(position)"
         if title.isEmpty || title == generic { return generic }
         return "\(generic) · \(title)"
+    }
+
+    /// Parses the navigate span. Rails prints `Date#to_s` as `YYYY-MM-DD`; a
+    /// value that is not that shape, or not a real day, stays nil.
+    static func date(from dateText: String) -> Date? {
+        let text = dateText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let parts = text.split(separator: "-", omittingEmptySubsequences: false)
+        guard parts.count == 3,
+              parts[0].count == 4, let year = Int(parts[0]),
+              parts[1].count == 2, let month = Int(parts[1]),
+              parts[2].count == 2, let day = Int(parts[2]) else { return nil }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .gmt
+        guard let date = calendar.date(from: DateComponents(year: year, month: month, day: day)) else {
+            return nil
+        }
+        let back = calendar.dateComponents([.year, .month, .day], from: date)
+        guard back.year == year, back.month == month, back.day == day else { return nil }
+        return date
     }
 }
 

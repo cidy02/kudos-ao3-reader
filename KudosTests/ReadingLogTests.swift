@@ -445,6 +445,128 @@ struct ReadingLogTests {
         #expect(ReadingLogService.wordsPerHour(sessions: [a, b]) == 20_000)
     }
 
+    @Test func wipGrowthCreditsOnlyTheNewWordsAfterCatchingUp() {
+        let work = UUID()
+        let caughtUp = ReadingSession(
+            workID: work,
+            startedAt: Date(timeIntervalSince1970: 86_400),
+            endedAt: Date(timeIntervalSince1970: 86_400 + 3600),
+            durationSeconds: 3600,
+            endingProgress: 1.0,
+            wordCount: 10_000,
+            didFinish: false
+        )
+        let newChapters = ReadingSession(
+            workID: work,
+            startedAt: Date(timeIntervalSince1970: 2 * 86_400),
+            endedAt: Date(timeIntervalSince1970: 2 * 86_400 + 1800),
+            durationSeconds: 1800,
+            endingProgress: 1.0,
+            wordCount: 14_000,
+            didFinish: false
+        )
+        let read = ReadingLogService.wordsRead(sessions: [caughtUp, newChapters])
+        #expect(read[caughtUp.id] == 10_000)
+        #expect(read[newChapters.id] == 4_000)
+    }
+
+    @Test func wipGrowthCreditsOnlyTheNewWordsAfterAFinishedSitting() {
+        let work = UUID()
+        let finishedEarlier = ReadingSession(
+            workID: work,
+            startedAt: Date(timeIntervalSince1970: 86_400),
+            endedAt: Date(timeIntervalSince1970: 86_400 + 3600),
+            durationSeconds: 3600,
+            endingProgress: 1.0,
+            wordCount: 10_000,
+            didFinish: true
+        )
+        let newChapters = ReadingSession(
+            workID: work,
+            startedAt: Date(timeIntervalSince1970: 2 * 86_400),
+            endedAt: Date(timeIntervalSince1970: 2 * 86_400 + 1800),
+            durationSeconds: 1800,
+            endingProgress: 1.0,
+            wordCount: 14_000,
+            didFinish: true
+        )
+        let read = ReadingLogService.wordsRead(sessions: [finishedEarlier, newChapters])
+        #expect(read[finishedEarlier.id] == 10_000)
+        #expect(read[newChapters.id] == 4_000)
+    }
+
+    @Test func sittingWithStartProgressUsesItAndWithoutFallsBackToPreviousSitting() {
+        let work = UUID()
+        let withExplicitStart = ReadingSession(
+            workID: work,
+            startedAt: Date(timeIntervalSince1970: 86_400),
+            endedAt: Date(timeIntervalSince1970: 86_400 + 1800),
+            durationSeconds: 1800,
+            startProgress: 0.25,
+            endingProgress: 0.60,
+            wordCount: 10_000
+        )
+        let withoutExplicitStart = ReadingSession(
+            workID: work,
+            startedAt: Date(timeIntervalSince1970: 2 * 86_400),
+            endedAt: Date(timeIntervalSince1970: 2 * 86_400 + 1800),
+            durationSeconds: 1800,
+            startProgress: nil,
+            endingProgress: 0.85,
+            wordCount: 10_000
+        )
+        let jumpedAhead = ReadingSession(
+            workID: work,
+            startedAt: Date(timeIntervalSince1970: 3 * 86_400),
+            endedAt: Date(timeIntervalSince1970: 3 * 86_400 + 900),
+            durationSeconds: 900,
+            startProgress: 0.90,
+            endingProgress: 1.0,
+            wordCount: 10_000
+        )
+        let read = ReadingLogService.wordsRead(
+            sessions: [withExplicitStart, withoutExplicitStart, jumpedAhead]
+        )
+        #expect(read[withExplicitStart.id] == 3_500)
+        #expect(read[withoutExplicitStart.id] == 2_500)
+        #expect(read[jumpedAhead.id] == 1_000)
+    }
+
+    @Test func rereadMovingBackThenForwardNeverCreditsNegativeWords() {
+        let work = UUID()
+        let first = ReadingSession(
+            workID: work,
+            startedAt: Date(timeIntervalSince1970: 86_400),
+            endedAt: Date(timeIntervalSince1970: 86_400 + 1800),
+            durationSeconds: 1800,
+            startProgress: 0.0,
+            endingProgress: 0.70,
+            wordCount: 10_000
+        )
+        let movedBack = ReadingSession(
+            workID: work,
+            startedAt: Date(timeIntervalSince1970: 2 * 86_400),
+            endedAt: Date(timeIntervalSince1970: 2 * 86_400 + 600),
+            durationSeconds: 600,
+            startProgress: 0.70,
+            endingProgress: 0.20,
+            wordCount: 10_000
+        )
+        let movedForward = ReadingSession(
+            workID: work,
+            startedAt: Date(timeIntervalSince1970: 3 * 86_400),
+            endedAt: Date(timeIntervalSince1970: 3 * 86_400 + 1800),
+            durationSeconds: 1800,
+            startProgress: nil,
+            endingProgress: 0.50,
+            wordCount: 12_000
+        )
+        let read = ReadingLogService.wordsRead(sessions: [first, movedBack, movedForward])
+        #expect(read[first.id] == 7_000)
+        #expect(read[movedBack.id] == 0)
+        #expect(read[movedForward.id] == 4_000)
+    }
+
     @Test func hoursByWeekBucketsBySessionStart() throws {
         ReadingLogService.resetOpenSessionsForTests()
         let context = try context()
