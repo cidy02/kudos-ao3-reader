@@ -100,7 +100,8 @@ internal fun WorkFandomKicker(
     expanded: Boolean = false,
     size: TextUnit = 9.sp,
     ruleSpacing: Dp = 5.dp,
-    maxLines: Int = if (isAccessibilityFontScale()) Int.MAX_VALUE else 2
+    maxLines: Int = if (isAccessibilityFontScale()) Int.MAX_VALUE else 2,
+    reachUp: Dp = KickerTargetReachUp
 ) {
     val kicker = fandomKicker(fandoms, expanded) ?: return
     SubjectKicker(
@@ -112,7 +113,8 @@ internal fun WorkFandomKicker(
         maxLines = maxLines,
         modifier = modifier.fandomKickerTarget(
             spoken = kicker.spoken,
-            onOpen = onOpenFandom?.let { open -> { open(kicker.fandom) } }
+            onOpen = onOpenFandom?.let { open -> { open(kicker.fandom) } },
+            reachUp = reachUp
         )
     )
 }

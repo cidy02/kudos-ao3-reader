@@ -5,6 +5,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.ui.subject.HomeStatusArrangement
 import io.github.cidy02.kudos.ui.subject.HomeStatusTray
+import io.github.cidy02.kudos.ui.subject.KickerTargetReachUp
 import io.github.cidy02.kudos.ui.subject.SubjectKicker
 import io.github.cidy02.kudos.ui.subject.WorkFandomKicker
 import io.github.cidy02.kudos.ui.subject.fandomOpener
@@ -308,6 +309,7 @@ fun SensitiveWorkRow(
                             // iOS `WorkPlainRow`: the 2x2 grid beside the title; at an accessibility size
                             // it stacks above the text instead of leaving, and "under the title" is a row.
                             val stacked = isAccessibilityFontScale()
+                            val gridStackedAbove = showsStatusTray && stacked && symbolPlacement == WorkSymbolPlacement.Beside
                             val statusTray: @Composable (HomeStatusArrangement) -> Unit = { arrangement ->
                                 HomeStatusTray(
                                     rating = rating,
@@ -319,7 +321,7 @@ fun SensitiveWorkRow(
                                     modifier = Modifier.testTag(WORK_STATUS_TRAY_TAG)
                                 )
                             }
-                            if (showsStatusTray && stacked && symbolPlacement == WorkSymbolPlacement.Beside) {
+                            if (gridStackedAbove) {
                                 statusTray(HomeStatusArrangement.Grid)
                             }
                             Row(
@@ -342,7 +344,8 @@ fun SensitiveWorkRow(
                                         onOpenFandom = fandomOpener(
                                             interactive = !selecting && !obscured, search = tagSearch
                                         ),
-                                        expanded = expanded && !savedCard
+                                        expanded = expanded && !savedCard,
+                                        reachUp = if (gridStackedAbove) 0.dp else KickerTargetReachUp
                                     )
                                     Text(
                                         text = title,
