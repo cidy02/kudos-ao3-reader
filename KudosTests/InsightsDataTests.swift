@@ -50,7 +50,10 @@ struct InsightsDataTests {
         #expect(first.fandoms == ["Visit Fandom"])
         work.workFandoms = ["Changed"]
         try await ReadingSessionSnapshotBackfill(modelContainer: container).run(defaults: defaults)
-        #expect(filled.fandoms == ["Fandom"])
+        let secondCheck = ModelContext(container)
+        let again = try secondCheck.fetch(FetchDescriptor<ReadingSession>())
+        #expect(again.first(where: { $0.id == old.id })?.fandoms == ["Fandom"])
+        #expect(again.first(where: { $0.id == first.id })?.fandoms == ["Visit Fandom"])
         context.delete(work)
         try context.save()
         #expect(ReadingLogService.facts(from: [first], works: []).first?.fandom == "Visit Fandom")
@@ -61,12 +64,16 @@ struct InsightsDataTests {
     @Test func statusesPartitionAndStackingThreshold() {
         let works = (0..<8).map { SavedWork(title: "\($0)", author: "A") }
         works[0].readingStatusRaw = "stopped"
+        works[0].isFinished = true
         works[1].readingStatusRaw = "onHold"
         works[2].readingStatusRaw = "stacking"
         works[3].isFinished = true
         works[4].isComplete = false
         works[4].lastReadDate = .now
-        works[4].readiumLocator = #"{"locations":{"totalProgression":1}}"#
+        works[4].chapters = "5/10"
+        works[4].lastSpineIndex = 4
+        #expect(works[4].insightsReadingStatus == .reading)
+        works[4].lastScrollFraction = 1
         works[5].lastReadDate = .now
         works[6].isQueuedForLater = true
         works[7].readingStatusRaw = "reading"
@@ -78,10 +85,30 @@ struct InsightsDataTests {
         let counts = Dictionary(grouping: works, by: \.insightsReadingStatus)
         #expect(SavedWork.InsightsReadingStatus.allCases.reduce(0) { $0 + (counts[$1]?.count ?? 0) } == works.count)
         let stack = works[2]
-        stack.knownChapterCount = 4
-        stack.statusChangedAt = .now
+        stack.chapters = "4/?"
+        stack.setReadingStatus(.stacking)
         stack.stackThreshold = 3
         #expect(!stack.shouldResumeStacking(postedChapters: 6))
         #expect(stack.shouldResumeStacking(postedChapters: 7))
+        stack.chapters = "0/?"
+        stack.setReadingStatus(.stacking)
+        #expect(stack.shouldResumeStacking(postedChapters: 3))
+    }
+
+    @Test func snapshotUsesStoredBylineOrVerifiedDisplayNames() {
+        let work = SavedWork(title: "A", author: "First, Second")
+        work.datePublished = "2020-01-01"
+        let session = ReadingSession(
+            workID: work.id, startedAt: .now, endedAt: .now, durationSeconds: 1
+        )
+        session.snapshot(from: work)
+        #expect(session.authorAccounts == ["First", "Second"])
+        #expect(session.publishedYear == 2020)
+        work.verifiedAuthorIdentities = [
+            AO3AuthorIdentity.nonNavigable("Anonymous", kind: .anonymous),
+            AO3AuthorIdentity(route: AO3AuthorRoute(username: "orphan_account"))
+        ]
+        session.snapshot(from: work)
+        #expect(session.authorAccounts == ["Anonymous", "orphan_account"])
     }
 }

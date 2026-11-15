@@ -694,17 +694,32 @@ nonisolated enum SyncMerge {
 /// flag is written only after the whole pass saves, so an interrupted pass retries.
 @ModelActor
 actor ReadingSessionSnapshotBackfill {
-    func run(defaults: UserDefaults = .standard) throws {
+    func run(defaults: UserDefaults = .standard) async throws {
         let key = "readingSessionMetadataSnapshotBackfilled"
         guard !defaults.bool(forKey: key) else { return }
-        let works = try modelContext.fetch(FetchDescriptor<SavedWork>())
-        let byID = Dictionary(works.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        let sessions = try modelContext.fetch(FetchDescriptor<ReadingSession>())
-        for session in sessions where !session.hasMetadataSnapshot {
-            guard let work = byID[session.workID] else { continue }
-            session.snapshot(from: work)
+        guard await MainActor.run(body: { PersistenceOperationGate.begin(.migration) }) else { return }
+        do {
+            let works = try modelContext.fetch(FetchDescriptor<SavedWork>())
+            let byID = Dictionary(works.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+            var offset = 0
+            while true {
+                var descriptor = FetchDescriptor<ReadingSession>(sortBy: [SortDescriptor(\.id)])
+                descriptor.fetchLimit = 100
+                descriptor.fetchOffset = offset
+                let sessions = try modelContext.fetch(descriptor)
+                guard !sessions.isEmpty else { break }
+                for session in sessions where !session.hasMetadataSnapshot {
+                    guard let work = byID[session.workID] else { continue }
+                    session.snapshot(from: work)
+                }
+                try modelContext.save()
+                offset += sessions.count
+            }
+            defaults.set(true, forKey: key)
+        } catch {
+            await MainActor.run { PersistenceOperationGate.end(.migration) }
+            throw error
         }
-        try modelContext.save()
-        defaults.set(true, forKey: key)
+        await MainActor.run { PersistenceOperationGate.end(.migration) }
     }
 }

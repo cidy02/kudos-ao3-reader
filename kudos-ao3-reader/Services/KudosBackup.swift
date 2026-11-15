@@ -897,6 +897,8 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
     let stopTag: String?
     let stopNote: String?
     let stackThreshold: Int?
+    let stackBaselineChapterCount: Int?
+    let statusWasRecorded: Bool?
     let hasEPUB: Bool
     let isComplete: Bool
     let rating: String
@@ -979,15 +981,16 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         isSaved = work.isSaved
         isFinished = work.isFinished
         keepInProgressOverride = work.keepInProgressOverride
-        readingStatusRaw = work.readingStatusRaw.isEmpty ? nil : work.readingStatusRaw
-        statusChangedAt = work.statusChangedAt.map(Optional.some)
-        stoppedAt = work.stoppedAt.map(Optional.some)
-        stopReasonRaw = work.stopReasonRaw.isEmpty ? nil : work.stopReasonRaw
-        stopTag = work.stopTag.isEmpty ? nil : work.stopTag
-        stopNote = work.stopNote.isEmpty ? nil : work.stopNote
-        // An explicit status can deliberately use the default threshold.
-        stackThreshold = work.stackThreshold == 3 && work.readingStatusRaw.isEmpty
-            ? nil : work.stackThreshold
+        let recorded = work.hasRecordedStatus
+        readingStatusRaw = recorded ? work.readingStatusRaw : nil
+        statusChangedAt = recorded ? .some(work.statusChangedAt) : nil
+        stoppedAt = recorded ? .some(work.stoppedAt) : nil
+        stopReasonRaw = recorded ? work.stopReasonRaw : nil
+        stopTag = recorded ? work.stopTag : nil
+        stopNote = recorded ? work.stopNote : nil
+        stackThreshold = recorded ? work.stackThreshold : nil
+        stackBaselineChapterCount = recorded ? work.stackBaselineChapterCount : nil
+        statusWasRecorded = recorded ? true : nil
         // `|| remoteEPUBPending`: a device that was promised a book and has
         // not received it yet must not publish its absence as fact. The remote
         // file is still there — the prune keeps assets by manifest work id —
@@ -1069,6 +1072,8 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         case stopTag
         case stopNote
         case stackThreshold
+        case stackBaselineChapterCount
+        case statusWasRecorded
         case hasEPUB
         case isComplete
         case rating
@@ -1150,6 +1155,8 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         stopTag = try container.decodeIfPresent(String.self, forKey: .stopTag)
         stopNote = try container.decodeIfPresent(String.self, forKey: .stopNote)
         stackThreshold = try container.decodeIfPresent(Int.self, forKey: .stackThreshold)
+        stackBaselineChapterCount = try container.decodeIfPresent(Int.self, forKey: .stackBaselineChapterCount)
+        statusWasRecorded = try container.decodeIfPresent(Bool.self, forKey: .statusWasRecorded)
         hasEPUB = try container.decodeIfPresent(Bool.self, forKey: .hasEPUB) ?? false
         isComplete = try container.decodeIfPresent(Bool.self, forKey: .isComplete) ?? false
         rating = try container.decodeIfPresent(String.self, forKey: .rating) ?? ""
@@ -1310,9 +1317,9 @@ nonisolated struct KudosBackupReadingSession: Codable, Equatable {
     let language: String?
     let isCompleteAtVisit: Bool?
     let metadataSnapshotRecorded: Bool?
-    let ao3SeriesID: Int?
+    let ao3SeriesID: Int??
     let seriesPosition: Int?
-    let publishedYear: Int?
+    let publishedYear: Int??
     let lastSpineIndex: Int
     let chapterTitle: String
     let endingProgress: Double
@@ -1361,20 +1368,21 @@ nonisolated struct KudosBackupReadingSession: Codable, Equatable {
         activeSeconds = session.activeSeconds
         deviceID = session.deviceID
         rulesVersion = session.rulesVersion
-        fandoms = session.fandoms.isEmpty ? nil : session.fandoms
-        relationships = session.relationships.isEmpty ? nil : session.relationships
-        characters = session.characters.isEmpty ? nil : session.characters
-        freeformTags = session.freeformTags.isEmpty ? nil : session.freeformTags
-        rating = session.rating.isEmpty ? nil : session.rating
-        warnings = session.warnings.isEmpty ? nil : session.warnings
-        categories = session.categories.isEmpty ? nil : session.categories
-        authorAccounts = session.authorAccounts.isEmpty ? nil : session.authorAccounts
-        language = session.language.isEmpty ? nil : session.language
+        let recorded = session.metadataSnapshotRecorded
+        fandoms = recorded ? session.fandoms : nil
+        relationships = recorded ? session.relationships : nil
+        characters = recorded ? session.characters : nil
+        freeformTags = recorded ? session.freeformTags : nil
+        rating = recorded ? session.rating : nil
+        warnings = recorded ? session.warnings : nil
+        categories = recorded ? session.categories : nil
+        authorAccounts = recorded ? session.authorAccounts : nil
+        language = recorded ? session.language : nil
         metadataSnapshotRecorded = session.metadataSnapshotRecorded ? true : nil
-        isCompleteAtVisit = session.hasMetadataSnapshot ? session.isCompleteAtVisit : nil
-        ao3SeriesID = session.ao3SeriesID
-        seriesPosition = session.seriesPosition == 0 ? nil : session.seriesPosition
-        publishedYear = session.publishedYear
+        isCompleteAtVisit = recorded ? session.isCompleteAtVisit : nil
+        ao3SeriesID = recorded ? .some(session.ao3SeriesID) : nil
+        seriesPosition = recorded ? session.seriesPosition : nil
+        publishedYear = recorded ? .some(session.publishedYear) : nil
         lastSpineIndex = session.lastSpineIndex
         chapterTitle = session.chapterTitle
         endingProgress = session.endingProgress
@@ -1413,9 +1421,11 @@ nonisolated struct KudosBackupReadingSession: Codable, Equatable {
         language = try container.decodeIfPresent(String.self, forKey: .language)
         isCompleteAtVisit = try container.decodeIfPresent(Bool.self, forKey: .isCompleteAtVisit)
         metadataSnapshotRecorded = try container.decodeIfPresent(Bool.self, forKey: .metadataSnapshotRecorded)
-        ao3SeriesID = try container.decodeIfPresent(Int.self, forKey: .ao3SeriesID)
+        ao3SeriesID = container.contains(.ao3SeriesID)
+            ? .some(try container.decode(Int?.self, forKey: .ao3SeriesID)) : nil
         seriesPosition = try container.decodeIfPresent(Int.self, forKey: .seriesPosition)
-        publishedYear = try container.decodeIfPresent(Int.self, forKey: .publishedYear)
+        publishedYear = container.contains(.publishedYear)
+            ? .some(try container.decode(Int?.self, forKey: .publishedYear)) : nil
         lastSpineIndex = try container.decodeIfPresent(Int.self, forKey: .lastSpineIndex) ?? 0
         chapterTitle = try container.decodeIfPresent(String.self, forKey: .chapterTitle) ?? ""
         endingProgress = try container.decodeIfPresent(Double.self, forKey: .endingProgress) ?? 0
@@ -3740,9 +3750,9 @@ enum KudosBackupService {
                 session.isCompleteAtVisit = archived.isCompleteAtVisit ?? session.isCompleteAtVisit
                 session.metadataSnapshotRecorded = archived.metadataSnapshotRecorded
                     ?? session.metadataSnapshotRecorded
-                session.ao3SeriesID = archived.ao3SeriesID ?? session.ao3SeriesID
+                if let value = archived.ao3SeriesID { session.ao3SeriesID = value }
                 session.seriesPosition = archived.seriesPosition ?? session.seriesPosition
-                session.publishedYear = archived.publishedYear ?? session.publishedYear
+                if let value = archived.publishedYear { session.publishedYear = value }
                 context.insert(session)
                 byID[archived.id] = session
                 resolvedLocalIDs.insert(session.id)
@@ -3824,9 +3834,9 @@ enum KudosBackupService {
         session.isCompleteAtVisit = archived.isCompleteAtVisit ?? session.isCompleteAtVisit
         session.metadataSnapshotRecorded = archived.metadataSnapshotRecorded
             ?? session.metadataSnapshotRecorded
-        session.ao3SeriesID = archived.ao3SeriesID ?? session.ao3SeriesID
+        if let value = archived.ao3SeriesID { session.ao3SeriesID = value }
         session.seriesPosition = archived.seriesPosition ?? session.seriesPosition
-        session.publishedYear = archived.publishedYear ?? session.publishedYear
+        if let value = archived.publishedYear { session.publishedYear = value }
         session.lastSpineIndex = archived.lastSpineIndex
         session.chapterTitle = archived.chapterTitle
         session.endingProgress = min(1, max(0, archived.endingProgress))
@@ -4752,6 +4762,8 @@ enum KudosBackupService {
             if let value = archived.stopTag { work.stopTag = value }
             if let value = archived.stopNote { work.stopNote = value }
             if let value = archived.stackThreshold { work.stackThreshold = value }
+            if let value = archived.stackBaselineChapterCount { work.stackBaselineChapterCount = value }
+            if let value = archived.statusWasRecorded { work.statusWasRecorded = value }
             if let value = archived.statusChangedAt { work.statusChangedAt = value }
             if let value = archived.stoppedAt { work.stoppedAt = value }
         }

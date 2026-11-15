@@ -51,7 +51,8 @@ struct ReadingLogBackupTests {
         let archivedWork = try #require((root["works"] as? [[String: Any]])?.first)
         let archivedSession = try #require((root["readingSessions"] as? [[String: Any]])?.first)
         for key in ["readingStatusRaw", "statusChangedAt", "stoppedAt", "stopReasonRaw",
-                    "stopTag", "stopNote", "stackThreshold"] {
+                    "stopTag", "stopNote", "stackThreshold", "stackBaselineChapterCount",
+                    "statusWasRecorded"] {
             #expect(archivedWork[key] == nil)
         }
         for key in ["fandoms", "relationships", "characters", "freeformTags",
@@ -72,6 +73,8 @@ struct ReadingLogBackupTests {
         let recordedSession = try #require((recordedRoot["readingSessions"] as? [[String: Any]])?.first)
         #expect(recordedSession["metadataSnapshotRecorded"] as? Bool == true)
         #expect(recordedSession["isCompleteAtVisit"] as? Bool == false)
+        #expect(recordedSession["fandoms"] as? [String] == [])
+        #expect(recordedSession["seriesPosition"] as? Int == 0)
         work.readingStatusRaw = "stacking"
         let stacking = try KudosBackupService.makeContents(
             works: [work], bookmarks: [], fonts: [], readingQueues: [],
@@ -132,6 +135,7 @@ struct ReadingLogBackupTests {
         session.authorAccounts = ["writer"]
         session.language = "English"
         session.isCompleteAtVisit = true
+        session.metadataSnapshotRecorded = true
         session.ao3SeriesID = 99
         session.seriesPosition = 2
         session.publishedYear = 2020
@@ -247,7 +251,8 @@ struct ReadingLogBackupTests {
         object["readingSessions"] = archived
         var legacyWorks = try #require(object["works"] as? [[String: Any]])
         for key in ["readingStatusRaw", "statusChangedAt", "stoppedAt", "stopReasonRaw",
-                    "stopTag", "stopNote", "stackThreshold"] {
+                    "stopTag", "stopNote", "stackThreshold", "stackBaselineChapterCount",
+                    "statusWasRecorded"] {
             legacyWorks[0].removeValue(forKey: key)
         }
         object["works"] = legacyWorks
@@ -296,6 +301,63 @@ struct ReadingLogBackupTests {
         )
         #expect(restoredWatermark.fandomName == "The Untamed (TV)")
         #expect(restoredWatermark.newestWorkIDSeen == 42)
+    }
+
+    @Test func recordedDefaultsReplaceOlderValuesOnExistingRows() throws {
+        let schema = schema()
+        let source = try context(schema)
+        let work = SavedWork(title: "WIP", author: "Writer")
+        work.setReadingStatus(nil)
+        work.lastModifiedAt = Date(timeIntervalSince1970: 2_000)
+        let session = ReadingSession(
+            workID: work.id, startedAt: Date(timeIntervalSince1970: 1_000),
+            endedAt: Date(timeIntervalSince1970: 1_100), durationSeconds: 100,
+            lastModifiedAt: Date(timeIntervalSince1970: 2_000)
+        )
+        session.metadataSnapshotRecorded = true
+        source.insert(work)
+        source.insert(session)
+        try source.save()
+        let contents = try KudosBackupService.makeContents(
+            works: [work], bookmarks: [], fonts: [], readingQueues: [],
+            readingSessions: [session], defaults: try testDefaults()
+        )
+        let target = try context(schema)
+        let oldWork = SavedWork(title: "WIP", author: "Writer")
+        oldWork.id = work.id
+        oldWork.readingStatusRaw = "stopped"
+        oldWork.statusChangedAt = Date(timeIntervalSince1970: 900)
+        oldWork.stoppedAt = Date(timeIntervalSince1970: 950)
+        oldWork.stopReasonRaw = "other"
+        oldWork.stackThreshold = 9
+        oldWork.stackBaselineChapterCount = 8
+        oldWork.lastModifiedAt = Date(timeIntervalSince1970: 1_500)
+        let oldSession = ReadingSession(
+            id: session.id, workID: work.id, startedAt: session.startedAt,
+            endedAt: session.endedAt, durationSeconds: 100,
+            lastModifiedAt: Date(timeIntervalSince1970: 1_500)
+        )
+        oldSession.metadataSnapshotRecorded = true
+        oldSession.fandoms = ["Stale"]
+        oldSession.seriesPosition = 5
+        oldSession.ao3SeriesID = 77
+        oldSession.publishedYear = 2020
+        target.insert(oldWork)
+        target.insert(oldSession)
+        try target.save()
+        _ = try KudosBackupService.restore(contents, into: target, defaults: try testDefaults())
+        let restoredWork = try #require(try target.fetch(FetchDescriptor<SavedWork>()).first)
+        let restoredSession = try #require(try target.fetch(FetchDescriptor<ReadingSession>()).first)
+        #expect(restoredWork.readingStatusRaw.isEmpty)
+        #expect(restoredWork.statusChangedAt == nil)
+        #expect(restoredWork.stoppedAt == nil)
+        #expect(restoredWork.stopReasonRaw.isEmpty)
+        #expect(restoredWork.stackThreshold == 3)
+        #expect(restoredWork.stackBaselineChapterCount == 0)
+        #expect(restoredSession.fandoms.isEmpty)
+        #expect(restoredSession.seriesPosition == 0)
+        #expect(restoredSession.ao3SeriesID == nil)
+        #expect(restoredSession.publishedYear == nil)
     }
 
     /// Renamed from `keepInProgressOverrideDecodesFalseWhenAbsent`, which

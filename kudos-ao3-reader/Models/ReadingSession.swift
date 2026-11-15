@@ -74,12 +74,17 @@ import SwiftData
         rating = work.rating
         warnings = work.workWarnings
         categories = work.workCategories
-        authorAccounts = work.verifiedAuthorIdentities.compactMap(\.username)
+        let verified = work.verifiedAuthorIdentities.map(\.displayName)
+        authorAccounts = verified.isEmpty
+            ? work.author.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+            : verified
         language = work.language
         isCompleteAtVisit = work.isComplete
         ao3SeriesID = work.ao3SeriesID
         seriesPosition = work.seriesPosition
-        publishedYear = WorkStat.date(from: work.datePublished).map { Calendar.current.component(.year, from: $0) }
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = TimeZone(secondsFromGMT: 0)!
+        publishedYear = WorkStat.date(from: work.datePublished).map { utc.component(.year, from: $0) }
     }
     var lastModifiedAt: Date = Date()
 
