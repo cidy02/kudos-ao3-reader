@@ -35,6 +35,8 @@ nonisolated struct ReadingSessionFacts: Equatable, Sendable {
     var chapterCount: Int = 0
     /// 0…1 at the start of the sitting (`ReadingSession.startProgress`), when recorded.
     var startProgress: Double? = nil
+    /// Seconds east of UTC when the sitting was read (`ReadingSession.tzOffsetSeconds`), when recorded.
+    var tzOffsetSeconds: Int? = nil
 }
 
 /// What the log knows about one work, for a history or favourites row.
@@ -206,7 +208,7 @@ nonisolated struct ReadingInsights: Equatable, Sendable {
         insights.sittingBuckets = sittingBuckets(from: facts)
         insights.readingSeconds = facts.reduce(0) { $0 + $1.durationSeconds }
         insights.finishedWorksCount = Set(facts.filter(\.didFinish).map(\.workID)).count
-        insights.readingDaysCount = Set(facts.map { calendar.startOfDay(for: $0.startedAt) }).count
+        insights.readingDaysCount = Set(facts.map { sittingTime(for: $0, calendar: calendar).day }).count
         // Days without reading are empty chart slots, never the biggest day.
         insights.biggestDay = insights.dailyWords.filter { $0.words > 0 }.max(by: { $0.words < $1.words })
         return insights
@@ -214,14 +216,50 @@ nonisolated struct ReadingInsights: Equatable, Sendable {
 
     // MARK: The rules
 
+    /// The hour at which one reading day ends and the next begins (04:00 local).
+    static let dayBoundaryHour = 4
+
+    /// A sitting's 4:00-to-4:00 reading day (at `calendar.startOfDay`) and local wall-clock
+    /// hour in the time zone the sitting was read in (`tzOffsetSeconds` when present, else
+    /// `calendar.timeZone`). Streaks, Reading Days and Time of Day all go through this one rule.
+    static func sittingTime(
+        for fact: ReadingSessionFacts,
+        calendar: Calendar = .current
+    ) -> (day: Date, hour: Int) {
+        var local = calendar
+        if let offset = fact.tzOffsetSeconds,
+           let timeZone = TimeZone(secondsFromGMT: offset) {
+            local.timeZone = timeZone
+        }
+        let parts = local.dateComponents([.year, .month, .day, .hour], from: fact.startedAt)
+        let hour = parts.hour ?? 0
+        let rawDay = calendar
+            .date(from: DateComponents(year: parts.year, month: parts.month, day: parts.day))
+            .map { calendar.startOfDay(for: $0) }
+            ?? calendar.startOfDay(for: fact.startedAt)
+        let day = hour < dayBoundaryHour
+            ? (calendar.date(byAdding: .day, value: -1, to: rawDay) ?? rawDay)
+            : rawDay
+        return (day: day, hour: hour)
+    }
+
+    /// The 4:00-to-4:00 reading day in the zone the sitting was read in.
+    static func readingDay(
+        for fact: ReadingSessionFacts,
+        calendar: Calendar = .current
+    ) -> Date {
+        sittingTime(for: fact, calendar: calendar).day
+    }
+
     static func weeklyBuckets(
         from facts: [ReadingSessionFacts],
         calendar: Calendar
     ) -> [WeeklyBucket] {
         var buckets: [Date: Double] = [:]
         for fact in facts {
+            let day = sittingTime(for: fact, calendar: calendar).day
             guard let weekStart = calendar
-                .dateInterval(of: .weekOfYear, for: fact.startedAt)?.start
+                .dateInterval(of: .weekOfYear, for: day)?.start
             else { continue }
             buckets[weekStart, default: 0] += fact.durationSeconds
         }
@@ -358,7 +396,7 @@ nonisolated struct ReadingInsights: Equatable, Sendable {
     /// question, and a streak computed in UTC would break for anyone who reads
     /// late at night.
     static func longestStreak(of facts: [ReadingSessionFacts], calendar: Calendar) -> Int {
-        let days = Set(facts.map { calendar.startOfDay(for: $0.startedAt) }).sorted()
+        let days = Set(facts.map { sittingTime(for: $0, calendar: calendar).day }).sorted()
         guard !days.isEmpty else { return 0 }
         var longest = 1
         var current = 1
@@ -451,7 +489,7 @@ nonisolated struct ReadingInsights: Equatable, Sendable {
     ) -> [DailyWordsBucket] {
         var wordsByDay: [Date: Int] = [:]
         for fact in facts {
-            let day = calendar.startOfDay(for: fact.startedAt)
+            let day = sittingTime(for: fact, calendar: calendar).day
             wordsByDay[day, default: 0] += fact.wordsRead
         }
 
@@ -497,7 +535,7 @@ nonisolated struct ReadingInsights: Equatable, Sendable {
     ) -> [HourlyBucket] {
         var hours: [Double] = Array(repeating: 0, count: 24)
         for fact in facts {
-            let hour = calendar.component(.hour, from: fact.startedAt)
+            let hour = sittingTime(for: fact, calendar: calendar).hour
             if hour >= 0 && hour < 24 {
                 hours[hour] += fact.durationSeconds
             }
@@ -510,14 +548,9 @@ nonisolated struct ReadingInsights: Equatable, Sendable {
         from facts: [ReadingSessionFacts],
         calendar: Calendar = .current
     ) -> Double {
-        var total: Double = 0
-        for fact in facts {
-            let hour = calendar.component(.hour, from: fact.startedAt)
-            if hour >= 1 && hour < 5 {
-                total += fact.durationSeconds
-            }
-        }
-        return total
+        hourlyDurationBuckets(from: facts, calendar: calendar)
+            .filter { $0.hour >= 1 && $0.hour < 5 }
+            .reduce(0) { $0 + $1.seconds }
     }
 
     /// Sittings duration distribution (<10m, 10–30m, 30–60m, 1–2h, 2h+).
@@ -1075,7 +1108,8 @@ nonisolated struct ReadingHabitsInsights: Equatable, Sendable {
         let timelineLanes = topFandomNames.map { name -> FandomTimelineLane in
             var months = Array(repeating: 0, count: 12)
             for fact in allFacts where fact.fandom == name {
-                let m = calendar.component(.month, from: fact.startedAt) - 1
+                let day = ReadingInsights.sittingTime(for: fact, calendar: calendar).day
+                let m = calendar.component(.month, from: day) - 1
                 if m >= 0 && m < 12 {
                     months[m] += fact.wordsRead
                 }
