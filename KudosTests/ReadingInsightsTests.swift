@@ -372,4 +372,252 @@ struct ReadingInsightsTests {
         #expect(habits.savedToOpenedMedianDays == 10)
         #expect(habits.openedToFinishedMedianDays == 4)
     }
+
+    // MARK: T-517 — the day runs 4:00 to 4:00, in the zone the sitting was read in
+
+    private func instant(
+        month: Int = 8, _ dayOfMonth: Int, _ hour: Int, _ minute: Int = 0, offsetHours: Int = 0
+    ) -> Date {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(secondsFromGMT: offsetHours * 3600) ?? .gmt
+        let parts = DateComponents(year: 2026, month: month, day: dayOfMonth, hour: hour, minute: minute)
+        return cal.date(from: parts) ?? Date(timeIntervalSince1970: 0)
+    }
+
+    private func sitting(
+        at startedAt: Date, minutes: Double = 30, words: Int = 0, tzHours: Int? = nil
+    ) -> ReadingSessionFacts {
+        var fact = ReadingSessionFacts(
+            workID: UUID(), startedAt: startedAt, durationSeconds: minutes * 60,
+            wordCount: words, didFinish: false, wordsRead: words
+        )
+        fact.tzOffsetSeconds = tzHours.map { $0 * 3600 }
+        return fact
+    }
+
+    @Test func aSittingAtHalfPastTwoCountsForThePreviousDay() {
+        let night = sitting(at: instant(10, 2, 30))
+        #expect(ReadingInsights.readingDay(for: night, calendar: calendar) == day(9, hour: 0))
+        // 4:00 sharp is the new day; 3:59 is still the old one.
+        #expect(ReadingInsights.readingDay(for: sitting(at: instant(10, 4, 0)), calendar: calendar) == day(10, hour: 0))
+        #expect(ReadingInsights.readingDay(for: sitting(at: instant(10, 3, 59)), calendar: calendar) == day(9, hour: 0))
+        // Read at 23:30 and 02:30 the same night: one day, one streak.
+        let facts = [sitting(at: instant(9, 23, 30)), night]
+        #expect(ReadingInsights.make(facts: facts, calendar: calendar).readingDaysCount == 1)
+        #expect(ReadingInsights.longestStreak(of: facts, calendar: calendar) == 1)
+    }
+
+    @Test func aSittingReadAtPlusNineAndViewedAtMinusFiveLandsOnTheDayItWasRead() {
+        var viewer = Calendar(identifier: .gregorian)
+        viewer.timeZone = TimeZone(secondsFromGMT: -5 * 3600) ?? .gmt
+        // 12:00 on 10 Aug in Tokyo is 22:00 on 9 Aug in the viewer's zone.
+        let read = sitting(at: instant(10, 12, offsetHours: 9), tzHours: 9)
+        var expected = DateComponents(year: 2026, month: 8, day: 10)
+        expected.hour = 0
+        #expect(ReadingInsights.readingDay(for: read, calendar: viewer) == viewer.date(from: expected))
+        // Without the recorded zone it falls back to the viewer's, as before.
+        var unzoned = read
+        unzoned.tzOffsetSeconds = nil
+        expected.day = 9
+        #expect(ReadingInsights.readingDay(for: unzoned, calendar: viewer) == viewer.date(from: expected))
+        // Time of Day uses the hour on the clock where it was read.
+        let hours = ReadingInsights.hourlyDurationBuckets(from: [read], calendar: viewer)
+        #expect(hours[12].seconds == 30 * 60)
+    }
+
+    @Test func aStreakAcrossATimeZoneChangeIsNotBroken() {
+        // 20:00 on 10 Aug in Tokyo, then 20:00 on 11 Aug in UTC-8 (04:00 UTC on the 12th).
+        // Viewed in one fixed zone these are two days apart; read where they were, they are
+        // consecutive evenings.
+        let facts = [
+            sitting(at: instant(10, 20, offsetHours: 9), tzHours: 9),
+            sitting(at: instant(11, 20, offsetHours: -8), tzHours: -8)
+        ]
+        #expect(ReadingInsights.longestStreak(of: facts, calendar: calendar) == 2)
+        #expect(ReadingInsights.make(facts: facts, calendar: calendar).readingDaysCount == 2)
+    }
+
+    // MARK: T-517 — like for like
+
+    private func julyFact(_ dayOfMonth: Int) -> ReadingSessionFacts {
+        sitting(at: instant(month: 7, dayOfMonth, 12), minutes: 60, words: 1_000)
+    }
+
+    @Test func aTenDayPartialMonthIsComparedWithTenDaysNotTheWholeMonth() {
+        let july = (1...31).map(julyFact)
+        let tenDays = DateInterval(start: day(1, hour: 0), end: day(11, hour: 0))
+        let insights = ReadingInsights.make(
+            facts: [fact(on: 2, minutes: 60, words: 1_000)],
+            previousPeriodFacts: july, dayRange: tenDays, calendar: calendar
+        )
+        #expect(insights.previousPeriodSeconds == 10 * 3_600)
+        #expect(insights.previousPeriodWordsRead == 10_000)
+        // No day range (a year): the earlier period stays whole.
+        let whole = ReadingInsights.make(
+            facts: [fact(on: 2, minutes: 60)], previousPeriodFacts: july, calendar: calendar
+        )
+        #expect(whole.previousPeriodSeconds == 31 * 3_600)
+        // Nothing read in those ten days last month: no delta, not a delta against zero.
+        let none = ReadingInsights.make(
+            facts: [fact(on: 2, minutes: 60)], previousPeriodFacts: [julyFact(20)],
+            dayRange: tenDays, calendar: calendar
+        )
+        #expect(none.previousPeriodSeconds == nil)
+        #expect(none.previousPeriodWordsRead == nil)
+    }
+
+    // MARK: T-517 — visits under 5 minutes apart are one sitting for the median
+
+    private func visits(secondStartsAtMinute second: Int) -> [ReadingSessionFacts] {
+        [
+            sitting(at: instant(1, 12, 0), minutes: 10),
+            sitting(at: instant(1, 12, second), minutes: 10),
+            sitting(at: instant(3, 12), minutes: 30),
+            sitting(at: instant(5, 12), minutes: 60)
+        ]
+    }
+
+    @Test func twoVisitsFourMinutesApartAreOneSittingForTheMedian() {
+        // The first visit ends 12:10; the second starts 12:14.
+        let facts = visits(secondStartsAtMinute: 14)
+        #expect(ReadingInsights.medianSeconds(of: facts) == 30 * 60)   // 20, 30, 60
+        // Stored sittings are untouched: the bars still count four visits.
+        #expect(ReadingInsights.sittingBuckets(from: facts).reduce(0) { $0 + $1.count } == 4)
+    }
+
+    @Test func twoVisitsSixMinutesApartAreTwoSittingsForTheMedian() {
+        let facts = visits(secondStartsAtMinute: 16)
+        #expect(ReadingInsights.medianSeconds(of: facts) == 20 * 60)   // 10, 10, 30, 60
+    }
+
+    // MARK: T-517 — Checks: numbers that must agree
+
+    /// A month of reading with no two visits within 5 minutes of each other and none before 04:00.
+    private func checkFixture() -> (facts: [ReadingSessionFacts], period: DateInterval, dayRange: DateInterval?) {
+        let a = UUID(), b = UUID(), c = UUID()
+        let rows: [(UUID, Int, Int, Double, Int, String)] = [
+            (a, 1, 9, 20, 4_000, "Naruto"), (a, 2, 21, 45, 9_000, "Naruto"),
+            (b, 4, 13, 90, 12_000, "Dracula"), (b, 4, 22, 30, 6_000, "Dracula"),
+            (c, 9, 6, 5, 1_000, ""), (c, 12, 15, 150, 30_000, "Blade Runner"),
+            (a, 20, 23, 35, 7_000, "Naruto")
+        ]
+        let facts = rows.map { work, d, h, minutes, words, fandom in
+            ReadingSessionFacts(
+                workID: work, startedAt: day(d, hour: h), durationSeconds: minutes * 60,
+                wordCount: words * 3, didFinish: false, fandom: fandom, wordsRead: words
+            )
+        }
+        let period = DateInterval(start: day(1, hour: 0), end: day(1, hour: 0).addingTimeInterval(31 * 86_400))
+        return (facts, period, period)
+    }
+
+    @Test func checkWordsAddUp() {
+        let (facts, _, range) = checkFixture()
+        let insights = ReadingInsights.make(facts: facts, dayRange: range, calendar: calendar)
+        let total = insights.totalWordsRead
+        #expect(total == facts.reduce(0) { $0 + $1.wordsRead })
+        #expect(insights.dailyWords.reduce(0) { $0 + $1.words } == total)
+        #expect(insights.fandomWordsShares.reduce(0) { $0 + $1.words } == total)
+        let habits = ReadingHabitsInsights.make(works: [], facts: facts, allFacts: facts, calendar: calendar)
+        #expect(habits.calendarDays.reduce(0) { $0 + $1.words } == total)
+    }
+
+    @Test func checkTimeAddsUp() {
+        let (facts, _, range) = checkFixture()
+        let insights = ReadingInsights.make(facts: facts, dayRange: range, calendar: calendar)
+        #expect(insights.hourlyDuration.reduce(0) { $0 + $1.seconds } == insights.readingSeconds)
+        #expect(insights.readingSeconds == insights.totalSeconds)
+        // The least time the Sittings bars can hold, bar by bar, cannot exceed the total.
+        let floors: [Double] = [0, 10, 30, 60, 120].map { $0 * 60 }
+        let implied = zip(insights.sittingBuckets, floors).reduce(0) { $0 + Double($1.0.count) * $1.1 }
+        #expect(implied <= insights.totalSeconds)
+    }
+
+    @Test func checkSittingsAddUp() {
+        let (facts, _, _) = checkFixture()
+        let insights = ReadingInsights.make(facts: facts, calendar: calendar)
+        let counted = facts.filter { $0.durationSeconds > 0 }.count
+        #expect(insights.sittingBuckets.reduce(0) { $0 + $1.count } == counted)
+        // Seven sittings: the middle one is the 4th shortest (35 min), in the 30–60 m bar.
+        let sorted = facts.map(\.durationSeconds).sorted()
+        let middle = sorted[sorted.count / 2]
+        func bar(_ seconds: Double) -> Int {
+            [10, 30, 60, 120].firstIndex { seconds / 60 < Double($0) } ?? 4
+        }
+        #expect(bar(insights.medianSessionSeconds) == bar(middle))
+        #expect(insights.medianSessionSeconds == middle)
+    }
+
+    @Test func checkWorksAddUp() {
+        let (facts, _, _) = checkFixture()
+        let insights = ReadingInsights.make(facts: facts, calendar: calendar)
+        #expect(insights.lengthMix.totalWorks == Set(facts.map(\.workID)).count)
+
+        let finished = SavedWork(title: "F", author: "A")
+        finished.isFinished = true
+        let reading = SavedWork(title: "R", author: "A")
+        reading.lastSpineIndex = 2
+        let later = SavedWork(title: "L", author: "A")
+        later.isQueuedForLater = true
+        let wip = SavedWork(title: "W", author: "A")
+        wip.isComplete = false
+        let done = SavedWork(title: "D", author: "A")
+        done.isComplete = true
+        let works = [finished, reading, later, wip, done]
+        #expect(ReadingInsights.partitionStatuses(works: works).total == works.count)
+        #expect(ReadingInsights.wipFreshness(works: works).total == works.filter { !$0.isComplete }.count)
+    }
+
+    @Test func checkShownFiguresReproduce() {
+        let (facts, _, _) = checkFixture()
+        let insights = ReadingInsights.make(facts: facts, calendar: calendar)
+        let hours = insights.readingSeconds / 3_600
+        #expect(abs(insights.wordsPerHour - Double(insights.totalWordsRead) / hours) < 1e-9)
+        let words = 212_600
+        #expect(ReadingInsights.novelsWorth(words: words) == (Double(words) / 70_000 * 2).rounded() / 2)
+
+        let unread = SavedWork(title: "U", author: "A")
+        unread.wordCount = 120_000
+        let library = ReadingLibraryInsights.make(
+            works: [unread], facts: facts,
+            periodInterval: DateInterval(start: day(1, hour: 0), end: day(28, hour: 0)),
+            periodMonths: 1, calendar: calendar
+        )
+        let monthly = Double(insights.totalWordsRead)
+        #expect(library.monthsToClear == max(1, Int((120_000 / monthly).rounded())))
+    }
+
+    @Test func checkHistoryHoldsStill() {
+        let (august, period, _) = checkFixture()
+        // July, which August is compared with, and September, which arrives later.
+        let july = (1...31).map(julyFact)
+        let september = [sitting(at: instant(month: 9, 3, 12), minutes: 60, words: 5_000)]
+        func augustAsSeen(on now: Date, log: [ReadingSessionFacts]) -> ReadingInsights {
+            let current = log.filter { period.contains($0.startedAt) }
+            let previous = log.filter {
+                $0.startedAt < period.start && $0.startedAt >= instant(month: 7, 1, 0)
+            }
+            let range = ReadingInsights.chartDays(for: period, now: now, calendar: calendar)
+            return ReadingInsights.make(
+                facts: current, previousPeriodFacts: previous, dayRange: range, calendar: calendar
+            )
+        }
+        let atTheEnd = augustAsSeen(on: instant(31, 18), log: august + july)
+        let nextMonth = augustAsSeen(on: instant(month: 9, 15, 9), log: august + july + september)
+        #expect(atTheEnd == nextMonth)
+    }
+
+    @Test func checkSaneSittingsClampProgress() {
+        // Progress outside 0…1 and an end before the start cannot make a start or a word count
+        // that runs backwards.
+        let work = UUID()
+        var odd = ReadingSessionFacts(
+            workID: work, startedAt: day(1), durationSeconds: 600, wordCount: 1_000,
+            didFinish: false, wordsRead: 0, endingProgress: 1.7
+        )
+        odd.startProgress = -0.4
+        let starts = ReadingInsights.startingProgress(of: [odd])
+        #expect(starts == [0])
+        #expect(ReadingInsights.make(facts: [odd], calendar: calendar).totalSeconds >= 0)
+    }
 }
