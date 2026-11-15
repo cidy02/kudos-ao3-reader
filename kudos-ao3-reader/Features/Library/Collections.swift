@@ -52,7 +52,8 @@ struct CollectionCard: View {
             StackedWorkCover(
                 kind: .collection,
                 name: collection.name,
-                hue: collection.displayHue,
+                identity: collection.id,
+                hue: collection.hue,
                 pickedHex: collection.colorHex,
                 backs: Array(previewWorks.prefix(CoverStackLayout.maxBacks)),
                 size: CGSize(width: cardSize.width, height: tileHeight)

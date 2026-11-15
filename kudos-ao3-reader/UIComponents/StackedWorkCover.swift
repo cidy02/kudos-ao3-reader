@@ -158,10 +158,8 @@ struct CoverStackLayout: Equatable {
 }
 
 /// A collection's or a queue's cover stack (`CoverStackKind`), drawn by
-/// `CoverStackLayout`. The covers behind are the works' own: each in its fandom's
-/// colour family (`CoverArt.workArt`, the same gradient as the shelf cover), never the app's
-/// red. The front is the collection's or queue's own generated motif
-/// (`init(kind:name:hue:pickedHex:backs:size:)`), or a face the caller draws.
+/// `CoverStackLayout`. The covers behind use each work's generated cover.
+/// The front uses the collection's or queue's generated motif, or a caller's face.
 ///
 /// The covers name nothing, but their colour is a work's fandom, so a caller leaves
 /// out every work the privacy setting is keeping back before passing `backs`.
@@ -197,7 +195,8 @@ struct StackedWorkCover<Face: View>: View {
             // Farthest first, so each nearer card lies over the one behind it.
             ForEach(layout.backs.indices.reversed(), id: \.self) { index in
                 let back = layout.backs[index]
-                backCover(backs[index], width: back.frame.width, dimming: back.dimming)
+                backCover(backs[index], width: back.frame.width, height: back.frame.height,
+                          dimming: back.dimming)
                     .frame(width: back.frame.width, height: back.frame.height)
                     .rotationEffect(.degrees(back.rotation), anchor: .bottomLeading)
                     .offset(x: back.frame.minX, y: back.frame.minY)
@@ -215,13 +214,10 @@ struct StackedWorkCover<Face: View>: View {
 
     /// A work's cover seen from behind the front card: the same generated art
     /// the shelf cover uses, with the hairline the old mosaic's cells had.
-    private func backCover(_ work: SavedWork, width: CGFloat, dimming: Double) -> some View {
-        let recipe = GeneratedCoverRecipe(id: work.ao3WorkID, title: work.title, author: work.author,
-                                          fandoms: work.workFandoms, tags: work.workTags,
-                                          words: work.wordCount, complete: work.isComplete, width: Double(width))
-        return GeneratedCoverView(recipe: recipe, width: width,
+    private func backCover(_ work: SavedWork, width: CGFloat, height: CGFloat, dimming: Double) -> some View {
+        return GeneratedCoverView(recipe: work.generatedCoverRecipe, width: width,
                                   epubURL: work.hasEPUB ? work.fileURL : nil,
-                                  epubWorkID: work.id, showsWords: false)
+                                  epubWorkID: work.id, height: height, showsWords: false)
             .brightness(-dimming)
             .accessibilityHidden(true)
     }
@@ -253,10 +249,12 @@ struct StackedWorkCover<Face: View>: View {
 
 extension StackedWorkCover where Face == CoverStackNameFace {
     /// The stack a collection or queue draws for itself.
-    init(kind: CoverStackKind, name: String, hue: Double, pickedHex: String?, backs: [SavedWork], size: CGSize) {
+    init(kind: CoverStackKind, name: String, identity: UUID? = nil, hue: Double?,
+         pickedHex: String?, backs: [SavedWork], size: CGSize) {
         self.init(kind: kind, size: size, backs: backs) { layout in
             CoverStackNameFace(
-                kind: kind, name: name, hue: hue, pickedHex: pickedHex, coverWidth: layout.front.width
+                kind: kind, name: name, identity: identity, hue: hue, pickedHex: pickedHex,
+                coverWidth: layout.front.width, coverHeight: layout.front.height
             )
         }
     }
@@ -266,16 +264,21 @@ extension StackedWorkCover where Face == CoverStackNameFace {
 struct CoverStackNameFace: View {
     let kind: CoverStackKind
     let name: String
-    let hue: Double
+    let identity: UUID?
+    let hue: Double?
     let pickedHex: String?
     let coverWidth: CGFloat
+    let coverHeight: CGFloat
 
     var body: some View {
-        GeneratedCoverView(recipe: GeneratedCoverRecipe(
-            collection: name,
-            hue: GeneratedCoverRecipe.collectionHue(pickedHex, fallback: Int(hue * 360))
-        ),
-                           width: coverWidth, showsWords: false)
+        let fallback = hue.map { Int($0 * 360) }
+            ?? identity.map { GeneratedCoverRecipe.collectionHue(for: $0) }
+            ?? Int(GeneratedCoverRecipe.hash("collection:" + name) % 360)
+        let swatch = GeneratedCoverRecipe.collectionSwatch(pickedHex, fallback: fallback)
+        return GeneratedCoverView(recipe: GeneratedCoverRecipe(
+            collection: name, identity: identity?.uuidString,
+            hue: swatch.hue, graphite: swatch.chroma == 0.012
+        ), width: coverWidth, height: coverHeight, showsWords: false)
             .accessibilityHidden(true)
     }
 }

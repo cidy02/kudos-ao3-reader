@@ -105,11 +105,8 @@ private struct MiniatureWorkCover: View {
     let work: SavedWork
 
     var body: some View {
-        GeneratedCoverView(recipe: GeneratedCoverRecipe(
-            id: work.ao3WorkID, title: work.title, author: work.author,
-            fandoms: work.workFandoms, tags: work.workTags, words: work.wordCount,
-            complete: work.isComplete, width: 61
-        ), width: 61, epubURL: work.hasEPUB ? work.fileURL : nil, epubWorkID: work.id,
+        GeneratedCoverView(recipe: work.generatedCoverRecipe,
+           width: 61, epubURL: work.hasEPUB ? work.fileURL : nil, epubWorkID: work.id,
            height: 54, showsWords: false)
     }
 }

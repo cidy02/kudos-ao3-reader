@@ -112,14 +112,7 @@ struct WorkCoverCard: View {
 
     var body: some View {
         WorkSummaryCardSurface(
-            recipe: GeneratedCoverRecipe(id: work.ao3WorkID, title: work.title, author: work.author,
-                                         fandoms: work.workFandoms, tags: work.workTags,
-                                         words: work.wordCount, complete: work.isComplete,
-                                         seriesID: URL(string: work.seriesURL).flatMap { Int($0.lastPathComponent) },
-                                         part: work.seriesPosition),
-            title: work.title,
-            author: work.author,
-            fandom: primaryFandom,
+            recipe: work.generatedCoverRecipe,
             epubURL: work.hasEPUB ? work.fileURL : nil,
             epubWorkID: work.id,
             showsInitial: showsInitial,
@@ -174,11 +167,6 @@ struct WorkCoverCard: View {
             announcesToVoiceOver: true,
             arrangement: .strip
         )
-    }
-
-    private var primaryFandom: String? {
-        work.workFandoms.first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-            .map(FandomDisplayName.bareTitle)
     }
 
     private var progressValue: Double? {
@@ -298,14 +286,7 @@ struct AO3WorkCoverCard: View {
     /// card's "+N new" slot), and there is no preservation state to report.
     var body: some View {
         let surface = WorkSummaryCardSurface(
-            recipe: GeneratedCoverRecipe(id: work.id, title: work.title, author: work.authorText,
-                                         fandoms: work.fandoms, tags: work.tags,
-                                         words: work.words, complete: work.isComplete ?? true,
-                                         seriesID: work.seriesURL.flatMap { URL(string: $0).flatMap { Int($0.lastPathComponent) } },
-                                         part: work.seriesPosition ?? 0),
-            title: work.title,
-            author: work.authorText,
-            fandom: primaryFandom,
+            recipe: work.generatedCoverRecipe,
             showsInitial: showsInitial,
             isMatureObscured: isMatureObscured,
             showsMatureRevealCapsule: showsMatureRevealCapsule
@@ -349,13 +330,6 @@ struct AO3WorkCoverCard: View {
             announcesToVoiceOver: true,
             arrangement: .strip
         )
-    }
-
-    /// The fandom the kicker prints — it replaces the `books.vertical` metadata
-    /// row this card used to carry, so no fact left the card with it.
-    private var primaryFandom: String? {
-        work.fandoms.first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-            .map(FandomDisplayName.bareTitle)
     }
 
     /// Words, chapters and the updated date all stay. The previous card printed
@@ -448,9 +422,6 @@ struct WorkSelectionBubble: View {
 
 private struct WorkSummaryCardSurface<Content: View>: View {
     let recipe: GeneratedCoverRecipe
-    let title: String
-    let author: String
-    let fandom: String?
     var epubURL: URL?
     var epubWorkID: UUID?
     var showsInitial: Bool = true

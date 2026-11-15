@@ -1,5 +1,8 @@
 import Foundation
+import CoreGraphics
+import ImageIO
 import Testing
+import UniformTypeIdentifiers
 @testable import Kudos
 
 @Suite("Generated cover recipe")
@@ -79,6 +82,74 @@ struct GeneratedCoverRecipeTests {
         #expect(second.hues[0] == first.hues[0] + 18)
     }
 
+    @Test func subtitlesAndFirstAuthor() {
+        for title in ["The Work (A Subtitle)", "The Work [A Subtitle]"] {
+            let recipe = GeneratedCoverRecipe(id: 42, title: title, author: "First, Second", fandoms: ["Original Work"])
+            #expect(recipe.title == "The Work")
+            #expect(!recipe.subtitle.isEmpty)
+            #expect(recipe.placement == 2)
+        }
+        let orTitle = GeneratedCoverRecipe(id: 42, title: "The Work; or, A Subtitle",
+                                           author: "First", fandoms: ["Original Work"])
+        #expect(orTitle.title == "The Work")
+        #expect(orTitle.subtitle == "A Subtitle")
+        let onlyParentheses = GeneratedCoverRecipe(id: 42, title: "(Only)",
+                                                    author: "First", fandoms: ["Original Work"])
+        #expect(onlyParentheses.title == "(Only)")
+        #expect(onlyParentheses.subtitle.isEmpty)
+        let first = GeneratedCoverRecipe(id: 42, title: "The Work", author: "First", fandoms: ["Original Work"])
+        let joined = GeneratedCoverRecipe(id: 42, title: "The Work", author: "First, Second", fandoms: ["Original Work"])
+        #expect(first.motif == joined.motif)
+        #expect(first.titleStyle == joined.titleStyle)
+    }
+
+    @Test func unrelatedTagsAndSizeDoNotChangeRecipe() {
+        let base = GeneratedCoverRecipe(id: 42, title: "The Work", author: "First",
+                                        fandoms: ["Original Work"], tags: ["Fantasy"])
+        let extra = GeneratedCoverRecipe(id: 42, title: "The Work", author: "First",
+                                         fandoms: ["Original Work"], tags: ["Fantasy", "Coffee Shops & Cafés"])
+        #expect(base == extra)
+    }
+
+    @Test @MainActor func threePartsShareSeriesArtAndBuildersAgree() {
+        let recipes = (1...3).map { part in
+            GeneratedCoverRecipe(id: 42 + part, title: "Part \(part)", author: "Different \(part)",
+                                 fandoms: ["Original Work"], tags: part == 2 ? ["Angst"] : ["Fluff"],
+                                 seriesID: 77, part: part)
+        }
+        #expect(recipes.allSatisfy { $0.motif == recipes[0].motif })
+        #expect(recipes.allSatisfy { $0.ground == recipes[0].ground })
+        #expect(recipes.allSatisfy { $0.rotation == recipes[0].rotation })
+
+        let saved = SavedWork(title: "Part 2", author: "First, Second")
+        saved.ao3WorkID = 44
+        saved.workFandoms = ["Original Work"]
+        saved.workTags = ["Angst"]
+        saved.ao3SeriesID = 77
+        saved.seriesPosition = 2
+        let remote = AO3WorkSummary.subscription(id: 44, title: "Part 2", authors: ["First", "Second"])
+        var listed = remote
+        listed.fandoms = ["Original Work"]
+        listed.tags = ["Angst"]
+        listed.seriesURL = "https://archiveofourown.org/series/77"
+        listed.seriesPosition = 2
+        listed.isComplete = saved.isComplete
+        listed.words = saved.wordCount
+        #expect(saved.generatedCoverRecipe == listed.generatedCoverRecipe)
+    }
+
+    @Test @MainActor func crossoverBandsHaveTheRequestedArea() {
+        let height: CGFloat = 112 * 1.42
+        func squared(_ value: CGFloat) -> CGFloat { max(value, 0) * max(value, 0) }
+        let fractions: [CGFloat] = [0.6, 1.0 / 3, 2.0 / 3]
+        for fraction in fractions {
+            let cut = GeneratedCoverView.crossoverCut(fraction, height: height)
+            let area = (squared(cut) - squared(cut - 112) - squared(cut - height)
+                        + squared(cut - 112 - height)) / 2
+            #expect(abs(area / (112 * height) - fraction) < 0.0001)
+        }
+    }
+
     @Test func whiteContrastAcrossGroundRange() {
         for hue in 0..<360 {
             for (lightness, chroma) in [(0.32, 0.085), (0.46, 0.085), (0.53, 0.09), (0.27, 0.08)] {
@@ -87,14 +158,30 @@ struct GeneratedCoverRecipeTests {
                     value <= 0.04045 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
                 }
                 let luminance = 0.2126 * linear(red) + 0.7152 * linear(green) + 0.0722 * linear(blue)
-                #expect(1.05 / (luminance + 0.05) >= 4.5)
+                for opacity in [0.92, 1.0] {
+                    let foreground = [red, green, blue].map { opacity + (1 - opacity) * $0 }
+                    let textLuminance = 0.2126 * linear(foreground[0])
+                        + 0.7152 * linear(foreground[1]) + 0.0722 * linear(foreground[2])
+                    #expect((textLuminance + 0.05) / (luminance + 0.05) >= 4.5)
+                }
             }
         }
     }
 
     @Test func collectionColourSnapsToPalette() {
         #expect(GeneratedCoverRecipe.collectionHue("#808080", fallback: 20) == 260)
+        #expect(GeneratedCoverRecipe.collectionSwatch("#808080", fallback: 20).chroma == 0.012)
+        #expect([20, 55, 85, 125, 150, 180, 205, 230, 260, 290, 320, 350]
+            .contains(GeneratedCoverRecipe.collectionHue(nil, fallback: 137)))
+        let identity = UUID(uuidString: "00000000-0000-0000-0000-000000000077")!
+        #expect([20, 55, 85, 125, 150, 180, 205, 230, 260, 290, 320, 350]
+            .contains(GeneratedCoverRecipe.collectionHue(for: identity)))
         #expect(GeneratedCoverRecipe(collection: "Next", hue: 150).hasRing == false)
+        let renamed = GeneratedCoverRecipe(collection: "Renamed", identity: "same-id", hue: 150)
+        let original = GeneratedCoverRecipe(collection: "Original", identity: "same-id", hue: 150)
+        #expect(renamed.motif == original.motif)
+        #expect(renamed.shapeSeed == original.shapeSeed)
+        #expect(renamed.placement == original.placement)
     }
 
     @Test func embeddedArtPrefersFrontMatterThenLargest() {
@@ -111,6 +198,70 @@ struct GeneratedCoverRecipeTests {
             EmbeddedWorkCoverImage.Candidate(data: Data([3]), frontMatter: true, pixelArea: 1_000_000)
         ]
         #expect(EmbeddedWorkCoverImage.preferred(images) == Data([3]))
+    }
+
+    @Test func embeddedArtScansFrontMatterInARealEPUB() throws {
+        func png(width: Int, red: CGFloat) throws -> Data {
+            let context = try #require(CGContext(
+                data: nil, width: width, height: 800, bitsPerComponent: 8, bytesPerRow: 0,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ))
+            context.setFillColor(red: red, green: 0, blue: 0, alpha: 1)
+            context.fill(CGRect(x: 0, y: 0, width: width, height: 800))
+            let image = try #require(context.makeImage())
+            let output = NSMutableData()
+            let destination = try #require(CGImageDestinationCreateWithData(
+                output, UTType.png.identifier as CFString, 1, nil
+            ))
+            CGImageDestinationAddImage(destination, image, nil)
+            #expect(CGImageDestinationFinalize(destination))
+            return output as Data
+        }
+        let front = try png(width: 320, red: 1)
+        let chapter = try png(width: 400, red: 0.5)
+        let container = """
+            <?xml version="1.0"?><container xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+            <rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles>
+            </container>
+            """
+        let opf = """
+            <?xml version="1.0"?><package xmlns="http://www.idpf.org/2007/opf" version="2.0">
+            <metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>Art Test</dc:title>
+            <dc:creator>Author</dc:creator><dc:language>en</dc:language></metadata>
+            <manifest><item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
+            <item id="front" href="front.xhtml" media-type="application/xhtml+xml"/>
+            <item id="chapter" href="chapter.xhtml" media-type="application/xhtml+xml"/></manifest>
+            <spine toc="ncx"><itemref idref="front"/><itemref idref="chapter"/></spine>
+            </package>
+            """
+        let toc = """
+            <?xml version="1.0"?><ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+            <navMap><navPoint id="front" playOrder="1"><navLabel><text>Preface</text></navLabel>
+            <content src="front.xhtml"/></navPoint><navPoint id="chapter" playOrder="2">
+            <navLabel><text>Chapter 1</text></navLabel><content src="chapter.xhtml"/></navPoint></navMap>
+            </ncx>
+            """
+        func entry(_ name: String, _ data: Data) -> HostileZipFixture.Entry {
+            HostileZipFixture.Entry(name: name, payload: data)
+        }
+        let archive = HostileZipFixture.build([
+            entry("mimetype", Data("application/epub+zip".utf8)),
+            entry("META-INF/container.xml", Data(container.utf8)),
+            entry("OEBPS/content.opf", Data(opf.utf8)),
+            entry("OEBPS/toc.ncx", Data(toc.utf8)),
+            entry("OEBPS/front.xhtml", Data("<html><body><img src='front.png'/></body></html>".utf8)),
+            entry("OEBPS/chapter.xhtml", Data("<html><body><img src='chapter.png'/></body></html>".utf8)),
+            entry("OEBPS/front.png", front), entry("OEBPS/chapter.png", chapter)
+        ])
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".epub")
+        defer { try? FileManager.default.removeItem(at: file) }
+        try archive.write(to: file)
+        #expect(EmbeddedWorkCoverImage.data(at: file) == front)
+        let thumb = try #require(EmbeddedWorkCoverImage.downsampledJPEG(front))
+        let source = try #require(CGImageSourceCreateWithData(thumb as CFData, nil))
+        let image = try #require(CGImageSourceCreateImageAtIndex(source, 0, nil))
+        #expect(max(image.width, image.height) <= 600)
     }
 
     @Test func postingYearIsMonotoneAndClamped() {
@@ -166,5 +317,41 @@ struct GeneratedCoverRecipeTests {
         #expect(count.value == 2)
         let cacheFiles = try FileManager.default.contentsOfDirectory(atPath: cache.path)
         #expect(cacheFiles.count == 1)
+    }
+
+    @Test func cancelledQueuedCoverDoesNotScan() async throws {
+        final class Counter: @unchecked Sendable {
+            private let lock = NSLock()
+            private var count = 0
+            func hit() { lock.lock(); count += 1; lock.unlock() }
+            var value: Int { lock.lock(); defer { lock.unlock() }; return count }
+        }
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let firstFile = folder.appendingPathComponent("first.epub")
+        let secondFile = folder.appendingPathComponent("second.epub")
+        try Data([1]).write(to: firstFile)
+        try Data([2]).write(to: secondFile)
+        let counter = Counter()
+        let gate = DispatchSemaphore(value: 0)
+        let loader = GeneratedCoverArtLoader(directory: folder.appendingPathComponent("cache"), scan: { file in
+            counter.hit()
+            if file == firstFile { gate.wait() }
+            return nil
+        })
+        let first = Task { await loader.image(workID: UUID(), fileURL: firstFile) }
+        for _ in 0..<100 where counter.value == 0 { try await Task.sleep(for: .milliseconds(5)) }
+        guard counter.value == 1 else {
+            gate.signal()
+            Issue.record("The first scan never started")
+            return
+        }
+        let second = Task { await loader.image(workID: UUID(), fileURL: secondFile) }
+        second.cancel()
+        _ = await second.value
+        gate.signal()
+        _ = await first.value
+        #expect(counter.value == 1)
     }
 }

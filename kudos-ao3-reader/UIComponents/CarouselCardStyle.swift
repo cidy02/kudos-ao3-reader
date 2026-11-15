@@ -107,13 +107,16 @@ enum CoverArt {
 
 /// A compact generated work cover (40×56).
 struct CompactWorkCover: View {
-    let title: String
-    let fandoms: [String]
+    let recipe: GeneratedCoverRecipe
+    var epubURL: URL?
+    var epubWorkID: UUID?
     var showsInitial: Bool = true
 
     var body: some View {
-        GeneratedCoverView(recipe: GeneratedCoverRecipe(id: nil, title: title, author: "", fandoms: fandoms, width: 40),
-                           width: 40, showsWords: false, showsArt: showsInitial)
+        GeneratedCoverView(recipe: recipe, width: 40,
+                           epubURL: showsInitial ? epubURL : nil,
+                           epubWorkID: showsInitial ? epubWorkID : nil,
+                           showsWords: false, showsArt: showsInitial)
         .shadow(color: Color.black.opacity(0.18), radius: 3, x: 0, y: 2)
         .accessibilityHidden(true)
     }

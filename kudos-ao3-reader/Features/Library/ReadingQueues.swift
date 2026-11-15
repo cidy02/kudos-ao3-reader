@@ -76,7 +76,8 @@ struct ReadingQueueCard: View {
         StackedWorkCover(
             kind: .queue,
             name: queue.displayName,
-            hue: queue.displayHue,
+            identity: queue.id,
+            hue: queue.hue,
             pickedHex: queue.colorHex,
             backs: worksBehind(in: works),
             size: CGSize(width: 72, height: 72)

@@ -10,7 +10,7 @@ nonisolated struct GeneratedCoverRecipe: Equatable, Sendable {
     let tier: Int
     private(set) var closedRing: Bool
     private(set) var hasRing: Bool
-    let placement: Int
+    private(set) var placement: Int
     let titleStyle: Int
     let rotation: Double
     let scale: Double
@@ -22,6 +22,7 @@ nonisolated struct GeneratedCoverRecipe: Equatable, Sendable {
     let author: String
     let fandom: String
     let part: Int
+    private(set) var groundChroma: Double = 0.085
 
     private static let palette = [20, 55, 85, 125, 150, 180, 205, 230, 260, 290, 320, 350]
     private static let parents = ["Persuasion": "Jane Austen", "Pride and Prejudice": "Jane Austen",
@@ -43,6 +44,7 @@ nonisolated struct GeneratedCoverRecipe: Equatable, Sendable {
         "Case Fic": "orderly", "Mystery": "orderly", "Politics": "orderly", "Character Study": "orderly",
         "Fantasy": "celestial", "Magic": "celestial", "Science Fiction": "celestial"
     ]
+    private static let subtitlePattern = try! NSRegularExpression(pattern: #"^(.*\S)\s+(\(.*\)|\[.*\])$"#)
     // Approximate posting dates of well-known works and round-number IDs, supplied
     // by the orchestrator from memory on 2026-11-14 while AO3 was down; not verified
     // against AO3. A year of error shifts the 16-year, 0.14-lightness ramp by <0.01.
@@ -85,7 +87,7 @@ nonisolated struct GeneratedCoverRecipe: Equatable, Sendable {
 
     init(id: Int?, title: String, author: String, fandoms: [String], tags: [String] = [],
          words: Int? = nil, complete: Bool = true, seriesID: Int? = nil, part: Int = 0,
-         salt: Int = 0, width: Double = 112, postedYear: Int? = nil) {
+         salt: Int = 0, postedYear: Int? = nil, firstAuthor: String? = nil) {
         let names = fandoms.map(Self.clean).filter { !$0.isEmpty }
         let mainTitle = title.replacingOccurrences(of: #"^\d+\.\s*"#, with: "", options: .regularExpression)
         let titleParts = Self.splitTitle(mainTitle)
@@ -100,7 +102,7 @@ nonisolated struct GeneratedCoverRecipe: Equatable, Sendable {
         }
         let year = postedYear.map(Double.init) ?? Self.year(for: id)
         lightness = Self.round2(0.32 + min(max((year - 2010) / 16, 0), 1) * 0.14)
-        let authorHash = Self.hash("author:" + author)
+        let authorHash = Self.hash("author:" + (firstAuthor ?? author.components(separatedBy: ", ").first ?? author))
         let selectedFamilies = Set(tags.compactMap { Self.tones[$0] })
         let workKey = String(id ?? Int(Self.hash("work:" + mainTitle + "|" + author)))
         let seriesKey = seriesID.map(String.init)
@@ -114,7 +116,7 @@ nonisolated struct GeneratedCoverRecipe: Equatable, Sendable {
         }
         titleStyle = Int((authorHash >> 5) % 3)
         placement = !subtitle.isEmpty ? 2 : self.title.count <= 16 ? 1 : 0
-        tier = width < 64 || (words ?? 30_000) < 10_000 ? 0 : (words ?? 30_000) < 40_000 ? 1 : (words ?? 30_000) < 100_000 ? 2 : 3
+        tier = (words ?? 30_000) < 10_000 ? 0 : (words ?? 30_000) < 40_000 ? 1 : (words ?? 30_000) < 100_000 ? 2 : 3
         closedRing = complete
         hasRing = true
         shapeSeed = Self.hash((seriesKey == nil ? "shape:" : "series-shape:") + key)
@@ -128,18 +130,35 @@ nonisolated struct GeneratedCoverRecipe: Equatable, Sendable {
         opacity = Self.round2(random.between(0.4, 0.55))
     }
 
-    init(collection name: String, hue: Int) {
-        self.init(id: nil, title: name, author: "collection:" + name, fandoms: [], complete: true)
+    init(collection name: String, identity: String? = nil, hue: Int, graphite: Bool = false) {
+        let key = identity ?? name
+        self.init(id: Int(Self.hash("collection:" + key)), title: name,
+                  author: "collection:" + key, fandoms: [], complete: true)
         hues = [hue]
         lightness = 0.4
         ground = .gradient
         closedRing = false
         hasRing = false
+        groundChroma = graphite ? 0.012 : 0.085
+        placement = 0
     }
 
     static func collectionHue(_ hex: String?, fallback: Int) -> Int {
+        collectionSwatch(hex, fallback: fallback).hue
+    }
+
+    static func collectionHue(for identity: UUID) -> Int {
+        palette[Int(hash("collection:" + identity.uuidString) % UInt32(palette.count))]
+    }
+
+    static func collectionSwatch(_ hex: String?, fallback: Int) -> (hue: Int, chroma: Double) {
         guard let hex, hex.count == 7, hex.first == "#",
-              let value = UInt32(hex.dropFirst(), radix: 16) else { return fallback }
+              let value = UInt32(hex.dropFirst(), radix: 16) else {
+            let normalized = (fallback % 360 + 360) % 360
+            let hue = palette.min { min(abs($0 - normalized), 360 - abs($0 - normalized))
+                                  < min(abs($1 - normalized), 360 - abs($1 - normalized)) } ?? palette[0]
+            return (hue, 0.085)
+        }
         let channels = [16, 8, 0].map { shift -> Double in
             let v = Double((value >> shift) & 255) / 255
             return v <= 0.04045 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4)
@@ -149,16 +168,19 @@ nonisolated struct GeneratedCoverRecipe: Equatable, Sendable {
         let s = cbrt(0.0883024619 * channels[0] + 0.2817188376 * channels[1] + 0.6299787005 * channels[2])
         let a = 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s
         let b = 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s
-        if hypot(a, b) < 0.03 { return 260 }
+        if hypot(a, b) < 0.03 { return (260, 0.012) }
         let hue = (atan2(b, a) * 180 / .pi + 360).truncatingRemainder(dividingBy: 360)
-        return palette.min { min(abs(Double($0) - hue), 360 - abs(Double($0) - hue))
-                           < min(abs(Double($1) - hue), 360 - abs(Double($1) - hue)) } ?? fallback
+        let snapped = palette.min { min(abs(Double($0) - hue), 360 - abs(Double($0) - hue))
+                                  < min(abs(Double($1) - hue), 360 - abs(Double($1) - hue)) } ?? palette[0]
+        return (snapped, 0.085)
     }
 
     private static func splitTitle(_ text: String) -> (String, String) {
         if let range = text.range(of: "; or, ") { return (String(text[..<range.lowerBound]), String(text[range.upperBound...])) }
-        if let range = text.range(of: #"\s+(\([^()]+\)|\[[^\[\]]+\])$"#, options: .regularExpression) {
-            return (String(text[..<range.lowerBound]), String(text[range.upperBound...]))
+        if let match = subtitlePattern.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+           let main = Range(match.range(at: 1), in: text),
+           let subtitle = Range(match.range(at: 2), in: text) {
+            return (String(text[main]), String(text[subtitle]))
         }
         return (text, "")
     }
@@ -177,5 +199,29 @@ nonisolated struct GeneratedCoverRecipe: Equatable, Sendable {
         }
         mutating func between(_ low: Double, _ high: Double) -> Double { low + next() * (high - low) }
         mutating func integer(_ low: Int, _ high: Int) -> Int { low + Int(next() * Double(high - low + 1)) }
+    }
+}
+
+extension SavedWork {
+    @MainActor
+    var generatedCoverRecipe: GeneratedCoverRecipe {
+        GeneratedCoverRecipe(id: ao3WorkID, title: title, author: author,
+                             fandoms: workFandoms, tags: workTagsFetched ? workFreeforms : workTags,
+                             words: wordCount,
+                             complete: isComplete,
+                             seriesID: ao3SeriesID ?? ReadingQueueService.ao3SeriesID(from: seriesURL),
+                             part: seriesPosition,
+                             firstAuthor: verifiedAuthorIdentities.first?.displayName)
+    }
+}
+
+extension AO3WorkSummary {
+    @MainActor
+    var generatedCoverRecipe: GeneratedCoverRecipe {
+        GeneratedCoverRecipe(id: id, title: title, author: authorText,
+                             fandoms: fandoms, tags: tags, words: words,
+                             complete: isComplete ?? true,
+                             seriesID: seriesURL.flatMap { ReadingQueueService.ao3SeriesID(from: $0) },
+                             part: seriesPosition ?? 0, firstAuthor: authors.first)
     }
 }

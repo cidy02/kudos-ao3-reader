@@ -2,6 +2,8 @@ import SwiftUI
 
 /// A cover in its own 112-unit coordinate system. Wordless instances are decorative.
 struct GeneratedCoverView: View {
+    // The spec's 86–88% white misses 4.5:1 on the lightest ground; 92% clears it.
+    private static let secondaryTextOpacity = 0.92
     let recipe: GeneratedCoverRecipe
     let width: CGFloat
     var epubURL: URL?
@@ -9,8 +11,40 @@ struct GeneratedCoverView: View {
     var height: CGFloat?
     var showsWords = true
     var showsArt = true
-    @State private var loadedRevision: String?
+    @Environment(\.displayScale) private var displayScale
+    @State private var loadedURL: URL?
     @State private var embeddedImage: Image?
+
+    private final class PreparedArt: NSObject {
+        let ground: [(Path, GraphicsContext.Shading)]
+        let motif: Path
+        let ring: Path?
+        let centre: CGPoint
+        let motifStyle: StrokeStyle
+        let ringStyle: StrokeStyle
+        let motifInk: Color
+        let ringInk: Color
+        let filled: Bool
+
+        init(ground: [(Path, GraphicsContext.Shading)], motif: Path, ring: Path?, centre: CGPoint,
+             motifStyle: StrokeStyle, ringStyle: StrokeStyle, motifInk: Color,
+             ringInk: Color, filled: Bool) {
+            self.ground = ground
+            self.motif = motif
+            self.ring = ring
+            self.centre = centre
+            self.motifStyle = motifStyle
+            self.ringStyle = ringStyle
+            self.motifInk = motifInk
+            self.ringInk = ringInk
+            self.filled = filled
+        }
+    }
+    private static let artCache: NSCache<NSString, PreparedArt> = {
+        let cache = NSCache<NSString, PreparedArt>()
+        cache.countLimit = 256
+        return cache
+    }()
 
     init(recipe: GeneratedCoverRecipe, width: CGFloat, epubURL: URL? = nil, epubWorkID: UUID? = nil,
          height: CGFloat? = nil,
@@ -25,25 +59,19 @@ struct GeneratedCoverView: View {
     }
 
     private var coverHeight: CGFloat { height ?? width * 1.42 }
-    private var imageRevision: String? {
-        guard let epubURL, let epubWorkID,
-              let date = (try? FileManager.default.attributesOfItem(atPath: epubURL.path))?[.modificationDate] as? Date
-        else { return nil }
-        return epubWorkID.uuidString + "|" + epubURL.path + "|" + String(date.timeIntervalSince1970.bitPattern)
-    }
-
     var body: some View {
         ZStack {
-            if showsArt, let imageRevision, loadedRevision == imageRevision, let embeddedImage {
+            if showsArt, loadedURL == epubURL, let embeddedImage {
                 embeddedImage.resizable().scaledToFill()
                     .frame(width: width, height: coverHeight).clipped()
             } else {
                 Canvas(opaque: true) { context, size in
                     let unit = size.width / 112
                     context.scaleBy(x: unit, y: unit)
-                    let h = size.height / unit
-                    drawGround(in: &context, height: h)
-                    if showsArt { drawMotif(in: &context, height: h, sparse: width < 64) }
+                    let art = Self.prepared(recipe: recipe, width: width, height: size.height,
+                                            displayScale: displayScale)
+                    drawGround(in: &context, art: art)
+                    if showsArt { drawMotif(in: &context, art: art) }
                 }
                 if showsWords { words }
             }
@@ -51,96 +79,134 @@ struct GeneratedCoverView: View {
         .frame(width: width, height: coverHeight)
         .clipShape(RoundedRectangle(cornerRadius: width * 0.125, style: .continuous))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel([recipe.title, recipe.author, recipe.fandom]
+        .accessibilityLabel([recipe.title, recipe.subtitle, recipe.author, recipe.fandom]
             .filter { !$0.isEmpty }.joined(separator: ", "))
         .accessibilityHidden(!showsWords)
-        .task(id: imageRevision) {
-            loadedRevision = nil
-            embeddedImage = nil
-            guard showsArt, let epubURL, let epubWorkID, let imageRevision else { return }
+        .task(id: epubURL) {
+            guard showsArt, let epubURL, let epubWorkID else { return }
             let image = await GeneratedCoverArtLoader.shared.image(workID: epubWorkID, fileURL: epubURL)
-            guard !Task.isCancelled, let image else { return }
-            embeddedImage = Image(decorative: image, scale: 1)
-            loadedRevision = imageRevision
+            guard !Task.isCancelled else { return }
+            embeddedImage = image.map { Image(decorative: $0, scale: 1) }
+            loadedURL = epubURL
         }
     }
 
-    private func drawGround(in context: inout GraphicsContext, height: CGFloat) {
+    private static func prepared(recipe: GeneratedCoverRecipe, width: CGFloat,
+                                 height: CGFloat, displayScale: CGFloat) -> PreparedArt {
+        let key = "\(String(reflecting: recipe))|\(width)|\(height)|\(displayScale)" as NSString
+        if let cached = artCache.object(forKey: key) { return cached }
+        let h = height * 112 / max(width, 1)
         let l = recipe.lightness
         let hue = Double(recipe.hues[0])
-        let main = Self.oklch(l, 0.085, hue)
-        let light = Self.oklch(l + 0.07, 0.09, hue + 14)
-        let dark = Self.oklch(l - 0.05, 0.08, hue - 10)
-        let bounds = CGRect(x: 0, y: 0, width: 112, height: height)
+        let chroma = recipe.groundChroma
+        let main = oklch(l, chroma, hue)
+        let light = oklch(l + 0.07, chroma + 0.005, hue + 14)
+        let dark = oklch(l - 0.05, 0.08, hue - 10)
+        let bounds = Path(CGRect(x: 0, y: 0, width: 112, height: h))
+        var ground: [(Path, GraphicsContext.Shading)] = []
         switch recipe.ground {
         case .gradient:
-            context.fill(Path(bounds), with: .linearGradient(
-                Gradient(colors: [main, light]),
-                startPoint: CGPoint(x: 19, y: 0), endPoint: CGPoint(x: 93, y: height)
-            ))
+            ground = [(bounds, .linearGradient(Gradient(colors: [main, light]),
+                                                startPoint: CGPoint(x: 19, y: 0),
+                                                endPoint: CGPoint(x: 93, y: h)))]
         case .split:
-            context.fill(Path(bounds), with: .color(main))
-            context.fill(Path(CGRect(x: 0, y: height * 0.58, width: 112, height: height * 0.42)), with: .color(light))
+            ground = [(bounds, .color(main)),
+                      (Path(CGRect(x: 0, y: h * 0.58, width: 112, height: h * 0.42)), .color(light))]
         case .band:
-            context.fill(Path(bounds), with: .color(main))
-            context.fill(Path(CGRect(x: 0, y: height * 0.62, width: 112, height: height * 0.12)), with: .color(dark))
+            ground = [(bounds, .color(main)),
+                      (Path(CGRect(x: 0, y: h * 0.62, width: 112, height: h * 0.12)), .color(dark))]
         case .solid:
-            context.fill(Path(bounds), with: .color(main))
+            ground = [(bounds, .color(main))]
         case .crossover:
             let count = recipe.hues.count
+            let extent = 112 + h
+            func point(_ cut: CGFloat, _ offset: CGFloat) -> CGPoint {
+                CGPoint(x: cut + offset, y: -offset)
+            }
             for index in 0..<count {
-                let start = count == 2 ? (index == 0 ? 0.0 : 0.6) : Double(index) / Double(count)
-                let end = count == 2 ? (index == 0 ? 0.6 : 1.0) : Double(index + 1) / Double(count)
-                // Projection onto the 135° gradient axis gives hard diagonal bands.
-                func point(_ t: Double, _ offset: Double) -> CGPoint {
-                    CGPoint(x: 112 * t + offset, y: height * t - offset * height / 112)
-                }
+                let first = count == 2 ? (index == 0 ? 0.0 : 0.6) : Double(index) / Double(count)
+                let last = count == 2 ? (index == 0 ? 0.6 : 1.0) : Double(index + 1) / Double(count)
+                let start = crossoverCut(CGFloat(first), height: h)
+                let end = crossoverCut(CGFloat(last), height: h)
                 var band = Path()
-                band.move(to: point(start, -height))
-                band.addLine(to: point(start, 112))
-                band.addLine(to: point(end, 112))
-                band.addLine(to: point(end, -height))
+                band.move(to: point(start, extent))
+                band.addLine(to: point(start, -extent))
+                band.addLine(to: point(end, -extent))
+                band.addLine(to: point(end, extent))
                 band.closeSubpath()
-                context.fill(band, with: .color(Self.oklch(l, 0.085, Double(recipe.hues[index]))))
+                ground.append((band, .color(oklch(l, chroma, Double(recipe.hues[index])))))
             }
         }
+        let centre = CGPoint(x: recipe.placement == 2 ? 32 : 80,
+                             y: h * (recipe.placement == 0 ? 0.314 : recipe.placement == 1 ? 0.742 : 0.73))
+        let sparse = width < 64
+        let density = [0.7, 0.95, 1.2, 1.5][sparse ? 0 : recipe.tier]
+        var random = GeneratedCoverRecipe.Random(seed: recipe.shapeSeed)
+        let motifPath = motif(recipe.motif, centre: centre, radius: 46, density: density, random: &random)
+        var ring: Path?
+        if recipe.hasRing {
+            let radius = CGFloat(46 * 1.16 * recipe.scale)
+            var path = Path()
+            if recipe.closedRing {
+                path.addEllipse(in: CGRect(x: centre.x - radius, y: centre.y - radius,
+                                           width: 2 * radius, height: 2 * radius))
+            } else {
+                let middle = atan2(Double(h / 2 - centre.y), Double(56 - centre.x))
+                path.addArc(center: centre, radius: radius,
+                            startAngle: .radians(middle + 0.6),
+                            endAngle: .radians(middle - 0.6), clockwise: false)
+            }
+            ring = path
+        }
+        let filled = recipe.motif == "petals" || recipe.motif == "halftone"
+        let art = PreparedArt(
+            ground: ground, motif: motifPath, ring: ring, centre: centre,
+            motifStyle: StrokeStyle(lineWidth: CGFloat(max(recipe.lineWidth,
+                sparse ? 0.9 * 112 / Double(width) : 0) / recipe.scale), lineCap: .round, lineJoin: .round),
+            ringStyle: StrokeStyle(lineWidth: CGFloat(max(1.2,
+                sparse ? 0.9 * 112 / Double(width) : 0)), lineCap: .round),
+            motifInk: Color.white.opacity(recipe.opacity * (filled ? 0.8 : 1)),
+            ringInk: Color.white.opacity(recipe.opacity), filled: filled
+        )
+        artCache.setObject(art, forKey: key)
+        return art
     }
 
-    private func drawMotif(in context: inout GraphicsContext, height: CGFloat, sparse: Bool) {
-        let centre = CGPoint(x: recipe.placement == 2 ? 32 : 80,
-                             y: height * (recipe.placement == 0 ? 0.314 : recipe.placement == 1 ? 0.742 : 0.73))
-        let density = [0.7, 0.95, 1.2, 1.5][sparse ? 0 : recipe.tier]
-        var rng = GeneratedCoverRecipe.Random(seed: recipe.shapeSeed)
-        let path = Self.motif(recipe.motif, centre: centre, radius: 46, density: density, random: &rng)
-        var art = context
-        art.translateBy(x: centre.x, y: centre.y)
-        art.rotate(by: .degrees(recipe.rotation))
-        art.scaleBy(x: CGFloat(recipe.scale), y: CGFloat(recipe.scale))
-        art.translateBy(x: -centre.x, y: -centre.y)
-        let white = Color.white.opacity(recipe.opacity)
-        if recipe.motif == "petals" || recipe.motif == "halftone" {
-            art.fill(path, with: .color(Color.white.opacity(recipe.opacity * 0.8)))
-        } else {
-            art.stroke(path, with: .color(white), style: StrokeStyle(
-                lineWidth: CGFloat(max(recipe.lineWidth, sparse ? 0.9 * 112 / Double(width) : 0) / recipe.scale),
-                lineCap: .round, lineJoin: .round
-            ))
+    // Invert the area of x + y <= cut so 135° bands cover exact fractions of the card.
+    static func crossoverCut(_ fraction: CGFloat, height: CGFloat) -> CGFloat {
+        let w: CGFloat = 112
+        if fraction <= 0 { return 0 }
+        if fraction >= 1 { return w + height }
+        var low: CGFloat = 0
+        var high = w + height
+        func square(_ value: CGFloat) -> CGFloat { max(value, 0) * max(value, 0) }
+        for _ in 0..<32 {
+            let middle = (low + high) / 2
+            let area = (square(middle) - square(middle - w)
+                        - square(middle - height) + square(middle - w - height)) / 2
+            if area / (w * height) < fraction { low = middle } else { high = middle }
         }
-        guard recipe.hasRing else { return }
-        let radius = CGFloat(46 * 1.16 * recipe.scale)
-        var ring = Path()
-        if recipe.closedRing {
-            ring.addEllipse(in: CGRect(x: centre.x - radius, y: centre.y - radius,
-                                       width: 2 * radius, height: 2 * radius))
+        return (low + high) / 2
+    }
+
+    private func drawGround(in context: inout GraphicsContext, art: PreparedArt) {
+        for (path, fill) in art.ground { context.fill(path, with: fill) }
+    }
+
+    private func drawMotif(in context: inout GraphicsContext, art: PreparedArt) {
+        var motifContext = context
+        motifContext.translateBy(x: art.centre.x, y: art.centre.y)
+        motifContext.rotate(by: .degrees(recipe.rotation))
+        motifContext.scaleBy(x: CGFloat(recipe.scale), y: CGFloat(recipe.scale))
+        motifContext.translateBy(x: -art.centre.x, y: -art.centre.y)
+        if art.filled {
+            motifContext.fill(art.motif, with: .color(art.motifInk))
         } else {
-            let middle = atan2(Double(height / 2 - centre.y), Double(56 - centre.x))
-            ring.addArc(center: centre, radius: radius,
-                        startAngle: .radians(middle + 0.6),
-                        endAngle: .radians(middle - 0.6), clockwise: false)
+            motifContext.stroke(art.motif, with: .color(art.motifInk), style: art.motifStyle)
         }
-        context.stroke(ring, with: .color(white), style: StrokeStyle(
-            lineWidth: CGFloat(max(1.2, sparse ? 0.9 * 112 / Double(width) : 0)), lineCap: .round
-        ))
+        if let ring = art.ring {
+            context.stroke(ring, with: .color(art.ringInk), style: art.ringStyle)
+        }
     }
 
     private var words: some View {
@@ -163,9 +229,13 @@ struct GeneratedCoverView: View {
                 .lineLimit(3)
                 .multilineTextAlignment(recipe.placement == 2 ? .trailing : .leading)
             if !recipe.subtitle.isEmpty {
-                Text(recipe.subtitle).lineLimit(2).font(.system(size: width * 0.09).italic())
+                Text(recipe.subtitle).lineLimit(2)
+                    .font(.system(size: width * 0.09, design: .serif).italic())
+                    .multilineTextAlignment(recipe.placement == 2 ? .trailing : .leading)
+                    .foregroundStyle(Color.white.opacity(Self.secondaryTextOpacity))
             }
             Text(recipe.author).lineLimit(1).font(.system(size: width * 0.09).italic())
+                .foregroundStyle(Color.white.opacity(Self.secondaryTextOpacity))
             if recipe.placement == 1 { Spacer(minLength: 0); fandomLabel }
             if recipe.placement == 2 { Spacer(minLength: 0) }
         }
@@ -176,12 +246,16 @@ struct GeneratedCoverView: View {
     private var fandomLabel: some View {
         HStack(spacing: 3) {
             Text(recipe.fandom.uppercased()).lineLimit(1)
-                .foregroundStyle(Color.white.opacity(0.88))
+                .truncationMode(.tail)
+            Spacer(minLength: 2)
             if recipe.part > 0 {
                 Text("PART \(recipe.part <= 5 ? ["", "I", "II", "III", "IV", "V"][recipe.part] : String(recipe.part))")
+                    .fixedSize(horizontal: true, vertical: false)
             }
         }
         .font(.system(size: width * 0.076, weight: .semibold))
+        .foregroundStyle(Color.white.opacity(Self.secondaryTextOpacity))
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // OKLCH to clipped sRGB; canvas and contrast tests use the same conversion.

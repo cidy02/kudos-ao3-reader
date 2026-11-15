@@ -96,7 +96,7 @@ struct QualityResponseSheet: View {
 
     private var contextCard: some View {
         HStack(alignment: .center, spacing: 12) {
-            CompactWorkCover(title: work.title, fandoms: work.fandoms)
+            CompactWorkCover(recipe: work.generatedCoverRecipe)
 
             VStack(alignment: .leading, spacing: 2) {
                 if let kickerText = contextKicker {

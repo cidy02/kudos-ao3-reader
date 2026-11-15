@@ -1404,7 +1404,8 @@ private struct HomeQueueRow: View {
             StackedWorkCover(
                 kind: .queue,
                 name: queue.displayName,
-                hue: queue.displayHue,
+                identity: queue.id,
+                hue: queue.hue,
                 pickedHex: queue.colorHex,
                 backs: worksBehind,
                 size: CGSize(width: 52, height: 52)

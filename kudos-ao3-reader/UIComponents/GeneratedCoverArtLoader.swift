@@ -22,6 +22,8 @@ actor GeneratedCoverArtLoader {
          scan: @escaping @Sendable (URL) -> Data? = { EmbeddedWorkCoverImage.data(at: $0) }) {
         self.directory = directory
         self.scan = scan
+        memory.countLimit = 64
+        memory.totalCostLimit = 80 * 1024 * 1024
     }
 
     func image(workID: UUID, fileURL: URL) async -> CGImage? {
@@ -32,9 +34,8 @@ actor GeneratedCoverArtLoader {
         let basename = workID.uuidString + "-" + revision
         let jpeg = directory.appendingPathComponent(basename + ".jpg")
         let empty = directory.appendingPathComponent(basename + ".empty")
-        if let data = try? Data(contentsOf: jpeg) {
-            let image = Self.decoded(data)
-            memory.setObject(Entry(image), forKey: key as NSString)
+        if let data = try? Data(contentsOf: jpeg), let image = Self.decoded(data) {
+            memory.setObject(Entry(image), forKey: key as NSString, cost: Self.cost(image))
             return image
         }
         if FileManager.default.fileExists(atPath: empty.path) {
@@ -52,6 +53,7 @@ actor GeneratedCoverArtLoader {
                 let scan = self.scan
                 tail = Task.detached(priority: .utility) { [self] in
                     await previous?.value
+                    guard await hasWaiters(for: key) else { await abandon(key); return }
                     let data = EmbeddedWorkCoverImage.downsampledJPEG(scan(fileURL))
                     await finish(key: key, workID: workID, fileURL: fileURL,
                                  revision: revision, data: data)
@@ -66,6 +68,15 @@ actor GeneratedCoverArtLoader {
         guard var entries = waiters[key], let continuation = entries.removeValue(forKey: waiter) else { return }
         waiters[key] = entries
         continuation.resume(returning: nil)
+    }
+
+    private func hasWaiters(for key: String) -> Bool { !(waiters[key]?.isEmpty ?? true) }
+
+    private func abandon(_ key: String) {
+        scanning.remove(key)
+        if let continuations = waiters.removeValue(forKey: key) {
+            for continuation in continuations.values { continuation.resume(returning: nil) }
+        }
     }
 
     private func finish(key: String, workID: UUID, fileURL: URL, revision: String, data: Data?) {
@@ -84,7 +95,7 @@ actor GeneratedCoverArtLoader {
             where old.lastPathComponent.hasPrefix(workID.uuidString + "-") && old != destination {
                 try? FileManager.default.removeItem(at: old)
             }
-            memory.setObject(Entry(image), forKey: key as NSString)
+            memory.setObject(Entry(image), forKey: key as NSString, cost: Self.cost(image))
         }
         scanning.remove(key)
         if let continuations = waiters.removeValue(forKey: key) {
@@ -99,5 +110,9 @@ actor GeneratedCoverArtLoader {
     private static func decoded(_ data: Data?) -> CGImage? {
         guard let data, let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
         return CGImageSourceCreateImageAtIndex(source, 0, nil)
+    }
+
+    private static func cost(_ image: CGImage?) -> Int {
+        image.map { $0.width * $0.height * 4 } ?? 1
     }
 }
