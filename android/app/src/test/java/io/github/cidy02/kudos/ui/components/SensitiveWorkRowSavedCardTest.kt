@@ -100,6 +100,9 @@ class SensitiveWorkRowSavedCardTest {
         compose.onNodeWithText("Doctor Who, Torchwood").assertDoesNotExist()
         compose.onNodeWithContentDescription("Show more").performClick()
         compose.onNodeWithText("Doctor Who, Torchwood").assertExists()
+        // Saved cards keep their "+N" kicker when expanded (iOS WorkRow:268).
+        compose.onNodeWithContentDescription("Fandom: Doctor Who, plus 1 more").assertExists()
+        compose.onNodeWithText("+1", useUnmergedTree = true).assertExists()
     }
 
     @Test fun knownZerosKeepTheirPlacesButAShortUntaggedCardDoesNotUnfold() {
