@@ -779,6 +779,7 @@ private fun HomeSectionLedgerRow(
             obscured = obscured,
             favorite = work.isFavorite,
             selected = selecting && selected,
+            selecting = selecting,
             onClick = {
                 when {
                     selecting -> actions.onSelect(work.id)

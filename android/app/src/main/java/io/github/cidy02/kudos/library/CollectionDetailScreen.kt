@@ -888,6 +888,7 @@ private fun CollectionWorkListItem(
                         obscured = obscured,
                         favorite = work.isFavorite,
                         selected = isSelecting && isSelected,
+                        selecting = isSelecting,
                         onClick = {
                             when {
                                 isSelecting -> onToggleSelection()
