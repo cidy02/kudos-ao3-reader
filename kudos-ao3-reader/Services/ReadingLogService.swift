@@ -392,29 +392,51 @@ enum ReadingLogService {
                 // Rows written before the count was recorded fall back to the
                 // work's count now, which is the best the log can do for them.
                 chapterCount: session.chapterCountAtVisit > 0
-                    ? session.chapterCountAtVisit : work?.postedChapterCount ?? 0
+                    ? session.chapterCountAtVisit : work?.postedChapterCount ?? 0,
+                startProgress: session.startProgress
             )
         }
     }
 
-    /// Words each sitting read (owner Q27, 2026-10-20, both apps): the move in
-    /// position since the work's sitting before (from the start for its first
-    /// sitting, or after a sitting that finished it), times the work's words. A
-    /// sitting that went back reads nothing and is where the next one starts
-    /// from. Android `ReadingInsights.wordsRead`. Where each sitting starts is
-    /// `ReadingInsights.startingProgress`, which History's chapter cells share.
+    /// Words each sitting read (owner Q27, 2026-10-20; T-515, 2026-11-13): this
+    /// sitting's end in words (`endingProgress × wordCount`) minus where it
+    /// started in words (`startProgress × wordCount` when recorded, else the
+    /// previous sitting's end in words, or 0 for a first sitting or a reread of a
+    /// finished work that did not grow), never below zero. A sitting that went
+    /// back reads nothing and is where the next one starts from.
     static func wordsRead(sessions: [ReadingSession]) -> [UUID: Int] {
-        let starts = ReadingInsights.startingProgress(of: sessions.map {
-            ReadingSessionFacts(
-                workID: $0.workID, startedAt: $0.startedAt, durationSeconds: 0,
-                wordCount: $0.wordCount, didFinish: $0.didFinish,
-                sessionID: $0.id, endingProgress: $0.endingProgress
-            )
-        })
         var read: [UUID: Int] = [:]
-        for (session, start) in zip(sessions, starts) {
-            let end = min(1, max(0, session.endingProgress))
-            read[session.id] = Int((max(0, end - start) * Double(session.wordCount)).rounded())
+        for group in Dictionary(grouping: sessions, by: \.workID).values {
+            var previousEndFraction = 0.0
+            var previousEndWords = 0.0
+            var previousWords = 0
+            var previousFinished = false
+            let sorted = group.sorted {
+                ($0.startedAt, $0.id.uuidString) < ($1.startedAt, $1.id.uuidString)
+            }
+            for session in sorted {
+                let words = max(0, session.wordCount)
+                let endFraction = min(1, max(0, session.endingProgress))
+                let endWords = endFraction * Double(words)
+                let startWords: Double
+                if let explicit = session.startProgress {
+                    let clamped = min(1, max(0, explicit))
+                    if previousWords > 0 && words > previousWords && clamped == previousEndFraction {
+                        startWords = previousEndWords
+                    } else {
+                        startWords = clamped * Double(words)
+                    }
+                } else if previousFinished && words <= previousWords {
+                    startWords = 0
+                } else {
+                    startWords = previousEndWords
+                }
+                read[session.id] = Int(max(0, endWords - startWords).rounded())
+                previousEndFraction = endFraction
+                previousEndWords = endWords
+                previousWords = words
+                previousFinished = session.didFinish
+            }
         }
         return read
     }
