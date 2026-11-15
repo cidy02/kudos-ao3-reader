@@ -107,9 +107,10 @@ class SensitiveWorkRowPrivacyTest {
                 )
             }
         }
-        // The kicker renders the fandom through SubjectKicker, which uppercases it for
-        // display; the contentDescription keeps the real casing, so match on that.
-        compose.onNodeWithContentDescription("Fandom: A Fandom", useUnmergedTree = true).performClick()
+        // iOS `selectingOrNavigating`: while selecting the whole row is one button, so the
+        // label is plain text, not a link. Tapping where it is draws selects the work.
+        compose.onAllNodesWithContentDescription("Fandom: A Fandom", useUnmergedTree = true).assertCountEquals(0)
+        compose.onNodeWithText("A FANDOM", useUnmergedTree = true).performClick()
         assertEquals(1, selections)
         assertEquals(0, searched)
     }

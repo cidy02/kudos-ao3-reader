@@ -1,6 +1,12 @@
 package io.github.cidy02.kudos.ui.subject
 
 import android.app.Application
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.Text
 import androidx.compose.runtime.CompositionLocalProvider
@@ -61,6 +67,12 @@ class WorkFandomKickerTest {
         assertEquals(0, fandomKicker(listOf("Doctor Who (TV)", "Torchwood"), expanded = true)!!.additional)
     }
 
+    @Test fun theSpokenLabelNamesTheFandomAndHowManyMoreOnce() {
+        assertEquals("Fandom: Doctor Who", fandomKicker(listOf("Doctor Who"))!!.spoken)
+        assertEquals("Fandom: Doctor Who, plus 2 more", fandomKicker(listOf("Doctor Who", "A", "B"))!!.spoken)
+        assertEquals("Fandom: Doctor Who", fandomKicker(listOf("Doctor Who", "A"), expanded = true)!!.spoken)
+    }
+
     @Test fun figuresLeaveTheAuthorToTheLineUnderTheTitle() {
         assertEquals(listOf("1.77K words", "3/3"), HomeFacts.localWorkFigures(1_773, "3/3"))
         assertEquals(emptyList<String>(), HomeFacts.localWorkFigures(0, "  "))
@@ -101,7 +113,7 @@ class WorkFandomKickerTest {
     @Test fun theLedgerFandomOpensThatFandomAndNotTheRow() {
         ledger(listOf("Doctor Who", "Torchwood"))
         compose.onNodeWithText("+1", useUnmergedTree = true).assertExists()
-        compose.onNodeWithContentDescription("Fandom: Doctor Who").performClick()
+        compose.onNodeWithContentDescription("Fandom: Doctor Who, plus 1 more").performClick()
         assertEquals(SearchSubjectField.FANDOM to "Doctor Who", searched)
         assertEquals(0, rowTaps)
     }
@@ -147,34 +159,84 @@ class WorkFandomKickerTest {
         assertEquals(SearchSubjectField.FANDOM to "Doctor Who", searched)
     }
 
-    // --- item 5: the 48 dp target that moves nothing -----------------------------------------
+    // --- item 5: a 48 dp target that overlaps nothing ----------------------------------------
 
-    private var linked by mutableStateOf(false)
+    private var plain by mutableStateOf(true)
+    private var linkOpened = 0
     private val palette get() = SubjectPalette.fromHue(0.5, ReaderTheme.Light)
 
     private fun kickerColumn() = compose.setContent {
         KudosTheme(KudosThemeMode.Light) {
-            Column {
-                Text("above", Modifier.testTag("above"))
-                // No semantics modifier of the caller's before the link: bounds are read at the first.
-                WorkFandomKicker(listOf("Doctor Who"), palette, if (linked) ({ }) else null)
-                Text("below", Modifier.testTag("below"))
+            Box(Modifier.padding(top = 20.dp).clickable { rowTaps++ }) {
+                Column {
+                    if (plain) SubjectKicker("Dr", palette, size = 9.sp, ruleSpacing = 5.dp)
+                    // A short name: 48 dp wide is the box's doing, not the text's.
+                    else WorkFandomKicker(listOf("Dr"), palette, { linkOpened++ })
+                    Text("the title", Modifier.testTag("title"))
+                }
             }
         }
     }
 
-    @Test fun theLinkIs48DpTallAndLeavesEverythingWhereItWas() {
+    @Test fun theTargetIs48DpEachWayLeavesTheTextAndOverlapsNothingBelow() {
         kickerColumn()
-        val plain = compose.onNodeWithTag("below").fetchSemanticsNode().boundsInRoot.top
-        val plainText = compose.onNodeWithText("DOCTOR WHO", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
-        compose.runOnIdle { linked = true }
+        val plainText = compose.onNodeWithText("DR", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        compose.runOnIdle { plain = false }
         compose.waitForIdle()
-        val link = compose.onNodeWithContentDescription("Fandom: Doctor Who").fetchSemanticsNode().boundsInRoot
-        val linkedText = compose.onNodeWithText("DOCTOR WHO", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val link = compose.onNodeWithContentDescription("Fandom: Dr").fetchSemanticsNode().boundsInRoot
+        val linkText = compose.onNodeWithText("DR", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val title = compose.onNodeWithTag("title").fetchSemanticsNode().boundsInRoot
         val minimum = with(compose.density) { 48.dp.toPx() }
-        assertTrue("target ${link.height}px < ${minimum}px", link.height >= minimum - 1f)
-        assertEquals(plain, compose.onNodeWithTag("below").fetchSemanticsNode().boundsInRoot.top, 0.5f)
-        assertEquals(plainText.top, linkedText.top, 0.5f)
-        assertEquals(plainText.left, linkedText.left, 0.5f)
+        assertTrue("height ${link.height}px < ${minimum}px", link.height >= minimum - 1f)
+        assertTrue("width ${link.width}px < ${minimum}px", link.width >= minimum - 1f)
+        assertEquals(plainText.top, linkText.top, 0.5f)
+        assertEquals(plainText.left, linkText.left, 0.5f)
+        // Reached up into the padding, not down over the title.
+        assertTrue("link bottom ${link.bottom} over title top ${title.top}", link.bottom <= title.top + 0.5f)
+    }
+
+    @Test fun aTapOnTheTitleGoesToTheRowAndATapOnTheLabelOpensTheFandom() {
+        kickerColumn()
+        compose.runOnIdle { plain = false }
+        compose.waitForIdle()
+        compose.onNodeWithTag("title").performClick()
+        assertEquals(1, rowTaps)
+        assertEquals(0, linkOpened)
+        compose.onNodeWithContentDescription("Fandom: Dr").performClick()
+        assertEquals(1, linkOpened)
+        assertEquals(1, rowTaps)
+    }
+
+    @Test fun theLabelIsAnnouncedOnceWithItsCount() {
+        compose.setContent {
+            KudosTheme(KudosThemeMode.Light) {
+                WorkFandomKicker(listOf("Doctor Who", "Torchwood"), palette, { })
+            }
+        }
+        compose.onNodeWithContentDescription("Fandom: Doctor Who, plus 1 more").assertExists()
+        // The drawn name and "+1" are cleared from the merged tree: no second announcement.
+        compose.onAllNodes(hasText("DOCTOR WHO"), useUnmergedTree = false).assertCountEquals(0)
+        compose.onAllNodes(hasText("+1"), useUnmergedTree = false).assertCountEquals(0)
+    }
+
+    @Test fun thePlusCountSurvivesALongNameAtTwoHundredPercent() {
+        compose.setContent {
+            KudosTheme(KudosThemeMode.Light) {
+                val density = androidx.compose.ui.platform.LocalDensity.current
+                CompositionLocalProvider(
+                    androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density.density, 2f)
+                ) {
+                    Box(Modifier.width(220.dp).testTag("box")) {
+                        WorkFandomKicker(
+                            listOf("A very long fandom name that cannot possibly fit on one line at all", "B", "C"),
+                            palette, null
+                        )
+                    }
+                }
+            }
+        }
+        val plus = compose.onNodeWithText("+2", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val box = compose.onNodeWithTag("box").fetchSemanticsNode().boundsInRoot
+        assertTrue("+2 ($plus) outside the ${box.width}px box", plus.right <= box.right + 0.5f && plus.left >= box.left)
     }
 }

@@ -297,7 +297,8 @@ fun SubjectKicker(
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = text.uppercase(),
-                modifier = if (trailing != null) Modifier.weight(1f, fill = false) else Modifier,
+                // A long name gives way, so the "+N" or the trailing pills stay on the line.
+                modifier = if (trailing != null || trailingCount > 0) Modifier.weight(1f, fill = false) else Modifier,
                 color = palette.accent,
                 fontSize = size,
                 lineHeight = (size.value * 1.4f).sp,

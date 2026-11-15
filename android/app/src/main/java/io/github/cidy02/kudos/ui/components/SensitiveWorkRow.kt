@@ -301,6 +301,7 @@ fun SensitiveWorkRow(
                                 // Under the blur, or while selecting, the glyph is part of the row.
                                 onToggleExpanded = if (obscured || (selecting && !selectionAllowsDetails)) cardTap else { { expanded = !expanded } },
                                 palette = palette, tagSearch = tagSearch,
+                                fandomIsLink = !selecting && !obscured,
                                 rankingSignal = rankingSignal
                             )
                         } else {
@@ -315,11 +316,16 @@ fun SensitiveWorkRow(
                                 ) {
                                     val namedFandoms = fandoms.filter { it.isNotBlank() }
                                     // The fandom is a link (opens that fandom), 48 dp to hit; none, no label.
+                                    // Not while selecting or hidden: the whole row is then one button (iOS
+                                    // `selectingOrNavigating`). A saved card keeps its "+N" open, as `WorkRow`
+                                    // does, since it names every fandom in text rather than as chips.
                                     WorkFandomKicker(
                                         fandoms = namedFandoms,
                                         palette = palette,
-                                        onOpenFandom = fandomOpener(interactive = true, search = tagSearch),
-                                        expanded = expanded
+                                        onOpenFandom = fandomOpener(
+                                            interactive = !selecting && !obscured, search = tagSearch
+                                        ),
+                                        expanded = expanded && !savedCard
                                     )
                                     Text(
                                         text = title,
@@ -586,6 +592,8 @@ private fun LedgerBody(
     onToggleExpanded: () -> Unit,
     palette: SubjectPalette,
     tagSearch: (SearchSubjectField, String) -> Unit,
+    /** False while selecting or hidden: the label is then plain text and the row owns the tap. */
+    fandomIsLink: Boolean,
     rankingSignal: String? = null
 ) {
     val tokens = LocalKudosTokens.current
@@ -601,11 +609,10 @@ private fun LedgerBody(
                     WorkFandomKicker(
                         fandoms = named,
                         palette = palette,
-                        onOpenFandom = fandomOpener(interactive = true, search = tagSearch),
+                        onOpenFandom = fandomOpener(interactive = fandomIsLink, search = tagSearch),
                         expanded = expanded,
                         size = 10.sp,
                         ruleSpacing = 6.dp,
-                        maxLines = if (accessibility) Int.MAX_VALUE else 1,
                         modifier = Modifier.weight(1f, fill = false)
                     )
                     // iOS draws Private and Rec as `SubjectStateBadge`s in the secondary colour (A70).

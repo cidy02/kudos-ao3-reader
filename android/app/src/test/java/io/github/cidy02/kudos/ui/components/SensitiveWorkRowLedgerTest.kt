@@ -53,7 +53,8 @@ class SensitiveWorkRowLedgerTest {
         var searched: Pair<SearchSubjectField, String>? = null
         show(onSearch = { field, tag -> searched = field to tag })
 
-        compose.onNodeWithText("DOCTOR WHO").assertExists()
+        // One announcement for the label, with its count: the drawn name and "+1" are not read again.
+        compose.onNodeWithContentDescription("Fandom: Doctor Who (2005), plus 1 more").assertExists()
         compose.onNodeWithText("English  ·  1,200 words  ·  1/1  ·  3 kudos").assertExists()
         compose.onNodeWithContentDescription("Updated 09 Jul 2026").assertExists()
         // No row of word chips: the tray of four symbols says them.
