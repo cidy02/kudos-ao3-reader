@@ -256,15 +256,44 @@ nonisolated struct ReadingInsights: Equatable, Sendable {
         sittingTime(for: fact, calendar: calendar).day
     }
 
+    /// Like for like: the part of the earlier period `previousPeriodFacts` that spans as many
+    /// days as `dayRange` (the days elapsed of the period on screen), counted from the start
+    /// of the earlier period. A 10-day partial month is compared with the first 10 days of
+    /// the month before, not the whole of it. Without a `dayRange` (a year, or no chart
+    /// days) the earlier period is returned whole. The earlier period is taken to start one
+    /// month before `dayRange` (the screen only compares months through a day range).
+    static func comparablePreviousFacts(
+        _ previousPeriodFacts: [ReadingSessionFacts],
+        matching dayRange: DateInterval?,
+        calendar: Calendar = .current
+    ) -> [ReadingSessionFacts] {
+        guard let dayRange,
+              let previousStart = calendar.date(byAdding: .month, value: -1, to: dayRange.start)
+        else { return previousPeriodFacts }
+        let elapsed = calendar.dateComponents(
+            [.day],
+            from: calendar.startOfDay(for: dayRange.start),
+            to: dayRange.end
+        ).day ?? 0
+        let previousFirstDay = calendar.startOfDay(for: previousStart)
+        return previousPeriodFacts.filter { fact in
+            let index = calendar.dateComponents(
+                [.day],
+                from: previousFirstDay,
+                to: readingDay(for: fact, calendar: calendar)
+            ).day ?? 0
+            return index < elapsed
+        }
+    }
+
     static func weeklyBuckets(
         from facts: [ReadingSessionFacts],
         calendar: Calendar
     ) -> [WeeklyBucket] {
         var buckets: [Date: Double] = [:]
         for fact in facts {
-            let day = sittingTime(for: fact, calendar: calendar).day
             guard let weekStart = calendar
-                .dateInterval(of: .weekOfYear, for: day)?.start
+                .dateInterval(of: .weekOfYear, for: fact.startedAt)?.start
             else { continue }
             buckets[weekStart, default: 0] += fact.durationSeconds
         }
