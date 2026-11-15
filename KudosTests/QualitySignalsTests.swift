@@ -442,4 +442,143 @@ struct QualitySignalsTests {
         guard let value else { return false }
         return abs(value - expected) < 1e-9
     }
+
+    // MARK: - Held data (T-522)
+
+    /// Readers-only uses opened comments. An unopened thread leaves the blurb
+    /// ratio alone and does not invent the author's share.
+    @Test func readersOnlyRatioNeedsOpenedComments() {
+        let figures = LoadedWorksRanker.Figures(
+            work(1, kudos: 100, hits: 1_000, comments: 40),
+            now: now
+        )
+        let blurb = LoadedWorksRanker.rawFigure(.commentsPerKudos, figures)
+        #expect(isClose(blurb, 0.4))
+        #expect(LoadedWorksRanker.readersOnlyCommentsPerKudos(
+            openedComments: nil, kudos: 100,
+            workAuthors: ["Pen Name"], workAuthorUsernames: ["creator"]
+        ) == nil)
+        #expect(LoadedWorksRanker.rawFigure(.commentsPerKudos, figures) == blurb)
+
+        #expect(LoadedWorksRanker.readersOnlyCommentsPerKudos(
+            openedComments: [], kudos: 100,
+            workAuthors: ["Pen Name"], workAuthorUsernames: ["creator"]
+        ) == 0)
+
+        let opened = openedComments()
+        let readersOnly = LoadedWorksRanker.readersOnlyCommentsPerKudos(
+            openedComments: opened, kudos: 100,
+            workAuthors: ["Pen Name"], workAuthorUsernames: ["creator"],
+            currentUsername: "creator"
+        )
+        // Three reader comments held. Not the blurb's 40, and not that 40 scaled
+        // by the reader share of the opened thread.
+        #expect(isClose(readersOnly, 0.03))
+        #expect(!isClose(readersOnly, 0.4))
+        #expect(!isClose(readersOnly, 40.0 * (3.0 / 7.0) / 100.0))
+
+        let viewer = AO3Comment(
+            id: 70, author: "Me Pseud", isGuest: false, userPath: "/users/viewer/pseuds/viewer"
+        )
+        #expect(isClose(LoadedWorksRanker.readersOnlyCommentsPerKudos(
+            openedComments: [viewer], kudos: 100,
+            workAuthors: ["Pen Name"], workAuthorUsernames: ["creator"],
+            currentUsername: "viewer"
+        ), 0.01))
+
+        // The viewer's own comment hides Author. Without the work's accounts,
+        // that comment cannot be classified, so the rate stays unknown.
+        #expect(LoadedWorksRanker.readersOnlyCommentsPerKudos(
+            openedComments: [viewer], kudos: 100,
+            workAuthors: ["Pen Name"], workAuthorUsernames: [],
+            currentUsername: "viewer"
+        ) == nil)
+    }
+
+    @Test func chapterCadenceUsesTheLastFiveGaps() {
+        #expect(LoadedWorksRanker.chapterCadenceDays(publishedOn: [posted(0), posted(100)]) == nil)
+        #expect(LoadedWorksRanker.chapterCadenceDays(publishedOn: [posted(0), posted(3), posted(6)]) == nil)
+        // Span of 7 days is enough: gaps of 3 and 4, median 3.5. The lifetime mean is also 3.5 here.
+        #expect(LoadedWorksRanker.chapterCadenceDays(publishedOn: [posted(0), posted(3), posted(7)]) == 3.5)
+
+        // Six chapters, five gaps 10, 10, 10, 10, 60. Median 10; span ÷ (chapters − 1) is 20.
+        let six = [0, 10, 20, 30, 40, 100].map { posted($0) as Date? }
+        #expect(LoadedWorksRanker.chapterCadenceDays(publishedOn: six) == 10)
+
+        // Seven chapters. The oldest gap is 100; the last five are 1, 2, 3, 4, 100, median 3.
+        // All six gaps median to 3.5, and the lifetime mean is 35.
+        let seven = [0, 100, 101, 103, 106, 110, 210].map { posted($0) as Date? }
+        #expect(LoadedWorksRanker.chapterCadenceDays(publishedOn: seven) == 3)
+
+        var hole = six
+        hole[2] = nil
+        #expect(LoadedWorksRanker.chapterCadenceDays(publishedOn: hole) == nil)
+        var unparsed = AO3ChapterRef(id: 1, position: 2, title: "Two")
+        unparsed.dateText = "not-a-date"
+        let withUnparsed = [posted(0), unparsed.publishedOn, posted(20), posted(40)]
+        #expect(LoadedWorksRanker.chapterCadenceDays(publishedOn: withUnparsed) == nil)
+    }
+
+    /// Quality-WIPs w4: interval 12 floored at 14, 31 days since, late 2.2.
+    @Test func wipScheduleSaysSlowerThanUsual() {
+        let slower = QualitySignalTones.wipScheduleWord(
+            chaptersPosted: 6, chaptersExpected: nil, daysSinceUpdate: 31, cadenceDays: 12
+        )
+        #expect(slower == "Slower than usual")
+
+        // 21 / max(14, 12) = 1.5. Dividing by the raw 12 would say slower.
+        #expect(QualitySignalTones.wipScheduleWord(
+            chaptersPosted: 6, chaptersExpected: nil, daysSinceUpdate: 21, cadenceDays: 12
+        ) == "On schedule")
+        #expect(QualitySignalTones.wipScheduleWord(
+            chaptersPosted: 18, chaptersExpected: 20, daysSinceUpdate: 12, cadenceDays: 14
+        ) == "Nearly done")
+        #expect(QualitySignalTones.wipScheduleWord(
+            chaptersPosted: 10, chaptersExpected: nil, daysSinceUpdate: 400, cadenceDays: 12
+        ) == "Long pause")
+        #expect(QualitySignalTones.wipScheduleWord(
+            chaptersPosted: 1, chaptersExpected: nil, daysSinceUpdate: 400, cadenceDays: nil
+        ) == "Just started")
+        // No cadence, and no lifetime-mean substitute for it.
+        #expect(QualitySignalTones.wipScheduleWord(
+            chaptersPosted: 2, chaptersExpected: nil, daysSinceUpdate: 31, cadenceDays: nil
+        ) == nil)
+    }
+
+    private func posted(_ day: Int) -> Date {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .gmt
+        return calendar.date(from: DateComponents(year: 2026, month: 1, day: 1 + day))
+            ?? Date(timeIntervalSince1970: 0)
+    }
+
+    /// Three reader comments, and creator replies by username, display name,
+    /// anonymous creator, and the signed-in creator. A deleted parent keeps its
+    /// reader reply. The cutoff's "12 more" is not a count of readers.
+    private func openedComments() -> [AO3Comment] {
+        let creatorReply = AO3Comment(
+            id: 2, author: "Pen Name", isGuest: false, userPath: "/users/creator/pseuds/pen"
+        )
+        var reader = AO3Comment(
+            id: 1, author: "Reader", isGuest: false, userPath: "/users/reader/pseuds/reader"
+        )
+        reader.replies = [creatorReply]
+        var readerTwo = AO3Comment(
+            id: 4, author: "Reader Two", isGuest: false, userPath: "/users/readertwo/pseuds/readertwo"
+        )
+        var deleted = AO3Comment(id: 3, author: "", isGuest: false)
+        deleted.isDeleted = true
+        deleted.replies = [readerTwo]
+        var cutoff = AO3Comment(id: 5, author: "", isGuest: false)
+        cutoff.isThreadCutoff = true
+        cutoff.cutoffCount = 12
+        let guest = AO3Comment(id: 6, author: "Pen Name", isGuest: true)
+        let byName = AO3Comment(id: 7, author: "Pen Name", isGuest: false)
+        var anonymous = AO3Comment(id: 8, author: "Anonymous", isGuest: false)
+        anonymous.isAnonymousCreator = true
+        let mine = AO3Comment(
+            id: 9, author: "Other Pseud", isGuest: false, userPath: "/users/creator/pseuds/other"
+        )
+        return [reader, deleted, cutoff, guest, byName, anonymous, mine]
+    }
 }
