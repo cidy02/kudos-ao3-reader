@@ -26,7 +26,7 @@ struct InsightsDataTests {
         work.workFandoms = ["Fandom"]
         work.workFreeforms = ["Tag"]
         work.rating = "Mature"
-        work.verifiedAuthorIdentities = [AO3AuthorIdentity(route: AO3AuthorRoute(username: "writer"))]
+        work.verifiedAuthorIdentities = [AO3AuthorIdentity(route: AO3AuthorRoute(username: "writer")!)]
         context.insert(work)
         let start = Date(timeIntervalSince1970: 1_000)
         ReadingLogService.startSession(for: work, now: start)
@@ -106,7 +106,7 @@ struct InsightsDataTests {
         #expect(session.publishedYear == 2020)
         work.verifiedAuthorIdentities = [
             AO3AuthorIdentity.nonNavigable("Anonymous", kind: .anonymous),
-            AO3AuthorIdentity(route: AO3AuthorRoute(username: "orphan_account"))
+            AO3AuthorIdentity(route: AO3AuthorRoute(username: "orphan_account")!)
         ]
         session.snapshot(from: work)
         #expect(session.authorAccounts == ["Anonymous", "orphan_account"])
