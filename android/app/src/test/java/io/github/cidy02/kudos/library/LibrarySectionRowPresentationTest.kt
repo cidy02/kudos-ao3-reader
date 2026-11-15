@@ -1,13 +1,21 @@
 package io.github.cidy02.kudos.library
 
 import android.app.Application
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import io.github.cidy02.kudos.core.model.SavedWork
+import io.github.cidy02.kudos.core.model.WorkCollection
+import io.github.cidy02.kudos.home.HomeSectionLedgerRow
+import io.github.cidy02.kudos.search.LocalTagSearch
+import io.github.cidy02.kudos.search.SearchSubjectField
+import io.github.cidy02.kudos.ui.subject.ReaderTheme
+import io.github.cidy02.kudos.ui.subject.SubjectPalette
 import io.github.cidy02.kudos.ui.theme.KudosTheme
 import io.github.cidy02.kudos.ui.theme.KudosThemeMode
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -93,5 +101,78 @@ class LibrarySectionRowPresentationTest {
         compose.runOnIdle { selecting.value = false }
         compose.onNodeWithContentDescription("A work, by A writer").performClick()
         assertEquals(1, opened)
+    }
+
+    @Test fun homeSectionLedgerRowSplitsFiguresAndDropsFandomLinkWhileSelecting() {
+        var searched: Pair<SearchSubjectField, String>? = null
+        val work = SavedWork(
+            id = "home-row", title = "A work", author = "A writer",
+            summary = "Hidden on ledger rows.", wordCount = 1200, chapters = "1/1",
+            workFandoms = listOf("Doctor Who"), legacyReaderProgress = 0.42
+        )
+        compose.setContent {
+            KudosTheme(KudosThemeMode.Light) {
+                CompositionLocalProvider(LocalTagSearch provides { f, v -> searched = f to v }) {
+                    HomeSectionLedgerRow(
+                        display = LibraryDisplayItem(LibraryWorkListItem(work), LibraryPrivacyVisibility.Visible),
+                        actions = actions,
+                        selected = selected.value,
+                        selecting = selecting.value,
+                        onRemoveFromAllQueues = {}
+                    )
+                }
+            }
+        }
+        compose.onNodeWithText("A writer").assertExists()
+        compose.onNodeWithText("1.2K words · 1/1").assertExists()
+        compose.onNodeWithText("A writer · 1.2K words · 1/1").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Fandom: Doctor Who").assertExists()
+
+        compose.runOnIdle { selecting.value = true; selected.value = true }
+        compose.onAllNodes(isToggleable()).filter(isOn()).assertCountEquals(1)
+        compose.onAllNodesWithContentDescription("Fandom: Doctor Who", useUnmergedTree = true).assertCountEquals(0)
+        compose.onNodeWithText("DOCTOR WHO", useUnmergedTree = true).performClick()
+        assertNull(searched)
+    }
+
+    @Test fun collectionLedgerRowSplitsFiguresAndDropsFandomLinkWhileSelecting() {
+        var searched: Pair<SearchSubjectField, String>? = null
+        val work = SavedWork(
+            id = "col-row", title = "A work", author = "A writer",
+            summary = "Hidden on ledger rows.", wordCount = 1200, chapters = "1/1",
+            workFandoms = listOf("Doctor Who"), legacyReaderProgress = 0.42
+        )
+        compose.setContent {
+            KudosTheme(KudosThemeMode.Light) {
+                CompositionLocalProvider(LocalTagSearch provides { f, v -> searched = f to v }) {
+                    CollectionWorkListItem(
+                        work = work,
+                        collection = WorkCollection(name = "Favorites"),
+                        displayMode = CollectionDisplayMode.Ledger,
+                        expandAll = false,
+                        isSelecting = selecting.value,
+                        isSelected = selected.value,
+                        obscured = false,
+                        palette = SubjectPalette.fromHue(0.5, ReaderTheme.Light),
+                        actions = actions,
+                        onToggleSelection = { picked++ },
+                        onOpenWork = { opened++ },
+                        onOpenReader = { opened++ },
+                        onReveal = { revealed++ },
+                        onRemove = {}
+                    )
+                }
+            }
+        }
+        compose.onNodeWithText("A writer").assertExists()
+        compose.onNodeWithText("1.2K words · 1/1").assertExists()
+        compose.onNodeWithText("A writer · 1.2K words · 1/1").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Fandom: Doctor Who").assertExists()
+
+        compose.runOnIdle { selecting.value = true; selected.value = true }
+        compose.onAllNodes(isToggleable()).filter(isOn()).assertCountEquals(1)
+        compose.onAllNodesWithContentDescription("Fandom: Doctor Who", useUnmergedTree = true).assertCountEquals(0)
+        compose.onNodeWithText("DOCTOR WHO", useUnmergedTree = true).performClick()
+        assertNull(searched)
     }
 }

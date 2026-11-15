@@ -811,7 +811,7 @@ fun CollectionDetailScreen(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun CollectionWorkListItem(
+internal fun CollectionWorkListItem(
     work: SavedWork,
     collection: WorkCollection,
     displayMode: CollectionDisplayMode,

@@ -217,6 +217,26 @@ class WorkFandomKickerTest {
         assertEquals(listOf(-1, 1), steps)
     }
 
+    @Test fun aQueueCardWhileSelectingKeepsFandomPlainWithoutSearchLink() {
+        var searched: Pair<SearchSubjectField, String>? = null
+        compose.setContent {
+            KudosTheme(KudosThemeMode.Light) {
+                CompositionLocalProvider(LocalTagSearch provides { field, tag -> searched = field to tag }) {
+                    QueueLedgerCard(
+                        work = SavedWork(id = "queued-selecting", title = "A queued work", author = "A writer",
+                            summary = "", wordCount = 1200, chapters = "1/1", comments = 0, bookmarks = 0,
+                            workFandoms = listOf("Doctor Who")),
+                        downloadFraction = null, obscured = false,
+                        selecting = true, selected = true
+                    )
+                }
+            }
+        }
+        compose.onAllNodesWithContentDescription("Fandom: Doctor Who", useUnmergedTree = true).assertCountEquals(0)
+        compose.onNodeWithText("DOCTOR WHO", useUnmergedTree = true).performClick()
+        assertNull(searched)
+    }
+
     // --- item 5: a 48 dp target that overlaps nothing ----------------------------------------
 
     private var plain by mutableStateOf(true)

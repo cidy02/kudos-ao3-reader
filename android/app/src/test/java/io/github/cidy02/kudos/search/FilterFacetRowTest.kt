@@ -4,31 +4,45 @@ import android.app.Application
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import io.github.cidy02.kudos.ui.components.WorkSymbolTile
+import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.theme.KudosTheme
 import io.github.cidy02.kudos.ui.theme.KudosThemeMode
+import kotlin.math.abs
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 /**
  * A-509c item 3 (iOS `FilterSymbolChipCard` for symbol cards, `TagPickerView.tagRows` for word rows).
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = Application::class, qualifiers = "w411dp-h1600dp")
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 class FilterFacetRowTest {
     @get:Rule val compose = createComposeRule()
     private var state by mutableStateOf(FilterSelectionState.CLEAR)
@@ -89,5 +103,94 @@ class FilterFacetRowTest {
         assertNull(config.getOrNull(SemanticsProperties.Text))
         assertEquals("Included", config.getOrNull(SemanticsProperties.StateDescription))
         compose.onAllNodesWithTag(FACET_STATUS_WORD_TAG, useUnmergedTree = true).assertCountEquals(0)
+    }
+
+    @Test fun aRenderedWordRowHasPlainLabelColourWordAndNoColouredBorder() {
+        var primary = Color.Unspecified
+        var secondary = Color.Unspecified
+        val includeGreen = Color(0.20f, 0.55f, 0.25f)
+        val excludeRed = Color(0.80f, 0.15f, 0.15f)
+        compose.setContent {
+            KudosTheme(KudosThemeMode.Light) {
+                val tokens = LocalKudosTokens.current
+                primary = tokens.primaryInk
+                secondary = tokens.secondaryInk
+                FilterFacetRow("Found Family", state) { state = state.next }
+            }
+        }
+        compose.onNodeWithText("Found Family").performClick()
+        assertEquals(FilterSelectionState.INCLUDED, state)
+        compose.onNodeWithText("Include", useUnmergedTree = true).assertExists()
+        assertEquals(primary, labelLayout("Found Family").layoutInput.style.color)
+        assertNotEquals(TextDecoration.LineThrough, labelLayout("Found Family").layoutInput.style.textDecoration)
+        assertFalse("included word row should not draw a 1.5dp green border",
+            hasTopEdgeBorder("Found Family", includeGreen))
+
+        compose.onNodeWithText("Found Family").performClick()
+        assertEquals(FilterSelectionState.EXCLUDED, state)
+        compose.onNodeWithText("Exclude", useUnmergedTree = true).assertExists()
+        val excludedLayout = labelLayout("Found Family")
+        assertEquals(secondary, excludedLayout.layoutInput.style.color)
+        assertEquals(TextDecoration.LineThrough, excludedLayout.layoutInput.style.textDecoration)
+        assertFalse("excluded word row should not draw a 1.5dp red border",
+            hasTopEdgeBorder("Found Family", excludeRed))
+    }
+
+    @Test fun aRenderedSymbolCardHasStateColouredBorderAndLabelWithNoStatusWord() {
+        var primary = Color.Unspecified
+        val includeGreen = Color(0.20f, 0.55f, 0.25f)
+        val excludeRed = Color(0.80f, 0.15f, 0.15f)
+        state = FilterSelectionState.INCLUDED
+        compose.setContent {
+            KudosTheme(KudosThemeMode.Light) {
+                primary = LocalKudosTokens.current.primaryInk
+                FilterFacetRow(
+                    title = "Rape/Non-Con",
+                    state = state,
+                    symbol = WorkSymbolTile.warnings(listOf("Rape/Non-Con"), false),
+                    accessibilityTitle = "Rape/Non-Consensual Sex"
+                ) { state = state.next }
+            }
+        }
+        compose.onAllNodesWithTag(FACET_STATUS_WORD_TAG, useUnmergedTree = true).assertCountEquals(0)
+        val includedLayout = labelLayout("Rape/Non-Con")
+        assertNotEquals(primary, includedLayout.layoutInput.style.color)
+        assertEquals(includeGreen, includedLayout.layoutInput.style.color)
+        assertNotEquals(TextDecoration.LineThrough, includedLayout.layoutInput.style.textDecoration)
+        assertTrue("included symbol card should draw its 1.5dp green border",
+            hasTopEdgeBorderByDescription("Rape/Non-Consensual Sex", includeGreen))
+
+        compose.onNodeWithContentDescription("Rape/Non-Consensual Sex").performClick()
+        assertEquals(FilterSelectionState.EXCLUDED, state)
+        compose.onAllNodesWithTag(FACET_STATUS_WORD_TAG, useUnmergedTree = true).assertCountEquals(0)
+        val excludedLayout = labelLayout("Rape/Non-Con")
+        assertEquals(excludeRed, excludedLayout.layoutInput.style.color)
+        assertEquals(TextDecoration.LineThrough, excludedLayout.layoutInput.style.textDecoration)
+        assertTrue("excluded symbol card should draw its 1.5dp red border",
+            hasTopEdgeBorderByDescription("Rape/Non-Consensual Sex", excludeRed))
+    }
+
+    private fun labelLayout(text: String): TextLayoutResult {
+        val layouts = mutableListOf<TextLayoutResult>()
+        compose.onNodeWithText(text, useUnmergedTree = true)
+            .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        return layouts.single()
+    }
+
+    private fun hasTopEdgeBorder(text: String, expected: Color): Boolean =
+        hasTopBorderPixel(compose.onNodeWithText(text).captureToImage().toPixelMap(), expected)
+
+    private fun hasTopEdgeBorderByDescription(description: String, expected: Color): Boolean =
+        hasTopBorderPixel(compose.onNodeWithContentDescription(description).captureToImage().toPixelMap(), expected)
+
+    private fun hasTopBorderPixel(pixels: androidx.compose.ui.graphics.PixelMap, expected: Color): Boolean {
+        val x = pixels.width / 2
+        return (0 until minOf(4, pixels.height)).any { y ->
+            val p = pixels[x, y]
+            p.alpha > 0.9f &&
+                abs(p.red - expected.red) < 0.08f &&
+                abs(p.green - expected.green) < 0.08f &&
+                abs(p.blue - expected.blue) < 0.08f
+        }
     }
 }

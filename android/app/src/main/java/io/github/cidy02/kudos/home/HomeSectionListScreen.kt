@@ -748,7 +748,7 @@ private fun HomeSectionFilterRail(
 }
 
 @Composable
-private fun HomeSectionLedgerRow(
+internal fun HomeSectionLedgerRow(
     display: LibraryDisplayItem,
     actions: LibraryCardActions,
     selected: Boolean,
