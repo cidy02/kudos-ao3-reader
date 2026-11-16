@@ -325,7 +325,8 @@ struct QueuePageHeader<FilterRail: View>: View {
         StackedWorkCover(
             kind: .queue,
             name: queue.displayName,
-            hue: queue.displayHue,
+            identity: queue.id,
+            hue: queue.hue,
             pickedHex: queue.colorHex,
             backs: Array(works.prefix(CoverStackLayout.maxBacks)),
             size: CGSize(width: 96, height: 96)

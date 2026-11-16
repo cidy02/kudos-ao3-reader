@@ -558,7 +558,8 @@ struct AllReadingQueuesGridView: View {
         StackedWorkCover(
             kind: .queue,
             name: queue.displayName,
-            hue: queue.displayHue,
+            identity: queue.id,
+            hue: queue.hue,
             pickedHex: queue.colorHex,
             backs: Array(works.filter { !gate.isConcealed($0, enabled: hideMature) }
                 .prefix(CoverStackLayout.maxBacks)),

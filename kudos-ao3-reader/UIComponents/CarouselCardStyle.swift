@@ -105,28 +105,18 @@ enum CoverArt {
     }
 }
 
-/// A compact generated work cover (40×56) with fandom-derived gradient art and the title's initial.
-/// Matches the redesign export (Board 21 Comments header).
+/// A compact generated work cover (40×56).
 struct CompactWorkCover: View {
-    let title: String
-    let fandoms: [String]
+    let recipe: GeneratedCoverRecipe
+    var epubURL: URL?
+    var epubWorkID: UUID?
     var showsInitial: Bool = true
 
     var body: some View {
-        let initial = title.trimmingCharacters(in: .whitespacesAndNewlines).first.map { String($0).uppercased() } ?? ""
-        ZStack(alignment: .bottomLeading) {
-            CoverArt.workGradient(fandoms: fandoms, title: title)
-            if showsInitial && !initial.isEmpty {
-                Text(initial)
-                    .font(.system(size: 44, weight: .semibold, design: .serif))
-                    .foregroundStyle(Color.white.opacity(0.18))
-                    .fixedSize()
-                    .alignmentGuide(.bottom) { $0[.lastTextBaseline] }
-                    .offset(x: -3, y: 12)
-            }
-        }
-        .frame(width: 40, height: 56)
-        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        GeneratedCoverView(recipe: recipe, width: 40,
+                           epubURL: showsInitial ? epubURL : nil,
+                           epubWorkID: showsInitial ? epubWorkID : nil,
+                           showsWords: false, showsArt: showsInitial)
         .shadow(color: Color.black.opacity(0.18), radius: 3, x: 0, y: 2)
         .accessibilityHidden(true)
     }

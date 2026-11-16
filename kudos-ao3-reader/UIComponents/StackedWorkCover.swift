@@ -158,10 +158,8 @@ struct CoverStackLayout: Equatable {
 }
 
 /// A collection's or a queue's cover stack (`CoverStackKind`), drawn by
-/// `CoverStackLayout`. The covers behind are the works' own: each in its fandom's
-/// colour family (`CoverArt.workArt`, the same gradient as the shelf cover), never the app's
-/// red. The front is the collection's or queue's own colour and initial
-/// (`init(kind:name:hue:pickedHex:backs:size:)`), or a face the caller draws.
+/// `CoverStackLayout`. The covers behind use each work's generated cover.
+/// The front uses the collection's or queue's generated motif, or a caller's face.
 ///
 /// The covers name nothing, but their colour is a work's fandom, so a caller leaves
 /// out every work the privacy setting is keeping back before passing `backs`.
@@ -197,7 +195,8 @@ struct StackedWorkCover<Face: View>: View {
             // Farthest first, so each nearer card lies over the one behind it.
             ForEach(layout.backs.indices.reversed(), id: \.self) { index in
                 let back = layout.backs[index]
-                backCover(backs[index], dimming: back.dimming, shape: shape)
+                backCover(backs[index], width: back.frame.width, height: back.frame.height,
+                          dimming: back.dimming)
                     .frame(width: back.frame.width, height: back.frame.height)
                     .rotationEffect(.degrees(back.rotation), anchor: .bottomLeading)
                     .offset(x: back.frame.minX, y: back.frame.minY)
@@ -215,12 +214,10 @@ struct StackedWorkCover<Face: View>: View {
 
     /// A work's cover seen from behind the front card: the same generated art
     /// the shelf cover uses, with the hairline the old mosaic's cells had.
-    private func backCover(_ work: SavedWork, dimming: Double, shape: RoundedRectangle) -> some View {
-        let theme = themeManager.appTheme
-        let art = CoverArt.workArt(fandoms: work.workFandoms, title: work.title)
-        return shape
-            .fill(CoverArt.workGradient(for: art))
-            .overlay(shape.strokeBorder(theme.glassStroke(0.10), lineWidth: 0.5))
+    private func backCover(_ work: SavedWork, width: CGFloat, height: CGFloat, dimming: Double) -> some View {
+        return GeneratedCoverView(recipe: work.generatedCoverRecipe, width: width,
+                                  epubURL: work.hasEPUB ? work.fileURL : nil,
+                                  epubWorkID: work.id, height: height, showsWords: false)
             .brightness(-dimming)
             .accessibilityHidden(true)
     }
@@ -251,57 +248,38 @@ struct StackedWorkCover<Face: View>: View {
 }
 
 extension StackedWorkCover where Face == CoverStackNameFace {
-    /// The stack a collection or queue draws for itself: its own colour, with the
-    /// first letter of its name, in front.
-    init(kind: CoverStackKind, name: String, hue: Double, pickedHex: String?, backs: [SavedWork], size: CGSize) {
+    /// The stack a collection or queue draws for itself.
+    init(kind: CoverStackKind, name: String, identity: UUID? = nil, hue: Double?,
+         pickedHex: String?, backs: [SavedWork], size: CGSize) {
         self.init(kind: kind, size: size, backs: backs) { layout in
             CoverStackNameFace(
-                kind: kind, name: name, hue: hue, pickedHex: pickedHex, coverWidth: layout.front.width
+                kind: kind, name: name, identity: identity, hue: hue, pickedHex: pickedHex,
+                coverWidth: layout.front.width, coverHeight: layout.front.height
             )
         }
     }
 }
 
-/// A collection's or queue's own card, with its initial set large and faint in
-/// New York across the bottom-leading corner, as the spec's generated covers do.
+/// A collection's or queue's own generated cover.
 struct CoverStackNameFace: View {
     let kind: CoverStackKind
     let name: String
-    let hue: Double
+    let identity: UUID?
+    let hue: Double?
     let pickedHex: String?
     let coverWidth: CGFloat
-
-    @Environment(ThemeManager.self) private var themeManager
+    let coverHeight: CGFloat
 
     var body: some View {
-        let initial = name.trimmingCharacters(in: .whitespacesAndNewlines).first.map { String($0).uppercased() }
-        LinearGradient(
-            colors: gradientColors,
-            startPoint: UnitPoint(x: 0.2887, y: 0.0468),
-            endPoint: UnitPoint(x: 0.7113, y: 0.9532)
-        )
-            .overlay(alignment: .bottomLeading) {
-                Text(initial ?? "")
-                    .font(.system(size: coverWidth * 1.05, weight: .semibold, design: .serif))
-                    .foregroundStyle(Color.white.opacity(0.15))
-                    .fixedSize()
-                    // Spec: the letter's baseline sits 11% of the width below the card.
-                    .alignmentGuide(.bottom) { $0[.lastTextBaseline] }
-                    .offset(x: -coverWidth * 0.06, y: coverWidth * 0.11)
-            }
+        let fallback = hue.map { Int($0 * 360) }
+            ?? identity.map { GeneratedCoverRecipe.collectionHue(for: $0) }
+            ?? Int(GeneratedCoverRecipe.hash("collection:" + name) % 360)
+        let swatch = GeneratedCoverRecipe.collectionSwatch(pickedHex, fallback: fallback)
+        return GeneratedCoverView(recipe: GeneratedCoverRecipe(
+            collection: name, identity: identity?.uuidString,
+            hue: swatch.hue, graphite: swatch.chroma == 0.012
+        ), width: coverWidth, height: coverHeight, showsWords: false)
             .accessibilityHidden(true)
-    }
-
-    private var gradientColors: [Color] {
-        switch kind {
-        case .collection:
-            let gradient = themeManager.appTheme.carouselCollectionGradient(hue: hue, pickedHex: pickedHex)
-            return [gradient.start, gradient.end]
-        case .queue:
-            let color = pickedHex.flatMap(Color.init(hex:))
-                ?? themeManager.appTheme.subjectPalette(hue: hue).accent
-            return [color.mix(with: .black, by: 0.38), color]
-        }
     }
 }
 
