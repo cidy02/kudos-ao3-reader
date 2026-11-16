@@ -298,4 +298,52 @@ struct AO3SeriesSubscribeTests {
         let posts = SeriesSubscribeStub.recorded().filter { $0.method == "POST" }
         #expect(posts.isEmpty)
     }
+
+    @Test func flashless200AndUnrelatedAlreadySubscribedBodyDoNotReportSubscribed() async throws {
+        let auth = makeAuth()
+        await auth.login(username: "alice", password: "pw")
+
+        // 1. Flashless 200 whose prose contains "already subscribed" is unconfirmed, not success.
+        SeriesSubscribeStub.reset(
+            getHTML: seriesHTML(seriesID: 42),
+            postStatus: 200,
+            postBody: "<div class='summary'><p>Reader note: already subscribed.</p></div>"
+        )
+        await #expect(throws: AO3WriteError.unconfirmed) {
+            _ = try await auth.toggleSubscribe(seriesID: 42, using: stubClient())
+        }
+
+        let unconfirmedClient = stubClient()
+        let model = AO3SeriesSubscribeModel { seriesID, auth in
+            try await auth.toggleSubscribe(seriesID: seriesID, using: unconfirmedClient)
+        }
+        model.tapped(seriesID: 42, auth: auth)
+        await model.waitForCurrentTask()
+        #expect(!model.isSubscribed)
+        #expect(model.banner == AO3WriteError.unconfirmed.errorDescription)
+        #expect(model.writeFailures == 1)
+        #expect(model.writeSuccesses == 0)
+
+        // 2. Error flash rejects even if unrelated body text says "already subscribed".
+        SeriesSubscribeStub.reset(
+            getHTML: seriesHTML(seriesID: 42),
+            postStatus: 422,
+            postBody: """
+            <div class="flash error">Rate limit exceeded.</div>
+            <p class="summary">Notes say already subscribed elsewhere.</p>
+            """
+        )
+        await #expect(throws: AO3WriteError.rejected("Rate limit exceeded.")) {
+            _ = try await auth.toggleSubscribe(seriesID: 42, using: stubClient())
+        }
+
+        // 3. Parsed error flash saying "already subscribed" still returns the benign message.
+        SeriesSubscribeStub.reset(
+            getHTML: seriesHTML(seriesID: 42),
+            postStatus: 422,
+            postBody: #"<div class="flash error">You have already subscribed to this series.</div>"#
+        )
+        let already = try await auth.toggleSubscribe(seriesID: 42, using: stubClient())
+        #expect(already == "You're already subscribed.")
+    }
 }

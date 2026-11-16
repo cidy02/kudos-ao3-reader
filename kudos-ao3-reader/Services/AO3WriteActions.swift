@@ -153,14 +153,13 @@ extension AO3AuthService {
             body: body, csrf: token, referer: pageURL, ajax: false
         )
         let (status, responseBody) = try await submitWrite(request, using: client)
-        if responseBody.localizedCaseInsensitiveContains("already subscribed") {
+        if let error = AO3Client.writeErrorMessage(in: responseBody),
+           error.localizedCaseInsensitiveContains("already subscribed") {
             return "You're already subscribed."
         }
-        if (200 ... 399).contains(status), AO3Client.writeErrorMessage(in: responseBody) == nil {
-            return "Subscribed."
-        }
-        throw AO3WriteError.rejected(
-            AO3Client.writeErrorMessage(in: responseBody) ?? "Couldn't subscribe."
+        return try Self.readingsWriteResult(
+            status: status, body: responseBody,
+            success: "Subscribed.", rejectedFallback: "Couldn't subscribe."
         )
     }
 
