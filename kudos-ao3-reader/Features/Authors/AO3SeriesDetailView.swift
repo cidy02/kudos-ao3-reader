@@ -46,6 +46,7 @@ struct AO3SeriesDetailView: View {
     @State private var preserveTask: Task<Void, Never>?
     @State private var preserveStatus: String?
     @State private var isConfirmingPreserve = false
+    @State private var subscribeModel = AO3SeriesSubscribeModel()
 
     /// Whether the signed-in account is one of this series' creators — the gate on
     /// 1br's Edit series.
@@ -150,6 +151,7 @@ struct AO3SeriesDetailView: View {
             .task(id: authenticationScope) {
                 loadTask?.cancel()
                 loadTask = nil
+                subscribeModel.reset()
                 bulkSelection.exitSelectMode()
                 works = []
                 currentPage = 0
@@ -159,7 +161,16 @@ struct AO3SeriesDetailView: View {
                 isShowingStaleCache = false
                 await load(page: 1, replace: true)
             }
-            .onDisappear { loadTask?.cancel() }
+            .onDisappear {
+                loadTask?.cancel()
+            }
+            .sensoryFeedback(.success, trigger: subscribeModel.writeSuccesses)
+            .sensoryFeedback(.error, trigger: subscribeModel.writeFailures)
+            .alert("AO3", isPresented: subscribeBannerPresented) {
+                Button("OK", role: .cancel) { subscribeModel.banner = nil }
+            } message: {
+                Text(subscribeModel.banner ?? "")
+            }
             // A save, a new order or a removal in the edit screens: the works are read again past
             // the cache, and the header takes the saved title. It showed the old ones until pulled.
             .onChange(of: auth.lastSeriesWrite) { _, write in
@@ -221,20 +232,49 @@ struct AO3SeriesDetailView: View {
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
             : AnyLayout(HStackLayout(spacing: 12))
         return layout {
-            // No native series subscribe exists (AO3's form is not in the app, and the
-            // networking policy forbids a new request type), so this opens the page on AO3.
-            // The arrow says it leaves the app.
-            Button { router.open(series.url) } label: {
-                HStack(spacing: 4) {
-                    // The bell is Subscribe app-wide (owner, 2026-11-09).
-                    Image(systemName: "bell")
-                    Text("Subscribe")
-                    Image(systemName: "arrow.up.forward").imageScale(.small)
+            if AO3SeriesSubscribeModel.showsSubscribe(isLoggedIn: auth.isLoggedIn) {
+                Button {
+                    subscribeModel.tapped(seriesID: series.id, auth: auth) {
+                        await invalidateSeriesPageCache()
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        if subscribeModel.isWorking {
+                            ProgressView()
+                                .controlSize(.small)
+                                .tint(ThemeManager.label(on: theme.effectiveTint))
+                        } else {
+                            // The bell is Subscribe app-wide (owner, 2026-11-09).
+                            Image(systemName: subscribeModel.isSubscribed ? "bell.slash" : "bell")
+                        }
+                        Text(subscribeModel.isSubscribed ? "Unsubscribe" : "Subscribe")
+                            .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .frame(maxWidth: .infinity)
                 }
-                .frame(maxWidth: .infinity)
+                .buttonStyle(.kudosPrimaryConfirm)
+                .disabled(
+                    subscribeModel.isWorking || !subscribeModel.hasSyncedSubscription
+                )
+                .accessibilityLabel(subscribeModel.isSubscribed ? "Unsubscribe" : "Subscribe")
+                .accessibilityValue(subscribeModel.isWorking ? "In progress" : "")
+                .accessibilityAddTraits(subscribeModel.isSubscribed ? [.isSelected] : [])
+                .confirmationDialog(
+                    "Unsubscribe from \(shownSeries.title)?",
+                    isPresented: $subscribeModel.isConfirmingUnsubscribe,
+                    titleVisibility: .visible
+                ) {
+                    Button("Unsubscribe", role: .destructive) {
+                        subscribeModel.confirmUnsubscribe(seriesID: series.id, auth: auth) {
+                            await invalidateSeriesPageCache()
+                        }
+                    }
+                    Button("Cancel", role: .cancel) { subscribeModel.cancelUnsubscribe() }
+                } message: {
+                    Text("You will stop receiving email updates for this series on AO3.")
+                }
             }
-            .buttonStyle(.kudosPrimaryConfirm)
-            .accessibilityHint("Opens this series on AO3.")
             // One tap can download a whole series, so it asks first; while it runs it is Cancel.
             Button {
                 if let preserveTask {
@@ -407,6 +447,7 @@ struct AO3SeriesDetailView: View {
     ) async {
         let expectedAuthenticationScope = authenticationScope
         let expectedSessionGeneration = auth.sessionGeneration
+        let expectedCacheScope = AO3AuthorProfileFetcher.sessionScopedCacheScope(for: auth)
         if replace, works.isEmpty { phase = .loading }
         if !replace { isLoadingMore = true }
         loadMoreError = nil
@@ -418,6 +459,11 @@ struct AO3SeriesDetailView: View {
             let cached = try await AO3AuthorProfileFetcher.page(
                 at: url,
                 auth: auth,
+                cacheScope: expectedCacheScope,
+                isCurrent: {
+                    authenticationScope == expectedAuthenticationScope
+                        && auth.sessionGeneration == expectedSessionGeneration
+                },
                 bypassCache: bypassCache
             )
             let result: AO3SearchPage
@@ -425,7 +471,11 @@ struct AO3SeriesDetailView: View {
                 result = try AO3Client.parseAuthorWorksPage(cached.html, page: page)
             } catch {
                 if let ao3Error = error as? AO3Error, case .parse = ao3Error {
-                    await AO3AuthorProfileFetcher.invalidate(url, auth: auth)
+                    await AO3AuthorProfileFetcher.invalidate(
+                        url,
+                        auth: auth,
+                        cacheScope: expectedCacheScope
+                    )
                 }
                 throw error
             }
@@ -441,6 +491,9 @@ struct AO3SeriesDetailView: View {
             }
             currentPage = result.currentPage
             totalPages = result.totalPages
+            if page == 1 {
+                subscribeModel.syncFromSeriesPage(html: cached.html, isLoggedIn: auth.isLoggedIn)
+            }
             isShowingStaleCache = replace
                 ? cached.isStale
                 : isShowingStaleCache || cached.isStale
@@ -461,6 +514,159 @@ struct AO3SeriesDetailView: View {
                 phase = .failed(message)
             } else {
                 loadMoreError = message
+            }
+        }
+    }
+
+    private var subscribeBannerPresented: Binding<Bool> {
+        Binding(get: { subscribeModel.banner != nil }, set: { if !$0 { subscribeModel.banner = nil } })
+    }
+
+    private func invalidateSeriesPageCache() async {
+        if let url = AO3Client.seriesPageURL(series.url, page: 1) {
+            await AO3AuthorProfileFetcher.invalidate(
+                url,
+                auth: auth,
+                cacheScope: AO3AuthorProfileFetcher.sessionScopedCacheScope(for: auth)
+            )
+        }
+        await AO3Client.shared.invalidateCachedResponses()
+    }
+}
+
+/// UI state and action driver for native series Subscribe / Unsubscribe (`T-549`).
+@MainActor
+@Observable
+final class AO3SeriesSubscribeModel {
+    /// Series ID, the state the reader asked for, the session.
+    typealias ToggleHandler = @MainActor (Int, Bool, AO3AuthService) async throws -> String
+
+    private(set) var isSubscribed = false
+    private(set) var hasSyncedSubscription = false
+    private(set) var isWorking = false
+    var isConfirmingUnsubscribe = false
+    var banner: String?
+    private(set) var writeSuccesses = 0
+    private(set) var writeFailures = 0
+
+    private var activeTask: Task<Void, Never>?
+    private var isHandlingSessionExpiry = false
+    private let toggleHandler: ToggleHandler
+
+    init(
+        toggleHandler: @escaping ToggleHandler = { seriesID, want, auth in
+            try await auth.toggleSubscribe(seriesID: seriesID, to: want)
+        }
+    ) {
+        self.toggleHandler = toggleHandler
+    }
+
+    func syncFromSeriesPage(html: String, isLoggedIn: Bool) {
+        guard !isWorking else { return }
+        guard isLoggedIn else {
+            isSubscribed = false
+            hasSyncedSubscription = false
+            return
+        }
+        isSubscribed = AO3Client.parseSubscription(from: html).isSubscribed
+        hasSyncedSubscription = true
+    }
+
+    func reset() {
+        // Don't abort or clear the alert when `.task(id: authenticationScope)` fires
+        // because `sessionDidExpire` just moved the session to `.signedOut`.
+        if !isHandlingSessionExpiry {
+            activeTask?.cancel()
+            activeTask = nil
+        }
+        isSubscribed = false
+        hasSyncedSubscription = false
+        isWorking = false
+        isConfirmingUnsubscribe = false
+        if !isHandlingSessionExpiry,
+           banner != AO3Error.authenticationRequired.errorDescription {
+            banner = nil
+        }
+    }
+
+    func cancelInFlight() {
+        activeTask?.cancel()
+        activeTask = nil
+    }
+
+    static func showsSubscribe(isLoggedIn: Bool) -> Bool {
+        isLoggedIn
+    }
+
+    func tapped(
+        seriesID: Int,
+        auth: AO3AuthService,
+        onSuccess: (@MainActor () async -> Void)? = nil
+    ) {
+        guard !isWorking, auth.isLoggedIn else { return }
+        if isSubscribed {
+            isConfirmingUnsubscribe = true
+            return
+        }
+        performToggle(seriesID: seriesID, want: true, auth: auth, onSuccess: onSuccess)
+    }
+
+    func confirmUnsubscribe(
+        seriesID: Int,
+        auth: AO3AuthService,
+        onSuccess: (@MainActor () async -> Void)? = nil
+    ) {
+        guard !isWorking, auth.isLoggedIn else { return }
+        // The dialog asked to unsubscribe; a page refresh while it was open must not turn that around.
+        performToggle(seriesID: seriesID, want: false, auth: auth, onSuccess: onSuccess)
+    }
+
+    func cancelUnsubscribe() {
+        isConfirmingUnsubscribe = false
+    }
+
+    func waitForCurrentTask() async {
+        await activeTask?.value
+    }
+
+    private func performToggle(
+        seriesID: Int,
+        want: Bool,
+        auth: AO3AuthService,
+        onSuccess: (@MainActor () async -> Void)?
+    ) {
+        let expectedGeneration = auth.sessionGeneration
+        isWorking = true
+        activeTask = Task { [weak self] in
+            guard let self else { return }
+            defer {
+                self.isWorking = false
+                self.activeTask = nil
+            }
+            do {
+                let message = try await self.toggleHandler(seriesID, want, auth)
+                guard auth.sessionGeneration == expectedGeneration else { return }
+                self.isSubscribed = want
+                self.banner = message
+                self.writeSuccesses += 1
+                await onSuccess?()
+            } catch is CancellationError {
+                return
+            } catch AO3Error.authenticationRequired {
+                guard auth.sessionGeneration == expectedGeneration else { return }
+                isHandlingSessionExpiry = true
+                let expired = await auth.sessionDidExpire(expectedGeneration: expectedGeneration)
+                isHandlingSessionExpiry = false
+                guard !Task.isCancelled else { return }
+                if expired {
+                    self.banner = AO3Error.authenticationRequired.errorDescription
+                    self.writeFailures += 1
+                }
+            } catch {
+                guard auth.sessionGeneration == expectedGeneration else { return }
+                self.banner = (error as? LocalizedError)?.errorDescription
+                    ?? UserFacingError.message(for: error)
+                self.writeFailures += 1
             }
         }
     }

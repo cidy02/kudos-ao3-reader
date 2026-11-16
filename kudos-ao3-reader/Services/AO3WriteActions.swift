@@ -96,41 +96,94 @@ extension AO3AuthService {
     /// Subscribes to (or, if already subscribed, unsubscribes from) a work. Reads the
     /// work page once for the CSRF token + current subscription state, then POSTs the
     /// matching action. Returns a message describing what happened.
-    func toggleSubscribe(workID: Int) async throws -> String {
+    func toggleSubscribe(workID: Int, using client: AO3Client = .shared) async throws -> String {
+        try await toggleSubscribe(
+            subscribableID: workID,
+            subscribableType: "Work",
+            pageURL: Self.workURL(workID),
+            using: client
+        )
+    }
+
+    /// Subscribes to (or, if already subscribed, unsubscribes from) a series using the
+    /// same subscriptions POST/delete flow as `toggleSubscribe(workID:)`, with
+    /// `subscription[subscribable_type] = "Series"` (otwarchive `SubscriptionsController#create`,
+    /// `SeriesController#show`, `series/_series_navigation.html.erb`, `subscriptions/_form.html.erb`).
+    /// `want` is the state the reader asked for. With it, AO3's fresh page decides only whether a
+    /// write is needed, never which one: a stale screen or a retry after a lost answer can no longer
+    /// send the opposite write (Codex's T-549 review). `nil` keeps the plain toggle.
+    func toggleSubscribe(seriesID: Int, to want: Bool? = nil, using client: AO3Client = .shared) async throws -> String {
+        try await toggleSubscribe(
+            subscribableID: seriesID,
+            subscribableType: "Series",
+            pageURL: AO3Client.seriesURL(seriesID: seriesID),
+            want: want,
+            using: client
+        )
+    }
+
+    private func toggleSubscribe(
+        subscribableID: Int,
+        subscribableType: String,
+        pageURL: URL,
+        want: Bool? = nil,
+        using client: AO3Client
+    ) async throws -> String {
+        try Task.checkCancellation()
         guard isLoggedIn, let username else { throw AO3WriteError.notSignedIn }
-        let workURL = Self.workURL(workID)
-        let (html, token) = try await fetchCSRFPage(at: workURL)
+        let expectedGeneration = sessionGeneration
+        let (html, token) = try await fetchCSRFPage(at: pageURL, using: client)
+        try Task.checkCancellation()
+        try requireSessionGeneration(expectedGeneration)
 
         let state = AO3Client.parseSubscription(from: html)
+        if let want {
+            // A signed-out page reads as "not subscribed": that is not AO3 agreeing (Codex re-review).
+            guard LiveAO3SessionValidator.isLoggedIn(html: html) else { throw AO3Error.authenticationRequired }
+            // otwarchive renders a create-or-delete subscription form for a signed-in reader; with
+            // neither recognised the state is unknown, and nothing is written or claimed (third review).
+            let recognised = state.isSubscribed
+                ? state.unsubscribePath != nil
+                : AO3Client.hasSubscribeForm(in: html)
+            guard recognised else { throw AO3Error.parse }
+            if want == state.isSubscribed {
+                return want ? "You're already subscribed." : "Unsubscribed."
+            }
+        }
         if state.isSubscribed, let path = state.unsubscribePath, let url = Self.absoluteURL(path) {
             // AO3's unsubscribe form is a POST carrying `_method=delete`.
             let body = Self.formEncoded([("_method", "delete"), ("authenticity_token", token)])
-            let request = try writeRequest(to: url, body: body, csrf: token, referer: workURL, ajax: false)
-            let (status, responseBody) = try await submitWrite(request)
+            let request = try writeRequest(to: url, body: body, csrf: token, referer: pageURL, ajax: false)
+            let (status, responseBody) = try await submitWrite(request, using: client)
             return try Self.readingsWriteResult(
                 status: status, body: responseBody,
                 success: "Unsubscribed.", rejectedFallback: "Couldn't unsubscribe."
             )
         }
 
+        // Public pages still return 200 with a guest CSRF meta when the session
+        // has expired; fail before POSTing instead of sending an unauthenticated write.
+        guard LiveAO3SessionValidator.isLoggedIn(html: html) else {
+            throw AO3Error.authenticationRequired
+        }
+
         let body = Self.formEncoded([
             ("authenticity_token", token),
-            ("subscription[subscribable_id]", String(workID)),
-            ("subscription[subscribable_type]", "Work")
+            ("subscription[subscribable_id]", String(subscribableID)),
+            ("subscription[subscribable_type]", subscribableType)
         ])
         let request = try writeRequest(
             to: Self.subscriptionsEndpoint(username: username),
-            body: body, csrf: token, referer: workURL, ajax: false
+            body: body, csrf: token, referer: pageURL, ajax: false
         )
-        let (status, responseBody) = try await submitWrite(request)
-        if responseBody.localizedCaseInsensitiveContains("already subscribed") {
+        let (status, responseBody) = try await submitWrite(request, using: client)
+        if let error = AO3Client.writeErrorMessage(in: responseBody),
+           error.localizedCaseInsensitiveContains("already subscribed") {
             return "You're already subscribed."
         }
-        if (200 ... 399).contains(status), AO3Client.writeErrorMessage(in: responseBody) == nil {
-            return "Subscribed."
-        }
-        throw AO3WriteError.rejected(
-            AO3Client.writeErrorMessage(in: responseBody) ?? "Couldn't subscribe."
+        return try Self.readingsWriteResult(
+            status: status, body: responseBody,
+            success: "Subscribed.", rejectedFallback: "Couldn't subscribe."
         )
     }
 
