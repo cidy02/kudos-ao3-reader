@@ -288,7 +288,6 @@ fun WorkDetailTagSections(
 ) {
     val searchTag = LocalTagSearch.current
     val tokens = LocalKudosTokens.current
-    val accessible = isAccessibilityFontScale()
 
     data class TagGroup(
         val title: String,
@@ -374,47 +373,24 @@ fun WorkDetailTagSections(
                             }
                         }
 
-                        if (accessible) {
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(2.dp)
-                            ) {
-                                Text(
-                                    text = group.title,
-                                    fontSize = 13.sp,
-                                    color = tokens.secondaryInk,
-                                    modifier = Modifier.semantics { heading() }
-                                )
-                                Text(
-                                    text = annotated,
-                                    fontSize = 15.sp,
-                                    lineHeight = 21.sp,
-                                    color = tokens.secondaryInk
-                                )
-                            }
-                        } else {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                verticalAlignment = Alignment.Top
-                            ) {
-                                Text(
-                                    text = group.title,
-                                    fontSize = 13.sp,
-                                    color = tokens.secondaryInk,
-                                    modifier = Modifier
-                                        .width(92.dp)
-                                        .padding(top = 1.dp)
-                                        .semantics { heading() }
-                                )
-                                Text(
-                                    text = annotated,
-                                    fontSize = 15.sp,
-                                    lineHeight = 20.sp,
-                                    color = tokens.secondaryInk,
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
+                        // The group's name on its own line, its tags below at full width (owner,
+                        // 2026-11-16: "below - not next to - their header"), as on iOS.
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            Text(
+                                text = group.title,
+                                fontSize = 13.sp,
+                                color = tokens.secondaryInk,
+                                modifier = Modifier.semantics { heading() }
+                            )
+                            Text(
+                                text = annotated,
+                                fontSize = 15.sp,
+                                lineHeight = 21.sp,
+                                color = tokens.secondaryInk
+                            )
                         }
                     }
                 }
