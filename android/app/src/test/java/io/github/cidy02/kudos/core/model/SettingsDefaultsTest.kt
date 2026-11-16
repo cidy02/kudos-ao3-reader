@@ -45,6 +45,16 @@ class SettingsDefaultsTest {
     }
 
     @Test
+    fun underTitleIsTheUnchosenDefaultAndStoredBesideWinsWithoutBackupExport() {
+        assertEquals(WorkSymbolPlacement.UnderTitle, WorkSymbolPlacement.Default)
+        assertEquals("underTitle", WorkSymbolPlacement.Default.storageValue)
+        assertEquals(WorkSymbolPlacement.UnderTitle, KudosSettings.Defaults.app.workSymbolPlacement)
+        assertNull(KudosSettings.Defaults.app.backupWorkSymbolPlacement)
+        assertEquals(WorkSymbolPlacement.Beside, WorkSymbolPlacement.fromStorage("beside"))
+        assertTrue(WorkSymbolPlacement.Beside.storageValue != WorkSymbolPlacement.Default.storageValue)
+    }
+
+    @Test
     fun enumMappingsUseContractStorageValues() {
         assertEquals(ReaderMode.Scroll, ReaderMode.fromStorage("scroll"))
         assertEquals(ReaderMode.Paged, ReaderMode.fromStorage("paged"))
