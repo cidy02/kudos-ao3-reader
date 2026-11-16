@@ -383,10 +383,7 @@ struct ReaderView: View {
             showsAO3Actions: ao3ID != nil,
             kudosGiven: work.hasGivenKudos,
             kudosEnabled: !workActions.isWorking && !work.hasGivenKudos,
-            isBookmarked: ao3ID.map {
-                workActions.bookmarkedWorkID == $0
-                    || workActions.workPageStates?.existingBookmark != nil
-            } ?? false,
+            isBookmarked: ao3ID.map { workActions.isBookmarked(workID: $0, auth: auth) } ?? false,
             bookmarkEnabled: !workActions.isWorking,
             upNext: ReaderEndOfWorkFacts.findUpNext(
                 for: work,
@@ -404,8 +401,8 @@ struct ReaderView: View {
                 )
             },
             onBookmark: {
-                if ao3ID != nil {
-                    workActions.startBookmark()
+                if let ao3ID {
+                    workActions.startBookmark(workID: ao3ID, auth: auth)
                 }
             },
             onStartNextWork: { nextWorkDestination = .reader($0) }

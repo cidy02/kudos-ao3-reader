@@ -198,7 +198,9 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                     )
                     showingSeriesQueuePrompt = true
                 }
-                if DebugLaunchRoute.takeSheet("bookmarkform") { workActions.startBookmark() }
+                if DebugLaunchRoute.takeSheet("bookmarkform") {
+                    workActions.startBookmark(workID: ao3WorkID ?? 0, auth: auth)
+                }
                 #endif
             }
         }

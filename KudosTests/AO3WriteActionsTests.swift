@@ -660,6 +660,21 @@ struct AO3WriteActionsTests {
     }
 
     @MainActor
+    @Test func workSubscribeNilIntentFormlessPageDoesNotPost() async throws {
+        let auth = await makeSignedInAuth()
+        WorkSubscribeStub.reset(html: """
+        <html><head><meta name="csrf-token" content="tok"></head><body class="logged-in">
+          <p class="caution notice">This work could have adult content.</p>
+        </body></html>
+        """)
+
+        await #expect(throws: AO3Error.parse) {
+            _ = try await auth.toggleSubscribe(workID: 42, to: nil, using: stubWorkClient())
+        }
+        #expect(WorkSubscribeStub.recordedMethods() == ["GET"])
+    }
+
+    @MainActor
     @Test func malformedDeleteFormAndUntrustedDeletePathNeverClaimOrCreate() async throws {
         let missingDeleteMethod = """
         <html><head><meta name="csrf-token" content="tok"></head><body class="logged-in">
@@ -880,6 +895,85 @@ struct AO3WriteActionsTests {
         #expect(expiryModel.workPageStates == nil)
         #expect(expiryModel.banner == AO3Error.authenticationRequired.errorDescription)
         #expect(expiryModel.writeFailures == 1)
+    }
+
+    @MainActor
+    @Test func cachedBookmarkIsNotOfferedAfterAccountSwitch() async throws {
+        let auth = await makeSignedInAuth(username: "alice")
+        let savedBookmark = AO3ExistingBookmark(
+            editPath: "/bookmarks/99",
+            collectionNames: "",
+            input: AO3AuthService.BookmarkInput(notes: "Alice's note", tags: "private-tag")
+        )
+        var writeCount = 0
+        let model = AO3WorkActionsModel(
+            workActionStatesHandler: { _, _ in
+                AO3WorkActionStates(isSubscribed: false, existingBookmark: savedBookmark)
+            },
+            bookmarkHandler: { _, _, _ in
+                writeCount += 1
+                return "Bookmarked."
+            }
+        )
+        model.refreshWorkPageStates(workID: 42, auth: auth)
+        await model.waitForStateFetch()
+        model.startBookmark(workID: 42, auth: auth)
+        #expect(model.bookmarkInput == savedBookmark.input)
+        #expect(model.bookmarkIsUpdate)
+        model.submitBookmark(workID: 42, auth: auth)
+        await model.waitForCurrentTask()
+        #expect(model.isBookmarked(workID: 42, auth: auth))
+
+        await auth.logout()
+        await auth.login(username: "bob", password: "pw")
+        #expect(!model.isBookmarked(workID: 42, auth: auth))
+        model.submitBookmark(workID: 42, auth: auth)
+        #expect(writeCount == 1)
+        model.startBookmark(workID: 42, auth: auth)
+        #expect(model.bookmarkInput == AO3AuthService.BookmarkInput())
+        #expect(!model.bookmarkIsUpdate)
+        model.bookmarkSessionDidChange()
+        #expect(model.workPageStates == nil)
+    }
+
+    @MainActor
+    @Test func pendingBookmarkCompletionDoesNotAffectNextAccount() async throws {
+        let auth = await makeSignedInAuth(username: "alice")
+        let entered = Signal()
+        let release = Signal()
+        var refreshCount = 0
+        let model = AO3WorkActionsModel(
+            workActionStatesHandler: { _, _ in
+                refreshCount += 1
+                return AO3WorkActionStates(isSubscribed: false, existingBookmark: nil)
+            },
+            bookmarkHandler: { _, _, _ in
+                await entered.fire()
+                await release.wait()
+                return "Bookmarked."
+            }
+        )
+        model.startBookmark(workID: 42, auth: auth)
+        model.bookmarkInput.notes = "Alice's note"
+        model.submitBookmark(workID: 42, auth: auth)
+        await entered.wait()
+
+        await auth.logout()
+        await auth.login(username: "bob", password: "pw")
+        model.bookmarkSessionDidChange()
+        model.startBookmark(workID: 42, auth: auth)
+        #expect(model.bookmarkInput.notes.isEmpty)
+        await release.fire()
+        await model.waitForCurrentTask()
+
+        #expect(model.showingBookmark)
+        #expect(model.bookmarkInput.notes.isEmpty)
+        #expect(model.bookmarkSuccess == nil)
+        #expect(model.bookmarkError == nil)
+        #expect(!model.isBookmarked(workID: 42, auth: auth))
+        #expect(model.writeSuccesses == 0)
+        #expect(model.writeFailures == 0)
+        #expect(refreshCount == 0)
     }
 
     // MARK: Work-page action states (fixtures trimmed from live captures, 2026-07-16)

@@ -9,6 +9,7 @@ import SwiftUI
 final class AO3WorkActionsModel {
     typealias SubscribeHandler = @MainActor (Int, Bool, AO3AuthService) async throws -> String
     typealias WorkActionStatesHandler = @MainActor (Int, AO3AuthService) async throws -> AO3WorkActionStates
+    typealias BookmarkHandler = @MainActor (Int, AO3AuthService.BookmarkInput, AO3AuthService) async throws -> String
 
     /// True while a write is in flight (disables re-taps; shows progress).
     var isWorking = false
@@ -19,7 +20,8 @@ final class AO3WorkActionsModel {
     private(set) var kudosGivenWorkID: Int?
     /// Set as soon as AO3 accepts a bookmark, without waiting for the advisory
     /// work-page refresh that follows the write.
-    private(set) var bookmarkedWorkID: Int?
+    private var bookmarkedWorkID: Int?
+    private var bookmarkedWorkGeneration: Int?
     /// Bumped by the write handlers when AO3 accepts / rejects a write — the haptic
     /// triggers (never a value that also changes when a page loads).
     private(set) var writeSuccesses = 0
@@ -34,6 +36,7 @@ final class AO3WorkActionsModel {
     /// True when the composer edits the existing AO3 bookmark (title/labels only —
     /// the submit itself re-detects the real state from the fresh work page).
     private(set) var bookmarkIsUpdate = false
+    private var bookmarkGeneration: Int?
 
     /// Live subscribed/bookmarked state for the menu labels, fetched lazily the
     /// first time the menu content appears for a work and after each relevant
@@ -48,11 +51,13 @@ final class AO3WorkActionsModel {
     private var stateFetchTask: Task<Void, Never>?
     private let subscribeHandler: SubscribeHandler
     private let workActionStatesHandler: WorkActionStatesHandler
+    private let bookmarkHandler: BookmarkHandler
 
     init(
         using client: AO3Client = .shared,
         subscribeHandler: SubscribeHandler? = nil,
-        workActionStatesHandler: WorkActionStatesHandler? = nil
+        workActionStatesHandler: WorkActionStatesHandler? = nil,
+        bookmarkHandler: BookmarkHandler? = nil
     ) {
         self.subscribeHandler = subscribeHandler ?? { workID, want, auth in
             try await auth.toggleSubscribe(workID: workID, to: want, using: client)
@@ -65,6 +70,9 @@ final class AO3WorkActionsModel {
             self.workActionStatesHandler = { workID, auth in
                 try await auth.workActionStates(workID: workID, using: client)
             }
+        }
+        self.bookmarkHandler = bookmarkHandler ?? { workID, input, auth in
+            try await auth.saveBookmark(workID: workID, input: input)
         }
     }
 
@@ -235,10 +243,20 @@ final class AO3WorkActionsModel {
         }
     }
 
+    func isBookmarked(workID: Int, auth: AO3AuthService) -> Bool {
+        (bookmarkedWorkID == workID && bookmarkedWorkGeneration == auth.sessionGeneration)
+            || (workPageStatesWorkID == workID
+                && workPageStatesGeneration == auth.sessionGeneration
+                && workPageStates?.existingBookmark != nil)
+    }
+
     /// Opens the composer — prefilled with the existing bookmark's values when
     /// the fetched state says this work is already bookmarked, blank otherwise.
-    func startBookmark() {
-        if let existing = workPageStates?.existingBookmark {
+    func startBookmark(workID: Int, auth: AO3AuthService) {
+        bookmarkGeneration = auth.sessionGeneration
+        if workPageStatesWorkID == workID,
+           workPageStatesGeneration == auth.sessionGeneration,
+           let existing = workPageStates?.existingBookmark {
             bookmarkInput = existing.input
             bookmarkIsUpdate = true
         } else {
@@ -250,32 +268,58 @@ final class AO3WorkActionsModel {
         showingBookmark = true
     }
 
+    func bookmarkSessionDidChange() {
+        workPageStatesRevision += 1
+        workPageStates = nil
+        workPageStatesWorkID = nil
+        workPageStatesGeneration = nil
+        hasSyncedWorkPageStates = false
+        isFetchingWorkPageStates = false
+        bookmarkGeneration = nil
+        bookmarkedWorkID = nil
+        bookmarkedWorkGeneration = nil
+        bookmarkInput = AO3AuthService.BookmarkInput()
+        bookmarkError = nil
+        bookmarkSuccess = nil
+        bookmarkIsUpdate = false
+        showingBookmark = false
+    }
+
     func submitBookmark(workID: Int, auth: AO3AuthService) {
-        guard !isWorking else { return }
+        guard !isWorking, bookmarkGeneration == auth.sessionGeneration else { return }
+        let expectedGeneration = auth.sessionGeneration
         let input = bookmarkInput
         isWorking = true
         bookmarkError = nil
-        Task {
+        activeTask = Task {
+            defer {
+                isWorking = false
+                activeTask = nil
+            }
             do {
-                let message = try await auth.saveBookmark(workID: workID, input: input)
+                let message = try await bookmarkHandler(workID, input, auth)
+                guard auth.sessionGeneration == expectedGeneration else { return }
                 bookmarkedWorkID = workID
+                bookmarkedWorkGeneration = expectedGeneration
                 AccessibilityNotification.Announcement(message).post()
                 writeSuccesses += 1
                 refreshWorkPageStates(workID: workID, auth: auth, force: true)
-                isWorking = false
                 guard message == "Bookmark updated." else {
                     showingBookmark = false
                     return
                 }
                 bookmarkSuccess = message
-                try? await Task.sleep(for: .seconds(2))
-                guard bookmarkSuccess == message else { return }
-                bookmarkSuccess = nil
-                showingBookmark = false
+                Task {
+                    try? await Task.sleep(for: .seconds(2))
+                    guard auth.sessionGeneration == expectedGeneration,
+                          bookmarkSuccess == message else { return }
+                    bookmarkSuccess = nil
+                    showingBookmark = false
+                }
             } catch {
+                guard auth.sessionGeneration == expectedGeneration else { return }
                 bookmarkError = Self.message(for: error)
                 writeFailures += 1
-                isWorking = false
             }
         }
     }
@@ -321,6 +365,9 @@ private struct AO3WorkActionsModifier: ViewModifier {
                 #if os(iOS)
                     .modifier(ScopeSurfaceAccent())
                 #endif
+            }
+            .onChange(of: auth.sessionGeneration) { _, _ in
+                actions.bookmarkSessionDidChange()
             }
             .commentsSheet(
                 isPresented: $actions.showingCommentsScreen,

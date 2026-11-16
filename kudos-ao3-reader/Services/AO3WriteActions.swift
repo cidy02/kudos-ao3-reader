@@ -155,13 +155,13 @@ extension AO3AuthService {
             else { return nil }
             return url
         }
+        // otwarchive@41d3878b subscriptions/_form.html.erb renders a create-or-delete form;
+        // with neither recognised the state is unknown, and nothing is written or claimed.
+        let recognised = state.isSubscribed
+            ? unsubscribeURL != nil
+            : AO3Client.hasSubscribeForm(in: html)
+        guard recognised else { throw AO3Error.parse }
         if let want {
-            // otwarchive renders a create-or-delete subscription form for a signed-in reader;
-            // with neither recognised the state is unknown, and nothing is written or claimed.
-            let recognised = state.isSubscribed
-                ? unsubscribeURL != nil
-                : AO3Client.hasSubscribeForm(in: html)
-            guard recognised else { throw AO3Error.parse }
             if want == state.isSubscribed {
                 return want ? "You're already subscribed." : "Unsubscribed."
             }
