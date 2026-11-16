@@ -1,6 +1,9 @@
 package io.github.cidy02.kudos.ui.components
 
 import android.app.Application
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
@@ -57,58 +60,60 @@ class GeneratedCoverViewTest {
 
     @Test fun generatedCoverShowsWordsWhenVisibleAndDrawsGroundOnlyWhenHidden() {
         val recipe = work.generatedCoverRecipe()
+        var visible by mutableStateOf(true)
         compose.setContent {
             KudosTheme(KudosThemeMode.Light) {
-                GeneratedCoverView(recipe = recipe, width = 164.dp, showsWords = true, showsArt = true)
+                GeneratedCoverView(recipe = recipe, width = 164.dp, showsWords = visible, showsArt = visible)
             }
         }
         compose.onNodeWithContentDescription("A Secret Work, An Author, Original Work").assertExists()
 
-        compose.setContent {
-            KudosTheme(KudosThemeMode.Light) {
-                GeneratedCoverView(recipe = recipe, width = 164.dp, showsWords = false, showsArt = false)
-            }
-        }
+        compose.runOnIdle { visible = false }
+        compose.waitForIdle()
         compose.onAllNodesWithText("A Secret Work", substring = true).assertCountEquals(0)
         compose.onAllNodesWithText("An Author", substring = true).assertCountEquals(0)
         compose.onAllNodesWithContentDescription("A Secret Work", substring = true).assertCountEquals(0)
     }
 
     @Test fun subjectWorkCoverCardHidesDetailsWhenObscuredAndShowsSummaryWhenVisible() {
+        var shownWork by mutableStateOf(work.copy(chapters = "1/1"))
+        var obscured by mutableStateOf(false)
         compose.setContent {
             KudosTheme(KudosThemeMode.Light) {
-                SubjectWorkCoverCard(work = work, obscured = false, downloadFraction = null)
+                SubjectWorkCoverCard(work = shownWork, obscured = obscured, downloadFraction = null)
             }
         }
         compose.onNodeWithContentDescription("A Secret Work", substring = true).assertExists()
-        compose.onNodeWithText("12K words · 3/3").assertExists()
+        compose.onNodeWithText("12K words · 1/1").assertExists()
 
-        compose.setContent {
-            KudosTheme(KudosThemeMode.Light) {
-                SubjectWorkCoverCard(work = work, obscured = true, downloadFraction = null)
-            }
-        }
+        // Multi-chapter works without explicit whole-book progress fall back to chapter ratio ("3/3" -> Ch 2 of 3).
+        compose.runOnIdle { shownWork = work }
+        compose.waitForIdle()
+        compose.onNodeWithText("Ch 2 of 3 · 33%").assertExists()
+        compose.onNodeWithContentDescription("Reading progress: 33 percent").assertExists()
+
+        compose.runOnIdle { obscured = true }
+        compose.waitForIdle()
         compose.onAllNodesWithText("A Secret Work", substring = true).assertCountEquals(0)
         compose.onAllNodesWithText("12K words", substring = true).assertCountEquals(0)
+        compose.onAllNodesWithText("Ch 2 of 3", substring = true).assertCountEquals(0)
         compose.onAllNodesWithContentDescription("A Secret Work", substring = true).assertCountEquals(0)
         compose.onNodeWithContentDescription("Hidden mature work. Activate to reveal.").assertExists()
     }
 
     @Test fun subjectRemoteCoverCardRespectsProvenanceAndObscuredMode() {
+        var obscured by mutableStateOf(false)
         compose.setContent {
             KudosTheme(KudosThemeMode.Light) {
-                SubjectRemoteCoverCard(summary = remoteSummary, showsProvenance = true, obscured = false)
+                SubjectRemoteCoverCard(summary = remoteSummary, showsProvenance = true, obscured = obscured)
             }
         }
         compose.onNodeWithContentDescription("Remote Title", substring = true).assertExists()
         compose.onNodeWithContentDescription("From AO3").assertExists()
         compose.onNodeWithText("24K words · 2/? · 14 Nov 2026").assertExists()
 
-        compose.setContent {
-            KudosTheme(KudosThemeMode.Light) {
-                SubjectRemoteCoverCard(summary = remoteSummary, showsProvenance = true, obscured = true)
-            }
-        }
+        compose.runOnIdle { obscured = true }
+        compose.waitForIdle()
         compose.onAllNodesWithText("Remote Title", substring = true).assertCountEquals(0)
         compose.onAllNodesWithContentDescription("From AO3").assertCountEquals(0)
         compose.onNodeWithContentDescription("Hidden mature work. Activate to reveal.").assertExists()
@@ -117,11 +122,13 @@ class GeneratedCoverViewTest {
     @Test fun collectionCardUsesCoverStackBothEmptyAndPopulated() {
         val emptyCollection = WorkCollection(id = "col-empty", name = "Empty Shelf", workIds = emptyList())
         val fullCollection = WorkCollection(id = "col-full", name = "Populated Shelf", workIds = listOf(work.id))
+        var collection by mutableStateOf(emptyCollection)
+        var previewWorks by mutableStateOf(emptyList<SavedWork>())
         compose.setContent {
             KudosTheme(KudosThemeMode.Dark) {
                 CollectionCard(
-                    collection = emptyCollection,
-                    previewWorks = emptyList(),
+                    collection = collection,
+                    previewWorks = previewWorks,
                     onClick = {},
                     onLongClick = {}
                 )
@@ -130,16 +137,11 @@ class GeneratedCoverViewTest {
         compose.onNodeWithText("Empty Shelf").assertExists()
         compose.onNodeWithText("0 works").assertExists()
 
-        compose.setContent {
-            KudosTheme(KudosThemeMode.Dark) {
-                CollectionCard(
-                    collection = fullCollection,
-                    previewWorks = listOf(work),
-                    onClick = {},
-                    onLongClick = {}
-                )
-            }
+        compose.runOnIdle {
+            collection = fullCollection
+            previewWorks = listOf(work)
         }
+        compose.waitForIdle()
         compose.onNodeWithText("Populated Shelf").assertExists()
         compose.onNodeWithText("1 work").assertExists()
     }
