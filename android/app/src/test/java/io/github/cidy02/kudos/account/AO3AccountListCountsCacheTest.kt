@@ -69,6 +69,7 @@ class AO3AccountListCountsCacheTest {
             action("Series (40)", "/users/astolat/series"),
             action("Bookmarks (1,022)", "/users/astolat/bookmarks"),
             action("Collections (33)", "/users/astolat/collections"),
+            action("Drafts (2)", "/users/astolat/works/drafts"),
             action("Gifts (131)", "/users/astolat/gifts"),
             action("Works (7)", "/users/astolat/pseuds/other/works"),
             action("Works (some)", "/users/astolat/works")
@@ -77,7 +78,11 @@ class AO3AccountListCountsCacheTest {
         assertEquals(1022, cache.get(AccountListType.Bookmarks, scope)?.exact)
         assertEquals(33, cache.get(AO3AccountListCountsCache.COLLECTIONS, scope)?.exact)
         assertEquals(40, cache.get(AO3AccountListCountsCache.SERIES, scope)?.exact)
+        assertEquals(2, cache.get(AO3AccountListCountsCache.DRAFTS, scope)?.exact)
         assertNull(cache.get(AccountListType.Subscriptions, scope))
         assertNull(cache.get(AccountListType.History, scope))
+        assertNull(Count(itemsOnPage = 0, totalPages = 2).knownCount)
+        assertEquals(20, Count(itemsOnPage = 20, totalPages = 2).knownCount)
+        assertEquals(0, Count(exact = 0).knownCount)
     }
 }
