@@ -72,6 +72,10 @@ class SyncRepository(
     private val lastManifestStore = SyncLastManifestStore(
         workFileStore.worksDirectory.parent ?: workFileStore.worksDirectory
     )
+    private val pendingImportManifestStore = SyncLastManifestStore(
+        workFileStore.worksDirectory.parent ?: workFileStore.worksDirectory,
+        fileName = BackupRepository.PENDING_IMPORT_MANIFEST_FILE
+    )
 
     suspend fun isSyncEnabled(): Boolean {
         return settingsRepository.settings.first().sync.isEnabled
@@ -82,10 +86,12 @@ class SyncRepository(
     }
 
     suspend fun connect(uri: Uri) = runSyncMutex.withLock {
+        val previousUri = getSyncFolderUri()
         context.contentResolver.takePersistableUriPermission(
             uri,
             Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
         )
+        if (previousUri != uri) pendingImportManifestStore.clear()
         settingsRepository.updateSyncFolderUri(uri.toString())
         // iOS records any connected folder as configured, wherever it was chosen, so a later
         // Disconnect does not bring the first-run sync prompt back (A75 #11).
@@ -373,9 +379,15 @@ class SyncRepository(
                 // Replace that paused sync meanwhile must not have its library published or the
                 // folder pruned by works it removed (review of 3fy, F7).
                 if (!folderImportStillAllowed()) throw ImportDeclined()
+                val pendingImport = pendingImportManifestStore.load()
+                val effectiveReadManifestJson = when {
+                    readManifestJson != null && pendingImport != null ->
+                        mergeFallbackManifestJson(pendingImport, readManifestJson) ?: readManifestJson
+                    else -> readManifestJson
+                }
                 // A folder whose manifest we actually read becomes the store. An empty folder
                 // leaves the previous store in place, and the commit below is its first write.
-                readManifestJson?.let { lastManifestStore.save(it, folderUri = uri.toString()) }
+                effectiveReadManifestJson?.let { lastManifestStore.save(it, folderUri = uri.toString()) }
                 val snapshot = backupRepository.captureLibrarySnapshot()
                 // Same single-source rule as the User-Agent: a hardcoded version here
                 // drifts silently and lands in every archive the user exports.
@@ -488,8 +500,8 @@ class SyncRepository(
                 val canFallbackToStore = !hasUsableFolderManifest &&
                     ((manifestBytesAtRead == null && backupManifest == null && conflicts.isEmpty()) ||
                         lastManifestStore.belongsToFolder(uri.toString()))
-                val replacedJson = readManifestJson
-                    ?: if (canFallbackToStore) lastManifestStore.load() else null
+                val replacedJson = effectiveReadManifestJson
+                    ?: if (canFallbackToStore) lastManifestStore.load() else pendingImport
                 val manifestBytes = BackupJson.encodeToString(
                     JsonObject.serializer(),
                     carryUnknownRecordKeys(manifestJson, replacedJson)
@@ -506,6 +518,7 @@ class SyncRepository(
                     throw IOException("Sync folder changed during sync. Try syncing again.")
                 }
                 lastManifestStore.save(manifestBytes, folderUri = uri.toString())
+                pendingImportManifestStore.clear()
                 foldedConflicts.forEach { it.delete() }
                 // Remembered only when nothing is outstanding (iOS withholds its stamp the same
                 // way): a work still owed an EPUB, or one whose file has gone missing from this

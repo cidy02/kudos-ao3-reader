@@ -1373,6 +1373,123 @@ class SyncManifestPassthroughTest {
         assertEquals(zipManifest["writingRecovery"], written["writingRecovery"])
     }
 
+    @Test
+    fun connectedBackupImportKeepsPendingOverlayForNextSyncAndClearsOnFolderSwitch() = runTest {
+        val folderFixture = iosT541ManifestJson()
+        val initialFolder = JsonObject(
+            folderFixture.filterKeys { it != "documents" } + mapOf(
+                "works" to JsonArray(listOf(folderFixture.getValue("works").jsonArray[0]))
+            )
+        )
+        writeChild(
+            ensureKudosLibrary(),
+            BackupPaths.MANIFEST,
+            "application/json",
+            BackupJson.encodeToString(JsonObject.serializer(), initialFolder).toByteArray(Charsets.UTF_8)
+        )
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+
+        val extraWorkId = "99999999-0000-4000-8000-000000000077"
+        val importedBackup = JsonObject(
+            mapOf(
+                "version" to JsonPrimitive(8),
+                "exportedAt" to JsonPrimitive("2026-06-26T14:00:00.000Z"),
+                "documents" to folderFixture.getValue("documents"),
+                "settings" to JsonObject(
+                    mapOf(
+                        "modifiedAt" to JsonObject(
+                            mapOf("keepScreenAwake" to JsonPrimitive("2026-06-26T14:00:00.000Z"))
+                        ),
+                        "extras" to JsonObject(
+                            mapOf("keepScreenAwake" to JsonPrimitive(false))
+                        )
+                    )
+                ),
+                "works" to JsonArray(
+                    listOf(
+                        JsonObject(
+                            mapOf(
+                                "id" to JsonPrimitive(extraWorkId),
+                                "title" to JsonPrimitive("Imported While Connected"),
+                                "author" to JsonPrimitive("Carol"),
+                                "sourceURL" to JsonPrimitive("https://archiveofourown.org/works/820077"),
+                                "ao3WorkID" to JsonPrimitive(820077),
+                                "dateAdded" to JsonPrimitive("2026-06-26T13:00:00.000Z"),
+                                "lastModifiedAt" to JsonPrimitive("2026-06-26T14:00:00.000Z"),
+                                "isSaved" to JsonPrimitive(true),
+                                "authorIdentitiesJSON" to JsonPrimitive("[{\"username\":\"carol\"}]"),
+                                "futureWorkInsights" to JsonObject(mapOf("streak" to JsonPrimitive(9)))
+                            )
+                        )
+                    )
+                )
+            )
+        )
+        backupRepository.importV2ZipBytes(zipManifest(importedBackup), mode = BackupImportMode.MERGE)
+
+        clockInstant = FIXED_CLOCK.plusSeconds(180)
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+
+        val synced = Json.parseToJsonElement(
+            readDocument(requireKudosLibrary().findFile(BackupPaths.MANIFEST)!!).toString(Charsets.UTF_8)
+        ).jsonObject
+        assertEquals(folderFixture["documents"], synced["documents"])
+        assertEquals(
+            JsonPrimitive(false),
+            synced.getValue("settings").jsonObject.getValue("extras").jsonObject["keepScreenAwake"]
+        )
+        assertEquals(
+            folderFixture.getValue("works").jsonArray[0].jsonObject["authorIdentitiesJSON"],
+            workJson(synced, WORK_ONE)["authorIdentitiesJSON"]
+        )
+        val syncedExtraWork = workJson(synced, extraWorkId)
+        assertEquals(JsonPrimitive("[{\"username\":\"carol\"}]"), syncedExtraWork["authorIdentitiesJSON"])
+        assertEquals(JsonObject(mapOf("streak" to JsonPrimitive(9))), syncedExtraWork["futureWorkInsights"])
+
+        // Switching to a different folder clears any new pending import overlay so it cannot bleed across.
+        val secondImport = JsonObject(
+            mapOf(
+                "version" to JsonPrimitive(8),
+                "exportedAt" to JsonPrimitive("2026-06-26T15:00:00.000Z"),
+                "writingRecovery" to JsonPrimitive("leaked-from-prior-import")
+            )
+        )
+        backupRepository.importV2ZipBytes(zipManifest(secondImport), mode = BackupImportMode.MERGE)
+
+        val other = DocumentFile.fromTreeUri(context, treeUri)!!.createDirectory("FolderB")!!
+        val otherKudos = other.createDirectory("KudosLibrary")!!
+        val folderBManifest = JsonObject(
+            mapOf(
+                "version" to JsonPrimitive(8),
+                "exportedAt" to JsonPrimitive("2026-06-26T16:00:00.000Z"),
+                "writingRecovery" to JsonPrimitive("folder-b-only")
+            )
+        )
+        writeChild(
+            otherKudos,
+            BackupPaths.MANIFEST,
+            "application/json",
+            BackupJson.encodeToString(JsonObject.serializer(), folderBManifest).toByteArray(Charsets.UTF_8)
+        )
+        val folderBUri = android.provider.DocumentsContract.buildTreeDocumentUri(
+            FakeTempDocumentsProvider.AUTHORITY,
+            android.provider.DocumentsContract.getDocumentId(other.uri)
+        )
+        context.grantUriPermission(
+            context.packageName,
+            folderBUri,
+            android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                android.content.Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+        )
+        syncRepository.connect(folderBUri)
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+        val afterB = Json.parseToJsonElement(
+            readDocument(otherKudos.findFile(BackupPaths.MANIFEST)!!).toString(Charsets.UTF_8)
+        ).jsonObject
+        assertEquals(JsonPrimitive("folder-b-only"), afterB["writingRecovery"])
+    }
+
     private fun iosT541ManifestJson(): JsonObject {
         val pair = Ed25519Sign.KeyPair.newKeyPair()
         runBlocking { settingsRepository.trustTombstonePublicKey(pair.publicKey.toLowerHex()) }

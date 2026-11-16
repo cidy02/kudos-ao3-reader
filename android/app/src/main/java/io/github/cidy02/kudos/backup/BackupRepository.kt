@@ -26,6 +26,7 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
 
@@ -48,6 +49,10 @@ class BackupRepository(
 ) {
     private val lastImportedManifestStore = SyncLastManifestStore(
         workFileStore.worksDirectory.parent ?: workFileStore.worksDirectory
+    )
+    private val pendingImportManifestStore = SyncLastManifestStore(
+        workFileStore.worksDirectory.parent ?: workFileStore.worksDirectory,
+        fileName = PENDING_IMPORT_MANIFEST_FILE
     )
     init {
         val legacy = SyncLastManifestStore(
@@ -181,19 +186,43 @@ class BackupRepository(
         }
     }
 
-    private fun recordImportedManifest(
+    private suspend fun recordImportedManifest(
         rawJson: JsonObject?,
         mode: BackupImportMode,
         replacePassthroughStore: Boolean = false
     ) {
-        if (replacePassthroughStore || mode == BackupImportMode.REPLACE_LIBRARY) {
+        if (replacePassthroughStore) {
             if (rawJson != null) lastImportedManifestStore.save(rawJson) else lastImportedManifestStore.clear()
+            pendingImportManifestStore.clear()
+            return
+        }
+        val connectedFolderUri = settingsRepository.settings.first().sync.folderUri
+        val keepFolderTag = connectedFolderUri?.takeIf { lastImportedManifestStore.belongsToFolder(it) }
+        if (mode == BackupImportMode.REPLACE_LIBRARY) {
+            if (rawJson != null) {
+                lastImportedManifestStore.save(rawJson, folderUri = keepFolderTag)
+                if (connectedFolderUri != null) pendingImportManifestStore.save(rawJson)
+            } else {
+                lastImportedManifestStore.clear()
+                pendingImportManifestStore.clear()
+            }
         } else if (rawJson != null) {
             val existing = lastImportedManifestStore.load()
             lastImportedManifestStore.save(
-                mergeImportedManifestJson(rawJson, existing)
+                mergeImportedManifestJson(rawJson, existing),
+                folderUri = keepFolderTag
             )
+            if (connectedFolderUri != null) {
+                val existingPending = pendingImportManifestStore.load()
+                pendingImportManifestStore.save(
+                    mergeImportedManifestJson(rawJson, existingPending)
+                )
+            }
         }
+    }
+
+    internal companion object {
+        internal const val PENDING_IMPORT_MANIFEST_FILE = "sync-pending-import-manifest.json"
     }
 
     private suspend fun prepareForImport(mode: BackupImportMode) {
