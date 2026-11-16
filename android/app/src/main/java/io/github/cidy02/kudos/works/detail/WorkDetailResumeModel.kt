@@ -43,7 +43,12 @@ data class ResumeCardModel(
 
     val postedChapters: Int get() = ChapterBarModel.postedChapterCount(chapters)
     val plannedChapters: Int get() = maxOf(ChapterBarModel.totalChapterCount(chapters) ?: postedChapters, postedChapters)
-    val postedShortLabel: String get() = if (plannedChapters > 0) "$postedChapters of $plannedChapters" else chapters
+    val postedShortLabel: String
+        get() = if (postedChapters > 0) {
+            "$postedChapters of ${ChapterBarModel.totalChapterCount(chapters)?.toString() ?: "?"}"
+        } else {
+            chapters
+        }
 
     val chapterNumber: Int
         get() {
@@ -91,10 +96,21 @@ data class ResumeCardModel(
     val chapterBarsLabel: String?
         get() {
             val posted = ChapterBarModel.postedChapterCount(chapters)
-            val planned = maxOf(ChapterBarModel.totalChapterCount(chapters) ?: posted, posted)
+            val total = ChapterBarModel.totalChapterCount(chapters)
+            val planned = maxOf(total ?: posted, posted)
             if (planned <= 128) return null
-            val read = progress?.let { "${(it * 100).toInt()} percent read, " }.orEmpty()
-            return "$read$posted of $planned chapters posted"
+            val read = progress?.let { "${(it * 100.0).roundToInt()} percent read, " }.orEmpty()
+            return buildString {
+                append(read)
+                if (total != null) {
+                    append("$posted of $planned chapters posted")
+                    val unposted = (planned - posted).coerceAtLeast(0)
+                    if (unposted > 0) append(", $unposted not posted yet")
+                } else {
+                    append("$posted chapters posted, total not set by the author")
+                }
+                if (clampedNewChapterCount > 0) append(", $clampedNewChapterCount new")
+            }
         }
 
     companion object {

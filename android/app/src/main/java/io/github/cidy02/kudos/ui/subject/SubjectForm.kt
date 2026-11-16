@@ -163,6 +163,7 @@ fun SubjectFormRow(
             .fillMaxWidth()
             .then(if (onClick != null) Modifier.defaultMinSize(minHeight = 48.dp) else Modifier)
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .then(if (onClick == null && trailing == null) Modifier.semantics(mergeDescendants = true) {} else Modifier)
             .padding(horizontal = 13.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)

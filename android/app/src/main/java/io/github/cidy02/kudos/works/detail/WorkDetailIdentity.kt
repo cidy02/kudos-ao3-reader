@@ -37,6 +37,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -383,6 +384,7 @@ fun WorkDetailResumeCard(
                     ResumeCircleAction(
                         icon = Icons.AutoMirrored.Filled.List,
                         accessibilityLabel = "Contents",
+                        accessibilityValue = model.postedShortLabel.takeIf { it.isNotBlank() }?.let { "$it chapters" },
                         enabled = !isBusy,
                         badge = null,
                         badgeInk = startColor,
@@ -502,14 +504,20 @@ private fun ResumeCircleAction(
     enabled: Boolean,
     badge: String?,
     badgeInk: Color,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    accessibilityValue: String? = null
 ) {
     Box(
         modifier = Modifier
             .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
             .clip(CircleShape)
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
-            .semantics(mergeDescendants = true) { contentDescription = accessibilityLabel },
+            .semantics(mergeDescendants = true) {
+                contentDescription = accessibilityLabel
+                if (!accessibilityValue.isNullOrBlank()) {
+                    stateDescription = accessibilityValue
+                }
+            },
         contentAlignment = Alignment.Center
     ) {
         Box(

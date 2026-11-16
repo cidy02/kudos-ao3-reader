@@ -31,7 +31,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -79,9 +78,8 @@ fun WorkDetailSummarySection(
     if (summary.isBlank()) return
     val tokens = LocalKudosTokens.current
     val uriHandler = LocalUriHandler.current
-    val fontScale = LocalDensity.current.fontScale
     var expanded by remember(summary) { mutableStateOf(false) }
-    var truncated by remember(summary, fontScale) { mutableStateOf(false) }
+    var truncated by remember(summary) { mutableStateOf(false) }
     val notesAction = onOpenNotes ?: ao3WorkId?.let { id ->
         { uriHandler.openUri("https://archiveofourown.org/works/$id") }
     }
@@ -106,8 +104,10 @@ fun WorkDetailSummarySection(
                 maxLines = if (expanded) Int.MAX_VALUE else 3,
                 overflow = TextOverflow.Ellipsis,
                 onTextLayout = { result ->
-                    if (!expanded) {
-                        truncated = result.hasVisualOverflow
+                    truncated = if (expanded) {
+                        result.lineCount > 3 || result.hasVisualOverflow
+                    } else {
+                        result.hasVisualOverflow
                     }
                 },
                 modifier = Modifier.animateContentSize()
@@ -230,7 +230,7 @@ fun WorkDetailDisclosureHeader(
                     onClick = onToggle
                 )
                 .padding(vertical = 10.dp)
-                .semantics(mergeDescendants = true) {
+                .clearAndSetSemantics {
                     heading()
                     contentDescription = "$title, $digest"
                     stateDescription = if (expanded) "Expanded" else "Collapsed"
