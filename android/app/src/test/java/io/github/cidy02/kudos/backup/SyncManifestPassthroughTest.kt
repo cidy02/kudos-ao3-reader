@@ -1715,6 +1715,38 @@ class SyncManifestPassthroughTest {
         assertFalse(after.belongsToFolder("content://previous"))
     }
 
+    @Test
+    fun failedTagWriteAfterBodyPublishDoesNotPairNewFolderWithOldTag() = runTest {
+        val dir = Files.createTempDirectory("kudos-a541-tag-crash")
+        try {
+            val store = SyncLastManifestStore(dir)
+            store.save(
+                JsonObject(mapOf("writingRecovery" to JsonPrimitive("folder-a-body"))),
+                folderUri = "content://folder-a"
+            )
+            SyncLastManifestStore.beforeTagPublish = { path ->
+                if (path.parent == dir) throw java.io.IOException("simulated crash before tag write")
+            }
+            val thrown = try {
+                store.save(
+                    JsonObject(mapOf("writingRecovery" to JsonPrimitive("folder-b-body"))),
+                    folderUri = "content://folder-b"
+                )
+                false
+            } catch (_: java.io.IOException) {
+                true
+            }
+            assertTrue(thrown)
+            assertEquals(JsonPrimitive("folder-b-body"), store.load()!!["writingRecovery"])
+            assertFalse(store.belongsToFolder("content://folder-a"))
+            assertFalse(store.belongsToFolder("content://folder-b"))
+            assertNull(store.taggedFolderUri())
+        } finally {
+            SyncLastManifestStore.beforeTagPublish = null
+            dir.toFile().deleteRecursively()
+        }
+    }
+
     private fun stampedManifest(
         exportedAt: String,
         workStamp: String,

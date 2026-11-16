@@ -674,6 +674,11 @@ internal class SyncLastManifestStore(
         val temp = Files.createTempFile(parent, ".sync-last-manifest-", ".tmp")
         try {
             Files.write(temp, bytes)
+            // Drop a differing folder tag before replacing the manifest body so a crash or
+            // write failure before the new tag moves never pairs the new body with the old folder.
+            if (folderUri != null && readFolderTag() != folderUri) {
+                runCatching { Files.deleteIfExists(folderFile) }
+            }
             try {
                 Files.move(temp, file, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
             } catch (_: Exception) {
@@ -685,6 +690,7 @@ internal class SyncLastManifestStore(
         // A null URI leaves the sidecar alone. Callers that do not know the folder
         // (a disconnected import) must not strip a tag a previous sync wrote.
         if (folderUri != null) {
+            beforeTagPublish?.invoke(folderFile)
             val tagTemp = Files.createTempFile(parent, ".sync-last-manifest-folder-", ".tmp")
             try {
                 Files.write(tagTemp, folderUri.toByteArray(Charsets.UTF_8))
@@ -715,5 +721,8 @@ internal class SyncLastManifestStore(
 
         /** Test hook. Receives the file about to be published. Null in production. */
         internal var beforeFilePublish: ((Path) -> Unit)? = null
+
+        /** Test hook. Receives the `.folder` tag path right before it is written. Null in production. */
+        internal var beforeTagPublish: ((Path) -> Unit)? = null
     }
 }
