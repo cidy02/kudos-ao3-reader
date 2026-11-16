@@ -122,22 +122,17 @@ struct AccountInboxPreviewRow: View {
     let item: AO3InboxItem
     let onOpen: () -> Void
 
-    @Environment(ThemeManager.self) private var theme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-
-    private var avatarPalette: SubjectPalette {
-        theme.appTheme.subjectPalette(hue: CoverArt.hue(for: item.commenterName))
-    }
 
     var body: some View {
         Button(action: onOpen) {
             HStack(alignment: .top, spacing: 10) {
-                Text(item.commenterName.first.map { String($0).uppercased() } ?? "?")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(avatarPalette.labelOnAccent)
-                    .frame(width: 30, height: 30)
-                    .background(avatarPalette.accent, in: Circle())
-                    .accessibilityHidden(true)
+                CommentAvatar(
+                    isGuest: item.isGuest,
+                    avatarURL: item.avatarURL,
+                    name: item.commenterName,
+                    size: 30
+                )
 
                 VStack(alignment: .leading, spacing: 2) {
                     byline
