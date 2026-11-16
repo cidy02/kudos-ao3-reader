@@ -290,6 +290,32 @@ nonisolated enum KudosBackupSettingValue: Codable, Equatable, Sendable {
 /// Decodes a `[String: T]` entry by entry, keeping every entry that decodes and reporting
 /// whether any did not (T-541). A malformed entry must not look like an absent map: absence
 /// can mean a reset, malformed cannot.
+/// An array decoded element by element (T-541, Codex's third review): one malformed entry is
+/// skipped and counted instead of turning every writing draft or data file in the archive into
+/// nothing.
+nonisolated struct LossyArray<Element: Decodable>: Decodable {
+    var values: [Element] = []
+    var skipped = 0
+
+    /// Decodes anything, so the container steps past an element `Element` refused.
+    private struct Skip: Decodable {
+        init(from decoder: Decoder) {}
+    }
+
+    init(from decoder: Decoder) throws {
+        var container = try decoder.unkeyedContainer()
+        while !container.isAtEnd {
+            if let value = try? container.decode(Element.self) {
+                values.append(value)
+            } else {
+                // Step past the bad element; a container that cannot advance ends the read.
+                guard (try? container.decode(Skip.self)) != nil else { break }
+                skipped += 1
+            }
+        }
+    }
+}
+
 nonisolated struct LossyMap<Value: Decodable>: Decodable {
     var values: [String: Value] = [:]
     var hadFailures = false

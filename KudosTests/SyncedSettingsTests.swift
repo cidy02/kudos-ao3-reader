@@ -414,6 +414,14 @@ struct SyncedSettingsTests {
         #expect(SubscriptionUpdateState.merged(local: merged, incoming: undated).decisions.first { $0.workID == 7 }?.action == .notForMe)
     }
 
+    /// Codex's third review: one malformed entry used to drop every writing draft in the archive.
+    @Test func oneMalformedEntryLosesOnlyItself() throws {
+        let json = Data(#"[{"name":"subscriptionScan/a.json","data":"e30=","modifiedAt":0},{"name":7},"x",{"name":"subscriptionScan/b.json","data":"e30=","modifiedAt":0}]"#.utf8)
+        let decoded = try JSONDecoder().decode(LossyArray<KudosBackupDocument>.self, from: json)
+        #expect(decoded.values.map(\.name) == ["subscriptionScan/a.json", "subscriptionScan/b.json"])
+        #expect(decoded.skipped == 2)
+    }
+
     private func pronunciationStore() -> KokoroPronunciationStore {
         KokoroPronunciationStore(url: FileManager.default.temporaryDirectory
             .appendingPathComponent("SyncedSettingsTests-\(UUID().uuidString).json"))

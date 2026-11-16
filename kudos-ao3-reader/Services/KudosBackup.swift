@@ -746,11 +746,14 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
             [KudosBackupTombstone].self,
             forKey: .tombstones
         ) ?? []
-        // `try?`: neither may stop the library itself from restoring.
+        // Neither may stop the library itself from restoring, and one bad entry must not take
+        // the good ones with it (`LossyArray`).
         writingRecovery = (try? container.decodeIfPresent(
-            [KudosBackupRecoveryCopy].self, forKey: .writingRecovery
-        )) ?? nil
-        documents = (try? container.decodeIfPresent([KudosBackupDocument].self, forKey: .documents)) ?? nil
+            LossyArray<KudosBackupRecoveryCopy>.self, forKey: .writingRecovery
+        ))?.values
+        documents = (try? container.decodeIfPresent(
+            LossyArray<KudosBackupDocument>.self, forKey: .documents
+        ))?.values
     }
 }
 
