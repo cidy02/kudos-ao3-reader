@@ -202,7 +202,6 @@ class BackupRepository(
             } else {
                 lastImportedManifestStore.clear()
             }
-            pendingImportManifestStore.clear()
             return
         }
         val keepFolderTag = connectedFolderUri?.takeIf { lastImportedManifestStore.belongsToFolder(it) }

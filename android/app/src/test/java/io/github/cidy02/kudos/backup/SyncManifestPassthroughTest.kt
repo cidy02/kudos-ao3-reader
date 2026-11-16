@@ -1852,6 +1852,73 @@ class SyncManifestPassthroughTest {
         assertFalse(Files.exists(pendingTagFile))
     }
 
+    @Test
+    fun legacyKudosBackupSyncFoldsPendingImportOverlay() = runTest {
+        syncRepository.disconnect()
+
+        val localWorkId = "99999999-0000-4000-8000-000000000099"
+        val localImport = JsonObject(
+            mapOf(
+                "version" to JsonPrimitive(8),
+                "exportedAt" to JsonPrimitive("2026-06-26T14:00:00.000Z"),
+                "writingRecovery" to JsonPrimitive("local-pending-draft"),
+                "pendingOnlyKey" to JsonPrimitive("kept-across-legacy-zip"),
+                "works" to JsonArray(
+                    listOf(
+                        JsonObject(
+                            mapOf(
+                                "id" to JsonPrimitive(localWorkId),
+                                "title" to JsonPrimitive("Local Pending Work"),
+                                "author" to JsonPrimitive("Eve"),
+                                "sourceURL" to JsonPrimitive("https://archiveofourown.org/works/820099"),
+                                "ao3WorkID" to JsonPrimitive(820099),
+                                "dateAdded" to JsonPrimitive("2026-06-26T13:00:00.000Z"),
+                                "lastModifiedAt" to JsonPrimitive("2026-06-26T14:00:00.000Z"),
+                                "isSaved" to JsonPrimitive(true),
+                                "authorIdentitiesJSON" to JsonPrimitive("[{\"username\":\"eve\"}]")
+                            )
+                        )
+                    )
+                )
+            )
+        )
+        backupRepository.importV2ZipBytes(zipManifest(localImport), mode = BackupImportMode.MERGE)
+
+        val root = DocumentFile.fromTreeUri(context, treeUri)!!
+        val legacyZipManifest = JsonObject(
+            iosT541ManifestJson() + mapOf(
+                "exportedAt" to JsonPrimitive("2026-06-26T12:00:00.000Z"),
+                "writingRecovery" to JsonPrimitive("older-legacy-zip-draft")
+            )
+        )
+        writeChild(root, "Kudos.kudosbackup", "application/zip", zipManifest(legacyZipManifest))
+
+        context.grantUriPermission(
+            context.packageName,
+            treeUri,
+            android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                android.content.Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+        )
+        syncRepository.connect(treeUri)
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+
+        val synced = Json.parseToJsonElement(
+            readDocument(requireKudosLibrary().findFile(BackupPaths.MANIFEST)!!).toString(Charsets.UTF_8)
+        ).jsonObject
+        assertEquals(JsonPrimitive("local-pending-draft"), synced["writingRecovery"])
+        assertEquals(JsonPrimitive("kept-across-legacy-zip"), synced["pendingOnlyKey"])
+        assertEquals(
+            JsonPrimitive("[{\"username\":\"eve\"}]"),
+            workJson(synced, localWorkId)["authorIdentitiesJSON"]
+        )
+        assertEquals(
+            legacyZipManifest.getValue("works").jsonArray[0].jsonObject["authorIdentitiesJSON"],
+            workJson(synced, WORK_ONE)["authorIdentitiesJSON"]
+        )
+        assertFalse(Files.exists(filesRoot.resolve(BackupRepository.PENDING_IMPORT_MANIFEST_FILE)))
+    }
+
     private fun stampedManifest(
         exportedAt: String,
         workStamp: String,
