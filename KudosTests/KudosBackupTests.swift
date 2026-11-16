@@ -12,14 +12,19 @@ extension PersistenceGateSuites {
 @MainActor
 @Suite(.serialized)
 struct KudosBackupTests {
+    /// A ModelContext does not keep its container alive; a freed container traps on insert.
+    nonisolated(unsafe) private static var liveContainers: [ModelContainer] = []
+
     private func coverContext() throws -> ModelContext {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
             WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
             SavedSearch.self, SyncTombstone.self, ReadingAnnotation.self
         ])
-        return try ModelContainer(for: schema,
-            configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]).mainContext
+        let container = try ModelContainer(for: schema,
+            configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)])
+        Self.liveContainers.append(container)
+        return container.mainContext
     }
 
     private func coverContents(_ work: SavedWork) throws -> KudosBackupContents {

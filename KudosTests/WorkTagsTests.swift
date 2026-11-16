@@ -7,15 +7,20 @@ import Testing
 /// work's tag list (drops the rating, trims, de-duplicates, preserves order).
 @MainActor
 struct WorkTagsTests {
+    /// A ModelContext does not keep its container alive; a freed container traps on insert.
+    nonisolated(unsafe) private static var liveContainers: [ModelContainer] = []
+
     private func coverContext() throws -> ModelContext {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
             WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
             SavedSearch.self, SyncTombstone.self, ReadingAnnotation.self
         ])
-        return try ModelContainer(
+        let container = try ModelContainer(
             for: schema, configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]
-        ).mainContext
+        )
+        Self.liveContainers.append(container)
+        return container.mainContext
     }
     @Test func dropsRatingTrimsAndDeduplicates() {
         let subjects = ["Teen And Up Audiences", "Fluff", "Fluff", "  Angst  ", ""]
