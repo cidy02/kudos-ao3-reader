@@ -53,6 +53,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
@@ -67,6 +68,7 @@ import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.core.model.WorkSymbolPlacement
 import io.github.cidy02.kudos.home.HomeFacts
 import io.github.cidy02.kudos.ui.components.LocalWorkSymbolPlacement
+import io.github.cidy02.kudos.ui.components.WORK_STATUS_TRAY_TAG
 import io.github.cidy02.kudos.ui.subject.HomeStatusArrangement
 import io.github.cidy02.kudos.ui.subject.HomeStatusTray
 import io.github.cidy02.kudos.ui.subject.RevealCapsule
@@ -273,23 +275,34 @@ fun QueueLedgerCard(
                             }
                         }
                     }
-                    Text(
-                        text = work.title,
-                        color = tokens.primaryInk,
-                        fontSize = 16.5.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    LedgerAuthorLine(work.author, wraps = true)
                     if (symbolPlacement == WorkSymbolPlacement.UnderTitle) {
-                        HomeStatusTray(
-                            rating = work.rating,
-                            categories = work.workCategories,
-                            warnings = work.workWarnings,
-                            isComplete = work.knownCompletion,
-                            arrangement = HomeStatusArrangement.Row,
-                            tileSize = tile,
-                            announces = true
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(
+                                text = work.title,
+                                color = tokens.primaryInk,
+                                fontSize = 16.5.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            HomeStatusTray(
+                                rating = work.rating,
+                                categories = work.workCategories,
+                                warnings = work.workWarnings,
+                                isComplete = work.knownCompletion,
+                                arrangement = HomeStatusArrangement.Row,
+                                tileSize = tile,
+                                announces = true,
+                                modifier = Modifier.testTag(WORK_STATUS_TRAY_TAG)
+                            )
+                            LedgerAuthorLine(work.author, wraps = true)
+                        }
+                    } else {
+                        Text(
+                            text = work.title,
+                            color = tokens.primaryInk,
+                            fontSize = 16.5.sp,
+                            fontWeight = FontWeight.SemiBold
                         )
+                        LedgerAuthorLine(work.author, wraps = true)
                     }
                     if (figures.isNotEmpty()) {
                         Text(
@@ -332,25 +345,38 @@ fun QueueLedgerCard(
                         palette = kickerPalette,
                         onOpenFandom = openFandom
                     )
-                    Text(
-                        text = work.title,
-                        color = tokens.primaryInk,
-                        fontSize = 16.5.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    LedgerAuthorLine(work.author, wraps = false)
                     if (symbolPlacement == WorkSymbolPlacement.UnderTitle) {
-                        HomeStatusTray(
-                            rating = work.rating,
-                            categories = work.workCategories,
-                            warnings = work.workWarnings,
-                            isComplete = work.knownCompletion,
-                            arrangement = HomeStatusArrangement.Row,
-                            tileSize = tile,
-                            announces = true
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(
+                                text = work.title,
+                                color = tokens.primaryInk,
+                                fontSize = 16.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            HomeStatusTray(
+                                rating = work.rating,
+                                categories = work.workCategories,
+                                warnings = work.workWarnings,
+                                isComplete = work.knownCompletion,
+                                arrangement = HomeStatusArrangement.Row,
+                                tileSize = tile,
+                                announces = true,
+                                modifier = Modifier.testTag(WORK_STATUS_TRAY_TAG)
+                            )
+                            LedgerAuthorLine(work.author, wraps = false)
+                        }
+                    } else {
+                        Text(
+                            text = work.title,
+                            color = tokens.primaryInk,
+                            fontSize = 16.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
                         )
+                        LedgerAuthorLine(work.author, wraps = false)
                     }
                     if (figures.isNotEmpty()) {
                         Text(

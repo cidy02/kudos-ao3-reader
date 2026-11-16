@@ -354,17 +354,19 @@ fun SensitiveWorkRow(
                                         maxLines = 2,
                                         overflow = TextOverflow.Ellipsis
                                     )
-                                    io.github.cidy02.kudos.works.detail.VerifiedAuthorByline(
-                                        author, authorIdentities, authorNames, includesBy = true
-                                    )
-                                    // A saved work's expanded row still names every fandom (iOS `WorkRow`).
-                                    // An AO3 work's row lists the others as tappable chips below instead.
-                                    if (savedCard && expanded && namedFandoms.size > 1) {
-                                        Text(
-                                            text = namedFandoms.joinToString(", "),
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    if (symbolPlacement == WorkSymbolPlacement.Beside) {
+                                        io.github.cidy02.kudos.works.detail.VerifiedAuthorByline(
+                                            author, authorIdentities, authorNames, includesBy = true
                                         )
+                                        // A saved work's expanded row still names every fandom (iOS `WorkRow`).
+                                        // An AO3 work's row lists the others as tappable chips below instead.
+                                        if (savedCard && expanded && namedFandoms.size > 1) {
+                                            Text(
+                                                text = namedFandoms.joinToString(", "),
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
                                     }
                                 }
                                 if (isFavorite && !selecting) {
@@ -395,6 +397,20 @@ fun SensitiveWorkRow(
 
                             if (showsStatusTray && symbolPlacement == WorkSymbolPlacement.UnderTitle) {
                                 statusTray(HomeStatusArrangement.Row)
+                            }
+                            if (symbolPlacement == WorkSymbolPlacement.UnderTitle) {
+                                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    io.github.cidy02.kudos.works.detail.VerifiedAuthorByline(
+                                        author, authorIdentities, authorNames, includesBy = true
+                                    )
+                                    if (savedCard && expanded && namedFandoms.size > 1) {
+                                        Text(
+                                            text = namedFandoms.joinToString(", "),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
                             }
 
                             if (summary.isNotBlank()) {
@@ -661,10 +677,57 @@ private fun LedgerBody(
                 HomeStatusArrangement.Grid
             },
             tileSize = 24.dp,
-            announces = true
+            announces = true,
+            modifier = Modifier.testTag(WORK_STATUS_TRAY_TAG)
         )
     }
-    if (accessibility || symbolPlacement == WorkSymbolPlacement.UnderTitle) {
+    if (symbolPlacement == WorkSymbolPlacement.UnderTitle) {
+        Column(Modifier.fillMaxWidth()) {
+            Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                if (named.isNotEmpty() || badges.isNotEmpty()) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.Top) {
+                        WorkFandomKicker(
+                            fandoms = named,
+                            palette = palette,
+                            onOpenFandom = fandomOpener(interactive = fandomIsLink, search = tagSearch),
+                            expanded = expanded,
+                            size = 10.sp,
+                            ruleSpacing = 6.dp,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                        // iOS draws Private and Rec as `SubjectStateBadge`s in the secondary colour (A70).
+                        badges.forEach { badge -> SubjectStateBadge(text = badge, color = tokens.secondaryInk) }
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = title,
+                        color = tokens.primaryInk,
+                        fontSize = 19.sp,
+                        lineHeight = 24.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = if (accessibility) 3 else 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    if (isFavorite) {
+                        Icon(Icons.Filled.Star, contentDescription = "Favorite", tint = Color(0xFFFFCC00),
+                            modifier = Modifier.size(16.dp))
+                    }
+                }
+            }
+            Spacer(Modifier.height(6.dp))
+            signals()
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = "by ${author.ifBlank { "Anonymous" }}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = tokens.secondaryInk,
+                maxLines = if (accessibility) 2 else 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    } else if (accessibility) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             identity(Modifier.fillMaxWidth())
             signals()
