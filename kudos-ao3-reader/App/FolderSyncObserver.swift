@@ -33,6 +33,11 @@ struct FolderSyncObserver: View {
             .frame(width: 0, height: 0)
             .accessibilityHidden(true)
             .task {
+                // T-541. Learn every synced setting's current value before anything can change
+                // one, so the first change after an upgrade is stamped and uploaded like any
+                // other. Values seen here for the first time get no stamp.
+                let observed = KudosBackupSettings.observedKeys(in: .standard)
+                SyncedSettingsClock.noteLocalChanges(keys: observed.keys, mapKeys: observed.maps, in: .standard)
                 await Task.yield()
                 guard FolderSyncService.snapshot().autoSyncEnabled else { return }
                 lastForegroundFolderSyncAt = Date()
@@ -95,8 +100,9 @@ struct FolderSyncObserver: View {
                 NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
                     .debounce(for: .seconds(1), scheduler: RunLoop.main)
             ) { _ in
+                let observed = KudosBackupSettings.observedKeys(in: .standard)
                 guard SyncedSettingsClock.stampChanges(
-                    keys: KudosBackupSettings.syncedKeys, in: .standard
+                    keys: observed.keys, mapKeys: observed.maps, in: .standard
                 ) else { return }
                 FolderSyncService.markDirty()
                 scheduleFolderSyncUp()

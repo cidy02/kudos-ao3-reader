@@ -15,6 +15,9 @@ nonisolated struct KokoroPronunciationStore: Sendable {
         /// A sync uses it to tell a newer edit from an older one, entry by entry; a stamp
         /// with no entry records a removal. Nil in a file written before it existed.
         var stamps: [String: Date]?
+        /// Corrections that came from a copy with no stamps of their own, dated by that copy's
+        /// export (T-541). They order such copies among themselves and never beat `stamps`.
+        var inferred: [String: Date]?
 
         func value(for word: String, in layer: Layer) -> String? {
             switch layer {
@@ -40,24 +43,35 @@ nonisolated struct KokoroPronunciationStore: Sendable {
 
         mutating func stamp(_ words: [String], in layer: Layer, at date: Date = Date()) {
             var all = stamps ?? [:]
-            for word in words { all[KokoroPronunciationStore.entryID(layer, word)] = date }
+            for word in words {
+                let id = KokoroPronunciationStore.entryID(layer, word)
+                all[id] = date
+                inferred?[id] = nil
+            }
             stamps = all
         }
     }
 
-    private static let idSeparator = "\u{1F}"
+    /// The separator the first version of these identifiers used. Still read, never written:
+    /// a word or key containing it could not be told apart.
+    private static let legacySeparator = "\u{1F}"
 
-    /// One correction's identity across devices: its layer, the layer's key, and the word.
+    /// One correction's identity across devices: its layer, the layer's key, and the word, as
+    /// a JSON array, so whatever characters a word or key holds, it reads back exactly.
     static func entryID(_ layer: Layer, _ word: String) -> String {
-        switch layer {
-        case .global: ["g", word].joined(separator: idSeparator)
-        case .fandom(let key): ["f", key, word].joined(separator: idSeparator)
-        case .work(let key): ["w", key, word].joined(separator: idSeparator)
+        let parts = switch layer {
+        case .global: ["g", word]
+        case .fandom(let key): ["f", key, word]
+        case .work(let key): ["w", key, word]
         }
+        guard let data = try? JSONEncoder().encode(parts) else { return parts.joined(separator: legacySeparator) }
+        return String(decoding: data, as: UTF8.self)
     }
 
     static func entry(from id: String) -> (Layer, String)? {
-        let parts = id.components(separatedBy: idSeparator)
+        let parts = id.hasPrefix("[")
+            ? ((try? JSONDecoder().decode([String].self, from: Data(id.utf8))) ?? [])
+            : id.components(separatedBy: legacySeparator)
         switch (parts.first, parts.count) {
         case ("g", 2): return (.global, parts[1])
         case ("f", 3): return (.fandom(parts[1]), parts[2])

@@ -192,11 +192,167 @@ struct SyncedSettingsTests {
     @Test func checkingForChangesWritesNothingWhenNothingChanged() {
         let defaults = freshDefaults()
         defaults.set(18.0, forKey: "readerFontPt")
-        #expect(!SyncedSettingsClock.stampChanges(keys: KudosBackupSettings.syncedKeys, in: defaults))
-        #expect(!SyncedSettingsClock.stampChanges(keys: KudosBackupSettings.syncedKeys, in: defaults))
+        let keys = KudosBackupSettings.observedKeys(in: defaults)
+        #expect(!SyncedSettingsClock.stampChanges(keys: keys.keys, mapKeys: keys.maps, in: defaults))
+        #expect(!SyncedSettingsClock.stampChanges(keys: keys.keys, mapKeys: keys.maps, in: defaults))
         defaults.set(22.0, forKey: "readerFontPt")
-        #expect(SyncedSettingsClock.stampChanges(keys: KudosBackupSettings.syncedKeys, in: defaults))
+        #expect(SyncedSettingsClock.stampChanges(keys: keys.keys, mapKeys: keys.maps, in: defaults))
         #expect(SyncedSettingsClock.stamps(in: defaults)["readerFontPt"] != nil)
+    }
+
+    // MARK: Second review round (Codex, 2026-11-15) and the complete snapshot (owner, 2026-11-16)
+
+    /// Through JSON, as a manifest travels.
+    private func throughJSON(_ settings: KudosBackupSettings) throws -> KudosBackupSettings {
+        try JSONDecoder().decode(KudosBackupSettings.self, from: JSONEncoder().encode(settings))
+    }
+
+    @Test func anExportDateNeverBeatsARealEditMadeHere() throws {
+        let defaults = freshDefaults()
+        defaults.set(18.0, forKey: "readerFontPt")
+        let stale = folderCopy(of: defaults, fontPt: 18)        // Android or an older build: no stamps
+        defaults.set(22.0, forKey: "readerFontPt")
+        _ = KudosBackupSettings.capture(defaults: defaults)      // the edit is stamped
+
+        // Exported after the edit, but the value in it is the old one.
+        try throughJSON(stale).apply(to: defaults, fromSync: true, archiveDate: Date())
+
+        #expect(defaults.double(forKey: "readerFontPt") == 22)
+    }
+
+    @Test func commentDraftsTypedOnTwoDevicesBothSurviveAndAClearedOneStaysCleared() throws {
+        let key = "ao3CommentDrafts"
+        let here = freshDefaults()
+        here.set(["me|w1-c0-p0": "old draft"], forKey: key)
+        let start = KudosBackupSettings.capture(defaults: here)          // both devices start here
+        let there = freshDefaults()
+        try throughJSON(start).apply(to: there, fromSync: true, archiveDate: Date())
+        #expect(there.dictionary(forKey: key) as? [String: String] == ["me|w1-c0-p0": "old draft"])
+
+        // Here: the draft is posted and cleared. There: a new draft for another work.
+        here.set([String: String](), forKey: key)
+        _ = KudosBackupSettings.capture(defaults: here)
+        var drafts = there.dictionary(forKey: key) as? [String: String] ?? [:]
+        drafts["me|w2-c0-p0"] = "typed there"
+        there.set(drafts, forKey: key)
+        let fromThere = try throughJSON(KudosBackupSettings.capture(defaults: there))
+
+        try fromThere.apply(to: here, fromSync: true, archiveDate: Date())
+
+        let result = here.dictionary(forKey: key) as? [String: String] ?? [:]
+        #expect(result["me|w2-c0-p0"] == "typed there")
+        #expect(result["me|w1-c0-p0"] == nil)        // posted here after the other copy last saw it
+    }
+
+    @Test func oneUnreadableExtraKeepsTheRestAndRemovesNothing() throws {
+        let defaults = freshDefaults()
+        defaults.set(true, forKey: "keepScreenAwake")
+        defaults.set("#F4ECD8", forKey: "readerCustomPaperHex")
+        var settings = KudosBackupSettings.capture(defaults: defaults)
+        settings.extras = ["keepScreenAwake": .bool(false)]
+        settings.modifiedAt = ["readerCustomPaperHex": Date(), "keepScreenAwake": Date()]
+        var json = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(settings)) as? [String: Any])
+        var extras = try #require(json["extras"] as? [String: Any])
+        extras["showsZeroStats"] = ["unexpected": [1, 2]]   // an entry this build cannot read
+        json["extras"] = extras
+        let decoded = try JSONDecoder().decode(
+            KudosBackupSettings.self, from: JSONSerialization.data(withJSONObject: json)
+        )
+        #expect(decoded.extras?["keepScreenAwake"] == .bool(false))
+        #expect(decoded.extrasIncomplete)
+
+        decoded.apply(to: defaults, fromSync: true, archiveDate: Date())
+
+        #expect(defaults.bool(forKey: "keepScreenAwake") == false)
+        #expect(defaults.string(forKey: "readerCustomPaperHex") == "#F4ECD8")   // not taken as a reset
+    }
+
+    @Test func perListLayoutsAndStoredBytesTravel() throws {
+        let source = freshDefaults()
+        source.set("grid", forKey: "library.someShelf.arrangement")
+        source.set(Data([1, 2, 3]), forKey: "writing.recentTags.v1")
+        source.set(["alice": "pseud"], forKey: "ao3PostingPseudByUsername")
+        let captured = try throughJSON(KudosBackupSettings.capture(defaults: source))
+        #expect(captured.extras?["library.someShelf.arrangement"] == .string("grid"))
+        #expect(KudosBackupSettings.extraKind(for: "library.page.arrangement") == nil)   // a named field
+        #expect(KudosBackupSettings.extraKind(for: "AO3AuthenticatedUsername") == nil)  // sign-in stays
+
+        let target = freshDefaults()
+        captured.apply(to: target, fromSync: true, archiveDate: Date())
+
+        #expect(target.string(forKey: "library.someShelf.arrangement") == "grid")
+        #expect(target.data(forKey: "writing.recentTags.v1") == Data([1, 2, 3]))
+        #expect(target.dictionary(forKey: "ao3PostingPseudByUsername") as? [String: String] == ["alice": "pseud"])
+    }
+
+    @Test func aStoredByteValueIsNotMistakenForAnotherOfTheSameLength() {
+        let defaults = freshDefaults()
+        defaults.set(Data([1, 2, 3]), forKey: "writing.recentTags.v1")
+        let keys = KudosBackupSettings.observedKeys(in: defaults)
+        SyncedSettingsClock.noteLocalChanges(keys: keys.keys, mapKeys: keys.maps, in: defaults)
+        defaults.set(Data([9, 9, 9]), forKey: "writing.recentTags.v1")
+        #expect(SyncedSettingsClock.stampChanges(keys: keys.keys, mapKeys: keys.maps, in: defaults))
+    }
+
+    @Test func correctionNamesReadBackWhateverTheyHold() {
+        let word = "odd\u{1F}word"
+        let id = KokoroPronunciationStore.entryID(.fandom("A\u{1F}B"), word)
+        let parsed = KokoroPronunciationStore.entry(from: id)
+        #expect(parsed?.0 == .fandom("A\u{1F}B"))
+        #expect(parsed?.1 == word)
+        // The first version's identifiers still read.
+        let legacy = ["g", "Wren"].joined(separator: "\u{1F}")
+        #expect(KokoroPronunciationStore.entry(from: legacy)?.1 == "Wren")
+    }
+
+    // MARK: Writing drafts and data files
+
+    private func temporaryFolder() throws -> URL {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("SyncedSettingsTests-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
+    }
+
+    @Test func writingDraftsArriveAndANewerOneHereIsKept() throws {
+        let source = try temporaryFolder()
+        let target = try temporaryFolder()
+        defer { try? FileManager.default.removeItem(at: source); try? FileManager.default.removeItem(at: target) }
+        let name = String(repeating: "a", count: 64) + ".SESSION-1.json"
+        let older = WritingTextRecovery.Entry(text: "first", originalDigest: "x", savedAt: Date(timeIntervalSince1970: 1_700_000_000), accountDigest: nil)
+        try JSONEncoder().encode(older).write(to: source.appendingPathComponent(name))
+        try Data("{}".utf8).write(to: source.appendingPathComponent("notes.json"))   // not a recovery copy
+
+        let copies = KudosBackupRecoveryCopy.capture(directory: source)
+        #expect(copies.map(\.fileName) == [name])
+        KudosBackupRecoveryCopy.apply(copies, directory: target)
+        #expect(try WritingTextRecovery(directory: target).load(from: target.appendingPathComponent(name))?.text == "first")
+
+        let newer = WritingTextRecovery.Entry(text: "kept", originalDigest: "x", savedAt: Date(timeIntervalSince1970: 1_700_000_500), accountDigest: nil)
+        try JSONEncoder().encode(newer).write(to: target.appendingPathComponent(name))
+        KudosBackupRecoveryCopy.apply(copies, directory: target)
+        #expect(try WritingTextRecovery(directory: target).load(from: target.appendingPathComponent(name))?.text == "kept")
+
+        let hostile = KudosBackupRecoveryCopy(fileName: "../../outside.json", entry: older)
+        KudosBackupRecoveryCopy.apply([hostile], directory: target)
+        #expect(!FileManager.default.fileExists(atPath: target.deletingLastPathComponent().appendingPathComponent("outside.json").path))
+    }
+
+    @Test func dataFilesTravelOnlyUnderKnownNames() throws {
+        let root = try temporaryFolder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        #expect(KudosBackupDocument.location(for: "mail/updates.json", root: root) != nil)
+        #expect(KudosBackupDocument.location(for: "subscriptionScan/user%3Aalice.json", root: root) != nil)
+        #expect(KudosBackupDocument.location(for: "mail/cursor.json", root: root) == nil)
+        #expect(KudosBackupDocument.location(for: "subscriptionScan/../../x.json", root: root) == nil)
+
+        let json = Data(#"{"items":[]}"#.utf8)
+        KudosBackupDocument.apply([.init(name: "mail/updates.json", data: json, modifiedAt: Date(timeIntervalSince1970: 1_700_000_000))], root: root)
+        let url = try #require(KudosBackupDocument.location(for: "mail/updates.json", root: root))
+        #expect(try Data(contentsOf: url) == json)
+        // An older copy does not replace it.
+        KudosBackupDocument.apply([.init(name: "mail/updates.json", data: Data("{}".utf8), modifiedAt: Date(timeIntervalSince1970: 1_600_000_000))], root: root)
+        #expect(try Data(contentsOf: url) == json)
+        #expect(KudosBackupDocument.capture(root: root).map(\.name) == ["mail/updates.json"])
     }
 
     private func pronunciationStore() -> KokoroPronunciationStore {
