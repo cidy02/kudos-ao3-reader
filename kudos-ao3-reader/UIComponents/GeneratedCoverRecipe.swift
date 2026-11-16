@@ -281,6 +281,26 @@ extension SavedWork {
     }
 
     @MainActor
+    func ensureCoverPinnedOrRefreshed() {
+        if coverRecipeJSON == nil {
+            pinCover(salt: 0, automatic: true)
+        } else {
+            refreshCoverIfNeeded()
+        }
+    }
+
+    @MainActor
+    func refreshCoverAfterMetadataUpdate(hadEmptyFandoms: Bool, hadZeroWords: Bool) {
+        if let coverRecipeJSON, let pinned = GeneratedCoverRecipe.supportedPin(in: coverRecipeJSON),
+           pinned.salt == 0, (pinned.pinnedAt ?? 0) == 0,
+           pinned.fandom.isEmpty || hadEmptyFandoms || hadZeroWords {
+            pinCover(salt: 0, automatic: true)
+        } else {
+            refreshCoverIfNeeded()
+        }
+    }
+
+    @MainActor
     private func resolvedCover(salt: Int) -> GeneratedCoverRecipe {
         GeneratedCoverRecipe(id: ao3WorkID, title: title, author: author,
                              fandoms: workFandoms, tags: workTagsFetched ? workFreeforms : workTags,

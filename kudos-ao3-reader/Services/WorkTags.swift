@@ -10,7 +10,11 @@ enum WorkTags {
     /// fetched, if there's no AO3 work id, or if AO3 returns nothing — staying
     /// un-flagged in those last cases so a later attempt can still succeed.
     @MainActor
-    static func refreshFromAO3(for work: SavedWork, in context: ModelContext) async {
+    static func refreshFromAO3(
+        for work: SavedWork,
+        in context: ModelContext,
+        fetchMetadata: WorkAvailability.MetadataFetch? = nil
+    ) async {
         // Callers fire this as a detached best-effort Task, so the work can already be
         // deleted (or, in tests, its whole container torn down) by the time this runs —
         // and touching any attribute of an invalidated model is a SwiftData assertion
@@ -31,11 +35,13 @@ enum WorkTags {
             // `workMetadata` reads the same page and parser as `workTags`, while
             // also retaining the verified author hrefs already present in that
             // response. No additional AO3 request is introduced.
-            let metadata = try await AO3Client.shared.workMetadata(workID: id)
+            let metadata = try await (fetchMetadata ?? { try await AO3Client.shared.workMetadata(workID: $0) })(id)
             let groups = metadata.tagGroups
             // Re-check after the network await — the work can be deleted mid-fetch.
             guard work.modelContext != nil else { return }
             guard !groups.isEmpty else { return } // locked/empty page — keep EPUB tags, retry later
+            let hadEmptyFandoms = work.workFandoms.isEmpty
+            let hadZeroWords = work.wordCount == 0
             if !metadata.authorIdentities.isEmpty {
                 work.verifiedAuthorIdentities = metadata.authorIdentities
             }
@@ -63,6 +69,7 @@ enum WorkTags {
             if let bookmarks = groups.bookmarks { work.bookmarks = bookmarks }
             if let hits = groups.hits { work.hits = hits }
             work.workTagsFetched = true
+            work.refreshCoverAfterMetadataUpdate(hadEmptyFandoms: hadEmptyFandoms, hadZeroWords: hadZeroWords)
             work.markModified()
             WorkSearchIndex.reindex(work)
             // The page answered, so the work exists: record that, which also clears a
