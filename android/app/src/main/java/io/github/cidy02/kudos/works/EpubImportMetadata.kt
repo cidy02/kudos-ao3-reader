@@ -389,18 +389,27 @@ private object EpubMetadataReader {
         return result
     }
 
-    private fun parseStats(text: String) = ExtractedMetadata(
-        publishedDate = statValue(text, "Published").orEmpty(),
-        updatedDate = statValue(text, "Updated").orEmpty(),
-        wordCount = statValue(text, "Words")?.digitsToInt(),
-        chapters = statValue(text, "Chapters").orEmpty(),
-        kudos = statValue(text, "Kudos")?.digitsToInt(),
-        comments = statValue(text, "Comments")?.digitsToInt(),
-        hits = statValue(text, "Hits")?.digitsToInt()
-    )
+    private fun parseStats(text: String): ExtractedMetadata {
+        val updated = statValue(text, "Updated")
+        val completed = statValue(text, "Completed")
+        return ExtractedMetadata(
+            publishedDate = statValue(text, "Published").orEmpty(),
+            updatedDate = updated ?: completed.orEmpty(),
+            isComplete = when {
+                completed != null -> true
+                updated != null -> false
+                else -> null
+            },
+            wordCount = statValue(text, "Words")?.digitsToInt(),
+            chapters = statValue(text, "Chapters").orEmpty(),
+            kudos = statValue(text, "Kudos")?.digitsToInt(),
+            comments = statValue(text, "Comments")?.digitsToInt(),
+            hits = statValue(text, "Hits")?.digitsToInt()
+        )
+    }
 
     private fun statValue(text: String, label: String): String? {
-        val nextLabel = "Published|Updated|Words|Chapters|Kudos|Comments|Bookmarks|Hits"
+        val nextLabel = "Published|Updated|Completed|Words|Chapters|Kudos|Comments|Bookmarks|Hits"
         return Regex("(?is)\\b$label:\\s*(.+?)(?=\\s+(?:$nextLabel):|$)")
             .find(text)
             ?.groupValues

@@ -294,4 +294,38 @@ class WorkReadingCopyTest {
         }
     }
 
+    @Test fun importWebEpubConvertsHtmlLinkAndParsesCompletedStatsCleanly() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val fake = object : AO3Client {
+            override suspend fun get(url: String, headers: Map<String, String>): AO3Result<AO3HttpResponse> =
+                error("importWebEpub should not fetch work page")
+            override suspend fun getBytes(url: String, headers: Map<String, String>): AO3Result<AO3BinaryResponse> =
+                AO3Result.Success(
+                    AO3BinaryResponse(
+                        url,
+                        200,
+                        mapOf("Content-Type" to listOf("text/html")),
+                        AO3_HTML_DOWNLOAD_MULTI_CHAPTER.toByteArray()
+                    )
+                )
+        }
+        val localImporter = WorkImporter(
+            works,
+            AO3WorkMetadataRepository(fake),
+            AO3EpubDownloader(fake, fetchImage = { null }),
+            store,
+            context.cacheDir
+        )
+        val result = localImporter.importWebEpub("https://archiveofourown.org/downloads/4242/The_Long_Road.html?updated_at=1")
+        val work = (result as WorkImportResult.Success).work
+        assertEquals("The Long Road & Back", work.title)
+        assertEquals("2026-03-01", work.datePublished)
+        assertEquals("2026-03-09", work.dateUpdated)
+        assertTrue(work.isComplete)
+        assertEquals(1234, work.wordCount)
+        assertEquals("2/2", work.chapters)
+        assertTrue(work.hasEpub)
+        assertTrue(store.workEpubExists(work.id))
+    }
+
 }
