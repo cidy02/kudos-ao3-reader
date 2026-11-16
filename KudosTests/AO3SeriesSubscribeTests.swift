@@ -227,6 +227,21 @@ struct AO3SeriesSubscribeTests {
         #expect(SeriesSubscribeStub.recorded().map(\.method) == ["GET"])
     }
 
+    /// Codex's third review: a signed-in page without a recognised subscription form is unknown,
+    /// so neither direction writes or reports success.
+    @Test func anUnrecognisedSubscriptionFormWritesNothingAndClaimsNothing() async throws {
+        let auth = makeAuth()
+        await auth.login(username: "alice", password: "pw")
+        let formless = seriesHTML(seriesID: 42).replacingOccurrences(of: "/subscriptions", with: "/elsewhere")
+        for want in [false, true] {
+            SeriesSubscribeStub.reset(getHTML: formless)
+            await #expect(throws: AO3Error.parse) {
+                _ = try await auth.toggleSubscribe(seriesID: 42, to: want, using: stubClient())
+            }
+            #expect(SeriesSubscribeStub.recorded().map(\.method) == ["GET"])
+        }
+    }
+
     /// Codex re-review: the Unsubscribe dialog's intent survives a page refresh while it is open.
     @Test func confirmingUnsubscribeSendsUnsubscribeEvenAfterAResync() async throws {
         let auth = makeAuth()

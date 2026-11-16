@@ -1176,6 +1176,14 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     /// subscribe/unsubscribe form. When subscribed, AO3 renders a delete form whose
     /// action is the unsubscribe path (`/users/X/subscriptions/<id>`); that path is
     /// returned so the caller can unsubscribe.
+    /// A recognised Subscribe form: a `/subscriptions` form that is not the delete one.
+    static func hasSubscribeForm(in html: String) -> Bool {
+        guard let doc = try? SwiftSoup.parse(html),
+              let form = try? doc.select("form[action*=/subscriptions]").first() else { return false }
+        let method = (try? form.select("input[name=_method]").first()?.attr("value"))?.lowercased() ?? ""
+        return method != "delete"
+    }
+
     static func parseSubscription(from html: String) -> (isSubscribed: Bool, unsubscribePath: String?) {
         guard let doc = try? SwiftSoup.parse(html),
               let form = try? doc.select("form[action*=/subscriptions]").first()

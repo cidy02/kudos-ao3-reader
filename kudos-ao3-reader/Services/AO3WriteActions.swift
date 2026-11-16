@@ -137,10 +137,18 @@ extension AO3AuthService {
         try requireSessionGeneration(expectedGeneration)
 
         let state = AO3Client.parseSubscription(from: html)
-        if let want, want == state.isSubscribed {
+        if let want {
             // A signed-out page reads as "not subscribed": that is not AO3 agreeing (Codex re-review).
             guard LiveAO3SessionValidator.isLoggedIn(html: html) else { throw AO3Error.authenticationRequired }
-            return want ? "You're already subscribed." : "Unsubscribed."
+            // otwarchive renders a create-or-delete subscription form for a signed-in reader; with
+            // neither recognised the state is unknown, and nothing is written or claimed (third review).
+            let recognised = state.isSubscribed
+                ? state.unsubscribePath != nil
+                : AO3Client.hasSubscribeForm(in: html)
+            guard recognised else { throw AO3Error.parse }
+            if want == state.isSubscribed {
+                return want ? "You're already subscribed." : "Unsubscribed."
+            }
         }
         if state.isSubscribed, let path = state.unsubscribePath, let url = Self.absoluteURL(path) {
             // AO3's unsubscribe form is a POST carrying `_method=delete`.
