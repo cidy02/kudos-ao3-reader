@@ -42,6 +42,50 @@ import SwiftData
     /// True when this session ended with the work marked finished. Reread
     /// count is the count of finishing sessions.
     var didFinish: Bool = false
+    var fandoms: [String] = []
+    var relationships: [String] = []
+    var characters: [String] = []
+    var freeformTags: [String] = []
+    var rating: String = ""
+    var warnings: [String] = []
+    var categories: [String] = []
+    var authorAccounts: [String] = []
+    var language: String = ""
+    var isCompleteAtVisit: Bool = false
+    var metadataSnapshotRecorded: Bool = false
+    var ao3SeriesID: Int? = nil
+    var seriesPosition: Int = 0
+    var publishedYear: Int? = nil
+
+    var hasMetadataSnapshot: Bool {
+        metadataSnapshotRecorded || !fandoms.isEmpty || !relationships.isEmpty || !characters.isEmpty
+            || !freeformTags.isEmpty || !rating.isEmpty || !warnings.isEmpty
+            || !categories.isEmpty || !authorAccounts.isEmpty || !language.isEmpty
+            || isCompleteAtVisit || ao3SeriesID != nil || seriesPosition > 0
+            || publishedYear != nil
+    }
+
+    func snapshot(from work: SavedWork) {
+        metadataSnapshotRecorded = true
+        fandoms = work.workFandoms
+        relationships = work.workRelationships
+        characters = work.workCharacters
+        freeformTags = work.workFreeforms
+        rating = work.rating
+        warnings = work.workWarnings
+        categories = work.workCategories
+        let verified = work.verifiedAuthorIdentities.map(\.displayName)
+        authorAccounts = verified.isEmpty
+            ? work.author.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+            : verified
+        language = work.language
+        isCompleteAtVisit = work.isComplete
+        ao3SeriesID = work.ao3SeriesID
+        seriesPosition = work.seriesPosition
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = TimeZone(secondsFromGMT: 0)!
+        publishedYear = WorkStat.date(from: work.datePublished).map { utc.component(.year, from: $0) }
+    }
     var lastModifiedAt: Date = Date()
 
     init(

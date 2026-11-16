@@ -213,6 +213,66 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
 
     /// 1ai Abandoned is derived (mid-way and untouched past a threshold).
     /// Setting this true is the undo: the threshold must not re-abandon it.
+    var readingStatusRaw: String = ""
+    var statusChangedAt: Date?
+    var stoppedAt: Date?
+    var stopReasonRaw: String = ""
+    var stopTag: String = ""
+    var stopNote: String = ""
+    var stackThreshold: Int = 3
+    var stackBaselineChapterCount: Int = 0
+    var statusWasRecorded: Bool = false
+
+    var hasRecordedStatus: Bool {
+        statusWasRecorded || !readingStatusRaw.isEmpty || statusChangedAt != nil
+            || stoppedAt != nil || !stopReasonRaw.isEmpty || !stopTag.isEmpty
+            || !stopNote.isEmpty || stackThreshold != 3 || stackBaselineChapterCount != 0
+    }
+
+    func setReadingStatus(_ status: ExplicitReadingStatus?, at date: Date = .now) {
+        readingStatusRaw = status?.rawValue ?? ""
+        statusChangedAt = status == nil ? nil : date
+        statusWasRecorded = true
+        stackBaselineChapterCount = status == .stacking ? postedChapterCount : 0
+        if status != .stopped {
+            stoppedAt = nil
+            stopReasonRaw = ""
+            stopTag = ""
+            stopNote = ""
+        }
+        markModified(date)
+    }
+
+    enum ExplicitReadingStatus: String { case reading, onHold, stacking, stopped }
+    enum InsightsReadingStatus: String, CaseIterable {
+        case stopped, onHold, stacking, finished, caughtUp, reading, savedForLater
+    }
+
+    var insightsReadingStatus: InsightsReadingStatus {
+        switch ExplicitReadingStatus(rawValue: readingStatusRaw) {
+        case .stopped: return .stopped
+        case .onHold: return .onHold
+        case .stacking: return .stacking
+        case .reading, .none: break
+        }
+        if isFinished { return .finished }
+        if !isComplete && hasStartedReading && postedChapterCount > 0
+            && lastSpineIndex + 1 >= postedChapterCount
+            && (lastScrollFraction >= 0.99 || publicationProgress == 1) && !hasUpdate {
+            return .caughtUp
+        }
+        if readingStatusRaw == ExplicitReadingStatus.reading.rawValue || hasStartedReading {
+            return .reading
+        }
+        return .savedForLater
+    }
+
+    func shouldResumeStacking(postedChapters: Int) -> Bool {
+        readingStatusRaw == ExplicitReadingStatus.stacking.rawValue
+            && statusChangedAt != nil
+            && postedChapters - stackBaselineChapterCount >= max(1, stackThreshold)
+    }
+
     var keepInProgressOverride: Bool = false
 
     /// 1ah's "Remove from history": when the reader took this work off History.
