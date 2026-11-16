@@ -1449,15 +1449,20 @@ enum WorkStat {
         }
     }
 
-    /// AO3 renders `Published`/`Updated` in two different formats depending on
-    /// which page it was scraped from — "2025-11-01" (ISO) on a work's own detail
-    /// page (`dd.published`/`dd.status`), "01 Nov 2025" on search/listing blurbs
-    /// (`p.datetime`) — both confirmed live against archiveofourown.org. Tries
-    /// both, normalizes to MM/DD/YYYY; falls back to the raw string unparsed
-    /// rather than showing nothing if AO3 ever changes either format.
-    private static let parseFormats = ["yyyy-MM-dd", "dd MMM yyyy"]
+    /// AO3 renders `Published`/`Updated` in a few fixed formats depending on the
+    /// page — "2025-11-01" (ISO) on a work's detail page (`dd.published`/`dd.status`),
+    /// "01 Nov 2025" / "1 Nov 2025" / "1 November 2025" on search/listing/collection
+    /// blurbs (`p.datetime`) — parsed as UTC calendar dates, then formatted through
+    /// the system's abbreviated date style so every surface reads like "Jul 9, 2026"
+    /// and localises; falls back to the raw string unparsed rather than dropping it.
+    nonisolated private static let parseFormats = [
+        "yyyy-MM-dd",
+        "dd MMM yyyy",
+        "d MMM yyyy",
+        "d MMMM yyyy"
+    ]
 
-    private static let parseFormatters: [DateFormatter] = parseFormats.map { format in
+    nonisolated private static let parseFormatters: [DateFormatter] = parseFormats.map { format in
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.calendar = Calendar(identifier: .gregorian)
@@ -1467,24 +1472,36 @@ enum WorkStat {
         return formatter
     }
 
-    private static let displayFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.calendar = Calendar(identifier: .gregorian)
-        formatter.timeZone = TimeZone(secondsFromGMT: 0)
-        formatter.dateFormat = "MM/dd/yyyy"
-        return formatter
-    }()
+    /// Formats an AO3 calendar-date string in GMT (avoiding day-shift in negative
+    /// UTC offsets) using the system's abbreviated date style; returns `rawText`
+    /// verbatim when AO3's format isn't recognised.
+    nonisolated static func displayDate(
+        _ rawText: String,
+        locale: Locale = .autoupdatingCurrent
+    ) -> String {
+        guard let parsed = date(from: rawText) else { return rawText }
+        return displayDate(parsed, locale: locale, timeZone: TimeZone(secondsFromGMT: 0) ?? .gmt)
+    }
 
-    static func displayDate(_ rawText: String) -> String {
-        date(from: rawText).map(displayFormatter.string(from:)) ?? rawText
+    /// Shared full-date formatter for `Date` values across the app.
+    nonisolated static func displayDate(
+        _ date: Date,
+        time: Date.FormatStyle.TimeStyle = .omitted,
+        locale: Locale = .autoupdatingCurrent,
+        timeZone: TimeZone = .autoupdatingCurrent
+    ) -> String {
+        Date.FormatStyle(date: .abbreviated, time: time, timeZone: timeZone)
+            .locale(locale)
+            .format(date)
     }
 
     /// The same date as a `Date`, for arithmetic on it (T-473's age groups); nil
-    /// when neither of AO3's formats parses.
-    static func date(from rawText: String) -> Date? {
+    /// when none of AO3's formats parse.
+    nonisolated static func date(from rawText: String) -> Date? {
+        let trimmed = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
         for formatter in parseFormatters {
-            if let date = formatter.date(from: rawText) { return date }
+            if let date = formatter.date(from: trimmed) { return date }
         }
         return nil
     }
