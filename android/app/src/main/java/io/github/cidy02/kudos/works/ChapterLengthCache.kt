@@ -3,11 +3,17 @@ package io.github.cidy02.kudos.works
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import io.github.cidy02.kudos.core.model.SavedWork
+import io.github.cidy02.kudos.core.model.readingProgress
 import io.github.cidy02.kudos.files.WorkFileStore
 import io.github.cidy02.kudos.reader.ReaderSectionBuilder
 import io.github.cidy02.kudos.reader.ReaderSectionKind
+import io.github.cidy02.kudos.ui.components.ChapterBarGeometry
+import io.github.cidy02.kudos.ui.components.ChapterBarLayout
+import io.github.cidy02.kudos.ui.components.ChapterBarModel
+import io.github.cidy02.kudos.ui.components.ChapterBarScale
 import java.io.File
 import java.net.URI
 import java.util.Locale
@@ -349,4 +355,39 @@ fun rememberChapterLengths(work: SavedWork?): ChapterLengths? {
         }
     }
     return lengths
+}
+
+/**
+ * Shared chapter-bar layout and `"Ch N · P%"` progress label for any row displaying [work].
+ */
+@Composable
+fun rememberWorkChapterBarState(
+    work: SavedWork,
+    scale: ChapterBarScale = ChapterBarScale.Row,
+    newChapterCount: Int = if (work.hasUpdate) {
+        maxOf(0, work.postedChapterCount - (work.knownChapterCount ?: work.postedChapterCount))
+    } else 0
+): Pair<ChapterBarLayout, String?> {
+    val chapterLengths = rememberChapterLengths(work)
+    val progress = work.readingProgress
+    val layout = remember(work.chapters, progress, work.isFinished, chapterLengths, newChapterCount, scale) {
+        ChapterBarModel.layout(
+            chapters = work.chapters,
+            progress = progress,
+            isFinished = work.isFinished,
+            weights = chapterLengths?.positions,
+            heights = chapterLengths?.words,
+            newChapterCount = newChapterCount,
+            scale = scale
+        )
+    }
+    val label = remember(work.chapters, progress, work.isFinished, chapterLengths) {
+        ChapterBarGeometry.progressLabel(
+            chapters = work.chapters,
+            progress = progress,
+            isFinished = work.isFinished,
+            weights = chapterLengths?.positions
+        )
+    }
+    return layout to label
 }

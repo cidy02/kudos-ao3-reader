@@ -1330,6 +1330,7 @@ internal fun SubscriptionsBrowser(
                             expandAll = expandAll,
                             palette = palette,
                             newLabel = SubscriptionWatermarks.newChaptersLabel(work.remote, watermarks),
+                            newChapterCount = SubscriptionWatermarks.newChapterCount(work.remote, watermarks),
                             onOpenWork = onOpenWork,
                             unsubscribePath = unsubscribePaths[work.remote.id],
                             busyPath = busyPath,
@@ -1348,6 +1349,7 @@ internal fun SubscriptionsBrowser(
                                 expandAll = expandAll,
                                 palette = palette,
                                 newLabel = null,
+                                newChapterCount = 0,
                                 onOpenWork = onOpenWork,
                                 unsubscribePath = unsubscribePaths[work.remote.id],
                                 busyPath = busyPath,
@@ -1362,6 +1364,7 @@ internal fun SubscriptionsBrowser(
                             expandAll = expandAll,
                             palette = palette,
                             newLabel = SubscriptionWatermarks.newChaptersLabel(work.remote, watermarks),
+                            newChapterCount = SubscriptionWatermarks.newChapterCount(work.remote, watermarks),
                             onOpenWork = onOpenWork,
                             unsubscribePath = unsubscribePaths[work.remote.id],
                             busyPath = busyPath,
@@ -1484,6 +1487,7 @@ private fun SubscriptionWorkRow(
     expandAll: Boolean,
     palette: SubjectPalette,
     newLabel: String?,
+    newChapterCount: Int = 0,
     onOpenWork: (AO3WorkSummary) -> Unit,
     unsubscribePath: String?,
     busyPath: String?,
@@ -1494,7 +1498,13 @@ private fun SubscriptionWorkRow(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        PairedWorkRow(work = work, expandAll = expandAll, onOpenWork = onOpenWork, ledger = true)
+        PairedWorkRow(
+            work = work,
+            expandAll = expandAll,
+            onOpenWork = onOpenWork,
+            ledger = true,
+            newChapterCount = newChapterCount
+        )
 
         // A row that wraps: at twice the text size "2 chapters new" left the button
         // "Unsubscri…". There the button goes under the words.
@@ -1735,6 +1745,7 @@ private fun PairedWorkRow(
     ledger: Boolean = false,
     /** This row's bookmark, on the Bookmarks list. */
     bookmark: AO3AuthorBookmark? = null,
+    newChapterCount: Int = 0,
     /** Drawn last inside the ledger card; told whether the row is blurred. */
     footer: (@Composable (obscured: Boolean) -> Unit)? = null
 ) {
@@ -1743,6 +1754,7 @@ private fun PairedWorkRow(
         val matched = environment.index.findMatch(work.remote)
         val obscured = matched != null && environment.visibility(matched) == LibraryPrivacyVisibility.Obscured
         EnrichingWorkRow(work.remote, expandAll, onOpenWork, ledger, bookmark,
+            newChapterCount = newChapterCount,
             footer = footer?.let { { it(obscured) } })
         return
     }
@@ -1769,7 +1781,7 @@ private fun PairedWorkRow(
         }
     } else {
         EnrichingWorkRow(work = work.remote, expandAll = expandAll, onOpenWork = onOpenWork, ledger = ledger,
-            bookmark = bookmark, footer = footer?.let { { it(false) } })
+            bookmark = bookmark, newChapterCount = newChapterCount, footer = footer?.let { { it(false) } })
     }
 }
 
@@ -1780,6 +1792,7 @@ private fun EnrichingWorkRow(
     onOpenWork: (AO3WorkSummary) -> Unit,
     ledger: Boolean = false,
     bookmark: AO3AuthorBookmark? = null,
+    newChapterCount: Int = 0,
     footer: (@Composable () -> Unit)? = null
 ) {
     val context = LocalContext.current
@@ -1802,7 +1815,8 @@ private fun EnrichingWorkRow(
         ledger = ledger || bookmark != null,
         footer = footer,
         // A work not in the Library draws its bookmark inside the one card (iOS 1q).
-        bookmark = bookmark?.asLedgerBookmark()
+        bookmark = bookmark?.asLedgerBookmark(),
+        newChapterCount = newChapterCount
     )
 }
 

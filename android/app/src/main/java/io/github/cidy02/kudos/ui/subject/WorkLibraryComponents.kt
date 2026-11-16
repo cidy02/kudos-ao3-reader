@@ -55,7 +55,9 @@ import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.home.HomeFacts
 import io.github.cidy02.kudos.core.model.WorkSymbolPlacement
 import io.github.cidy02.kudos.search.LocalTagSearch
+import io.github.cidy02.kudos.ui.components.ChapterBarLayout
 import io.github.cidy02.kudos.ui.components.LocalWorkSymbolPlacement
+import io.github.cidy02.kudos.ui.components.WorkChapterBarLine
 import kotlinx.coroutines.launch
 
 enum class WorkSectionLayout { Shelves, Ledger }
@@ -159,7 +161,9 @@ fun WorkLedgerRow(
     modifier: Modifier = Modifier,
     downloadFraction: Double? = null,
     selecting: Boolean = false,
-    muted: Boolean = false
+    muted: Boolean = false,
+    chapterBarLayout: ChapterBarLayout? = null,
+    chapterProgressLabel: String? = null
 ) {
     val tokens = LocalKudosTokens.current
     val fontScale = LocalDensity.current.fontScale
@@ -223,6 +227,9 @@ fun WorkLedgerRow(
                                 tileSize = 24.dp, announces = true)
                         }
                         if (metadata.isNotBlank()) Text(metadata, color = tokens.secondaryInk, fontSize = 11.5.sp)
+                        if (chapterBarLayout != null && !chapterBarLayout.isEmpty) {
+                            WorkChapterBarLine(layout = chapterBarLayout, label = chapterProgressLabel)
+                        }
                         if (symbolPlacement == WorkSymbolPlacement.Beside) {
                             HomeStatusTray(rating, categories, warnings, isComplete, HomeStatusArrangement.Grid,
                                 tileSize = 24.dp, announces = true)
@@ -262,6 +269,9 @@ fun WorkLedgerRow(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
+                        if (chapterBarLayout != null && !chapterBarLayout.isEmpty) {
+                            WorkChapterBarLine(layout = chapterBarLayout, label = chapterProgressLabel)
+                        }
                     }
                     if (symbolPlacement == WorkSymbolPlacement.Beside) {
                         HomeStatusTray(rating, categories, warnings, isComplete, HomeStatusArrangement.Grid,

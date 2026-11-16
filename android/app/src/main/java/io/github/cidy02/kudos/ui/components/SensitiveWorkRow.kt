@@ -77,6 +77,7 @@ import io.github.cidy02.kudos.ui.subject.WorkReadingOrDownloadRing
 import io.github.cidy02.kudos.ui.subject.downloadDimmed
 import io.github.cidy02.kudos.ui.subject.rememberWorkDownloadFraction
 import io.github.cidy02.kudos.library.readingProgressFraction
+import io.github.cidy02.kudos.works.rememberWorkChapterBarState
 import androidx.compose.material3.Checkbox
 
 
@@ -195,8 +196,20 @@ fun SensitiveWorkRow(
     modifier: Modifier = Modifier,
     authorIdentities: String = "",
     authorNames: List<String> = io.github.cidy02.kudos.works.resolveTappableAuthorNames(null, author),
-    leadingProgress: (@Composable () -> Unit)? = null
+    leadingProgress: (@Composable () -> Unit)? = null,
+    chapterBarLayout: ChapterBarLayout? = null,
+    chapterProgressLabel: String? = null,
+    newChapterCount: Int = 0
 ) {
+    val resolvedChapterBarLayout = chapterBarLayout ?: remember(chapters, newChapterCount) {
+        ChapterBarModel.layout(
+            chapters = chapters,
+            progress = null,
+            weights = null,
+            newChapterCount = newChapterCount,
+            scale = ChapterBarScale.Row
+        )
+    }
     val symbolPlacement = LocalWorkSymbolPlacement.current
     var expanded by remember(id) { mutableStateOf(expandAll) }
     LaunchedEffect(expandAll) { expanded = expandAll }
@@ -303,7 +316,9 @@ fun SensitiveWorkRow(
                                 onToggleExpanded = if (obscured || (selecting && !selectionAllowsDetails)) cardTap else { { expanded = !expanded } },
                                 palette = palette, tagSearch = tagSearch,
                                 fandomIsLink = !selecting && !obscured,
-                                rankingSignal = rankingSignal
+                                rankingSignal = rankingSignal,
+                                chapterBarLayout = resolvedChapterBarLayout,
+                                chapterProgressLabel = chapterProgressLabel
                             )
                         } else {
                             // iOS `WorkPlainRow`: the 2x2 grid beside the title; at an accessibility size
@@ -451,6 +466,12 @@ fun SensitiveWorkRow(
                                     showsZeroStats = showsZeroStats
                                 )
                             )
+                            if (!resolvedChapterBarLayout.isEmpty) {
+                                WorkChapterBarLine(
+                                    layout = resolvedChapterBarLayout,
+                                    label = chapterProgressLabel
+                                )
+                            }
                             // iOS's standard card closes with the day AO3 gives the work and the unfold control at the foot.
                             if (dateText.isNotBlank() || (!savedCard && expandable)) {
                                 Row(
@@ -599,7 +620,9 @@ private fun LedgerBody(
     tagSearch: (SearchSubjectField, String) -> Unit,
     /** False while selecting or hidden: the label is then plain text and the row owns the tap. */
     fandomIsLink: Boolean,
-    rankingSignal: String? = null
+    rankingSignal: String? = null,
+    chapterBarLayout: ChapterBarLayout = ChapterBarLayout(),
+    chapterProgressLabel: String? = null
 ) {
     val tokens = LocalKudosTokens.current
     val accessibility = isAccessibilityFontScale()
@@ -755,6 +778,9 @@ private fun LedgerBody(
     if (!rankingSignal.isNullOrBlank()) {
         Text(rankingSignal, fontSize = 11.5.sp, lineHeight = 16.sp, color = tokens.secondaryInk)
     }
+    if (!chapterBarLayout.isEmpty) {
+        WorkChapterBarLine(layout = chapterBarLayout, label = chapterProgressLabel)
+    }
 }
 
 @Composable
@@ -774,7 +800,8 @@ fun SensitiveWorkRow(
     selecting: Boolean = false,
     selected: Boolean = false,
     selectionAllowsDetails: Boolean = false,
-    neutralCard: Boolean = false
+    neutralCard: Boolean = false,
+    newChapterCount: Int = 0
 ) {
     val environment = LocalWorkRowEnvironment.current
     val row: @Composable (SavedWork?, Boolean, () -> Unit, () -> Unit) -> Unit = { local, obscured, click, longClick ->
@@ -827,7 +854,8 @@ fun SensitiveWorkRow(
                 onSelect = { onOpenWork(work) },
                 onTagClick = onTagClick,
                 onTagSearch = onTagSearch,
-                onLongClick = if (obscured) longClick else onLongClick ?: longClick
+                onLongClick = if (obscured) longClick else onLongClick ?: longClick,
+                newChapterCount = newChapterCount
             )
         }
     }
@@ -876,6 +904,14 @@ fun SensitiveWorkRow(
     footer: (@Composable () -> Unit)? = null,
     downloadFraction: Double? = rememberWorkDownloadFraction(work)
 ) {
+    val newChapterCount = if (work.hasUpdate) {
+        maxOf(0, work.postedChapterCount - (work.knownChapterCount ?: work.postedChapterCount))
+    } else 0
+    val (chapterBarLayout, chapterProgressLabel) = rememberWorkChapterBarState(
+        work = work,
+        scale = ChapterBarScale.Row,
+        newChapterCount = newChapterCount
+    )
     SensitiveWorkRow(
         id = work.id,
         title = work.title,
@@ -929,6 +965,9 @@ fun SensitiveWorkRow(
                     modifier = Modifier.padding(start = 16.dp)
                 )
             }
-        } else null
+        } else null,
+        chapterBarLayout = chapterBarLayout,
+        chapterProgressLabel = chapterProgressLabel,
+        newChapterCount = newChapterCount
     )
 }
