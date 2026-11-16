@@ -265,6 +265,20 @@ internal fun foldManifestCopies(copies: List<RawManifestCopy>): JsonObject? {
 }
 
 /**
+ * Merges a newly imported manifest with the existing stored manifest, picking the strictly
+ * newer `exportedAt` as primary. Ties or a missing `exportedAt` favour [incoming].
+ */
+internal fun mergeImportedManifestJson(incoming: JsonObject, existing: JsonObject?): JsonObject {
+    if (existing == null) return incoming
+    val incomingAt = instantOf(incoming["exportedAt"])
+    val existingAt = instantOf(existing["exportedAt"])
+    val existingIsStrictlyNewer = incomingAt != null && existingAt != null && existingAt > incomingAt
+    val primary = if (existingIsStrictlyNewer) existing else incoming
+    val fallback = if (existingIsStrictlyNewer) incoming else existing
+    return mergeFallbackManifestJson(primary, fallback) ?: primary
+}
+
+/**
  * Folds [fallback] beneath [primary]. A key [primary] merely lacks is kept, including
  * writing drafts. A newer `modifiedAt` / record stamp is the only removal: the side
  * with the strictly newer stamp supplies that extras entry or the whole record, and

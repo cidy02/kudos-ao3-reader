@@ -1217,6 +1217,60 @@ class SyncManifestPassthroughTest {
         assertFalse("futureField" in olderPrimary.getValue("annotations").jsonArray.single().jsonObject)
     }
 
+    @Test
+    fun recordImportedManifestPrefersNewerExportedAtAndFavorsImportOnTieOrMissing() = runTest {
+        val base = iosT541ManifestJson()
+        val baseExtras = base.getValue("settings").jsonObject.getValue("extras").jsonObject
+        val newerImport = JsonObject(
+            base + mapOf(
+                "exportedAt" to JsonPrimitive("2026-06-26T12:00:00.000Z"),
+                "writingRecovery" to JsonPrimitive("newer-draft"),
+                "settings" to JsonObject(
+                    base.getValue("settings").jsonObject + mapOf(
+                        "extras" to JsonObject(baseExtras + mapOf("readerHighlightColor" to JsonPrimitive("blue")))
+                    )
+                )
+            )
+        )
+        backupRepository.importV2ZipBytes(zipManifest(newerImport), mode = BackupImportMode.REPLACE_LIBRARY)
+
+        val olderImport = JsonObject(
+            base + mapOf(
+                "exportedAt" to JsonPrimitive("2026-06-26T08:00:00.000Z"),
+                "writingRecovery" to JsonPrimitive("older-draft"),
+                "settings" to JsonObject(
+                    base.getValue("settings").jsonObject + mapOf(
+                        "extras" to JsonObject(baseExtras + mapOf("readerHighlightColor" to JsonPrimitive("yellow")))
+                    )
+                )
+            )
+        )
+        backupRepository.importV2ZipBytes(zipManifest(olderImport), mode = BackupImportMode.MERGE)
+        val afterOlder = exportedManifest()
+        assertEquals(JsonPrimitive("newer-draft"), afterOlder["writingRecovery"])
+        assertEquals(
+            JsonPrimitive("blue"),
+            afterOlder.getValue("settings").jsonObject.getValue("extras").jsonObject["readerHighlightColor"]
+        )
+
+        val tiedImport = JsonObject(
+            base + mapOf(
+                "exportedAt" to JsonPrimitive("2026-06-26T12:00:00.000Z"),
+                "writingRecovery" to JsonPrimitive("tied-draft")
+            )
+        )
+        backupRepository.importV2ZipBytes(zipManifest(tiedImport), mode = BackupImportMode.MERGE)
+        assertEquals(JsonPrimitive("tied-draft"), exportedManifest()["writingRecovery"])
+
+        val undatedImport = JsonObject(
+            base.filterKeys { it != "exportedAt" } + mapOf(
+                "writingRecovery" to JsonPrimitive("undated-draft")
+            )
+        )
+        backupRepository.importV2ZipBytes(zipManifest(undatedImport), mode = BackupImportMode.MERGE)
+        assertEquals(JsonPrimitive("undated-draft"), exportedManifest()["writingRecovery"])
+    }
+
     private fun iosT541ManifestJson(): JsonObject {
         val pair = Ed25519Sign.KeyPair.newKeyPair()
         runBlocking { settingsRepository.trustTombstonePublicKey(pair.publicKey.toLowerHex()) }

@@ -170,7 +170,7 @@ class BackupRepository(
         } else if (rawJson != null) {
             val existing = lastImportedManifestStore.load()
             lastImportedManifestStore.save(
-                mergeFallbackManifestJson(rawJson, existing) ?: rawJson
+                mergeImportedManifestJson(rawJson, existing)
             )
         }
     }
