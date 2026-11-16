@@ -20,20 +20,55 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
+import java.util.concurrent.ConcurrentHashMap
+
 /** Shared serial IO executor; blocks below never suspend, so state and disk writes cannot interleave. */
 internal val writingRecoveryIO = Dispatchers.IO.limitedParallelism(1)
 
 /** E1 device-local files, independent of Room and Kudos backup/sync. Synchronous methods are IO-only. */
-class WritingTextRecovery(val directory: Path, private val clock: Clock = Clock.systemUTC()) {
+class WritingTextRecovery(
+    val directory: Path,
+    private val clock: Clock = Clock.systemUTC(),
+    private val onDraftSaved: ((String) -> Unit)? = null
+) {
     @Serializable
-    data class Entry(val text: String, val originalDigest: String, val savedAt: Double)
+    data class Entry(
+        val text: String,
+        val originalDigest: String,
+        val savedAt: Double,
+        val accountDigest: String? = null
+    )
     data class Copy(val url: Path, val entry: Entry)
 
-    fun fileURL(account: String, target: String, field: String): Path {
-        val key = listOf(account.lowercase(Locale.ROOT), target, field).joinToString("") {
-            "${it.toByteArray(Charsets.UTF_8).size}:$it"
+    fun hasLocalDrafts(username: String?): Boolean {
+        val normalized = normalizedAccount(username) ?: return false
+        val targetDigest = digest(normalized)
+        val newWorkKeys = NEW_WORK_FIELDS.map { field ->
+            keyDigest(normalizedAccount = normalized, target = "work:new", field = field)
+        }.toSet()
+        val diskIndex = readAccountIndex()
+        for (url in allCopyURLs()) {
+            val keyDigest = keyDigestPrefix(url) ?: continue
+            val entryAccountDigest = runCatching { load(url)?.accountDigest }.getOrNull()
+            if (entryAccountDigest != null) {
+                if (entryAccountDigest == targetDigest) return true
+                continue
+            }
+            val ownerDigest = diskIndex[keyDigest] ?: registeredAccountDigest(keyDigest)
+            if (ownerDigest != null) {
+                if (ownerDigest == targetDigest) return true
+                continue
+            }
+            if (keyDigest in newWorkKeys) return true
         }
-        return directory.resolve("${digest(key)}.json")
+        return false
+    }
+
+    fun fileURL(account: String, target: String, field: String): Path {
+        val normalized = account.lowercase(Locale.ROOT)
+        val digestValue = keyDigest(normalizedAccount = normalized, target = target, field = field)
+        normalizedAccount(account)?.let { registerKeyDigest(digestValue, it) }
+        return directory.resolve("$digestValue.json")
     }
 
     fun sessionURL(key: Path, session: UUID = UUID.randomUUID()): Path =
@@ -81,7 +116,15 @@ class WritingTextRecovery(val directory: Path, private val clock: Clock = Clock.
         } finally {
             Files.deleteIfExists(temporary)
         }
+        val keyDigest = keyDigestPrefix(to)
+        val accountDigest = keyDigest?.let(::registeredAccountDigest)
+        if (keyDigest != null && accountDigest != null) {
+            runCatching { recordAccountIndex(keyDigest, accountDigest) }
+        }
         runCatching { prune(to) }
+        if (onDraftSaved != null && keyDigest != null) {
+            registeredUsername(keyDigest)?.let(onDraftSaved)
+        }
     }
 
     /** Keep the current file plus four newest others; metadata only, best-effort deletion. */
@@ -108,14 +151,85 @@ class WritingTextRecovery(val directory: Path, private val clock: Clock = Clock.
         .sortedWith(compareByDescending<Pair<Path, FileTime>> { it.second }.thenByDescending { it.first.fileName.toString() })
         .map { it.first }
 
+    private fun readAccountIndex(): Map<String, String> {
+        val indexPath = directory.resolve(ACCOUNT_INDEX_FILE)
+        if (!Files.exists(indexPath)) return emptyMap()
+        return runCatching {
+            Files.readAllLines(indexPath, Charsets.UTF_8)
+                .mapNotNull { line ->
+                    val sep = line.indexOf('=')
+                    if (sep <= 0 || sep >= line.lastIndex) null
+                    else line.substring(0, sep) to line.substring(sep + 1)
+                }
+                .toMap()
+        }.getOrDefault(emptyMap())
+    }
+
+    private fun recordAccountIndex(keyDigest: String, accountDigest: String) {
+        synchronized(indexLock) {
+            val current = readAccountIndex().toMutableMap()
+            if (current[keyDigest] == accountDigest) return
+            current[keyDigest] = accountDigest
+            val content = current.entries.joinToString("\n") { "${it.key}=${it.value}" }
+                .toByteArray(Charsets.UTF_8)
+            val indexPath = directory.resolve(ACCOUNT_INDEX_FILE)
+            val temporary = Files.createTempFile(directory, ".account-index-", ".tmp")
+            try {
+                FileOutputStream(temporary.toFile()).use { output ->
+                    output.write(content)
+                    output.fd.sync()
+                }
+                Files.move(temporary, indexPath, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+            } finally {
+                Files.deleteIfExists(temporary)
+            }
+        }
+    }
+
     companion object {
         const val copyLimit = 5
         private const val foundationEpoch = 978_307_200L
+        private const val ACCOUNT_INDEX_FILE = ".account-index"
+        private val NEW_WORK_FIELDS = listOf("content", "summary", "notes", "endnotes")
         private val json = Json { ignoreUnknownKeys = true }
+        private val indexLock = Any()
+        private val accountDigestByKeyDigest = ConcurrentHashMap<String, String>()
+        private val usernameByKeyDigest = ConcurrentHashMap<String, String>()
 
         /** Future editor supplies Context.filesDir.toPath(); no app callers are installed by this brief. */
-        fun inFilesDir(filesDir: Path, clock: Clock = Clock.systemUTC()): WritingTextRecovery =
-            WritingTextRecovery(filesDir.resolve("WritingTextRecovery"), clock)
+        fun inFilesDir(
+            filesDir: Path,
+            clock: Clock = Clock.systemUTC(),
+            onDraftSaved: ((String) -> Unit)? = null
+        ): WritingTextRecovery =
+            WritingTextRecovery(filesDir.resolve("WritingTextRecovery"), clock, onDraftSaved)
+
+        private fun normalizedAccount(username: String?): String? {
+            val trimmed = username?.trim()?.lowercase(Locale.ROOT) ?: return null
+            if (trimmed.isEmpty() || trimmed == "signed-out") return null
+            return trimmed
+        }
+
+        private fun keyDigest(normalizedAccount: String, target: String, field: String): String {
+            val key = listOf(normalizedAccount, target, field).joinToString("") {
+                "${it.toByteArray(Charsets.UTF_8).size}:$it"
+            }
+            return digest(key)
+        }
+
+        private fun keyDigestPrefix(url: Path): String? =
+            url.fileName?.toString()?.substringBefore('.')?.takeIf { it.isNotEmpty() }
+
+        private fun registerKeyDigest(keyDigest: String, normalizedAccount: String) {
+            accountDigestByKeyDigest[keyDigest] = digest(normalizedAccount)
+            usernameByKeyDigest[keyDigest] = normalizedAccount
+        }
+
+        private fun registeredAccountDigest(keyDigest: String): String? =
+            accountDigestByKeyDigest[keyDigest]
+
+        private fun registeredUsername(keyDigest: String): String? =
+            usernameByKeyDigest[keyDigest]
 
         fun digest(text: String): String = MessageDigest.getInstance("SHA-256")
             .digest(text.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it.toInt() and 0xff) }

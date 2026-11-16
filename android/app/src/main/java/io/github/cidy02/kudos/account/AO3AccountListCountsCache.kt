@@ -1,5 +1,7 @@
 package io.github.cidy02.kudos.account
 
+import java.util.concurrent.CopyOnWriteArrayList
+
 /**
  * In-session cache of account-list sizes for Overview cards.
  * Port of iOS `AO3AccountListCountsCache` — never fetches; only stores counts
@@ -16,6 +18,18 @@ class AO3AccountListCountsCache(
             get() = when {
                 exact != null -> exact.toString()
                 lowerBound != null && lowerBound > 0 -> "$lowerBound+"
+                else -> null
+            }
+
+        /**
+         * Returns a known count only when [exact] is present (including `0`) or
+         * [lowerBound] proves the list is non-empty (`> 0`). A weak zero lower
+         * bound without [exact] is unknown (`null`), never zero.
+         */
+        val knownCount: Int?
+            get() = when {
+                exact != null -> exact
+                lowerBound != null && lowerBound > 0 -> lowerBound
                 else -> null
             }
 
@@ -43,6 +57,15 @@ class AO3AccountListCountsCache(
     private data class Entry(val count: Count, val expiresAt: Long)
 
     private val entries = mutableMapOf<String, Entry>()
+    private val writingCountListeners = CopyOnWriteArrayList<(String) -> Unit>()
+
+    fun addWritingCountListener(listener: (String) -> Unit) {
+        writingCountListeners += listener
+    }
+
+    fun removeWritingCountListener(listener: (String) -> Unit) {
+        writingCountListeners -= listener
+    }
 
     fun get(kind: AccountListType, authenticationScope: String): Count? = get(kind.listKey, authenticationScope)
 
@@ -75,18 +98,25 @@ class AO3AccountListCountsCache(
                 "series" -> SERIES
                 "bookmarks" -> AccountListType.Bookmarks.listKey
                 "collections" -> COLLECTIONS
+                "drafts", "works/drafts" -> DRAFTS
                 else -> continue
             }
             put(listKey, authenticationScope, Count(exact = action.listCount ?: continue))
         }
     }
 
-    @Synchronized
     fun put(listKey: String, authenticationScope: String, count: Count) {
-        val key = key(listKey, authenticationScope)
-        val existing = entries[key]?.takeIf { it.expiresAt >= System.currentTimeMillis() }
-        if (existing != null && !count.isAtLeastAsStrongAs(existing.count)) return
-        entries[key] = Entry(count, System.currentTimeMillis() + ttlMillis)
+        synchronized(this) {
+            val key = key(listKey, authenticationScope)
+            val existing = entries[key]?.takeIf { it.expiresAt >= System.currentTimeMillis() }
+            if (existing != null && !count.isAtLeastAsStrongAs(existing.count)) return
+            entries[key] = Entry(count, System.currentTimeMillis() + ttlMillis)
+        }
+        if (listKey == AccountListType.MyWorks.listKey || listKey == SERIES || listKey == DRAFTS) {
+            for (listener in writingCountListeners) {
+                listener(authenticationScope)
+            }
+        }
     }
 
     @Synchronized
@@ -102,9 +132,10 @@ class AO3AccountListCountsCache(
          */
         fun scope(username: String, generation: Int): String = "$username#session-$generation"
 
-        /** Lists with no [AccountListType] whose size only the dashboard nav gives. */
+        /** Lists with no [AccountListType] whose size only the dashboard nav or drafts index gives. */
         const val SERIES = "Series"
         const val COLLECTIONS = "Collections"
+        const val DRAFTS = "Drafts"
     }
 
     private fun key(listKey: String, scope: String): String =
