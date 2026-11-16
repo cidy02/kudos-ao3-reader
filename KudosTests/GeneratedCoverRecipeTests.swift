@@ -7,6 +7,15 @@ import UniformTypeIdentifiers
 
 @Suite("Generated cover recipe")
 struct GeneratedCoverRecipeTests {
+    @Test func fandomLabelUsesTheBareFandomName() {
+        let doctor = GeneratedCoverRecipe(id: 1, title: "Sodium Lights", author: "a", fandoms: ["Doctor Who (2005)"])
+        let frozen = GeneratedCoverRecipe(id: 2, title: "Winter Garden", author: "b", fandoms: ["Frozen (Disney Movies)"])
+        let media = GeneratedCoverRecipe(id: 3, title: "T", author: "c", fandoms: ["Avatar: The Last Airbender - All Media Types"])
+        #expect(doctor.fandom == "Doctor Who")
+        #expect(frozen.fandom == "Frozen")
+        #expect(media.fandom == "Avatar: The Last Airbender")
+    }
+
     @Test func referenceShelf() {
         // Values came from executing CoverArt.dc.html's renderVals with row C's work inputs and years.
         let cases: [(Int, String, String, String, Int, Bool, Int, [String], Int?, Int,

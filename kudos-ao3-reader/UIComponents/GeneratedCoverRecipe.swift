@@ -61,12 +61,11 @@ nonisolated struct GeneratedCoverRecipe: Equatable, Sendable {
         text.utf8.reduce(2_166_136_261) { ($0 ^ UInt32($1)) &* 16_777_619 }
     }
 
+    /// Cover-Spec §3: the fandom's bare name ("Doctor Who (2005)" → "Doctor Who", "Frozen (Disney
+    /// Movies)" → "Frozen", "- All Media Types" dropped). The app's one rule for that, shared with the
+    /// fandom lists, so a cover and a fandom card never name the same fandom differently.
     private static func clean(_ fandom: String) -> String {
-        var name = fandom.components(separatedBy: " - ").first ?? fandom
-        for suffix in [" (TV)", " (Movies)", " (Comics)", " (Anime)", " & Related Fandoms"] {
-            if name.hasSuffix(suffix) { name.removeLast(suffix.count) }
-        }
-        return name.trimmingCharacters(in: .whitespacesAndNewlines)
+        FandomDisplayName.bareTitle(fandom).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private static func hue(_ fandom: String) -> Int {
