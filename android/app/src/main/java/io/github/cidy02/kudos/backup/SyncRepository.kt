@@ -12,12 +12,10 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import io.github.cidy02.kudos.BuildConfig
-import io.github.cidy02.kudos.core.model.ReadingQueueKind
-import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.files.WorkFileStore
 import io.github.cidy02.kudos.files.FontFileStore
-import io.github.cidy02.kudos.works.WorkIdentityIndex
+import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
@@ -27,16 +25,13 @@ import java.text.Normalizer
 import java.time.Instant
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+import java.util.zip.ZipInputStream
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 
@@ -71,6 +66,8 @@ class SyncRepository(
      */
     private var declineImportWhenPaused = false
 
+    private val lastManifestStore = SyncLastManifestStore(workFileStore.worksDirectory.parent)
+
     suspend fun isSyncEnabled(): Boolean {
         return settingsRepository.settings.first().sync.isEnabled
     }
@@ -90,6 +87,7 @@ class SyncRepository(
         settingsRepository.setHasConfiguredSyncFolder(true)
         settingsRepository.updateSyncLastError(null)
         settingsRepository.updateSyncLastManifestDigest(null)
+        lastManifestStore.clear()
         settingsRepository.updateSyncIsEnabled(true)
         scheduleWorker()
     }
@@ -118,6 +116,7 @@ class SyncRepository(
         // iOS forgets when the folder last synced too: "Last Synced" no longer names a folder.
         settingsRepository.updateSyncLastSyncAt(null)
         settingsRepository.updateSyncLastManifestDigest(null)
+        lastManifestStore.clear()
         WorkManager.getInstance(context).cancelUniqueWork(SYNC_WORK_NAME)
     }
 
@@ -237,6 +236,12 @@ class SyncRepository(
             // was lost or cut short unable to sync again, and an interrupted first sync is
             // enough to leave one: files in the folder and no manifest yet.
             var folderViewIsCurrent = false
+            var readManifestJson: JsonObject? = if (decodedLive != null && manifestBytesAtRead != null) {
+                parseJsonObjectOrNull(manifestBytesAtRead)
+            } else {
+                null
+            }
+            var shouldPersistReadManifest = false
 
             if (manifestBytesAtRead != null || backupManifest != null || conflicts.isNotEmpty()) {
                 // The .bak is the previous manifest: enough to recover this device's records
@@ -264,23 +269,34 @@ class SyncRepository(
                     // Files can land in the folder after the manifest that lists their work.
                     importOriginals(syncDir, decodedLive!!)
                 } else {
-                    (decodedLive ?: decodeManifestOrNull(backupManifest))?.let { manifest ->
+                    val fallbackBackup = if (decodedLive == null) decodeManifestWithRawOrNull(backupManifest) else null
+                    val manifest = decodedLive ?: fallbackBackup?.first
+                    if (decodedLive == null && fallbackBackup != null) {
+                        readManifestJson = fallbackBackup.second
+                    }
+                    manifest?.let {
                         // Asset retries must not replay our older corrections over local edits/deletions.
-                        val incoming = if (ownPronunciations) manifest.copy(
+                        val incoming = if (ownPronunciations) it.copy(
                             pronunciations = io.github.cidy02.kudos.reader.speech.PronunciationCorrections()
-                        ) else manifest
+                        ) else it
                         val outcome = importManifest(syncDir, incoming)
                         pendingFonts += outcome.pendingFonts
                         absorbed = absorbed.absorb(outcome.summary)
                         folderViewIsCurrent = decodedLive != null && outcome.complete
+                        shouldPersistReadManifest = readManifestJson != null
                     }
                 }
 
                 conflicts.forEach { file ->
-                    val outcome = decodeManifestOrNull(file)?.let { importManifest(syncDir, it) }
+                    val decodedConflict = decodeManifestWithRawOrNull(file)
+                    val outcome = decodedConflict?.first?.let { importManifest(syncDir, it) }
                     if (outcome != null) {
                         pendingFonts += outcome.pendingFonts
                         absorbed = absorbed.absorb(outcome.summary)
+                        decodedConflict?.second?.let { conflictJson ->
+                            readManifestJson = mergeFallbackManifestJson(readManifestJson, conflictJson)
+                            shouldPersistReadManifest = true
+                        }
                     }
                     if (outcome?.complete == true) {
                         foldedConflicts += file
@@ -302,12 +318,20 @@ class SyncRepository(
                             if (summary.pronunciationsRestoreFailed) {
                                 throw IOException("Could not save pronunciation corrections. The sync folder was kept; try again.")
                             }
+                            extractManifestJsonFromZip(bytes)?.let { zipJson ->
+                                readManifestJson = zipJson
+                                shouldPersistReadManifest = true
+                            }
                         }
                     }
                 }
                 // A folder with nothing in it is a first write, and has nothing to prune.
                 // One that holds files and no manifest is not: see above.
                 folderViewIsCurrent = syncDir.listFiles().isEmpty()
+            }
+
+            if (shouldPersistReadManifest) {
+                readManifestJson?.let(lastManifestStore::save)
             }
 
             // 2. Export incrementally
@@ -428,17 +452,15 @@ class SyncRepository(
                 ).jsonObject
                 // What the folder's manifest held that this build does not know stays in the
                 // manifest this build writes. Dropped, as it was, a device that joined the
-                // folder after an Android sync never received it. It is the manifest this
-                // run replaces, read moments ago, so nothing stale is carried.
-                val replacedJson = if (decodedLive == null) null else runCatching {
-                    Json.parseToJsonElement(manifestBytesAtRead!!.toString(Charsets.UTF_8)) as? JsonObject
-                }.getOrNull()
-                val unknown = replacedJson?.filterKeys { it !in knownManifestKeys }.orEmpty()
+                // folder after an Android sync never received it.
+                val replacedJson = readManifestJson
+                    ?: if (manifestBytesAtRead != null || !folderViewIsCurrent) lastManifestStore.load() else null
                 val manifestBytes = BackupJson.encodeToString(
                     JsonObject.serializer(),
-                    JsonObject(carryUnknownRecordKeys(manifestJson, replacedJson) + unknown)
+                    carryUnknownRecordKeys(manifestJson, replacedJson)
                 ).toByteArray(Charsets.UTF_8)
                 writeManifest(syncDir, manifestBytes, backup = manifestBytesAtRead.takeIf { decodedLive != null })
+                lastManifestStore.save(manifestBytes)
                 foldedConflicts.forEach { it.delete() }
                 // Remembered only when nothing is outstanding (iOS withholds its stamp the same
                 // way): a work still owed an EPUB, or one whose file has gone missing from this
@@ -527,17 +549,30 @@ class SyncRepository(
         output.use { it.write(data) }
     }
 
-    /** Decodes a manifest document, or null if it is absent, empty or unreadable. */
-    private fun decodeManifestOrNull(file: DocumentFile?): KudosBackupManifest? {
+    /** Decodes a manifest document and keeps its raw JSON object, or null if absent/unreadable. */
+    private fun decodeManifestWithRawOrNull(file: DocumentFile?): Pair<KudosBackupManifest, JsonObject?>? {
         if (file == null) return null
         return runCatching {
-            context.contentResolver.openInputStream(file.uri)?.use { input ->
-                BackupValidator.decodeManifest(
-                    input.readLimitedBytes(BackupPaths.MANIFEST, BackupLimits.MAX_MANIFEST_BYTES)
-                )
-            }
+            val bytes = context.contentResolver.openInputStream(file.uri)?.use { input ->
+                input.readLimitedBytes(BackupPaths.MANIFEST, BackupLimits.MAX_MANIFEST_BYTES)
+            } ?: return@runCatching null
+            BackupValidator.decodeManifest(bytes) to parseJsonObjectOrNull(bytes)
         }.getOrNull()
     }
+
+    private fun extractManifestJsonFromZip(zipBytes: ByteArray): JsonObject? = runCatching {
+        ZipInputStream(ByteArrayInputStream(zipBytes)).use { zip ->
+            while (true) {
+                val entry = zip.nextEntry ?: break
+                if (entry.name == BackupPaths.MANIFEST) {
+                    val bytes = zip.readLimitedBytes(BackupPaths.MANIFEST, BackupLimits.MAX_MANIFEST_BYTES)
+                    return@runCatching parseJsonObjectOrNull(bytes)
+                }
+                zip.closeEntry()
+            }
+            null
+        }
+    }.getOrNull()
 
     /**
      * The live manifest's bytes, null when the folder has none. A manifest that is there and
@@ -553,14 +588,6 @@ class SyncRepository(
         } catch (error: Exception) {
             throw IOException("The sync folder's manifest could not be read. Its files were kept.")
         }
-    }
-
-    /** Every top-level key this build's manifest has, those it leaves out when null included. */
-    private val knownManifestKeys: Set<String> by lazy {
-        Json { encodeDefaults = true }.encodeToJsonElement(
-            KudosBackupManifest.serializer(),
-            KudosBackupManifest(version = 0, exportedAt = "")
-        ).jsonObject.keys
     }
 
     // Strict JSON, not `BackupJson`: that one is lenient, and reads a bare word as a value.
@@ -980,85 +1007,4 @@ sealed interface SyncResult {
      * nothing. Treated as non-failure by lifecycle / WorkManager callers.
      */
     data object SkippedAlreadyRunning : SyncResult
-}
-
-/** Carry only first-level unknown fields of records actually written, from the live manifest. */
-@OptIn(ExperimentalSerializationApi::class)
-internal fun carryUnknownRecordKeys(outgoing: JsonObject, replaced: JsonObject?): JsonObject {
-    if (replaced == null) return outgoing
-    val descriptors = mapOf(
-        "works" to BackupWork.serializer().descriptor,
-        "bookmarks" to BackupBookmark.serializer().descriptor,
-        "fonts" to BackupFont.serializer().descriptor,
-        "collections" to BackupCollection.serializer().descriptor,
-        "savedSearches" to BackupSavedSearch.serializer().descriptor,
-        "readingQueues" to BackupReadingQueue.serializer().descriptor,
-        "readingQueueMemberships" to BackupReadingQueueMembership.serializer().descriptor,
-        "annotations" to BackupAnnotation.serializer().descriptor,
-        "readingSessions" to BackupReadingSession.serializer().descriptor,
-        "readingFavorites" to BackupReadingFavorite.serializer().descriptor,
-        "fandomReadWatermarks" to BackupFandomReadWatermark.serializer().descriptor,
-        // Both apps sign fixed typed fields, not the JSON object. Extra keys do not
-        // change TombstoneSigning.payloadBytes / iOS TombstoneSigning.payload(for:).
-        "tombstones" to BackupTombstone.serializer().descriptor
-    )
-    fun JsonObject.text(key: String): String? =
-        (get(key) as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull
-    fun JsonObject.id(): String? = text("id")?.let(BackupPaths::normalizeIdForComparison)
-
-    val result = outgoing.toMutableMap()
-    val oldPronunciations = replaced["pronunciations"] as? JsonObject
-    val newPronunciations = outgoing["pronunciations"] as? JsonObject
-    if (oldPronunciations != null && newPronunciations != null) {
-        result["pronunciations"] = JsonObject(newPronunciations + oldPronunciations.filterKeys {
-            it !in setOf("global", "fandoms", "works")
-        })
-    }
-    descriptors.forEach { (listName, descriptor) ->
-        val oldRecords = (replaced[listName] as? JsonArray)?.mapNotNull { it as? JsonObject }
-            ?: return@forEach
-        val newRecords = outgoing[listName] as? JsonArray ?: return@forEach
-        val known = (0 until descriptor.elementsCount).mapTo(HashSet()) { descriptor.getElementName(it) }
-        val byId = oldRecords.mapNotNull { record -> record.id()?.let { it to record } }.toMap()
-        // Work UUIDs can be rematched by AO3 identity during merge. Reuse its index.
-        val workIndex = if (listName == "works") WorkIdentityIndex.snapshot(oldRecords.mapNotNull { record ->
-            record.id()?.let { id -> SavedWork(
-                id = id, title = "", author = "", sourceUrl = record.text("sourceURL").orEmpty(), hasEpub = false
-            ) }
-        }) else null
-        val byUrl = if (listName == "bookmarks") oldRecords.associateBy { it.text("urlString") } else emptyMap()
-        val byFont = if (listName == "fonts") oldRecords.groupBy {
-            it.text("fileName")?.let(BackupPaths::fontFileNameKey)
-        } else emptyMap()
-        val byFandom = if (listName == "fandomReadWatermarks") oldRecords.associateBy { it.text("fandomName") }
-            else emptyMap()
-        fun JsonObject.favoriteTarget(): Pair<String, String>? {
-            val kind = text("kindRaw") ?: return null
-            return text("targetKey")?.let { kind to it }
-        }
-        val byTarget = if (listName == "readingFavorites") oldRecords.associateBy { it.favoriteTarget() }
-            else emptyMap()
-        result[listName] = JsonArray(newRecords.map { element ->
-            val record = element as? JsonObject ?: return@map element
-            val old = when (listName) {
-                "works" -> workIndex?.existingWork(
-                    ao3WorkId = (record["ao3WorkID"] as? JsonPrimitive)?.contentOrNull?.toLongOrNull(),
-                    sourceUrl = record.text("sourceURL"), recordId = record.id()
-                )?.let { byId[BackupPaths.normalizeIdForComparison(it.id)] }
-                "bookmarks" -> record.text("urlString")?.let { byUrl[it] }
-                "fonts" -> record.text("fileName")?.let { name ->
-                    val matches = byFont[BackupPaths.fontFileNameKey(name)].orEmpty()
-                    matches.firstOrNull { it.text("fileName") == name } ?: matches.singleOrNull()
-                }
-                "fandomReadWatermarks" -> record.id()?.let { byId[it] } ?: record.text("fandomName")?.let { byFandom[it] }
-                "readingFavorites" -> record.id()?.let { byId[it] } ?: record.favoriteTarget()?.let { byTarget[it] }
-                "readingQueues" -> if (record.text("kindRaw") == ReadingQueueKind.SAVED_FOR_LATER) {
-                    oldRecords.firstOrNull { it.text("kindRaw") == ReadingQueueKind.SAVED_FOR_LATER }
-                } else record.id()?.let { byId[it] }
-                else -> record.id()?.let { byId[it] }
-            }
-            if (old == null) record else JsonObject(record + old.filterKeys { it !in known && it !in record })
-        })
-    }
-    return JsonObject(result)
 }
