@@ -139,21 +139,35 @@ extension AO3AuthService {
         try Task.checkCancellation()
         try requireSessionGeneration(expectedGeneration)
 
+        // Public pages still return 200 with a guest CSRF meta when the session
+        // has expired; fail before reading forms or POSTing instead of treating
+        // a signed-out page as "not subscribed" or sending an unauthenticated write.
+        guard LiveAO3SessionValidator.isLoggedIn(html: html) else {
+            throw AO3Error.authenticationRequired
+        }
+
         let state = AO3Client.parseSubscription(from: html)
+        let unsubscribeURL = state.unsubscribePath.flatMap { raw -> URL? in
+            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty,
+                  let url = Self.absoluteURL(trimmed),
+                  AO3RequestDefaults.isTrustedURL(url)
+            else { return nil }
+            return url
+        }
         if let want {
-            // A signed-out page reads as "not subscribed": that is not AO3 agreeing (Codex re-review).
-            guard LiveAO3SessionValidator.isLoggedIn(html: html) else { throw AO3Error.authenticationRequired }
-            // otwarchive renders a create-or-delete subscription form for a signed-in reader; with
-            // neither recognised the state is unknown, and nothing is written or claimed (third review).
+            // otwarchive renders a create-or-delete subscription form for a signed-in reader;
+            // with neither recognised the state is unknown, and nothing is written or claimed.
             let recognised = state.isSubscribed
-                ? state.unsubscribePath != nil
+                ? unsubscribeURL != nil
                 : AO3Client.hasSubscribeForm(in: html)
             guard recognised else { throw AO3Error.parse }
             if want == state.isSubscribed {
                 return want ? "You're already subscribed." : "Unsubscribed."
             }
         }
-        if state.isSubscribed, let path = state.unsubscribePath, let url = Self.absoluteURL(path) {
+        if state.isSubscribed {
+            guard let url = unsubscribeURL else { throw AO3Error.parse }
             // AO3's unsubscribe form is a POST carrying `_method=delete`.
             let body = Self.formEncoded([("_method", "delete"), ("authenticity_token", token)])
             let request = try writeRequest(to: url, body: body, csrf: token, referer: pageURL, ajax: false)
@@ -162,12 +176,6 @@ extension AO3AuthService {
                 status: status, body: responseBody,
                 success: "Unsubscribed.", rejectedFallback: "Couldn't unsubscribe."
             )
-        }
-
-        // Public pages still return 200 with a guest CSRF meta when the session
-        // has expired; fail before POSTing instead of sending an unauthenticated write.
-        guard LiveAO3SessionValidator.isLoggedIn(html: html) else {
-            throw AO3Error.authenticationRequired
         }
 
         let body = Self.formEncoded([
