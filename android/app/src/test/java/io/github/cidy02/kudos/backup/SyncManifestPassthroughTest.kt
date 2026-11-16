@@ -505,7 +505,7 @@ class SyncManifestPassthroughTest {
     }
 
     @Test
-    fun backupFallbackConflictFoldingAndPersistedStorePreserveUnknownsAndDisconnectClearsStore() = runTest {
+    fun backupFallbackConflictFoldingAndPersistedStorePreserveUnknownsAndDisconnectKeepsStore() = runTest {
         val fixture = iosT541ManifestJson()
         val kudosDir = ensureKudosLibrary()
 
@@ -558,10 +558,10 @@ class SyncManifestPassthroughTest {
         assertFalse("Removed top-level key must not be resurrected", "writingRecovery" in afterRemoval)
         assertEquals(fixture["documents"], afterRemoval["documents"])
 
-        // 4. Disconnect deletes sync-last-manifest.json.
+        // 4. Disconnect keeps the on-device store. It is still the fallback for the next folder.
         assertTrue(Files.isRegularFile(filesRoot.resolve("sync-last-manifest.json")))
         syncRepository.disconnect()
-        assertFalse(Files.isRegularFile(filesRoot.resolve("sync-last-manifest.json")))
+        assertTrue(Files.isRegularFile(filesRoot.resolve("sync-last-manifest.json")))
     }
 
     @Test
@@ -588,24 +588,49 @@ class SyncManifestPassthroughTest {
             fromZip.getValue("settings").jsonObject["modifiedAt"]
         )
 
-        // Conflict manifest introduces an extra top-level key and a record-level key absent from live.
+        // Newer exportedAt makes this conflict the primary even though it does not hold the live name.
+        // Its writingRecovery wins. Its older keepScreenAwake stamp and older work stamp do not.
         val conflictWorkId = "99999999-0000-4000-8000-000000000001"
-        val conflictManifest = Json.parseToJsonElement(
-            """{
-                "version": 8,
-                "exportedAt": "2026-06-26T12:00:00.000Z",
-                "works": [{
-                    "id": "$conflictWorkId",
-                    "title": "Conflict Work",
-                    "author": "Conflict Author",
-                    "sourceURL": "https://archiveofourown.org/works/777001",
-                    "dateAdded": "2026-06-25T10:00:00.000Z",
-                    "lastModifiedAt": "2026-06-26T12:00:00.000Z",
-                    "authorIdentitiesJSON": "[{\"username\":\"conflict_u\"}]"
-                }],
-                "conflictExtra": {"fromConflict": true}
-            }"""
-        ).jsonObject
+        val liveWorkOne = fixture.getValue("works").jsonArray[0].jsonObject
+        val conflictManifest = JsonObject(
+            mapOf(
+                "version" to JsonPrimitive(8),
+                "exportedAt" to JsonPrimitive("2026-06-26T12:30:00.000Z"),
+                "writingRecovery" to JsonPrimitive("from-conflict"),
+                "settings" to JsonObject(
+                    mapOf(
+                        "modifiedAt" to JsonObject(
+                            mapOf("keepScreenAwake" to JsonPrimitive("2026-06-26T08:00:00.000Z"))
+                        ),
+                        "extras" to JsonObject(
+                            mapOf("keepScreenAwake" to JsonPrimitive(false))
+                        )
+                    )
+                ),
+                "works" to JsonArray(
+                    listOf(
+                        JsonObject(
+                            liveWorkOne + mapOf(
+                                "lastModifiedAt" to JsonPrimitive("2026-06-26T09:00:00.000Z"),
+                                "authorIdentitiesJSON" to JsonPrimitive("conflict-old")
+                            )
+                        ),
+                        JsonObject(
+                            mapOf(
+                                "id" to JsonPrimitive(conflictWorkId),
+                                "title" to JsonPrimitive("Conflict Work"),
+                                "author" to JsonPrimitive("Conflict Author"),
+                                "sourceURL" to JsonPrimitive("https://archiveofourown.org/works/777001"),
+                                "dateAdded" to JsonPrimitive("2026-06-25T10:00:00.000Z"),
+                                "lastModifiedAt" to JsonPrimitive("2026-06-26T12:00:00.000Z"),
+                                "authorIdentitiesJSON" to JsonPrimitive("[{\"username\":\"conflict_u\"}]")
+                            )
+                        )
+                    )
+                ),
+                "conflictExtra" to JsonObject(mapOf("fromConflict" to JsonPrimitive(true)))
+            )
+        )
         writeChild(
             requireKudosLibrary(),
             "manifest (1).json",
@@ -618,10 +643,18 @@ class SyncManifestPassthroughTest {
             readDocument(requireKudosLibrary().findFile(BackupPaths.MANIFEST)!!).toString(Charsets.UTF_8)
         ).jsonObject
         assertEquals(conflictManifest["conflictExtra"], afterConflict["conflictExtra"])
+        assertEquals(JsonPrimitive("from-conflict"), afterConflict["writingRecovery"])
+        assertEquals(
+            fixture.getValue("settings").jsonObject["extras"],
+            afterConflict.getValue("settings").jsonObject["extras"]
+        )
         val conflictWork = afterConflict.getValue("works").jsonArray.first {
             it.jsonObject["id"]?.jsonPrimitive?.content?.equals(conflictWorkId, ignoreCase = true) == true
         }.jsonObject
         assertEquals(JsonPrimitive("[{\"username\":\"conflict_u\"}]"), conflictWork["authorIdentitiesJSON"])
+        val workOne = workJson(afterConflict, WORK_ONE)
+        assertEquals(liveWorkOne["authorIdentitiesJSON"], workOne["authorIdentitiesJSON"])
+        assertEquals(liveWorkOne["futureWorkInsights"], workOne["futureWorkInsights"])
     }
 
     @Test
@@ -791,7 +824,7 @@ class SyncManifestPassthroughTest {
     }
 
     @Test
-    fun disconnectWaitsForCommitThenClearsTheStore() = runTest {
+    fun disconnectWaitsForCommitAndKeepsTheStore() = runTest {
         val fixture = iosT541ManifestJson()
         writeChild(ensureKudosLibrary(), BackupPaths.MANIFEST, "application/json",
             BackupJson.encodeToString(JsonObject.serializer(), fixture).toByteArray())
@@ -810,11 +843,11 @@ class SyncManifestPassthroughTest {
         assertTrue(sync.await() is SyncResult.Success)
         disconnect.await()
         assertNull(settingsRepository.settings.first().sync.folderUri)
-        assertFalse(Files.exists(filesRoot.resolve("sync-last-manifest.json")))
+        assertTrue(Files.isRegularFile(filesRoot.resolve("sync-last-manifest.json")))
     }
 
     @Test
-    fun changeFolderWaitsForCommitThenClearsOldOpaqueState() = runTest {
+    fun changeFolderWaitsForCommitAndKeepsTheStore() = runTest {
         val fixture = iosT541ManifestJson()
         writeChild(ensureKudosLibrary(), BackupPaths.MANIFEST, "application/json",
             BackupJson.encodeToString(JsonObject.serializer(), fixture).toByteArray())
@@ -842,7 +875,214 @@ class SyncManifestPassthroughTest {
         assertTrue(sync.await() is SyncResult.Success)
         change.await()
         assertEquals(newFolder, blocked.getSyncFolderUri())
-        assertFalse(Files.exists(filesRoot.resolve("sync-last-manifest.json")))
+        assertTrue(Files.isRegularFile(filesRoot.resolve("sync-last-manifest.json")))
+    }
+
+    @Test
+    fun mergeImportNewerStampRemovesExtrasEntryAndRecordKey() = runTest {
+        val fixture = iosT541ManifestJson()
+        backupRepository.importV2ZipBytes(zipManifest(fixture), mode = BackupImportMode.MERGE)
+        val settings = fixture.getValue("settings").jsonObject
+        val extras = settings.getValue("extras").jsonObject
+        val modifiedAt = settings.getValue("modifiedAt").jsonObject
+        val works = fixture.getValue("works").jsonArray.map { it.jsonObject }.toMutableList()
+        works[0] = JsonObject(
+            works[0].filterKeys { it != "authorIdentitiesJSON" } + mapOf(
+                "lastModifiedAt" to JsonPrimitive("2026-06-26T18:00:00.000Z")
+            )
+        )
+        val newer = JsonObject(
+            fixture.filterKeys { it != "writingRecovery" && it != "settings" && it != "works" } + mapOf(
+                "settings" to JsonObject(
+                    settings + mapOf(
+                        "modifiedAt" to JsonObject(
+                            modifiedAt + mapOf(
+                                "keepScreenAwake" to JsonPrimitive("2026-06-26T18:00:00.000Z"),
+                                "[\"ao3CommentDrafts\",\"42\"]" to JsonPrimitive("2026-06-26T18:00:00.000Z")
+                            )
+                        ),
+                        "extras" to JsonObject(
+                            extras.filterKeys {
+                                it != "keepScreenAwake" && it != "readerHighlightColor" && it != "ao3CommentDrafts"
+                            }
+                        )
+                    )
+                ),
+                "works" to JsonArray(works)
+            )
+        )
+        backupRepository.importV2ZipBytes(zipManifest(newer), mode = BackupImportMode.MERGE)
+
+        val written = exportedManifest()
+        val writtenExtras = written.getValue("settings").jsonObject.getValue("extras").jsonObject
+        assertEquals(fixture["writingRecovery"], written["writingRecovery"])
+        assertEquals(JsonPrimitive("yellow"), writtenExtras["readerHighlightColor"])
+        assertFalse("keepScreenAwake" in writtenExtras)
+        val drafts = writtenExtras["ao3CommentDrafts"]?.jsonObject?.get("map")?.jsonObject
+        assertTrue(drafts == null || "42" !in drafts)
+        val work = workJson(written, WORK_ONE)
+        assertFalse("authorIdentitiesJSON" in work)
+        assertEquals(
+            fixture.getValue("works").jsonArray[0].jsonObject["futureWorkInsights"],
+            work["futureWorkInsights"]
+        )
+    }
+
+    @Test
+    fun mergeImportOlderStampDoesNotOverwriteNewerStoredValue() = runTest {
+        val fixture = iosT541ManifestJson()
+        backupRepository.importV2ZipBytes(zipManifest(fixture), mode = BackupImportMode.REPLACE_LIBRARY)
+        val settings = fixture.getValue("settings").jsonObject
+        val works = fixture.getValue("works").jsonArray.map { it.jsonObject }.toMutableList()
+        works[0] = JsonObject(
+            works[0] + mapOf(
+                "lastModifiedAt" to JsonPrimitive("2026-06-26T08:00:00.000Z"),
+                "authorIdentitiesJSON" to JsonPrimitive("older")
+            )
+        )
+        val older = JsonObject(
+            fixture.filterKeys { it != "writingRecovery" && it != "settings" && it != "works" } + mapOf(
+                "settings" to JsonObject(
+                    settings + mapOf(
+                        "modifiedAt" to JsonObject(
+                            settings.getValue("modifiedAt").jsonObject + mapOf(
+                                "keepScreenAwake" to JsonPrimitive("2026-06-26T08:00:00.000Z")
+                            )
+                        ),
+                        "extras" to JsonObject(
+                            settings.getValue("extras").jsonObject + mapOf(
+                                "keepScreenAwake" to JsonPrimitive(false)
+                            )
+                        )
+                    )
+                ),
+                "works" to JsonArray(works)
+            )
+        )
+        backupRepository.importV2ZipBytes(zipManifest(older), mode = BackupImportMode.MERGE)
+
+        val written = exportedManifest()
+        val writtenExtras = written.getValue("settings").jsonObject.getValue("extras").jsonObject
+        assertEquals(JsonPrimitive(true), writtenExtras["keepScreenAwake"])
+        assertEquals(fixture["writingRecovery"], written["writingRecovery"])
+        assertEquals(
+            fixture.getValue("works").jsonArray[0].jsonObject["authorIdentitiesJSON"],
+            workJson(written, WORK_ONE)["authorIdentitiesJSON"]
+        )
+    }
+
+    @Test
+    fun primaryManifestPrefersNewerExportedAtThenMtimeThenLiveName() {
+        val older = JsonObject(
+            mapOf(
+                "exportedAt" to JsonPrimitive("2026-06-26T10:00:00.000Z"),
+                "writingRecovery" to JsonPrimitive("older-export")
+            )
+        )
+        val newer = JsonObject(
+            mapOf(
+                "exportedAt" to JsonPrimitive("2026-06-26T12:00:00.000Z"),
+                "writingRecovery" to JsonPrimitive("newer-export")
+            )
+        )
+        val byExport = foldManifestCopies(
+            listOf(
+                RawManifestCopy(older, modifiedAtMillis = 9_000, liveName = true),
+                RawManifestCopy(newer, modifiedAtMillis = 1, liveName = false)
+            )
+        )
+        assertEquals(JsonPrimitive("newer-export"), byExport!!["writingRecovery"])
+
+        val live = JsonObject(mapOf("writingRecovery" to JsonPrimitive("live")))
+        val conflict = JsonObject(mapOf("writingRecovery" to JsonPrimitive("conflict")))
+        val byMtime = foldManifestCopies(
+            listOf(
+                RawManifestCopy(live, modifiedAtMillis = 1_000, liveName = true),
+                RawManifestCopy(conflict, modifiedAtMillis = 5_000, liveName = false)
+            )
+        )
+        assertEquals(JsonPrimitive("conflict"), byMtime!!["writingRecovery"])
+
+        val byName = foldManifestCopies(
+            listOf(
+                RawManifestCopy(conflict, modifiedAtMillis = 5_000, liveName = false),
+                RawManifestCopy(live, modifiedAtMillis = 5_000, liveName = true)
+            )
+        )
+        assertEquals(JsonPrimitive("live"), byName!!["writingRecovery"])
+    }
+
+    @Test
+    fun changeFolderToEmptyFolderCarriesOpaqueFields() = runTest {
+        val fixture = iosT541ManifestJson()
+        writeChild(
+            ensureKudosLibrary(),
+            BackupPaths.MANIFEST,
+            "application/json",
+            BackupJson.encodeToString(JsonObject.serializer(), fixture).toByteArray()
+        )
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+
+        val other = DocumentFile.fromTreeUri(context, treeUri)!!.createDirectory("EmptyOther")!!
+        val newFolder = android.provider.DocumentsContract.buildTreeDocumentUri(
+            FakeTempDocumentsProvider.AUTHORITY,
+            android.provider.DocumentsContract.getDocumentId(other.uri)
+        )
+        context.grantUriPermission(
+            context.packageName,
+            newFolder,
+            android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                android.content.Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+        )
+        syncRepository.connect(newFolder)
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+
+        val library = DocumentFile.fromTreeUri(context, newFolder)!!.findFile("KudosLibrary")
+            ?: error("KudosLibrary missing in the new folder")
+        val written = Json.parseToJsonElement(
+            readDocument(library.findFile(BackupPaths.MANIFEST)!!).toString(Charsets.UTF_8)
+        ).jsonObject
+        assertEquals(fixture["writingRecovery"], written["writingRecovery"])
+        assertEquals(fixture["documents"], written["documents"])
+        assertEquals(
+            fixture.getValue("settings").jsonObject["extras"],
+            written.getValue("settings").jsonObject["extras"]
+        )
+        assertEquals(
+            fixture.getValue("works").jsonArray[0].jsonObject["authorIdentitiesJSON"],
+            workJson(written, WORK_ONE)["authorIdentitiesJSON"]
+        )
+    }
+
+    @Test
+    fun sharedLockKeepsAnInFlightSaveFromLandingAfterClear() = runTest {
+        val dir = Files.createTempDirectory("kudos-a541-lock")
+        val first = SyncLastManifestStore(dir)
+        val second = SyncLastManifestStore(dir)
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        SyncLastManifestStore.beforeFilePublish = { path ->
+            if (path == first.file) {
+                entered.complete(Unit)
+                runBlocking { release.await() }
+            }
+        }
+        try {
+            val save = async(Dispatchers.IO) {
+                first.save(JsonObject(mapOf("kept" to JsonPrimitive("yes"))))
+            }
+            entered.await()
+            val clear = async(Dispatchers.IO) { second.clear() }
+            assertNull(withTimeoutOrNull(100) { clear.await() })
+            release.complete(Unit)
+            save.await()
+            clear.await()
+            assertFalse(Files.exists(first.file))
+        } finally {
+            SyncLastManifestStore.beforeFilePublish = null
+            dir.toFile().deleteRecursively()
+        }
     }
 
     private fun iosT541ManifestJson(): JsonObject {
@@ -1109,6 +1349,31 @@ class SyncManifestPassthroughTest {
             "futureManifestMeta": "ios-t541"
         }"""
         ).jsonObject
+    }
+
+    private fun workJson(manifest: JsonObject, id: String): JsonObject {
+        return manifest.getValue("works").jsonArray.first {
+            it.jsonObject["id"]?.jsonPrimitive?.content.equals(id, ignoreCase = true)
+        }.jsonObject
+    }
+
+    private fun zipManifest(json: JsonObject): ByteArray {
+        return ByteArrayOutputStream().use { out ->
+            ZipOutputStream(out).use { zip ->
+                zip.putNextEntry(ZipEntry(BackupPaths.MANIFEST))
+                zip.write(BackupJson.encodeToString(JsonObject.serializer(), json).toByteArray())
+                zip.closeEntry()
+            }
+            out.toByteArray()
+        }
+    }
+
+    private suspend fun exportedManifest(): JsonObject {
+        val exported = backupRepository.exportV2ZipBytes()
+        return ZipInputStream(ByteArrayInputStream(exported)).use { zip ->
+            generateSequence { zip.nextEntry }.first { it.name == BackupPaths.MANIFEST }
+            Json.parseToJsonElement(zip.readBytes().toString(Charsets.UTF_8)).jsonObject
+        }
     }
 
     private fun ensureKudosLibrary(): DocumentFile {

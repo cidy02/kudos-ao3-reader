@@ -82,7 +82,6 @@ class SyncRepository(
     }
 
     suspend fun connect(uri: Uri) = runSyncMutex.withLock {
-        val previousFolder = getSyncFolderUri()
         context.contentResolver.takePersistableUriPermission(
             uri,
             Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
@@ -93,7 +92,8 @@ class SyncRepository(
         settingsRepository.setHasConfiguredSyncFolder(true)
         settingsRepository.updateSyncLastError(null)
         settingsRepository.updateSyncLastManifestDigest(null)
-        if (previousFolder != null && previousFolder != uri) lastManifestStore.clear()
+        // The on-device store stays. It is the fallback until this folder's own manifest
+        // is read or written once; that read or write then replaces it.
         settingsRepository.updateSyncIsEnabled(true)
         folderGeneration++
         scheduleWorker()
@@ -123,7 +123,6 @@ class SyncRepository(
         // iOS forgets when the folder last synced too: "Last Synced" no longer names a folder.
         settingsRepository.updateSyncLastSyncAt(null)
         settingsRepository.updateSyncLastManifestDigest(null)
-        lastManifestStore.clear()
         folderGeneration++
         WorkManager.getInstance(context).cancelUniqueWork(SYNC_WORK_NAME)
     }
@@ -206,12 +205,12 @@ class SyncRepository(
             // 1. Import first, folding in any conflict copies.
             //
             // A SAF provider that loses a write race leaves "manifest (1).json"
-            // beside the real one. iOS's foldConflictContents restores *every*
-            // unresolved version rather than picking a winner, so nothing a user
-            // did on either device is dropped; we do the same, and delete the
-            // folded copies once this run's own manifest, which now lists what
-            // they held, is in the folder. Deleted before that, as they used to
-            // be, a run that then failed left their records in no index at all.
+            // beside the real one. The newest exportedAt is the primary, then the
+            // newer file time, then the live name. Every other copy still contributes
+            // a key the primary lacks; only a newer stamp removes one. The folded
+            // copies are deleted once this run's own manifest, which now lists what
+            // they held, is in the folder. Deleted before that, a run that then
+            // failed left their records in no index at all.
             val conflicts = syncDir.listFiles().filter { file ->
                 val name = file.name ?: return@filter false
                 name.startsWith("manifest") && name.endsWith(".json") &&
@@ -251,6 +250,18 @@ class SyncRepository(
                 null
             }
             var hasUsableFolderManifest = decodedLive != null
+            // Live is a candidate only when it decoded. Its .bak is not, so a live file that
+            // removed a key is not restored from the previous bak. .bak joins only below,
+            // when the live file did not decode.
+            val manifestCopies = mutableListOf<RawManifestCopy>()
+            val liveJson = readManifestJson
+            if (liveJson != null) {
+                manifestCopies += RawManifestCopy(
+                    json = liveJson,
+                    modifiedAtMillis = syncDir.findFile(BackupPaths.MANIFEST)?.lastModified() ?: 0L,
+                    liveName = true
+                )
+            }
 
             if (manifestBytesAtRead != null || backupManifest != null || conflicts.isNotEmpty()) {
                 // The .bak is the previous manifest: enough to recover this device's records
@@ -281,8 +292,14 @@ class SyncRepository(
                     val fallbackBackup = if (decodedLive == null) decodeManifestWithRawOrNull(backupManifest) else null
                     val manifest = decodedLive ?: fallbackBackup?.first
                     if (fallbackBackup != null) hasUsableFolderManifest = true
-                    if (decodedLive == null && fallbackBackup != null) {
-                        readManifestJson = fallbackBackup.second
+                    val bakJson = if (decodedLive == null) fallbackBackup?.second else null
+                    if (bakJson != null) {
+                        readManifestJson = bakJson
+                        manifestCopies += RawManifestCopy(
+                            json = bakJson,
+                            modifiedAtMillis = backupManifest?.lastModified() ?: 0L,
+                            liveName = false
+                        )
                     }
                     manifest?.let {
                         // Asset retries must not replay our older corrections over local edits/deletions.
@@ -304,7 +321,11 @@ class SyncRepository(
                         pendingFonts += outcome.pendingFonts
                         absorbed = absorbed.absorb(outcome.summary)
                         decodedConflict?.second?.let { conflictJson ->
-                            readManifestJson = mergeFallbackManifestJson(readManifestJson, conflictJson)
+                            manifestCopies += RawManifestCopy(
+                                json = conflictJson,
+                                modifiedAtMillis = file.lastModified(),
+                                liveName = false
+                            )
                         }
                     }
                     if (outcome?.complete == true) {
@@ -316,6 +337,9 @@ class SyncRepository(
                         // would discard what the other device wrote.
                         folderViewIsCurrent = false
                     }
+                }
+                if (manifestCopies.isNotEmpty()) {
+                    readManifestJson = foldManifestCopies(manifestCopies)
                 }
             } else {
                 root.findFile("Kudos.kudosbackup")?.let { remoteBackup ->
@@ -337,6 +361,10 @@ class SyncRepository(
                 // One that holds files and no manifest is not: see above.
                 folderViewIsCurrent = syncDir.listFiles().isEmpty()
             }
+
+            // A folder whose manifest we actually read becomes the store. An empty folder
+            // leaves the previous store in place, and the commit below is its first write.
+            readManifestJson?.let { lastManifestStore.save(it) }
 
             // 2. Export incrementally
             val pronunciationsUnreadable = persistenceGate.withLock {
