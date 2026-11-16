@@ -1,6 +1,7 @@
 import Foundation
 import CoreGraphics
 import ImageIO
+import os
 import Testing
 import UniformTypeIdentifiers
 @testable import Kudos
@@ -79,6 +80,26 @@ struct GeneratedCoverRecipeTests {
         auto.pinCover(salt: 0) // Reader Reset Cover must not drop back to epoch 0.
         #expect((GeneratedCoverRecipe.pinnedAt(in: auto.coverRecipeJSON)?.timeIntervalSince1970 ?? 0) > 0)
         #expect(!GeneratedCoverRecipe.isAutomaticPin(in: auto.coverRecipeJSON))
+    }
+
+    @Test @MainActor func pinCoverNotifiesFolderSyncObserverOnlyWhenRecipeChanges() {
+        let notifications = OSAllocatedUnfairLock(initialState: 0)
+        let token = NotificationCenter.default.addObserver(
+            forName: .kudosSyncRelevantSettingChanged,
+            object: nil,
+            queue: nil
+        ) { _ in notifications.withLock { $0 += 1 } }
+        defer { NotificationCenter.default.removeObserver(token) }
+
+        let work = SavedWork(title: "Sync Signal", author: "Writer")
+        work.pinCover(salt: 0)
+        #expect(notifications.withLock { $0 } == 1)
+
+        work.pinCover(salt: 0) // Unchanged — must not re-notify FolderSyncObserver.
+        #expect(notifications.withLock { $0 } == 1)
+
+        work.pinCover(salt: 1)
+        #expect(notifications.withLock { $0 } == 2)
     }
 
     @Test @MainActor func unknownRecipeFieldsAreNeverReencodedByCoverActions() throws {

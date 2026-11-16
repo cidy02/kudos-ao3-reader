@@ -271,6 +271,7 @@ extension SavedWork {
               let json = String(data: data, encoding: .utf8) else { return }
         coverRecipeJSON = json
         FolderSyncService.markDirty()
+        NotificationCenter.default.post(name: .kudosSyncRelevantSettingChanged, object: nil)
     }
 
     @MainActor
