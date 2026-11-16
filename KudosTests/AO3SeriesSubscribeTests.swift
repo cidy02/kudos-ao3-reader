@@ -216,6 +216,9 @@ struct AO3SeriesSubscribeTests {
         }
         #expect(SeriesSubscribeStub.recorded().isEmpty)
 
+        #expect(!AO3SeriesSubscribeModel.showsSubscribe(isLoggedIn: false))
+        #expect(AO3SeriesSubscribeModel.showsSubscribe(isLoggedIn: true))
+
         var handlerCalls = 0
         let model = AO3SeriesSubscribeModel { _, _ in
             handlerCalls += 1
@@ -223,8 +226,8 @@ struct AO3SeriesSubscribeTests {
         }
         model.tapped(seriesID: 42, auth: auth)
         #expect(handlerCalls == 0)
-        #expect(model.banner == AO3WriteError.notSignedIn.errorDescription)
-        #expect(model.writeFailures == 1)
+        #expect(model.banner == nil)
+        #expect(model.writeFailures == 0)
         #expect(!model.isWorking)
     }
 

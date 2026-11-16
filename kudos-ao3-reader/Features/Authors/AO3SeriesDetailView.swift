@@ -232,44 +232,45 @@ struct AO3SeriesDetailView: View {
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
             : AnyLayout(HStackLayout(spacing: 12))
         return layout {
-            Button {
-                subscribeModel.tapped(seriesID: series.id, auth: auth) {
-                    await invalidateSeriesPageCache()
-                }
-            } label: {
-                HStack(spacing: 4) {
-                    if subscribeModel.isWorking {
-                        ProgressView()
-                            .controlSize(.small)
-                            .tint(.white)
-                    } else {
-                        // The bell is Subscribe app-wide (owner, 2026-11-09).
-                        Image(systemName: subscribeModel.isSubscribed ? "bell.slash" : "bell")
-                    }
-                    Text(subscribeModel.isSubscribed ? "Unsubscribe" : "Subscribe")
-                }
-                .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.kudosPrimaryConfirm)
-            .disabled(
-                subscribeModel.isWorking
-                    || (auth.isLoggedIn && !subscribeModel.hasSyncedSubscription)
-            )
-            .accessibilityLabel(subscribeModel.isSubscribed ? "Unsubscribe" : "Subscribe")
-            .accessibilityAddTraits(subscribeModel.isSubscribed ? [.isSelected] : [])
-            .confirmationDialog(
-                "Unsubscribe from \(shownSeries.title)?",
-                isPresented: $subscribeModel.isConfirmingUnsubscribe,
-                titleVisibility: .visible
-            ) {
-                Button("Unsubscribe", role: .destructive) {
-                    subscribeModel.confirmUnsubscribe(seriesID: series.id, auth: auth) {
+            if AO3SeriesSubscribeModel.showsSubscribe(isLoggedIn: auth.isLoggedIn) {
+                Button {
+                    subscribeModel.tapped(seriesID: series.id, auth: auth) {
                         await invalidateSeriesPageCache()
                     }
+                } label: {
+                    HStack(spacing: 4) {
+                        if subscribeModel.isWorking {
+                            ProgressView()
+                                .controlSize(.small)
+                                .tint(.white)
+                        } else {
+                            // The bell is Subscribe app-wide (owner, 2026-11-09).
+                            Image(systemName: subscribeModel.isSubscribed ? "bell.slash" : "bell")
+                        }
+                        Text(subscribeModel.isSubscribed ? "Unsubscribe" : "Subscribe")
+                    }
+                    .frame(maxWidth: .infinity)
                 }
-                Button("Cancel", role: .cancel) { subscribeModel.cancelUnsubscribe() }
-            } message: {
-                Text("You will stop receiving email updates for this series on AO3.")
+                .buttonStyle(.kudosPrimaryConfirm)
+                .disabled(
+                    subscribeModel.isWorking || !subscribeModel.hasSyncedSubscription
+                )
+                .accessibilityLabel(subscribeModel.isSubscribed ? "Unsubscribe" : "Subscribe")
+                .accessibilityAddTraits(subscribeModel.isSubscribed ? [.isSelected] : [])
+                .confirmationDialog(
+                    "Unsubscribe from \(shownSeries.title)?",
+                    isPresented: $subscribeModel.isConfirmingUnsubscribe,
+                    titleVisibility: .visible
+                ) {
+                    Button("Unsubscribe", role: .destructive) {
+                        subscribeModel.confirmUnsubscribe(seriesID: series.id, auth: auth) {
+                            await invalidateSeriesPageCache()
+                        }
+                    }
+                    Button("Cancel", role: .cancel) { subscribeModel.cancelUnsubscribe() }
+                } message: {
+                    Text("You will stop receiving email updates for this series on AO3.")
+                }
             }
             // One tap can download a whole series, so it asks first; while it runs it is Cancel.
             Button {
@@ -589,17 +590,16 @@ final class AO3SeriesSubscribeModel {
         activeTask = nil
     }
 
+    static func showsSubscribe(isLoggedIn: Bool) -> Bool {
+        isLoggedIn
+    }
+
     func tapped(
         seriesID: Int,
         auth: AO3AuthService,
         onSuccess: (@MainActor () async -> Void)? = nil
     ) {
-        guard !isWorking else { return }
-        guard auth.isLoggedIn else {
-            banner = AO3WriteError.notSignedIn.errorDescription
-            writeFailures += 1
-            return
-        }
+        guard !isWorking, auth.isLoggedIn else { return }
         if isSubscribed {
             isConfirmingUnsubscribe = true
             return
@@ -612,12 +612,7 @@ final class AO3SeriesSubscribeModel {
         auth: AO3AuthService,
         onSuccess: (@MainActor () async -> Void)? = nil
     ) {
-        guard !isWorking else { return }
-        guard auth.isLoggedIn else {
-            banner = AO3WriteError.notSignedIn.errorDescription
-            writeFailures += 1
-            return
-        }
+        guard !isWorking, auth.isLoggedIn else { return }
         performToggle(seriesID: seriesID, auth: auth, onSuccess: onSuccess)
     }
 
