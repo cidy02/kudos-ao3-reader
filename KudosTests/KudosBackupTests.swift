@@ -113,6 +113,41 @@ struct KudosBackupTests {
         #expect(plain.coverRecipeJSON == richPin)
     }
 
+    @Test func replaceLibraryRestoresArchivedCoverOverNewerLocalShuffle() throws {
+        let id = UUID()
+        let archivedContext = try coverContext()
+        let archivedWork = SavedWork(id: id, title: "Snapshot", author: "Author")
+        archivedContext.insert(archivedWork)
+        archivedWork.pinCover(salt: 0)
+        var snapshotObj = try #require(
+            JSONSerialization.jsonObject(with: Data(#require(archivedWork.coverRecipeJSON).utf8)) as? [String: Any]
+        )
+        snapshotObj["pinnedAt"] = Date().timeIntervalSince1970 - 600
+        archivedWork.coverRecipeJSON = try #require(String(
+            data: JSONSerialization.data(withJSONObject: snapshotObj), encoding: .utf8
+        ))
+        let snapshotPin = archivedWork.coverRecipeJSON
+
+        let localContext = try coverContext()
+        let localWork = SavedWork(id: id, title: "Snapshot", author: "Author")
+        localContext.insert(localWork)
+        localWork.pinCover(salt: 2)
+        let localPin = try #require(localWork.coverRecipeJSON)
+
+        _ = try KudosBackupService.restore(
+            coverContents(archivedWork), into: localContext, defaults: try testDefaults(), mode: .replaceLibrary
+        )
+        #expect(localWork.coverRecipeJSON == snapshotPin)
+
+        // An archive without the key still keeps the stored local pin in Replace mode.
+        localWork.coverRecipeJSON = localPin
+        archivedWork.coverRecipeJSON = nil
+        _ = try KudosBackupService.restore(
+            coverContents(archivedWork), into: localContext, defaults: try testDefaults(), mode: .replaceLibrary
+        )
+        #expect(localWork.coverRecipeJSON == localPin)
+    }
+
     @Test func futureUndecodablePinPassesThroughRestoreAndActions() throws {
         let id = UUID()
         let context = try coverContext()

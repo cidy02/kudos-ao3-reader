@@ -4839,7 +4839,10 @@ enum KudosBackupService {
         work.workRelationships = TagMerge.merged(work.workRelationships, archived.workRelationships)
         work.workFreeforms = TagMerge.merged(work.workFreeforms, archived.workFreeforms)
         if let coverRecipeJSON = archived.coverRecipeJSON,
-           shouldApplyIncomingCover(localJSON: work.coverRecipeJSON, incomingJSON: coverRecipeJSON) {
+           mode == .replaceLibrary || shouldApplyIncomingCover(
+               localJSON: work.coverRecipeJSON,
+               incomingJSON: coverRecipeJSON
+           ) {
             work.coverRecipeJSON = coverRecipeJSON
         }
         work.workTagsFetched = work.workTagsFetched || archived.workTagsFetched
