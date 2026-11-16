@@ -140,7 +140,58 @@ struct AO3HTMLDownloadTests {
         let document = try EPUBDocument.open(epubURL: url, into: extracted)
         #expect(document.chapters.map(\.title) == ["Preface", "One Shot", "Afterword"])
         #expect(try EPUBDocument.metadata(ofEPUBAt: url).author == "Anonymous")
-        #expect(try text(MiniZip(data: data), "OEBPS/chapter-2.xhtml").contains("All of it, at once."))
+
+        let zip = try MiniZip(data: data)
+        let chapterTwo = try text(zip, "OEBPS/chapter-2.xhtml")
+        #expect(chapterTwo.contains("All of it, at once."))
+        #expect(!chapterTwo.contains("toc-heading"))
+        #expect(chapterTwo.components(separatedBy: "One Shot").count == 2) // <title> only
+        #expect(try text(zip, "OEBPS/style.css").contains(".toc-heading { display: none; }"))
+    }
+
+    @Test func aWindows1252ByteInTheFileConverts() async throws {
+        var bytes = Data(try Self.fixture("ao3_download_single_chapter").utf8)
+        let target = Data("All of it, at once.".utf8)
+        let replacement = Data("All".utf8) + Data([0x93]) + Data("it.".utf8)
+        let range = try #require(bytes.range(of: target))
+        bytes.replaceSubrange(range, with: replacement)
+
+        let htmlFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("html")
+        try bytes.write(to: htmlFile)
+        defer { try? FileManager.default.removeItem(at: htmlFile) }
+
+        let epubURL = try await AO3HTMLDownloadConverter.epubFile(fromHTMLFile: htmlFile, named: "win1252.epub")
+        defer { try? FileManager.default.removeItem(at: epubURL) }
+        #expect(try EPUBDocument.metadata(ofEPUBAt: epubURL).title == "One Shot")
+        let zip = try MiniZip(data: try Data(contentsOf: epubURL))
+        let chapterTwo = try text(zip, "OEBPS/chapter-2.xhtml")
+        #expect(chapterTwo.contains("All\u{FFFD}it."))
+    }
+
+    @Test func rtlDirectionSurvivesSanitizationOnBlocksAndBody() async throws {
+        let html = try Self.fixture("ao3_download_single_chapter")
+            .replacingOccurrences(of: "<body>", with: "<body dir=\"rtl\">")
+            .replacingOccurrences(
+                of: "<div class=\"userstuff\">\n      <p>All of it, at once.</p>",
+                with: """
+                <div class="userstuff" dir="rtl">
+                      <p dir="auto">All of it, at once.</p>
+                      <p dir="ltr">Left to right.</p>
+                      <p dir="bogus">Invalid dir stripped.</p>
+                """
+            )
+        let data = try #require(try await AO3HTMLDownloadConverter.epub(fromHTML: html, fetchImage: { _ in nil }))
+        let zip = try MiniZip(data: data)
+        let opf = try text(zip, "OEBPS/content.opf")
+        let chapterTwo = try text(zip, "OEBPS/chapter-2.xhtml")
+        #expect(opf.contains("page-progression-direction=\"rtl\""))
+        #expect(chapterTwo.contains("<body dir=\"rtl\">"))
+        #expect(chapterTwo.contains("<div class=\"userstuff\" dir=\"rtl\">"))
+        #expect(chapterTwo.contains("<p dir=\"auto\">"))
+        #expect(chapterTwo.contains("<p dir=\"ltr\">"))
+        #expect(!chapterTwo.contains("bogus"))
     }
 
     @Test func anOrdinaryPageIsNotABook() async throws {
@@ -209,6 +260,166 @@ struct AO3HTMLDownloadTests {
         await #expect(throws: AO3Error.forbidden) { _ = try await client().downloadEPUB(workID: 7) }
         #expect(HTMLOnlyAO3.paths == ["/downloads/7/work.epub"])
     }
+
+    @Test func followUpErrorsOnWorkPageOrHTMLSurfaceAsThemselves() async throws {
+        let maintenanceBody = try Self.fixture("ao3_maintenance")
+        let cases: [(status: Int, body: String, headers: [String: String], expected: AO3Error)] = [
+            (403, "", [:], .forbidden),
+            (429, "", ["Retry-After": "0"], .rateLimited(retryAfter: 0)),
+            (503, "", [:], .server(status: 503)),
+            (503, maintenanceBody, [:], .maintenance),
+        ]
+
+        // 1) `.epub` 404 → work page fails with 403 / 429 / 503 / maintenance.
+        for item in cases {
+            HTMLOnlyAO3.reset(page: item.body, html: "")
+            HTMLOnlyAO3.routeStatus = ["/downloads/7/work.epub": 404, "/works/7": item.status]
+            HTMLOnlyAO3.routeHeaders = ["/works/7": item.headers]
+            await #expect(throws: item.expected) { _ = try await client().downloadEPUB(workID: 7) }
+            #expect(!HTMLOnlyAO3.paths.contains("/downloads/7/work.html"))
+        }
+
+        // 2) `.epub` 404 → work page has no menu → `.html` fails with 403 / 429 / 503 / maintenance.
+        let noMenu = "<html><body><p>Restricted.</p></body></html>"
+        for item in cases {
+            HTMLOnlyAO3.reset(page: noMenu, html: item.body)
+            HTMLOnlyAO3.routeStatus = [
+                "/downloads/7/work.epub": 404,
+                "/works/7": 200,
+                "/downloads/7/work.html": item.status,
+            ]
+            HTMLOnlyAO3.routeHeaders = ["/downloads/7/work.html": item.headers]
+            await #expect(throws: item.expected) { _ = try await client().downloadEPUB(workID: 7) }
+        }
+
+        // 3) `.epub` 404 → work page offers HTML → `.html` succeeds.
+        HTMLOnlyAO3.reset(page: Self.workPage("html"), html: try Self.fixture("ao3_download_single_chapter"))
+        HTMLOnlyAO3.routeStatus = ["/downloads/7/work.epub": 404]
+        let file = try await client().downloadEPUB(workID: 7)
+        defer { try? FileManager.default.removeItem(at: file) }
+        #expect(try EPUBDocument.metadata(ofEPUBAt: file).title == "One Shot")
+
+        // 4) Cancelled task during follow-up still throws CancellationError, not refusal.
+        HTMLOnlyAO3.reset(page: Self.workPage("html"), html: "")
+        HTMLOnlyAO3.routeStatus = ["/downloads/7/work.epub": 404]
+        let cancelledClient = client()
+        let task = Task {
+            try await Task.sleep(nanoseconds: 0)
+            return try await cancelledClient.downloadEPUB(workID: 7)
+        }
+        task.cancel()
+        await #expect(throws: CancellationError.self) { _ = try await task.value }
+    }
+
+    // MARK: - Image isolation & caps
+
+    @Test func imageSessionKeepsNoCookiesOrCredentials() {
+        for config in [
+            AO3HTMLDownloadConverter.makeImageSessionConfiguration(),
+            AO3HTMLDownloadConverter.imageSession.configuration,
+        ] {
+            #expect(!config.httpShouldSetCookies)
+            #expect(config.httpCookieStorage == nil)
+            #expect(config.urlCredentialStorage == nil)
+        }
+    }
+
+    @Test func ao3HostImagesAndRedirectsGoThroughAO3ClientNeverBareSession() async throws {
+        ImageStubProtocol.reset()
+        ImageStubProtocol.responses[URL(string: "https://img.example/redirect.png")!] = .redirect(
+            to: URL(string: "https://archiveofourown.org/images/from-redirect.png")!
+        )
+        let bareConfig = AO3HTMLDownloadConverter.makeImageSessionConfiguration()
+        bareConfig.protocolClasses = [ImageStubProtocol.self]
+        let bareSession = URLSession(configuration: bareConfig)
+
+        AO3ImageStubProtocol.reset(data: Self.png)
+        let ao3Config = AO3Client.makeAnonymousSessionConfiguration()
+        ao3Config.protocolClasses = [AO3ImageStubProtocol.self]
+        let ao3Client = AO3Client(session: URLSession(configuration: ao3Config), paceSleep: { _ in })
+
+        // Direct AO3 URL: fetched via AO3Client (with its User-Agent), never bare session.
+        let directURL = URL(string: "https://archiveofourown.org/images/direct.png")!
+        let directData = await AO3HTMLDownloadConverter.fetchRemoteImage(
+            directURL, session: bareSession, ao3Client: ao3Client
+        )
+        #expect(directData == Self.png)
+        #expect(ImageStubProtocol.requestedURLs.isEmpty)
+        #expect(AO3ImageStubProtocol.requestedURLs == [directURL])
+        #expect(AO3ImageStubProtocol.userAgents.first == AO3RequestDefaults.userAgent)
+
+        // Non-HTTPS AO3 host URL: skipped, never touches bare session.
+        let insecureAO3 = URL(string: "http://archiveofourown.org/images/insecure.png")!
+        #expect(
+            await AO3HTMLDownloadConverter.fetchRemoteImage(
+                insecureAO3, session: bareSession, ao3Client: ao3Client
+            ) == nil
+        )
+        #expect(ImageStubProtocol.requestedURLs.isEmpty)
+
+        // Redirect from non-AO3 host to AO3 host: bare session stops at 302; target goes through AO3Client.
+        let redirectOrigin = URL(string: "https://img.example/redirect.png")!
+        let redirectTarget = URL(string: "https://archiveofourown.org/images/from-redirect.png")!
+        let redirectedData = await AO3HTMLDownloadConverter.fetchRemoteImage(
+            redirectOrigin, session: bareSession, ao3Client: ao3Client
+        )
+        #expect(redirectedData == Self.png)
+        #expect(ImageStubProtocol.requestedURLs == [redirectOrigin])
+        #expect(AO3ImageStubProtocol.requestedURLs == [directURL, redirectTarget])
+    }
+
+    @Test func perImageAndTotalImageCapsAreEnforced() async throws {
+        ImageStubProtocol.reset()
+        let bareConfig = AO3HTMLDownloadConverter.makeImageSessionConfiguration()
+        bareConfig.protocolClasses = [ImageStubProtocol.self]
+        let bareSession = URLSession(configuration: bareConfig)
+        let ao3Client = client()
+
+        // Content-Length above cap aborts before reading body.
+        let headerOverCap = URL(string: "https://img.example/header-over.png")!
+        ImageStubProtocol.responses[headerOverCap] = .chunks(
+            [Self.png, Data(repeating: 0, count: 64)], contentLength: 100
+        )
+        #expect(
+            await AO3HTMLDownloadConverter.fetchRemoteImage(
+                headerOverCap, session: bareSession, ao3Client: ao3Client, maxBytes: 16
+            ) == nil
+        )
+        #expect(!ImageStubProtocol.finishedURLs.contains(headerOverCap))
+
+        // Chunked response without Content-Length aborts as soon as bytes exceed cap.
+        let streamOverCap = URL(string: "https://img.example/stream-over.png")!
+        ImageStubProtocol.responses[streamOverCap] = .chunks(
+            [Data(repeating: 1, count: 10), Data(repeating: 2, count: 10)], contentLength: nil
+        )
+        #expect(
+            await AO3HTMLDownloadConverter.fetchRemoteImage(
+                streamOverCap, session: bareSession, ao3Client: ao3Client, maxBytes: 16
+            ) == nil
+        )
+        #expect(!ImageStubProtocol.finishedURLs.contains(streamOverCap))
+
+        // Total cap checks `total + size <= max` before appending.
+        let html = try Self.fixture("ao3_download_single_chapter").replacingOccurrences(
+            of: "<p>All of it, at once.</p>",
+            with: """
+            <p><img src="https://img.example/a.png" alt="a"></p>
+            <p><img src="https://img.example/b.png" alt="b"></p>
+            <p><img src="https://img.example/c.png" alt="c"></p>
+            """
+        )
+        let epubData = try #require(
+            try await AO3HTMLDownloadConverter.epub(
+                fromHTML: html,
+                fetchImage: { _ in Self.png }, // 12 bytes each
+                maxTotalImageBytes: 25
+            )
+        )
+        let zip = try MiniZip(data: epubData)
+        #expect(zip.data(named: "OEBPS/images/image-1.png") == Self.png)
+        #expect(zip.data(named: "OEBPS/images/image-2.png") == Self.png)
+        #expect(zip.data(named: "OEBPS/images/image-3.png") == nil)
+    }
 }
 
 /// AO3 with EPUB withdrawn: an EPUB request gets a page in its place, as
@@ -218,24 +429,32 @@ private final class HTMLOnlyAO3: URLProtocol, @unchecked Sendable {
     nonisolated(unsafe) static var page = ""
     nonisolated(unsafe) static var html = ""
     nonisolated(unsafe) static var status = 200
+    nonisolated(unsafe) static var routeStatus: [String: Int] = [:]
+    nonisolated(unsafe) static var routeHeaders: [String: [String: String]] = [:]
     nonisolated(unsafe) static var paths: [String] = []
 
     static func reset(page: String, html: String, status: Int = 200) {
         self.page = page
         self.html = html
         self.status = status
+        routeStatus = [:]
+        routeHeaders = [:]
         paths = []
     }
 
     override class func canInit(with _: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
-        guard let url = request.url,
-              let response = HTTPURLResponse(
-                  url: url, statusCode: Self.status, httpVersion: "HTTP/1.1",
-                  headerFields: ["Content-Type": "text/html; charset=utf-8"]
-              )
-        else {
+        guard let url = request.url else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badURL))
+            return
+        }
+        let code = Self.routeStatus[url.path] ?? Self.status
+        var headers = ["Content-Type": "text/html; charset=utf-8"]
+        for (key, value) in Self.routeHeaders[url.path] ?? [:] { headers[key] = value }
+        guard let response = HTTPURLResponse(
+            url: url, statusCode: code, httpVersion: "HTTP/1.1", headerFields: headers
+        ) else {
             client?.urlProtocol(self, didFailWithError: URLError(.badURL))
             return
         }
@@ -247,6 +466,105 @@ private final class HTMLOnlyAO3: URLProtocol, @unchecked Sendable {
         }
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: Data(body.utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
+}
+
+private final class ImageStubProtocol: URLProtocol, @unchecked Sendable {
+    enum StubResponse {
+        case chunks([Data], contentLength: Int?)
+        case redirect(to: URL)
+    }
+
+    nonisolated(unsafe) static var responses: [URL: StubResponse] = [:]
+    nonisolated(unsafe) static var requestedURLs: [URL] = []
+    nonisolated(unsafe) static var finishedURLs: [URL] = []
+    private var cancelled = false
+
+    static func reset() {
+        responses = [:]
+        requestedURLs = []
+        finishedURLs = []
+    }
+
+    override class func canInit(with _: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        guard let url = request.url, let stub = Self.responses[url] else {
+            client?.urlProtocol(self, didFailWithError: URLError(.fileDoesNotExist))
+            return
+        }
+        Self.requestedURLs.append(url)
+        switch stub {
+        case let .redirect(to: target):
+            guard let response = HTTPURLResponse(
+                url: url, statusCode: 302, httpVersion: "HTTP/1.1",
+                headerFields: ["Location": target.absoluteString]
+            ) else {
+                client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
+                return
+            }
+            client?.urlProtocol(self, wasRedirectedTo: URLRequest(url: target), redirectResponse: response)
+            client?.urlProtocolDidFinishLoading(self)
+        case let .chunks(chunks, contentLength: contentLength):
+            var headers: [String: String] = [:]
+            if let contentLength { headers["Content-Length"] = "\(contentLength)" }
+            guard let response = HTTPURLResponse(
+                url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: headers
+            ) else {
+                client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
+                return
+            }
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            for chunk in chunks {
+                if cancelled { return }
+                client?.urlProtocol(self, didLoad: chunk)
+            }
+            if !cancelled {
+                Self.finishedURLs.append(url)
+                client?.urlProtocolDidFinishLoading(self)
+            }
+        }
+    }
+
+    override func stopLoading() {
+        cancelled = true
+    }
+}
+
+private final class AO3ImageStubProtocol: URLProtocol, @unchecked Sendable {
+    nonisolated(unsafe) static var data = Data()
+    nonisolated(unsafe) static var requestedURLs: [URL] = []
+    nonisolated(unsafe) static var userAgents: [String] = []
+
+    static func reset(data: Data) {
+        self.data = data
+        requestedURLs = []
+        userAgents = []
+    }
+
+    override class func canInit(with _: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        guard let url = request.url,
+              let response = HTTPURLResponse(
+                  url: url, statusCode: 200, httpVersion: "HTTP/1.1",
+                  headerFields: ["Content-Type": "image/png"]
+              )
+        else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badURL))
+            return
+        }
+        Self.requestedURLs.append(url)
+        if let userAgent = request.value(forHTTPHeaderField: "User-Agent") {
+            Self.userAgents.append(userAgent)
+        }
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Self.data)
         client?.urlProtocolDidFinishLoading(self)
     }
 

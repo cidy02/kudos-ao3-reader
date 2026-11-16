@@ -55,22 +55,29 @@ nonisolated enum AO3HTMLDownloadConverter {
 
         // A single-chapter work has no chapter heading: its one section is named
         // for the work.
-        var sections: [(title: String, elements: [Element], dir: String?)] = [
-            ("Preface", [preface], documentDir)
-        ]
+        struct Section {
+            let title: String
+            var elements: [Element]
+            let dir: String?
+        }
+        var sections = [Section(title: "Preface", elements: [preface], dir: documentDir)]
         for child in chapters.children().array() {
             let heading = child.hasClass("meta") && child.hasClass("group")
                 ? child.children().array().first { $0.tagName() == "h2" && $0.hasClass("heading") }
                 : nil
             if heading != nil || sections.count == 1 {
                 let title = try trimmed(heading?.text())
-                sections.append((title.isEmpty ? metadata.title : title, [], chaptersDir ?? documentDir))
+                sections.append(Section(
+                    title: title.isEmpty ? metadata.title : title,
+                    elements: [],
+                    dir: chaptersDir ?? documentDir
+                ))
             }
             sections[sections.count - 1].elements.append(child)
         }
         guard sections.count > 1 else { return nil }
         if let afterword = try document.select("body > div#afterword").first() {
-            sections.append(("Afterword", [afterword], documentDir))
+            sections.append(Section(title: "Afterword", elements: [afterword], dir: documentDir))
         }
 
         try relink(sections.map(\.elements), imagePaths: imagePaths)
@@ -184,7 +191,8 @@ nonisolated enum AO3HTMLDownloadConverter {
     /// fetched is left out.
     static func epub(
         fromHTML html: String,
-        fetchImage: @Sendable (URL) async -> Data? = fetchRemoteImage
+        fetchImage: @Sendable (URL) async -> Data? = fetchRemoteImage,
+        maxTotalImageBytes: Int = maxTotalImageBytes
     ) async throws -> Data? {
         var images: [(path: String, data: Data)] = []
         var paths: [String: String] = [:]
