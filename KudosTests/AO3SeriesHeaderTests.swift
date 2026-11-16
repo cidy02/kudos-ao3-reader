@@ -22,7 +22,9 @@ struct AO3SeriesHeaderTests {
         let text = AO3SeriesDetailView.facts(for: series(
             words: 141_000, workCount: 3, bookmarks: 1, complete: false, restricted: true, date: "2026-10-23"
         ))
-        #expect(text == "3 works · 141,000 words · 1 bookmark · restricted · in progress · 2026-10-23")
+        // T-552 (owner 11-16): dates read through the system's abbreviated format, e.g. "Oct 23, 2026".
+        let date = WorkStat.displayDate("2026-10-23")
+        #expect(text == "3 works · 141,000 words · 1 bookmark · restricted · in progress · \(date)")
     }
 
     @Test func factsSkipWhatAO3DidNotPrint() {
