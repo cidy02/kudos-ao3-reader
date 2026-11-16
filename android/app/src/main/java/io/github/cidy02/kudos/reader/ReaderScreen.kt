@@ -125,6 +125,7 @@ import io.github.cidy02.kudos.reader.settings.ReaderSpeechPreferences
 import io.github.cidy02.kudos.reader.speech.ReaderSpeechController
 import io.github.cidy02.kudos.reader.speech.ReaderSpeechSeekSession
 import io.github.cidy02.kudos.reader.speech.SpeechStatus
+import io.github.cidy02.kudos.reader.speech.TTSService
 import io.github.cidy02.kudos.ui.components.ReaderPageSkeleton
 import io.github.cidy02.kudos.ui.components.workCardZoomDestination
 import io.github.cidy02.kudos.ui.subject.KudosTokens
@@ -132,6 +133,7 @@ import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.LocalSubjectPalette
 import io.github.cidy02.kudos.ui.subject.ReaderTheme
 import io.github.cidy02.kudos.ui.subject.SubjectPalette
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -158,8 +160,21 @@ fun ReaderScreen(
     settingsRepository: io.github.cidy02.kudos.data.preferences.SettingsRepository? = null,
     /** An AO3 work, tag or author link tapped in the text: opened in the app, as iOS. */
     onOpenAo3Link: (ReaderLinkDestination) -> Unit = {},
-    customFontRepository: io.github.cidy02.kudos.files.CustomFontRepository? = null
+    customFontRepository: io.github.cidy02.kudos.files.CustomFontRepository? = null,
+    openPublication: (suspend (java.io.File) -> ReadiumOpenResult)? = null,
+    ttsService: TTSService? = null
 ) {
+    val closeReader: () -> Unit = {
+        viewModel.cancelPendingLaunch()
+        onBack()
+    }
+    LaunchedEffect(viewModel) {
+        viewModel.trackPendingLaunch()
+    }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        viewModel.trackPendingLaunch()
+    }
+
     val uiState by viewModel.state.collectAsState()
     val settings by (settingsRepository ?: viewModel.readerSettingsRepository)
         .settings.collectAsState(initial = io.github.cidy02.kudos.core.model.KudosSettings.Defaults)
@@ -193,17 +208,18 @@ fun ReaderScreen(
             ReaderUiState.Loading -> ReaderPageSkeleton(message = "Opening…")
             is ReaderUiState.Error -> ReaderErrorView(
                 error = state.error,
-                onBack = onBack,
+                onBack = closeReader,
                 onRetry = { viewModel.load() },
                 onRemoveOfflineCopy = if (state.error is ReaderError.FileMissing) {
-                    { viewModel.markEpubMissing(); onBack() }
+                    { viewModel.markEpubMissing(); closeReader() }
                 } else {
                     null
                 }
             )
             is ReaderUiState.Reading -> ReaderReading(
-                state, viewModel, onBack, onOpenComments, onOpenWorkDetail, settings,
-                onOpenAo3Link, settingsRepository, customFontRepository
+                state, viewModel, closeReader, onOpenComments, onOpenWorkDetail, settings,
+                onOpenAo3Link, settingsRepository, customFontRepository,
+                openPublication, ttsService
             )
         }
     }
@@ -220,7 +236,9 @@ private fun ReaderReading(
     settings: io.github.cidy02.kudos.core.model.KudosSettings,
     onOpenAo3Link: (ReaderLinkDestination) -> Unit,
     settingsRepository: io.github.cidy02.kudos.data.preferences.SettingsRepository?,
-    customFontRepository: io.github.cidy02.kudos.files.CustomFontRepository?
+    customFontRepository: io.github.cidy02.kudos.files.CustomFontRepository?,
+    openPublication: (suspend (java.io.File) -> ReadiumOpenResult)? = null,
+    ttsService: TTSService? = null
 ) {
     val context = LocalContext.current
     val workActions = remember(context) { ReaderWorkActions(context) }
@@ -245,7 +263,9 @@ private fun ReaderReading(
         )
     }
     val haptics = LocalHapticFeedback.current
-    val opener = remember { ReadiumPublicationOpener(context) }
+    val openEpub: suspend (java.io.File) -> ReadiumOpenResult = remember(context, openPublication) {
+        openPublication ?: ReadiumPublicationOpener(context)::open
+    }
     val linkHandler = remember { ReaderLinkHandler() }
     val navigatorController = remember { ReadiumNavigatorController() }
     var attempt by remember { mutableIntStateOf(0) }
@@ -289,11 +309,14 @@ private fun ReaderReading(
 
     val scope = rememberCoroutineScope()
 
-    val speechController = remember(context) { ReaderSpeechController(context) }
+    val speechController = remember(context, ttsService) {
+        if (ttsService != null) ReaderSpeechController(context, tts = ttsService) else ReaderSpeechController(context)
+    }
     val speechStatus by speechController.status.collectAsState()
     val spokenText by speechController.spokenText.collectAsState()
     var launchNonce by remember { mutableIntStateOf(0) }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        viewModel.trackPendingLaunch()
         if (io.github.cidy02.kudos.app.ReaderLaunchRequest.peek(state.work.id) != null) {
             launchNonce++
         }
@@ -341,9 +364,9 @@ private fun ReaderReading(
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { viewModel.pauseReadingSession() }
     LifecycleEventEffect(Lifecycle.Event.ON_START) { viewModel.resumeReadingSession() }
 
-    val opening by produceState<ReadiumOpenResult?>(initialValue = null, state.epubPath, attempt) {
+    val opening by produceState<ReadiumOpenResult?>(initialValue = null, state.epubPath, attempt, openEpub) {
         value = null
-        value = opener.open(state.epubPath.toFile())
+        value = openEpub(state.epubPath.toFile())
     }
 
 
@@ -389,20 +412,26 @@ private fun ReaderReading(
             }
             val tocEntries = remember(publication) { ReadiumTocAdapter.entries(publication) }
             val sections = remember(publication) { ReadiumTocAdapter.sections(publication) }
-            LaunchedEffect(publication, launchNonce, speechStatus) {
-                val launch = io.github.cidy02.kudos.app.ReaderLaunchRequest.consumeWhenReady(
-                    state.work.id, speechStatus != SpeechStatus.UNAVAILABLE
-                )
+            LaunchedEffect(publication, launchNonce) {
+                val pending = io.github.cidy02.kudos.app.ReaderLaunchRequest.peek(state.work.id)
                     ?: return@LaunchedEffect
+                val resolvedStatus = if (pending.startReadAloud) {
+                    speechController.status.first { it != SpeechStatus.RESOLVING }
+                } else {
+                    speechController.status.value
+                }
+                val launch = io.github.cidy02.kudos.app.ReaderLaunchRequest.consumeWhenReady(
+                    state.work.id, resolvedStatus != SpeechStatus.RESOLVING
+                ) ?: return@LaunchedEffect
                 if (launch.openContents) {
                     tocInitialTab = 0
                     showTocSheet = true
                 }
                 if (launch.startReadAloud && ReaderContentText.isAvailable(publication)) {
-                    val active = speechStatus == SpeechStatus.PLAYING || speechStatus == SpeechStatus.PAUSED
-                    if (speechStatus == SpeechStatus.MODEL_NOT_DOWNLOADED) {
+                    val active = resolvedStatus == SpeechStatus.PLAYING || resolvedStatus == SpeechStatus.PAUSED
+                    if (resolvedStatus == SpeechStatus.MODEL_NOT_DOWNLOADED) {
                         showTtsControls = true
-                    } else if (!active) {
+                    } else if (resolvedStatus != SpeechStatus.UNAVAILABLE && !active) {
                         val from = state.liveProgress?.locatorJson
                             ?.let { ReadiumNavigatorController.locatorFromJson(it) }
                         speechController.startReading(

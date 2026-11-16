@@ -74,6 +74,7 @@ class ReaderViewModel(
     private var isScrubbing = false
     private var sessionLifecycleJob: Job? = null
     private var settingsJob: Job? = null
+    private var trackedLaunchToken: Long? = null
 
     internal val readerSettingsRepository: SettingsRepository get() = settingsRepository
 
@@ -87,6 +88,7 @@ class ReaderViewModel(
     }
 
     init {
+        trackPendingLaunch()
         repository.attachProgressWriter(
             scheduler = object : TrailingWriteScheduler {
                 private var trailing: Job? = null
@@ -219,6 +221,21 @@ class ReaderViewModel(
 
     fun resumeReadingSession() {
         enqueueSessionLifecycle { readingLogService.resumeSession(workId) }
+    }
+
+    internal fun trackPendingLaunch() {
+        io.github.cidy02.kudos.app.ReaderLaunchRequest.tokenFor(workId)?.let { trackedLaunchToken = it }
+    }
+
+    internal fun cancelPendingLaunch() {
+        val token = trackedLaunchToken ?: return
+        io.github.cidy02.kudos.app.ReaderLaunchRequest.clearIfMatches(workId, token)
+        trackedLaunchToken = null
+    }
+
+    override fun onCleared() {
+        cancelPendingLaunch()
+        super.onCleared()
     }
 
     fun close() {
