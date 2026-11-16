@@ -77,6 +77,7 @@ class SyncRepositoryTest {
     private lateinit var provider: FakeTempDocumentsProvider
 
     private var clockInstant: Instant = FIXED_CLOCK
+    private val backgroundSyncSchedules = mutableListOf<Boolean>()
 
     @Test
     fun originalReadLimitCountsStreamBytesWithoutTrustingProviderSize() {
@@ -125,6 +126,7 @@ class SyncRepositoryTest {
         provider = FakeTempDocumentsProvider()
         treeUri = provider.install(context, safRoot)
 
+        backgroundSyncSchedules.clear()
         syncRepository = SyncRepository(
             context = context,
             settingsRepository = settingsRepository,
@@ -132,7 +134,8 @@ class SyncRepositoryTest {
             workFileStore = workFileStore,
             fontFileStore = fontFileStore,
             persistenceGate = persistenceGate,
-            clock = { clockInstant }
+            clock = { clockInstant },
+            scheduleBackgroundSync = { backgroundSyncSchedules += it }
         )
 
         runBlocking {
@@ -158,6 +161,7 @@ class SyncRepositoryTest {
         assertTrue(settingsRepository.hasConfiguredSyncFolder.first())
         syncRepository.disconnect()
         assertFalse(settingsRepository.firstRunState.first().showsSync(dismissedThisSession = false))
+        assertEquals(listOf(true, false), backgroundSyncSchedules)
     }
 
     @Test

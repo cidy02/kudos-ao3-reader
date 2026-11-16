@@ -123,7 +123,8 @@ class SyncManifestPassthroughTest {
             workFileStore = workFileStore,
             fontFileStore = fontFileStore,
             persistenceGate = persistenceGate,
-            clock = { clockInstant }
+            clock = { clockInstant },
+            scheduleBackgroundSync = {}
         )
 
         runBlocking {
@@ -835,7 +836,7 @@ class SyncManifestPassthroughTest {
             fontFileStore, persistenceGate, clock = { clockInstant }, beforeManifestCommit = {
                 entered.complete(Unit)
                 release.await()
-            })
+            }, scheduleBackgroundSync = {})
         val sync = async(Dispatchers.IO) { blocked.runSync() }
         entered.await()
         val disconnect = async(Dispatchers.IO) { blocked.disconnect() }
@@ -858,7 +859,7 @@ class SyncManifestPassthroughTest {
             fontFileStore, persistenceGate, clock = { clockInstant }, beforeManifestCommit = {
                 entered.complete(Unit)
                 release.await()
-            })
+            }, scheduleBackgroundSync = {})
         val sync = async(Dispatchers.IO) { blocked.runSync() }
         entered.await()
         val other = DocumentFile.fromTreeUri(context, treeUri)!!.createDirectory("Other")!!
@@ -1315,7 +1316,8 @@ class SyncManifestPassthroughTest {
             workFileStore = workFileStore,
             fontFileStore = fontFileStore,
             persistenceGate = pausingGate,
-            clock = { clockInstant }
+            clock = { clockInstant },
+            scheduleBackgroundSync = {}
         )
 
         val result = gatedSync.runAutoSync()

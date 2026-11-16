@@ -51,7 +51,8 @@ class SyncRepository(
     private val maxEpubBatchBytes: Long = 32L * 1024 * 1024,
     /** How many bytes of fonts one sync-down may install (iOS `maxTotalFontBytes`). */
     private val maxFontPassBytes: Long = BackupLimits.MAX_TOTAL_FONT_BYTES,
-    internal val beforeManifestCommit: suspend () -> Unit = {}
+    internal val beforeManifestCommit: suspend () -> Unit = {},
+    internal val scheduleBackgroundSync: ((Boolean) -> Unit)? = null
 ) {
     /**
      * Whole-run single-flight for [runSync]. [PersistenceGate] only serializes
@@ -104,7 +105,7 @@ class SyncRepository(
         // is read or written once; that read or write then replaces it.
         settingsRepository.updateSyncIsEnabled(true)
         folderGeneration++
-        scheduleWorker()
+        updateBackgroundSyncSchedule(true)
     }
 
     /**
@@ -113,7 +114,7 @@ class SyncRepository(
      */
     suspend fun setAutoSync(enabled: Boolean) {
         settingsRepository.updateSyncIsEnabled(enabled)
-        if (enabled) scheduleWorker() else WorkManager.getInstance(context).cancelUniqueWork(SYNC_WORK_NAME)
+        updateBackgroundSyncSchedule(enabled)
     }
 
     suspend fun disconnect() = runSyncMutex.withLock {
@@ -132,7 +133,19 @@ class SyncRepository(
         settingsRepository.updateSyncLastSyncAt(null)
         settingsRepository.updateSyncLastManifestDigest(null)
         folderGeneration++
-        WorkManager.getInstance(context).cancelUniqueWork(SYNC_WORK_NAME)
+        updateBackgroundSyncSchedule(false)
+    }
+
+    private fun updateBackgroundSyncSchedule(enabled: Boolean) {
+        scheduleBackgroundSync?.let {
+            it(enabled)
+            return
+        }
+        if (enabled) {
+            scheduleWorker()
+        } else {
+            WorkManager.getInstance(context).cancelUniqueWork(SYNC_WORK_NAME)
+        }
     }
 
     private fun scheduleWorker() {
