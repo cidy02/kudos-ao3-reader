@@ -282,18 +282,31 @@ internal fun FilterFacetRow(
             .background(if (look.fillAlpha > 0f) color.copy(alpha = look.fillAlpha) else Color.Transparent, shape)
             .then(if (look.borderWidth > 0.dp) Modifier.border(look.borderWidth, color, shape) else Modifier)
             .clickable(role = Role.Button, onClickLabel = state.nextActionLabel.lowercase(), onClick = onClick)
-            .semantics(mergeDescendants = true) {
-                if (spokenSeparately) contentDescription = accessibilityTitle
-                if (state != FilterSelectionState.CLEAR) stateDescription =
-                    if (state == FilterSelectionState.INCLUDED) "Included" else "Excluded"
-            }
+            .then(
+                if (spokenSeparately) {
+                    Modifier.clearAndSetSemantics {
+                        contentDescription = accessibilityTitle
+                        if (state != FilterSelectionState.CLEAR) {
+                            stateDescription = if (state == FilterSelectionState.INCLUDED) "Included" else "Excluded"
+                        }
+                    }
+                } else {
+                    Modifier.semantics(mergeDescendants = true) {
+                        if (state != FilterSelectionState.CLEAR) {
+                            stateDescription = if (state == FilterSelectionState.INCLUDED) "Included" else "Excluded"
+                        }
+                    }
+                }
+            )
             .padding(horizontal = if (dense) 8.dp else 10.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(if (dense) 6.dp else 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        if (symbol != null) WorkSymbolTileView(symbol, 22.dp, Modifier.alpha(look.symbolAlpha))
+        if (symbol != null) {
+            WorkSymbolTileView(symbol, 22.dp, Modifier.alpha(look.symbolAlpha).clearAndSetSemantics { })
+        }
         Text(title,
-            Modifier.weight(1f).then(if (spokenSeparately) Modifier.clearAndSetSemantics { } else Modifier),
+            Modifier.weight(1f),
             color = when {
                 look.labelInStateColour -> color
                 state == FilterSelectionState.EXCLUDED -> tokens.secondaryInk
