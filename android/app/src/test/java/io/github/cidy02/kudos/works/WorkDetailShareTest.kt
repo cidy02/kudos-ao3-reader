@@ -10,6 +10,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -157,6 +158,85 @@ class WorkDetailShareTest {
                 store.deleteWorkEpub(work.id)
                 store.deleteOriginal(work.id)
             }
+        }
+    }
+
+    @Test
+    fun completedLocalOnlyWorkShowsCompleteInWorkDetailScreenIconStrip() {
+        val work = SavedWork(
+            title = "Completed local import",
+            author = "Author",
+            sourceUrl = "file:///import.epub",
+            isComplete = true
+        )
+        assertLocalWorkCompletionOnRealWorkDetailScreen(work, expected = "Status: complete")
+    }
+
+    @Test
+    fun unfinishedLocalOnlyWorkShowsUnknownCompletionInWorkDetailScreenIconStrip() {
+        val work = SavedWork(
+            title = "Unfinished local import",
+            author = "Author",
+            sourceUrl = "file:///draft.epub",
+            isComplete = false
+        )
+        assertLocalWorkCompletionOnRealWorkDetailScreen(work, expected = "Status: unknown")
+    }
+
+    private fun assertLocalWorkCompletionOnRealWorkDetailScreen(work: SavedWork, expected: String) {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val database = Room.inMemoryDatabaseBuilder(context, KudosDatabase::class.java)
+            .allowMainThreadQueries().build()
+        val store = WorkFileStore(java.nio.file.Files.createTempDirectory("detail-completion").toFile().toPath())
+        val offline = object : AO3Client {
+            override suspend fun get(url: String, headers: Map<String, String>): AO3Result<AO3HttpResponse> =
+                error("Unexpected network request: $url")
+        }
+        val writes = object : AO3AuthenticatedClient {
+            override fun username(): String? = null
+            override suspend fun getAuthenticated(url: String): AO3Result<AO3HttpResponse> =
+                error("Unexpected authenticated request: $url")
+            override suspend fun postAuthenticated(
+                url: String, formFields: List<Pair<String, String>>, headers: Map<String, String>
+            ): AO3Result<AO3HttpResponse> = error("Unexpected write: $url")
+        }
+        val repository = WorkRepository(database, store)
+        val importer = WorkImporter(
+            repository, AO3WorkMetadataRepository(offline), AO3EpubDownloader(offline),
+            store, context.cacheDir
+        )
+        val series = AO3SeriesRepository(offline)
+        val chrome = PushedShellChrome()
+        var showing by mutableStateOf(true)
+        try {
+            runBlocking { repository.upsert(work) }
+            compose.setContent {
+                MaterialTheme {
+                    CompositionLocalProvider(LocalPushedShellChrome provides chrome) {
+                        if (showing) Column {
+                            Row { chrome.trailingContent?.invoke(this) }
+                            WorkDetailScreen(
+                                source = WorkDetailSource.LocalWork(work.id),
+                                workRepository = repository,
+                                workImporter = importer,
+                                downloadQueue = DownloadQueue(importer, repository, series),
+                                writeRepository = AO3WriteRepository(writes),
+                                readingQueueRepository = ReadingQueueRepository(database),
+                                seriesRepository = series,
+                                onLogin = {}, onOpenComments = {}, onOpenReader = {}
+                            )
+                        }
+                    }
+                }
+            }
+            compose.waitUntil(timeoutMillis = 5_000) {
+                compose.onAllNodesWithText(work.title).fetchSemanticsNodes().isNotEmpty()
+            }
+            compose.onNode(hasContentDescription(expected, substring = true)).assertExists()
+        } finally {
+            compose.runOnIdle { showing = false }
+            compose.waitForIdle()
+            database.close()
         }
     }
 }

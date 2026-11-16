@@ -2,12 +2,20 @@ package io.github.cidy02.kudos.works.detail
 
 import androidx.compose.ui.geometry.Offset
 import android.app.Application
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
 import io.github.cidy02.kudos.search.LocalTagSearch
@@ -65,13 +73,116 @@ class WorkDetailVersionEComposeTest {
         var tapped: Pair<SearchSubjectField, String>? = null
         compose.setContent { KudosTheme(KudosThemeMode.Light) {
             CompositionLocalProvider(LocalTagSearch provides { field, tag -> tapped = field to tag }) {
-                WorkDetailTagSections(emptyList(), emptyList(), listOf("Friends"), emptyList(), emptyList(),
-                    LocalKudosTokens.current.scopePalette)
+                Box(Modifier.fillMaxWidth().testTag("tag-row-container")) {
+                    WorkDetailTagSections(
+                        emptyList(), emptyList(), listOf("Alpha", "Beta"), emptyList(), emptyList(),
+                        LocalKudosTokens.current.scopePalette
+                    )
+                }
             }
         } }
-        // The row fills its width; its centre is past the word, so tap the word itself.
-        compose.onNodeWithText("Friends").performTouchInput { click(centerLeft + Offset(8f, 0f)) }
-        assertEquals(SearchSubjectField.RELATIONSHIP to "Friends", tapped)
+        val results = mutableListOf<TextLayoutResult>()
+        val textNode = compose.onNodeWithText("Alpha, Beta")
+        textNode.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
+        val layout = results.single()
+        val textBounds = textNode.fetchSemanticsNode().boundsInRoot
+        val containerBounds = compose.onNodeWithTag("tag-row-container").fetchSemanticsNode().boundsInRoot
+
+        // Tapping trailing empty row space well to the right of the tag text must do nothing.
+        compose.onNodeWithTag("tag-row-container").performTouchInput {
+            click(Offset(containerBounds.width - 12f, textBounds.center.y - containerBounds.top))
+        }
+        assertNull(tapped)
+
+        // Tapping trailing empty row space well to the right of the tag text must do nothing.
+        compose.onNodeWithTag("tag-row-container").performTouchInput {
+            click(Offset(containerBounds.width - 12f, textBounds.center.y - containerBounds.top))
+        }
+        assertNull(tapped)
+
+        // Tapping the group label outside any tag link word must do nothing.
+        compose.onNodeWithText("Relationships").performTouchInput { click() }
+        assertNull(tapped)
+
+        // Tapping each inline tag word triggers only that tag's search.
+        textNode.performTouchInput { click(layout.getBoundingBox(1).center) }
+        assertEquals(SearchSubjectField.RELATIONSHIP to "Alpha", tapped)
+
+        tapped = null
+        textNode.performTouchInput { click(layout.getBoundingBox(8).center) }
+        assertEquals(SearchSubjectField.RELATIONSHIP to "Beta", tapped)
+    }
+
+    @Test fun contentsButtonExposesPostedChapterStateDescription() {
+        val chapters = mutableStateOf("10/12")
+        compose.setContent { KudosTheme(KudosThemeMode.Light) {
+            WorkDetailResumeCard(
+                actionTitle = "Read",
+                model = ResumeCardModel("Title", emptyList(), chapters.value, null, null, null, 0),
+                chapterLengths = null, isBusy = false, downloadFraction = null, canUpdateDownload = false,
+                onPrimaryClick = {}, onContentsClick = {}, onReadAloudClick = {}
+            )
+        } }
+        compose.onNodeWithContentDescription("Contents")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "10 of 12 chapters"))
+        compose.runOnIdle { chapters.value = "4/?" }
+        compose.onNodeWithContentDescription("Contents")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "4 of ? chapters"))
+    }
+
+    @Test fun currentWorkSeriesRowIsOneMergedAccessibilityStop() {
+        compose.setContent { KudosTheme(KudosThemeMode.Light) {
+            WorkDetailSeriesSection(
+                seriesTitle = "Coast Road", seriesPosition = 2,
+                seriesUrl = "https://archiveofourown.org/series/1", queuingSeries = false,
+                currentWorkTitle = "Salt & Copper",
+                onDownloadSeries = {}, onOpenSeries = {}
+            )
+        } }
+        compose.onNode(hasText("2. Salt & Copper") and hasText("This work"))
+            .assertExists()
+            .assertHasNoClickAction()
+    }
+
+    @Test fun summaryLessSurvivesFontScaleChangeWhileExpanded() {
+        val scale = mutableStateOf(1f)
+        compose.setContent { KudosTheme(KudosThemeMode.Light) {
+            val density = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(density.density, scale.value)) {
+                WorkDetailSummarySection(
+                    "word ".repeat(30),
+                    LocalKudosTokens.current.scopePalette,
+                    modifier = Modifier.width(160.dp)
+                )
+            }
+        } }
+        compose.onNodeWithText("More").assertHasClickAction().performClick()
+        compose.onNodeWithText("Less").assertExists()
+
+        compose.runOnIdle { scale.value = 2f }
+        compose.onNodeWithText("Less").assertHasClickAction().performClick()
+        compose.onNodeWithText("More").assertExists()
+    }
+
+    @Test fun disclosureHeaderClearsChildTextSemanticsAndPreservesButtonAction() {
+        var expanded = mutableStateOf(false)
+        compose.setContent { KudosTheme(KudosThemeMode.Light) {
+            WorkDetailTagSections(
+                emptyList(), emptyList(), listOf("Friends"), emptyList(), emptyList(),
+                LocalKudosTokens.current.scopePalette,
+                expanded = expanded.value,
+                onToggleExpanded = { expanded.value = !expanded.value }
+            )
+        } }
+        val node = compose.onNodeWithContentDescription("Tags, 1 relationship")
+            .assertHasClickAction()
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Collapsed"))
+            .fetchSemanticsNode()
+        assertTrue(SemanticsProperties.Heading in node.config)
+        assertFalse(SemanticsProperties.Text in node.config)
+        compose.onNodeWithContentDescription("Tags, 1 relationship").performClick()
+        compose.onNodeWithContentDescription("Tags, 1 relationship")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Expanded"))
     }
 
     @Test fun summaryMoreAppearsOnlyForMeasuredOverflow() {

@@ -47,6 +47,24 @@ class WorkDetailResumeTest {
         assertTrue(model.chapterBarsLabel!!.contains("4 of 2147483647 chapters posted"))
     }
 
+    @Test fun chapterBarsLabelHandlesUnknownTotalsRoundingAndUnpostedOrNewCounts() {
+        val unknownTotal = ResumeCardModel("T", emptyList(), "200/?", 0.506, null, null, 0)
+        assertEquals(
+            "51 percent read, 200 chapters posted, total not set by the author",
+            unknownTotal.chapterBarsLabel
+        )
+        val withUnpostedAndNew = ResumeCardModel("T", emptyList(), "150/200", null, null, null, 3)
+        assertEquals(
+            "150 of 200 chapters posted, 50 not posted yet, 3 new",
+            withUnpostedAndNew.chapterBarsLabel
+        )
+    }
+
+    @Test fun postedShortLabelUsesQuestionMarkForUnknownTotal() {
+        assertEquals("4 of ?", ResumeCardModel("T", emptyList(), "4/?", null, null, null, 0).postedShortLabel)
+        assertEquals("10 of 12", ResumeCardModel("T", emptyList(), "10/12", null, null, null, 0).postedShortLabel)
+    }
+
     @Test
     fun workReadingPositionExtractsChapterProgressFromEnvelopeAndRawJson() {
         val raw = """{"href":"ch3.xhtml","locations":{"progression":0.42,"totalProgression":0.6}}"""
