@@ -9,6 +9,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.assertExists
+import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.performClick
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -33,6 +35,31 @@ import org.robolectric.annotation.GraphicsMode
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class SettingsHubBackupTest {
     @get:Rule val compose = createComposeRule()
+
+    @Test
+    fun storageRowKeepsTheExistingDownloadsRoute() {
+        val route = mutableStateOf("hub")
+        compose.setContent {
+            KudosTheme(KudosThemeMode.Light) {
+                CompositionLocalProvider(LocalPushedShellChrome provides remember { PushedShellChrome() }) {
+                    val nav = rememberNavController()
+                    val entry by nav.currentBackStackEntryAsState()
+                    route.value = entry?.destination?.route ?: "hub"
+                    NavHost(navController = nav, startDestination = "hub") {
+                        composable("hub") {
+                            SettingsHubScreen(nav, KudosSettings.Defaults, null, onOpenBackup = {})
+                        }
+                        composable("downloads") { androidx.compose.material3.Text("Storage destination") }
+                    }
+                }
+            }
+        }
+        compose.onNodeWithText("Storage").assertExists().performClick()
+        compose.waitForIdle()
+        assertEquals("downloads", route.value)
+        compose.onNodeWithText("Storage destination").assertExists()
+        compose.onNodeWithText("Downloads").assertDoesNotExist()
+    }
 
     @Test
     fun backupRowOpensTheExporterAndDoesNotPushASecondPage() {

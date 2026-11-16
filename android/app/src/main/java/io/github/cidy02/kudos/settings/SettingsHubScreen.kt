@@ -136,7 +136,7 @@ fun SettingsHubScreen(
                         .padding(horizontal = SubjectMetrics.accountGutter)
                         .subjectPanel()
                 ) {
-                    SubjectFormRow("Downloads", value = downloadsString, showsDisclosure = true, onClick = { navController.navigate("downloads") })
+                    SubjectFormRow("Storage", value = downloadsString, showsDisclosure = true, onClick = { navController.navigate("downloads") })
                     SubjectRowSeparator()
                     SubjectFormRow("Preservation", value = "", showsDisclosure = true, onClick = { navController.navigate("preservation") })
                     SubjectRowSeparator()

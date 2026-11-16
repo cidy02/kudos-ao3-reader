@@ -104,7 +104,7 @@ fun JumpBackInSlot(
     onOpenFandom: (String) -> Unit
 ) {
     if (picks.isEmpty()) Box(Modifier.fillMaxWidth().height(1.dp))
-    else JumpBackInSection(picks, categories, onOpenFandom, Modifier.padding(bottom = 18.dp))
+    else JumpBackInSection(picks, categories, onOpenFandom, Modifier.padding(bottom = 12.dp))
 }
 
 @Composable
@@ -180,12 +180,12 @@ fun CategoryPanel(
             .background(palette.panelWash)
             .border(0.5.dp, palette.rowBorder, PanelShape)
             .clickable(onClick = onOpen)
-            .padding(top = 14.dp, bottom = 16.dp)
+            .padding(vertical = 10.dp)
             .semantics { contentDescription = "${category.name}. Open fandoms." },
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 16.dp),
+            modifier = Modifier.padding(horizontal = 12.dp).heightIn(min = 48.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -204,12 +204,12 @@ fun CategoryPanel(
                     modifier = Modifier.size(15.dp)
                 )
             }
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                 Text(
                     text = category.name,
                     color = tokens.primaryInk,
                     fontSize = 15.sp,
-                    maxLines = 2,
+                    maxLines = if (io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale()) Int.MAX_VALUE else 2,
                     overflow = TextOverflow.Ellipsis
                 )
                 CategoryCountsLine(stats, palette)
@@ -231,7 +231,7 @@ fun CategoryPanel(
                 palette = palette,
                 familiarNames = familiar,
                 onOpenFandom = onOpenFandom,
-                modifier = Modifier.padding(horizontal = 16.dp)
+                modifier = Modifier.padding(horizontal = 12.dp)
             )
         }
     }
@@ -286,7 +286,7 @@ private fun FandomChipCluster(
 ) {
     val shown = fandoms.size
     val remainder = (total - shown).coerceAtLeast(0)
-    FlowRow(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(7.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+    FlowRow(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(7.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         fandoms.forEach { fandom ->
             val familiar = fandom.names.any { it.lowercase(Locale.US) in familiarNames }
             ClusterChip(
@@ -321,7 +321,8 @@ private fun ClusterChip(
             .background(tokens.glassFill(0.09))
             .border(0.5.dp, palette.chipStroke, shape)
             .clickable(onClick = onOpen)
-            .padding(horizontal = 11.dp, vertical = 7.dp)
+            .heightIn(min = 48.dp)
+            .padding(horizontal = 9.dp, vertical = 3.dp)
             .semantics {
                 contentDescription = buildString {
                     append(fandom.title)
@@ -346,14 +347,14 @@ private fun ClusterChip(
             color = palette.accent,
             fontSize = 12.5.sp,
             fontWeight = FontWeight.Medium,
-            maxLines = 1,
+            maxLines = if (io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale()) Int.MAX_VALUE else 1,
             overflow = TextOverflow.Ellipsis
         )
         Text(
             text = (if (fandom.isApproximate) "~" else "") + fandom.workCount.compactCount(),
             color = palette.accent.copy(alpha = 0.62f),
             fontSize = 11.sp,
-            maxLines = 1
+            maxLines = if (io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale()) Int.MAX_VALUE else 1
         )
     }
 }
