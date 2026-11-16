@@ -1,5 +1,7 @@
 import Foundation
+import ImageIO
 import SwiftSoup
+import UniformTypeIdentifiers
 
 /// AO3's own "Download → HTML" file, rebuilt as the EPUB AO3 would have served.
 ///
@@ -191,7 +193,7 @@ nonisolated enum AO3HTMLDownloadConverter {
     /// fetched is left out.
     static func epub(
         fromHTML html: String,
-        fetchImage: @Sendable (URL) async -> Data? = fetchRemoteImage,
+        fetchImage: @Sendable (URL, Int) async -> Data? = fetchRemoteImage,
         maxTotalImageBytes: Int = maxTotalImageBytes
     ) async throws -> Data? {
         var images: [(path: String, data: Data)] = []
@@ -199,12 +201,20 @@ nonisolated enum AO3HTMLDownloadConverter {
         var total = 0
         for source in try imageSources(in: html) where images.count < maxImages && total < maxTotalImageBytes {
             try Task.checkCancellation()
+            let remaining = min(maxImageBytes, maxTotalImageBytes - total)
+            guard remaining > 0 else { break }
             guard let url = URL(string: source), ["http", "https"].contains(url.scheme?.lowercased()),
-                  let data = await fetchImage(url),
-                  data.count <= maxImageBytes,
-                  total + data.count <= maxTotalImageBytes,
-                  let type = imageExtension(of: data)
+                  let fetched = await fetchImage(url, remaining),
+                  fetched.count <= remaining
             else { continue }
+            let data: Data
+            if imageExtension(of: fetched) == "webp" {
+                guard let converted = pngFromWebP(fetched), converted.count <= remaining else { continue }
+                data = converted
+            } else {
+                data = fetched
+            }
+            guard let type = imageExtension(of: data) else { continue }
             let path = "images/image-\(images.count + 1).\(type)"
             images.append((path, data))
             paths[source] = path
@@ -237,7 +247,7 @@ nonisolated enum AO3HTMLDownloadConverter {
         let html = String(decoding: try Data(contentsOf: file), as: UTF8.self)
         guard let data = try await epub(
             fromHTML: html,
-            fetchImage: { await fetchRemoteImage($0, session: imageSession, ao3Client: ao3Client) }
+            fetchImage: { await fetchRemoteImage($0, session: imageSession, ao3Client: ao3Client, maxBytes: $1) }
         )
         else { throw AO3Error.parse }
         let destination = Storage.tempDownloadURL(suggestedName: name)
@@ -264,6 +274,16 @@ nonisolated enum AO3HTMLDownloadConverter {
         return nil
     }
 
+    private static func pngFromWebP(_ data: Data) -> Data? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { return nil }
+        let output = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(output, UTType.png.identifier as CFString, 1, nil)
+        else { return nil }
+        CGImageDestinationAddImage(destination, image, nil)
+        return CGImageDestinationFinalize(destination) ? output as Data : nil
+    }
+
     static func makeImageSessionConfiguration() -> URLSessionConfiguration {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForResource = 30
@@ -284,8 +304,8 @@ nonisolated enum AO3HTMLDownloadConverter {
         return host == "archiveofourown.org" || host.hasSuffix(".archiveofourown.org")
     }
 
-    @Sendable static func fetchRemoteImage(_ url: URL) async -> Data? {
-        await fetchRemoteImage(url, session: imageSession, ao3Client: .shared)
+    @Sendable static func fetchRemoteImage(_ url: URL, maxBytes: Int) async -> Data? {
+        await fetchRemoteImage(url, session: imageSession, ao3Client: .shared, maxBytes: maxBytes)
     }
 
     static func fetchRemoteImage(
@@ -294,6 +314,7 @@ nonisolated enum AO3HTMLDownloadConverter {
         ao3Client: AO3Client,
         maxBytes: Int = maxImageBytes
     ) async -> Data? {
+        guard maxBytes > 0 else { return nil }
         if isAO3Host(url) {
             return await fetchFromAO3(url, ao3Client: ao3Client, maxBytes: maxBytes)
         }
@@ -312,10 +333,7 @@ nonisolated enum AO3HTMLDownloadConverter {
         ao3Client: AO3Client,
         maxBytes: Int
     ) async -> Data? {
-        guard let data = try? await ao3Client.imageData(at: url),
-              data.count <= maxBytes
-        else { return nil }
-        return data
+        try? await ao3Client.imageData(at: url, maxBytes: maxBytes)
     }
 
     private enum BareFetchOutcome: Sendable {
@@ -329,21 +347,39 @@ nonisolated enum AO3HTMLDownloadConverter {
         session: URLSession,
         maxBytes: Int
     ) async -> BareFetchOutcome {
-        let delegate = ImageFetchDelegate(maxBytes: maxBytes)
-        let task = session.dataTask(with: url)
-        task.delegate = delegate
+        let delegate = ImageFetchDelegate(maxBytes: maxBytes, ao3Only: false)
+        let streamingSession = URLSession(configuration: session.configuration, delegate: delegate, delegateQueue: nil)
+        let task = streamingSession.dataTask(with: url)
         delegate.attach(task: task)
-        return await withTaskCancellationHandler {
+        let result = await withTaskCancellationHandler {
             await withCheckedContinuation { continuation in
                 delegate.start(continuation: continuation)
             }
         } onCancel: {
             delegate.cancel()
         }
+        streamingSession.finishTasksAndInvalidate()
+        return result
+    }
+
+    static func fetchAO3Image(_ url: URL, session: URLSession, maxBytes: Int) async -> Data? {
+        let delegate = ImageFetchDelegate(maxBytes: maxBytes, ao3Only: true)
+        let streamingSession = URLSession(configuration: session.configuration, delegate: delegate, delegateQueue: nil)
+        let task = streamingSession.dataTask(with: url)
+        delegate.attach(task: task)
+        let result = await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in delegate.start(continuation: continuation) }
+        } onCancel: {
+            delegate.cancel()
+        }
+        streamingSession.finishTasksAndInvalidate()
+        if case let .data(data) = result { return data }
+        return nil
     }
 
     private final class ImageFetchDelegate: NSObject, URLSessionDataDelegate, @unchecked Sendable {
         private let maxBytes: Int
+        private let ao3Only: Bool
         private let lock = NSLock()
         private var buffer = Data()
         private var redirectedToAO3URL: URL?
@@ -352,8 +388,9 @@ nonisolated enum AO3HTMLDownloadConverter {
         private var continuation: CheckedContinuation<BareFetchOutcome, Never>?
         private weak var task: URLSessionDataTask?
 
-        init(maxBytes: Int) {
+        init(maxBytes: Int, ao3Only: Bool) {
             self.maxBytes = maxBytes
+            self.ao3Only = ao3Only
         }
 
         func attach(task: URLSessionDataTask) {
@@ -403,7 +440,16 @@ nonisolated enum AO3HTMLDownloadConverter {
                 return
             }
             if AO3HTMLDownloadConverter.isAO3Host(target) {
-                lock.withLock { redirectedToAO3URL = target }
+                if ao3Only {
+                    completionHandler(newRequest)
+                } else {
+                    lock.withLock { redirectedToAO3URL = target }
+                    completionHandler(nil)
+                }
+                return
+            }
+            if ao3Only {
+                lock.withLock { failed = true }
                 completionHandler(nil)
                 return
             }

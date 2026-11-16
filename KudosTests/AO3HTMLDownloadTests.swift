@@ -65,7 +65,7 @@ struct AO3HTMLDownloadTests {
 
     @Test func anHTMLDownloadBecomesTheEPUBAO3WouldHaveMade() async throws {
         let html = try Self.fixture("ao3_download_multi_chapter")
-        let fetch: @Sendable (URL) async -> Data? = { $0.lastPathComponent == "map.png" ? Self.png : nil }
+        let fetch: @Sendable (URL, Int) async -> Data? = { $0.lastPathComponent == "map.png" ? Self.png : nil }
         let data = try #require(try await AO3HTMLDownloadConverter.epub(fromHTML: html, fetchImage: fetch))
         let url = try write(data)
         defer { try? FileManager.default.removeItem(at: url) }
@@ -131,7 +131,7 @@ struct AO3HTMLDownloadTests {
 
     @Test func aSingleChapterWorkHasOneSectionNamedForTheWork() async throws {
         let html = try Self.fixture("ao3_download_single_chapter")
-        let data = try #require(try await AO3HTMLDownloadConverter.epub(fromHTML: html, fetchImage: { _ in nil }))
+        let data = try #require(try await AO3HTMLDownloadConverter.epub(fromHTML: html, fetchImage: { _, _ in nil }))
         let url = try write(data)
         defer { try? FileManager.default.removeItem(at: url) }
         let extracted = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -182,7 +182,7 @@ struct AO3HTMLDownloadTests {
                       <p dir="bogus">Invalid dir stripped.</p>
                 """
             )
-        let data = try #require(try await AO3HTMLDownloadConverter.epub(fromHTML: html, fetchImage: { _ in nil }))
+        let data = try #require(try await AO3HTMLDownloadConverter.epub(fromHTML: html, fetchImage: { _, _ in nil }))
         let zip = try MiniZip(data: data)
         let opf = try text(zip, "OEBPS/content.opf")
         let chapterTwo = try text(zip, "OEBPS/chapter-2.xhtml")
@@ -195,7 +195,7 @@ struct AO3HTMLDownloadTests {
     }
 
     @Test func anOrdinaryPageIsNotABook() async throws {
-        #expect(try await AO3HTMLDownloadConverter.epub(fromHTML: Self.workPage("html"), fetchImage: { _ in nil }) == nil)
+        #expect(try await AO3HTMLDownloadConverter.epub(fromHTML: Self.workPage("html"), fetchImage: { _, _ in nil }) == nil)
     }
 
     @Test func aDownloadedHTMLFileImportedByHandIsReadTheSameWay() throws {
@@ -231,6 +231,19 @@ struct AO3HTMLDownloadTests {
         let second = try await client.downloadEPUB(workID: 8)
         defer { try? FileManager.default.removeItem(at: second) }
         #expect(HTMLOnlyAO3.paths == ["/downloads/8/work.html"])
+    }
+
+    @Test func failedHTMLDoesNotSkipTheNextEPUBProbe() async throws {
+        HTMLOnlyAO3.reset(page: Self.workPage("html"), html: "")
+        HTMLOnlyAO3.routeStatus = ["/downloads/7/work.epub": 404, "/downloads/7/work.html": 403]
+        let client = client()
+        await #expect(throws: AO3Error.forbidden) { _ = try await client.downloadEPUB(workID: 7) }
+        HTMLOnlyAO3.paths = []
+        HTMLOnlyAO3.routeStatus = ["/downloads/8/work.epub": 404]
+        HTMLOnlyAO3.html = try Self.fixture("ao3_download_single_chapter")
+        let file = try await client.downloadEPUB(workID: 8)
+        defer { try? FileManager.default.removeItem(at: file) }
+        #expect(HTMLOnlyAO3.paths == ["/downloads/8/work.epub", "/works/8", "/downloads/8/work.html"])
     }
 
     @Test func anEPUBThatFailsWhileStillOnTheMenuIsAFailureAndHTMLIsNotAsked() async throws {
@@ -399,6 +412,21 @@ struct AO3HTMLDownloadTests {
         )
         #expect(!ImageStubProtocol.finishedURLs.contains(streamOverCap))
 
+        // The AO3 route must stop the same stream without retrying it.
+        let ao3OverCap = URL(string: "https://archiveofourown.org/images/over.png")!
+        ImageStubProtocol.responses[ao3OverCap] = .chunks(
+            [Data(repeating: 1, count: 10), Data(repeating: 2, count: 10), Data(repeating: 3, count: 10)],
+            contentLength: nil
+        )
+        let ao3Config = AO3Client.makeAnonymousSessionConfiguration()
+        ao3Config.protocolClasses = [ImageStubProtocol.self]
+        let cappedAO3Client = AO3Client(session: URLSession(configuration: ao3Config), paceSleep: { _ in })
+        #expect(await AO3HTMLDownloadConverter.fetchRemoteImage(
+            ao3OverCap, session: bareSession, ao3Client: cappedAO3Client, maxBytes: 16
+        ) == nil)
+        #expect(ImageStubProtocol.requestedURLs.filter { $0 == ao3OverCap }.count == 1)
+        #expect(!ImageStubProtocol.finishedURLs.contains(ao3OverCap))
+
         // Total cap checks `total + size <= max` before appending.
         let html = try Self.fixture("ao3_download_single_chapter").replacingOccurrences(
             of: "<p>All of it, at once.</p>",
@@ -411,7 +439,10 @@ struct AO3HTMLDownloadTests {
         let epubData = try #require(
             try await AO3HTMLDownloadConverter.epub(
                 fromHTML: html,
-                fetchImage: { _ in Self.png }, // 12 bytes each
+                fetchImage: { url, limit in
+                    if url.lastPathComponent == "c.png" { #expect(limit == 1) }
+                    return Self.png
+                }, // 12 bytes each
                 maxTotalImageBytes: 25
             )
         )
@@ -419,6 +450,38 @@ struct AO3HTMLDownloadTests {
         #expect(zip.data(named: "OEBPS/images/image-1.png") == Self.png)
         #expect(zip.data(named: "OEBPS/images/image-2.png") == Self.png)
         #expect(zip.data(named: "OEBPS/images/image-3.png") == nil)
+    }
+
+    @Test func undecodableWebPIsDroppedInsteadOfPackaged() async throws {
+        let html = try Self.fixture("ao3_download_single_chapter").replacingOccurrences(
+            of: "<p>All of it, at once.</p>",
+            with: "<p><img src=\"https://img.example/bad.webp\"></p>"
+        )
+        let badWebP = Data("RIFFxxxxWEBPbad".utf8)
+        let data = try #require(try await AO3HTMLDownloadConverter.epub(
+            fromHTML: html, fetchImage: { _, _ in badWebP }
+        ))
+        let zip = try MiniZip(data: data)
+        #expect(!zip.names.contains { $0.hasSuffix(".webp") })
+        #expect(!zip.names.contains { $0.hasPrefix("OEBPS/images/") })
+        #expect(try text(zip, "OEBPS/chapter-2.xhtml").contains("<img") == false)
+    }
+
+    @Test func webPIsConvertedBeforePackaging() async throws {
+        let html = try Self.fixture("ao3_download_single_chapter").replacingOccurrences(
+            of: "<p>All of it, at once.</p>",
+            with: "<p><img src=\"https://img.example/tiny.webp\"></p>"
+        )
+        let webP = try #require(Data(base64Encoded:
+            "UklGRjwAAABXRUJQVlA4IDAAAADQAQCdASoBAAEAAUAmJaACdLoB+AADsAD+8ut//NgVzXPv9//S4P0uD9Lg/9KQAAA="
+        ))
+        let data = try #require(try await AO3HTMLDownloadConverter.epub(
+            fromHTML: html, fetchImage: { _, _ in webP }
+        ))
+        let zip = try MiniZip(data: data)
+        #expect(zip.data(named: "OEBPS/images/image-1.png")?.starts(with: [0x89, 0x50, 0x4E, 0x47]) == true)
+        #expect(!zip.names.contains { $0.hasSuffix(".webp") })
+        #expect(try text(zip, "OEBPS/chapter-2.xhtml").contains("src=\"images/image-1.png\""))
     }
 }
 

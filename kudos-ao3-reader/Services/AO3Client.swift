@@ -291,6 +291,14 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         try await fetchData(from: url)
     }
 
+    /// HTML-download images get one paced attempt and stop at the byte limit.
+    func imageData(at url: URL, maxBytes: Int) async throws -> Data? {
+        try Self.rejectIfUntrusted(url)
+        try await pace()
+        defer { Self.purgeSessionCookie(from: session.configuration.httpCookieStorage, url: url) }
+        return await AO3HTMLDownloadConverter.fetchAO3Image(url, session: session, maxBytes: maxBytes)
+    }
+
     private static func htmlString(from data: Data) -> String {
         // Preserve the existing lossy UTF-8 behavior for AO3 HTML with bad bytes.
         // swiftlint:disable:next optional_data_string_conversion
@@ -1560,9 +1568,10 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         guard offered.contains("html") else {
             throw AO3Error.network("AO3 isn't offering EPUB or HTML downloads right now.")
         }
-        // The list is the site's, not the work's, so it holds for the next download too.
+        let file = try await downloadHTMLAsEPUB(workID: workID, onProgress: onProgress)
+        // The format list is site-wide; remember it only after HTML worked.
         htmlOnlyUntil = Date().addingTimeInterval(Self.htmlOnlyMemory)
-        return try await downloadHTMLAsEPUB(workID: workID, onProgress: onProgress)
+        return file
     }
 
     /// While this is in the future, AO3 has said EPUB is off the menu: go straight to HTML.
