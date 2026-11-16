@@ -159,6 +159,45 @@ struct GeneratedCoverRecipeTests {
         }
     }
 
+    @Test @MainActor func readingCardUsesTheSameRecipeAsItsCover() {
+        let work = SavedWork(title: "The Long Frost", author: "fogandlamplight")
+        work.ao3WorkID = 1001
+        work.workFandoms = ["Sherlock Holmes"]
+        work.workTags = ["Angst"]
+        let card = ResumeCardModel(work: work)
+        let background = WorkCoverCardBackground(recipe: card.coverRecipe)
+        let cover = GeneratedCoverView(recipe: work.generatedCoverRecipe, width: 112)
+        #expect(background.recipe == cover.recipe)
+        #expect(WorkCoverCardBackground.ink == 0.4)
+        #expect(WorkCoverCardBackground(recipe: card.coverRecipe, showsArt: false).showsArt == false)
+    }
+
+    @Test @MainActor func cardTextContrastOverAnyCoverPixelInEveryTheme() {
+        // Ground, motif and embedded art can each contain white; the scrim is
+        // bounded against that worst case, regardless of recipe or theme.
+        let recipes = (0..<32).map {
+            GeneratedCoverRecipe(id: 1_000 + $0, title: "Work \($0)", author: "Author \($0)",
+                                 fandoms: ["Fandom \($0)"], tags: [$0.isMultiple(of: 2) ? "Angst" : "Fluff"])
+        }
+        func linear(_ value: Double) -> Double {
+            value <= 0.04045 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
+        }
+        for _ in ["Light", "Sepia", "Dark", "OLED"] {
+            for recipe in recipes {
+                let ground = GeneratedCoverView.rgb(GeneratedCoverView.lighterGroundLightness(recipe.lightness),
+                                                    recipe.groundChroma + 0.005, Double(recipe.hues[0] + 14))
+                // White also bounds any bright pixel in embedded art.
+                for pixel in [ground.0, ground.1, ground.2, 1.0] {
+                    let shaded = pixel * (1 - WorkCoverCardBackground.scrimOpacity)
+                    for textOpacity in [0.85, 0.88, 0.9, 0.92, 1.0] {
+                        let text = textOpacity + (1 - textOpacity) * shaded
+                        #expect((linear(text) + 0.05) / (linear(shaded) + 0.05) >= 4.5)
+                    }
+                }
+            }
+        }
+    }
+
     @Test @MainActor func whiteContrastAcrossGroundRange() {
         #expect(GeneratedCoverView.bylineOpacity == 0.86)
         #expect(GeneratedCoverView.fandomOpacity == 0.88)

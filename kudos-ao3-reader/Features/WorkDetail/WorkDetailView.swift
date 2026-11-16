@@ -359,6 +359,10 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     /// grid no longer opens with a Read tile — two controls for one action, a
     /// thumb-length apart, is a coin toss the reader should not have to make.
     private var resumeCardModel: ResumeCardModel {
+        let coverRecipe: GeneratedCoverRecipe = switch source {
+        case .saved(let work): work.generatedCoverRecipe
+        case .remote(let work): localWork?.generatedCoverRecipe ?? work.generatedCoverRecipe
+        }
         let opened = localWork?.lastReadDate?.formatted(.relative(presentation: .named))
         let chapterProgress = localWork.flatMap {
             WorkReadingPosition.chapterProgress(from: $0.readiumLocator)
@@ -370,6 +374,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             max(0, $0.postedChapterCount - $0.knownChapterCount)
         } ?? 0
         return ResumeCardModel(
+            coverRecipe: coverRecipe,
             title: displayTitle,
             authors: displayAuthorList,
             authorIdentities: displayAuthorIdentities,

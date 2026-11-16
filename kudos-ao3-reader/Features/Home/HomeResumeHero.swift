@@ -11,6 +11,7 @@ enum ResumeCardVariant: Equatable {
 }
 
 struct ResumeCardModel {
+    let coverRecipe: GeneratedCoverRecipe
     let title: String
     let authors: [String]
     let authorIdentities: [AO3AuthorIdentity]
@@ -45,7 +46,8 @@ struct ResumeCardModel {
     /// agrees with the bars (`ChapterLengthCache`). Nil counts chapters as equal.
     var chapterPositions: [Int]?
 
-    init(work: SavedWork) {
+    @MainActor init(work: SavedWork) {
+        coverRecipe = work.generatedCoverRecipe
         title = work.title
         authors = work.verifiedAuthorIdentities.isEmpty
             ? (work.author.isEmpty ? [] : [work.author])
@@ -79,6 +81,7 @@ struct ResumeCardModel {
     }
 
     init(
+        coverRecipe: GeneratedCoverRecipe,
         title: String,
         authors: [String],
         authorIdentities: [AO3AuthorIdentity],
@@ -107,6 +110,7 @@ struct ResumeCardModel {
         extraFandomCount: Int = 0,
         primaryFandomFull: String? = nil
     ) {
+        self.coverRecipe = coverRecipe
         self.title = title
         self.authors = authors
         self.authorIdentities = authorIdentities
@@ -135,8 +139,6 @@ struct ResumeCardModel {
         self.extraFandomCount = max(0, extraFandomCount)
         self.primaryFandomFull = primaryFandomFull
     }
-
-    var art: CoverArt.WorkArt { CoverArt.workArt(fandoms: fandoms, title: title) }
 
     var primaryFandom: String? {
         fandoms.first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
@@ -287,7 +289,7 @@ struct HomeResumeHero: View {
     var body: some View {
         if blurred {
             ZStack {
-                resumeCard(interactive: false, showsInitial: false)
+                resumeCard(interactive: false, showsContent: false)
                     .environment(\.ao3AuthorNavigationEnabled, false)
                     .blur(radius: 6)
                     .allowsHitTesting(false)
@@ -359,7 +361,7 @@ struct HomeResumeHero: View {
         }
     }
 
-    private func resumeCard(interactive: Bool, showsInitial: Bool = true) -> some View {
+    private func resumeCard(interactive: Bool, showsContent: Bool = true) -> some View {
         WorkResumeCard(
             model: ResumeCardModel(work: work),
             localWork: work,
@@ -367,7 +369,7 @@ struct HomeResumeHero: View {
             primaryLabel: variant == .next ? "Start" : "Resume",
             isBusy: false,
             isInteractive: interactive,
-            showsInitial: showsInitial,
+            showsContent: showsContent,
             showsVariantLabel: showsVariantLabel,
             onPrimary: { onPrimary?() },
             onReadAloud: { onReadAloud?() }
@@ -376,24 +378,25 @@ struct HomeResumeHero: View {
     }
 }
 
-struct WorkIdentityCardBackground: View {
-    let art: CoverArt.WorkArt
-    let title: String
-    var showsInitial = true
+struct WorkCoverCardBackground: View {
+    let recipe: GeneratedCoverRecipe
+    var epubURL: URL?
+    var epubWorkID: UUID?
+    var showsArt = true
+
+    static let ink = 0.4
+    static let scrimOpacity = 0.6
 
     @Environment(ThemeManager.self) private var themeManager
 
     var body: some View {
-        RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
-            .fill(CoverArt.workGradient(for: art))
-            .overlay(alignment: .bottomTrailing) {
-                if showsInitial {
-                    Text(title.trimmingCharacters(in: .whitespacesAndNewlines).first.map(String.init) ?? "")
-                        .font(.system(size: 250, weight: .semibold, design: .serif))
-                        .foregroundStyle(Color.white.opacity(0.08))
-                        .offset(x: 10, y: 58)
-                        .accessibilityHidden(true)
-                }
+        GeometryReader { geometry in
+            GeneratedCoverView(recipe: recipe, width: geometry.size.width,
+                               epubURL: showsArt ? epubURL : nil,
+                               epubWorkID: showsArt ? epubWorkID : nil,
+                               height: geometry.size.height, showsWords: false,
+                               showsArt: showsArt, ink: Self.ink, cornerRadius: 0)
+                .overlay(Color.black.opacity(Self.scrimOpacity))
             }
             .clipShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
             .overlay(
@@ -416,9 +419,8 @@ struct WorkResumeCard: View {
     let primaryLabel: String
     var isBusy = false
     var isInteractive = true
-    /// A hidden mature work must not draw its initial: the letter stays
-    /// recognisable under the 6 pt blur. Every other card keeps it.
-    var showsInitial = true
+    /// Hidden mature works draw only the cover ground beneath the blur.
+    var showsContent = true
     var showsVariantLabel = true
     let onPrimary: () -> Void
     let onReadAloud: () -> Void
@@ -452,7 +454,7 @@ struct WorkResumeCard: View {
         .padding(variant == .detail ? 14 : 16)
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .foregroundStyle(.white)
-        .opacity(showsInitial ? 1 : 0)
+        .opacity(showsContent ? 1 : 0)
         .background(cardBackground)
         .contentShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
         .environment(\.colorScheme, .dark)
@@ -462,7 +464,7 @@ struct WorkResumeCard: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(accessibilityLabel)
-        .accessibilityHidden(!showsInitial)
+        .accessibilityHidden(!showsContent)
     }
 
     /// The queue's fraction while a download or restore is in flight
@@ -531,10 +533,11 @@ struct WorkResumeCard: View {
     }
 
     private var cardBackground: some View {
-        WorkIdentityCardBackground(
-            art: model.art,
-            title: model.title,
-            showsInitial: showsInitial
+        WorkCoverCardBackground(
+            recipe: model.coverRecipe,
+            epubURL: localWork?.hasEPUB == true ? localWork?.fileURL : nil,
+            epubWorkID: localWork?.id,
+            showsArt: showsContent
         )
     }
 
