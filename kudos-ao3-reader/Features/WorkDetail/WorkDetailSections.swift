@@ -76,20 +76,12 @@ extension WorkDetailView {
         return "\(total) tag\(total == 1 ? "" : "s")"
     }
 
-    /// Version E: AO3's compact label column, then comma-separated search links.
-    @ViewBuilder
+    /// The group's name on its own line, its comma-separated search links below it, so the
+    /// tags use the full width (owner, 2026-11-16: "below - not next to - their header").
     private func tagRow(_ group: TagGroup) -> some View {
-        if dynamicTypeSize.isAccessibilitySize {
-            VStack(alignment: .leading, spacing: 0) {
-                tagGroupLabel(group)
-                WorkDetailTagLinks(tags: group.tags, field: group.field)
-            }
-        } else {
-            HStack(alignment: .top, spacing: 10) {
-                tagGroupLabel(group)
-                    .frame(width: 92, alignment: .leading)
-                WorkDetailTagLinks(tags: group.tags, field: group.field)
-            }
+        VStack(alignment: .leading, spacing: 2) {
+            tagGroupLabel(group)
+            WorkDetailTagLinks(tags: group.tags, field: group.field)
         }
     }
 
