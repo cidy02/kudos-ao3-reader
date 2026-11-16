@@ -857,13 +857,14 @@ nonisolated struct KudosBackupPronunciations: Codable, Equatable {
         for (word, ipa) in global { take(ipa, .global, word) }
         for (fandom, entries) in fandoms { for (word, ipa) in entries { take(ipa, .fandom(fandom), word) } }
         for (work, entries) in works { for (word, ipa) in entries { take(ipa, .work(work), word) } }
-        // A correction removed elsewhere arrives as its own stamp with no value.
-        if fromSync && !stampsIncomplete {
+        // A correction removed elsewhere arrives as its own stamp with no value; an explicit
+        // restore honours it too.
+        if !stampsIncomplete {
             for id in (stamps ?? [:]).keys {
                 guard let (layer, word) = KokoroPronunciationStore.entry(from: id),
                       value(for: word, in: layer) == nil,
                       file.value(for: word, in: layer) != nil,
-                      SyncedSettingsClock.incomingWins(local: local(id), incoming: own(id), fromSync: true)
+                      SyncedSettingsClock.incomingWins(local: local(id), incoming: own(id), fromSync: fromSync)
                 else { continue }
                 file.set(nil, for: word, in: layer)
                 record(id, own(id))
@@ -1713,6 +1714,9 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
     private static let defaultReaderMargin: Double = 28
 
     var readerFontID: String
+    /// Set by restore when `readerFontID` names a custom font whose file is not on this
+    /// device: the font is then left as it is here. Never encoded.
+    var skipsReaderFont = false
     var readerMode: String
     var readerTwoPage: Bool
     var readerCustomize: Bool
@@ -1763,7 +1767,7 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         "readerLineHeight", "readerLetterSpacing", "readerWordSpacing", "readerMargin",
         "readerJustify", "appTheme", "readerTheme", "matchAppReaderTheme", "accentColorHex",
         "autoPreserveSmallSeriesOnSaveForLater", "autoPreserveSeriesWorkThreshold",
-        "library.page.arrangement", "workSymbolPlacement"
+        "library.page.arrangement", "workSymbolPlacement", "readerFontID"
     ]
 
     /// Everything else the reader chose, carried by key since T-541 (owner, 2026-11-16: "backups
@@ -2120,7 +2124,7 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
                 adopted.append((entry, stamp(id)))
             }
             // An entry removed elsewhere arrives as its own stamp with no value.
-            if fromSync && !extrasIncomplete {
+            if !extrasIncomplete {
                 for id in (modifiedAt ?? [:]).keys {
                     guard let (owner, entry) = SyncedSettingsClock.entry(from: id), owner == key,
                           incoming[entry] == nil, local[entry] != nil, wins(id, ownStamp(id)) else { continue }
@@ -2134,13 +2138,12 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
                 SyncedSettingsClock.adopt(key: key, entry: entry, value: local[entry], stamp: stamp, in: defaults)
             }
         }
-        // M21. Never assign the archive's readerFontID — the font selection is local-only.
-        // A custom font refers to a file name that may not exist on this device (the
-        // archive might carry a font the user never installed here, or folder-sync
-        // might push one that hasn't been validated yet). Silently switching the reader
-        // to a missing font breaks rendering until the user notices and resets it in
-        // Settings. The user picks their font on each device; sync carries the *files*,
-        // not the selection.
+        // The reader font travels like any setting since T-541 (owner, 2026-11-16: a complete
+        // snapshot; Codex's third review). M21's reason for keeping it local still holds, so a
+        // custom font is taken only when its file is on this device (the caller checks after
+        // the font files are restored, and sets `skipsReaderFont` otherwise): the reader is
+        // never switched to a font it cannot draw, and this device's choice stays.
+        if !skipsReaderFont { write(readerFontID, "readerFontID") }
         write(readerMode, "readerMode")
         write(readerTwoPage, "readerTwoPage")
         write(readerCustomize, "readerCustomize")
@@ -2209,11 +2212,12 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
                 write(value.object, key)
             }
         }
-        // A choice reset on another device arrives as a stamp with no value. Only a sync
-        // removes one, only on the key's own real stamp (a copy that does not know the key
-        // carries neither, and that is not a reset), and never when part of the copy was
-        // unreadable.
-        guard fromSync, !extrasIncomplete else { return }
+        // A choice reset on another device arrives as a stamp with no value. It is removed
+        // here only on the key's own real stamp (a copy that does not know the key carries
+        // neither, and that is not a reset), never when part of the copy was unreadable, and on
+        // an explicit restore as well as a sync, so a restore reproduces the snapshot (Codex's
+        // third review).
+        guard !extrasIncomplete else { return }
         for key in observed.keys where !observed.maps.contains(key) && Self.extraKind(for: key) != nil
             && extras?[key] == nil && defaults.object(forKey: key) != nil {
             guard let own = ownStamp(key), wins(key, own) else { continue }
@@ -3879,7 +3883,7 @@ enum KudosBackupService {
                 if !FileManager.default.fileExists(
                     atPath: Storage.fontsDirectory.appendingPathComponent(fileName).path
                 ) {
-                    settings.readerFontID = "system"
+                    settings.skipsReaderFont = true
                 }
             }
             settings.apply(to: defaults, fromSync: fromSync, archiveDate: contents.manifest.exportedAt)

@@ -189,6 +189,36 @@ struct SyncedSettingsTests {
         #expect(defaults.string(forKey: "readerCustomPaperHex") == "#F4ECD8")
     }
 
+    /// Codex's third review: an explicit restore reproduces the snapshot, resets included.
+    @Test func anExplicitRestoreAlsoAppliesAReset() {
+        let defaults = freshDefaults()
+        defaults.set("#F4ECD8", forKey: "readerCustomPaperHex")
+        var snapshot = KudosBackupSettings.capture(defaults: defaults)
+        snapshot.extras?["readerCustomPaperHex"] = nil
+        snapshot.modifiedAt = ["readerCustomPaperHex": Date().addingTimeInterval(-5)]
+        snapshot.apply(to: defaults, fromSync: false)
+        #expect(defaults.object(forKey: "readerCustomPaperHex") == nil)
+    }
+
+    /// Codex's third review: the reader font is part of the snapshot, but never a custom font
+    /// whose file is not on this device.
+    @Test func theReaderFontTravelsUnlessItsFileIsMissing() {
+        let defaults = freshDefaults()
+        defaults.set("system", forKey: "readerFontID")
+        var incoming = KudosBackupSettings.capture(defaults: defaults)
+        incoming.readerFontID = "serif"
+        incoming.modifiedAt = ["readerFontID": Date().addingTimeInterval(-5)]
+        incoming.apply(to: defaults, fromSync: true, archiveDate: Date().addingTimeInterval(-5))
+        #expect(defaults.string(forKey: "readerFontID") == "serif")
+
+        var missing = KudosBackupSettings.capture(defaults: defaults)
+        missing.readerFontID = "custom:not-here.ttf"
+        missing.modifiedAt = ["readerFontID": Date()]
+        missing.skipsReaderFont = true
+        missing.apply(to: defaults, fromSync: true, archiveDate: Date())
+        #expect(defaults.string(forKey: "readerFontID") == "serif")
+    }
+
     @Test func aFirstChoiceForAnUntouchedSettingIsStampedAndAnnounced() {
         let defaults = freshDefaults()
         let keys = ["readerFontPt", "readerLineSpacing"]
