@@ -581,7 +581,7 @@ private fun dayShade(bucket: ReadingHistoryTimeline.Bucket, maxSeconds: Double, 
 }
 
 @Composable
-private fun YearChart(timeline: ReadingHistoryTimeline, zone: ZoneId, locale: Locale) {
+internal fun YearChart(timeline: ReadingHistoryTimeline, zone: ZoneId, locale: Locale) {
     val tokens = LocalKudosTokens.current
     val buckets = timeline.buckets
     val maxHours = maxOf((buckets.maxOfOrNull { it.seconds } ?: 0.0) / 3600.0, 1.0)
@@ -632,10 +632,7 @@ private fun YearChart(timeline: ReadingHistoryTimeline, zone: ZoneId, locale: Lo
                 Box(Modifier.size(10.dp).background(tokens.accent, RoundedCornerShape(2.5.dp)))
                 Text("Hours read", color = tokens.secondaryInk, fontSize = 11.sp)
             }
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                Text("3", color = tokens.accentInk, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                Text("Works finished", color = tokens.secondaryInk, fontSize = 11.sp)
-            }
+            Text("Number above a bar = works finished", color = tokens.secondaryInk, fontSize = 11.sp)
         }
     }
 }
