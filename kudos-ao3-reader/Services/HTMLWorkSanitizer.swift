@@ -107,6 +107,7 @@ nonisolated enum HTMLWorkSanitizer {
             .addAttributes("img", "src", "alt", "title", "width", "height")
             .addAttributes(":all", "id")
         let clean = try Cleaner(headWhitelist: nil, bodyWhitelist: allowed).clean(dirty)
+        try normalizeDirections(in: clean)
         clean.outputSettings()
             .syntax(syntax: .xml)
             .escapeMode(.xhtml)
@@ -114,11 +115,20 @@ nonisolated enum HTMLWorkSanitizer {
         return try clean.body()?.html() ?? ""
     }
 
+    static func sanitizedDirection(_ raw: String?) -> String? {
+        let normalized = raw?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        switch normalized {
+        case "rtl", "ltr", "auto": return normalized
+        default: return nil
+        }
+    }
+
     // MARK: - Internals
 
     private static func sanitizedFragment(rawHTML: String) throws -> String {
         let dirty = try SwiftSoup.parseBodyFragment(rawHTML)
         let clean = try Cleaner(headWhitelist: nil, bodyWhitelist: allowlist()).clean(dirty)
+        try normalizeDirections(in: clean)
 
         // `.xml` syntax is what makes the output XHTML rather than HTML: void
         // elements come out as `<br />`, so the chapter file stays well-formed for
@@ -152,6 +162,7 @@ nonisolated enum HTMLWorkSanitizer {
             // Cleaner unwraps the element and the note becomes indistinguishable
             // from prose.
             .addTags("aside")
+            .addAttributes(":all", "dir")
             .addAttributes("aside", "class")
             .addAttributes("dd", "class")
             .addAttributes("dl", "class")
@@ -164,6 +175,16 @@ nonisolated enum HTMLWorkSanitizer {
             .addAttributes("h1", "class")
             .addAttributes("h2", "class")
             .addAttributes("h3", "class")
+    }
+
+    private static func normalizeDirections(in document: Document) throws {
+        for element in try document.select("[dir]").array() {
+            if let valid = try sanitizedDirection(element.attr("dir")) {
+                try element.attr("dir", valid)
+            } else {
+                try element.removeAttr("dir")
+            }
+        }
     }
 
     private static func textLength(of body: Element) -> Int {

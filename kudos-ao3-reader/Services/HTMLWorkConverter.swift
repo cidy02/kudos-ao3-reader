@@ -26,9 +26,15 @@ nonisolated enum HTMLWorkConverter {
         let document = try SwiftSoup.parse(html)
         // AO3's own download first: its shape is known exactly, so nothing is guessed.
         if let download = try AO3HTMLDownloadConverter.read(document) { return download }
-        let metadata = try readMetadata(document, fallbackTitle: fallbackTitle)
-        let chapters = try readChapters(document, workTitle: metadata.title)
+        var metadata = try readMetadata(document, fallbackTitle: fallbackTitle)
+        let dir = try HTMLWorkSanitizer.sanitizedDirection(document.body()?.attr("dir"))
+            ?? HTMLWorkSanitizer.sanitizedDirection(document.select("html").first()?.attr("dir"))
+        metadata.dir = dir
+        var chapters = try readChapters(document, workTitle: metadata.title)
         guard !chapters.isEmpty else { throw EPUBBuilder.BuildError.noChapters }
+        if let dir {
+            for index in chapters.indices { chapters[index].dir = dir }
+        }
         return Result(metadata: metadata, chapters: chapters)
     }
 

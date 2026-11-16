@@ -23,7 +23,16 @@ nonisolated struct EPUBBuilder {
         /// True when the body already shows its own heading (AO3's HTML download
         /// does), so the title names the section in the contents list and is not
         /// printed a second time above it.
-        var hasOwnHeading = false
+        var hasOwnHeading: Bool
+        /// Text direction (`rtl`, `ltr`, `auto`) placed on `<body>` when set.
+        var dir: String?
+
+        init(title: String, bodyXHTML: String, hasOwnHeading: Bool = false, dir: String? = nil) {
+            self.title = title
+            self.bodyXHTML = bodyXHTML
+            self.hasOwnHeading = hasOwnHeading
+            self.dir = dir
+        }
     }
 
     struct Metadata {
@@ -46,6 +55,9 @@ nonisolated struct EPUBBuilder {
         /// calibre's series pair, which is how an AO3 EPUB names its series.
         var seriesTitle: String
         var seriesIndex: Int?
+        /// Work-level reading direction (`rtl`, `ltr`, `auto`). `"rtl"` emits
+        /// `page-progression-direction="rtl"` on `<spine>`.
+        var dir: String?
 
         init(
             title: String,
@@ -57,7 +69,8 @@ nonisolated struct EPUBBuilder {
             identifier: String = UUID().uuidString,
             date: String = "",
             seriesTitle: String = "",
-            seriesIndex: Int? = nil
+            seriesIndex: Int? = nil,
+            dir: String? = nil
         ) {
             self.title = title
             self.author = author
@@ -69,6 +82,7 @@ nonisolated struct EPUBBuilder {
             self.date = date
             self.seriesTitle = seriesTitle
             self.seriesIndex = seriesIndex
+            self.dir = dir
         }
     }
 
@@ -216,6 +230,10 @@ nonisolated struct EPUBBuilder {
         }
         metadataLines.append(contentsOf: subjects)
 
+        let spineProgression = HTMLWorkSanitizer.sanitizedDirection(metadata.dir) == "rtl"
+            ? " page-progression-direction=\"rtl\""
+            : ""
+
         return """
         <?xml version="1.0" encoding="UTF-8"?>
         <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="bookid">
@@ -227,7 +245,7 @@ nonisolated struct EPUBBuilder {
             <item id="style" href="style.css" media-type="text/css"/>
         \(manifestItems.joined(separator: "\n"))
           </manifest>
-          <spine>
+          <spine\(spineProgression)>
         \(spineItems.joined(separator: "\n"))
           </spine>
         </package>
@@ -268,6 +286,7 @@ nonisolated struct EPUBBuilder {
 
     private static func chapterDocument(_ chapter: Chapter, language: String) -> String {
         let lang = escaped(language.isEmpty ? "en" : language)
+        let dirAttr = HTMLWorkSanitizer.sanitizedDirection(chapter.dir).map { " dir=\"\($0)\"" } ?? ""
         // The `epub:` prefix must be declared here or a chapter carrying an
         // `epub:type="note"` aside is not well-formed XHTML and strict parsers reject
         // the whole file.
@@ -281,7 +300,7 @@ nonisolated struct EPUBBuilder {
             <title>\(escaped(chapter.title))</title>
             <link rel="stylesheet" type="text/css" href="style.css"/>
           </head>
-          <body>
+          <body\(dirAttr)>
         \(chapter.hasOwnHeading ? "" : "    <h1>\(escaped(chapter.title))</h1>")
         \(chapter.bodyXHTML)
           </body>

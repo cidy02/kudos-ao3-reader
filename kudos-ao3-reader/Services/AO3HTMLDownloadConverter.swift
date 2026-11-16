@@ -43,7 +43,11 @@ nonisolated enum AO3HTMLDownloadConverter {
         guard let preface = try document.select("body > div#preface").first(),
               let chapters = try document.select("body > div#chapters").first()
         else { return nil }
-        let metadata = try readMetadata(document, preface: preface)
+        var metadata = try readMetadata(document, preface: preface)
+        let documentDir = try HTMLWorkSanitizer.sanitizedDirection(document.body()?.attr("dir"))
+            ?? HTMLWorkSanitizer.sanitizedDirection(document.select("html").first()?.attr("dir"))
+        let chaptersDir = try HTMLWorkSanitizer.sanitizedDirection(chapters.attr("dir"))
+        metadata.dir = chaptersDir ?? documentDir
         // Hidden in AO3's file; they exist only to give calibre its section names.
         // Remove before collecting sections so a single-chapter heading (a direct
         // child of `#chapters`) is never carried into the chapter file.
@@ -51,20 +55,22 @@ nonisolated enum AO3HTMLDownloadConverter {
 
         // A single-chapter work has no chapter heading: its one section is named
         // for the work.
-        var sections: [(title: String, elements: [Element])] = [("Preface", [preface])]
+        var sections: [(title: String, elements: [Element], dir: String?)] = [
+            ("Preface", [preface], documentDir)
+        ]
         for child in chapters.children().array() {
             let heading = child.hasClass("meta") && child.hasClass("group")
                 ? child.children().array().first { $0.tagName() == "h2" && $0.hasClass("heading") }
                 : nil
             if heading != nil || sections.count == 1 {
                 let title = try trimmed(heading?.text())
-                sections.append((title.isEmpty ? metadata.title : title, []))
+                sections.append((title.isEmpty ? metadata.title : title, [], chaptersDir ?? documentDir))
             }
             sections[sections.count - 1].elements.append(child)
         }
         guard sections.count > 1 else { return nil }
         if let afterword = try document.select("body > div#afterword").first() {
-            sections.append(("Afterword", [afterword]))
+            sections.append(("Afterword", [afterword], documentDir))
         }
 
         try relink(sections.map(\.elements), imagePaths: imagePaths)
@@ -74,7 +80,8 @@ nonisolated enum AO3HTMLDownloadConverter {
                 try EPUBBuilder.Chapter(
                     title: $0.title,
                     bodyXHTML: HTMLWorkSanitizer.ao3DownloadFragment(ofAll: $0.elements),
-                    hasOwnHeading: true
+                    hasOwnHeading: true,
+                    dir: $0.dir
                 )
             }
         )
