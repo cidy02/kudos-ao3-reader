@@ -24,7 +24,7 @@ interface TTSService {
      * raw value, "" for Automatic). Only [AutomaticTTSService] has more than one engine to choose.
      */
     fun setEngine(engine: String) = Unit
-    fun ensureReady(): Boolean = status.value != SpeechStatus.UNAVAILABLE
+    fun ensureReady(): Boolean = status.value != SpeechStatus.UNAVAILABLE && status.value != SpeechStatus.RESOLVING
     fun shutdown() = Unit
 }
 

@@ -158,7 +158,7 @@ internal fun SettingsListeningContent(
                     SettingsActionRow(
                         "Play Sample",
                         // The device's own voice reads without the pack, as iOS's Apple voice does.
-                        enabled = status != SpeechStatus.UNAVAILABLE,
+                        enabled = status != SpeechStatus.UNAVAILABLE && status != SpeechStatus.RESOLVING,
                         onClick = { auditionRequested = true }
                     )
                 }

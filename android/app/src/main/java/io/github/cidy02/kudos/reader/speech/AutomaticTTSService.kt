@@ -116,7 +116,7 @@ class AutomaticTTSService(
  */
 // Android TextToSpeech has no portable word → IPA lexicon API; stored corrections cannot reach this engine.
 class SystemTTSService(context: Context) : TTSService {
-    private val _status = MutableStateFlow(SpeechStatus.UNAVAILABLE)
+    private val _status = MutableStateFlow(SpeechStatus.RESOLVING)
     override val status: StateFlow<SpeechStatus> = _status.asStateFlow()
     private val _spokenText = MutableStateFlow("")
     override val spokenText: StateFlow<String> = _spokenText.asStateFlow()
@@ -137,8 +137,10 @@ class SystemTTSService(context: Context) : TTSService {
                 runCatching { engine.voices }.getOrNull().orEmpty(),
                 Locale.getDefault()
             )
-            if (voice != null && runCatching { engine.setVoice(voice) }.getOrNull() == TextToSpeech.SUCCESS) {
-                _status.value = SpeechStatus.STOPPED
+            _status.value = if (voice != null && runCatching { engine.setVoice(voice) }.getOrNull() == TextToSpeech.SUCCESS) {
+                SpeechStatus.STOPPED
+            } else {
+                SpeechStatus.UNAVAILABLE
             }
         }
         engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
@@ -156,7 +158,7 @@ class SystemTTSService(context: Context) : TTSService {
     }
 
     override suspend fun speak(text: String) {
-        if (_status.value == SpeechStatus.UNAVAILABLE) return
+        if (_status.value == SpeechStatus.UNAVAILABLE || _status.value == SpeechStatus.RESOLVING) return
         val chunks = TextChunker.chunk(text)
         val reading = synchronized(handover) {
             _status.value = SpeechStatus.PLAYING
@@ -207,7 +209,9 @@ class SystemTTSService(context: Context) : TTSService {
     }
 
     override fun stop() = synchronized(handover) {
-        if (_status.value != SpeechStatus.UNAVAILABLE) _status.value = SpeechStatus.STOPPED
+        if (_status.value != SpeechStatus.UNAVAILABLE && _status.value != SpeechStatus.RESOLVING) {
+            _status.value = SpeechStatus.STOPPED
+        }
         _spokenText.value = ""
         cutOff()
     }

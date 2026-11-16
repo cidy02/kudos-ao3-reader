@@ -2,10 +2,13 @@ package io.github.cidy02.kudos.reader.speech
 
 import android.app.Application
 import android.content.Context
+import android.speech.tts.TextToSpeech
+import android.speech.tts.Voice
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.Configuration
 import androidx.work.WorkManager
 import io.github.cidy02.kudos.reader.ReaderSpeechSource
+import java.util.Locale
 import kotlin.coroutines.ContinuationInterceptor
 import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.CompletableDeferred
@@ -29,7 +32,9 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowTextToSpeech
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = Application::class)
@@ -46,7 +51,10 @@ class ReaderSpeechControllerTest {
         }
     }
 
-    @After fun tearDown() = Dispatchers.resetMain()
+    @After fun tearDown() {
+        ShadowTextToSpeech.reset()
+        Dispatchers.resetMain()
+    }
 
     @Test fun enginePreparationRunsOffMain() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
@@ -253,6 +261,68 @@ class ReaderSpeechControllerTest {
         }
     }
 
+    @Test fun controllerStaysResolvingUntilLateTtsResolvesWithVoiceAndWithoutVoice() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        TTSDownloadWorker.modelDirectory(context).deleteRecursively()
+
+        val lateWithVoice = Engine(SpeechStatus.RESOLVING)
+        val controllerWithVoice = ReaderSpeechController(context, tts = lateWithVoice)
+        val lateWithoutVoice = Engine(SpeechStatus.RESOLVING)
+        val controllerWithoutVoice = ReaderSpeechController(context, tts = lateWithoutVoice)
+        try {
+            assertEquals(SpeechStatus.RESOLVING, controllerWithVoice.status.value)
+            assertEquals(SpeechStatus.RESOLVING, controllerWithoutVoice.status.value)
+            runCurrent()
+            assertEquals(SpeechStatus.RESOLVING, controllerWithVoice.status.value)
+            assertEquals(SpeechStatus.RESOLVING, controllerWithoutVoice.status.value)
+
+            controllerWithVoice.startReading(listOf("Too early."))
+            controllerWithVoice.stop()
+            assertEquals(SpeechStatus.RESOLVING, controllerWithVoice.status.value)
+            assertTrue(lateWithVoice.calls.tryReceive().isFailure)
+
+            lateWithVoice.status.value = SpeechStatus.STOPPED
+            runCurrent()
+            assertEquals(SpeechStatus.STOPPED, controllerWithVoice.status.value)
+            controllerWithVoice.startReading(listOf("Ready now."))
+            assertEquals("Ready now.", lateWithVoice.calls.receive().text)
+
+            lateWithoutVoice.status.value = SpeechStatus.UNAVAILABLE
+            runCurrent()
+            assertEquals(SpeechStatus.MODEL_NOT_DOWNLOADED, controllerWithoutVoice.status.value)
+            controllerWithoutVoice.stop()
+            assertEquals(SpeechStatus.MODEL_NOT_DOWNLOADED, controllerWithoutVoice.status.value)
+        } finally {
+            controllerWithVoice.shutdownAndJoin()
+            controllerWithoutVoice.shutdownAndJoin()
+        }
+    }
+
+    @Test fun systemTtsServiceStartsResolvingUntilInitFinishesWithOrWithoutVoice() {
+        ShadowTextToSpeech.addVoice(
+            Voice("local", Locale.getDefault(), Voice.QUALITY_NORMAL, Voice.LATENCY_NORMAL, false, emptySet())
+        )
+        val withVoice = SystemTTSService(context)
+        assertEquals(SpeechStatus.RESOLVING, withVoice.status.value)
+        assertFalse(withVoice.ensureReady())
+        shadowOf(ShadowTextToSpeech.getLastTextToSpeechInstance()).onInitListener.onInit(TextToSpeech.SUCCESS)
+        assertEquals(SpeechStatus.STOPPED, withVoice.status.value)
+        assertTrue(withVoice.ensureReady())
+        withVoice.shutdown()
+
+        ShadowTextToSpeech.reset()
+        ShadowTextToSpeech.addVoice(
+            Voice("cloud", Locale.getDefault(), Voice.QUALITY_NORMAL, Voice.LATENCY_NORMAL, true, emptySet())
+        )
+        val withoutVoice = SystemTTSService(context)
+        assertEquals(SpeechStatus.RESOLVING, withoutVoice.status.value)
+        assertFalse(withoutVoice.ensureReady())
+        shadowOf(ShadowTextToSpeech.getLastTextToSpeechInstance()).onInitListener.onInit(TextToSpeech.SUCCESS)
+        assertEquals(SpeechStatus.UNAVAILABLE, withoutVoice.status.value)
+        assertFalse(withoutVoice.ensureReady())
+        withoutVoice.shutdown()
+    }
+
     private suspend fun ReaderSpeechController.shutdownAndJoin() {
         val scope = org.robolectric.util.ReflectionHelpers.getField<CoroutineScope>(this, "scope")
         val job = scope.coroutineContext.job
@@ -269,8 +339,8 @@ class ReaderSpeechControllerTest {
         val dispatcher: ContinuationInterceptor?
     )
 
-    private class Engine : TTSService {
-        override val status = MutableStateFlow(SpeechStatus.STOPPED)
+    private class Engine(initialStatus: SpeechStatus = SpeechStatus.STOPPED) : TTSService {
+        override val status = MutableStateFlow(initialStatus)
         override val spokenText = MutableStateFlow("")
         override val availableVoices = MutableStateFlow(emptyList<TTSVoice>())
         val calls = Channel<Call>(Channel.UNLIMITED)

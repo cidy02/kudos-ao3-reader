@@ -29,6 +29,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 enum class SpeechStatus {
+    RESOLVING,
     UNAVAILABLE,
     STOPPED,
     PLAYING,
@@ -49,7 +50,14 @@ class ReaderSpeechController(
     
     private val scope = CoroutineScope(Dispatchers.Main + Job())
 
-    private val _status = MutableStateFlow(SpeechStatus.STOPPED)
+    private fun resolveStatus(ttsStatus: SpeechStatus): SpeechStatus =
+        if (ttsStatus == SpeechStatus.UNAVAILABLE && !TTSDownloadWorker.isModelDownloaded(appContext)) {
+            SpeechStatus.MODEL_NOT_DOWNLOADED
+        } else {
+            ttsStatus
+        }
+
+    private val _status = MutableStateFlow(resolveStatus(tts.status.value))
     val status: StateFlow<SpeechStatus> = _status.asStateFlow()
 
     private val seekPreview = MutableStateFlow<String?>(null)
@@ -111,8 +119,7 @@ class ReaderSpeechController(
                 // was missing, however good the device's own voice.
                 if (pausedAtQueuePosition ||
                     (ttsStatus == SpeechStatus.STOPPED && currentSpeakJob?.isActive == true)) return@collect
-                _status.value = if (ttsStatus == SpeechStatus.UNAVAILABLE &&
-                    !TTSDownloadWorker.isModelDownloaded(appContext)) SpeechStatus.MODEL_NOT_DOWNLOADED else ttsStatus
+                _status.value = resolveStatus(ttsStatus)
             }
         }
         
@@ -183,7 +190,9 @@ class ReaderSpeechController(
     }
 
     fun startReading(paragraphs: ReaderSpeechSource) {
-        if (_status.value == SpeechStatus.MODEL_NOT_DOWNLOADED) return
+        if (_status.value == SpeechStatus.MODEL_NOT_DOWNLOADED ||
+            _status.value == SpeechStatus.RESOLVING ||
+            _status.value == SpeechStatus.UNAVAILABLE) return
         stop()
         currentQueue.clear()
         source = paragraphs
@@ -315,7 +324,9 @@ class ReaderSpeechController(
         pausedAtQueuePosition = false
         seekWasPlaying = false
         seekPreview.value = null
-        _status.value = SpeechStatus.STOPPED
+        if (_status.value == SpeechStatus.PLAYING || _status.value == SpeechStatus.PAUSED) {
+            _status.value = SpeechStatus.STOPPED
+        }
         publishPlaybackState(PlaybackState.STATE_STOPPED)
     }
 
