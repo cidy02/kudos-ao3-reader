@@ -390,6 +390,17 @@ enum SyncTombstones {
     nonisolated static let collectionPermanentlyDeletedReason = "collectionPermanentlyDeleted"
     nonisolated static let queuePermanentlyDeletedReason = "queuePermanentlyDeleted"
 
+    static func isPermanent(_ tombstone: SyncTombstone) -> Bool {
+        [workPermanentlyDeletedReason, collectionPermanentlyDeletedReason, queuePermanentlyDeletedReason]
+            .contains(tombstone.deletionReason)
+    }
+
+    /// The newer tombstone wins; on a tie, "deleted for good" beats "moved to Recently Deleted".
+    static func replaces(_ incoming: SyncTombstone, _ existing: SyncTombstone) -> Bool {
+        incoming.lastModifiedAt > existing.lastModifiedAt
+            || (incoming.lastModifiedAt == existing.lastModifiedAt && isPermanent(incoming) && !isPermanent(existing))
+    }
+
     static func recordDeletion(of work: SavedWork, in context: ModelContext, permanently: Bool = false) {
         insertSigned(
             SyncTombstone(

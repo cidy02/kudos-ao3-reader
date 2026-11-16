@@ -154,6 +154,7 @@ nonisolated struct KokoroPronunciationStore: Sendable {
         file.global.merge(overrides) { _, new in new }
         file.stamp(words + Array(overrides.keys), in: .global)
         try save(file)
+        LocalSnapshotChange.post()
     }
 
     /// Which layer an override belongs to. Work beats fandom beats global,

@@ -2741,9 +2741,15 @@ enum KudosBackupService {
                 // the row already on file rather than inserted beside it, so the
                 // device keeps one tombstone per record and the next restore
                 // starts from the later date too.
-                guard adopted.lastModifiedAt > held.lastModifiedAt else { continue }
+                guard adopted.lastModifiedAt > held.lastModifiedAt
+                    || (adopted.lastModifiedAt == held.lastModifiedAt
+                        && SyncTombstones.isPermanent(adopted) && !SyncTombstones.isPermanent(held))
+                else { continue }
                 held.createdAt = adopted.createdAt
                 held.lastModifiedAt = adopted.lastModifiedAt
+                // The reason goes with the date: a later "deleted for good" must not keep the
+                // earlier "moved to Recently Deleted" reason (sixth T-541 review).
+                held.deletionReason = adopted.deletionReason
                 // The signature travels with the date it signs, or the row stops
                 // verifying. `shouldAdopt` already vouched for this pair.
                 held.signerPublicKey = adopted.signerPublicKey
@@ -4627,37 +4633,35 @@ enum KudosBackupService {
         }
 
         private mutating func indexNewest(_ tombstone: SyncTombstone, byID id: UUID) {
-            if let existing = savedWorkTombstonesByID[id], existing.lastModifiedAt >= tombstone.lastModifiedAt {
+            if let existing = savedWorkTombstonesByID[id], !SyncTombstones.replaces(tombstone, existing) {
                 return
             }
             savedWorkTombstonesByID[id] = tombstone
         }
 
         private mutating func indexNewest(_ tombstone: SyncTombstone, byAO3WorkID id: Int) {
-            if let existing = savedWorkTombstonesByAO3WorkID[id],
-               existing.lastModifiedAt >= tombstone.lastModifiedAt {
+            if let existing = savedWorkTombstonesByAO3WorkID[id], !SyncTombstones.replaces(tombstone, existing) {
                 return
             }
             savedWorkTombstonesByAO3WorkID[id] = tombstone
         }
 
         private mutating func indexNewest(_ tombstone: SyncTombstone, byCanonicalURL url: String) {
-            if let existing = savedWorkTombstonesByCanonicalURL[url],
-               existing.lastModifiedAt >= tombstone.lastModifiedAt {
+            if let existing = savedWorkTombstonesByCanonicalURL[url], !SyncTombstones.replaces(tombstone, existing) {
                 return
             }
             savedWorkTombstonesByCanonicalURL[url] = tombstone
         }
 
         private mutating func indexNewest(_ tombstone: SyncTombstone, byCollectionID id: UUID) {
-            if let existing = collectionTombstonesByID[id], existing.lastModifiedAt >= tombstone.lastModifiedAt {
+            if let existing = collectionTombstonesByID[id], !SyncTombstones.replaces(tombstone, existing) {
                 return
             }
             collectionTombstonesByID[id] = tombstone
         }
 
         private mutating func indexNewest(_ tombstone: SyncTombstone, byQueueID id: UUID) {
-            if let existing = queueTombstonesByID[id], existing.lastModifiedAt >= tombstone.lastModifiedAt {
+            if let existing = queueTombstonesByID[id], !SyncTombstones.replaces(tombstone, existing) {
                 return
             }
             queueTombstonesByID[id] = tombstone
