@@ -1320,6 +1320,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     private func openLinkedChapter(in work: SavedWork, openingContents: Bool) async {
         guard let linkedChapterID, let workID = ao3WorkID else { return }
         working = true
+        loadError = nil
         defer { working = false }
         do {
             let generation = auth.sessionGeneration

@@ -141,6 +141,7 @@ struct LinkedWorkLandingView: View {
     }
 
     static func canFetchRemote(status: AO3AuthStatus) -> Bool {
+        // Bounded by LiveAO3SessionValidator's 20 s request timeout when restoring a session.
         status != .restoring
     }
 
