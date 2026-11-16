@@ -216,12 +216,14 @@ nonisolated enum AO3HTMLDownloadConverter {
         ao3Client: AO3Client = .shared
     ) async throws -> URL {
         defer { try? FileManager.default.removeItem(at: file) }
-        // AO3 writes the file as UTF-8 (`DownloadWriter#generate_html_download`).
-        guard let html = try String(bytes: Data(contentsOf: file), encoding: .utf8),
-              let data = try await epub(
-                  fromHTML: html,
-                  fetchImage: { await fetchRemoteImage($0, session: imageSession, ao3Client: ao3Client) }
-              )
+        // AO3 writes the file as UTF-8 (`DownloadWriter#generate_html_download`);
+        // decode lossily like `AO3Client.htmlString(from:)` so bad bytes don't fail it.
+        // swiftlint:disable:next optional_data_string_conversion
+        let html = String(decoding: try Data(contentsOf: file), as: UTF8.self)
+        guard let data = try await epub(
+            fromHTML: html,
+            fetchImage: { await fetchRemoteImage($0, session: imageSession, ao3Client: ao3Client) }
+        )
         else { throw AO3Error.parse }
         let destination = Storage.tempDownloadURL(suggestedName: name)
         try data.write(to: destination, options: .atomic)
