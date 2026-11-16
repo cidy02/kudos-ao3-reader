@@ -12,8 +12,8 @@ struct AO3WorkActionsMenu: View {
     /// When shown from a reader, the AO3 story chapter to open comments on so the
     /// user lands on the chapter they're reading. nil (Work Detail) → All comments.
     var commentsInitialChapterPosition: Int?
-    /// Fired only when this subscribe call actually subscribed (not on the
-    /// unsubscribe half of the same toggle). nil at call sites with nothing to
+    /// Fired when the requested subscribed state is confirmed, including an
+    /// already-subscribed response. nil at call sites with nothing to
     /// hook, such as the reader.
     var onSubscribeSuccess: (() -> Void)? = nil
     var onKudosSuccess: (() -> Void)? = nil
@@ -112,7 +112,9 @@ struct AO3WorkActionsTopRow: View {
 
             let isSubscribed = actions.workPageStates?.isSubscribed == true
             Button {
-                actions.subscribe(workID: workID, auth: auth, onSubscribed: onSubscribeSuccess)
+                actions.subscribe(
+                    workID: workID, to: !isSubscribed, auth: auth, onSubscribed: onSubscribeSuccess
+                )
             } label: {
                 Label(
                     isSubscribed ? "Unsubscribe" : "Subscribe",

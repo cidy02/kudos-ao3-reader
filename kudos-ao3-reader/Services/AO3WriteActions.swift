@@ -93,14 +93,17 @@ extension AO3AuthService {
         )
     }
 
-    /// Subscribes to (or, if already subscribed, unsubscribes from) a work. Reads the
-    /// work page once for the CSRF token + current subscription state, then POSTs the
-    /// matching action. Returns a message describing what happened.
-    func toggleSubscribe(workID: Int, using client: AO3Client = .shared) async throws -> String {
+    /// Reads the work page once for CSRF and subscription state. With `want`, AO3's
+    /// fresh state decides whether to write, never which action the reader requested.
+    /// `nil` preserves the plain toggle for callers without an intended state.
+    func toggleSubscribe(
+        workID: Int, to want: Bool? = nil, using client: AO3Client = .shared
+    ) async throws -> String {
         try await toggleSubscribe(
             subscribableID: workID,
             subscribableType: "Work",
             pageURL: Self.workURL(workID),
+            want: want,
             using: client
         )
     }

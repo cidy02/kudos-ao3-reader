@@ -2,9 +2,49 @@ import Foundation
 import Testing
 @testable import Kudos
 
-/// Covers the pure, offline pieces of the native AO3 write actions: CSRF / pseud /
-/// error parsing and form-body encoding. The actual POST endpoints can only be
-/// confirmed against a live signed-in AO3 session.
+private final class WorkSubscribeStub: URLProtocol, @unchecked Sendable {
+    private static let lock = NSLock()
+    private static var html = ""
+    private static var methods: [String] = []
+
+    static func reset(html: String) {
+        lock.lock()
+        self.html = html
+        methods = []
+        lock.unlock()
+    }
+
+    static func recordedMethods() -> [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return methods
+    }
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        guard let url = request.url else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badURL))
+            return
+        }
+        Self.lock.lock()
+        Self.methods.append(request.httpMethod ?? "GET")
+        let html = Self.html
+        Self.lock.unlock()
+        let response = HTTPURLResponse(
+            url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil
+        )!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data(html.utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
+}
+
+/// Covers offline parsing, form encoding, and the work Subscribe decision with a
+/// URLProtocol stub. The actual POST endpoints remain unverified against live AO3.
 struct AO3WriteActionsTests {
     @Test func parsesCSRFTokenFromMetaTag() {
         let html = """
@@ -339,6 +379,44 @@ struct AO3WriteActionsTests {
         #expect(result.unsubscribePath == nil)
     }
 
+    @MainActor
+    @Test func workSubscribeIntentDoesNotSendTheOppositeWrite() async throws {
+        let auth = AO3AuthService(
+            vault: MemoryAO3SessionVault(),
+            validator: InboxTestSessionValidator(),
+            loginPerformer: DynamicInboxTestLoginPerformer(),
+            cookieManager: MockAO3CookieManager(),
+            removalTracker: MemoryAO3SessionRemovalTracker()
+        )
+        await auth.login(username: "alice", password: "pw")
+        let config = AO3Client.makeAnonymousSessionConfiguration()
+        config.protocolClasses = [WorkSubscribeStub.self]
+        let client = AO3Client(session: URLSession(configuration: config), paceSleep: { _ in })
+
+        WorkSubscribeStub.reset(html: """
+        <html><head><meta name="csrf-token" content="token"></head><body class="logged-in">
+          <form action="/users/alice/subscriptions" method="post">
+            <input type="submit" value="Subscribe">
+          </form>
+        </body></html>
+        """)
+        let unsubscribed = try await auth.toggleSubscribe(workID: 42, to: false, using: client)
+        #expect(unsubscribed == "Unsubscribed.")
+        #expect(WorkSubscribeStub.recordedMethods() == ["GET"])
+
+        WorkSubscribeStub.reset(html: """
+        <html><head><meta name="csrf-token" content="token"></head><body class="logged-in">
+          <form action="/users/alice/subscriptions/789" method="post">
+            <input type="hidden" name="_method" value="delete">
+            <input type="submit" value="Unsubscribe">
+          </form>
+        </body></html>
+        """)
+        let subscribed = try await auth.toggleSubscribe(workID: 42, to: true, using: client)
+        #expect(subscribed == "You're already subscribed.")
+        #expect(WorkSubscribeStub.recordedMethods() == ["GET"])
+    }
+
     // MARK: Work-page action states (fixtures trimmed from live captures, 2026-07-16)
 
     private final class FixtureAnchor {}
@@ -377,13 +455,8 @@ struct AO3WriteActionsTests {
     /// The state that makes `unsubscribe` and `toggleSubscribe` diverge, and the
     /// reason the Following list must not use the toggle.
     ///
-    /// `toggleSubscribe` reads the work page and SUBSCRIBES whenever it finds no
-    /// subscription — correct for a toggle on a work page. A row in the Following
-    /// list can be stale (unsubscribed on the website, or from another device), and
-    /// then the work page looks exactly like the fixture below: a plain subscribe
-    /// form, no `_method=delete`. Routed through the toggle, a tap labelled
-    /// "Unfollow" would subscribe the user instead. `unsubscribe` guards on this
-    /// same parse and returns without writing.
+    /// An unqualified `toggleSubscribe` would subscribe when a Following row went
+    /// stale. The list's dedicated `unsubscribe` guards on this same parse.
     @Test("A stale Following row parses as not-subscribed, which is why Unfollow cannot use the toggle")
     func notSubscribedIsTheStaleRowState() {
         let staleRow = """
@@ -393,7 +466,7 @@ struct AO3WriteActionsTests {
         </form>
         """
         let state = AO3Client.parseSubscription(from: staleRow)
-        #expect(!state.isSubscribed, "the toggle would branch to subscribe here")
+        #expect(!state.isSubscribed, "a plain toggle would branch to subscribe here")
         #expect(state.unsubscribePath == nil, "and there is no delete path to POST")
     }
 
