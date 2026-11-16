@@ -25,6 +25,7 @@ nonisolated enum AO3HTMLDownloadConverter {
     p.message, .meta h1, .meta h2, .meta .byline { text-align: center; }
     .meta dl.tags { border: 1px solid; padding: 1em; }
     .meta .endnote-link { font-size: 0.8em; }
+    .toc-heading { display: none; }
     img { max-width: 100%; height: auto; }
     """
 
@@ -43,6 +44,10 @@ nonisolated enum AO3HTMLDownloadConverter {
               let chapters = try document.select("body > div#chapters").first()
         else { return nil }
         let metadata = try readMetadata(document, preface: preface)
+        // Hidden in AO3's file; they exist only to give calibre its section names.
+        // Remove before collecting sections so a single-chapter heading (a direct
+        // child of `#chapters`) is never carried into the chapter file.
+        try document.select(".toc-heading").remove()
 
         // A single-chapter work has no chapter heading: its one section is named
         // for the work.
@@ -62,8 +67,6 @@ nonisolated enum AO3HTMLDownloadConverter {
             sections.append(("Afterword", [afterword]))
         }
 
-        // Hidden in AO3's file; they exist only to give calibre its section names.
-        try document.select(".toc-heading").remove()
         try relink(sections.map(\.elements), imagePaths: imagePaths)
         return try HTMLWorkConverter.Result(
             metadata: metadata,
@@ -354,16 +357,17 @@ nonisolated enum AO3HTMLDownloadConverter {
         }
 
         func cancel() {
-            let action: (cont: CheckedContinuation<BareFetchOutcome, Never>?, task: URLSessionDataTask?) = lock.withLock {
-                isCancelled = true
-                failed = true
-                buffer.removeAll(keepingCapacity: false)
-                let cont = continuation
-                continuation = nil
-                return (cont, task)
-            }
-            action.task?.cancel()
-            action.cont?.resume(returning: .failed)
+            let (cont, task): (CheckedContinuation<BareFetchOutcome, Never>?, URLSessionDataTask?) =
+                lock.withLock {
+                    isCancelled = true
+                    failed = true
+                    buffer.removeAll(keepingCapacity: false)
+                    let cont = continuation
+                    continuation = nil
+                    return (cont, task)
+                }
+            task?.cancel()
+            cont?.resume(returning: .failed)
         }
 
         func urlSession(
