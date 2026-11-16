@@ -1591,7 +1591,9 @@ actor AO3Client { // swiftlint:disable:this type_body_length
 
     private func downloadHTMLAsEPUB(workID: Int, onProgress: (@Sendable (Double) -> Void)?) async throws -> URL {
         let html = try await download(workID: workID, format: "html", onProgress: onProgress)
-        return try await AO3HTMLDownloadConverter.epubFile(fromHTMLFile: html, named: "\(workID).epub")
+        return try await AO3HTMLDownloadConverter.epubFile(
+            fromHTMLFile: html, named: "\(workID).epub", ao3Client: self
+        )
     }
 
     private func download(

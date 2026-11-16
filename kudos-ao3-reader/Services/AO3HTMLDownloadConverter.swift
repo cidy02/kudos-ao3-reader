@@ -180,8 +180,12 @@ nonisolated enum AO3HTMLDownloadConverter {
         var paths: [String: String] = [:]
         var total = 0
         for source in try imageSources(in: html) where images.count < maxImages && total < maxTotalImageBytes {
+            try Task.checkCancellation()
             guard let url = URL(string: source), ["http", "https"].contains(url.scheme?.lowercased()),
-                  let data = await fetchImage(url), let type = imageExtension(of: data)
+                  let data = await fetchImage(url),
+                  data.count <= maxImageBytes,
+                  total + data.count <= maxTotalImageBytes,
+                  let type = imageExtension(of: data)
             else { continue }
             let path = "images/image-\(images.count + 1).\(type)"
             images.append((path, data))
@@ -203,11 +207,18 @@ nonisolated enum AO3HTMLDownloadConverter {
 
     /// Rebuilds the HTML download at `file` as an EPUB in the downloads cache,
     /// consuming `file`. Throws `AO3Error.parse` when it is not an AO3 download.
-    static func epubFile(fromHTMLFile file: URL, named name: String) async throws -> URL {
+    static func epubFile(
+        fromHTMLFile file: URL,
+        named name: String,
+        ao3Client: AO3Client = .shared
+    ) async throws -> URL {
         defer { try? FileManager.default.removeItem(at: file) }
         // AO3 writes the file as UTF-8 (`DownloadWriter#generate_html_download`).
         guard let html = try String(bytes: Data(contentsOf: file), encoding: .utf8),
-              let data = try await epub(fromHTML: html)
+              let data = try await epub(
+                  fromHTML: html,
+                  fetchImage: { await fetchRemoteImage($0, session: imageSession, ao3Client: ao3Client) }
+              )
         else { throw AO3Error.parse }
         let destination = Storage.tempDownloadURL(suggestedName: name)
         try data.write(to: destination, options: .atomic)
@@ -233,19 +244,205 @@ nonisolated enum AO3HTMLDownloadConverter {
         return nil
     }
 
-    /// Its own session: an image host is not AO3, and gets none of AO3's cookies.
-    private static let imageSession: URLSession = {
+    static func makeImageSessionConfiguration() -> URLSessionConfiguration {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForResource = 30
-        return URLSession(configuration: configuration)
-    }()
+        configuration.httpShouldSetCookies = false
+        configuration.httpCookieStorage = nil
+        configuration.httpCookieAcceptPolicy = .never
+        configuration.urlCredentialStorage = nil
+        configuration.urlCache = nil
+        return configuration
+    }
+
+    /// Its own session: an image host is not AO3, and gets none of AO3's cookies
+    /// or credentials.
+    static let imageSession = URLSession(configuration: makeImageSessionConfiguration())
+
+    static func isAO3Host(_ url: URL?) -> Bool {
+        guard let host = url?.host()?.lowercased() else { return false }
+        return host == "archiveofourown.org" || host.hasSuffix(".archiveofourown.org")
+    }
 
     @Sendable static func fetchRemoteImage(_ url: URL) async -> Data? {
-        guard let (file, response) = try? await imageSession.download(from: url) else { return nil }
-        defer { try? FileManager.default.removeItem(at: file) }
-        guard (response as? HTTPURLResponse)?.statusCode == 200,
-              let size = try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize, size <= maxImageBytes
+        await fetchRemoteImage(url, session: imageSession, ao3Client: .shared)
+    }
+
+    static func fetchRemoteImage(
+        _ url: URL,
+        session: URLSession,
+        ao3Client: AO3Client,
+        maxBytes: Int = maxImageBytes
+    ) async -> Data? {
+        if isAO3Host(url) {
+            return await fetchFromAO3(url, ao3Client: ao3Client, maxBytes: maxBytes)
+        }
+        switch await fetchWithBareSession(url, session: session, maxBytes: maxBytes) {
+        case let .data(data):
+            return data
+        case let .redirectToAO3(targetURL):
+            return await fetchFromAO3(targetURL, ao3Client: ao3Client, maxBytes: maxBytes)
+        case .failed:
+            return nil
+        }
+    }
+
+    private static func fetchFromAO3(
+        _ url: URL,
+        ao3Client: AO3Client,
+        maxBytes: Int
+    ) async -> Data? {
+        guard let data = try? await ao3Client.imageData(at: url),
+              data.count <= maxBytes
         else { return nil }
-        return try? Data(contentsOf: file)
+        return data
+    }
+
+    private enum BareFetchOutcome: Sendable {
+        case data(Data)
+        case redirectToAO3(URL)
+        case failed
+    }
+
+    private static func fetchWithBareSession(
+        _ url: URL,
+        session: URLSession,
+        maxBytes: Int
+    ) async -> BareFetchOutcome {
+        let delegate = ImageFetchDelegate(maxBytes: maxBytes)
+        let task = session.dataTask(with: url)
+        task.delegate = delegate
+        delegate.attach(task: task)
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                delegate.start(continuation: continuation)
+            }
+        } onCancel: {
+            delegate.cancel()
+        }
+    }
+
+    private final class ImageFetchDelegate: NSObject, URLSessionDataDelegate, @unchecked Sendable {
+        private let maxBytes: Int
+        private let lock = NSLock()
+        private var buffer = Data()
+        private var redirectedToAO3URL: URL?
+        private var failed = false
+        private var isCancelled = false
+        private var continuation: CheckedContinuation<BareFetchOutcome, Never>?
+        private weak var task: URLSessionDataTask?
+
+        init(maxBytes: Int) {
+            self.maxBytes = maxBytes
+        }
+
+        func attach(task: URLSessionDataTask) {
+            lock.withLock { self.task = task }
+        }
+
+        func start(continuation: CheckedContinuation<BareFetchOutcome, Never>) {
+            let action: (resumeNow: Bool, task: URLSessionDataTask?) = lock.withLock {
+                if isCancelled { return (true, nil) }
+                self.continuation = continuation
+                return (false, task)
+            }
+            if action.resumeNow {
+                continuation.resume(returning: .failed)
+            } else {
+                action.task?.resume()
+            }
+        }
+
+        func cancel() {
+            let action: (cont: CheckedContinuation<BareFetchOutcome, Never>?, task: URLSessionDataTask?) = lock.withLock {
+                isCancelled = true
+                failed = true
+                buffer.removeAll(keepingCapacity: false)
+                let cont = continuation
+                continuation = nil
+                return (cont, task)
+            }
+            action.task?.cancel()
+            action.cont?.resume(returning: .failed)
+        }
+
+        func urlSession(
+            _: URLSession,
+            task _: URLSessionTask,
+            willPerformHTTPRedirection _: HTTPURLResponse,
+            newRequest: URLRequest,
+            completionHandler: @escaping (URLRequest?) -> Void
+        ) {
+            guard let target = newRequest.url,
+                  let scheme = target.scheme?.lowercased(),
+                  scheme == "http" || scheme == "https"
+            else {
+                lock.withLock { failed = true }
+                completionHandler(nil)
+                return
+            }
+            if AO3HTMLDownloadConverter.isAO3Host(target) {
+                lock.withLock { redirectedToAO3URL = target }
+                completionHandler(nil)
+                return
+            }
+            completionHandler(newRequest)
+        }
+
+        func urlSession(
+            _: URLSession,
+            dataTask _: URLSessionDataTask,
+            didReceive response: URLResponse,
+            completionHandler: @escaping (URLSession.ResponseDisposition) -> Void
+        ) {
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                lock.withLock { failed = true }
+                completionHandler(.cancel)
+                return
+            }
+            let headerLength = http.value(forHTTPHeaderField: "Content-Length").flatMap(Int64.init) ?? -1
+            let contentLength = max(response.expectedContentLength, headerLength)
+            if contentLength > Int64(maxBytes) {
+                lock.withLock { failed = true }
+                completionHandler(.cancel)
+                return
+            }
+            if contentLength > 0 {
+                lock.withLock { buffer.reserveCapacity(Int(contentLength)) }
+            }
+            completionHandler(.allow)
+        }
+
+        func urlSession(_: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+            let shouldCancel = lock.withLock { () -> Bool in
+                guard !failed, !isCancelled else { return true }
+                if data.count > maxBytes - buffer.count {
+                    failed = true
+                    buffer.removeAll(keepingCapacity: false)
+                    return true
+                }
+                buffer.append(data)
+                return false
+            }
+            if shouldCancel {
+                dataTask.cancel()
+            }
+        }
+
+        func urlSession(_: URLSession, task _: URLSessionTask, didCompleteWithError error: Error?) {
+            let (cont, outcome): (CheckedContinuation<BareFetchOutcome, Never>?, BareFetchOutcome) = lock.withLock {
+                let cont = continuation
+                continuation = nil
+                defer { buffer.removeAll(keepingCapacity: false) }
+                if let ao3URL = redirectedToAO3URL {
+                    return (cont, .redirectToAO3(ao3URL))
+                }
+                if error != nil || failed || isCancelled {
+                    return (cont, .failed)
+                }
+                return (cont, .data(buffer))
+            }
+            cont?.resume(returning: outcome)
+        }
     }
 }
