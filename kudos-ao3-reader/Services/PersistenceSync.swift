@@ -381,10 +381,10 @@ enum PersistenceMigrationService {
 @MainActor
 enum SyncTombstones {
     /// The reason a work's tombstone carries when it is gone for good, not moved to Recently
-    /// Deleted (T-541). Restore reads it: a copy in Recently Deleted elsewhere then finishes
-    /// its deletion, and an archive's Recently Deleted copy of it is not restored. Not part of
-    /// the signed payload: a forged value can only end a recovery window early on a work the
-    /// reader has already deleted, and only through a signature the device already trusts.
+    /// Deleted (T-541). Restore reads it for one thing only: an archive's Recently Deleted copy
+    /// of such a work is not restored. Not part of the signed payload and not written by
+    /// Android, so nothing destructive is ever decided on it (Codex's fourth review); a signed
+    /// marker on both platforms is T-541b.
     nonisolated static let workPermanentlyDeletedReason = "workPermanentlyDeleted"
 
     static func recordDeletion(of work: SavedWork, in context: ModelContext, permanently: Bool = false) {

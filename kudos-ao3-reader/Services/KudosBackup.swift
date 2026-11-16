@@ -2944,19 +2944,12 @@ enum KudosBackupService {
             }
         }
 
-        // T-541 (Codex's third review): a permanent delete made on another device never reached
-        // a copy here that was already in Recently Deleted, because tombstones were consulted only
-        // for the records the archive carries, and a permanent delete leaves the archive. That
-        // copy then went out again on this device's next export. Only a trusted tombstone gets
-        // here, and only for a work the reader already deleted on this device: its own countdown
-        // is brought to now, so the launch sweep finishes it through the usual `hardDelete` (no
-        // file is touched inside a restore). Replace is a snapshot and skips tombstones.
-        if mode != .replaceLibrary {
-            let now = Date()
-            for work in existingWorks where tombstones.permanentlyDeletedElsewhere(work) {
-                work.permanentDeletionScheduledAt = min(work.permanentDeletionScheduledAt ?? now, now)
-            }
-        }
+        // Not done here (Codex's fourth T-541 review): finishing a copy that is in Recently
+        // Deleted because another device deleted it for good. The only thing that says "for
+        // good" is `deletionReason`, which the signature does not cover and Android does not
+        // write, so acting on it could end a recovery window on a forged or misread record.
+        // Until permanence is signed on both platforms (T-541b), such a copy runs out its own
+        // window here, and the archive's copy of it is still refused by the rule below.
 
         let existingCollections = try context.fetch(FetchDescriptor<WorkCollection>())
         var collectionsByID = Dictionary(
@@ -4729,17 +4722,6 @@ enum KudosBackupService {
                 }
             }
             return tombstone.lastModifiedAt >= archivedModifiedAt
-        }
-
-        /// A copy here, already in Recently Deleted, that another device has since deleted for
-        /// good: matched by the record's own id only, never by AO3 identity, so a later
-        /// download of the same AO3 work is a different record and untouched.
-        func permanentlyDeletedElsewhere(_ work: SavedWork) -> Bool {
-            guard work.isPendingDeletion,
-                  let tombstone = savedWorkTombstonesByID[work.id],
-                  tombstone.deletionReason == SyncTombstones.workPermanentlyDeletedReason
-            else { return false }
-            return tombstone.lastModifiedAt >= (work.deletedAt ?? .distantPast)
         }
 
         func collectionResolution(id: UUID, incomingModifiedAt: Date?) -> SyncMerge.TombstoneResolution {

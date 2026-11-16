@@ -468,19 +468,21 @@ struct TombstoneSweepsExistingRecordsTests {
         return work
     }
 
-    @Test func aPermanentDeleteElsewhereFinishesACopyInRecentlyDeletedHere() throws {
+    /// Codex's fourth review: `deletionReason` is not signed, so it never shortens a recovery
+    /// window here. A copy in Recently Deleted keeps this device's countdown whatever the reason.
+    @Test func aPermanentDeleteElsewhereLeavesThisDevicesCountdownAlone() throws {
         let defaults = try testDefaults()
         let peer = try trustedPeer(defaults)
         let context = try context()
         let work = try recentlyDeletedWork(deletedAt: 100, in: context)
+        let countdown = work.permanentDeletionScheduledAt
         let snapshot = try KudosBackupService.makeContents(
             works: [], bookmarks: [], fonts: [], readingQueues: [],
             tombstones: [workTombstone(id: work.id, at: 130, permanently: true, key: peer)],
             defaults: defaults
         )
         _ = try KudosBackupService.restore(snapshot, into: context, defaults: defaults, mode: .reconcile)
-        // Within 30 s of the move, as a quick "Delete Permanently" is: still finished.
-        #expect((work.permanentDeletionScheduledAt ?? .distantFuture) <= Date())
+        #expect(work.permanentDeletionScheduledAt == countdown)
         #expect(work.isPendingDeletion)
     }
 
