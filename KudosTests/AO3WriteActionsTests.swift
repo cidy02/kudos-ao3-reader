@@ -824,13 +824,15 @@ struct AO3WriteActionsTests {
     @MainActor
     @Test func workActionsModelIsolatesStatesByGenerationAndHandlesCancelAndExpiry() async throws {
         let auth = await makeSignedInAuth(username: "alice")
+        // A sign-in advances the generation by more than one, so compare with the first session's own value.
+        let firstGeneration = auth.sessionGeneration
         var fetchedGenerations: [Int] = []
         let model = AO3WorkActionsModel(
             subscribeHandler: { _, want, _ in want ? "Subscribed." : "Unsubscribed." },
             workActionStatesHandler: { _, service in
                 let gen = service.sessionGeneration
                 fetchedGenerations.append(gen)
-                return AO3WorkActionStates(isSubscribed: gen == 1, existingBookmark: nil)
+                return AO3WorkActionStates(isSubscribed: gen == firstGeneration, existingBookmark: nil)
             }
         )
 
