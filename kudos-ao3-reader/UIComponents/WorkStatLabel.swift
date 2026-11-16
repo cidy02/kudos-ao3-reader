@@ -49,7 +49,7 @@ struct WorkStatLabel: View {
         HStack(spacing: 3) {
             Image(systemName: symbol)
                 .font(.caption2.weight(.bold))
-                .foregroundStyle(iconColor.map { AnyShapeStyle($0) } ?? AnyShapeStyle(.secondary))
+                .foregroundStyle(iconColor.map { AnyShapeStyle($0) } ?? AnyShapeStyle(.secondaryInk))
             Text(text)
         }
         .lineLimit(1)
@@ -80,7 +80,7 @@ struct WorkUpdatedDateBadge: View {
                 accessibilityLabel: "Updated \(display)"
             )
             .font(.caption2)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
         }
     }
 }
@@ -137,7 +137,7 @@ struct WorkLedgerStatsLine: View {
         if !figures.visible.isEmpty {
             Text(figures.visible.joined(separator: "  ·  "))
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .lineLimit(nil)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -218,13 +218,13 @@ struct WorkListStatsGrid: View {
                 HStack(alignment: .firstTextBaseline, spacing: 3) {
                     if let label = cell.label {
                         Text(label)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                         Text(cell.value)
                             .fontWeight(.semibold)
                             .foregroundStyle(.primary)
                     } else {
                         Text(cell.value)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                     }
                 }
                 .font(.caption)
@@ -290,7 +290,7 @@ struct WorkTagLineView: View {
                     Button { onTap(chip.text, chip.field) } label: {
                         Text(chip.text)
                             .font(.caption.weight(chip.isRelationship ? .semibold : .regular))
-                            .foregroundStyle(chip.isRelationship ? accentInk : Color.secondary)
+                            .foregroundStyle(chip.isRelationship ? AnyShapeStyle(accentInk) : AnyShapeStyle(.secondaryInk))
                             .lineLimit(1)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 3)
@@ -305,7 +305,7 @@ struct WorkTagLineView: View {
                 if line.extra > 0 {
                     Text("+\(line.extra)")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
             }
         }
@@ -1029,7 +1029,7 @@ struct WorkListStatsRow: View {
         .font(.caption2)
         // Matches the summary text above the divider (.secondary) — .tertiary
         // read as too faint next to it.
-        .foregroundStyle(.secondary)
+        .foregroundStyle(.secondaryInk)
         .padding(.top, 1)
     }
 }

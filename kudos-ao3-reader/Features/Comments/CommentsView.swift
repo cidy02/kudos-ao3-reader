@@ -699,7 +699,7 @@ struct CommentsView: View {
                 if let selectedChapterFact {
                     Text(selectedChapterFact)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -719,12 +719,12 @@ struct CommentsView: View {
                 if hasByline, selectedChapterFact != nil {
                     Text("·")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
                 if let selectedChapterFact {
                     Text(selectedChapterFact)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .lineLimit(1)
                 }
             }
@@ -809,7 +809,7 @@ struct CommentsView: View {
         return HStack(spacing: 0) {
             metaLineText(data)
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
         }
@@ -1058,7 +1058,7 @@ struct CommentsView: View {
                 Image(systemName: model.isOffline ? "wifi.exclamationmark" : "exclamationmark.triangle")
             }
             .font(.footnote)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
         }
         .cardRow()
     }
@@ -1075,7 +1075,7 @@ struct CommentsView: View {
         .minimumHitTarget()
         let position = Text("Page \(model.currentPageNumber) of \(page.totalPages)")
             .font(.footnote)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             .monospacedDigit()
         let next = Button {
             loadPage(model.currentPageNumber + 1)
@@ -1250,7 +1250,7 @@ struct CommentsView: View {
             HStack(spacing: 10) {
                 Text(title)
                     .font(.system(size: 16, weight: .regular))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1308,7 +1308,7 @@ struct CommentsView: View {
                             if let total = model.page?.totalComments {
                                 Text(total.formatted())
                                     .foregroundStyle(
-                                        model.scope == .all ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary)
+                                        model.scope == .all ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondaryInk)
                                     )
                             }
                             if model.scope == .all {
@@ -1331,7 +1331,7 @@ struct CommentsView: View {
                             )
                         } else if model.chaptersLoaded {
                             Text("No chapters available.")
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.secondaryInk)
                         } else {
                             ProgressView().accentFill()
                                 .accessibilityLabel("Loading chapters")
@@ -1712,7 +1712,7 @@ struct CommentComposerSheet: View {
                         // one Kudos posts to; AO3 files it under the newest chapter.
                         Text("New comments post to the whole work. AO3 shows them on its latest chapter.")
                             .font(.caption2)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                     }
 
                     statusBanner
@@ -1862,7 +1862,7 @@ struct CommentComposerSheet: View {
                     // placeholder sits exactly where the first character will.
                     Text(isReply ? "Write your reply…" : "Share your thoughts…")
                         .font(.system(size: editorTextSize))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .padding(.horizontal, 17)
                         .padding(.top, 18)
                         .allowsHitTesting(false)
@@ -1879,7 +1879,7 @@ struct CommentComposerSheet: View {
             .lineLimit(1)
             .truncationMode(.middle)
         let remaining = Text("\(remainingCharacters.formatted()) left")
-            .foregroundStyle(remainingCharacters < 0 ? Color.red : Color.secondary)
+            .foregroundStyle(remainingCharacters < 0 ? AnyShapeStyle(Color.red) : AnyShapeStyle(.secondaryInk))
         return Group {
             if dynamicTypeSize.isAccessibilitySize {
                 // Side by side the name was cut from the middle ("as AO…eader") at the
@@ -1899,7 +1899,7 @@ struct CommentComposerSheet: View {
         }
         .font(.system(size: identitySize))
         .monospacedDigit()
-        .foregroundStyle(Color.secondary)
+        .foregroundStyle(.secondaryInk)
         .accessibilityElement(children: .combine)
     }
 
@@ -1924,7 +1924,7 @@ struct CommentComposerSheet: View {
             Text(parent.bodyText)
                 .font(.system(size: quoteBodySize))
                 .lineSpacing(2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .lineLimit(3)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -2001,7 +2001,7 @@ struct CommentComposerSheet: View {
             Label("We're checking whether this posted before trying again…",
                   systemImage: "clock.arrow.circlepath")
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
         case let .ambiguous(message):
             VStack(alignment: .leading, spacing: 8) {
                 Label(message, systemImage: "exclamationmark.triangle")

@@ -95,7 +95,7 @@ struct TombstoneTrustSettingsSection: View {
             if trustedDevices.isEmpty {
                 Text("No other devices paired yet.")
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             } else {
                 ForEach(trustedDevices) { device in
                     TrustedDeviceRow(
@@ -127,7 +127,7 @@ struct TombstoneTrustSettingsSection: View {
             if let statusMessage {
                 Text(statusMessage)
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             }
         } header: {
             Text("Deletion signing")
@@ -191,7 +191,7 @@ private struct TrustedDeviceRow: View {
                     Text(device.label.isEmpty ? "Unnamed device" : device.label)
                     Text(String(device.publicKeyHex.prefix(8)) + "…")
                         .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
                 Spacer()
                 Button("Rename") {
@@ -330,7 +330,7 @@ struct PairingSheet: View {
                 Section {
                     Text("Scan another device's code to trust its deletions here, or show your code "
                         + "so it can trust deletions from this device.")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
 
                 Section {
@@ -404,7 +404,7 @@ struct PairingSheet: View {
             Group {
                 Section {
                     Text("This device is now trusted. Give it a name you will recognize later.")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
                 Section {
                     TextField("e.g. Sam's iPhone", text: $trustLabel)

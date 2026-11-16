@@ -274,7 +274,7 @@ struct ChallengeSettingsEditView: View {
             if !settings.scheduleIsEditable {
                 Text(instant.wireString.isEmpty ? "Not set" : instant.wireString)
                     .font(.system(size: bodySize))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             } else if let wallClock = instant.wallClock {
                 DatePicker("", selection: Binding(
                     get: { wallClock },
@@ -287,7 +287,7 @@ struct ChallengeSettingsEditView: View {
                 // Unreadable text is shown as AO3 sent it and posted back unchanged.
                 Text(instant.wireString.isEmpty ? "Not set" : instant.wireString)
                     .font(.system(size: bodySize))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                 if instant.wireString.isEmpty {
                     Button("Set") { form?.settings[keyPath: keyPath].wallClock = Date() }
                         .font(.system(size: bodySize, weight: .semibold))
@@ -363,7 +363,7 @@ struct ChallengeSettingsEditView: View {
             HStack(spacing: 10) {
                 Text("\(value)")
                     .font(.system(size: optionValueSize, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                 Stepper("", value: Binding(get: { value }, set: onChange), in: range)
                     .labelsHidden()
                     .disabled(isDisabled).accentFill()
@@ -393,7 +393,7 @@ struct ChallengeSettingsEditView: View {
             countMenu("\(label) Required", required)
             Text("to")
                 .font(.system(size: bodySize))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
             countMenu("\(label) Allowed", allowed)
         }
     }
@@ -523,7 +523,7 @@ struct ChallengeSettingsEditView: View {
                         .foregroundStyle(.primary)
                     Text("Choosing “any” can match you with anything in the tag set.")
                         .font(.system(size: captionSize))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -611,7 +611,7 @@ struct ChallengeSettingsEditView: View {
                 .accentFill()
             Text("Loading challenge settings…")
                 .font(.system(size: loadingSize))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
         }
         .frame(maxWidth: .infinity, alignment: .center)
         .padding(.vertical, 24)
@@ -623,7 +623,7 @@ struct ChallengeSettingsEditView: View {
                 .font(.system(size: stateTitleSize, weight: .semibold))
             Text(message)
                 .font(.system(size: bodySize))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .multilineTextAlignment(.center)
             Button("Try Again") {
                 Task { await load() }

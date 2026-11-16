@@ -121,7 +121,7 @@ struct SeriesEditView: View {
                     Section {
                         Text(savedMessage)
                             .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                             .pageBodyRow(top: 12, gutter: gutter)
                             .id(Self.verdictID)
                     }
@@ -399,7 +399,7 @@ struct SeriesReorderView: View {
                     .font(.system(size: workTitleSize, weight: .medium))
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                 if let metadata = row.metadataText {
-                    Text(metadata).font(.system(size: footnoteSize)).foregroundStyle(.secondary)
+                    Text(metadata).font(.system(size: footnoteSize)).foregroundStyle(.secondaryInk)
                 }
             }
             Spacer(minLength: 0)
@@ -544,7 +544,7 @@ struct SeriesRemoveWorksView: View {
                     .font(.system(size: workTitleSize, weight: .medium))
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                 if let metadata = row.metadataText {
-                    Text(metadata).font(.system(size: footnoteSize)).foregroundStyle(.secondary)
+                    Text(metadata).font(.system(size: footnoteSize)).foregroundStyle(.secondaryInk)
                 }
             }
             Spacer(minLength: 0)

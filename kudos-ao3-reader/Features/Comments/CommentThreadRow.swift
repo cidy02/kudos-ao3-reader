@@ -308,7 +308,7 @@ struct CommentParticipantBadge: View {
             .padding(.horizontal, 7)
             .padding(.vertical, 2)
             .background(isEmphasized ? AnyShapeStyle(.accentFill) : AnyShapeStyle(.quaternary), in: Capsule())
-            .foregroundStyle(isEmphasized ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary))
+            .foregroundStyle(isEmphasized ? AnyShapeStyle(.white) : AnyShapeStyle(.secondaryInk))
             .fixedSize()
             .layoutPriority(1)
             // One element, one announcement — without this VoiceOver reads the
@@ -869,7 +869,7 @@ private func continueThreadButton(count: Int, action: @escaping () -> Void) -> s
                 .foregroundStyle(.tertiary)
             Text(countText)
                 .monospacedDigit()
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
             Image(systemName: "chevron.right")
                 .imageScale(.small)
                 .foregroundStyle(.tint)
@@ -1151,7 +1151,7 @@ private struct CommentPostRow: View {
             // The avatar placeholder stays so the reply rail passes through.
             Text(comment.bodyText.isEmpty ? "(Previous comment deleted.)" : comment.bodyText)
                 .font(.subheadline.italic())
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .frame(minHeight: CommentThreadGeometry.avatarSize(forDepth: depth), alignment: .center)
         } else {
             VStack(alignment: .leading, spacing: 6) {
@@ -1186,7 +1186,7 @@ private struct CommentPostRow: View {
                 .minimumHitTarget()
                 .accessibilityHint("Opens the rest of this thread on the AO3 website")
         } else {
-            label.foregroundStyle(.secondary)
+            label.foregroundStyle(.secondaryInk)
         }
     }
 
@@ -1235,7 +1235,7 @@ private struct CommentPostRow: View {
         } else if showsParentAttribution, let replyToAuthor, !replyToAuthor.isEmpty {
             Label("in reply to \(replyToAuthor)", systemImage: "arrow.turn.down.right")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .accessibilityHidden(true)
@@ -1318,7 +1318,7 @@ private struct CommentPostRow: View {
                 // name is what gives way (see `byline`).
                 Text(collapse.label)
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .lineLimit(1)
                     .fixedSize()
                     .padding(.horizontal, 8)
@@ -1422,7 +1422,7 @@ private struct CommentPostRow: View {
         )
         return Text(timestamp)
             .font(.caption2)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
             .accessibilityLabel(absolute)
@@ -1442,7 +1442,7 @@ private struct CommentPostRow: View {
                 .padding(.horizontal, 7)
                 .padding(.vertical, 2)
                 .background(.quaternary, in: Capsule())
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .lineLimit(1)
                 .fixedSize()
                 .layoutPriority(1)
@@ -1577,7 +1577,7 @@ struct CommentOverflowButtonLabel: View {
         // 1f: a bare mark on every row, not a chip; the 44pt target stays.
         Image(systemName: "ellipsis")
             .font(.system(size: 15))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             .frame(minWidth: 44, minHeight: 44)
             .contentShape(Rectangle())
     }
@@ -1867,14 +1867,14 @@ struct CommentAvatar: View {
         if !isGuest, let initial {
             Text(initial)
                 .font(.system(size: size * 0.42, weight: .semibold, design: .rounded))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .minimumScaleFactor(0.6)
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             Image(systemName: "person.fill")
                 .font(.system(size: size * 0.43, weight: .medium))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }

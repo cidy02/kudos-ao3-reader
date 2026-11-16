@@ -86,7 +86,7 @@ struct ReaderHighlightColorBar: View {
             Button(action: onDismiss) {
                 Image(systemName: "xmark")
                     .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .frame(width: 28, height: 28)
                     .contentShape(Rectangle())
             }

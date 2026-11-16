@@ -37,7 +37,7 @@ struct AuthorProfileOverviewHeader: View {
                         if let userID = about.userID {
                             LabeledContent("User ID", value: userID.formatted())
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.secondaryInk)
                         }
                         if !about.bio.isEmpty {
                             AO3RichTextView(document: about.bio, font: .subheadline)
@@ -73,7 +73,7 @@ struct AuthorProfileOverviewHeader: View {
                 if let subtitle = identitySubtitle(header) {
                     Text(subtitle)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -134,7 +134,7 @@ struct AuthorProfileOverviewHeader: View {
                     Image(systemName: "chevron.up.chevron.down")
                         .font(.title.weight(.medium))
                         .imageScale(.small)
-                        .foregroundStyle(Color.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
             }
             .accessibilityLabel("\(model.route.displayName). Choose a pseud")
@@ -260,7 +260,7 @@ struct AuthorProfileCountStrip: View {
                                 .font(.title3.weight(.bold).monospacedDigit())
                             Text(item.title)
                                 .font(.caption2)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.secondaryInk)
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
@@ -309,7 +309,7 @@ private struct AuthorProfileOverviewFailure: View {
                 .font(.subheadline.weight(.semibold))
             Text(message)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
             Button("Retry") { model.retrySection(section, auth: auth) }
                 .buttonStyle(.kudosSecondary)
         }
@@ -382,7 +382,7 @@ struct AuthorProfileOverviewSections: View {
                                     if let count = fandom.workCount {
                                         Text(count.compactCount)
                                             .font(.subheadline)
-                                            .foregroundStyle(.secondary)
+                                            .foregroundStyle(.secondaryInk)
                                     }
                                 }
                                 .padding(.horizontal, 12)
@@ -596,7 +596,7 @@ struct AuthorProfileOverviewSections: View {
     private func overviewMessage(_ text: String) -> some View {
         Text(text)
             .font(.subheadline)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(16)
             .subjectPanel()
@@ -767,7 +767,7 @@ struct AuthorProfileSeriesCard: View {
                 if let meta = seriesMeta {
                     Text(meta)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -840,7 +840,7 @@ struct AuthorProfileBookmarkNoteCard: View {
                     if let meta = bookmarkMeta {
                         Text(meta)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                             .lineLimit(1)
                     }
                 }

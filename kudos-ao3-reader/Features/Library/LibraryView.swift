@@ -480,14 +480,14 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             HStack(spacing: 10) {
                 Image(systemName: "trash")
                     .font(.system(size: 14))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                 Text("Recently Deleted")
                     .font(.system(size: recentlyDeletedTitleSize, weight: .semibold))
                 Spacer()
                 Text(recentlyDeletedCount.compactCount)
                     .font(.system(size: recentlyDeletedCountSize))
                     .monospacedDigit()
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                 Image(systemName: "chevron.right")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.tertiary)
@@ -558,7 +558,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         } emptyState: {
             Text("Use + above to create a collection for works you want to group together.")
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
         }
     }
 
@@ -604,7 +604,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
         )
         let phrase = LibraryPageArrangement.workCountPhrase(libraryHeader.workCount)
         let line = Text(phrase).fontWeight(.semibold).foregroundStyle(.primary)
-            + Text(" · \(libraryHeader.downloadedCount) downloaded · \(bytes)").foregroundStyle(.secondary)
+            + Text(" · \(libraryHeader.downloadedCount) downloaded · \(bytes)").foregroundStyle(.secondaryInk)
         return Button {
             path.append(LibraryCatalogueDestination(kind: .allWorks))
         } label: {
@@ -787,7 +787,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             if collections.isEmpty {
                 Text(emptyCopy(for: .collections))
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 16)
             } else {
@@ -834,7 +834,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
             VStack(alignment: .leading, spacing: 8) {
                 Text(emptyCopy(for: .queues))
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
                 Button("Open Queues") {
                     path.append(AllReadingQueuesDestination(initialQueueID: nil))
@@ -855,7 +855,7 @@ struct LibraryView: View { // swiftlint:disable:this type_body_length
                 VStack(alignment: .leading, spacing: 8) {
                     Text(emptyCopy(for: .queues))
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
                     Button("Open Queues") {
                         path.append(AllReadingQueuesDestination(initialQueueID: nil))

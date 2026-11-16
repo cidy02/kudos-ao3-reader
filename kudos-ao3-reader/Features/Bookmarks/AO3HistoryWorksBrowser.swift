@@ -255,7 +255,7 @@ struct AO3HistoryReadingFootnote: View {
             if !facts.isEmpty {
                 Text(facts.joined(separator: " · "))
                     .font(.system(size: footnoteSize))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .monospacedDigit()
             }
             if reading.isMarkedForLater || reading.isFlaggedToSkip {

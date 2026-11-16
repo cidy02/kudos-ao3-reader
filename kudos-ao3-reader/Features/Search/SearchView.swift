@@ -579,7 +579,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                                 if let subtitle = savedSearchSubtitle(saved.filters) {
                                     Text(subtitle)
                                         .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(.secondaryInk)
                                         .lineLimit(1)
                                 }
                             }
@@ -597,7 +597,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 Text("Search above for works in your Library or on AO3. "
                     + "To explore by fandom, use the Browse tab.")
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .bareListRow()
             }
             .cardList()
@@ -854,7 +854,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         GlassFieldBar(text: $filters.query, placeholder: "Library and AO3", onSubmit: runSearch) {
             Image(systemName: "magnifyingglass")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
         } trailing: {
             if !filters.query.isEmpty {
                 Button(action: clearQuery) {
@@ -862,7 +862,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 }
                 .accessibilityLabel("Clear search")
                 .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
             }
         }
     }

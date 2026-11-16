@@ -296,7 +296,7 @@ struct AO3SubscriptionsWorksBrowser: View {
     private var footer: some View {
         Text(AO3SubscriptionsCopy.footer(currentPage: currentPage, totalPages: totalPages))
             .font(.system(size: footerSize))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, 4)
@@ -486,7 +486,7 @@ struct AO3SubscriptionsChapterFootnote: View {
     var body: some View {
         Text(text)
             .font(.system(size: footnoteSize))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             .monospacedDigit()
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 2)

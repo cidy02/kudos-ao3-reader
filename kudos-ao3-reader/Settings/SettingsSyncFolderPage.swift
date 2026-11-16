@@ -147,7 +147,7 @@ struct FolderSyncSettingsSection: View {
                         if !folderStatus.folderPath.isEmpty {
                             Text(folderStatus.folderPath)
                                 .font(.caption2)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.secondaryInk)
                                 .lineLimit(1)
                         }
                     }
@@ -231,14 +231,14 @@ struct FolderSyncSettingsSection: View {
                 HStack(spacing: 12) {
                     ProgressView().accentFill()
                     Text(isSyncing ? "Syncing library…" : "Preparing your library…")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
             }
 
             if !folderStatus.lastError.isEmpty {
                 Text(folderStatus.lastError)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             }
         } footer: {
             Text("Kudos stores your library data, including reading history, in the folder you "
@@ -283,7 +283,7 @@ struct FolderSyncDetailsView: View {
             } else {
                 Section {
                     Text("No sync has run yet this session.")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
             }
         }

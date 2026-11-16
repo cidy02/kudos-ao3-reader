@@ -353,7 +353,7 @@ struct AO3CollectionsList: View {
                 .fixedSize(horizontal: false, vertical: true)
             Text(emptyDetail)
                 .font(.system(size: bodySize))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
             if !displayedCollections.isEmpty {
                 Button("Clear Filters") { filters = AO3CollectionsFilter() }
@@ -692,7 +692,7 @@ struct AO3CollectionCard: View {
             if !collection.summary.isEmpty {
                 Text(collection.summary)
                     .font(.system(size: summarySize))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -771,7 +771,7 @@ struct AO3CollectionCard: View {
             if !metaFacts.isEmpty {
                 Text(metaFacts.joined(separator: " · "))
                     .font(.system(size: metaSize))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .monospacedDigit()
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -779,7 +779,7 @@ struct AO3CollectionCard: View {
             if !collection.updatedAtText.isEmpty {
                 Text(collection.updatedAtText)
                     .font(.system(size: metaSize))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .monospacedDigit()
                     .fixedSize(horizontal: false, vertical: true)
             }

@@ -151,7 +151,7 @@ struct AllReadingQueuesGridView: View {
     private var queueSearchField: some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
             TextField("Search queues, tags and works", text: $searchText)
                 .textFieldStyle(.plain)
                 .autocorrectionDisabled()
@@ -160,7 +160,7 @@ struct AllReadingQueuesGridView: View {
                     searchText = ""
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Clear search")
@@ -501,7 +501,7 @@ struct AllReadingQueuesGridView: View {
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
                     Text(works.count.compactCount)
                         .font(.system(size: rowCountSize, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
                 if !works.isEmpty {
                     QueueProgressStrip(
@@ -517,7 +517,7 @@ struct AllReadingQueuesGridView: View {
                     Text(storageLine)
                         .font(.system(size: rowStorageSize))
                         .monospacedDigit()
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
             }
 
@@ -719,7 +719,7 @@ struct QueueRowTagLabel: View {
         let shape = Capsule()
         Text(text)
             .font(.system(size: fontSize, weight: .semibold))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             .lineLimit(1)
             .padding(.vertical, 3)
             .padding(.horizontal, 7)

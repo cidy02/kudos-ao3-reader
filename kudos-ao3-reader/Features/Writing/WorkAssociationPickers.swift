@@ -164,7 +164,7 @@ struct WorkCollectionsGiftsView: View {
                         .foregroundStyle(.primary)
                     Text(Self.stateText(offer.access))
                         .font(.system(size: captionSize))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
                 Spacer(minLength: 0)
             }
@@ -187,14 +187,14 @@ struct WorkCollectionsGiftsView: View {
         } label: {
             HStack(spacing: 11) {
                 Image(systemName: offer.isSelected ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(offer.isSelected ? theme.accentInk : Color.secondary)
+                    .foregroundStyle(offer.isSelected ? theme.accentInk : theme.secondaryInk)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(offer.title.isEmpty ? offer.name : offer.title)
                         .font(.system(size: rowTitleSize, weight: .medium))
                         .foregroundStyle(.primary)
                     Text(Self.stateText(offer.access))
                         .font(.system(size: captionSize))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
                 Spacer(minLength: 0)
             }
@@ -432,7 +432,7 @@ struct WorkSeriesPickerView: View {
         } label: {
             HStack(spacing: 11) {
                 Image(systemName: isCurrent ? "checkmark" : membership.isSelected ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(membership.isSelected ? theme.accentInk : Color.secondary)
+                    .foregroundStyle(membership.isSelected ? theme.accentInk : theme.secondaryInk)
                     .frame(minWidth: 17)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(membership.title)
@@ -441,7 +441,7 @@ struct WorkSeriesPickerView: View {
                     if let detail = isCurrent ? "This work is in it" : Self.detailText(membership) {
                         Text(detail)
                             .font(.system(size: captionSize))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                     }
                 }
                 Spacer(minLength: 0)

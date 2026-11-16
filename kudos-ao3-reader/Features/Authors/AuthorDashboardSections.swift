@@ -171,7 +171,7 @@ struct AO3DashboardSections: View {
     private func message(_ text: String) -> some View {
         Text(text)
             .font(.subheadline)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(16)
             .subjectPanel()
@@ -305,7 +305,7 @@ struct AO3DashboardCompactCard: View {
             if !meta.isEmpty {
                 Text(meta)
                     .font(.system(size: metaSize))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .lineLimit(1)
             }
         }

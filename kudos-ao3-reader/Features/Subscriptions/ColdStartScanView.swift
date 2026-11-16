@@ -113,7 +113,7 @@ struct ColdStartScanView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
                 Image(systemName: "archivebox")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .accessibilityHidden(true)
                 Text("Restore from a backup first")
                     .font(.headline)
@@ -124,7 +124,7 @@ struct ColdStartScanView: View {
                 + "so restoring one costs no requests at all."
             )
             .font(.subheadline)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             .fixedSize(horizontal: false, vertical: true)
 
             // shortcut: subscription-snapshot restore is disabled here, connect it when that driver lands
@@ -142,7 +142,7 @@ struct ColdStartScanView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
                 Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .accessibilityHidden(true)
                 Text("Checking your subscriptions")
                     .font(.headline)
@@ -151,7 +151,7 @@ struct ColdStartScanView: View {
             if let unavailableReason {
                 Text(unavailableReason)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
             } else {
                 ProgressView(
@@ -162,27 +162,27 @@ struct ColdStartScanView: View {
 
                 Text(statusLineText)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .monospacedDigit()
                     .fixedSize(horizontal: false, vertical: true)
 
                 if let notice {
                     Text(notice)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Text(identityText)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
             if showsAlphabeticalNote {
                 Text(SubscriptionScanCopy.alphabeticalHonesty)
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -239,7 +239,7 @@ struct ColdStartScanView: View {
                     .foregroundStyle(.green)
                 Text("Scan finished")
                     .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             }
             .frame(maxWidth: .infinity, minHeight: 44, alignment: .center)
         case .stopped:

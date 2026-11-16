@@ -325,7 +325,7 @@ private extension AuthorProfileView {
                 if model.isShowingStaleCache {
                     Label("Showing cached AO3 data", systemImage: "wifi.slash")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .padding(.horizontal, SubjectMetrics.accountGutter)
                 }
                 AO3AuthorWorksScopeSection(
@@ -389,7 +389,7 @@ private extension AuthorProfileView {
                 Section {
                     Label("Showing cached AO3 data", systemImage: "wifi.slash")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .cardRow()
                 }
             }
@@ -439,7 +439,7 @@ private extension AuthorProfileView {
             if let postingLine {
                 Text("Posting as \(postingLine)")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .padding(.horizontal, SubjectMetrics.accountGutter)
             }
             // Before the counts load the subtitle is just the name; under "Posting as"
@@ -588,7 +588,7 @@ private extension AuthorProfileView {
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: 0)) : AnyLayout(HStackLayout(spacing: 12))
         return layout {
             Label("Scope", systemImage: "person.2")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
             Spacer(minLength: 8)
             Menu {
                 if let allPseuds = AO3AuthorRoute(username: model.route.username) {
@@ -677,7 +677,7 @@ private extension AuthorProfileView {
             Section("Bio") {
                 if about.bio.isEmpty {
                     Text("This user has not added a bio.")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .cardRow()
                 } else {
                     AO3RichTextView(document: about.bio)

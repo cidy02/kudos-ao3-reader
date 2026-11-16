@@ -105,6 +105,6 @@ struct ReadingHistoryFactsStrip: View {
         Text(text)
             .font(.system(size: factSize, weight: .semibold))
             .monospacedDigit()
-            .foregroundStyle(tint ?? Color.secondary)
+            .foregroundStyle(tint.map(AnyShapeStyle.init) ?? AnyShapeStyle(.secondaryInk))
     }
 }

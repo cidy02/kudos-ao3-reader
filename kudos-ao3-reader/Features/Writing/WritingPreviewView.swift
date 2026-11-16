@@ -76,7 +76,7 @@ struct WritingPreviewView: View {
         case let .heading(text):
             Text(text).font(.headline).frame(maxWidth: .infinity, alignment: .leading)
         case let .label(text):
-            Text(text).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            Text(text).font(.caption.weight(.semibold)).foregroundStyle(.secondaryInk)
                 .frame(maxWidth: .infinity, alignment: .leading)
         case let .text(document):
             AO3RichTextView(document: document).frame(maxWidth: .infinity, alignment: .leading)

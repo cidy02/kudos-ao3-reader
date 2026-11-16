@@ -93,7 +93,7 @@ struct FandomFamilyBlock: View {
                 ForEach(Array(headerAliases.enumerated()), id: \.offset) { _, alias in
                     aliasText(alias)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
@@ -104,7 +104,7 @@ struct FandomFamilyBlock: View {
                 ) {
                     Text(subtitle)
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -176,7 +176,7 @@ struct FandomFamilyBlock: View {
                 Text(member.workCount.formatted())
                     .font(.caption.weight(.medium))
                     .monospacedDigit()
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .frame(minWidth: stacks ? 0 : 44, alignment: stacks ? .leading : .trailing)
             }
 

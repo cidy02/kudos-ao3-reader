@@ -105,7 +105,7 @@ struct ReaderChromeTopBar: View {
                 .truncationMode(.tail)
         }
         .font(.system(size: 11.5))
-        .foregroundStyle(.secondary)
+        .foregroundStyle(.secondaryInk)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(author)
     }

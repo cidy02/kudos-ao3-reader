@@ -304,7 +304,7 @@ struct ChallengeSignUpsView: View { // swiftlint:disable:this type_body_length
                 : filterSelection == .all ? "Sign-ups will appear here as people join the challenge."
                 : "No sign-ups in this page match the \"\(filterSelection.rawValue)\" filter.")
                 .font(.system(size: bodySize))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity)
@@ -403,7 +403,7 @@ struct ChallengeSignUpsView: View { // swiftlint:disable:this type_body_length
                 .accentFill()
             Text("Loading sign-ups…")
                 .font(.system(size: loadingSize))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .center)
@@ -417,7 +417,7 @@ struct ChallengeSignUpsView: View { // swiftlint:disable:this type_body_length
                 .fixedSize(horizontal: false, vertical: true)
             Text(message)
                 .font(.system(size: failureBodySize))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
             Button("Try Again") {
@@ -591,7 +591,7 @@ private struct ChallengeSignUpDetailView: View {
                         .fixedSize(horizontal: false, vertical: true)
                     Text(row.tags.joined(separator: ", "))
                         .font(.system(size: captionSize))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

@@ -330,7 +330,7 @@ struct MediaBrowserView: View {
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.tertiary)
             }
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
             .overlay(
@@ -442,7 +442,7 @@ struct MediaBrowserView: View {
                         }
                     }
                     .font(.system(size: jumpBackInDetailSize))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .lineLimit(1)
                 }
             }
@@ -571,7 +571,7 @@ struct MediaBrowserView: View {
                 }
             }
             .font(.caption2)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
         } else {
             loadingStats
         }

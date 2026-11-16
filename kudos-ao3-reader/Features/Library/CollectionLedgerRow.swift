@@ -84,7 +84,7 @@ struct CollectionLedgerRow: View {
 
             Text("\(totalWorkCount) work\(totalWorkCount == 1 ? "" : "s")")
                 .font(.system(size: detailSize))
-                .foregroundStyle(Color.secondary)
+                .foregroundStyle(.secondaryInk)
                 .lineLimit(1)
         }
     }
@@ -137,7 +137,7 @@ private struct MiniatureWorkCover: View {
                     .foregroundStyle(
                         themeManager.appTheme.isDarkFamily
                             ? Color.white.opacity(0.62)
-                            : Color.secondary
+                            : themeManager.secondaryInk
                     )
                     .lineLimit(1)
             }

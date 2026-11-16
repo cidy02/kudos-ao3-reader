@@ -112,7 +112,7 @@ struct QualityResponseSheet: View {
 
                 Text(contextMeta)
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -415,14 +415,14 @@ struct QualityResponseSheet: View {
     private func sectionHeader(_ text: String) -> some View {
         Text(text)
             .font(.footnote)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             .padding(.horizontal, 16)
     }
 
     private func sectionFooter(_ text: String) -> some View {
         Text(text)
             .font(.footnote)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             .padding(.horizontal, 16)
             .fixedSize(horizontal: false, vertical: true)
     }
@@ -468,7 +468,7 @@ struct QualityResponseRow: View {
                 if let subtitle, !subtitle.isEmpty {
                     Text(subtitle)
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -492,7 +492,7 @@ struct QualityResponseRow: View {
             if let detail, !detail.isEmpty {
                 Text(detail)
                     .font(.body)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .layoutPriority(1)
             }
 
@@ -619,7 +619,7 @@ struct HowReaderResponseWorksSheet: View {
             ForEach(paragraphs, id: \.self) { paragraph in
                 Text(paragraph)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }

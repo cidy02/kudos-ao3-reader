@@ -81,13 +81,13 @@ struct SearchLocalChipsView: View {
         let chipLabel = HStack(spacing: 6) {
             Text(chip.kind.rawValue)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
             Text(chip.label)
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(Color.primary)
             Text("\(chip.count)")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
         }
         .padding(.horizontal, 12)
         .frame(minHeight: 32)

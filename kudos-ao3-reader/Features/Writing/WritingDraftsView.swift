@@ -319,7 +319,7 @@ private struct DraftCard: View {
             if !work.summary.isEmpty {
                 Text(work.summary)
                     .font(.system(size: summarySize))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .lineLimit(3)
             }
             if counts != nil || created != nil {
@@ -333,7 +333,7 @@ private struct DraftCard: View {
                     }
                 }
                 .font(.system(size: metaSize))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .monospacedDigit()
             }
         }

@@ -151,6 +151,14 @@ enum ReaderTheme: String, CaseIterable, Identifiable {
     var appSeparator: Color? {
         self == .sepia ? Color(red: 0.357, green: 0.275, blue: 0.212).opacity(0.18) : nil
     }
+
+    /// Secondary text and muted ink on Sepia's warm paper surfaces (#6B594B).
+    /// Measured WCAG contrast: 5.00:1 on `appBaseBackground` (#ECDEC1) and
+    /// 5.88:1 on `appElevatedBackground` / `backgroundColor` (#FBF0D9).
+    /// Nil on Light, Dark, and OLED, which keep the system's `.secondary`.
+    var appSecondaryInk: Color? {
+        self == .sepia ? Color(red: 0.420, green: 0.349, blue: 0.294) : nil
+    }
 }
 
 /// A font choice in the reader: either a bundled system family or an imported font.

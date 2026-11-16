@@ -261,7 +261,7 @@ struct LibraryFilterPanel: View {
                                 .foregroundStyle(
                                     filters.hasActiveFilters
                                         ? theme.appTheme.errorColor
-                                        : Color.secondary
+                                        : theme.secondaryInk
                                 )
                             Spacer()
                         }
@@ -533,7 +533,7 @@ private struct LibraryMultiSelectField: View {
                 Text(title).foregroundStyle(.primary)
                 Spacer()
                 Text(selection.isEmpty ? "Any" : "\(selection.count) selected")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                 Image(systemName: "chevron.right")
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(.tertiary)
@@ -568,10 +568,10 @@ private struct LibraryOptionPicker: View {
                 let matches = filtered
                 if options.isEmpty {
                     Text("Your Library has no \(title.lowercased()) yet.")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 } else if matches.isEmpty {
                     Text("None of your options match “\(query)”.")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 } else {
                     ForEach(matches, id: \.self) { value in
                         Button {

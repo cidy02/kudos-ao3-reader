@@ -138,7 +138,7 @@ struct AccountProfileCard: View {
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.system(size: nameSize, weight: .medium))
                     .imageScale(.small)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             }
             .contentShape(Rectangle())
         }
@@ -182,7 +182,7 @@ struct AccountProfileCard: View {
                 .font(.caption)
             Text(sessionStatusLineText)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
         }
@@ -215,7 +215,7 @@ struct AccountProfileCard: View {
                 .foregroundStyle(.green)
         case .verifying:
             Image(systemName: "arrow.triangle.2.circlepath")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
         case .healthy:
             Image(systemName: "checkmark.seal.fill")
                 .foregroundStyle(.green)
@@ -322,7 +322,7 @@ struct AccountProfileCard: View {
 
             Text("Your sign-in stays on this device. Kudos never sees your password.")
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -422,7 +422,7 @@ struct AccountNavCardLabel: View {
                     Text(count)
                         .font(.system(size: valueSize, weight: .medium))
                         .monospacedDigit()
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
             }
             Image(systemName: opensExternally ? "arrow.up.forward.square" : "chevron.right")
@@ -483,11 +483,11 @@ struct AccountShortcutGridTile: View {
                 if opensExternally {
                     Image(systemName: "arrow.up.forward")
                         .font(.caption2.weight(.bold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 } else if let count {
                     Text(count)
                         .font(.system(size: countSize, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .padding(.top, 1)
                 }
             }
@@ -715,7 +715,7 @@ struct AccountWorksInlineSection: View {
         HStack {
             Text(kind.title)
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
             Spacer()
             Button(action: onRefine) {
                 Label("Filters", systemImage: "line.3.horizontal.decrease")
