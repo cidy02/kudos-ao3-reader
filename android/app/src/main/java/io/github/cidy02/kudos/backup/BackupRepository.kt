@@ -209,6 +209,7 @@ class BackupRepository(
         if (mode == BackupImportMode.REPLACE_LIBRARY) {
             if (rawJson != null) {
                 lastImportedManifestStore.save(rawJson, folderUri = keepFolderTag)
+                if (connectedFolderUri == null) pendingImportManifestStore.clear()
                 pendingImportManifestStore.save(rawJson, folderUri = connectedFolderUri)
             } else {
                 lastImportedManifestStore.clear()
@@ -220,6 +221,11 @@ class BackupRepository(
                 mergeImportedManifestJson(rawJson, existing),
                 folderUri = keepFolderTag
             )
+            // Drop any prior folder-tagged pending overlay before saving a disconnected import
+            // so switching folders does not delete the new disconnected overlay via the old tag.
+            if (connectedFolderUri == null && pendingImportManifestStore.taggedFolderUri() != null) {
+                pendingImportManifestStore.clear()
+            }
             val existingPending = pendingImportManifestStore.load()
             pendingImportManifestStore.save(
                 mergeImportedManifestJson(rawJson, existingPending),

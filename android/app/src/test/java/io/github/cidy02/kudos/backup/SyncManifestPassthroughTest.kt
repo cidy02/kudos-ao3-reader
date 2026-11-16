@@ -1747,6 +1747,111 @@ class SyncManifestPassthroughTest {
         }
     }
 
+    @Test
+    fun disconnectedImportAfterUnsyncedConnectedImportDropsStaleFolderTag() = runTest {
+        val pendingTagFile = filesRoot.resolve("${BackupRepository.PENDING_IMPORT_MANIFEST_FILE}.folder")
+
+        // 1. Connected Merge under Folder A tags the pending overlay to Folder A.
+        val connectedAImport = JsonObject(
+            mapOf(
+                "version" to JsonPrimitive(8),
+                "exportedAt" to JsonPrimitive("2026-06-26T10:00:00.000Z"),
+                "writingRecovery" to JsonPrimitive("folder-a-unsynced")
+            )
+        )
+        backupRepository.importV2ZipBytes(zipManifest(connectedAImport), mode = BackupImportMode.MERGE)
+        assertTrue(Files.isRegularFile(pendingTagFile))
+
+        // 2. Disconnect without syncing, then perform a disconnected Merge of a new backup.
+        syncRepository.disconnect()
+        val extraWorkId = "99999999-0000-4000-8000-000000000088"
+        val disconnectedImport = JsonObject(
+            mapOf(
+                "version" to JsonPrimitive(8),
+                "exportedAt" to JsonPrimitive("2026-06-26T12:00:00.000Z"),
+                "writingRecovery" to JsonPrimitive("disconnected-draft"),
+                "works" to JsonArray(
+                    listOf(
+                        JsonObject(
+                            mapOf(
+                                "id" to JsonPrimitive(extraWorkId),
+                                "title" to JsonPrimitive("Disconnected Work"),
+                                "author" to JsonPrimitive("Dana"),
+                                "sourceURL" to JsonPrimitive("https://archiveofourown.org/works/820088"),
+                                "ao3WorkID" to JsonPrimitive(820088),
+                                "dateAdded" to JsonPrimitive("2026-06-26T11:00:00.000Z"),
+                                "lastModifiedAt" to JsonPrimitive("2026-06-26T12:00:00.000Z"),
+                                "isSaved" to JsonPrimitive(true),
+                                "authorIdentitiesJSON" to JsonPrimitive("[{\"username\":\"dana\"}]")
+                            )
+                        )
+                    )
+                )
+            )
+        )
+        backupRepository.importV2ZipBytes(zipManifest(disconnectedImport), mode = BackupImportMode.MERGE)
+        assertFalse(
+            "disconnected import must clear any prior folder tag on pending",
+            Files.exists(pendingTagFile)
+        )
+
+        // 3. Connecting Folder B must retain the untagged disconnected overlay and fold it on sync.
+        val other = DocumentFile.fromTreeUri(context, treeUri)!!.createDirectory("FolderBForDisconnected")!!
+        val otherKudos = other.createDirectory("KudosLibrary")!!
+        val folderBManifest = JsonObject(
+            mapOf(
+                "version" to JsonPrimitive(8),
+                "exportedAt" to JsonPrimitive("2026-06-26T11:00:00.000Z"),
+                "writingRecovery" to JsonPrimitive("folder-b-older")
+            )
+        )
+        writeChild(
+            otherKudos,
+            BackupPaths.MANIFEST,
+            "application/json",
+            BackupJson.encodeToString(JsonObject.serializer(), folderBManifest).toByteArray(Charsets.UTF_8)
+        )
+        val folderBUri = android.provider.DocumentsContract.buildTreeDocumentUri(
+            FakeTempDocumentsProvider.AUTHORITY,
+            android.provider.DocumentsContract.getDocumentId(other.uri)
+        )
+        context.grantUriPermission(
+            context.packageName,
+            folderBUri,
+            android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                android.content.Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+        )
+        syncRepository.connect(folderBUri)
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+        val syncedB = Json.parseToJsonElement(
+            readDocument(otherKudos.findFile(BackupPaths.MANIFEST)!!).toString(Charsets.UTF_8)
+        ).jsonObject
+        assertEquals(JsonPrimitive("disconnected-draft"), syncedB["writingRecovery"])
+        assertEquals(
+            JsonPrimitive("[{\"username\":\"dana\"}]"),
+            workJson(syncedB, extraWorkId)["authorIdentitiesJSON"]
+        )
+
+        // 4. Connected Replace followed by disconnect + disconnected Replace also drops the stale tag.
+        backupRepository.importV2ZipBytes(zipManifest(connectedAImport), mode = BackupImportMode.MERGE)
+        assertTrue(Files.isRegularFile(pendingTagFile))
+        syncRepository.disconnect()
+        backupRepository.importV2ZipBytes(
+            zipManifest(
+                JsonObject(
+                    mapOf(
+                        "version" to JsonPrimitive(8),
+                        "exportedAt" to JsonPrimitive("2026-06-26T13:00:00.000Z"),
+                        "writingRecovery" to JsonPrimitive("disconnected-replace")
+                    )
+                )
+            ),
+            mode = BackupImportMode.REPLACE_LIBRARY
+        )
+        assertFalse(Files.exists(pendingTagFile))
+    }
+
     private fun stampedManifest(
         exportedAt: String,
         workStamp: String,
