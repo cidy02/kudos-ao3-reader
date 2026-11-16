@@ -288,13 +288,15 @@ internal fun mergeFallbackManifestJson(primary: JsonObject?, fallback: JsonObjec
         if (pArray != null && fArray != null) {
             val fObjects = fArray.mapNotNull { it as? JsonObject }
             val matcher = RecordMatcher(listName, fObjects)
-            val matchedFallback = hashSetOf<JsonObject>()
+            val fallbackIndexByIdentity = java.util.IdentityHashMap<JsonObject, Int>()
+            fObjects.forEachIndexed { index, obj -> fallbackIndexByIdentity[obj] = index }
+            val matchedFallbackIndices = hashSetOf<Int>()
             val combined = pArray.map { element ->
                 val pObj = element as? JsonObject ?: return@map element
                 val match = matcher.match(pObj) ?: return@map pObj
-                matchedFallback += match
+                fallbackIndexByIdentity[match]?.let { matchedFallbackIndices += it }
                 JsonObject(match + pObj)
-            } + fObjects.filter { it !in matchedFallback }
+            } + fObjects.filterIndexed { index, _ -> index !in matchedFallbackIndices }
             merged[listName] = JsonArray(combined)
         } else if ((primary[listName] == null || primary[listName] is JsonNull) && fArray != null) {
             merged[listName] = fArray
@@ -313,8 +315,11 @@ internal fun mergeFallbackManifestJson(primary: JsonObject?, fallback: JsonObjec
  * Persists the raw JSON of the last-read sync manifest next to existing sync/file state so
  * commit-time sync-up can carry unmodeled fields even across fallback recoveries or crashes.
  */
-internal class SyncLastManifestStore(directory: Path) {
-    val file: Path = directory.resolve("sync-last-manifest.json")
+internal class SyncLastManifestStore(
+    directory: Path,
+    fileName: String = "sync-last-manifest.json"
+) {
+    val file: Path = directory.resolve(fileName)
     private val lock = Any()
 
     fun load(): JsonObject? = synchronized(lock) {

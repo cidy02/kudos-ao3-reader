@@ -66,7 +66,9 @@ class SyncRepository(
      */
     private var declineImportWhenPaused = false
 
-    private val lastManifestStore = SyncLastManifestStore(workFileStore.worksDirectory.parent)
+    private val lastManifestStore = SyncLastManifestStore(
+        workFileStore.worksDirectory.parent ?: workFileStore.worksDirectory
+    )
 
     suspend fun isSyncEnabled(): Boolean {
         return settingsRepository.settings.first().sync.isEnabled
@@ -272,7 +274,7 @@ class SyncRepository(
                     val fallbackBackup = if (decodedLive == null) decodeManifestWithRawOrNull(backupManifest) else null
                     val manifest = decodedLive ?: fallbackBackup?.first
                     if (decodedLive == null && fallbackBackup != null) {
-                        readManifestJson = fallbackBackup.second
+                        readManifestJson = mergeFallbackManifestJson(lastManifestStore.load(), fallbackBackup.second)
                     }
                     manifest?.let {
                         // Asset retries must not replay our older corrections over local edits/deletions.

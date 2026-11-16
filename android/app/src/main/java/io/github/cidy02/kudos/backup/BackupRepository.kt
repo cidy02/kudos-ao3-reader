@@ -27,6 +27,7 @@ import java.time.format.DateTimeFormatter
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonObject
 
 /**
  * Captures the local library into a `.kudosbackup` ZIP and restores
@@ -45,6 +46,12 @@ class BackupRepository(
         io.github.cidy02.kudos.reader.speech.KokoroPronunciationStore(workFileStore.worksDirectory.parent.toFile()),
     private val cacheDirectory: File? = null
 ) {
+    private val lastImportedManifestStore = SyncLastManifestStore(
+        workFileStore.worksDirectory.parent ?: workFileStore.worksDirectory,
+        fileName = "backup-last-manifest.json"
+    )
+
+    internal fun lastImportedManifestJson(): JsonObject? = lastImportedManifestStore.load()
     val metadataCheck = SyncMetadataCheck(now = clock) {
         persistenceGate.withLock {
             withContext(Dispatchers.IO) {
@@ -98,8 +105,12 @@ class BackupRepository(
                 fontFilesByFileName = fontFiles,
                 originalFilesByName = originalFiles
             )
-            BackupExportResult(BackupExporter.exportV2(pack), omittedBooks, omittedFonts,
-                pronunciationsUnreadable = snapshot.pronunciationsUnreadable)
+            BackupExportResult(
+                BackupExporter.exportV2(pack, baseManifestJson = lastImportedManifestStore.load()),
+                omittedBooks,
+                omittedFonts,
+                pronunciationsUnreadable = snapshot.pronunciationsUnreadable
+            )
         }
     }
 
@@ -120,7 +131,9 @@ class BackupRepository(
             prepareForImport(mode)
             val current = captureLibrarySnapshot(pack.fontFilesByFileName.keys, pack.fontFilesByFileName)
             val merge = mergePackage(current, pack, mode)
-            applyMergeResultLocked(merge, pack.originalFilesByName)
+            applyMergeResultLocked(merge, pack.originalFilesByName).also {
+                recordImportedManifest(pack.rawManifestJson, mode)
+            }
         }
     }
 
@@ -136,7 +149,20 @@ class BackupRepository(
             prepareForImport(mode)
             val current = captureLibrarySnapshot(pack.fontFilesByFileName.keys, pack.fontFilesByFileName)
             val merge = mergePackage(current, pack, mode, normalizeQueuePreservation)
-            applyMergeResultLocked(merge, pack.originalFilesByName)
+            applyMergeResultLocked(merge, pack.originalFilesByName).also {
+                recordImportedManifest(pack.rawManifestJson, mode)
+            }
+        }
+    }
+
+    private fun recordImportedManifest(rawJson: JsonObject?, mode: BackupImportMode) {
+        if (mode == BackupImportMode.REPLACE_LIBRARY) {
+            if (rawJson != null) lastImportedManifestStore.save(rawJson) else lastImportedManifestStore.clear()
+        } else if (rawJson != null) {
+            val existing = lastImportedManifestStore.load()
+            lastImportedManifestStore.save(
+                mergeFallbackManifestJson(rawJson, existing) ?: rawJson
+            )
         }
     }
 
