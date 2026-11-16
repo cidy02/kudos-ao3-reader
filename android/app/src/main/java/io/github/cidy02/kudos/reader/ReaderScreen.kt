@@ -289,11 +289,24 @@ private fun ReaderReading(
 
     val scope = rememberCoroutineScope()
 
-    val speechController = remember(context) { ReaderSpeechController(context) }
+    val speechController = remember(context, viewModel) {
+        ReaderSpeechController(
+            context = context,
+            onUtteranceStart = { viewModel.noteReadingActivity() }
+        )
+    }
     val speechStatus by speechController.status.collectAsState()
     val spokenText by speechController.spokenText.collectAsState()
     val writeMessage by viewModel.writeMessage.collectAsState()
     val kudosWorking by viewModel.kudosWorking.collectAsState()
+
+    LaunchedEffect(speechStatus, state.preferences.speechRate) {
+        if (speechStatus == SpeechStatus.PLAYING) {
+            viewModel.setListeningMode(
+                ReaderSpeechPreferences.clampRate(state.preferences.speechRate).toDouble()
+            )
+        }
+    }
 
     val tokens = readerChromeTokens(state.preferences.theme, settings)
 
@@ -1015,6 +1028,11 @@ private fun ReaderReading(
                         repository = settingsRepository ?: viewModel.readerSettingsRepository,
                         onDismiss = { speech ->
                             speechController.configure(speech.applyTo(state.preferences), state.work.title)
+                            if (speechStatus == SpeechStatus.PLAYING) {
+                                viewModel.setListeningMode(
+                                    ReaderSpeechPreferences.clampRate(speech.rate).toDouble()
+                                )
+                            }
                             settingsSheet = null
                         }
                     )

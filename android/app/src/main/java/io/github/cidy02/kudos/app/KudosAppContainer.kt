@@ -293,7 +293,11 @@ class KudosAppContainer(
     }
 
     val readingLogService: ReadingLogService by lazy {
-        ReadingLogService(database.readingLogDao())
+        val prefs = appContext.getSharedPreferences("reading-log", Context.MODE_PRIVATE)
+        ReadingLogService(
+            dao = database.readingLogDao(),
+            deviceIdProvider = { ReadingLogService.deviceId(prefs) }
+        )
     }
 
     val annotationRepository: io.github.cidy02.kudos.reader.AnnotationRepository by lazy {
