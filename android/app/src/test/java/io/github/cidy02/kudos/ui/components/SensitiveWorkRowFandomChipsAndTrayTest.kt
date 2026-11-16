@@ -80,12 +80,14 @@ class SensitiveWorkRowFandomChipsAndTrayTest {
     @Test fun aLocalStandardRowDrawsTheTwoByTwoSymbolGridBesideTheTitle() {
         compose.setContent {
             KudosTheme(KudosThemeMode.Light) {
-                SensitiveWorkRow(
-                    work = SavedWork(id = "saved", title = "A saved work", author = "A writer",
-                        summary = "A short summary.", wordCount = 1200, chapters = "1/1", comments = 0,
-                        bookmarks = 0, workFandoms = listOf("Doctor Who"), rating = "Teen And Up Audiences"),
-                    onOpenWork = {}
-                )
+                CompositionLocalProvider(LocalWorkSymbolPlacement provides WorkSymbolPlacement.Beside) {
+                    SensitiveWorkRow(
+                        work = SavedWork(id = "saved", title = "A saved work", author = "A writer",
+                            summary = "A short summary.", wordCount = 1200, chapters = "1/1", comments = 0,
+                            bookmarks = 0, workFandoms = listOf("Doctor Who"), rating = "Teen And Up Audiences"),
+                        onOpenWork = {}
+                    )
+                }
             }
         }
         val tray = compose.onNodeWithTag(WORK_STATUS_TRAY_TAG, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
@@ -101,7 +103,10 @@ class SensitiveWorkRowFandomChipsAndTrayTest {
         compose.setContent {
             KudosTheme(KudosThemeMode.Light) {
                 val density = LocalDensity.current
-                CompositionLocalProvider(LocalDensity provides Density(density.density, 2f)) {
+                CompositionLocalProvider(
+                    LocalDensity provides Density(density.density, 2f),
+                    LocalWorkSymbolPlacement provides WorkSymbolPlacement.Beside
+                ) {
                     SensitiveWorkRow(
                         work = SavedWork(id = "saved", title = "A saved work", author = "A writer",
                             summary = "A short summary.", wordCount = 1200, chapters = "1/1", comments = 0,

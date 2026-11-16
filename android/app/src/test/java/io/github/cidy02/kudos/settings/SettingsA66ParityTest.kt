@@ -107,11 +107,11 @@ class SettingsA66ParityTest {
             }.value
             KudosTheme(KudosThemeMode.Light) { SettingsAppearancePage(repository, current) }
         }
-        compose.onNodeWithText("Under the Title").performScrollTo().performClick()
+        compose.onNodeWithText("Beside the Title").performScrollTo().performClick()
         compose.waitUntil(5_000) {
-            runBlocking { repository.snapshot().app.workSymbolPlacement == WorkSymbolPlacement.UnderTitle }
+            runBlocking { repository.snapshot().app.workSymbolPlacement == WorkSymbolPlacement.Beside }
         }
-        assertEquals(WorkSymbolPlacement.UnderTitle,
+        assertEquals(WorkSymbolPlacement.Beside,
             runBlocking { repository.snapshot().app.workSymbolPlacement })
     }
 
