@@ -340,7 +340,11 @@ struct FandomListView: View {
                 ForEach(Self.indexLetters, id: \.self) { letter in
                     Text(letter)
                         .font(.system(size: indexFontSize, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(available.contains(letter) ? themeManager.accentInk : themeManager.secondaryInk)
+                        .foregroundStyle(
+                            available.contains(letter)
+                                ? AnyShapeStyle(themeManager.accentInk)
+                                : AnyShapeStyle(.secondaryInk)
+                        )
                         .opacity(available.contains(letter) ? 1 : 0.28)
                         .frame(maxHeight: .infinity)
                 }

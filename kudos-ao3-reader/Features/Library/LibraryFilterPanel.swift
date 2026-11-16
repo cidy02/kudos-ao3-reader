@@ -260,8 +260,8 @@ struct LibraryFilterPanel: View {
                             Text("Reset All Filters")
                                 .foregroundStyle(
                                     filters.hasActiveFilters
-                                        ? theme.appTheme.errorColor
-                                        : theme.secondaryInk
+                                        ? AnyShapeStyle(theme.appTheme.errorColor)
+                                        : AnyShapeStyle(.secondaryInk)
                                 )
                             Spacer()
                         }
