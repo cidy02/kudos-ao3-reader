@@ -60,7 +60,8 @@ object EpubBuilder {
         val date: String = "",
         val subjects: List<String> = emptyList(),
         val seriesTitle: String = "",
-        val seriesIndex: String = ""
+        val seriesIndex: String = "",
+        val dir: String = ""
     )
 
     private fun xml(value: String): String = escape(value).replace(">", "&gt;").replace("\"", "&quot;")
@@ -81,6 +82,9 @@ object EpubBuilder {
     ): ByteArray {
         val id = "urn:uuid:" + java.util.UUID.nameUUIDFromBytes(book.source.ifEmpty { book.title }.toByteArray())
         val language = xml(book.language.ifBlank { "en" })
+        val dir = book.dir.trim().lowercase().takeIf { it in setOf("rtl", "ltr", "auto") }.orEmpty()
+        val dirAttr = if (dir.isNotEmpty()) " dir=\"$dir\"" else ""
+        val spineProgression = if (dir == "rtl") " page-progression-direction=\"rtl\"" else ""
         val metadata = buildList {
             add("<dc:identifier id=\"pub-id\">$id</dc:identifier>")
             add("<dc:title>${xml(book.title)}</dc:title>")
@@ -110,12 +114,12 @@ $metadata
 <item id="style" href="style.css" media-type="text/css"/>
 ${(chapters.indices.map { "<item id=\"section-$it\" href=\"section-$it.xhtml\" media-type=\"application/xhtml+xml\"/>" } + imageItems).joinToString("\n")}
 </manifest>
-<spine toc="ncx">
+<spine toc="ncx"$spineProgression>
 ${chapters.indices.joinToString("\n") { "<itemref idref=\"section-$it\"/>" }}
 </spine>
 </package>"""
         val nav = """<?xml version="1.0" encoding="UTF-8"?>
-<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="$language">
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="$language"$dirAttr>
 <head><title>${xml(book.title)}</title></head>
 <body><nav epub:type="toc"><ol>
 ${chapters.withIndex().joinToString("\n") { (index, chapter) -> "<li><a href=\"section-$index.xhtml\">${xml(chapter.title)}</a></li>" }}
@@ -164,7 +168,7 @@ ${chapters.withIndex().joinToString("\n") { (index, chapter) ->
                 put(
                     "OEBPS/section-$index.xhtml",
                     """<?xml version="1.0" encoding="UTF-8"?>
-<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="$language">
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="$language"$dirAttr>
 <head><title>${xml(chapter.title)}</title><link rel="stylesheet" type="text/css" href="style.css"/></head>
 <body>
 ${chapter.bodyHtml}

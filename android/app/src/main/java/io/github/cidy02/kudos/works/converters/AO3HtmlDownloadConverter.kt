@@ -48,6 +48,8 @@ img { max-width: 100%; height: auto; }
         val preface = document.selectFirst("body > div#preface") ?: return null
         val chapters = document.selectFirst("body > div#chapters") ?: return null
         val book = readBook(document, preface)
+        // Hidden in AO3's file; they exist only to give calibre its section names.
+        document.select(".toc-heading").remove()
 
         // calibre starts a section at the Preface, at each chapter's heading, and at
         // the Afterword. A single-chapter work has no chapter heading: its one
@@ -64,8 +66,6 @@ img { max-width: 100%; height: auto; }
         if (sections.size == firstChapter) return null
         document.selectFirst("body > div#afterword")?.let { sections += "Afterword" to mutableListOf(it) }
 
-        // Hidden in AO3's file; they exist only to give calibre its section names.
-        document.select(".toc-heading").remove()
         relinkAnchors(sections.map { it.second })
         val images = embedImages(sections.flatMap { it.second }, fetchImage)
 
@@ -111,7 +111,11 @@ img { max-width: 100%; height: auto; }
             // Tag links only: the same list also links the work's series and collections.
             subjects = preface.select("dl.tags dd a[href*=/tags/]").eachText().distinct(),
             seriesTitle = series?.selectFirst("a[href*=/series/]")?.text().orEmpty(),
-            seriesIndex = Regex("Part (\\d+) of").find(series?.text().orEmpty())?.groupValues?.get(1).orEmpty()
+            seriesIndex = Regex("Part (\\d+) of").find(series?.text().orEmpty())?.groupValues?.get(1).orEmpty(),
+            dir = listOf(document.selectFirst("html"), document.body())
+                .firstNotNullOfOrNull { element ->
+                    element?.attr("dir")?.trim()?.lowercase()?.takeIf { it in VALID_DIRS }
+                }.orEmpty()
         )
     }
 
@@ -184,7 +188,10 @@ img { max-width: 100%; height: auto; }
      * `#endnotes`), and the importers that read an AO3 EPUB's preface read it by
      * those names. Neither can carry script.
      */
+    private val VALID_DIRS = setOf("rtl", "ltr", "auto")
+
     private val SAFELIST: Safelist = Safelist.relaxed()
         .preserveRelativeLinks(true)
-        .addAttributes(":all", "class", "id")
+        .addTags("bdo", "bdi")
+        .addAttributes(":all", "class", "id", "dir", "lang")
 }

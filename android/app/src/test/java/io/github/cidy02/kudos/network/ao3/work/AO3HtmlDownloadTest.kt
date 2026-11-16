@@ -116,7 +116,10 @@ class AO3HtmlDownloadTest {
             Regex("<a href=\"section-\\d\\.xhtml\">([^<]+)</a>").findAll(files.getValue("OEBPS/nav.xhtml"))
                 .map { it.groupValues[1] }.toList()
         )
-        assertTrue(files.getValue("OEBPS/section-1.xhtml").contains("All of it, at once."))
+        val chapter = files.getValue("OEBPS/section-1.xhtml")
+        assertTrue(chapter.contains("All of it, at once."))
+        assertFalse(chapter.contains("toc-heading"))
+        assertFalse(chapter.substringAfter("<body>").contains("One Shot"))
         assertTrue(files.getValue("OEBPS/content.opf").contains("<dc:creator>Anonymous</dc:creator>"))
     }
 
@@ -465,11 +468,65 @@ class AO3HtmlDownloadTest {
         assertFalse(files.getValue("OEBPS/section-1.xhtml").contains("pic-6.png"))
     }
 
+    @Test
+    fun rtlAndDirectionalAttributesSurviveConversion() = runTest {
+        val html = SINGLE_CHAPTER
+            .replace("<html xmlns=\"http://www.w3.org/1999/xhtml\" xml:lang=\"en\" lang=\"en\">",
+                "<html xmlns=\"http://www.w3.org/1999/xhtml\" xml:lang=\"en\" lang=\"en\" dir=\"rtl\">")
+            .replace(
+                "<p>All of it, at once.</p>",
+                "<p dir=\"rtl\">שלום</p><p><span dir=\"ltr\">LTR</span></p>" +
+                    "<div dir=\"auto\" lang=\"ar\"><bdo dir=\"rtl\">abc</bdo><bdi dir=\"auto\">xyz</bdi></div>"
+            )
+        val epub = AO3HtmlDownloadConverter.toEpub(html.toByteArray())!!
+        val files = unzip(epub)
+        assertTrue(files.getValue("OEBPS/content.opf").contains("<spine toc=\"ncx\" page-progression-direction=\"rtl\">"))
+        val chapter = files.getValue("OEBPS/section-1.xhtml")
+        assertTrue(chapter.contains("dir=\"rtl\""))
+        assertTrue(chapter.contains("<p dir=\"rtl\">"))
+        assertTrue(chapter.contains("<span dir=\"ltr\">"))
+        assertTrue(chapter.contains("dir=\"auto\""))
+        assertTrue(chapter.contains("lang=\"ar\""))
+        assertTrue(chapter.contains("<bdo dir=\"rtl\">"))
+        assertTrue(chapter.contains("<bdi dir=\"auto\">"))
+    }
+
+    @Test
+    fun nonUtf8HtmlDownloadDecodesWithoutFailing() = runTest {
+        val win1252 = SINGLE_CHAPTER.replace("All of it, at once.", "All of it \u2014 r\u00e9sum\u00e9.")
+            .toByteArray(java.nio.charset.Charset.forName("windows-1252"))
+        val epubWin = AO3HtmlDownloadConverter.toEpub(win1252)!!
+        assertTrue(EpubImportMetadata.isReadablePackage(epubWin))
+        assertTrue(unzip(epubWin).getValue("OEBPS/section-1.xhtml").contains("All of it \u2014 r\u00e9sum\u00e9."))
+
+        val prefix = SINGLE_CHAPTER.substringBefore("All of it, at once.").toByteArray(Charsets.ISO_8859_1)
+        val invalidUtf8 = byteArrayOf(0x81.toByte(), 0xFF.toByte(), 0xC3.toByte(), 0x28.toByte())
+        val suffix = SINGLE_CHAPTER.substringAfter("All of it, at once.").toByteArray(Charsets.ISO_8859_1)
+        val epubInvalid = AO3HtmlDownloadConverter.toEpub(prefix + invalidUtf8 + suffix)!!
+        assertTrue(EpubImportMetadata.isReadablePackage(epubInvalid))
+    }
+
+    @Test
+    fun titlesWithHtmlMarkupAndMissingAfterwordConvertCleanly() = runTest {
+        val html = SINGLE_CHAPTER
+            .replace("<h1>One Shot</h1>", "<h1>The <em>Long</em> &amp; Winding</h1>")
+            .replace(Regex("<div id=\"afterword\">.*?</div>\\s*</body>", RegexOption.DOT_MATCHES_ALL), "</body>")
+        val epub = AO3HtmlDownloadConverter.toEpub(html.toByteArray())!!
+        val files = unzip(epub)
+        assertEquals(
+            listOf("Preface", "The Long & Winding"),
+            Regex("<a href=\"section-\\d\\.xhtml\">([^<]+)</a>").findAll(files.getValue("OEBPS/nav.xhtml"))
+                .map { it.groupValues[1] }.toList()
+        )
+        assertTrue(files.getValue("OEBPS/content.opf").contains("<dc:title>The Long &amp; Winding</dc:title>"))
+    }
+
     private fun unzip(bytes: ByteArray): Map<String, String> = LinkedHashMap<String, String>().also { files ->
         ZipInputStream(bytes.inputStream()).use { zip ->
             while (true) {
                 val entry = zip.nextEntry ?: break
-                files[entry.name] = zip.readBytes().toString(Charsets.ISO_8859_1)
+                val charset = if (entry.name.startsWith("OEBPS/images/")) Charsets.ISO_8859_1 else Charsets.UTF_8
+                files[entry.name] = zip.readBytes().toString(charset)
             }
         }
     }
