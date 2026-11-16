@@ -209,23 +209,29 @@ fun WorkLedgerRow(
                         WorkFandomKicker(fandoms, palette, openFandom, ruleSpacing = 4.dp)
                         WorkReadingOrDownloadRing(downloadFraction, progress, state = if (downloadFraction != null) "Downloading" else progressState, diameter = 44.dp * fontScale, showsZeroPercent = true)
                         if (symbolPlacement == WorkSymbolPlacement.UnderTitle) {
-                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
                                     Text(
                                         title,
                                         color = tokens.primaryInk,
                                         fontSize = 16.5.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        modifier = Modifier.weight(1f, fill = false)
+                                        fontWeight = FontWeight.SemiBold
                                     )
-                                    if (favorite) Text("★", color = Color(0xFFFFC107), fontSize = 13.sp)
+                                    HomeStatusTray(
+                                        rating, categories, warnings, isComplete, HomeStatusArrangement.Row,
+                                        tileSize = 24.dp, announces = true,
+                                        modifier = Modifier.testTag(WORK_STATUS_TRAY_TAG)
+                                    )
+                                    LedgerAuthorLine(author, wraps = true)
                                 }
-                                HomeStatusTray(
-                                    rating, categories, warnings, isComplete, HomeStatusArrangement.Row,
-                                    tileSize = 24.dp, announces = true,
-                                    modifier = Modifier.testTag(WORK_STATUS_TRAY_TAG)
-                                )
-                                LedgerAuthorLine(author, wraps = true)
+                                if (favorite) Text("★", color = Color(0xFFFFC107), fontSize = 13.sp)
                             }
                         } else {
                             Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -255,29 +261,37 @@ fun WorkLedgerRow(
                 ) {
                     WorkReadingOrDownloadRing(downloadFraction, progress, state = if (downloadFraction != null) "Downloading" else progressState, diameter = 44.dp * fontScale, showsZeroPercent = true)
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                        WorkFandomKicker(fandoms, palette, openFandom, ruleSpacing = 4.dp)
                         if (symbolPlacement == WorkSymbolPlacement.UnderTitle) {
-                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Text(
-                                        title,
-                                        color = tokens.primaryInk,
-                                        fontSize = 16.5.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.weight(1f, fill = false)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                        WorkFandomKicker(fandoms, palette, openFandom, ruleSpacing = 4.dp)
+                                        Text(
+                                            title,
+                                            color = tokens.primaryInk,
+                                            fontSize = 16.5.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                    Spacer(Modifier.height(6.dp))
+                                    HomeStatusTray(
+                                        rating, categories, warnings, isComplete, HomeStatusArrangement.Row,
+                                        tileSize = 24.dp, announces = true,
+                                        modifier = Modifier.testTag(WORK_STATUS_TRAY_TAG)
                                     )
-                                    if (favorite) Text("★", color = Color(0xFFFFC107), fontSize = 13.sp)
+                                    Spacer(Modifier.height(6.dp))
+                                    LedgerAuthorLine(author, wraps = false)
                                 }
-                                HomeStatusTray(
-                                    rating, categories, warnings, isComplete, HomeStatusArrangement.Row,
-                                    tileSize = 24.dp, announces = true,
-                                    modifier = Modifier.testTag(WORK_STATUS_TRAY_TAG)
-                                )
-                                LedgerAuthorLine(author, wraps = false)
+                                if (favorite) Text("★", color = Color(0xFFFFC107), fontSize = 13.sp)
                             }
                         } else {
+                            WorkFandomKicker(fandoms, palette, openFandom, ruleSpacing = 4.dp)
                             Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Text(
                                     title,
