@@ -573,7 +573,9 @@ private final class ImageStubProtocol: URLProtocol, @unchecked Sendable {
             client?.urlProtocol(self, wasRedirectedTo: URLRequest(url: target), redirectResponse: response)
             client?.urlProtocolDidFinishLoading(self)
         case let .chunks(chunks, contentLength: contentLength):
-            var headers: [String: String] = [:]
+            // With no Content-Type, URLSession holds the response back to sniff the body, so a
+            // cancel on the response arrived only after the whole body. Image hosts send one.
+            var headers: [String: String] = ["Content-Type": "image/png"]
             if let contentLength { headers["Content-Length"] = "\(contentLength)" }
             guard let response = HTTPURLResponse(
                 url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: headers
