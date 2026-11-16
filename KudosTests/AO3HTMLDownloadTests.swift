@@ -519,19 +519,32 @@ private final class ImageStubProtocol: URLProtocol, @unchecked Sendable {
                 return
             }
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-            for chunk in chunks {
-                if cancelled { return }
-                client?.urlProtocol(self, didLoad: chunk)
-            }
-            if !cancelled {
+            // A real server sends a body over time: deliver it a chunk at a time, so a client
+            // that cancels on the response or mid-body is seen to stop the transfer. Delivered
+            // all at once inside `startLoading`, the load finished before any cancel arrived.
+            deliver(chunks, from: 0, url: url)
+        }
+    }
+
+    private func deliver(_ chunks: [Data], from index: Int, url: URL) {
+        Self.queue.asyncAfter(deadline: .now() + 0.05) { [self] in
+            guard !isCancelled else { return }
+            if index < chunks.count {
+                client?.urlProtocol(self, didLoad: chunks[index])
+                deliver(chunks, from: index + 1, url: url)
+            } else {
                 Self.finishedURLs.append(url)
                 client?.urlProtocolDidFinishLoading(self)
             }
         }
     }
 
+    private static let queue = DispatchQueue(label: "ImageStubProtocol")
+    private let lock = NSLock()
+    private var isCancelled: Bool { lock.withLock { cancelled } }
+
     override func stopLoading() {
-        cancelled = true
+        lock.withLock { cancelled = true }
     }
 }
 
