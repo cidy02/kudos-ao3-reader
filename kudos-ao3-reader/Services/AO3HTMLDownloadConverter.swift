@@ -456,8 +456,9 @@ nonisolated enum AO3HTMLDownloadConverter {
             completionHandler(newRequest)
         }
 
+        // `_ session`: with an argument label this is not the delegate method and is never called.
         func urlSession(
-            session: URLSession,
+            _ session: URLSession,
             dataTask: URLSessionDataTask,
             didReceive response: URLResponse,
             completionHandler: @escaping (URLSession.ResponseDisposition) -> Void
