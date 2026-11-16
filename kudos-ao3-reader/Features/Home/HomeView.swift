@@ -493,6 +493,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                     + Text(" streak").foregroundStyle(.secondary)
                 )
                 .font(.subheadline)
+                .multilineTextAlignment(.leading)
                 .fixedSize(horizontal: false, vertical: true)
 
                 Image(systemName: "chevron.right")
@@ -1247,9 +1248,12 @@ private struct HomeNewChapterRow: View {
             }
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(rowTitle)
+                Text(dynamicTypeSize.isAccessibilitySize
+                    ? AccessibilitySoftBreak.opportunities(in: rowTitle)
+                    : rowTitle)
                     .font(.body.weight(.semibold))
                     .foregroundStyle(.primary)
+                    .multilineTextAlignment(.leading)
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
 
                 if symbolPlacement == .underTitle {
@@ -1263,9 +1267,12 @@ private struct HomeNewChapterRow: View {
                 )
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                Text(metaText)
+                Text(dynamicTypeSize.isAccessibilitySize
+                    ? AccessibilitySoftBreak.opportunities(in: metaText)
+                    : metaText)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.leading)
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
 
                 if let preservation = work?.preservationState.badgeLabel {
@@ -1405,7 +1412,8 @@ private struct HomeQueueRow: View {
             StackedWorkCover(
                 kind: .queue,
                 name: queue.displayName,
-                hue: queue.displayHue,
+                identity: queue.id,
+                hue: queue.hue,
                 pickedHex: queue.colorHex,
                 backs: worksBehind,
                 size: CGSize(width: 52, height: 52)
@@ -1418,9 +1426,12 @@ private struct HomeQueueRow: View {
     private var detailsButton: some View {
         Button(action: onOpenQueue) {
             VStack(alignment: .leading, spacing: 1) {
-                Text(queue.displayName)
+                Text(dynamicTypeSize.isAccessibilitySize
+                    ? AccessibilitySoftBreak.opportunities(in: queue.displayName)
+                    : queue.displayName)
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(palette.accent)
+                    .multilineTextAlignment(.leading)
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
 
                 // Two lines before it truncates: the offline count is the last fact.
@@ -1431,9 +1442,12 @@ private struct HomeQueueRow: View {
                     .fixedSize(horizontal: false, vertical: true)
 
                 if let work = upNextWork {
-                    Text(work.title)
+                    Text(dynamicTypeSize.isAccessibilitySize
+                        ? AccessibilitySoftBreak.opportunities(in: work.title)
+                        : work.title)
                         .font(.body.weight(.semibold))
                         .foregroundStyle(.primary)
+                        .multilineTextAlignment(.leading)
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
 
                     HStack(spacing: 8) {
@@ -1449,7 +1463,8 @@ private struct HomeQueueRow: View {
                         Text("\(leftCount) to go")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
-                            .lineLimit(1)
+                            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                            .fixedSize(horizontal: false, vertical: dynamicTypeSize.isAccessibilitySize)
                     }
                     .padding(.vertical, 2)
 

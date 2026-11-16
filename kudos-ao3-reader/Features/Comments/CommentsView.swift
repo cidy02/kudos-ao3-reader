@@ -657,10 +657,12 @@ struct CommentsView: View {
     }
 
     private func compactWorkRowContent(concealed: Bool) -> some View {
-        HStack(alignment: dynamicTypeSize.isAccessibilitySize ? .top : .center, spacing: 12) {
+        let saved = allWorks.first { $0.ao3WorkID == workID }
+        return HStack(alignment: dynamicTypeSize.isAccessibilitySize ? .top : .center, spacing: 12) {
             CompactWorkCover(
-                title: model.workContext.title,
-                fandoms: model.workContext.fandoms,
+                recipe: saved?.generatedCoverRecipe ?? workSummary.generatedCoverRecipe,
+                epubURL: saved?.hasEPUB == true ? saved?.fileURL : nil,
+                epubWorkID: saved?.id,
                 showsInitial: !concealed
             )
             VStack(alignment: .leading, spacing: 2) {

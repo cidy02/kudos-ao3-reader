@@ -678,13 +678,19 @@ struct SectionRuleHeader: View {
 
     @ViewBuilder
     private var titleBlock: some View {
+        // layoutPriority keeps a title that fits the proposal on one line beside
+        // the count. "Summary" plus "6 words" at AX5 is that case, and a second
+        // line is the writing editor's text viewport. A title wider than the
+        // proposal still wraps — "Reading Queues" does not widen Home.
+        let wraps = SectionHeaderLayout.titleWraps(dynamicTypeSize)
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(title)
+            Text(wraps ? AccessibilitySoftBreak.opportunities(in: title) : title)
                 .font(.title3.weight(.bold))
                 // Color.primary, not `.primary`: the hierarchical style resolves against the inherited
                 // foreground, which a List section header sets to grey (Writing's headers rendered grey).
                 .foregroundStyle(Color.primary)
-                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                .lineLimit(wraps ? nil : 1)
+                .multilineTextAlignment(.leading)
                 .fixedSize(horizontal: false, vertical: true)
                 .layoutPriority(1)
 

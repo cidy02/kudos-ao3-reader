@@ -890,6 +890,15 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
     /// the override used to decode as `false` and, on winning the timestamp
     /// comparison, silently clear a preference it had no opinion about.
     let keepInProgressOverride: Bool?
+    let readingStatusRaw: String?
+    let statusChangedAt: Date??
+    let stoppedAt: Date??
+    let stopReasonRaw: String?
+    let stopTag: String?
+    let stopNote: String?
+    let stackThreshold: Int?
+    let stackBaselineChapterCount: Int?
+    let statusWasRecorded: Bool?
     let hasEPUB: Bool
     let isComplete: Bool
     let rating: String
@@ -972,6 +981,16 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         isSaved = work.isSaved
         isFinished = work.isFinished
         keepInProgressOverride = work.keepInProgressOverride
+        let recorded = work.hasRecordedStatus
+        readingStatusRaw = recorded ? work.readingStatusRaw : nil
+        statusChangedAt = recorded ? .some(work.statusChangedAt) : nil
+        stoppedAt = recorded ? .some(work.stoppedAt) : nil
+        stopReasonRaw = recorded ? work.stopReasonRaw : nil
+        stopTag = recorded ? work.stopTag : nil
+        stopNote = recorded ? work.stopNote : nil
+        stackThreshold = recorded ? work.stackThreshold : nil
+        stackBaselineChapterCount = recorded ? work.stackBaselineChapterCount : nil
+        statusWasRecorded = recorded ? true : nil
         // `|| remoteEPUBPending`: a device that was promised a book and has
         // not received it yet must not publish its absence as fact. The remote
         // file is still there — the prune keeps assets by manifest work id —
@@ -1046,6 +1065,15 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         case isSaved
         case isFinished
         case keepInProgressOverride
+        case readingStatusRaw
+        case statusChangedAt
+        case stoppedAt
+        case stopReasonRaw
+        case stopTag
+        case stopNote
+        case stackThreshold
+        case stackBaselineChapterCount
+        case statusWasRecorded
         case hasEPUB
         case isComplete
         case rating
@@ -1118,6 +1146,17 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
             Bool.self,
             forKey: .keepInProgressOverride
         )
+        readingStatusRaw = try container.decodeIfPresent(String.self, forKey: .readingStatusRaw)
+        statusChangedAt = container.contains(.statusChangedAt)
+            ? .some(try container.decode(Date?.self, forKey: .statusChangedAt)) : nil
+        stoppedAt = container.contains(.stoppedAt)
+            ? .some(try container.decode(Date?.self, forKey: .stoppedAt)) : nil
+        stopReasonRaw = try container.decodeIfPresent(String.self, forKey: .stopReasonRaw)
+        stopTag = try container.decodeIfPresent(String.self, forKey: .stopTag)
+        stopNote = try container.decodeIfPresent(String.self, forKey: .stopNote)
+        stackThreshold = try container.decodeIfPresent(Int.self, forKey: .stackThreshold)
+        stackBaselineChapterCount = try container.decodeIfPresent(Int.self, forKey: .stackBaselineChapterCount)
+        statusWasRecorded = try container.decodeIfPresent(Bool.self, forKey: .statusWasRecorded)
         hasEPUB = try container.decodeIfPresent(Bool.self, forKey: .hasEPUB) ?? false
         isComplete = try container.decodeIfPresent(Bool.self, forKey: .isComplete) ?? false
         rating = try container.decodeIfPresent(String.self, forKey: .rating) ?? ""
@@ -1267,6 +1306,20 @@ nonisolated struct KudosBackupReadingSession: Codable, Equatable {
     let activeSeconds: Double?
     let deviceID: String?
     let rulesVersion: Int?
+    let fandoms: [String]?
+    let relationships: [String]?
+    let characters: [String]?
+    let freeformTags: [String]?
+    let rating: String?
+    let warnings: [String]?
+    let categories: [String]?
+    let authorAccounts: [String]?
+    let language: String?
+    let isCompleteAtVisit: Bool?
+    let metadataSnapshotRecorded: Bool?
+    let ao3SeriesID: Int??
+    let seriesPosition: Int?
+    let publishedYear: Int??
     let lastSpineIndex: Int
     let chapterTitle: String
     let endingProgress: Double
@@ -1280,6 +1333,20 @@ nonisolated struct KudosBackupReadingSession: Codable, Equatable {
         case durationSeconds, lastSpineIndex, chapterTitle, endingProgress
         case tzOffsetSeconds, startProgress, startSpineIndex, modeRaw
         case playbackRate, activeSeconds, deviceID, rulesVersion
+        case fandoms
+        case relationships
+        case characters
+        case freeformTags
+        case rating
+        case warnings
+        case categories
+        case authorAccounts
+        case language
+        case isCompleteAtVisit
+        case metadataSnapshotRecorded
+        case ao3SeriesID
+        case seriesPosition
+        case publishedYear
         case wordCount, chapterCountAtVisit, didFinish, lastModifiedAt
     }
 
@@ -1304,6 +1371,21 @@ nonisolated struct KudosBackupReadingSession: Codable, Equatable {
         activeSeconds = session.activeSeconds
         deviceID = session.deviceID.isEmpty ? nil : session.deviceID
         rulesVersion = recorded ? session.rulesVersion : nil
+        let snapshot = session.metadataSnapshotRecorded
+        fandoms = snapshot ? session.fandoms : nil
+        relationships = snapshot ? session.relationships : nil
+        characters = snapshot ? session.characters : nil
+        freeformTags = snapshot ? session.freeformTags : nil
+        rating = snapshot ? session.rating : nil
+        warnings = snapshot ? session.warnings : nil
+        categories = snapshot ? session.categories : nil
+        authorAccounts = snapshot ? session.authorAccounts : nil
+        language = snapshot ? session.language : nil
+        metadataSnapshotRecorded = snapshot ? true : nil
+        isCompleteAtVisit = snapshot ? session.isCompleteAtVisit : nil
+        ao3SeriesID = snapshot ? .some(session.ao3SeriesID) : nil
+        seriesPosition = snapshot ? session.seriesPosition : nil
+        publishedYear = snapshot ? .some(session.publishedYear) : nil
         lastSpineIndex = session.lastSpineIndex
         chapterTitle = session.chapterTitle
         endingProgress = session.endingProgress
@@ -1331,6 +1413,22 @@ nonisolated struct KudosBackupReadingSession: Codable, Equatable {
         activeSeconds = try container.decodeIfPresent(Double.self, forKey: .activeSeconds)
         deviceID = try container.decodeIfPresent(String.self, forKey: .deviceID)
         rulesVersion = try container.decodeIfPresent(Int.self, forKey: .rulesVersion)
+        fandoms = try container.decodeIfPresent([String].self, forKey: .fandoms)
+        relationships = try container.decodeIfPresent([String].self, forKey: .relationships)
+        characters = try container.decodeIfPresent([String].self, forKey: .characters)
+        freeformTags = try container.decodeIfPresent([String].self, forKey: .freeformTags)
+        rating = try container.decodeIfPresent(String.self, forKey: .rating)
+        warnings = try container.decodeIfPresent([String].self, forKey: .warnings)
+        categories = try container.decodeIfPresent([String].self, forKey: .categories)
+        authorAccounts = try container.decodeIfPresent([String].self, forKey: .authorAccounts)
+        language = try container.decodeIfPresent(String.self, forKey: .language)
+        isCompleteAtVisit = try container.decodeIfPresent(Bool.self, forKey: .isCompleteAtVisit)
+        metadataSnapshotRecorded = try container.decodeIfPresent(Bool.self, forKey: .metadataSnapshotRecorded)
+        ao3SeriesID = container.contains(.ao3SeriesID)
+            ? .some(try container.decode(Int?.self, forKey: .ao3SeriesID)) : nil
+        seriesPosition = try container.decodeIfPresent(Int.self, forKey: .seriesPosition)
+        publishedYear = container.contains(.publishedYear)
+            ? .some(try container.decode(Int?.self, forKey: .publishedYear)) : nil
         lastSpineIndex = try container.decodeIfPresent(Int.self, forKey: .lastSpineIndex) ?? 0
         chapterTitle = try container.decodeIfPresent(String.self, forKey: .chapterTitle) ?? ""
         endingProgress = try container.decodeIfPresent(Double.self, forKey: .endingProgress) ?? 0
@@ -3643,6 +3741,21 @@ enum KudosBackupService {
                     didFinish: archived.didFinish,
                     lastModifiedAt: archived.lastModifiedAt
                 )
+                session.fandoms = archived.fandoms ?? session.fandoms
+                session.relationships = archived.relationships ?? session.relationships
+                session.characters = archived.characters ?? session.characters
+                session.freeformTags = archived.freeformTags ?? session.freeformTags
+                session.rating = archived.rating ?? session.rating
+                session.warnings = archived.warnings ?? session.warnings
+                session.categories = archived.categories ?? session.categories
+                session.authorAccounts = archived.authorAccounts ?? session.authorAccounts
+                session.language = archived.language ?? session.language
+                session.isCompleteAtVisit = archived.isCompleteAtVisit ?? session.isCompleteAtVisit
+                session.metadataSnapshotRecorded = archived.metadataSnapshotRecorded
+                    ?? session.metadataSnapshotRecorded
+                if let value = archived.ao3SeriesID { session.ao3SeriesID = value }
+                session.seriesPosition = archived.seriesPosition ?? session.seriesPosition
+                if let value = archived.publishedYear { session.publishedYear = value }
                 context.insert(session)
                 byID[archived.id] = session
                 resolvedLocalIDs.insert(session.id)
@@ -3712,6 +3825,21 @@ enum KudosBackupService {
         session.activeSeconds = archived.activeSeconds ?? session.activeSeconds
         session.deviceID = archived.deviceID ?? session.deviceID
         session.rulesVersion = archived.rulesVersion ?? session.rulesVersion
+        session.fandoms = archived.fandoms ?? session.fandoms
+        session.relationships = archived.relationships ?? session.relationships
+        session.characters = archived.characters ?? session.characters
+        session.freeformTags = archived.freeformTags ?? session.freeformTags
+        session.rating = archived.rating ?? session.rating
+        session.warnings = archived.warnings ?? session.warnings
+        session.categories = archived.categories ?? session.categories
+        session.authorAccounts = archived.authorAccounts ?? session.authorAccounts
+        session.language = archived.language ?? session.language
+        session.isCompleteAtVisit = archived.isCompleteAtVisit ?? session.isCompleteAtVisit
+        session.metadataSnapshotRecorded = archived.metadataSnapshotRecorded
+            ?? session.metadataSnapshotRecorded
+        if let value = archived.ao3SeriesID { session.ao3SeriesID = value }
+        session.seriesPosition = archived.seriesPosition ?? session.seriesPosition
+        if let value = archived.publishedYear { session.publishedYear = value }
         session.lastSpineIndex = archived.lastSpineIndex
         session.chapterTitle = archived.chapterTitle
         session.endingProgress = min(1, max(0, archived.endingProgress))
@@ -4631,6 +4759,17 @@ enum KudosBackupService {
         work.isFinished = incomingWins ? archived.isFinished : work.isFinished
         // An archive that carries no opinion cannot overrule one the reader has
         // expressed here, however new that archive is.
+        if incomingWins {
+            if let value = archived.readingStatusRaw { work.readingStatusRaw = value }
+            if let value = archived.stopReasonRaw { work.stopReasonRaw = value }
+            if let value = archived.stopTag { work.stopTag = value }
+            if let value = archived.stopNote { work.stopNote = value }
+            if let value = archived.stackThreshold { work.stackThreshold = value }
+            if let value = archived.stackBaselineChapterCount { work.stackBaselineChapterCount = value }
+            if let value = archived.statusWasRecorded { work.statusWasRecorded = value }
+            if let value = archived.statusChangedAt { work.statusChangedAt = value }
+            if let value = archived.stoppedAt { work.stoppedAt = value }
+        }
         if let archivedKeepInProgress = archived.keepInProgressOverride, incomingWins {
             work.keepInProgressOverride = archivedKeepInProgress
         }

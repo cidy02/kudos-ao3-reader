@@ -681,7 +681,7 @@ nonisolated struct FandomName: Hashable, Sendable {
     }
 }
 
-enum FandomDisplayName {
+nonisolated enum FandomDisplayName {
     /// AO3 writes a multilingual fandom tag as `original | romanization |
     /// localized`. The last segment is the one an English-locale reader scans
     /// for, and the one `split` should see. Empty segments are dropped; a name
