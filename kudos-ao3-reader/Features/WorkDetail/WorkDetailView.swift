@@ -94,6 +94,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
 
     @State var newTagName = ""
     @State var showingAddToCollection = false
+    @State private var showingEPUBExport = false
     @State var working = false // a download / import is in flight
     @State var loadError: String?
     #if os(iOS)
@@ -230,6 +231,11 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                 #endif
             }
         }
+        #if os(iOS)
+        .sheet(isPresented: $showingEPUBExport) {
+            if let work = localWork { WorkEPUBExportSheet(works: [work]) }
+        }
+        #endif
         .sheet(isPresented: $showingAddToQueue) {
             if let work = localWork {
                 AddToQueueView(work: work)
@@ -596,6 +602,13 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
 
                     Section("Library") {
                         localWorkMenuItems(includesQuickToggles: ao3WorkID != nil)
+                        #if os(iOS)
+                        if let work = localWork, work.hasEPUB {
+                            Button { showingEPUBExport = true } label: {
+                                Label("Export EPUB…", systemImage: "square.and.arrow.up")
+                            }
+                        }
+                        #endif
                     }
 
                     if let id = ao3WorkID {

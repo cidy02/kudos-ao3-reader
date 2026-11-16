@@ -26,6 +26,7 @@ final nonisolated class OPFParser: NSObject, XMLParserDelegate {
     var manifest: [String: String] = [:] // item id -> href
     var manifestMedia: [String: String] = [:] // item id -> media-type
     var manifestProps: [String: String] = [:] // item id -> properties
+    var coverMetaID: String?
     var spine: [String] = [] // itemref idref order
     var spineLinear: [Bool] = [] // per itemref: false for linear="no"
     var tocID: String? // <spine toc="..."> (NCX id)
@@ -75,6 +76,7 @@ final nonisolated class OPFParser: NSObject, XMLParserDelegate {
                 metaContents.append(content)
             }
             switch attributes["name"] {
+            case "cover": coverMetaID = attributes["content"]
             case "calibre:series": seriesTitle = attributes["content"] ?? ""
             case "calibre:series_index":
                 if let content = attributes["content"], let value = Double(content) {

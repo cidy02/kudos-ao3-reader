@@ -20,6 +20,9 @@ struct WorkBulkActionBar: View {
     @State private var showingAddToQueue = false
     @State private var showingAddToCollection = false
     @State private var showingTag = false
+    #if os(iOS)
+    @State private var showingEPUBExport = false
+    #endif
 
     private var allFavorited: Bool {
         !selectedWorks.isEmpty && selectedWorks.allSatisfy(\.isFavorite)
@@ -48,6 +51,13 @@ struct WorkBulkActionBar: View {
         Spacer()
 
         Menu {
+            #if os(iOS)
+            if selectedWorks.contains(where: \.hasEPUB) {
+                Button { showingEPUBExport = true } label: {
+                    Label("Export EPUBs…", systemImage: "square.and.arrow.up")
+                }
+            }
+            #endif
             if let download = WorkDownload.bulkAction(for: selectedWorks) {
                 Button {
                     Task {
@@ -121,6 +131,11 @@ struct WorkBulkActionBar: View {
         .sheet(isPresented: $showingTag) {
             WorkBulkTagSheet(works: selectedWorks)
         }
+        #if os(iOS)
+        .sheet(isPresented: $showingEPUBExport) {
+            WorkEPUBExportSheet(works: selectedWorks.filter(\.hasEPUB))
+        }
+        #endif
         #if DEBUG
         .task { if DebugLaunchRoute.takeSheet("bulktag") { showingTag = true } }
         #endif
