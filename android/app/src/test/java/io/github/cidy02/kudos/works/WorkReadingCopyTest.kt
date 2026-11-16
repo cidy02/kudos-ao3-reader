@@ -14,6 +14,7 @@ import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
 import io.github.cidy02.kudos.network.ao3.work.AO3EpubDownloader
 import io.github.cidy02.kudos.network.ao3.work.AO3WorkMetadataRepository
+import io.github.cidy02.kudos.network.ao3.work.AO3_HTML_DOWNLOAD_MULTI_CHAPTER
 import java.nio.file.Files
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.CancellationException
@@ -217,6 +218,80 @@ class WorkReadingCopyTest {
             }
         }
         assertEquals(0, downloads)
+    }
+
+    @Test fun htmlOnlyDownloadFromSummaryFetchesWorkPageOnce() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val requests = mutableListOf<String>()
+        val pageHtml = """
+            <html><body><div id="workskin">
+              <ul class="work navigation actions">
+                <li class="download"><ul class="expandable secondary">
+                  <li><a href="/downloads/4242/The_Long_Road.html">HTML</a></li>
+                </ul></li>
+              </ul>
+              <dd class="language">Français</dd>
+            </div></body></html>
+        """.trimIndent()
+        val fake = object : AO3Client {
+            override suspend fun get(url: String, headers: Map<String, String>): AO3Result<AO3HttpResponse> {
+                requests += url
+                return AO3Result.Success(AO3HttpResponse(url, 200, emptyMap(), pageHtml))
+            }
+            override suspend fun getBytes(url: String, headers: Map<String, String>): AO3Result<AO3BinaryResponse> {
+                requests += url
+                return if (url.endsWith(".epub")) AO3Result.Failure(AO3Error.NotFound)
+                else AO3Result.Success(AO3BinaryResponse(
+                    url, 200, mapOf("Content-Type" to listOf("text/html")),
+                    AO3_HTML_DOWNLOAD_MULTI_CHAPTER.toByteArray()
+                ))
+            }
+        }
+        val localImporter = WorkImporter(
+            works,
+            AO3WorkMetadataRepository(fake),
+            AO3EpubDownloader(fake, fetchImage = { null }),
+            store,
+            context.cacheDir
+        )
+        val result = localImporter.download(summary.copy(id = 4242))
+        assertTrue(result is WorkImportResult.Success)
+        assertEquals(
+            listOf(
+                "https://archiveofourown.org/works/4242?view_adult=true",
+                "https://archiveofourown.org/downloads/4242/work.epub",
+                "https://archiveofourown.org/downloads/4242/work.html"
+            ),
+            requests
+        )
+    }
+
+    @Test fun followUpBlockRateLimitOrOutageAfterEpubNotFoundDoesNotMarkUnavailable() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        listOf(
+            AO3Error.Forbidden,
+            AO3Error.RateLimited(null),
+            AO3Error.Server(503),
+            AO3Error.Maintenance
+        ).forEachIndexed { index, error ->
+            val fake = object : AO3Client {
+                override suspend fun get(url: String, headers: Map<String, String>): AO3Result<AO3HttpResponse> =
+                    AO3Result.Failure(error)
+                override suspend fun getBytes(url: String, headers: Map<String, String>): AO3Result<AO3BinaryResponse> =
+                    AO3Result.Failure(AO3Error.NotFound)
+            }
+            val localImporter = WorkImporter(
+                works,
+                AO3WorkMetadataRepository(fake),
+                AO3EpubDownloader(fake, fetchImage = { null }),
+                store,
+                context.cacheDir
+            )
+            val workSummary = summary.copy(id = 7000L + index)
+            val result = localImporter.download(workSummary) as WorkImportResult.Failure
+            assertEquals(error, result.error)
+            assertFalse(works.getWork(result.work!!.id)!!.ao3Unavailable)
+        }
     }
 
 }

@@ -159,7 +159,22 @@ class AO3HtmlDownloadTest {
         val client = ScriptedClient(page = workPage("epub", "html"), html = SINGLE_CHAPTER)
         val result = AO3EpubDownloader(client, fetchImage = { null }).download(7)
         assertTrue((result as AO3Result.Failure).error is AO3Error.Parse)
-        assertFalse(client.requests.any { it.endsWith(".html") })
+        assertEquals(
+            listOf(
+                "https://archiveofourown.org/downloads/7/work.epub",
+                "https://archiveofourown.org/works/7?view_adult=true"
+            ),
+            client.requests
+        )
+
+        val notFoundWhileOffered = ScriptedClient(
+            page = workPage("epub", "html"),
+            html = SINGLE_CHAPTER,
+            epub = AO3Result.Failure(AO3Error.NotFound)
+        )
+        val err = (AO3EpubDownloader(notFoundWhileOffered, fetchImage = { null }).download(7) as AO3Result.Failure).error
+        assertTrue(err is AO3Error.Parse)
+        assertFalse(notFoundWhileOffered.requests.any { it.endsWith(".html") })
     }
 
     @Test
@@ -200,6 +215,127 @@ class AO3HtmlDownloadTest {
         }
         assertEquals(AO3Error.NotFound, (AO3EpubDownloader(gone, fetchImage = { null }).download(7) as AO3Result.Failure).error)
         assertEquals(2, gone.requests.size)
+    }
+
+    @Test
+    fun followUpWorkPageOrHtmlFailureSurfacesThatErrorInsteadOfStaleNotFound() = runTest {
+        val noMenu = "<html><body><p>Restricted.</p></body></html>"
+        for (error in listOf(
+            AO3Error.Forbidden,
+            AO3Error.RateLimited(30_000),
+            AO3Error.Server(503),
+            AO3Error.Maintenance,
+            AO3Error.Overloaded(503, null),
+            AO3Error.AuthenticationRequired,
+            AO3Error.Network("offline", offline = true)
+        )) {
+            val workPageFails = ScriptedClient(
+                page = "",
+                html = SINGLE_CHAPTER,
+                epub = AO3Result.Failure(AO3Error.NotFound),
+                pageFailure = error
+            )
+            assertEquals(
+                error,
+                (AO3EpubDownloader(workPageFails, fetchImage = { null }).download(7) as AO3Result.Failure).error
+            )
+
+            val htmlFails = ScriptedClient(
+                page = noMenu,
+                html = "",
+                epub = AO3Result.Failure(AO3Error.NotFound),
+                htmlFailure = error
+            )
+            assertEquals(
+                error,
+                (AO3EpubDownloader(htmlFails, fetchImage = { null }).download(7) as AO3Result.Failure).error
+            )
+        }
+    }
+
+    @Test
+    fun redownloadProbesEpubWithinFifteenMinutesAndHtmlFailureProbesEpub() = runTest {
+        var clock = 0L
+        var epubRestored = false
+        val validZip = byteArrayOf(0x50, 0x4B, 0x03, 0x04, 1, 2, 3)
+        val client = object : AO3Client {
+            val requests = mutableListOf<String>()
+            override suspend fun get(url: String, headers: Map<String, String>): AO3Result<AO3HttpResponse> {
+                requests += url
+                return AO3Result.Success(AO3HttpResponse(url, 200, emptyMap(), workPage("html")))
+            }
+            override suspend fun getBytes(url: String, headers: Map<String, String>): AO3Result<AO3BinaryResponse> {
+                requests += url
+                if (url.endsWith(".epub")) {
+                    return if (epubRestored) {
+                        AO3Result.Success(AO3BinaryResponse(url, 200, mapOf("Content-Type" to listOf("application/epub+zip")), validZip))
+                    } else {
+                        AO3Result.Failure(AO3Error.NotFound)
+                    }
+                }
+                return AO3Result.Success(AO3BinaryResponse(url, 200, mapOf("Content-Type" to listOf("text/html")), SINGLE_CHAPTER.toByteArray()))
+            }
+        }
+        val downloader = AO3EpubDownloader(client, fetchImage = { null }, now = { clock })
+        assertTrue(downloader.download(7) is AO3Result.Success)
+        clock += 60_000L
+
+        epubRestored = true
+        client.requests.clear()
+        // Explicit redownload (probeEpub = true) checks .epub despite 15-min memory and resets it.
+        val redownloaded = downloader.download(8, probeEpub = true) as AO3Result.Success
+        assertTrue(redownloaded.value.contentEquals(validZip))
+        assertEquals(listOf("https://archiveofourown.org/downloads/8/work.epub"), client.requests)
+
+        client.requests.clear()
+        assertTrue(downloader.download(9) is AO3Result.Success)
+        assertEquals(listOf("https://archiveofourown.org/downloads/9/work.epub"), client.requests)
+    }
+
+    @Test
+    fun htmlRefusalDuringFifteenMinuteMemoryProbesEpubWhileOutageDoesNot() = runTest {
+        var clock = 0L
+        var htmlResult: AO3Result<AO3BinaryResponse> = AO3Result.Failure(AO3Error.NotFound)
+        val validZip = byteArrayOf(0x50, 0x4B, 0x03, 0x04, 9, 8)
+        val client = object : AO3Client {
+            val requests = mutableListOf<String>()
+            var htmlReady = false
+            override suspend fun get(url: String, headers: Map<String, String>): AO3Result<AO3HttpResponse> {
+                requests += url
+                return AO3Result.Success(AO3HttpResponse(url, 200, emptyMap(), workPage("html")))
+            }
+            override suspend fun getBytes(url: String, headers: Map<String, String>): AO3Result<AO3BinaryResponse> {
+                requests += url
+                if (url.endsWith(".epub")) {
+                    return if (!htmlReady) AO3Result.Failure(AO3Error.NotFound)
+                    else AO3Result.Success(AO3BinaryResponse(url, 200, mapOf("Content-Type" to listOf("application/epub+zip")), validZip))
+                }
+                return if (!htmlReady) {
+                    AO3Result.Success(AO3BinaryResponse(url, 200, mapOf("Content-Type" to listOf("text/html")), SINGLE_CHAPTER.toByteArray()))
+                } else {
+                    htmlResult
+                }
+            }
+        }
+        val downloader = AO3EpubDownloader(client, fetchImage = { null }, now = { clock })
+        assertTrue(downloader.download(7) is AO3Result.Success)
+        client.htmlReady = true
+        clock += 60_000L
+
+        // Outage on .html does NOT probe .epub.
+        htmlResult = AO3Result.Failure(AO3Error.Forbidden)
+        client.requests.clear()
+        assertEquals(AO3Error.Forbidden, (downloader.download(8) as AO3Result.Failure).error)
+        assertEquals(listOf("https://archiveofourown.org/downloads/8/work.html"), client.requests)
+
+        // 404 on .html clears memory and probes .epub.
+        htmlResult = AO3Result.Failure(AO3Error.NotFound)
+        client.requests.clear()
+        assertTrue((downloader.download(9) as AO3Result.Success).value.contentEquals(validZip))
+        assertEquals(
+            listOf("https://archiveofourown.org/downloads/9/work.html", "https://archiveofourown.org/downloads/9/work.epub"),
+            client.requests
+        )
     }
 
     @Test
@@ -344,12 +480,15 @@ private class ScriptedClient(
     private val page: String,
     private val html: String,
     private val epub: AO3Result<AO3BinaryResponse>? = null,
-    private val binaryImages: Map<String, ByteArray> = emptyMap()
+    private val binaryImages: Map<String, ByteArray> = emptyMap(),
+    private val pageFailure: AO3Error? = null,
+    private val htmlFailure: AO3Error? = null
 ) : AO3Client {
     val requests = mutableListOf<String>()
 
     override suspend fun get(url: String, headers: Map<String, String>): AO3Result<AO3HttpResponse> {
         requests += url
+        pageFailure?.let { return AO3Result.Failure(it) }
         return AO3Result.Success(AO3HttpResponse(url, 200, emptyMap(), page))
     }
 
@@ -360,6 +499,9 @@ private class ScriptedClient(
         }
         if (url.substringBefore('?').endsWith(".epub")) {
             epub?.let { return it }
+        }
+        if (url.substringBefore('?').endsWith(".html")) {
+            htmlFailure?.let { return AO3Result.Failure(it) }
         }
         val body = if (url.substringBefore('?').endsWith(".html")) html else "<!DOCTYPE html><html><body>Sorry.</body></html>"
         return AO3Result.Success(AO3BinaryResponse(url, 200, mapOf("Content-Type" to listOf("text/html")), body.toByteArray()))

@@ -39,21 +39,58 @@ class AO3EpubDownloader(
     @Volatile
     private var htmlOnlyUntil = 0L
 
-    suspend fun download(workId: Long, onProgress: (Double) -> Unit = {}): AO3Result<ByteArray> {
-        if (now() < htmlOnlyUntil) return downloadUrl(urlBuilder.htmlDownloadUrl(workId), onProgress)
+    suspend fun download(
+        workId: Long,
+        onProgress: (Double) -> Unit = {},
+        prefetchedWorkPageHtml: String? = null,
+        probeEpub: Boolean = false
+    ): AO3Result<ByteArray> {
+        if (!probeEpub && now() < htmlOnlyUntil) {
+            val html = downloadUrl(urlBuilder.htmlDownloadUrl(workId), onProgress)
+            if (html is AO3Result.Failure && html.error.mayMeanEpubIsNotOffered()) {
+                htmlOnlyUntil = 0L
+                val epubRetry = downloadUrl(urlBuilder.epubDownloadUrl(workId), onProgress)
+                if (epubRetry is AO3Result.Success ||
+                    (epubRetry is AO3Result.Failure && (!epubRetry.error.mayMeanEpubIsNotOffered() || epubRetry.error is AO3Error.NotFound))
+                ) {
+                    return epubRetry
+                }
+            }
+            return html
+        }
         val epub = downloadUrl(urlBuilder.epubDownloadUrl(workId), onProgress)
+        if (epub is AO3Result.Success) {
+            htmlOnlyUntil = 0L
+            return epub
+        }
         if (epub !is AO3Result.Failure || !epub.error.mayMeanEpubIsNotOffered()) return epub
 
         // EPUB first costs nothing while AO3 is whole; only a refusal is worth a
-        // second request, to read what the work's download menu offers instead.
-        val page = client.get(urlBuilder.workMetadataUrl(workId)) as? AO3Result.Success ?: return epub
-        val offered = offeredFormats(page.value.body)
+        // second request (reusing any work page already fetched for metadata), to
+        // read what the work's download menu offers instead.
+        val pageHtml = prefetchedWorkPageHtml ?: when (val page = client.get(urlBuilder.workMetadataUrl(workId))) {
+            is AO3Result.Success -> page.value.body
+            is AO3Result.Failure -> return page
+        }
+        val offered = offeredFormats(pageHtml)
         return when {
             // No menu on this page (a work restricted to signed-in readers shows a
-            // guest none): HTML may still be there, and if not the first answer stands.
-            offered == null ->
-                downloadUrl(urlBuilder.htmlDownloadUrl(workId), onProgress) as? AO3Result.Success ?: epub
-            "epub" in offered -> epub
+            // guest none): HTML may still be there; surface transient/block/outage
+            // errors from that probe rather than returning a stale 404.
+            offered == null -> {
+                val html = downloadUrl(urlBuilder.htmlDownloadUrl(workId), onProgress)
+                if (html is AO3Result.Success || (html is AO3Result.Failure && !html.error.mayMeanEpubIsNotOffered())) {
+                    html
+                } else {
+                    epub
+                }
+            }
+            "epub" in offered ->
+                if (epub.error is AO3Error.NotFound) {
+                    AO3Result.Failure(AO3Error.Parse("AO3 listed EPUB on the work page, but its download returned 404."))
+                } else {
+                    epub
+                }
             "html" in offered -> {
                 // The list is the site's, not the work's, so it holds for the next download too.
                 htmlOnlyUntil = now() + HTML_ONLY_MEMORY_MILLIS

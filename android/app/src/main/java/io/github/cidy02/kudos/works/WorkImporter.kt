@@ -84,8 +84,12 @@ class WorkImporter(
             this
         }
 
-    suspend fun download(summary: AO3WorkSummary, onProgress: (Double) -> Unit = {}): WorkImportResult {
-        val metadata = fetchCanonical(summary.id)
+    suspend fun download(
+        summary: AO3WorkSummary,
+        onProgress: (Double) -> Unit = {},
+        probeEpub: Boolean = false
+    ): WorkImportResult {
+        val (metadata, prefetchedPageHtml) = fetchCanonicalWithPage(summary.id)
         // After AO3 answers: a page read meanwhile is in the work the merge starts from.
         val existing = findExisting(summary)
         val merged = workRepository.upsert(
@@ -99,7 +103,7 @@ class WorkImporter(
         )
         val base = reviveIfNeeded(existing, merged)
 
-        return when (val download = downloader.download(summary.id, onProgress)) {
+        return when (val download = downloader.download(summary.id, onProgress, prefetchedPageHtml, probeEpub)) {
             is AO3Result.Failure -> {
                 if (download.error is AO3Error.NotFound) {
                     val current = workRepository.getWork(base.id) ?: base
@@ -169,13 +173,17 @@ class WorkImporter(
         }
     }
 
-    suspend fun downloadExisting(work: SavedWork, onProgress: (Double) -> Unit = {}): WorkImportResult {
+    suspend fun downloadExisting(
+        work: SavedWork,
+        onProgress: (Double) -> Unit = {},
+        probeEpub: Boolean = false
+    ): WorkImportResult {
         val resolved = workRepository.resolveLocalWork(work.id)
             ?: return WorkImportResult.Failure(null, AO3Error.Validation("This local work no longer exists."))
         val workId = WorkIdentityIndex.ao3WorkId(resolved)
             ?: return WorkImportResult.Failure(resolved, AO3Error.Validation("No AO3 work id found for this work."))
 
-        return when (val download = downloader.download(workId, onProgress)) {
+        return when (val download = downloader.download(workId, onProgress, probeEpub = probeEpub)) {
             is AO3Result.Failure -> {
                 if (download.error is AO3Error.NotFound) {
                     val current = workRepository.getWork(resolved.id) ?: resolved
@@ -482,6 +490,16 @@ class WorkImporter(
         return when (val metadata = metadataRepository.fetch(workId)) {
             is AO3Result.Failure -> null
             is AO3Result.Success -> metadata.value.takeUnless { it.isEmpty }
+        }
+    }
+
+    private suspend fun fetchCanonicalWithPage(workId: Long): Pair<AO3WorkMetadata?, String?> {
+        if (metadataRepository::class.java != AO3WorkMetadataRepository::class.java) {
+            return fetchCanonical(workId) to null
+        }
+        return when (val result = metadataRepository.fetchWithHtml(workId)) {
+            is AO3Result.Failure -> null to null
+            is AO3Result.Success -> result.value.first.takeUnless { it.isEmpty } to result.value.second
         }
     }
 

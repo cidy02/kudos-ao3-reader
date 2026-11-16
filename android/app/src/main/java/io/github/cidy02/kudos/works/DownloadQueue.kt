@@ -243,7 +243,7 @@ class DownloadQueue(
     }
 
     private suspend fun downloadItem(item: DownloadQueueItem, onProgress: (Double) -> Unit): WorkImportResult {
-        item.summary?.let { return workImporter.download(it, onProgress) }
+        item.summary?.let { return workImporter.download(it, onProgress, probeEpub = item.force) }
 
         val source = item.sourceUrl?.takeIf { it.isNotBlank() }
             ?: AO3URLResolver.canonicalWorkUrl(item.ao3WorkId)
@@ -252,7 +252,7 @@ class DownloadQueue(
             loadWorks = workRepository::listWorksForIdentity
         )
         if (existing != null) {
-            return workImporter.downloadExisting(existing, onProgress)
+            return workImporter.downloadExisting(existing, onProgress, probeEpub = item.force)
         }
 
         // Minimal summary so WorkImporter can still fetch canonical metadata + EPUB.
@@ -267,7 +267,7 @@ class DownloadQueue(
             isComplete = item.isComplete.takeIf { it },
             seriesUrl = item.seriesUrl.takeIf { it.isNotBlank() }
         )
-        return workImporter.download(summary, onProgress)
+        return workImporter.download(summary, onProgress, probeEpub = item.force)
     }
 
     private suspend fun isAlreadyDownloaded(item: DownloadQueueItem): Boolean {
