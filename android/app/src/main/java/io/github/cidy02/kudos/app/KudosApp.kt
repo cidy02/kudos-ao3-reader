@@ -344,11 +344,25 @@ fun KudosApp(
                     )
                 } else {
                     // Settings > Library > Show zero counts reaches every work card (iOS @AppStorage).
+                    val coverArtLoader = remember(context) {
+                        io.github.cidy02.kudos.ui.components.GeneratedCoverArtLoader.forCacheDir(
+                            context.applicationContext.cacheDir
+                        )
+                    }
+                    val workEpubFileResolver: (String) -> java.io.File? = remember(container.workFileStore) {
+                        { workId ->
+                            runCatching { container.workFileStore.workEpubPath(workId).toFile() }.getOrNull()
+                        }
+                    }
                     androidx.compose.runtime.CompositionLocalProvider(
                         io.github.cidy02.kudos.ui.components.LocalShowsZeroStats provides
                             settings.app.showsZeroStats,
                         io.github.cidy02.kudos.ui.components.LocalWorkSymbolPlacement provides
-                            settings.app.workSymbolPlacement
+                            settings.app.workSymbolPlacement,
+                        io.github.cidy02.kudos.ui.components.LocalGeneratedCoverArtLoader provides
+                            coverArtLoader,
+                        io.github.cidy02.kudos.ui.components.LocalWorkEpubFileResolver provides
+                            workEpubFileResolver
                     ) {
                         if (whatsNewEntries.isNotEmpty()) {
                             WhatsNewSheet(
