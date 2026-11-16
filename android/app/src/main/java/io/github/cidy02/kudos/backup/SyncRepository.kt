@@ -30,6 +30,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -49,7 +50,8 @@ class SyncRepository(
     /** How many bytes of EPUBs one sync-down pass holds in memory at once. */
     private val maxEpubBatchBytes: Long = 32L * 1024 * 1024,
     /** How many bytes of fonts one sync-down may install (iOS `maxTotalFontBytes`). */
-    private val maxFontPassBytes: Long = BackupLimits.MAX_TOTAL_FONT_BYTES
+    private val maxFontPassBytes: Long = BackupLimits.MAX_TOTAL_FONT_BYTES,
+    internal val beforeManifestCommit: suspend () -> Unit = {}
 ) {
     /**
      * Whole-run single-flight for [runSync]. [PersistenceGate] only serializes
@@ -58,6 +60,7 @@ class SyncRepository(
      * and directory creation at the start of the run.
      */
     private val runSyncMutex = Mutex()
+    private var folderGeneration = 0L
 
     /**
      * Set for an automatic run only, inside [runSyncMutex]. Replace pauses sync by
@@ -78,7 +81,8 @@ class SyncRepository(
         return settingsRepository.settings.first().sync.folderUri?.let { Uri.parse(it) }
     }
 
-    suspend fun connect(uri: Uri) {
+    suspend fun connect(uri: Uri) = runSyncMutex.withLock {
+        val previousFolder = getSyncFolderUri()
         context.contentResolver.takePersistableUriPermission(
             uri,
             Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
@@ -89,8 +93,9 @@ class SyncRepository(
         settingsRepository.setHasConfiguredSyncFolder(true)
         settingsRepository.updateSyncLastError(null)
         settingsRepository.updateSyncLastManifestDigest(null)
-        lastManifestStore.clear()
+        if (previousFolder != null && previousFolder != uri) lastManifestStore.clear()
         settingsRepository.updateSyncIsEnabled(true)
+        folderGeneration++
         scheduleWorker()
     }
 
@@ -103,7 +108,7 @@ class SyncRepository(
         if (enabled) scheduleWorker() else WorkManager.getInstance(context).cancelUniqueWork(SYNC_WORK_NAME)
     }
 
-    suspend fun disconnect() {
+    suspend fun disconnect() = runSyncMutex.withLock {
         getSyncFolderUri()?.let { uri ->
             runCatching {
                 context.contentResolver.releasePersistableUriPermission(
@@ -119,6 +124,7 @@ class SyncRepository(
         settingsRepository.updateSyncLastSyncAt(null)
         settingsRepository.updateSyncLastManifestDigest(null)
         lastManifestStore.clear()
+        folderGeneration++
         WorkManager.getInstance(context).cancelUniqueWork(SYNC_WORK_NAME)
     }
 
@@ -185,6 +191,7 @@ class SyncRepository(
         !declineImportWhenPaused || isSyncEnabled()
 
     private suspend fun runSyncLocked(): SyncResult {
+        val generation = folderGeneration
         val uri = getSyncFolderUri() ?: return SyncResult.Error("No sync folder selected.")
         val root = DocumentFile.fromTreeUri(context, uri)
             ?: return SyncResult.Error("Could not access sync folder.")
@@ -243,7 +250,7 @@ class SyncRepository(
             } else {
                 null
             }
-            var shouldPersistReadManifest = false
+            var hasUsableFolderManifest = decodedLive != null
 
             if (manifestBytesAtRead != null || backupManifest != null || conflicts.isNotEmpty()) {
                 // The .bak is the previous manifest: enough to recover this device's records
@@ -273,8 +280,9 @@ class SyncRepository(
                 } else {
                     val fallbackBackup = if (decodedLive == null) decodeManifestWithRawOrNull(backupManifest) else null
                     val manifest = decodedLive ?: fallbackBackup?.first
+                    if (fallbackBackup != null) hasUsableFolderManifest = true
                     if (decodedLive == null && fallbackBackup != null) {
-                        readManifestJson = mergeFallbackManifestJson(lastManifestStore.load(), fallbackBackup.second)
+                        readManifestJson = fallbackBackup.second
                     }
                     manifest?.let {
                         // Asset retries must not replay our older corrections over local edits/deletions.
@@ -285,7 +293,6 @@ class SyncRepository(
                         pendingFonts += outcome.pendingFonts
                         absorbed = absorbed.absorb(outcome.summary)
                         folderViewIsCurrent = decodedLive != null && outcome.complete
-                        shouldPersistReadManifest = readManifestJson != null
                     }
                 }
 
@@ -293,11 +300,11 @@ class SyncRepository(
                     val decodedConflict = decodeManifestWithRawOrNull(file)
                     val outcome = decodedConflict?.first?.let { importManifest(syncDir, it) }
                     if (outcome != null) {
+                        hasUsableFolderManifest = true
                         pendingFonts += outcome.pendingFonts
                         absorbed = absorbed.absorb(outcome.summary)
                         decodedConflict?.second?.let { conflictJson ->
                             readManifestJson = mergeFallbackManifestJson(readManifestJson, conflictJson)
-                            shouldPersistReadManifest = true
                         }
                     }
                     if (outcome?.complete == true) {
@@ -322,7 +329,6 @@ class SyncRepository(
                             }
                             extractManifestJsonFromZip(bytes)?.let { zipJson ->
                                 readManifestJson = zipJson
-                                shouldPersistReadManifest = true
                             }
                         }
                     }
@@ -330,10 +336,6 @@ class SyncRepository(
                 // A folder with nothing in it is a first write, and has nothing to prune.
                 // One that holds files and no manifest is not: see above.
                 folderViewIsCurrent = syncDir.listFiles().isEmpty()
-            }
-
-            if (shouldPersistReadManifest) {
-                readManifestJson?.let(lastManifestStore::save)
             }
 
             // 2. Export incrementally
@@ -434,10 +436,6 @@ class SyncRepository(
                 // written does not know what that one lists. Writing it would drop those
                 // records from the folder's only index. This run stops, and the next reads
                 // the new manifest first.
-                if (!readLiveManifest(syncDir).contentEquals(manifestBytesAtRead)) {
-                    throw IOException("Sync folder changed during sync. Try syncing again.")
-                }
-
                 // The commit point.
                 val localFontKeys = manifestOut.fonts.mapTo(HashSet()) { BackupPaths.fontFileNameKey(it.fileName) }
                 val manifestJson = BackupJson.encodeToJsonElement(
@@ -456,12 +454,22 @@ class SyncRepository(
                 // manifest this build writes. Dropped, as it was, a device that joined the
                 // folder after an Android sync never received it.
                 val replacedJson = readManifestJson
-                    ?: if (manifestBytesAtRead != null || !folderViewIsCurrent) lastManifestStore.load() else null
+                    ?: if (!hasUsableFolderManifest) lastManifestStore.load() else null
                 val manifestBytes = BackupJson.encodeToString(
                     JsonObject.serializer(),
                     carryUnknownRecordKeys(manifestJson, replacedJson)
                 ).toByteArray(Charsets.UTF_8)
+                beforeManifestCommit()
+                if (!readLiveManifest(syncDir).contentEquals(manifestBytesAtRead)) {
+                    throw IOException("Sync folder changed during sync. Try syncing again.")
+                }
+                if (generation != folderGeneration || getSyncFolderUri() != uri) {
+                    throw IOException("Sync folder changed during sync. Try syncing again.")
+                }
                 writeManifest(syncDir, manifestBytes, backup = manifestBytesAtRead.takeIf { decodedLive != null })
+                if (generation != folderGeneration || getSyncFolderUri() != uri) {
+                    throw IOException("Sync folder changed during sync. Try syncing again.")
+                }
                 lastManifestStore.save(manifestBytes)
                 foldedConflicts.forEach { it.delete() }
                 // Remembered only when nothing is outstanding (iOS withholds its stamp the same

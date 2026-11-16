@@ -47,9 +47,18 @@ class BackupRepository(
     private val cacheDirectory: File? = null
 ) {
     private val lastImportedManifestStore = SyncLastManifestStore(
-        workFileStore.worksDirectory.parent ?: workFileStore.worksDirectory,
-        fileName = "backup-last-manifest.json"
+        workFileStore.worksDirectory.parent ?: workFileStore.worksDirectory
     )
+    init {
+        val legacy = SyncLastManifestStore(
+            workFileStore.worksDirectory.parent ?: workFileStore.worksDirectory,
+            fileName = "backup-last-manifest.json"
+        )
+        if (lastImportedManifestStore.load() == null) {
+            legacy.load()?.let(lastImportedManifestStore::save)
+        }
+        if (lastImportedManifestStore.load() != null) legacy.clear()
+    }
 
     internal fun lastImportedManifestJson(): JsonObject? = lastImportedManifestStore.load()
     val metadataCheck = SyncMetadataCheck(now = clock) {

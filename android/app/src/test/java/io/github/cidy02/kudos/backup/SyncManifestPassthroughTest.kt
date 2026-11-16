@@ -26,11 +26,15 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
@@ -714,6 +718,131 @@ class SyncManifestPassthroughTest {
             fixture.getValue("works").jsonArray[0].jsonObject["authorIdentitiesJSON"],
             exportedWorks.single()["authorIdentitiesJSON"]
         )
+    }
+
+    @Test
+    fun syncDownThenManualBackupExportKeepsOpaqueFields() = runTest {
+        val fixture = iosT541ManifestJson()
+        writeChild(ensureKudosLibrary(), BackupPaths.MANIFEST, "application/json",
+            BackupJson.encodeToString(JsonObject.serializer(), fixture).toByteArray())
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+
+        val exported = backupRepository.exportV2ZipBytes()
+        val written = ZipInputStream(ByteArrayInputStream(exported)).use { zip ->
+            generateSequence { zip.nextEntry }.first { it.name == BackupPaths.MANIFEST }
+            Json.parseToJsonElement(zip.readBytes().toString(Charsets.UTF_8)).jsonObject
+        }
+        assertEquals(fixture["writingRecovery"], written["writingRecovery"])
+        assertEquals(fixture["documents"], written["documents"])
+        assertEquals(fixture.getValue("settings").jsonObject["extras"], written.getValue("settings").jsonObject["extras"])
+        assertEquals(fixture.getValue("works").jsonArray[0].jsonObject["authorIdentitiesJSON"],
+            written.getValue("works").jsonArray[0].jsonObject["authorIdentitiesJSON"])
+    }
+
+    @Test
+    fun backupImportThenSyncToEmptyFolderKeepsOpaqueFields() = runTest {
+        val fixture = iosT541ManifestJson()
+        val zipBytes = ByteArrayOutputStream().use { out ->
+            ZipOutputStream(out).use { zip ->
+                zip.putNextEntry(ZipEntry(BackupPaths.MANIFEST))
+                zip.write(BackupJson.encodeToString(JsonObject.serializer(), fixture).toByteArray())
+                zip.closeEntry()
+            }
+            out.toByteArray()
+        }
+        backupRepository.importV2ZipBytes(zipBytes)
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+        val written = Json.parseToJsonElement(
+            readDocument(requireKudosLibrary().findFile(BackupPaths.MANIFEST)!!).toString(Charsets.UTF_8)
+        ).jsonObject
+        assertEquals(fixture["writingRecovery"], written["writingRecovery"])
+        assertEquals(fixture["documents"], written["documents"])
+        assertEquals(fixture.getValue("settings").jsonObject["modifiedAt"], written.getValue("settings").jsonObject["modifiedAt"])
+        assertEquals(fixture.getValue("works").jsonArray[0].jsonObject["authorIdentitiesJSON"],
+            written.getValue("works").jsonArray[0].jsonObject["authorIdentitiesJSON"])
+    }
+
+    @Test
+    fun usableBakWinsOverOlderStoreForEveryOpaqueLevel() = runTest {
+        val old = iosT541ManifestJson()
+        val new = JsonObject(old + mapOf(
+            "writingRecovery" to JsonPrimitive("new top level"),
+            "settings" to JsonObject(old.getValue("settings").jsonObject + mapOf(
+                "extras" to JsonObject(old.getValue("settings").jsonObject.getValue("extras").jsonObject +
+                    mapOf("readerHighlightColor" to JsonPrimitive("blue")))
+            )),
+            "works" to JsonArray(listOf(JsonObject(old.getValue("works").jsonArray[0].jsonObject +
+                mapOf("authorIdentitiesJSON" to JsonPrimitive("new record")))) +
+                old.getValue("works").jsonArray.drop(1))
+        ))
+        SyncLastManifestStore(filesRoot).save(old)
+        val folder = ensureKudosLibrary()
+        writeChild(folder, BackupPaths.MANIFEST, "application/json", "{".toByteArray())
+        writeChild(folder, BackupPaths.MANIFEST_BACKUP, "application/json",
+            BackupJson.encodeToString(JsonObject.serializer(), new).toByteArray())
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+        val written = Json.parseToJsonElement(
+            readDocument(requireKudosLibrary().findFile(BackupPaths.MANIFEST)!!).toString(Charsets.UTF_8)
+        ).jsonObject
+        assertEquals(new["writingRecovery"], written["writingRecovery"])
+        assertEquals(new.getValue("settings").jsonObject["extras"], written.getValue("settings").jsonObject["extras"])
+        assertEquals(new.getValue("works").jsonArray[0].jsonObject["authorIdentitiesJSON"],
+            written.getValue("works").jsonArray[0].jsonObject["authorIdentitiesJSON"])
+    }
+
+    @Test
+    fun disconnectWaitsForCommitThenClearsTheStore() = runTest {
+        val fixture = iosT541ManifestJson()
+        writeChild(ensureKudosLibrary(), BackupPaths.MANIFEST, "application/json",
+            BackupJson.encodeToString(JsonObject.serializer(), fixture).toByteArray())
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val blocked = SyncRepository(context, settingsRepository, backupRepository, workFileStore,
+            fontFileStore, persistenceGate, clock = { clockInstant }, beforeManifestCommit = {
+                entered.complete(Unit)
+                release.await()
+            })
+        val sync = async(Dispatchers.IO) { blocked.runSync() }
+        entered.await()
+        val disconnect = async(Dispatchers.IO) { blocked.disconnect() }
+        assertNull(withTimeoutOrNull(100) { disconnect.await() })
+        release.complete(Unit)
+        assertTrue(sync.await() is SyncResult.Success)
+        disconnect.await()
+        assertNull(settingsRepository.settings.first().sync.folderUri)
+        assertFalse(Files.exists(filesRoot.resolve("sync-last-manifest.json")))
+    }
+
+    @Test
+    fun changeFolderWaitsForCommitThenClearsOldOpaqueState() = runTest {
+        val fixture = iosT541ManifestJson()
+        writeChild(ensureKudosLibrary(), BackupPaths.MANIFEST, "application/json",
+            BackupJson.encodeToString(JsonObject.serializer(), fixture).toByteArray())
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val blocked = SyncRepository(context, settingsRepository, backupRepository, workFileStore,
+            fontFileStore, persistenceGate, clock = { clockInstant }, beforeManifestCommit = {
+                entered.complete(Unit)
+                release.await()
+            })
+        val sync = async(Dispatchers.IO) { blocked.runSync() }
+        entered.await()
+        val other = DocumentFile.fromTreeUri(context, treeUri)!!.createDirectory("Other")!!
+        val newFolder = android.provider.DocumentsContract.buildTreeDocumentUri(
+            FakeTempDocumentsProvider.AUTHORITY,
+            android.provider.DocumentsContract.getDocumentId(other.uri)
+        )
+        context.grantUriPermission(context.packageName, newFolder,
+            android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                android.content.Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+        val change = async(Dispatchers.IO) { blocked.connect(newFolder) }
+        assertNull(withTimeoutOrNull(100) { change.await() })
+        release.complete(Unit)
+        assertTrue(sync.await() is SyncResult.Success)
+        change.await()
+        assertEquals(newFolder, blocked.getSyncFolderUri())
+        assertFalse(Files.exists(filesRoot.resolve("sync-last-manifest.json")))
     }
 
     private fun iosT541ManifestJson(): JsonObject {
