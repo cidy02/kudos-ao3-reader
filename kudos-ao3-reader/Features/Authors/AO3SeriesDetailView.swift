@@ -251,7 +251,10 @@ struct AO3SeriesDetailView: View {
                 .frame(maxWidth: .infinity)
             }
             .buttonStyle(.kudosPrimaryConfirm)
-            .disabled(subscribeModel.isWorking)
+            .disabled(
+                subscribeModel.isWorking
+                    || (auth.isLoggedIn && !subscribeModel.hasSyncedSubscription)
+            )
             .accessibilityLabel(subscribeModel.isSubscribed ? "Unsubscribe" : "Subscribe")
             .accessibilityAddTraits(subscribeModel.isSubscribed ? [.isSelected] : [])
             .confirmationDialog(
@@ -440,6 +443,7 @@ struct AO3SeriesDetailView: View {
     ) async {
         let expectedAuthenticationScope = authenticationScope
         let expectedSessionGeneration = auth.sessionGeneration
+        let expectedCacheScope = AO3AuthorProfileFetcher.sessionScopedCacheScope(for: auth)
         if replace, works.isEmpty { phase = .loading }
         if !replace { isLoadingMore = true }
         loadMoreError = nil
@@ -451,6 +455,11 @@ struct AO3SeriesDetailView: View {
             let cached = try await AO3AuthorProfileFetcher.page(
                 at: url,
                 auth: auth,
+                cacheScope: expectedCacheScope,
+                isCurrent: {
+                    authenticationScope == expectedAuthenticationScope
+                        && auth.sessionGeneration == expectedSessionGeneration
+                },
                 bypassCache: bypassCache
             )
             let result: AO3SearchPage
@@ -458,7 +467,11 @@ struct AO3SeriesDetailView: View {
                 result = try AO3Client.parseAuthorWorksPage(cached.html, page: page)
             } catch {
                 if let ao3Error = error as? AO3Error, case .parse = ao3Error {
-                    await AO3AuthorProfileFetcher.invalidate(url, auth: auth)
+                    await AO3AuthorProfileFetcher.invalidate(
+                        url,
+                        auth: auth,
+                        cacheScope: expectedCacheScope
+                    )
                 }
                 throw error
             }
@@ -507,7 +520,11 @@ struct AO3SeriesDetailView: View {
 
     private func invalidateSeriesPageCache() async {
         if let url = AO3Client.seriesPageURL(series.url, page: 1) {
-            await AO3AuthorProfileFetcher.invalidate(url, auth: auth)
+            await AO3AuthorProfileFetcher.invalidate(
+                url,
+                auth: auth,
+                cacheScope: AO3AuthorProfileFetcher.sessionScopedCacheScope(for: auth)
+            )
         }
         await AO3Client.shared.invalidateCachedResponses()
     }
@@ -520,6 +537,7 @@ final class AO3SeriesSubscribeModel {
     typealias ToggleHandler = @MainActor (Int, AO3AuthService) async throws -> String
 
     private(set) var isSubscribed = false
+    private(set) var hasSyncedSubscription = false
     private(set) var isWorking = false
     var isConfirmingUnsubscribe = false
     var banner: String?
@@ -539,7 +557,14 @@ final class AO3SeriesSubscribeModel {
     }
 
     func syncFromSeriesPage(html: String, isLoggedIn: Bool) {
-        isSubscribed = isLoggedIn ? AO3Client.parseSubscription(from: html).isSubscribed : false
+        guard !isWorking else { return }
+        guard isLoggedIn else {
+            isSubscribed = false
+            hasSyncedSubscription = false
+            return
+        }
+        isSubscribed = AO3Client.parseSubscription(from: html).isSubscribed
+        hasSyncedSubscription = true
     }
 
     func reset() {
@@ -550,6 +575,7 @@ final class AO3SeriesSubscribeModel {
             activeTask = nil
         }
         isSubscribed = false
+        hasSyncedSubscription = false
         isWorking = false
         isConfirmingUnsubscribe = false
         if !isHandlingSessionExpiry,

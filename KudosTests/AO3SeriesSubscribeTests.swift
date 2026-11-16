@@ -370,4 +370,60 @@ struct AO3SeriesSubscribeTests {
         #expect(hits[0].method == "GET")
         #expect(hits.filter { $0.method == "POST" }.isEmpty)
     }
+
+    @Test func syncStateRequiresSignedInPage1IgnoresMidWriteSyncAndIsolatesCacheBySession() async throws {
+        let auth = makeAuth()
+        await auth.login(username: "alice", password: "pw")
+
+        let writeEntered = Signal()
+        let writeRelease = Signal()
+        let model = AO3SeriesSubscribeModel { _, _ in
+            await writeEntered.fire()
+            await writeRelease.wait()
+            return "Subscribed."
+        }
+
+        // Before page 1 finishes, state is unknown.
+        #expect(!model.hasSyncedSubscription)
+        model.syncFromSeriesPage(html: seriesHTML(seriesID: 42, subscriptionID: 789), isLoggedIn: false)
+        #expect(!model.hasSyncedSubscription)
+        #expect(!model.isSubscribed)
+
+        // Page 1 sync sets state and marks it known.
+        model.syncFromSeriesPage(html: seriesHTML(seriesID: 42), isLoggedIn: true)
+        #expect(model.hasSyncedSubscription)
+        #expect(!model.isSubscribed)
+
+        // A stale page-1 sync arriving while a write is in flight must not overwrite isSubscribed.
+        model.tapped(seriesID: 42, auth: auth)
+        await writeEntered.wait()
+        #expect(model.isWorking)
+        model.syncFromSeriesPage(html: seriesHTML(seriesID: 42, subscriptionID: 789), isLoggedIn: true)
+        #expect(!model.isSubscribed)
+        await writeRelease.fire()
+        await model.waitForCurrentTask()
+        #expect(model.isSubscribed)
+
+        model.reset()
+        #expect(!model.hasSyncedSubscription)
+        #expect(!model.isSubscribed)
+
+        // Re-logging in as the same user changes sessionScopedCacheScope, isolating cached series HTML.
+        let url = URL(string: "https://archiveofourown.org/series/999042")!
+        let firstScope = AO3AuthorProfileFetcher.sessionScopedCacheScope(for: auth)
+        let firstKey = AO3AuthorPageCache.Key(url: url, authenticationScope: firstScope)
+        await AO3AuthorPageCache.shared.insert(
+            seriesHTML(seriesID: 999042, subscriptionID: 789), for: firstKey
+        )
+
+        await auth.logout()
+        await auth.login(username: "alice", password: "pw")
+        let secondScope = AO3AuthorProfileFetcher.sessionScopedCacheScope(for: auth)
+        let secondKey = AO3AuthorPageCache.Key(url: url, authenticationScope: secondScope)
+        #expect(firstScope != secondScope)
+        #expect(await AO3AuthorPageCache.shared.value(for: secondKey) == nil)
+
+        await AO3AuthorProfileFetcher.invalidate(url, auth: auth, cacheScope: firstScope)
+        #expect(await AO3AuthorPageCache.shared.value(for: firstKey) == nil)
+    }
 }
