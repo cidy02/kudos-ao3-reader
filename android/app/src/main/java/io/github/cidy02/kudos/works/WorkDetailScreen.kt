@@ -1147,11 +1147,12 @@ fun WorkDetailScreen(
     if (showingPageDateEditor) {
         val localWork = state.local
         if (localWork != null) {
+            val tokens = LocalKudosTokens.current
             val workHue = remember(state.fandoms, state.title) {
                 HomeFacts.workHue(state.fandoms, state.title)
             }
-            val pagePalette = remember(workHue, LocalKudosTokens.current.theme) {
-                SubjectPalette.fromHue(workHue, LocalKudosTokens.current.theme)
+            val pagePalette = remember(workHue, tokens.theme) {
+                SubjectPalette.fromHue(workHue, tokens.theme)
             }
             DownloadedDateEditorDialog(
                 initialDate = localWork.downloadedAt ?: localWork.dateAdded,

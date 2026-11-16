@@ -309,4 +309,7 @@ object ChapterLengthCache {
             }
         }
     }
+
+    private fun org.jsoup.nodes.Element.localName(): String =
+        tagName().substringAfter(':').lowercase(Locale.ROOT)
 }
