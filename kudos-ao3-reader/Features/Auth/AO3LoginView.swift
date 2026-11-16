@@ -310,7 +310,7 @@ struct AO3LoginView: View {
     private func openOnAO3(_ url: URL) {
         userInitiatedClose = true
         auth.cancelLogin()
-        dismiss()
         router.open(url)
+        dismiss()
     }
 }

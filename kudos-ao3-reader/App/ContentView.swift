@@ -96,7 +96,7 @@ struct ContentView: View {
             .sheet(isPresented: Binding(
                 get: {
                     router.isPresentingLinkedWork && !router.isPresentingAccount
-                        && router.panel == .none && !showingBugReport
+                        && router.canPresentLinkedWorkOverPanel && !showingBugReport
                         && whatsNewEntries.isEmpty && externalImport.pendingImport == nil
                         && !onboardingPresented.wrappedValue && !syncFolderOnboardingPresented.wrappedValue
                 },
@@ -124,6 +124,7 @@ struct ContentView: View {
                     router.pendingLoginSessionGeneration = nil
                     if router.pendingWorkLink != nil { router.isPresentingLinkedWork = true }
                 }
+                router.linkedWorkLoginDidDismiss()
             }) {
                 if let link = router.pendingLoginWorkLink {
                     AO3LoginView(contextMessage: "Restricted work",

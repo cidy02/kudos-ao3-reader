@@ -380,6 +380,8 @@ final class AppRouter {
     var pendingLoginWorkLink: (id: Int, chapterID: Int?)?
     var pendingLoginSessionGeneration: Int?
     var isPresentingLinkedWorkLogin = false
+    private var opensWebsiteAfterLinkedWorkLoginDismiss = false
+    private var websiteURLAfterLinkedWorkLoginDismiss: URL?
     private(set) var workLinkEpoch = 0
     var isPresentingLinkedWork = false
     /// A tag the Library should filter by on its next appearance (e.g. tapped on a
@@ -431,6 +433,10 @@ final class AppRouter {
         case none, searchFilters, libraryFilters, readerChapters, readerDisplay, readerFind
     }
 
+    var canPresentLinkedWorkOverPanel: Bool {
+        panel != .searchFilters && panel != .libraryFilters
+    }
+
     /// Opens a URL in the in-app AO3 website sheet without changing tabs.
     ///
     /// Scheme + host gates live at this sink, not at the call sites.
@@ -444,6 +450,10 @@ final class AppRouter {
         else { return }
         if isPresentingAccount || opensWebsiteAfterAccountDismiss {
             openWebsiteAfterDismissingAccount(url)
+            return
+        }
+        if isPresentingLinkedWorkLogin || opensWebsiteAfterLinkedWorkLoginDismiss {
+            openWebsiteAfterDismissingLinkedWorkLogin(url)
             return
         }
         let destination = Self.canonicalAO3URL(url)
@@ -477,8 +487,11 @@ final class AppRouter {
             workLinkEpoch &+= 1
             if isPresentingAccount {
                 isPresentingAccount = false
-            } else if isPresentingLinkedWorkLogin {
+            } else if isPresentingLinkedWorkLogin || opensWebsiteAfterLinkedWorkLoginDismiss {
                 pendingLoginWorkLink = nil
+                pendingLoginSessionGeneration = nil
+                opensWebsiteAfterLinkedWorkLoginDismiss = false
+                websiteURLAfterLinkedWorkLoginDismiss = nil
                 isPresentingLinkedWorkLogin = false
             } else if isPresentingWebBrowser && !isPresentingLinkedWork {
                 isPresentingWebBrowser = false
@@ -810,6 +823,22 @@ final class AppRouter {
             open(url)
         } else {
             openWebsite()
+        }
+    }
+
+    func openWebsiteAfterDismissingLinkedWorkLogin(_ url: URL) {
+        opensWebsiteAfterLinkedWorkLoginDismiss = true
+        websiteURLAfterLinkedWorkLoginDismiss = url
+        isPresentingLinkedWorkLogin = false
+    }
+
+    func linkedWorkLoginDidDismiss() {
+        guard opensWebsiteAfterLinkedWorkLoginDismiss else { return }
+        let url = websiteURLAfterLinkedWorkLoginDismiss
+        opensWebsiteAfterLinkedWorkLoginDismiss = false
+        websiteURLAfterLinkedWorkLoginDismiss = nil
+        if let url, pendingWorkLink == nil {
+            open(url)
         }
     }
 

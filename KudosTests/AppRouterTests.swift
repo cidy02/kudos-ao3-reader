@@ -836,6 +836,35 @@ struct AppRouterTests {
         #expect(router.selection == .home)
     }
 
+    @Test func readerPanelsDoNotBlockOrDismissLinkedWorkLanding() {
+        let router = AppRouter()
+        for panel: AppRouter.Panel in [.none, .readerChapters, .readerDisplay, .readerFind] {
+            router.panel = panel
+            #expect(router.canPresentLinkedWorkOverPanel)
+        }
+        for panel: AppRouter.Panel in [.searchFilters, .libraryFilters] {
+            router.panel = panel
+            #expect(!router.canPresentLinkedWorkOverPanel)
+        }
+    }
+
+    @Test func openingAURLFromLinkedWorkLoginWaitsForLoginDismissal() throws {
+        let router = AppRouter()
+        let url = try #require(URL(string: "https://archiveofourown.org/users/password/new"))
+        router.isPresentingLinkedWorkLogin = true
+
+        router.open(url)
+
+        #expect(!router.isPresentingLinkedWorkLogin)
+        #expect(!router.isPresentingWebBrowser)
+        #expect(router.pendingURL == nil)
+
+        router.linkedWorkLoginDidDismiss()
+
+        #expect(router.isPresentingWebBrowser)
+        #expect(router.pendingURL == url)
+    }
+
     @Test func malformedAndNonAO3UserURLsAreNotAuthorRoutes() {
         #expect(AppRouter.authorRoute(
             for: URL(string: "https://archiveofourown.org/users/login")!
