@@ -635,10 +635,11 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
     /// this file inherits the source device's deletion history, instead of having zero
     /// tombstone knowledge and silently resurrecting anything deleted after export.
     let tombstones: [KudosBackupTombstone]
-    /// Unpublished writing saved for crash recovery (T-541). Additive, no version bump.
-    var writingRecovery: [KudosBackupRecoveryCopy] = []
+    /// Unpublished writing saved for crash recovery (T-541). Additive, no version bump; nil
+    /// (and absent from the JSON) when there is none, so such a manifest is unchanged.
+    var writingRecovery: [KudosBackupRecoveryCopy]?
     /// App data kept in files outside SwiftData (T-541): mail updates, subscription scans.
-    var documents: [KudosBackupDocument] = []
+    var documents: [KudosBackupDocument]?
 
     init(
         version: Int = currentVersion,
@@ -748,8 +749,8 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
         // `try?`: neither may stop the library itself from restoring.
         writingRecovery = (try? container.decodeIfPresent(
             [KudosBackupRecoveryCopy].self, forKey: .writingRecovery
-        )) ?? []
-        documents = (try? container.decodeIfPresent([KudosBackupDocument].self, forKey: .documents)) ?? []
+        )) ?? nil
+        documents = (try? container.decodeIfPresent([KudosBackupDocument].self, forKey: .documents)) ?? nil
     }
 }
 
@@ -2459,8 +2460,10 @@ enum KudosBackupService {
             pronunciations: .capture(),
             tombstones: tombstones.map(KudosBackupTombstone.init)
         )
-        manifest.writingRecovery = KudosBackupRecoveryCopy.capture()
-        manifest.documents = KudosBackupDocument.capture()
+        let recovery = KudosBackupRecoveryCopy.capture()
+        manifest.writingRecovery = recovery.isEmpty ? nil : recovery
+        let documents = KudosBackupDocument.capture()
+        manifest.documents = documents.isEmpty ? nil : documents
         return KudosBackupContents(
             manifest: manifest,
             epubFiles: epubFiles,
@@ -3870,8 +3873,8 @@ enum KudosBackupService {
         )
         // Same reasoning, every mode: unpublished writing and app data files are not library
         // content, and each only ever adds or replaces with something newer.
-        KudosBackupRecoveryCopy.apply(contents.manifest.writingRecovery)
-        KudosBackupDocument.apply(contents.manifest.documents)
+        KudosBackupRecoveryCopy.apply(contents.manifest.writingRecovery ?? [])
+        KudosBackupDocument.apply(contents.manifest.documents ?? [])
         return KudosBackupRestoreSummary(
             // Count what was actually applied — tombstone-suppressed works are skipped
             // and must not inflate the user-facing "N works restored" confirmation.

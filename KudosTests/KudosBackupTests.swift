@@ -84,7 +84,7 @@ struct KudosBackupTests {
         #expect(decoded.fontData(for: font.fileName) == fontData)
     }
 
-    @Test func authorIdentityPersistsLocallyWithoutChangingBackupSchema() throws {
+    @Test func authorIdentityTravelsInTheBackupWithoutAVersionBump() throws {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
             WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
@@ -131,7 +131,8 @@ struct KudosBackupTests {
 
         let restored = try #require(targetContext.fetch(FetchDescriptor<SavedWork>()).first)
         #expect(restored.author == "Avery Writes")
-        #expect(restored.verifiedAuthorIdentities.isEmpty)
+        // T-541: the bylines as AO3 accounts travel, so they stay tappable after a restore.
+        #expect(restored.verifiedAuthorIdentities == [identity])
         #expect(contents.manifest.version == KudosBackupManifest.currentVersion)
     }
 
