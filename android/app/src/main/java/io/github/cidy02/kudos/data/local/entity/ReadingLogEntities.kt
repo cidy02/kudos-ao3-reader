@@ -1,10 +1,21 @@
 package io.github.cidy02.kudos.data.local.entity
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 import java.time.Instant
+
+enum class ReadingSessionMode(val rawValue: String) {
+    READ("read"),
+    LISTEN("listen");
+
+    companion object {
+        fun fromRaw(raw: String?): ReadingSessionMode =
+            entries.firstOrNull { it.rawValue == raw } ?: READ
+    }
+}
 
 /** iOS `ReadingSession`: one stretch of reading, for Reading Insights (1bi). */
 @Entity(tableName = "reading_sessions", indices = [Index("workID"), Index("startedAt")])
@@ -17,6 +28,14 @@ data class ReadingSessionEntity(
     val startedAt: Instant,
     val endedAt: Instant,
     val durationSeconds: Double = 0.0,
+    val tzOffsetSeconds: Int? = null,
+    val startProgress: Double? = null,
+    val startSpineIndex: Int? = null,
+    @ColumnInfo(defaultValue = "'read'") val modeRaw: String = "read",
+    val playbackRate: Double? = null,
+    val activeSeconds: Double? = null,
+    @ColumnInfo(defaultValue = "") val deviceID: String = "",
+    @ColumnInfo(defaultValue = "0") val rulesVersion: Int = 0,
     val lastSpineIndex: Int = 0,
     val chapterTitle: String = "",
     val endingProgress: Double = 0.0,
@@ -24,7 +43,9 @@ data class ReadingSessionEntity(
     val chapterCountAtVisit: Int = 0,
     val didFinish: Boolean = false,
     val lastModifiedAt: Instant
-)
+) {
+    val mode: ReadingSessionMode get() = ReadingSessionMode.fromRaw(modeRaw)
+}
 
 /** iOS `ReadingFavorite`: a favourited work, author, fandom or tag (1aj–1bd). */
 @Entity(tableName = "reading_favorites", indices = [Index(value = ["kindRaw", "targetKey"])])
