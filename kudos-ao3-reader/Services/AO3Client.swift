@@ -210,6 +210,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     /// callers are in flight.
     private var nextAllowedRequestAt = Date.distantPast
     private var nextAllowedRankTop100RequestAt = Date.distantPast
+    private var nextAllowedQueueSourceRequestAt = Date.distantPast
     /// While set and in the future, every request fails fast with `.maintenance`
     /// instead of reaching AO3 (batch refreshes would otherwise each knock on a
     /// site that just said it is down).
@@ -259,6 +260,17 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         if step.wait > 0 {
             try await paceSleep(step.wait)
         }
+    }
+
+    private func paceQueueSource() async throws {
+        try Task.checkCancellation()
+        try throwIfHeldForMaintenance()
+        let step = Self.paceStep(
+            now: Date(), nextAllowed: nextAllowedQueueSourceRequestAt, minInterval: 3
+        )
+        nextAllowedQueueSourceRequestAt = step.nextAllowed
+        if step.wait > 0 { try await paceSleep(step.wait) }
+        try throwIfHeldForMaintenance()
     }
 
     /// The slot-claiming computation behind `pace()`, pure so the politeness math
@@ -551,20 +563,51 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         }
     }
 
+    /// The queue-open count uses the same non-retrying 3-second request path as
+    /// Rank Top 100, with its own identifiable User-Agent feature.
+    func queueSourcePage(_ url: URL, authenticatedRequest: URLRequest? = nil) async throws -> AO3SearchPage {
+        try Self.rejectIfUntrusted(url)
+        let holdKey = "queueSources.retryAfterUntil"
+        if let until = UserDefaults.standard.object(forKey: holdKey) as? Date,
+           until > Date() {
+            throw AO3Error.rateLimited(retryAfter: until.timeIntervalSinceNow)
+        }
+        let request = RankTop100PageRequest(page: 1, url: url, scope: "")
+        do {
+            return try await AO3RequestCoordinator.shared.withSlot { [self] in
+                try await performRankTop100Fetch(
+                    request, authenticatedRequest: authenticatedRequest, feature: .queueSourceCounts
+                )
+            }
+        } catch AO3Error.rateLimited(let retryAfter) {
+            if let retryAfter {
+                UserDefaults.standard.set(Date().addingTimeInterval(retryAfter), forKey: holdKey)
+            }
+            throw AO3Error.rateLimited(retryAfter: retryAfter)
+        }
+    }
+
     private func performRankTop100Fetch(
         _ pageRequest: RankTop100PageRequest,
-        authenticatedRequest: URLRequest?
+        authenticatedRequest: URLRequest?,
+        feature: AO3AutomatedFeature = .rankTop100
     ) async throws -> AO3SearchPage {
         var request = authenticatedRequest ?? URLRequest(url: pageRequest.url)
         request.url = pageRequest.url
         request.setValue(
-            AO3RequestDefaults.userAgent(feature: .rankTop100),
+            AO3RequestDefaults.userAgent(feature: feature),
             forHTTPHeaderField: "User-Agent"
         )
-        // In this order: the feature's 3 s wait can be long, and pace() has to
-        // claim its slot immediately before the request goes out.
-        try await paceRankTop100()
-        try await pace()
+        // Queue counts claim their 3 s slot after the global pacer so a wait
+        // there cannot compress the interval between actual queue requests.
+        switch feature {
+        case .rankTop100:
+            try await paceRankTop100()
+            try await pace()
+        case .queueSourceCounts:
+            try await pace()
+            try await paceQueueSource()
+        }
 
         let data: Data
         if authenticatedRequest != nil {

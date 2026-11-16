@@ -247,6 +247,7 @@ struct QueuePageHeader<FilterRail: View>: View {
     let preservedIDs: Set<UUID>
     let palette: SubjectPalette
     let onAddTag: () -> Void
+    let onFindMore: (SavedSearch) -> Void
     @ViewBuilder var filterRail: () -> FilterRail
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -265,6 +266,35 @@ struct QueuePageHeader<FilterRail: View>: View {
 
         VStack(alignment: .leading, spacing: 14) {
             headerTop(detailLine: detailLine)
+
+            ForEach(queue.searchLinks.filter { $0.search != nil }.sorted {
+                ($0.search?.name ?? "") < ($1.search?.name ?? "")
+            }) { link in
+                if let search = link.search {
+                    Button { onFindMore(search) } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "magnifyingglass")
+                                .foregroundStyle(.secondary)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Find More").font(.subheadline.weight(.semibold))
+                                Text(search.name).font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer(minLength: 4)
+                            if let count = link.newResultCount, count > 0 {
+                                Text(QueueSourceChecks.badge(count))
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.tint)
+                            }
+                            Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
+                        }
+                        .padding(12)
+                        .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Find more works: \(search.name), "
+                        + "\(link.newResultCount.map(QueueSourceChecks.badge) ?? "new count unavailable") on AO3")
+                }
+            }
 
             if !works.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {

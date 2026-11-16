@@ -307,6 +307,13 @@ nonisolated enum WritingTabEvents {
 
 /// Shared navigation state so other tabs can hand a URL to the browser and
 /// switch to it (e.g. opening a saved bookmark).
+struct QueueSearchRoute {
+    let id = UUID()
+    let searchID: UUID
+    let queueID: UUID
+    let page: AO3SearchPage?
+}
+
 @Observable
 final class AppRouter {
     struct RestoredSelection: Equatable {
@@ -394,6 +401,8 @@ final class AppRouter {
     /// A tag the Search tab should search AO3 for (e.g. a tapped fandom/character/
     /// relationship chip). Consumed + cleared by `SearchView`.
     var pendingTagSearch: AO3TagSearch?
+    var pendingQueueSearch: QueueSearchRoute?
+    var currentQueueID: UUID?
     /// A tag's works page to show natively in Browse (e.g. an AO3 link tapped in a
     /// work's preface). Consumed + cleared by `BrowseView`.
     var pendingTagWorks: AO3TagWorksRequest?

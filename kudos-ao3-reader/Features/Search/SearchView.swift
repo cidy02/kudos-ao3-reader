@@ -185,6 +185,10 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                     // behind a still-visible, unrelated screen.
                     path = NavigationPath()
                 }
+                .onChange(of: router.pendingQueueSearch?.id, initial: true) { _, _ in
+                    consumeQueueSearch()
+                }
+                .onChange(of: savedSearches.map(\.id)) { _, _ in consumeQueueSearch() }
                 .navigationTitle("Search")
             #if os(iOS)
                 .navigationBarTitleDisplayMode(.inline)
@@ -574,18 +578,28 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 Section {
                     ForEach(savedSearches) { saved in
                         Button { runSaved(saved) } label: {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(saved.name).foregroundStyle(.primary)
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(saved.name).foregroundStyle(.primary)
                                 if let subtitle = savedSearchSubtitle(saved.filters) {
                                     Text(subtitle)
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                         .lineLimit(1)
                                 }
+                                }
+                                Spacer(minLength: 4)
+                                if let count = saved.queueLinks.compactMap(\.newResultCount).max(), count > 0 {
+                                    Text(QueueSourceChecks.badge(count))
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(.tint)
+                                }
                             }
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel("Open saved search \(saved.name), "
+                            + "\(saved.queueLinks.compactMap(\.newResultCount).max().map(QueueSourceChecks.badge) ?? "no new count")")
                     }
                     .onDelete(perform: deleteSavedSearches)
                     .cardRow()
@@ -1125,12 +1139,42 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     }
 
     /// Loads a saved search's filters and runs it.
-    private func runSaved(_ saved: SavedSearch) {
+    private func consumeQueueSearch() {
+        guard let route = router.pendingQueueSearch,
+              let saved = savedSearches.first(where: { $0.id == route.searchID })
+        else { return }
+        router.pendingQueueSearch = nil
+        runSaved(saved, cachedPage: route.page)
+        path = NavigationPath()
+    }
+
+    private func runSaved(_ saved: SavedSearch, cachedPage: AO3SearchPage? = nil) {
         filterHistory.removeAll()
         isLibraryExpanded = false
         filters = saved.filters
         router.panel = .none
-        runSearch()
+        saved.lastOpenedAt = Date()
+        for link in saved.queueLinks { link.newResultCount = 0 }
+        try? context.save()
+        if let cachedPage {
+            loadTask?.cancel()
+            loadToken += 1
+            results = cachedPage.works
+            showsRankedResults = false
+            bulkSelection.selection.removeAll()
+            rankTop100Pages = [:]
+            currentPage = cachedPage.currentPage
+            totalPages = AO3ResultListPaging.clampedTotalPages(cachedPage.totalPages)
+            resultSummary = cachedPage.summary
+            loadedFilters = saved.filters
+            requestedFilters = saved.filters
+            requestedPage = nil
+            failedPage = nil
+            lastAppendError = nil
+            phase = .loaded
+        } else {
+            runSearch()
+        }
     }
 
     private func deleteSavedSearches(at offsets: IndexSet) {

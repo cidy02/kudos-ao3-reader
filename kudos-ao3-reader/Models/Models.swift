@@ -980,6 +980,9 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
 
     @Relationship(deleteRule: .cascade, inverse: \ReadingQueueMembership.queue)
     var memberships: [ReadingQueueMembership] = []
+    @Relationship(deleteRule: .cascade, inverse: \QueueSavedSearchLink.queue)
+    var searchLinks: [QueueSavedSearchLink] = []
+    var searchSourcesModifiedAt: Date?
     /// The reader's own tags on this queue — 1h draws them under the header with
     /// a dashed "+ Tag", and 1i filters the organizer by them. Shares `Tag` with
     /// `SavedWork.tags` so the vocabulary is one list, not two.
