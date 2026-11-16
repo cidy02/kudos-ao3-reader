@@ -567,6 +567,7 @@ internal class SyncLastManifestStore(
     fileName: String = "sync-last-manifest.json"
 ) {
     val file: Path = directory.resolve(fileName)
+    private val folderFile: Path = directory.resolve("$fileName.folder")
 
     fun load(): JsonObject? = synchronized(lock) {
         if (!Files.isRegularFile(file)) return null
@@ -574,12 +575,17 @@ internal class SyncLastManifestStore(
         parseJsonObjectOrNull(bytes)
     }
 
-    fun save(json: JsonObject) {
-        val bytes = BackupJson.encodeToString(JsonObject.serializer(), json).toByteArray(Charsets.UTF_8)
-        save(bytes)
+    fun belongsToFolder(folderUri: String): Boolean = synchronized(lock) {
+        if (!Files.isRegularFile(folderFile)) return false
+        runCatching { Files.readAllBytes(folderFile).toString(Charsets.UTF_8) }.getOrNull() == folderUri
     }
 
-    fun save(bytes: ByteArray) = synchronized(lock) {
+    fun save(json: JsonObject, folderUri: String? = null) {
+        val bytes = BackupJson.encodeToString(JsonObject.serializer(), json).toByteArray(Charsets.UTF_8)
+        save(bytes, folderUri)
+    }
+
+    fun save(bytes: ByteArray, folderUri: String? = null) = synchronized(lock) {
         // Inside the lock, before the file is replaced, so a clear on any instance
         // cannot finish until this publish does, and cannot be overwritten by it.
         beforeFilePublish?.invoke(file)
@@ -596,10 +602,16 @@ internal class SyncLastManifestStore(
         } finally {
             runCatching { Files.deleteIfExists(temp) }
         }
+        if (folderUri != null) {
+            Files.write(folderFile, folderUri.toByteArray(Charsets.UTF_8))
+        } else {
+            runCatching { Files.deleteIfExists(folderFile) }
+        }
     }
 
     fun clear() = synchronized(lock) {
         runCatching { Files.deleteIfExists(file) }
+        runCatching { Files.deleteIfExists(folderFile) }
         Unit
     }
 

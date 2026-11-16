@@ -346,13 +346,17 @@ class SyncRepository(
                     context.contentResolver.openInputStream(remoteBackup.uri)?.use { input ->
                         val bytes = input.readBytes()
                         if (bytes.isNotEmpty()) {
-                            val summary = backupRepository.importV2ZipBytes(bytes, admit = this::folderImportStillAllowed)
+                            val summary = backupRepository.importV2ZipBytesReplacingStore(
+                                bytes,
+                                admit = this::folderImportStillAllowed
+                            )
                             absorbed = absorbed.absorb(summary)
                             if (summary.pronunciationsRestoreFailed) {
                                 throw IOException("Could not save pronunciation corrections. The sync folder was kept; try again.")
                             }
                             extractManifestJsonFromZip(bytes)?.let { zipJson ->
                                 readManifestJson = zipJson
+                                hasUsableFolderManifest = true
                             }
                         }
                     }
@@ -371,7 +375,7 @@ class SyncRepository(
                 if (!folderImportStillAllowed()) throw ImportDeclined()
                 // A folder whose manifest we actually read becomes the store. An empty folder
                 // leaves the previous store in place, and the commit below is its first write.
-                readManifestJson?.let { lastManifestStore.save(it) }
+                readManifestJson?.let { lastManifestStore.save(it, folderUri = uri.toString()) }
                 val snapshot = backupRepository.captureLibrarySnapshot()
                 // Same single-source rule as the User-Agent: a hardcoded version here
                 // drifts silently and lands in every archive the user exports.
@@ -478,10 +482,14 @@ class SyncRepository(
                     )
                 ).jsonObject
                 // What the folder's manifest held that this build does not know stays in the
-                // manifest this build writes. Dropped, as it was, a device that joined the
-                // folder after an Android sync never received it.
+                // manifest this build writes. A folder whose own manifest is unreadable and
+                // has no usable .bak only falls back to the store if that store already
+                // belonged to this folder.
+                val canFallbackToStore = !hasUsableFolderManifest &&
+                    ((manifestBytesAtRead == null && backupManifest == null && conflicts.isEmpty()) ||
+                        lastManifestStore.belongsToFolder(uri.toString()))
                 val replacedJson = readManifestJson
-                    ?: if (!hasUsableFolderManifest) lastManifestStore.load() else null
+                    ?: if (canFallbackToStore) lastManifestStore.load() else null
                 val manifestBytes = BackupJson.encodeToString(
                     JsonObject.serializer(),
                     carryUnknownRecordKeys(manifestJson, replacedJson)
@@ -497,7 +505,7 @@ class SyncRepository(
                 if (generation != folderGeneration || getSyncFolderUri() != uri) {
                     throw IOException("Sync folder changed during sync. Try syncing again.")
                 }
-                lastManifestStore.save(manifestBytes)
+                lastManifestStore.save(manifestBytes, folderUri = uri.toString())
                 foldedConflicts.forEach { it.delete() }
                 // Remembered only when nothing is outstanding (iOS withholds its stamp the same
                 // way): a work still owed an EPUB, or one whose file has gone missing from this

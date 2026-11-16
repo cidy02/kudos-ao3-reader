@@ -133,6 +133,23 @@ class BackupRepository(
         bytes: ByteArray,
         mode: BackupImportMode = BackupImportMode.RECONCILE,
         admit: suspend () -> Boolean = { true }
+    ): BackupRestoreSummary = importV2ZipBytesInternal(bytes, mode, admit, replacePassthroughStore = false)
+
+    internal suspend fun importV2ZipBytesReplacingStore(
+        bytes: ByteArray,
+        admit: suspend () -> Boolean = { true }
+    ): BackupRestoreSummary = importV2ZipBytesInternal(
+        bytes = bytes,
+        mode = BackupImportMode.RECONCILE,
+        admit = admit,
+        replacePassthroughStore = true
+    )
+
+    private suspend fun importV2ZipBytesInternal(
+        bytes: ByteArray,
+        mode: BackupImportMode,
+        admit: suspend () -> Boolean,
+        replacePassthroughStore: Boolean
     ): BackupRestoreSummary = persistenceGate.withLock {
         if (!admit()) throw ImportDeclined()
         withContext(Dispatchers.IO) {
@@ -141,7 +158,7 @@ class BackupRepository(
             val current = captureLibrarySnapshot(pack.fontFilesByFileName.keys, pack.fontFilesByFileName)
             val merge = mergePackage(current, pack, mode)
             applyMergeResultLocked(merge, pack.originalFilesByName).also {
-                recordImportedManifest(pack.rawManifestJson, mode)
+                recordImportedManifest(pack.rawManifestJson, mode, replacePassthroughStore)
             }
         }
     }
@@ -164,8 +181,12 @@ class BackupRepository(
         }
     }
 
-    private fun recordImportedManifest(rawJson: JsonObject?, mode: BackupImportMode) {
-        if (mode == BackupImportMode.REPLACE_LIBRARY) {
+    private fun recordImportedManifest(
+        rawJson: JsonObject?,
+        mode: BackupImportMode,
+        replacePassthroughStore: Boolean = false
+    ) {
+        if (replacePassthroughStore || mode == BackupImportMode.REPLACE_LIBRARY) {
             if (rawJson != null) lastImportedManifestStore.save(rawJson) else lastImportedManifestStore.clear()
         } else if (rawJson != null) {
             val existing = lastImportedManifestStore.load()

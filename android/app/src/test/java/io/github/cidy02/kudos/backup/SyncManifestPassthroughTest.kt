@@ -1318,6 +1318,61 @@ class SyncManifestPassthroughTest {
         )
     }
 
+    @Test
+    fun unreadableManifestWithoutBakInNewFolderDoesNotTakePreviousFoldersStore() = runTest {
+        val oldFixture = iosT541ManifestJson()
+        writeChild(
+            ensureKudosLibrary(),
+            BackupPaths.MANIFEST,
+            "application/json",
+            BackupJson.encodeToString(JsonObject.serializer(), oldFixture).toByteArray(Charsets.UTF_8)
+        )
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+
+        val other = DocumentFile.fromTreeUri(context, treeUri)!!.createDirectory("DamagedOther")!!
+        val otherKudos = other.createDirectory("KudosLibrary")!!
+        writeChild(otherKudos, BackupPaths.MANIFEST, "application/json", """{"version":8,"works":[""".toByteArray())
+        val newFolder = android.provider.DocumentsContract.buildTreeDocumentUri(
+            FakeTempDocumentsProvider.AUTHORITY,
+            android.provider.DocumentsContract.getDocumentId(other.uri)
+        )
+        context.grantUriPermission(
+            context.packageName,
+            newFolder,
+            android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                android.content.Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+        )
+        syncRepository.connect(newFolder)
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+
+        val written = Json.parseToJsonElement(
+            readDocument(otherKudos.findFile(BackupPaths.MANIFEST)!!).toString(Charsets.UTF_8)
+        ).jsonObject
+        assertFalse("writingRecovery" in written)
+        assertFalse("documents" in written)
+        assertNull(written.getValue("settings").jsonObject["extras"])
+    }
+
+    @Test
+    fun legacyKudosBackupReplacesPreviousStoreInsteadOfMergingOverIt() = runTest {
+        val oldFixture = JsonObject(
+            iosT541ManifestJson() + mapOf("oldFolderOnlyKey" to JsonPrimitive("must-not-leak"))
+        )
+        SyncLastManifestStore(filesRoot).save(oldFixture)
+
+        val zipManifest = iosT541ManifestJson()
+        val root = DocumentFile.fromTreeUri(context, treeUri)!!
+        writeChild(root, "Kudos.kudosbackup", "application/zip", zipManifest(zipManifest))
+
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+        val written = Json.parseToJsonElement(
+            readDocument(requireKudosLibrary().findFile(BackupPaths.MANIFEST)!!).toString(Charsets.UTF_8)
+        ).jsonObject
+        assertFalse("oldFolderOnlyKey" in written)
+        assertEquals(zipManifest["writingRecovery"], written["writingRecovery"])
+    }
+
     private fun iosT541ManifestJson(): JsonObject {
         val pair = Ed25519Sign.KeyPair.newKeyPair()
         runBlocking { settingsRepository.trustTombstonePublicKey(pair.publicKey.toLowerHex()) }
