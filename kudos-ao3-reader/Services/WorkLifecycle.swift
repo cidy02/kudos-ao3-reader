@@ -175,7 +175,7 @@ enum WorkLifecycle {
     /// instead, so a work is always recoverable first.
     @MainActor
     static func hardDelete(_ work: SavedWork, in context: ModelContext) {
-        SyncTombstones.recordDeletion(of: work, in: context)
+        SyncTombstones.recordDeletion(of: work, in: context, permanently: true)
         // The cascade delete rule on SavedWork.queueMemberships removes these rows as a
         // side effect of context.delete(work) below — tombstone them explicitly first so
         // a future cloud merge doesn't resurrect a queue membership for a deleted work.

@@ -2937,6 +2937,20 @@ enum KudosBackupService {
             }
         }
 
+        // T-541 (Codex's third review): a permanent delete made on another device never reached
+        // a copy here that was already in Recently Deleted, because tombstones were consulted only
+        // for the records the archive carries, and a permanent delete leaves the archive. That
+        // copy then went out again on this device's next export. Only a trusted tombstone gets
+        // here, and only for a work the reader already deleted on this device: its own countdown
+        // is brought to now, so the launch sweep finishes it through the usual `hardDelete` (no
+        // file is touched inside a restore). Replace is a snapshot and skips tombstones.
+        if mode != .replaceLibrary {
+            let now = Date()
+            for work in existingWorks where tombstones.permanentlyDeletedElsewhere(work) {
+                work.permanentDeletionScheduledAt = min(work.permanentDeletionScheduledAt ?? now, now)
+            }
+        }
+
         let existingCollections = try context.fetch(FetchDescriptor<WorkCollection>())
         var collectionsByID = Dictionary(
             existingCollections.map { ($0.id, $0) },
@@ -4688,7 +4702,11 @@ enum KudosBackupService {
             // Deleted came back empty. That copy is the deletion, not something it predates.
             // Restore it into Recently Deleted (`apply` keeps it pending) while its recovery
             // window is open, unless a later tombstone (a permanent delete) follows it.
-            if archived.isDeleted == true, let deletedAt = archived.deletedAt {
+            // Not for a permanent delete (Codex's third T-541 review): within the 120 seconds a
+            // "Delete Permanently" right after the move to Recently Deleted looked like the move
+            // itself, and the archive's copy came back.
+            if archived.isDeleted == true, let deletedAt = archived.deletedAt,
+               tombstone.deletionReason != SyncTombstones.workPermanentlyDeletedReason {
                 let scheduled = archived.permanentDeletionScheduledAt
                     ?? deletedAt.addingTimeInterval(PreservedWorkService.recoveryWindow)
                 if scheduled > Date(),
@@ -4697,6 +4715,17 @@ enum KudosBackupService {
                 }
             }
             return tombstone.lastModifiedAt >= archivedModifiedAt
+        }
+
+        /// A copy here, already in Recently Deleted, that another device has since deleted for
+        /// good: matched by the record's own id only, never by AO3 identity, so a later
+        /// download of the same AO3 work is a different record and untouched.
+        func permanentlyDeletedElsewhere(_ work: SavedWork) -> Bool {
+            guard work.isPendingDeletion,
+                  let tombstone = savedWorkTombstonesByID[work.id],
+                  tombstone.deletionReason == SyncTombstones.workPermanentlyDeletedReason
+            else { return false }
+            return tombstone.lastModifiedAt >= (work.deletedAt ?? .distantPast)
         }
 
         func collectionResolution(id: UUID, incomingModifiedAt: Date?) -> SyncMerge.TombstoneResolution {

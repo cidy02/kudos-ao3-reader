@@ -380,7 +380,14 @@ enum PersistenceMigrationService {
 
 @MainActor
 enum SyncTombstones {
-    static func recordDeletion(of work: SavedWork, in context: ModelContext) {
+    /// The reason a work's tombstone carries when it is gone for good, not moved to Recently
+    /// Deleted (T-541). Restore reads it: a copy in Recently Deleted elsewhere then finishes
+    /// its deletion, and an archive's Recently Deleted copy of it is not restored. Not part of
+    /// the signed payload: a forged value can only end a recovery window early on a work the
+    /// reader has already deleted, and only through a signature the device already trusts.
+    nonisolated static let workPermanentlyDeletedReason = "workPermanentlyDeleted"
+
+    static func recordDeletion(of work: SavedWork, in context: ModelContext, permanently: Bool = false) {
         insertSigned(
             SyncTombstone(
                 recordID: work.id,
@@ -389,7 +396,7 @@ enum SyncTombstones {
                 ao3WorkID: work.ao3WorkID ?? WorkTags.ao3WorkID(from: work.sourceURL),
                 createdAt: TombstoneSigning.now(),
                 deletedOnDeviceID: PersistenceDevice.currentID(),
-                deletionReason: "workDeleted"
+                deletionReason: permanently ? workPermanentlyDeletedReason : "workDeleted"
             ),
             in: context
         )
