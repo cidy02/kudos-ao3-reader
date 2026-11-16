@@ -52,6 +52,7 @@ final class MailSubscriptionDriver {
     /// Records Save or Not for me. The write lands before `state` changes, so a
     /// failed save leaves the card in the deck.
     func recordDecision(_ action: SubscriptionDecision.Action, workID: UInt64) throws {
+        adoptStoredState()
         let previous = state
         var next = state
         next.decisions.removeAll { $0.workID == workID }
@@ -205,6 +206,7 @@ final class MailSubscriptionDriver {
                 let returnedCursor = harvest.cursor.map {
                     MailCursor(uidValidity: $0.uidValidity, lastUID: $0.lastUid)
                 }
+                adoptStoredState()
                 var nextState = stateForHarvest(returnedCursor: returnedCursor, currentCursor: cursor)
                 let mapped = harvest.readings.compactMap(SubscriptionUpdate.init(reading:))
 
@@ -239,6 +241,7 @@ final class MailSubscriptionDriver {
             }
 
             hasMoreWaiting = moreWaiting
+            adoptStoredState()
             state.lastRefreshAt = now()
             try store.saveState(state)
         }
@@ -257,6 +260,15 @@ final class MailSubscriptionDriver {
             try? await mailbox.close()
             throw error
         }
+    }
+
+    /// The file can gain choices from another device while this driver holds its copy: a
+    /// restore or a sync merges into it directly (T-541). Fold them in before anything is
+    /// written over the file, so the driver never puts back a list from before that merge
+    /// (Codex's fourth review). This device's own later choices still win.
+    private func adoptStoredState() {
+        guard let stored = try? store.loadState(), stored != state else { return }
+        state = SubscriptionUpdateState.merged(local: state, incoming: stored)
     }
 
     private func stateForHarvest(

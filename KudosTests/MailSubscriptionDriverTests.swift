@@ -353,6 +353,22 @@ struct MailSubscriptionDriverTests {
         #expect(driver.updates.isEmpty)
     }
 
+    /// Codex's fourth T-541 review: a choice merged into the file from another device after the
+    /// driver loaded must survive this device's next choice.
+    @Test func aChoiceMergedFromAnotherDeviceSurvivesTheNextChoiceHere() throws {
+        let store = MemorySubscriptionUpdateStore(state: SubscriptionUpdateState(decisions: [
+            SubscriptionDecision(workID: 1, action: .saved, decidedAt: Date(timeIntervalSince1970: 100))
+        ]))
+        let driver = makeDriver(vault: MemoryMailCredentialsVault(), store: store, mailbox: FakeMailbox(harvests: []))
+        // A sync merges another device's later choice into the file behind the driver's back.
+        store.state = SubscriptionUpdateState.merged(local: store.state, incoming: SubscriptionUpdateState(decisions: [
+            SubscriptionDecision(workID: 2, action: .notForMe, decidedAt: Date(timeIntervalSince1970: 200))
+        ]))
+        try driver.recordDecision(.saved, workID: 3)
+        let actions = Dictionary(uniqueKeysWithValues: store.state.decisions.map { ($0.workID, $0.action) })
+        #expect(actions == [1: .saved, 2: .notForMe, 3: .saved])
+    }
+
     private func makeDriver(
         vault: MemoryMailCredentialsVault,
         store: MemorySubscriptionUpdateStore,
