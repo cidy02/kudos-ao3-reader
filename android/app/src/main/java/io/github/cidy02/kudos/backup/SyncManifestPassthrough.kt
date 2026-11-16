@@ -9,6 +9,7 @@ import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.time.Instant
 import java.time.OffsetDateTime
+import java.time.temporal.ChronoUnit
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.json.Json
@@ -283,24 +284,41 @@ internal fun mergeImportedManifestJson(incoming: JsonObject, existing: JsonObjec
  * writing drafts. A newer `modifiedAt` / record stamp is the only removal: the side
  * with the strictly newer stamp supplies that extras entry or the whole record, and
  * an older stamp does not overwrite a newer one. Equal stamps do not apply.
+ * Each side's stamps are bounded by that manifest's `exportedAt`.
  */
-internal fun mergeFallbackManifestJson(primary: JsonObject?, fallback: JsonObject?): JsonObject? {
+internal fun mergeFallbackManifestJson(
+    primary: JsonObject?,
+    fallback: JsonObject?,
+    now: Instant = Instant.now()
+): JsonObject? {
     if (primary == null) return fallback
     if (fallback == null) return primary
 
+    val primaryBounds = StampBounds(instantOf(primary["exportedAt"]), now)
+    val fallbackBounds = StampBounds(instantOf(fallback["exportedAt"]), now)
     val merged = linkedMapOf<String, JsonElement>()
     merged.putAll(primary)
 
     val primarySettings = primary["settings"] as? JsonObject
     val fallbackSettings = fallback["settings"] as? JsonObject
     if (primarySettings != null && fallbackSettings != null) {
-        merged["settings"] = mergeStampedSettings(primarySettings, fallbackSettings)
+        merged["settings"] = mergeStampedSettings(
+            primarySettings,
+            fallbackSettings,
+            primaryBounds,
+            fallbackBounds
+        )
     }
 
     val primaryPron = primary["pronunciations"] as? JsonObject
     val fallbackPron = fallback["pronunciations"] as? JsonObject
     if (primaryPron != null && fallbackPron != null) {
-        merged["pronunciations"] = mergeStampedPronunciations(primaryPron, fallbackPron)
+        merged["pronunciations"] = mergeStampedPronunciations(
+            primaryPron,
+            fallbackPron,
+            primaryBounds,
+            fallbackBounds
+        )
     }
 
     recordListDescriptors.keys.forEach { listName ->
@@ -316,7 +334,7 @@ internal fun mergeFallbackManifestJson(primary: JsonObject?, fallback: JsonObjec
                 val pObj = element as? JsonObject ?: return@map element
                 val match = matcher.match(pObj) ?: return@map pObj
                 fallbackIndexByIdentity[match]?.let { matchedFallbackIndices += it }
-                mergeRawRecord(listName, pObj, match)
+                mergeRawRecord(listName, pObj, match, primaryBounds, fallbackBounds)
             } + fObjects.filterIndexed { index, _ -> index !in matchedFallbackIndices }
             merged[listName] = JsonArray(combined)
         } else if ((primary[listName] == null || primary[listName] is JsonNull) && fArray != null) {
@@ -342,26 +360,49 @@ private fun instantOf(element: JsonElement?): Instant? {
 }
 
 /**
+ * One manifest's clock for stamp comparisons. [exportedAt] is that file's own
+ * `exportedAt`; a missing or far-future value does not cap.
+ */
+private class StampBounds(val exportedAt: Instant?, val now: Instant) {
+    fun of(element: JsonElement?): Instant? = boundedInstant(element, exportedAt, now)
+}
+
+/**
+ * Ignores an instant more than 24h ahead of [now]. Caps every other instant at
+ * [exportedAt] when that cap is itself inside the same window, matching
+ * [BackupValidator.parseInstant].
+ */
+private fun boundedInstant(element: JsonElement?, exportedAt: Instant?, now: Instant): Instant? {
+    val parsed = instantOf(element) ?: return null
+    val limit = now.plus(24, ChronoUnit.HOURS)
+    if (parsed.isAfter(limit)) return null
+    val cap = exportedAt?.takeUnless { it.isAfter(limit) }
+    return if (cap != null && parsed.isAfter(cap)) cap else parsed
+}
+
+/**
  * Record modification stamp: `readingQueues` use `max(dateUpdated, lastMembershipChangedAt)`;
  * other lists use `lastModifiedAt` or a primitive `modifiedAt`, with creation-date fallbacks
  * for collections (`dateAdded`), memberships (`queuedAt`), and annotations (`createdAt`).
+ * Every candidate is passed through [boundedInstant].
  */
-private fun recordStamp(listName: String, record: JsonObject): Instant? {
+private fun recordStamp(listName: String, record: JsonObject, bounds: StampBounds): Instant? {
+    fun at(element: JsonElement?) = bounds.of(element)
     if (listName == "readingQueues") {
         listOfNotNull(
-            instantOf(record["dateUpdated"]),
-            instantOf(record["lastMembershipChangedAt"])
+            at(record["dateUpdated"]),
+            at(record["lastMembershipChangedAt"])
         ).maxOrNull()?.let { return it }
     }
-    instantOf(record["lastModifiedAt"])?.let { return it }
+    at(record["lastModifiedAt"])?.let { return it }
     val modified = record["modifiedAt"]
     if (modified != null && modified !is JsonObject && modified !is JsonArray) {
-        instantOf(modified)?.let { return it }
+        at(modified)?.let { return it }
     }
     return when (listName) {
-        "collections" -> instantOf(record["dateAdded"])
-        "readingQueueMemberships" -> instantOf(record["queuedAt"])
-        "annotations" -> instantOf(record["createdAt"])
+        "collections" -> at(record["dateAdded"])
+        "readingQueueMemberships" -> at(record["queuedAt"])
+        "annotations" -> at(record["createdAt"])
         else -> null
     }
 }
@@ -404,10 +445,12 @@ private fun applyStampedValue(
     fallbackStamp: JsonElement?,
     primaryValue: JsonElement?,
     fallbackValue: JsonElement?,
+    primaryBounds: StampBounds,
+    fallbackBounds: StampBounds,
     onStamp: (JsonElement) -> Unit,
     onValue: (JsonElement) -> Unit
 ) {
-    when (stampWinner(instantOf(primaryStamp), instantOf(fallbackStamp))) {
+    when (stampWinner(primaryBounds.of(primaryStamp), fallbackBounds.of(fallbackStamp))) {
         StampWinner.PRIMARY -> {
             primaryStamp?.let(onStamp)
             primaryValue?.let(onValue)
@@ -423,7 +466,12 @@ private fun applyStampedValue(
     }
 }
 
-private fun mergeStampedSettings(primary: JsonObject, fallback: JsonObject): JsonObject {
+private fun mergeStampedSettings(
+    primary: JsonObject,
+    fallback: JsonObject,
+    primaryBounds: StampBounds,
+    fallbackBounds: StampBounds
+): JsonObject {
     val combined = linkedMapOf<String, JsonElement>()
     combined.putAll(primary)
     fallback.forEach { (key, value) ->
@@ -455,7 +503,7 @@ private fun mergeStampedSettings(primary: JsonObject, fallback: JsonObject): Jso
         val fValue = fExtrasMap[owner]
         val ownerEntries = entryIds.filter { it.owner == owner }
         val ownerStamp = pModMap[owner] ?: fModMap[owner]
-        val ownerWinner = stampWinner(instantOf(pModMap[owner]), instantOf(fModMap[owner]))
+        val ownerWinner = stampWinner(primaryBounds.of(pModMap[owner]), fallbackBounds.of(fModMap[owner]))
         val mapOwner = mapBody(pValue) != null || mapBody(fValue) != null || ownerEntries.isNotEmpty()
         if (!mapOwner) {
             applyStampedValue(
@@ -463,6 +511,8 @@ private fun mergeStampedSettings(primary: JsonObject, fallback: JsonObject): Jso
                 fallbackStamp = fModMap[owner],
                 primaryValue = pValue,
                 fallbackValue = fValue,
+                primaryBounds = primaryBounds,
+                fallbackBounds = fallbackBounds,
                 onStamp = { mergedMod[owner] = it },
                 onValue = { mergedExtras[owner] = it }
             )
@@ -476,6 +526,8 @@ private fun mergeStampedSettings(primary: JsonObject, fallback: JsonObject): Jso
                 fallbackStamp = fModMap[owner],
                 primaryValue = pValue,
                 fallbackValue = fValue,
+                primaryBounds = primaryBounds,
+                fallbackBounds = fallbackBounds,
                 onStamp = { mergedMod[owner] = it },
                 onValue = { mergedExtras[owner] = it }
             )
@@ -494,6 +546,8 @@ private fun mergeStampedSettings(primary: JsonObject, fallback: JsonObject): Jso
                 fallbackStamp = stampKey?.let { fModMap[it] },
                 primaryValue = pMap?.get(entry),
                 fallbackValue = fMap?.get(entry),
+                primaryBounds = primaryBounds,
+                fallbackBounds = fallbackBounds,
                 onStamp = { if (stampKey != null) mergedMod[stampKey] = it },
                 onValue = { mergedMap[entry] = it }
             )
@@ -511,6 +565,8 @@ private fun mergeStampedSettings(primary: JsonObject, fallback: JsonObject): Jso
             fallbackStamp = fModMap[key],
             primaryValue = null,
             fallbackValue = null,
+            primaryBounds = primaryBounds,
+            fallbackBounds = fallbackBounds,
             onStamp = { mergedMod[key] = it },
             onValue = { _ -> }
         )
@@ -521,7 +577,12 @@ private fun mergeStampedSettings(primary: JsonObject, fallback: JsonObject): Jso
     return JsonObject(combined)
 }
 
-private fun mergeStampedPronunciations(primary: JsonObject, fallback: JsonObject): JsonObject {
+private fun mergeStampedPronunciations(
+    primary: JsonObject,
+    fallback: JsonObject,
+    primaryBounds: StampBounds,
+    fallbackBounds: StampBounds
+): JsonObject {
     val combined = linkedMapOf<String, JsonElement>()
     combined.putAll(primary)
     val pStamps = primary["stamps"] as? JsonObject
@@ -534,6 +595,8 @@ private fun mergeStampedPronunciations(primary: JsonObject, fallback: JsonObject
                 fallbackStamp = fStamps?.get(key),
                 primaryValue = pStamps?.get(key),
                 fallbackValue = fStamps?.get(key),
+                primaryBounds = primaryBounds,
+                fallbackBounds = fallbackBounds,
                 onStamp = { mergedStamps[key] = it },
                 onValue = { mergedStamps[key] = it }
             )
@@ -550,8 +613,19 @@ private fun mergeStampedPronunciations(primary: JsonObject, fallback: JsonObject
  * The newer record stamp wins the whole record, so a key that record omits stays removed.
  * No stamp, or a tie, keeps keys that only one side has and lets the primary overwrite collisions.
  */
-private fun mergeRawRecord(listName: String, primary: JsonObject, fallback: JsonObject): JsonObject {
-    return when (stampWinner(recordStamp(listName, primary), recordStamp(listName, fallback))) {
+private fun mergeRawRecord(
+    listName: String,
+    primary: JsonObject,
+    fallback: JsonObject,
+    primaryBounds: StampBounds,
+    fallbackBounds: StampBounds
+): JsonObject {
+    return when (
+        stampWinner(
+            recordStamp(listName, primary, primaryBounds),
+            recordStamp(listName, fallback, fallbackBounds)
+        )
+    ) {
         StampWinner.PRIMARY -> primary
         StampWinner.FALLBACK -> fallback
         StampWinner.TIE -> JsonObject(fallback + primary)
@@ -575,9 +649,15 @@ internal class SyncLastManifestStore(
         parseJsonObjectOrNull(bytes)
     }
 
+    fun taggedFolderUri(): String? = synchronized(lock) { readFolderTag() }
+
     fun belongsToFolder(folderUri: String): Boolean = synchronized(lock) {
-        if (!Files.isRegularFile(folderFile)) return false
-        runCatching { Files.readAllBytes(folderFile).toString(Charsets.UTF_8) }.getOrNull() == folderUri
+        readFolderTag() == folderUri
+    }
+
+    private fun readFolderTag(): String? {
+        if (!Files.isRegularFile(folderFile)) return null
+        return runCatching { Files.readAllBytes(folderFile).toString(Charsets.UTF_8) }.getOrNull()
     }
 
     fun save(json: JsonObject, folderUri: String? = null) {
@@ -602,10 +682,25 @@ internal class SyncLastManifestStore(
         } finally {
             runCatching { Files.deleteIfExists(temp) }
         }
+        // A null URI leaves the sidecar alone. Callers that do not know the folder
+        // (a disconnected import) must not strip a tag a previous sync wrote.
         if (folderUri != null) {
-            Files.write(folderFile, folderUri.toByteArray(Charsets.UTF_8))
-        } else {
-            runCatching { Files.deleteIfExists(folderFile) }
+            val tagTemp = Files.createTempFile(parent, ".sync-last-manifest-folder-", ".tmp")
+            try {
+                Files.write(tagTemp, folderUri.toByteArray(Charsets.UTF_8))
+                try {
+                    Files.move(
+                        tagTemp,
+                        folderFile,
+                        StandardCopyOption.ATOMIC_MOVE,
+                        StandardCopyOption.REPLACE_EXISTING
+                    )
+                } catch (_: Exception) {
+                    Files.move(tagTemp, folderFile, StandardCopyOption.REPLACE_EXISTING)
+                }
+            } finally {
+                runCatching { Files.deleteIfExists(tagTemp) }
+            }
         }
     }
 

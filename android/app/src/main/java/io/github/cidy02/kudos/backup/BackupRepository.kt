@@ -142,19 +142,22 @@ class BackupRepository(
 
     internal suspend fun importV2ZipBytesReplacingStore(
         bytes: ByteArray,
-        admit: suspend () -> Boolean = { true }
+        admit: suspend () -> Boolean = { true },
+        folderUri: String? = null
     ): BackupRestoreSummary = importV2ZipBytesInternal(
         bytes = bytes,
         mode = BackupImportMode.RECONCILE,
         admit = admit,
-        replacePassthroughStore = true
+        replacePassthroughStore = true,
+        folderUri = folderUri
     )
 
     private suspend fun importV2ZipBytesInternal(
         bytes: ByteArray,
         mode: BackupImportMode,
         admit: suspend () -> Boolean,
-        replacePassthroughStore: Boolean
+        replacePassthroughStore: Boolean,
+        folderUri: String? = null
     ): BackupRestoreSummary = persistenceGate.withLock {
         if (!admit()) throw ImportDeclined()
         withContext(Dispatchers.IO) {
@@ -163,7 +166,7 @@ class BackupRepository(
             val current = captureLibrarySnapshot(pack.fontFilesByFileName.keys, pack.fontFilesByFileName)
             val merge = mergePackage(current, pack, mode)
             applyMergeResultLocked(merge, pack.originalFilesByName).also {
-                recordImportedManifest(pack.rawManifestJson, mode, replacePassthroughStore)
+                recordImportedManifest(pack.rawManifestJson, mode, replacePassthroughStore, folderUri)
             }
         }
     }
@@ -189,19 +192,24 @@ class BackupRepository(
     private suspend fun recordImportedManifest(
         rawJson: JsonObject?,
         mode: BackupImportMode,
-        replacePassthroughStore: Boolean = false
+        replacePassthroughStore: Boolean = false,
+        folderUri: String? = null
     ) {
+        val connectedFolderUri = folderUri ?: settingsRepository.settings.first().sync.folderUri
         if (replacePassthroughStore) {
-            if (rawJson != null) lastImportedManifestStore.save(rawJson) else lastImportedManifestStore.clear()
+            if (rawJson != null) {
+                lastImportedManifestStore.save(rawJson, folderUri = connectedFolderUri)
+            } else {
+                lastImportedManifestStore.clear()
+            }
             pendingImportManifestStore.clear()
             return
         }
-        val connectedFolderUri = settingsRepository.settings.first().sync.folderUri
         val keepFolderTag = connectedFolderUri?.takeIf { lastImportedManifestStore.belongsToFolder(it) }
         if (mode == BackupImportMode.REPLACE_LIBRARY) {
             if (rawJson != null) {
                 lastImportedManifestStore.save(rawJson, folderUri = keepFolderTag)
-                if (connectedFolderUri != null) pendingImportManifestStore.save(rawJson)
+                pendingImportManifestStore.save(rawJson, folderUri = connectedFolderUri)
             } else {
                 lastImportedManifestStore.clear()
                 pendingImportManifestStore.clear()
@@ -212,12 +220,11 @@ class BackupRepository(
                 mergeImportedManifestJson(rawJson, existing),
                 folderUri = keepFolderTag
             )
-            if (connectedFolderUri != null) {
-                val existingPending = pendingImportManifestStore.load()
-                pendingImportManifestStore.save(
-                    mergeImportedManifestJson(rawJson, existingPending)
-                )
-            }
+            val existingPending = pendingImportManifestStore.load()
+            pendingImportManifestStore.save(
+                mergeImportedManifestJson(rawJson, existingPending),
+                folderUri = connectedFolderUri
+            )
         }
     }
 

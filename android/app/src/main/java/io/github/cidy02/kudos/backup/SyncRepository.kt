@@ -86,12 +86,14 @@ class SyncRepository(
     }
 
     suspend fun connect(uri: Uri) = runSyncMutex.withLock {
-        val previousUri = getSyncFolderUri()
         context.contentResolver.takePersistableUriPermission(
             uri,
             Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
         )
-        if (previousUri != uri) pendingImportManifestStore.clear()
+        // Untagged pending is this device's own import and follows the folder it
+        // syncs next. A tag for a different folder is dropped so it cannot bleed.
+        val pendingTag = pendingImportManifestStore.taggedFolderUri()
+        if (pendingTag != null && pendingTag != uri.toString()) pendingImportManifestStore.clear()
         settingsRepository.updateSyncFolderUri(uri.toString())
         // iOS records any connected folder as configured, wherever it was chosen, so a later
         // Disconnect does not bring the first-run sync prompt back (A75 #11).
@@ -354,7 +356,8 @@ class SyncRepository(
                         if (bytes.isNotEmpty()) {
                             val summary = backupRepository.importV2ZipBytesReplacingStore(
                                 bytes,
-                                admit = this::folderImportStillAllowed
+                                admit = this::folderImportStillAllowed,
+                                folderUri = uri.toString()
                             )
                             absorbed = absorbed.absorb(summary)
                             if (summary.pronunciationsRestoreFailed) {
@@ -382,7 +385,7 @@ class SyncRepository(
                 val pendingImport = pendingImportManifestStore.load()
                 val effectiveReadManifestJson = when {
                     readManifestJson != null && pendingImport != null ->
-                        mergeFallbackManifestJson(pendingImport, readManifestJson) ?: readManifestJson
+                        mergeImportedManifestJson(pendingImport, readManifestJson)
                     else -> readManifestJson
                 }
                 // A folder whose manifest we actually read becomes the store. An empty folder

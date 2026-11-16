@@ -37,6 +37,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -1495,6 +1496,285 @@ class SyncManifestPassthroughTest {
             readDocument(otherKudos.findFile(BackupPaths.MANIFEST)!!).toString(Charsets.UTF_8)
         ).jsonObject
         assertEquals(JsonPrimitive("folder-b-only"), afterB["writingRecovery"])
+    }
+
+    @Test
+    fun olderPendingImportDoesNotReplaceNewerFolderSnapshot() = runTest {
+        val base = iosT541ManifestJson()
+        val baseSettings = base.getValue("settings").jsonObject
+        val folderDocuments = JsonArray(
+            listOf(
+                JsonObject(
+                    mapOf(
+                        "name" to JsonPrimitive("folder-doc"),
+                        "data" to JsonPrimitive("Zm9sZGVy")
+                    )
+                )
+            )
+        )
+        val folderManifest = JsonObject(
+            base + mapOf(
+                "exportedAt" to JsonPrimitive("2026-06-26T18:00:00.000Z"),
+                "writingRecovery" to JsonPrimitive("folder-draft"),
+                "documents" to folderDocuments,
+                "settings" to JsonObject(
+                    baseSettings + mapOf(
+                        "extras" to JsonObject(
+                            baseSettings.getValue("extras").jsonObject +
+                                mapOf("readerHighlightColor" to JsonPrimitive("blue"))
+                        )
+                    )
+                )
+            )
+        )
+        writeChild(
+            ensureKudosLibrary(),
+            BackupPaths.MANIFEST,
+            "application/json",
+            BackupJson.encodeToString(JsonObject.serializer(), folderManifest).toByteArray(Charsets.UTF_8)
+        )
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+
+        val olderImport = JsonObject(
+            mapOf(
+                "version" to JsonPrimitive(8),
+                "exportedAt" to JsonPrimitive("2026-06-26T08:00:00.000Z"),
+                "writingRecovery" to JsonPrimitive("old-draft"),
+                "importOnly" to JsonPrimitive("kept"),
+                "documents" to JsonArray(
+                    listOf(JsonObject(mapOf("name" to JsonPrimitive("old-doc"))))
+                ),
+                "settings" to JsonObject(
+                    mapOf(
+                        "extras" to JsonObject(
+                            mapOf("readerHighlightColor" to JsonPrimitive("yellow"))
+                        )
+                    )
+                )
+            )
+        )
+        backupRepository.importV2ZipBytes(zipManifest(olderImport), mode = BackupImportMode.MERGE)
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+
+        val synced = Json.parseToJsonElement(
+            readDocument(requireKudosLibrary().findFile(BackupPaths.MANIFEST)!!).toString(Charsets.UTF_8)
+        ).jsonObject
+        assertEquals(JsonPrimitive("folder-draft"), synced["writingRecovery"])
+        assertEquals(
+            "folder-doc",
+            synced.getValue("documents").jsonArray.single().jsonObject.getValue("name").jsonPrimitive.content
+        )
+        assertEquals(
+            JsonPrimitive("blue"),
+            synced.getValue("settings").jsonObject.getValue("extras").jsonObject["readerHighlightColor"]
+        )
+        // Present only on the older import. Dropping the pending file would keep the folder draft too.
+        assertEquals(JsonPrimitive("kept"), synced["importOnly"])
+    }
+
+    @Test
+    fun pendingImportSurvivesDisconnectAndFoldsUntagged() = runTest {
+        val folderManifest = JsonObject(
+            iosT541ManifestJson() + mapOf("writingRecovery" to JsonPrimitive("from-folder"))
+        )
+        writeChild(
+            ensureKudosLibrary(),
+            BackupPaths.MANIFEST,
+            "application/json",
+            BackupJson.encodeToString(JsonObject.serializer(), folderManifest).toByteArray(Charsets.UTF_8)
+        )
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+
+        syncRepository.disconnect()
+        assertNull(settingsRepository.settings.first().sync.folderUri)
+
+        val imported = JsonObject(
+            mapOf(
+                "version" to JsonPrimitive(8),
+                "exportedAt" to JsonPrimitive("2026-06-26T14:00:00.000Z"),
+                "writingRecovery" to JsonPrimitive("from-import"),
+                "importOnly" to JsonPrimitive("kept")
+            )
+        )
+        backupRepository.importV2ZipBytes(zipManifest(imported), mode = BackupImportMode.MERGE)
+        val pending = filesRoot.resolve(BackupRepository.PENDING_IMPORT_MANIFEST_FILE)
+        assertTrue(Files.isRegularFile(pending))
+        assertFalse(
+            "a disconnected import must not tag the pending overlay",
+            Files.exists(filesRoot.resolve("${BackupRepository.PENDING_IMPORT_MANIFEST_FILE}.folder"))
+        )
+
+        context.grantUriPermission(
+            context.packageName,
+            treeUri,
+            android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                android.content.Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+        )
+        syncRepository.connect(treeUri)
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+
+        val synced = Json.parseToJsonElement(
+            readDocument(requireKudosLibrary().findFile(BackupPaths.MANIFEST)!!).toString(Charsets.UTF_8)
+        ).jsonObject
+        assertEquals(JsonPrimitive("from-import"), synced["writingRecovery"])
+        assertEquals(JsonPrimitive("kept"), synced["importOnly"])
+    }
+
+    @Test
+    fun passthroughStampsIgnoreFarFutureAndCapAtExportedAt() {
+        val now = Instant.parse("2021-01-01T00:00:00Z")
+        val workId = "10000000-0000-4000-8000-0000000000aa"
+
+        // June is inside the 24h window but after this file's exportedAt, so it caps to January
+        // and loses to the March stamp. A missing cap would let June win.
+        val cappedForged = stampedManifest(
+            exportedAt = "2020-01-01T00:00:00Z",
+            workStamp = "2020-06-01T00:00:00Z",
+            workId = workId,
+            workExtraKey = "forgedOnly",
+            workExtraValue = JsonPrimitive("drop-me"),
+            queueStamp = "2020-06-01T00:00:00Z",
+            queueExtraKey = "forgedQueueKey",
+            queueExtraValue = JsonPrimitive("drop-me"),
+            awakeStamp = "2020-06-01T00:00:00Z",
+            awake = false
+        )
+        val cappedGenuine = stampedManifest(
+            exportedAt = "2020-03-01T00:00:00Z",
+            workStamp = "2020-03-01T00:00:00Z",
+            workId = workId,
+            workExtraKey = "futureField",
+            workExtraValue = JsonPrimitive("kept"),
+            queueStamp = "2020-03-01T00:00:00Z",
+            queueExtraKey = "futureField",
+            queueExtraValue = JsonPrimitive("kept"),
+            awakeStamp = "2020-03-01T00:00:00Z",
+            awake = true
+        )
+        assertGenuineStampsWin(mergeFallbackManifestJson(cappedForged, cappedGenuine, now)!!)
+        assertGenuineStampsWin(mergeFallbackManifestJson(cappedGenuine, cappedForged, now)!!)
+
+        // exportedAt is later than the genuine stamp, so merely capping year 3000 at it would
+        // still crown the forged record. Only ignoring the far-future instant lets March win.
+        val futureForged = stampedManifest(
+            exportedAt = "2020-06-01T00:00:00Z",
+            workStamp = "3000-01-01T00:00:00Z",
+            workId = workId,
+            workExtraKey = "forgedOnly",
+            workExtraValue = JsonPrimitive("drop-me"),
+            queueStamp = "3000-01-01T00:00:00Z",
+            queueExtraKey = "forgedQueueKey",
+            queueExtraValue = JsonPrimitive("drop-me"),
+            awakeStamp = "2020-06-01T00:00:00Z",
+            awake = false
+        )
+        val futureGenuine = stampedManifest(
+            exportedAt = "2020-03-01T00:00:00Z",
+            workStamp = "2020-03-01T00:00:00Z",
+            workId = workId,
+            workExtraKey = "authorIdentitiesJSON",
+            workExtraValue = JsonPrimitive("[{\"username\":\"real\"}]"),
+            queueStamp = "2020-03-01T00:00:00Z",
+            queueExtraKey = "futureField",
+            queueExtraValue = JsonObject(mapOf("queueMeta" to JsonPrimitive(1))),
+            awakeStamp = "2020-03-01T00:00:00Z",
+            awake = true
+        )
+        assertFarFutureLoses(mergeFallbackManifestJson(futureForged, futureGenuine, now)!!)
+        assertFarFutureLoses(mergeFallbackManifestJson(futureGenuine, futureForged, now)!!)
+    }
+
+    @Test
+    fun saveWithoutFolderUriKeepsTagAndKudosBackupWritesCurrentFolder() = runTest {
+        val dir = Files.createTempDirectory("kudos-a541-tag")
+        try {
+            val store = SyncLastManifestStore(dir)
+            store.save(
+                JsonObject(mapOf("writingRecovery" to JsonPrimitive("first"))),
+                folderUri = "content://folder-a"
+            )
+            store.save(JsonObject(mapOf("writingRecovery" to JsonPrimitive("second"))))
+            assertTrue(store.belongsToFolder("content://folder-a"))
+            assertEquals(JsonPrimitive("second"), store.load()!!["writingRecovery"])
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+
+        SyncLastManifestStore(filesRoot).save(
+            JsonObject(iosT541ManifestJson() + mapOf("oldFolderOnlyKey" to JsonPrimitive("must-not-leak"))),
+            folderUri = "content://previous"
+        )
+        val root = DocumentFile.fromTreeUri(context, treeUri)!!
+        writeChild(root, "Kudos.kudosbackup", "application/zip", zipManifest(iosT541ManifestJson()))
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+
+        val after = SyncLastManifestStore(filesRoot)
+        val current = syncRepository.getSyncFolderUri()!!.toString()
+        assertTrue(after.belongsToFolder(current))
+        assertFalse(after.belongsToFolder("content://previous"))
+    }
+
+    private fun stampedManifest(
+        exportedAt: String,
+        workStamp: String,
+        workId: String,
+        workExtraKey: String,
+        workExtraValue: JsonElement,
+        queueStamp: String,
+        queueExtraKey: String,
+        queueExtraValue: JsonElement,
+        awakeStamp: String,
+        awake: Boolean
+    ): JsonObject {
+        val work = linkedMapOf<String, JsonElement>(
+            "id" to JsonPrimitive(workId),
+            "lastModifiedAt" to JsonPrimitive(workStamp)
+        )
+        work[workExtraKey] = workExtraValue
+        val queue = linkedMapOf<String, JsonElement>(
+            "id" to JsonPrimitive(QUEUE_ONE),
+            "kindRaw" to JsonPrimitive("custom"),
+            "dateUpdated" to JsonPrimitive(queueStamp)
+        )
+        queue[queueExtraKey] = queueExtraValue
+        return JsonObject(
+            mapOf(
+                "exportedAt" to JsonPrimitive(exportedAt),
+                "works" to JsonArray(listOf(JsonObject(work))),
+                "readingQueues" to JsonArray(listOf(JsonObject(queue))),
+                "settings" to JsonObject(
+                    mapOf(
+                        "modifiedAt" to JsonObject(mapOf("keepScreenAwake" to JsonPrimitive(awakeStamp))),
+                        "extras" to JsonObject(mapOf("keepScreenAwake" to JsonPrimitive(awake)))
+                    )
+                )
+            )
+        )
+    }
+
+    private fun assertGenuineStampsWin(merged: JsonObject) {
+        val work = merged.getValue("works").jsonArray.single().jsonObject
+        assertEquals(JsonPrimitive("kept"), work["futureField"])
+        assertFalse("forgedOnly" in work)
+        val queue = merged.getValue("readingQueues").jsonArray.single().jsonObject
+        assertEquals(JsonPrimitive("kept"), queue["futureField"])
+        assertFalse("forgedQueueKey" in queue)
+        val settings = merged.getValue("settings").jsonObject
+        assertEquals(JsonPrimitive(true), settings.getValue("extras").jsonObject["keepScreenAwake"])
+        assertEquals(
+            JsonPrimitive("2020-03-01T00:00:00Z"),
+            settings.getValue("modifiedAt").jsonObject["keepScreenAwake"]
+        )
+    }
+
+    private fun assertFarFutureLoses(merged: JsonObject) {
+        val work = merged.getValue("works").jsonArray.single().jsonObject
+        assertEquals(JsonPrimitive("[{\"username\":\"real\"}]"), work["authorIdentitiesJSON"])
+        assertFalse("forgedOnly" in work)
+        val queue = merged.getValue("readingQueues").jsonArray.single().jsonObject
+        assertEquals(JsonObject(mapOf("queueMeta" to JsonPrimitive(1))), queue["futureField"])
+        assertFalse("forgedQueueKey" in queue)
     }
 
     private fun iosT541ManifestJson(): JsonObject {
