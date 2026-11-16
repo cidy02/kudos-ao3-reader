@@ -2217,6 +2217,19 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         // neither, and that is not a reset), never when part of the copy was unreadable, and on
         // an explicit restore as well as a sync, so a restore reproduces the snapshot (Codex's
         // third review).
+        // The three named settings that may be absent follow the same rule (Codex's fourth
+        // review): absent with their own stamp is a reset, absent without one is an older or
+        // unaware writer.
+        let namedOptional: [(key: String, absent: Bool)] = [
+            ("accentColorHex", accentColorHex == nil),
+            (LibraryPageArrangement.storageKey, libraryPageArrangement == nil),
+            (WorkSymbolPlacement.storageKey, workSymbolPlacement == nil)
+        ]
+        for named in namedOptional where named.absent && defaults.object(forKey: named.key) != nil {
+            guard let own = ownStamp(named.key), wins(named.key, own) else { continue }
+            defaults.removeObject(forKey: named.key)
+            SyncedSettingsClock.adopt(key: named.key, stamp: own, in: defaults)
+        }
         guard !extrasIncomplete else { return }
         for key in observed.keys where !observed.maps.contains(key) && Self.extraKind(for: key) != nil
             && extras?[key] == nil && defaults.object(forKey: key) != nil {

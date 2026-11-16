@@ -200,6 +200,24 @@ struct SyncedSettingsTests {
         #expect(defaults.object(forKey: "readerCustomPaperHex") == nil)
     }
 
+    /// Codex's fourth review: the named settings that may be absent honour a reset too, on a sync
+    /// and on an explicit restore; absent without a stamp still leaves the local choice.
+    @Test func aResetOfANamedOptionalSettingTravels() {
+        for fromSync in [true, false] {
+            let defaults = freshDefaults()
+            defaults.set("#2468AC", forKey: "accentColorHex")
+            defaults.set(WorkSymbolPlacement.beside.rawValue, forKey: WorkSymbolPlacement.storageKey)
+            var reset = KudosBackupSettings.capture(defaults: defaults)
+            reset.accentColorHex = nil
+            reset.workSymbolPlacement = nil
+            reset.modifiedAt = ["accentColorHex": Date().addingTimeInterval(-5)]
+            reset.apply(to: defaults, fromSync: fromSync, archiveDate: Date().addingTimeInterval(-5))
+            #expect(defaults.object(forKey: "accentColorHex") == nil, "fromSync: \(fromSync)")
+            // No stamp for the symbol placement: an unaware writer, not a reset.
+            #expect(defaults.string(forKey: WorkSymbolPlacement.storageKey) == WorkSymbolPlacement.beside.rawValue)
+        }
+    }
+
     /// Codex's third review: the reader font is part of the snapshot, but never a custom font
     /// whose file is not on this device.
     @Test func theReaderFontTravelsUnlessItsFileIsMissing() {
