@@ -172,7 +172,14 @@ fun MainScaffold(
     }
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
-    val shell = Routes.isShellRoot(currentRoute)
+    val showsWritingTab by container.writingTabController.showsWritingTabFlow.collectAsState()
+    val authState by container.authRepository.state.collectAsState()
+    val authGeneration by container.authRepository.generation.collectAsState()
+    val returnToWritingRequest by container.writingTabController.returnToWritingRequestFlow.collectAsState()
+    LaunchedEffect(authState, authGeneration) {
+        container.writingTabController.onAuthStateChanged(authState, authGeneration)
+    }
+    val shell = Routes.isShellRoot(currentRoute, showsWriting = showsWritingTab)
     val reader = currentRoute == Routes.Reader
     val shellTitle = Routes.shellTitle(currentRoute)
     val chrome = remember { ShellChromeState() }
@@ -212,6 +219,16 @@ fun MainScaffold(
                 navController.navigate(plan.pushRoute)
             }
             is RestoredNavigation.Push -> navController.navigate(plan.route)
+            is RestoredNavigation.PendingWriting -> {
+                if (navController.currentDestination?.route != plan.tabRoute) {
+                    navController.navigateShellRoot(plan.tabRoute)
+                }
+                if (plan.writingRoute != null) {
+                    container.writingTabController.openPendingWritingRoute(plan.writingRoute)
+                } else {
+                    container.writingTabController.noteRestoredWritingSelection()
+                }
+            }
         }
     }
 
@@ -219,7 +236,17 @@ fun MainScaffold(
     LaunchedEffect(startRoute) {
         if (startRoute != null && handledStartRoute != startRoute) {
             handledStartRoute = startRoute
-            Routes.legacyLaunchNavigation(startRoute)?.let(::applyRestored)
+            if (io.github.cidy02.kudos.BuildConfig.DEBUG &&
+                io.github.cidy02.kudos.network.ao3.DemoNetwork.isActive &&
+                (startRoute == Routes.Writing ||
+                    Routes.resolveFormerAccountRoute(startRoute) is LegacyAccountDestination.Writing)
+            ) {
+                container.writingTabController.revealWritingTabForSession()
+            }
+            Routes.legacyLaunchNavigation(
+                startRoute,
+                showsWriting = container.writingTabController.showsWritingTab
+            )?.let(::applyRestored)
         }
     }
     // Not keyed on the current route: each pop would cancel this effect before the
@@ -232,7 +259,40 @@ fun MainScaffold(
         val top = entries.last()
         val concreteTop = concreteRoute(top)
         val stack = entries.dropLast(1).map { it.destination.route } + concreteTop
-        Routes.restoredNavigation(stack, concreteTop)?.let(::applyRestored)
+        Routes.restoredNavigation(
+            stack,
+            concreteTop,
+            showsWriting = container.writingTabController.showsWritingTab
+        )?.let(::applyRestored)
+    }
+    LaunchedEffect(currentRoute, showsWritingTab) {
+        if (currentRoute == Routes.Writing && !showsWritingTab) {
+            if (authState is io.github.cidy02.kudos.auth.AO3AuthState.Restoring) {
+                container.writingTabController.noteRestoredWritingSelection()
+            }
+            navController.navigateShellRoot(Routes.Home)
+        }
+    }
+    LaunchedEffect(returnToWritingRequest, showsWritingTab, currentRoute, accountSheetState.isPresentingAccount) {
+        if (returnToWritingRequest > 0 &&
+            showsWritingTab &&
+            currentRoute == Routes.Home &&
+            !accountSheetState.isPresentingAccount
+        ) {
+            container.writingTabController.consumeReturnToWritingRequest()
+            val pending = container.writingTabController.consumePendingWritingRoute()
+            navController.navigateShellRoot(Routes.Writing)
+            val target = when (pending) {
+                WritingRoute.Works -> Routes.accountList(
+                    NavArgCodecs.encodeAccountListType(io.github.cidy02.kudos.account.AccountListType.MyWorks)
+                )
+                WritingRoute.Drafts -> Routes.WritingDrafts
+                WritingRoute.Series -> container.authRepository.username()?.let { Routes.authorSeries(it) }
+                WritingRoute.CollectionsAndChallenges -> Routes.AO3Collections
+                null -> null
+            }
+            target?.let(navController::navigate)
+        }
     }
     val onHome = currentRoute == Routes.Home
     val onLibrary = currentRoute == Routes.Library
@@ -244,8 +304,16 @@ fun MainScaffold(
     // The destination a pushed page was opened from stays marked in the navigation bar.
     var lastRoot by remember { mutableStateOf(Routes.Home) }
     SideEffect {
-        if (Routes.isTopLevel(currentRoute)) searchReturnTab = currentRoute ?: Routes.Home
-        if (Routes.isShellRoot(currentRoute)) lastRoot = currentRoute ?: Routes.Home
+        if (Routes.isTopLevel(currentRoute, showsWriting = showsWritingTab)) {
+            searchReturnTab = currentRoute ?: Routes.Home
+        }
+        if (Routes.isShellRoot(currentRoute, showsWriting = showsWritingTab)) {
+            lastRoot = currentRoute ?: Routes.Home
+        }
+        container.writingTabController.onShellStateChanged(
+            currentRoute = currentRoute,
+            isPresentingAccount = accountSheetState.isPresentingAccount
+        )
     }
     val pushedSelecting = pushedChrome.mounted && pushedChrome.hideTabBar
     val selectionHidesBar = homeSelecting || librarySelecting || overlay.hidesTabBar || pushedSelecting
@@ -322,7 +390,6 @@ fun MainScaffold(
         onLibrary -> libraryChrome.washHue
         else -> null
     }
-    val authState by container.authRepository.state.collectAsState()
     val scopePalette = io.github.cidy02.kudos.ui.subject.LocalSubjectPalette.current
     val heroPalette = washHue?.let { io.github.cidy02.kudos.ui.subject.SubjectPalette.fromHue(it, tokens.theme) }
     val washModifier = when {
@@ -397,7 +464,8 @@ fun MainScaffold(
                             shellChrome = homeChrome,
                             libraryChrome = libraryChrome,
                             writingChrome = writingChrome,
-                            onOpenAccount = { accountSheetState.showAccount(AccountSheetRoute.Profile) }
+                            onOpenAccount = { accountSheetState.showAccount(AccountSheetRoute.Profile) },
+                            showsWritingTab = showsWritingTab
                         )
                     }
                 }
@@ -570,8 +638,16 @@ fun MainScaffold(
         )
 
         if (showTabBar) {
+            val selectedRoot = if (shell) {
+                currentRoute
+            } else if (lastRoot == Routes.Writing && !showsWritingTab) {
+                Routes.Home
+            } else {
+                lastRoot
+            }
             ShellNavigationBar(
-                currentRoute = if (shell) currentRoute else lastRoot,
+                currentRoute = selectedRoot,
+                showsWriting = showsWritingTab,
                 onNavigate = { route -> navController.navigateShellRoot(route) },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -593,7 +669,8 @@ fun MainScaffold(
                     themeMode = themeMode,
                     onCycleTheme = onCycleTheme,
                     state = accountSheetState,
-                    mainNavController = navController
+                    mainNavController = navController,
+                    showsWritingTab = showsWritingTab
                 )
             }
         }
@@ -608,7 +685,8 @@ private fun AccountSheetModal(
     themeMode: KudosThemeMode,
     onCycleTheme: () -> Unit,
     state: AccountSheetState,
-    mainNavController: NavHostController
+    mainNavController: NavHostController,
+    showsWritingTab: Boolean
 ) {
     val sheetNavController = rememberNavController()
     val sheetBackStackEntry by sheetNavController.currentBackStackEntryAsState()
@@ -723,7 +801,8 @@ private fun AccountSheetModal(
                             state.dismissAccount()
                             mainNavController.navigateShellRoot(rootRoute)
                             destinationRoute?.let(mainNavController::navigate)
-                        }
+                        },
+                        showsWritingTab = showsWritingTab
                     )
                     androidx.activity.compose.BackHandler(
                         enabled = sheetPushedChrome.mounted && sheetPushedChrome.onBack != null
@@ -841,6 +920,7 @@ private fun PushedTopBar(
 @Composable
 private fun ShellNavigationBar(
     currentRoute: String?,
+    showsWriting: Boolean,
     onNavigate: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -866,7 +946,7 @@ private fun ShellNavigationBar(
         containerColor = tokens.glassFill(0.08).compositeOver(tokens.background),
         contentColor = tokens.primaryInk
     ) {
-        Routes.topLevelDestinations.forEach { destination ->
+        Routes.topLevelDestinations(showsWriting = showsWriting).forEach { destination ->
             val selected = currentRoute == destination.route
             ShortNavigationBarItem(
                 selected = selected,

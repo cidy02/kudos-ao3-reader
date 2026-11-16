@@ -138,6 +138,16 @@ import kotlinx.coroutines.launch
 
 internal const val AccountInboxPreviewLimit = 2
 
+fun showsStartWritingRow(isSignedIn: Boolean = true, showsWritingTab: Boolean): Boolean =
+    isSignedIn && !showsWritingTab
+
+fun startWritingDestination(isSignedIn: Boolean = true, showsWritingTab: Boolean): String? =
+    if (showsStartWritingRow(isSignedIn = isSignedIn, showsWritingTab = showsWritingTab)) {
+        WritingWorkDestination.route()
+    } else {
+        null
+    }
+
 /**
  * Account sheet (port of iOS `AccountView`, T-470):
  * author-style header tinted in the user's colour with pseud chooser and bio;
@@ -171,6 +181,8 @@ fun AccountScreen(
     onOpenAbout: () -> Unit = {},
     privacySettings: PrivacySettings? = null,
     privacyRevealState: PrivacyRevealState = PrivacyRevealState(),
+    showsWritingTab: Boolean = false,
+    onStartWriting: () -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: AccountViewModel = viewModel(
         factory = AccountViewModel.factory(
@@ -292,6 +304,11 @@ fun AccountScreen(
                         AccountAO3Section(
                             unreadCount = unreadCount,
                             palette = accountPalette,
+                            showStartWriting = showsStartWritingRow(
+                                isSignedIn = signedIn,
+                                showsWritingTab = showsWritingTab
+                            ),
+                            onStartWriting = onStartWriting,
                             onOpenInbox = onOpenInbox,
                             onOpenPreferences = { onOpenWeb("native:preferences") },
                             onOpenDashboard = onOpenDashboard,
@@ -953,11 +970,13 @@ private fun AccountInboxPreviewRow(
     }
 }
 
-/** iOS `accountAO3Section`: Inbox, AO3 Preferences, My Dashboard, More on AO3, Open AO3. */
+/** iOS `accountAO3Section`: Start Writing (when Writing tab is hidden), Inbox, AO3 Preferences, My Dashboard, More on AO3, Open AO3. */
 @Composable
 internal fun AccountAO3Section(
     unreadCount: Int?,
     palette: SubjectPalette,
+    showStartWriting: Boolean = false,
+    onStartWriting: () -> Unit = {},
     onOpenInbox: () -> Unit,
     onOpenPreferences: () -> Unit,
     onOpenDashboard: () -> Unit,
@@ -967,6 +986,15 @@ internal fun AccountAO3Section(
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         SectionRuleHeader(title = "AO3", gutter = 0.dp)
         Column(Modifier.fillMaxWidth().subjectPanel()) {
+            if (showStartWriting) {
+                AccountPanelNavRow(
+                    title = "Start Writing",
+                    icon = Icons.Outlined.Edit,
+                    palette = palette,
+                    onClick = onStartWriting
+                )
+                SubjectRowSeparator()
+            }
             AccountPanelNavRow(
                 title = "Inbox",
                 icon = Icons.Outlined.Inbox,

@@ -17,6 +17,7 @@ import io.github.cidy02.kudos.works.WorkAvailabilitySweep
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 
@@ -54,6 +55,15 @@ class KudosApplication : Application(), Configuration.Provider {
         installImageLoader()
         TombstoneSigning.initialize(this)
         container = KudosAppContainer(this, applicationScope)
+        // Keep WritingTabController in sync with auth state as soon as the container exists.
+        container.writingTabController
+        applicationScope.launch {
+            combine(container.authRepository.state, container.authRepository.generation) { state, generation ->
+                state to generation
+            }.collect { (state, generation) ->
+                container.writingTabController.onAuthStateChanged(state, generation)
+            }
+        }
         // Start the library snapshot before the first frame so Home does not
         // open on an empty loading state and then recompute it.
         container.libraryRepository

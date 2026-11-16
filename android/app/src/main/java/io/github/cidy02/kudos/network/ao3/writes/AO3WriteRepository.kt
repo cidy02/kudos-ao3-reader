@@ -216,7 +216,11 @@ class AO3WriteRepository(
 
     /** iOS saveWork: the loaded token/body/action, zero preparation reads, one single-shot POST. */
     suspend fun saveWork(form: AO3WorkForm, expectedGeneration: Int): AO3Result<Unit> =
-        submitWork(form, expectedGeneration, form.actionUrl)
+        submitWork(form, expectedGeneration, form.actionUrl).also { result ->
+            if (result is AO3Result.Success) {
+                io.github.cidy02.kudos.app.WritingTabEvents.notifyDraftSaved(client.username())
+            }
+        }
 
     /** iOS editTags: fresh form/token/action, desired tags, one single-shot POST. */
     suspend fun editWorkTags(desired: AO3WorkForm, expectedGeneration: Int): AO3Result<Unit> {
@@ -270,7 +274,11 @@ class AO3WriteRepository(
         if (client.username() == null) return AO3Result.Failure(AO3Error.Validation("Log in to AO3 first."))
         val missing = form.missingRequiredFields()
         if (missing.isNotEmpty()) return AO3Result.Failure(AO3Error.Validation("AO3 still needs ${missing.joinToString(" and ")}."))
-        return submitWork(form, expectedGeneration, form.actionUrl, submit = AO3WorkSubmitAction.Post)
+        return submitWork(form, expectedGeneration, form.actionUrl, submit = AO3WorkSubmitAction.Post).also { result ->
+            if (result is AO3Result.Success) {
+                io.github.cidy02.kudos.app.WritingTabEvents.notifyDraftSaved(client.username())
+            }
+        }
     }
 
     /** Preview is a write: one POST, same dispatch fence/verdict, then authoritative pane. */
@@ -322,7 +330,11 @@ class AO3WriteRepository(
             return AO3Result.Failure(AO3Error.Validation("AO3 didn't accept the change."))
         val fields = form.parameters(submit)
         if (fields.none { it.first == submit.fieldName }) return AO3Result.Failure(AO3Error.Validation(AO3CollectionFields.UNCONFIRMED))
-        return workVerdict(postWriting(form.actionUrl, fields, form.csrfToken, form.actionUrl, expectedGeneration))
+        return workVerdict(postWriting(form.actionUrl, fields, form.csrfToken, form.actionUrl, expectedGeneration)).also { result ->
+            if (result is AO3Result.Success) {
+                io.github.cidy02.kudos.app.WritingTabEvents.notifyDraftSaved(client.username())
+            }
+        }
     }
 
     suspend fun previewChapter(form: AO3ChapterForm, expectedGeneration: Int): AO3Result<AO3ChapterPreview> {

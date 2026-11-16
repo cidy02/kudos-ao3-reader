@@ -24,7 +24,13 @@ class AO3AuthorRepository(
 
     suspend fun loadDashboard(route: AO3AuthorRoute, bypassCache: Boolean = false): AO3Result<AO3AuthorHeader> {
         val url = route.dashboardUrl
-        return cached(url, AO3PageCache.Kind.Dashboard, bypassCache) { parser.parseDashboard(it, route) }
+        val result = cached(url, AO3PageCache.Kind.Dashboard, bypassCache) { parser.parseDashboard(it, route) }
+        if (result is AO3Result.Success &&
+            authenticatedClient?.username()?.equals(route.username, ignoreCase = true) == true
+        ) {
+            io.github.cidy02.kudos.app.WritingTabEvents.notifyDashboardLoaded(result.value, route)
+        }
+        return result
     }
 
     /** Reads an already-cached dashboard without falling through to an AO3 request. */

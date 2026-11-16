@@ -88,7 +88,9 @@ fun WritingTextEditorScreen(
     val updatedCheckpoint by rememberUpdatedState(onCheckpoint)
     val session = remember(account, target, field) {
         WritingEditorSession(WritingNativeTextField(context, text), text,
-            WritingTextRecovery.inFilesDir(context.filesDir.toPath()), account, target, field,
+            WritingTextRecovery.inFilesDir(context.filesDir.toPath()) { savedAccount ->
+                io.github.cidy02.kudos.app.WritingTabEvents.notifyDraftSaved(savedAccount)
+            }, account, target, field,
             CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate), SystemClock::uptimeMillis,
             onCheckpoint = { updatedCheckpoint(it) })
     }

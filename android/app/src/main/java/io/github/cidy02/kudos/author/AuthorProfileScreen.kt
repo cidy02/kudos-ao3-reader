@@ -111,7 +111,8 @@ fun AuthorProfileScreen(
     /** The overview's See All and count strip (iOS `dashboardDestination`). Defaults to the plain tab. */
     onSeeAll: (AO3AuthorRoute, AuthorSeeAll) -> Unit = { r, target -> onOpenAuthorTab(r, target.tab) },
     /** Works opened as Gifts or Most Kudos from the overview's See All. */
-    initialView: AuthorSeeAll? = null
+    initialView: AuthorSeeAll? = null,
+    countsCache: io.github.cidy02.kudos.account.AO3AccountListCountsCache? = null
 ) {
     val account by ((authRepository ?: seriesFormRepository?.auth)?.state?.collectAsState() ?: remember {
         mutableStateOf<io.github.cidy02.kudos.auth.AO3AuthState>(io.github.cidy02.kudos.auth.AO3AuthState.SignedOut) })
@@ -252,6 +253,24 @@ fun AuthorProfileScreen(
                                 val rows = if (pageNum > 1) works?.works.orEmpty() + r.value.works else r.value.works
                                 works = r.value.copy(works = rows.distinctBy { it.id })
                                 tabStale = tabStale || r.isStale
+                                if (pageNum == 1 && expectedFandom == null &&
+                                    expectedScope == AO3AuthorWorksScope.Works &&
+                                    expectedRoute.pseud == null &&
+                                    signedInUsername != null &&
+                                    expectedRoute.username.equals(signedInUsername, ignoreCase = true)
+                                ) {
+                                    countsCache?.put(
+                                        AccountListType.MyWorks,
+                                        io.github.cidy02.kudos.account.AO3AccountListCountsCache.scope(
+                                            signedInUsername,
+                                            expectedSession
+                                        ),
+                                        io.github.cidy02.kudos.account.AO3AccountListCountsCache.Count(
+                                            itemsOnPage = r.value.works.size,
+                                            totalPages = r.value.totalPages
+                                        )
+                                    )
+                                }
                             }
                             is AO3Result.Failure -> tabError = r.error.displayMessage()
                         }
@@ -265,6 +284,23 @@ fun AuthorProfileScreen(
                                 val rows = if (pageNum > 1) series?.series.orEmpty() + r.value.series else r.value.series
                                 series = r.value.copy(series = rows.distinctBy { it.id })
                                 tabStale = tabStale || r.isStale
+                                if (pageNum == 1 &&
+                                    expectedRoute.pseud == null &&
+                                    signedInUsername != null &&
+                                    expectedRoute.username.equals(signedInUsername, ignoreCase = true)
+                                ) {
+                                    countsCache?.put(
+                                        io.github.cidy02.kudos.account.AO3AccountListCountsCache.SERIES,
+                                        io.github.cidy02.kudos.account.AO3AccountListCountsCache.scope(
+                                            signedInUsername,
+                                            expectedSession
+                                        ),
+                                        io.github.cidy02.kudos.account.AO3AccountListCountsCache.Count(
+                                            itemsOnPage = r.value.series.size,
+                                            totalPages = r.value.totalPages
+                                        )
+                                    )
+                                }
                             }
                             is AO3Result.Failure -> tabError = r.error.displayMessage()
                         }

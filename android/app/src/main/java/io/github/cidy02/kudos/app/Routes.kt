@@ -148,6 +148,7 @@ sealed interface RestoredNavigation {
     data class AccountSheet(val route: AccountSheetRoute, val popCount: Int, val tabRoute: String) : RestoredNavigation
     data class TabPush(val tabRoute: String, val pushRoute: String) : RestoredNavigation
     data class Push(val route: String) : RestoredNavigation
+    data class PendingWriting(val tabRoute: String = Routes.Home, val writingRoute: WritingRoute? = null) : RestoredNavigation
 }
 
 /**
@@ -404,32 +405,46 @@ object Routes {
 
     fun navArgOf(name: String) = navArgument(name) { type = NavType.StringType }
 
-    val topLevelDestinations = listOf(
-        TopLevelDestination(
-            route = Home,
-            label = "Home",
-            selectedIcon = Icons.Filled.Home,
-            unselectedIcon = Icons.Outlined.Home
-        ),
-        TopLevelDestination(
-            route = Library,
-            label = "Library",
-            selectedIcon = Icons.AutoMirrored.Filled.MenuBook,
-            unselectedIcon = Icons.AutoMirrored.Outlined.MenuBook
-        ),
-        TopLevelDestination(
-            route = Writing,
-            label = "Writing",
-            selectedIcon = Icons.Filled.Edit,
-            unselectedIcon = Icons.Outlined.Edit
-        ),
-        TopLevelDestination(
-            route = Browse,
-            label = "Browse",
-            selectedIcon = Icons.Filled.Explore,
-            unselectedIcon = Icons.Outlined.Explore
+    /**
+     * Core tabs in the navigation bar. `Writing` appears only when the Writing-tab rule
+     * says the signed-in account writes (A-513 / iOS T-513).
+     */
+    fun topLevelDestinations(showsWriting: Boolean): List<TopLevelDestination> = buildList {
+        add(
+            TopLevelDestination(
+                route = Home,
+                label = "Home",
+                selectedIcon = Icons.Filled.Home,
+                unselectedIcon = Icons.Outlined.Home
+            )
         )
-    )
+        add(
+            TopLevelDestination(
+                route = Library,
+                label = "Library",
+                selectedIcon = Icons.AutoMirrored.Filled.MenuBook,
+                unselectedIcon = Icons.AutoMirrored.Outlined.MenuBook
+            )
+        )
+        if (showsWriting) {
+            add(
+                TopLevelDestination(
+                    route = Writing,
+                    label = "Writing",
+                    selectedIcon = Icons.Filled.Edit,
+                    unselectedIcon = Icons.Outlined.Edit
+                )
+            )
+        }
+        add(
+            TopLevelDestination(
+                route = Browse,
+                label = "Browse",
+                selectedIcon = Icons.Filled.Explore,
+                unselectedIcon = Icons.Outlined.Explore
+            )
+        )
+    }
 
     fun titleFor(route: String?): String {
         return when (route) {
@@ -496,11 +511,12 @@ object Routes {
         }
     }
 
-    fun isTopLevel(route: String?): Boolean =
-        topLevelDestinations.any { it.route == route }
+    fun isTopLevel(route: String?, showsWriting: Boolean = true): Boolean =
+        topLevelDestinations(showsWriting).any { it.route == route }
 
-    /** The four tabs plus Search. Pushed screens are not roots, so the navigation bar hides. */
-    fun isShellRoot(route: String?): Boolean = route == Search || isTopLevel(route)
+    /** The core tabs plus Search. Pushed screens are not roots, so the navigation bar hides. */
+    fun isShellRoot(route: String?, showsWriting: Boolean = true): Boolean =
+        route == Search || isTopLevel(route, showsWriting)
 
     /**
      * Large inline title for a shell root. Account has none (its gear floats).
@@ -556,14 +572,25 @@ object Routes {
     }
 
     /** Process-death / upgrade back stack. Does not move Writing's Inbox or Log In. */
-    fun restoredNavigation(stackFromRoot: List<String?>, concreteTop: String?): RestoredNavigation? {
+    fun restoredNavigation(
+        stackFromRoot: List<String?>,
+        concreteTop: String?,
+        showsWriting: Boolean = false
+    ): RestoredNavigation? {
         val sheet = restoredAccountSheet(stackFromRoot)
         if (sheet != null) {
             return RestoredNavigation.AccountSheet(sheet, restoredAccountPopCount(stackFromRoot), Home)
         }
+        if (concreteTop == Writing && !showsWriting) {
+            return RestoredNavigation.PendingWriting(tabRoute = Home, writingRoute = null)
+        }
         return when (val legacy = resolveFormerAccountRoute(concreteTop)) {
             is LegacyAccountDestination.Writing ->
-                concreteTop?.let { RestoredNavigation.TabPush(Writing, it) }
+                if (showsWriting) {
+                    concreteTop?.let { RestoredNavigation.TabPush(Writing, it) }
+                } else {
+                    RestoredNavigation.PendingWriting(tabRoute = Home, writingRoute = legacy.route)
+                }
             is LegacyAccountDestination.Library ->
                 concreteTop?.let { RestoredNavigation.TabPush(Library, it) }
             is LegacyAccountDestination.Account, null -> null
@@ -571,12 +598,20 @@ object Routes {
     }
 
     /** Debug `nav:` launch and other explicit legacy routes, including Inbox → the sheet. */
-    fun legacyLaunchNavigation(route: String): RestoredNavigation? {
-        val restored = restoredSelection(route)
+    fun legacyLaunchNavigation(route: String, showsWriting: Boolean = false): RestoredNavigation? {
+        if (route == Writing && !showsWriting) {
+            return RestoredNavigation.PendingWriting(tabRoute = Home, writingRoute = null)
+        }
+        val restored = restoredSelection(route, showsWriting = showsWriting)
         return when (val legacy = resolveFormerAccountRoute(route)) {
             is LegacyAccountDestination.Account ->
                 RestoredNavigation.AccountSheet(legacy.route, popCount = 0, tabRoute = restored.tabRoute)
-            is LegacyAccountDestination.Writing -> RestoredNavigation.TabPush(Writing, route)
+            is LegacyAccountDestination.Writing ->
+                if (showsWriting) {
+                    RestoredNavigation.TabPush(Writing, route)
+                } else {
+                    RestoredNavigation.PendingWriting(tabRoute = Home, writingRoute = legacy.route)
+                }
             is LegacyAccountDestination.Library -> RestoredNavigation.TabPush(Library, route)
             null -> if (route != restored.tabRoute) RestoredNavigation.Push(route) else null
         }
@@ -585,14 +620,14 @@ object Routes {
     /** Routes the Account sheet may host. Everything else is a tab jump on the main graph. */
     fun belongsOnAccountSheet(route: String): Boolean = accountSheetRoute(route) != null
 
-    /** Marked for Later, Bookmarks, History and Subscriptions live on Library. Works live on Writing. */
-    fun shellRootForAccountList(type: AccountListType): String = when (type) {
+    /** Marked for Later, Bookmarks, History and Subscriptions live on Library. Works live on Writing (or Home while hidden). */
+    fun shellRootForAccountList(type: AccountListType, showsWriting: Boolean = true): String = when (type) {
         AccountListType.MarkedForLater,
         AccountListType.Bookmarks,
         AccountListType.History,
         AccountListType.Subscriptions -> Library
         AccountListType.MyWorks,
-        is AccountListType.Collection -> Writing
+        is AccountListType.Collection -> if (showsWriting) Writing else Home
     }
 
     fun libraryFilterRoot(): String = Library
@@ -623,7 +658,7 @@ object Routes {
         }
     }
 
-    fun restoredSelection(rawRoute: String?): RestoredTabSelection {
+    fun restoredSelection(rawRoute: String?, showsWriting: Boolean = false): RestoredTabSelection {
         val sheetRoute = accountSheetRoute(rawRoute)
         if (sheetRoute != null) {
             return RestoredTabSelection(
@@ -632,7 +667,14 @@ object Routes {
                 accountRoute = sheetRoute
             )
         }
-        if (rawRoute != null && isShellRoot(rawRoute)) {
+        if (rawRoute == Writing && !showsWriting) {
+            return RestoredTabSelection(
+                tabRoute = Home,
+                presentsAccount = false,
+                accountRoute = null
+            )
+        }
+        if (rawRoute != null && isShellRoot(rawRoute, showsWriting = showsWriting)) {
             return RestoredTabSelection(
                 tabRoute = rawRoute,
                 presentsAccount = false,
