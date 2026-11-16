@@ -96,17 +96,47 @@ extension AO3AuthService {
     /// Subscribes to (or, if already subscribed, unsubscribes from) a work. Reads the
     /// work page once for the CSRF token + current subscription state, then POSTs the
     /// matching action. Returns a message describing what happened.
-    func toggleSubscribe(workID: Int) async throws -> String {
+    func toggleSubscribe(workID: Int, using client: AO3Client = .shared) async throws -> String {
+        try await toggleSubscribe(
+            subscribableID: workID,
+            subscribableType: "Work",
+            pageURL: Self.workURL(workID),
+            using: client
+        )
+    }
+
+    /// Subscribes to (or, if already subscribed, unsubscribes from) a series using the
+    /// same subscriptions POST/delete flow as `toggleSubscribe(workID:)`, with
+    /// `subscription[subscribable_type] = "Series"` (otwarchive `SubscriptionsController#create`,
+    /// `SeriesController#show`, `series/_series_navigation.html.erb`, `subscriptions/_form.html.erb`).
+    func toggleSubscribe(seriesID: Int, using client: AO3Client = .shared) async throws -> String {
+        try await toggleSubscribe(
+            subscribableID: seriesID,
+            subscribableType: "Series",
+            pageURL: AO3Client.seriesURL(seriesID: seriesID),
+            using: client
+        )
+    }
+
+    private func toggleSubscribe(
+        subscribableID: Int,
+        subscribableType: String,
+        pageURL: URL,
+        using client: AO3Client
+    ) async throws -> String {
+        try Task.checkCancellation()
         guard isLoggedIn, let username else { throw AO3WriteError.notSignedIn }
-        let workURL = Self.workURL(workID)
-        let (html, token) = try await fetchCSRFPage(at: workURL)
+        let expectedGeneration = sessionGeneration
+        let (html, token) = try await fetchCSRFPage(at: pageURL, using: client)
+        try Task.checkCancellation()
+        try requireSessionGeneration(expectedGeneration)
 
         let state = AO3Client.parseSubscription(from: html)
         if state.isSubscribed, let path = state.unsubscribePath, let url = Self.absoluteURL(path) {
             // AO3's unsubscribe form is a POST carrying `_method=delete`.
             let body = Self.formEncoded([("_method", "delete"), ("authenticity_token", token)])
-            let request = try writeRequest(to: url, body: body, csrf: token, referer: workURL, ajax: false)
-            let (status, responseBody) = try await submitWrite(request)
+            let request = try writeRequest(to: url, body: body, csrf: token, referer: pageURL, ajax: false)
+            let (status, responseBody) = try await submitWrite(request, using: client)
             return try Self.readingsWriteResult(
                 status: status, body: responseBody,
                 success: "Unsubscribed.", rejectedFallback: "Couldn't unsubscribe."
@@ -115,14 +145,14 @@ extension AO3AuthService {
 
         let body = Self.formEncoded([
             ("authenticity_token", token),
-            ("subscription[subscribable_id]", String(workID)),
-            ("subscription[subscribable_type]", "Work")
+            ("subscription[subscribable_id]", String(subscribableID)),
+            ("subscription[subscribable_type]", subscribableType)
         ])
         let request = try writeRequest(
             to: Self.subscriptionsEndpoint(username: username),
-            body: body, csrf: token, referer: workURL, ajax: false
+            body: body, csrf: token, referer: pageURL, ajax: false
         )
-        let (status, responseBody) = try await submitWrite(request)
+        let (status, responseBody) = try await submitWrite(request, using: client)
         if responseBody.localizedCaseInsensitiveContains("already subscribed") {
             return "You're already subscribed."
         }
