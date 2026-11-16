@@ -1232,18 +1232,23 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         return results
     }
 
-    /// Whether the user is currently subscribed to the work, read from the work page's
-    /// subscribe/unsubscribe form. When subscribed, AO3 renders a delete form whose
-    /// action is the unsubscribe path (`/users/X/subscriptions/<id>`); that path is
-    /// returned so the caller can unsubscribe.
-    /// A recognised Subscribe form: a `/subscriptions` form that is not the delete one.
+    /// A recognised Subscribe form: a `/subscriptions` create form (not delete or `/subscriptions/<id>`).
     static func hasSubscribeForm(in html: String) -> Bool {
         guard let doc = try? SwiftSoup.parse(html),
               let form = try? doc.select("form[action*=/subscriptions]").first() else { return false }
         let method = (try? form.select("input[name=_method]").first()?.attr("value"))?.lowercased() ?? ""
-        return method != "delete"
+        guard method != "delete",
+              let rawAction = try? form.attr("action")
+        else { return false }
+        let trimmed = rawAction.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let path = URLComponents(string: trimmed)?.path else { return false }
+        return path.hasSuffix("/subscriptions")
     }
 
+    /// Whether the user is currently subscribed to the work, read from the work page's
+    /// subscribe/unsubscribe form. When subscribed, AO3 renders a delete form whose
+    /// action is the unsubscribe path (`/users/X/subscriptions/<id>`); that path is
+    /// returned so the caller can unsubscribe.
     static func parseSubscription(from html: String) -> (isSubscribed: Bool, unsubscribePath: String?) {
         guard let doc = try? SwiftSoup.parse(html),
               let form = try? doc.select("form[action*=/subscriptions]").first()
