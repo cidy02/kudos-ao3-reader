@@ -37,34 +37,61 @@ final class AO3WorkActionsModel {
     /// write. nil = unknown → the menu falls back to its default labels.
     private(set) var workPageStates: AO3WorkActionStates?
     private var workPageStatesWorkID: Int?
+    private var workPageStatesGeneration: Int?
+    private var hasSyncedWorkPageStates = false
     private var isFetchingWorkPageStates = false
     private var workPageStatesRevision = 0
+    private var activeTask: Task<Void, Never>?
 
-    /// One work-page GET, only when signed in and only once per work (or when
-    /// `force`d after a write). Advisory labels only — see
+    /// One work-page GET, only when signed in and only once per work/session
+    /// (or when `force`d after a write). Advisory labels only — see
     /// `AO3AuthService.workActionStates`.
     func refreshWorkPageStates(workID: Int, auth: AO3AuthService, force: Bool = false) {
         guard auth.isLoggedIn else {
+            workPageStatesRevision += 1
             workPageStates = nil
             workPageStatesWorkID = nil
+            workPageStatesGeneration = nil
+            hasSyncedWorkPageStates = false
+            isFetchingWorkPageStates = false
             return
         }
-        if workPageStatesWorkID != workID {
+        let expectedGeneration = auth.sessionGeneration
+        if workPageStatesWorkID != workID || workPageStatesGeneration != expectedGeneration {
             workPageStatesRevision += 1
             workPageStates = nil
             workPageStatesWorkID = workID
-        } else if workPageStates != nil, !force {
+            workPageStatesGeneration = expectedGeneration
+            hasSyncedWorkPageStates = false
+            isFetchingWorkPageStates = false
+        } else if force {
+            workPageStatesRevision += 1
+            isFetchingWorkPageStates = false
+        } else if hasSyncedWorkPageStates {
             return
         }
         guard !isFetchingWorkPageStates else { return }
         isFetchingWorkPageStates = true
         let revision = workPageStatesRevision
         Task {
-            defer { isFetchingWorkPageStates = false }
+            defer {
+                if workPageStatesWorkID == workID,
+                   workPageStatesGeneration == expectedGeneration,
+                   workPageStatesRevision == revision {
+                    isFetchingWorkPageStates = false
+                }
+            }
             let states = try? await auth.workActionStates(workID: workID)
-            // A slow response for a previous work must not label this one.
-            guard workPageStatesWorkID == workID, workPageStatesRevision == revision else { return }
-            workPageStates = states
+            // A slow response for a previous work or session must not label this one.
+            guard auth.sessionGeneration == expectedGeneration,
+                  workPageStatesWorkID == workID,
+                  workPageStatesGeneration == expectedGeneration,
+                  workPageStatesRevision == revision
+            else { return }
+            if let states {
+                workPageStates = states
+                hasSyncedWorkPageStates = true
+            }
         }
     }
 
@@ -87,8 +114,10 @@ final class AO3WorkActionsModel {
         auth: AO3AuthService,
         onSuccess: (() -> Void)? = nil
     ) {
-        run(presentsSuccess: false) {
+        let expectedGeneration = auth.sessionGeneration
+        run(auth: auth, presentsSuccess: false) {
             let message = try await auth.giveKudos(workID: workID)
+            guard auth.sessionGeneration == expectedGeneration else { throw CancellationError() }
             self.kudosGivenWorkID = workID
             onSuccess?()
             return message
@@ -96,13 +125,25 @@ final class AO3WorkActionsModel {
     }
 
     func subscribe(workID: Int, to want: Bool, auth: AO3AuthService, onSubscribed: (() -> Void)? = nil) {
-        run {
+        let expectedGeneration = auth.sessionGeneration
+        run(auth: auth) {
             let message = try await auth.toggleSubscribe(workID: workID, to: want)
-            if self.workPageStatesWorkID == workID {
+            guard auth.sessionGeneration == expectedGeneration else { throw CancellationError() }
+            if self.workPageStatesWorkID == nil || self.workPageStatesWorkID == workID {
+                let sameScope = self.workPageStatesWorkID == workID
+                    && self.workPageStatesGeneration == expectedGeneration
+                let hadStates = sameScope && self.workPageStates != nil
+                let existingBookmark = sameScope ? self.workPageStates?.existingBookmark : nil
+                self.workPageStatesWorkID = workID
+                self.workPageStatesGeneration = expectedGeneration
                 self.workPageStatesRevision += 1
+                self.isFetchingWorkPageStates = false
                 self.workPageStates = AO3WorkActionStates(
-                    isSubscribed: want, existingBookmark: self.workPageStates?.existingBookmark
+                    isSubscribed: want, existingBookmark: existingBookmark
                 )
+                if !hadStates {
+                    self.refreshWorkPageStates(workID: workID, auth: auth, force: true)
+                }
             }
             if want { onSubscribed?() }
             return message
@@ -110,37 +151,54 @@ final class AO3WorkActionsModel {
     }
 
     func markForLater(workID: Int, auth: AO3AuthService) {
-        run { try await auth.markForLater(workID: workID) }
+        run(auth: auth) { try await auth.markForLater(workID: workID) }
     }
 
     /// Runs a fire-and-forget write. Kudos announces success in place; the
     /// other actions continue to show their result in the host alert.
-    /// Pass `afterSuccessRefresh` for writes that change the menu's
-    /// subscribed/bookmarked labels so they refetch instead of going stale.
     private func run(
-        afterSuccessRefresh: (workID: Int, auth: AO3AuthService)? = nil,
+        auth: AO3AuthService,
         presentsSuccess: Bool = true,
         _ action: @escaping () async throws -> String
     ) {
         guard !isWorking else { return }
+        let expectedGeneration = auth.sessionGeneration
         isWorking = true
-        Task {
+        activeTask = Task {
+            defer {
+                isWorking = false
+                activeTask = nil
+            }
             do {
                 let message = try await action()
+                guard auth.sessionGeneration == expectedGeneration else { return }
                 if presentsSuccess {
                     banner = message
                 } else {
                     AccessibilityNotification.Announcement(message).post()
                 }
                 writeSuccesses += 1
-                if let refresh = afterSuccessRefresh {
-                    refreshWorkPageStates(workID: refresh.workID, auth: refresh.auth, force: true)
+            } catch is CancellationError {
+                return
+            } catch AO3Error.authenticationRequired {
+                guard auth.sessionGeneration == expectedGeneration else { return }
+                let expired = await auth.sessionDidExpire(expectedGeneration: expectedGeneration)
+                guard !Task.isCancelled else { return }
+                if expired {
+                    workPageStatesRevision += 1
+                    workPageStates = nil
+                    workPageStatesWorkID = nil
+                    workPageStatesGeneration = nil
+                    hasSyncedWorkPageStates = false
+                    isFetchingWorkPageStates = false
+                    banner = AO3Error.authenticationRequired.errorDescription
+                    writeFailures += 1
                 }
             } catch {
+                guard auth.sessionGeneration == expectedGeneration else { return }
                 banner = Self.message(for: error)
                 writeFailures += 1
             }
-            isWorking = false
         }
     }
 
