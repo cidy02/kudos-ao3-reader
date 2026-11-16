@@ -159,6 +159,8 @@ struct ContentView: View {
                 // Another yield before walking every SavedWork + fileExists — that used
                 // to hitch the first tab switch if it still had the main actor.
                 await Task.yield()
+                // Must precede queue normalization, which can reset failed preservation status.
+                await PersistenceMigrationService.clearFalseAO3UnavailableFlagsIfNeeded(in: modelContext)
                 ReadingQueueService.normalizeAllQueuedWorks(in: modelContext)
                 await PersistenceMigrationService.runIfNeeded(in: modelContext)
                 // Independent of folder sync — a local Recently Deleted item past its

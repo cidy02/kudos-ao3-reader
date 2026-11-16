@@ -150,6 +150,36 @@ enum PersistenceMigrationService {
         return await run(in: context, defaults: defaults)
     }
 
+    static let falseAO3UnavailableRepairKey = "falseAO3UnavailableRepairT542cDone"
+
+    /// Repairs 404s from the November 2026 EPUB-download outage without querying AO3.
+    static func clearFalseAO3UnavailableFlagsIfNeeded(
+        in context: ModelContext,
+        defaults: UserDefaults = .standard
+    ) async {
+        guard !defaults.bool(forKey: falseAO3UnavailableRepairKey),
+              PersistenceOperationGate.begin(.migration) else { return }
+        defer { PersistenceOperationGate.end(.migration) }
+        do {
+            var processed = 0
+            for work in try context.fetch(FetchDescriptor<SavedWork>(
+                predicate: #Predicate { $0.ao3Unavailable }
+            )) {
+                guard work.modelContext != nil else { continue }
+                if work.epubPreservationStatus == .failed,
+                   !FileManager.default.fileExists(atPath: work.fileURL.path) {
+                    work.ao3Unavailable = false
+                }
+                processed += 1
+                if processed.isMultiple(of: yieldInterval) { await Task.yield() }
+            }
+            try context.save()
+            defaults.set(true, forKey: falseAO3UnavailableRepairKey)
+        } catch {
+            Log.library.error("AO3 availability repair failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
     /// Gives content identities to books that have none, a bounded number per
     /// launch, repeating on later launches until nothing is left. Needs no
     /// completion flag: once every EPUB is hashed the fetch below returns

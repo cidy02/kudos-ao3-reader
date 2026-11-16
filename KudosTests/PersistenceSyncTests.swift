@@ -20,6 +20,57 @@ struct PersistenceSyncTests {
         return try ModelContainer(for: schema, configurations: [configuration])
     }
 
+    @Test func falseAO3UnavailableRepairOnlyClearsFailedWorksWithoutAFileAndRunsOnce() async throws {
+        let container = try container()
+        let context = container.mainContext
+        let defaults = try testDefaults()
+        let noEPUB = SavedWork(title: "No EPUB", author: "Writer")
+        noEPUB.hasEPUB = false
+        noEPUB.epubPreservationStatus = .failed
+        noEPUB.ao3Unavailable = true
+        let missingFile = SavedWork(title: "Missing file", author: "Writer")
+        missingFile.epubPreservationStatus = .failed
+        missingFile.ao3Unavailable = true
+        let hasFile = SavedWork(title: "Has file", author: "Writer")
+        hasFile.epubPreservationStatus = .failed
+        hasFile.ao3Unavailable = true
+        try Data("local copy".utf8).write(to: hasFile.fileURL)
+        defer { try? FileManager.default.removeItem(at: hasFile.fileURL) }
+        let fileWithStaleFlag = SavedWork(title: "File with stale flag", author: "Writer")
+        fileWithStaleFlag.hasEPUB = false
+        fileWithStaleFlag.epubPreservationStatus = .failed
+        fileWithStaleFlag.ao3Unavailable = true
+        try Data("local copy".utf8).write(to: fileWithStaleFlag.fileURL)
+        defer { try? FileManager.default.removeItem(at: fileWithStaleFlag.fileURL) }
+        let unflagged = SavedWork(title: "Unflagged", author: "Writer")
+        unflagged.hasEPUB = false
+        unflagged.epubPreservationStatus = .failed
+        let otherFailure = SavedWork(title: "Other 404", author: "Writer")
+        otherFailure.hasEPUB = false
+        otherFailure.ao3Unavailable = true
+        for work in [noEPUB, missingFile, hasFile, fileWithStaleFlag, unflagged, otherFailure] {
+            context.insert(work)
+        }
+        try context.save()
+
+        await PersistenceMigrationService.clearFalseAO3UnavailableFlagsIfNeeded(
+            in: context, defaults: defaults
+        )
+        #expect(!noEPUB.ao3Unavailable)
+        #expect(!missingFile.ao3Unavailable)
+        #expect(hasFile.ao3Unavailable)
+        #expect(fileWithStaleFlag.ao3Unavailable)
+        #expect(!unflagged.ao3Unavailable)
+        #expect(otherFailure.ao3Unavailable)
+        #expect(defaults.bool(forKey: PersistenceMigrationService.falseAO3UnavailableRepairKey))
+
+        noEPUB.ao3Unavailable = true
+        await PersistenceMigrationService.clearFalseAO3UnavailableFlagsIfNeeded(
+            in: context, defaults: defaults
+        )
+        #expect(noEPUB.ao3Unavailable)
+    }
+
     @Test func migrationIsIdempotentAndMarksMissingEPUBRecoverable() async throws {
         let container = try container()
         let context = container.mainContext
