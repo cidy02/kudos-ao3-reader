@@ -658,10 +658,7 @@ private struct ReadingHistoryChart: View {
                         .frame(width: 10, height: 10)
                     Text("Hours read")
                 }
-                HStack(spacing: 4) {
-                    Text("3").fontWeight(.semibold).foregroundStyle(themeManager.accentInk)
-                    Text("Works finished")
-                }
+                Text("Number above a bar = works finished")
             }
             .font(.caption2)
             .foregroundStyle(.secondary)
