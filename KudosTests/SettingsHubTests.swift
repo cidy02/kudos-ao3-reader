@@ -105,7 +105,9 @@ struct SettingsHubTests {
             readingMode: .scroll, downloadOnSubscribe: false, autoPreserveSeries: true, seriesLimit: 3,
             hidesMature: false, matureMode: .obscure, folderSync: Self.sync(connected: true, auto: true),
             auth: .signedOut,
-            speechEngineID: "system", speechVoiceID: "com.apple.voice.compact.en-US.Samantha", speechVoiceName: "Samantha"
+            speechEngineID: "system",
+            speechVoiceID: "com.apple.voice.compact.en-US.Samantha",
+            speechVoiceName: "Samantha"
         )
         let third = SettingsHubInputs(
             appTheme: .sepia, readerTheme: .dark, themesMatched: true, fontName: "System",

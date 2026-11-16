@@ -129,17 +129,21 @@ struct CommentAvatarTests {
         )
     }
 
-    private static func rgba(
-        _ color: Color,
-        for theme: ReaderTheme
-    ) -> (red: Double, green: Double, blue: Double, alpha: Double) {
-        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+    private struct RGBA {
+        let red: Double
+        let green: Double
+        let blue: Double
+        let alpha: Double
+    }
+
+    private static func rgba(_ color: Color, for theme: ReaderTheme) -> RGBA {
+        var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
         #if canImport(UIKit)
         let traits = UITraitCollection(
             userInterfaceStyle: theme.colorScheme == .dark ? .dark : .light
         )
         let resolved = UIColor(color).resolvedColor(with: traits)
-        resolved.getRed(&r, green: &g, blue: &b, alpha: &a)
+        resolved.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
         #elseif canImport(AppKit)
         let appearanceName: NSAppearance.Name = theme.colorScheme == .dark ? .darkAqua : .aqua
         let appearance = NSAppearance(named: appearanceName)
@@ -147,8 +151,13 @@ struct CommentAvatarTests {
         appearance?.performAsCurrentDrawingAppearance {
             srgb = NSColor(color).usingColorSpace(.sRGB) ?? NSColor(color)
         }
-        srgb.getRed(&r, green: &g, blue: &b, alpha: &a)
+        srgb.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
         #endif
-        return (Double(r), Double(g), Double(b), Double(a))
+        return RGBA(
+            red: Double(red),
+            green: Double(green),
+            blue: Double(blue),
+            alpha: Double(alpha)
+        )
     }
 }
