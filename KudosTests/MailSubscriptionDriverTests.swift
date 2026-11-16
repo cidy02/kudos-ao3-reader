@@ -311,7 +311,10 @@ struct MailSubscriptionDriverTests {
         try driver.recordDecision(.notForMe, workID: 42)
 
         let reloaded = makeDriver(vault: vault, store: store, mailbox: mailbox)
-        #expect(reloaded.decisions == [SubscriptionDecision(workID: 42, action: .notForMe)])
+        // T-541: a choice records when it was made, on the driver's clock.
+        #expect(reloaded.decisions == [SubscriptionDecision(
+            workID: 42, action: .notForMe, decidedAt: Date(timeIntervalSince1970: 1_762_000_000)
+        )])
     }
 
     @Test func mailboxGenerationChangeKeepsDecisions() async {

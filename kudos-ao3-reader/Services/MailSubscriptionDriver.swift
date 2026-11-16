@@ -56,7 +56,7 @@ final class MailSubscriptionDriver {
         let previous = state
         var next = state
         next.decisions.removeAll { $0.workID == workID }
-        next.decisions.append(SubscriptionDecision(workID: workID, action: action, decidedAt: Date()))
+        next.decisions.append(SubscriptionDecision(workID: workID, action: action, decidedAt: now()))
         next = next.capped()
         do {
             try store.saveState(next)
