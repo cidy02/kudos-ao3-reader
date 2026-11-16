@@ -63,9 +63,16 @@ class GeneratedCoverArtLoader<T : Any>(
     private var tail: Job? = null
 
     suspend fun image(workId: String, file: File): T? {
-        if (!file.isFile) return null
-        val revision = file.lastModified().toString()
-        val key = "${file.absolutePath}|$revision"
+        // isFile and lastModified are disk stats. Callers (LaunchedEffect) run on Main.
+        val located = withContext(Dispatchers.IO) {
+            if (!file.isFile) {
+                null
+            } else {
+                val revision = file.lastModified().toString()
+                revision to "${file.absolutePath}|$revision"
+            }
+        } ?: return null
+        val (revision, key) = located
         memory[key]?.let { return it.image }
 
         val basename = "$workId-$revision"

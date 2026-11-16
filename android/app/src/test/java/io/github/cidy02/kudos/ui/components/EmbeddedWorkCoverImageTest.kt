@@ -6,8 +6,10 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.charset.StandardCharsets
+import java.util.Collections
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.zip.CRC32
@@ -21,9 +23,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -243,5 +247,159 @@ class EmbeddedWorkCoverImageTest {
         first.join()
         loaderJob.children.toList().forEach { it.join() }
         assertEquals(1, scans.get())
+    }
+
+    @Test
+    fun coverArtFileStatRunsOffTheCallerThread() = runBlocking {
+        val dir = tempFolder.newFolder("loader-stat")
+        val statThreads = Collections.synchronizedList(mutableListOf<String>())
+        val file = object : File(dir, "work.epub") {
+            override fun isFile(): Boolean {
+                statThreads.add(Thread.currentThread().name)
+                return super.isFile()
+            }
+
+            override fun lastModified(): Long {
+                statThreads.add(Thread.currentThread().name)
+                return super.lastModified()
+            }
+        }
+        file.writeBytes(byteArrayOf(1))
+        val loader = GeneratedCoverArtLoader(
+            directory = File(dir, "cache"),
+            scan = { null },
+            downsample = { it },
+            decode = { it }
+        )
+        val caller = Executors.newSingleThreadExecutor { runnable -> Thread(runnable, "cover-caller") }
+        val dispatcher = caller.asCoroutineDispatcher()
+        try {
+            withContext(dispatcher) {
+                assertNull(loader.image(UUID.randomUUID().toString(), file))
+            }
+        } finally {
+            caller.shutdown()
+        }
+        assertTrue(statThreads.isNotEmpty())
+        assertTrue(statThreads.none { it == "cover-caller" })
+    }
+
+    @Test
+    fun jpegQualityMatchesIosAndUnknownImageSizeIsSkipped() {
+        assertEquals(100, EmbeddedWorkCoverImage.JPEG_QUALITY)
+        assertTrue(EmbeddedWorkCoverImage.imageEntrySkipped(-1L))
+        assertTrue(EmbeddedWorkCoverImage.imageEntrySkipped(20_000_001L))
+        assertFalse(EmbeddedWorkCoverImage.imageEntrySkipped(20_000_000L))
+        assertFalse(EmbeddedWorkCoverImage.imageEntrySkipped(32_000L))
+    }
+
+    @Test
+    fun tocHrefPercentDecodesPlusWithoutTreatingPlusAsSpace() {
+        val art = solidPng(width = 320, red = 40)
+        val epub = storedZip(
+            "plus.epub",
+            listOf(
+                "mimetype" to "application/epub+zip".toByteArray(StandardCharsets.UTF_8),
+                "META-INF/container.xml" to containerXml("OEBPS/content.opf"),
+                "OEBPS/content.opf" to plusOpf(),
+                "OEBPS/nav.xhtml" to """
+                    <html xmlns="http://www.w3.org/1999/xhtml"><body>
+                    <nav epub:type="toc">
+                    <a href="preface.xhtml">Preface</a>
+                    <a href="ch%2B1.xhtml">Chapter 1</a>
+                    </nav></body></html>
+                """.trimIndent().toByteArray(StandardCharsets.UTF_8),
+                "OEBPS/preface.xhtml" to "<html><body><p>Preface</p></body></html>".toByteArray(),
+                "OEBPS/ch+1.xhtml" to "<html><body><img src='art.png'/></body></html>".toByteArray(),
+                "OEBPS/art.png" to art
+            )
+        )
+        assertArrayEquals(art, EmbeddedWorkCoverImage.data(epub, imageCodec = jvmCodec))
+    }
+
+    @Test
+    fun navIdentifiedByIdTocIsUsedWhenItIsNotFirst() {
+        val art = solidPng(width = 400, red = 90)
+        val epub = storedZip(
+            "id-toc.epub",
+            listOf(
+                "mimetype" to "application/epub+zip".toByteArray(StandardCharsets.UTF_8),
+                "META-INF/container.xml" to containerXml("OEBPS/content.opf"),
+                "OEBPS/content.opf" to idTocOpf(),
+                "OEBPS/nav.xhtml" to """
+                    <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><body>
+                    <nav epub:type="landmarks"><a href="preface.xhtml">Landmarks</a></nav>
+                    <nav id="toc">
+                    <a href="preface.xhtml">Preface</a>
+                    <a href="chapter.xhtml">Chapter 1</a>
+                    </nav></body></html>
+                """.trimIndent().toByteArray(StandardCharsets.UTF_8),
+                "OEBPS/preface.xhtml" to "<html><body><p>Preface</p></body></html>".toByteArray(),
+                "OEBPS/chapter.xhtml" to "<html><body><img src='art.png'/></body></html>".toByteArray(),
+                "OEBPS/art.png" to art
+            )
+        )
+        assertArrayEquals(art, EmbeddedWorkCoverImage.data(epub, imageCodec = jvmCodec))
+    }
+
+    private fun solidPng(width: Int, red: Int): ByteArray {
+        val image = BufferedImage(width, 800, BufferedImage.TYPE_INT_RGB)
+        val graphics = image.createGraphics()
+        graphics.color = Color(red, 0, 0)
+        graphics.fillRect(0, 0, width, 800)
+        graphics.dispose()
+        val out = ByteArrayOutputStream()
+        assertTrue(ImageIO.write(image, "png", out))
+        return out.toByteArray()
+    }
+
+    private fun containerXml(opfPath: String): ByteArray = """
+        <?xml version="1.0"?><container xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+        <rootfiles><rootfile full-path="$opfPath" media-type="application/oebps-package+xml"/></rootfiles>
+        </container>
+    """.trimIndent().toByteArray(StandardCharsets.UTF_8)
+
+    private fun plusOpf(): ByteArray = """
+        <?xml version="1.0"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+        <metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>Plus</dc:title>
+        <dc:creator>Author</dc:creator><dc:language>en</dc:language></metadata>
+        <manifest>
+        <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+        <item id="preface" href="preface.xhtml" media-type="application/xhtml+xml"/>
+        <item id="chapter" href="ch+1.xhtml" media-type="application/xhtml+xml"/>
+        </manifest>
+        <spine><itemref idref="preface"/><itemref idref="chapter"/></spine>
+        </package>
+    """.trimIndent().toByteArray(StandardCharsets.UTF_8)
+
+    private fun idTocOpf(): ByteArray = """
+        <?xml version="1.0"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+        <metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>Id Toc</dc:title>
+        <dc:creator>Author</dc:creator><dc:language>en</dc:language></metadata>
+        <manifest>
+        <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+        <item id="preface" href="preface.xhtml" media-type="application/xhtml+xml"/>
+        <item id="chapter" href="chapter.xhtml" media-type="application/xhtml+xml"/>
+        </manifest>
+        <spine><itemref idref="preface"/><itemref idref="chapter"/></spine>
+        </package>
+    """.trimIndent().toByteArray(StandardCharsets.UTF_8)
+
+    private fun storedZip(name: String, entries: List<Pair<String, ByteArray>>): File {
+        val epub = tempFolder.newFile(name)
+        ZipOutputStream(epub.outputStream()).use { zip ->
+            for ((entryName, bytes) in entries) {
+                val entry = ZipEntry(entryName).apply {
+                    method = ZipEntry.STORED
+                    size = bytes.size.toLong()
+                    compressedSize = bytes.size.toLong()
+                    crc = CRC32().apply { update(bytes) }.value
+                }
+                zip.putNextEntry(entry)
+                zip.write(bytes)
+                zip.closeEntry()
+            }
+        }
+        return epub
     }
 }

@@ -458,4 +458,86 @@ class GeneratedCoverRecipeTest {
             id += 100_000L
         }
     }
+
+    @Test
+    fun collectionUuidIdentityMatchesIosUppercase() {
+        val lower = "e621e1f8-c36c-495a-93fc-0c247a3e6e5f"
+        val upper = "E621E1F8-C36C-495A-93FC-0C247A3E6E5F"
+        assertEquals(upper, GeneratedCoverRecipe.canonicalCollectionIdentity(lower))
+        assertEquals(upper, GeneratedCoverRecipe.canonicalCollectionIdentity(upper))
+        assertEquals("same-id", GeneratedCoverRecipe.canonicalCollectionIdentity("same-id"))
+        assertEquals("SAME-ID", GeneratedCoverRecipe.canonicalCollectionIdentity("SAME-ID"))
+
+        val fromLower = GeneratedCoverRecipe.forCollection(name = "Shelf", identity = lower, hue = 150)
+        val fromUpper = GeneratedCoverRecipe.forCollection(name = "Shelf", identity = upper, hue = 150)
+        assertEquals(fromUpper.motif, fromLower.motif)
+        assertEquals(fromUpper.shapeSeed, fromLower.shapeSeed)
+        assertEquals(fromUpper.rotation, fromLower.rotation, 0.0)
+        assertEquals(fromUpper.scale, fromLower.scale, 0.0)
+
+        val upperId = GeneratedCoverRecipe.hash("collection:$upper").toLong().toString()
+        assertEquals(GeneratedCoverRecipe.hash("shape:$upperId"), fromLower.shapeSeed)
+        val lowerId = GeneratedCoverRecipe.hash("collection:$lower").toLong().toString()
+        assertNotEquals(GeneratedCoverRecipe.hash("shape:$lowerId"), fromLower.shapeSeed)
+
+        val plain = GeneratedCoverRecipe.forCollection(name = "Shelf", identity = "same-id", hue = 150)
+        val shouted = GeneratedCoverRecipe.forCollection(name = "Shelf", identity = "SAME-ID", hue = 150)
+        assertNotEquals(plain.shapeSeed, shouted.shapeSeed)
+    }
+
+    @Test
+    fun unicodeSeparatorsSplitTitlesLikeIos() {
+        val subtitle = GeneratedCoverRecipe.create(
+            id = 9L,
+            title = "The Work\u00A0(Subtitle)",
+            author = "a",
+            fandoms = listOf("Original Work")
+        )
+        assertEquals("The Work", subtitle.title)
+        assertEquals("(Subtitle)", subtitle.subtitle)
+        assertEquals(2, subtitle.placement)
+
+        val numbered = GeneratedCoverRecipe.create(
+            id = 10L,
+            title = "1.\u00A0Title",
+            author = "a",
+            fandoms = listOf("Original Work")
+        )
+        assertEquals("Title", numbered.title)
+        assertEquals("", numbered.subtitle)
+
+        val ascii = GeneratedCoverRecipe.create(
+            id = 11L,
+            title = "1. Title (Sub)",
+            author = "a",
+            fandoms = listOf("Original Work")
+        )
+        assertEquals("Title", ascii.title)
+        assertEquals("(Sub)", ascii.subtitle)
+        assertEquals(2, ascii.placement)
+    }
+
+    @Test
+    fun zwjEmojiCountsAsOneGraphemeOnThePlacementBoundary() {
+        val family = "\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67\u200D\uD83D\uDC66"
+        assertEquals(1, GeneratedCoverRecipe.graphemeCount(family))
+        val sixteen = "AAAAAAAAAAAAAAA$family"
+        assertEquals(16, GeneratedCoverRecipe.graphemeCount(sixteen))
+        val atBoundary = GeneratedCoverRecipe.create(
+            id = 16L,
+            title = sixteen,
+            author = "a",
+            fandoms = listOf("Original Work")
+        )
+        assertEquals(1, atBoundary.placement)
+        val seventeen = "AAAAAAAAAAAAAAAA$family"
+        assertEquals(17, GeneratedCoverRecipe.graphemeCount(seventeen))
+        val past = GeneratedCoverRecipe.create(
+            id = 17L,
+            title = seventeen,
+            author = "a",
+            fandoms = listOf("Original Work")
+        )
+        assertEquals(0, past.placement)
+    }
 }

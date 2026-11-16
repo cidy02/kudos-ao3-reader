@@ -11,7 +11,8 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.InputStream
 import java.net.URI
-import java.net.URLDecoder
+import java.nio.ByteBuffer
+import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
 import java.util.Locale
 import java.util.zip.ZipFile
@@ -58,7 +59,11 @@ object AndroidEmbeddedImageCodec : EmbeddedImageCodec {
         }
         return try {
             val out = ByteArrayOutputStream()
-            if (scaled.compress(Bitmap.CompressFormat.JPEG, 90, out)) out.toByteArray() else null
+            if (scaled.compress(Bitmap.CompressFormat.JPEG, EmbeddedWorkCoverImage.JPEG_QUALITY, out)) {
+                out.toByteArray()
+            } else {
+                null
+            }
         } finally {
             scaled.recycle()
         }
@@ -102,6 +107,12 @@ object EmbeddedWorkCoverImage {
     private const val VIRTUAL_ROOT = "/KudosGeneratedCoverArt/"
     private const val MAX_IMAGE_BYTES = 20_000_000
     private const val MAX_XML_BYTES = 8_000_000
+
+    /** iOS ImageIO writes the downsampled cover at its highest JPEG quality. */
+    internal const val JPEG_QUALITY = 100
+
+    /** iOS skips an image whose uncompressed size is missing. `ZipEntry.size` is -1 then. */
+    internal fun imageEntrySkipped(size: Long): Boolean = size < 0L || size > MAX_IMAGE_BYTES
 
     data class Candidate(
         val data: ByteArray,
@@ -186,7 +197,7 @@ object EmbeddedWorkCoverImage {
                         val imgUri = resolveRelative(pageUri, src) ?: continue
                         val name = entryName(imgUri) ?: continue
                         val entry = zip.getEntry(name) ?: continue
-                        if (entry.size > MAX_IMAGE_BYTES) continue
+                        if (imageEntrySkipped(entry.size)) continue
                         val data = readEntry(zip, name, MAX_IMAGE_BYTES) ?: continue
                         val (width, height) = imageCodec.dimensions(data) ?: continue
                         if (!accepts(width, height)) continue
@@ -317,7 +328,10 @@ object EmbeddedWorkCoverImage {
             Jsoup.parse(data.toString(StandardCharsets.UTF_8))
         }.getOrNull() ?: return emptyList()
         val nav = doc.select("nav").firstOrNull { el ->
-            el.attributes().any { attr -> attr.key.endsWith("type") && attr.value.contains("toc") }
+            val typedToc = el.attributes().any { attr ->
+                attr.key.endsWith("type") && attr.value.contains("toc")
+            }
+            typedToc || el.id() == "toc"
         } ?: doc.selectFirst("nav") ?: return emptyList()
         return nav.select("a[href]").mapNotNull { link ->
             val href = link.attr("href")
@@ -340,8 +354,41 @@ object EmbeddedWorkCoverImage {
     private fun fileKey(href: String): String {
         val noFragment = href.substringBefore('#')
         val last = noFragment.substringAfterLast('/')
-        val decoded = runCatching { URLDecoder.decode(last, StandardCharsets.UTF_8.name()) }.getOrDefault(last)
-        return decoded.lowercase(Locale.ROOT)
+        // Swift `removingPercentEncoding` decodes %xx and leaves '+' alone.
+        // URLDecoder would turn "ch+1.xhtml" into "ch 1.xhtml".
+        return percentDecode(last).lowercase(Locale.ROOT)
+    }
+
+    private fun percentDecode(value: String): String {
+        if ('%' !in value) return value
+        val bytes = ByteArrayOutputStream(value.length)
+        var index = 0
+        while (index < value.length) {
+            val char = value[index]
+            if (char == '%') {
+                if (index + 2 >= value.length) return value
+                val byte = hexByte(value[index + 1], value[index + 2]) ?: return value
+                bytes.write(byte)
+                index += 3
+                continue
+            }
+            bytes.write(char.toString().toByteArray(StandardCharsets.UTF_8))
+            index += 1
+        }
+        return runCatching {
+            StandardCharsets.UTF_8.newDecoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT)
+                .decode(ByteBuffer.wrap(bytes.toByteArray()))
+                .toString()
+        }.getOrDefault(value)
+    }
+
+    private fun hexByte(hi: Char, lo: Char): Int? {
+        val high = Character.digit(hi, 16)
+        val low = Character.digit(lo, 16)
+        if (high < 0 || low < 0) return null
+        return (high shl 4) or low
     }
 
     private fun resolveRelative(base: URI, rawRef: String): URI? {

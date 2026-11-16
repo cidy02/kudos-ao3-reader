@@ -97,8 +97,10 @@ data class GeneratedCoverRecipe(
             "Fantasy" to "celestial", "Magic" to "celestial", "Science Fiction" to "celestial"
         )
         private val constrainedRotationMotifs = setOf("sprig", "waves", "chevrons", "truchet", "halftone")
-        private val leadingNumberRegex = Regex("^\\d+\\.\\s*")
-        private val subtitleRegex = Regex("^(.*\\S)\\s+(\\(.*\\)|\\[.*\\])$")
+        // Java `\s` is ASCII-only. iOS NSRegularExpression `\s` includes `\p{Z}` (NBSP).
+        // Do not turn on Unicode character classes: that would also widen `\d` past ASCII digits.
+        private val leadingNumberRegex = Regex("^\\d+\\.[\\s\\p{Z}]*")
+        private val subtitleRegex = Regex("^(.*[^\\s\\p{Z}])[\\s\\p{Z}]+(\\(.*\\)|\\[.*\\])$")
 
         // Approximate posting dates of well-known works and round-number IDs, supplied
         // by the orchestrator from memory on 2026-11-14 while AO3 was down; not verified
@@ -253,7 +255,9 @@ data class GeneratedCoverRecipe(
             hue: Int,
             graphite: Boolean = false
         ): GeneratedCoverRecipe {
-            val key = identity ?: name
+            // iOS passes UUID.uuidString, which is uppercase. Java UUID.toString() is lowercase.
+            // Non-UUID keys (a collection name, the tests' "same-id") stay as given.
+            val key = identity?.let(::canonicalCollectionIdentity) ?: name
             return create(
                 id = hash("collection:$key").toLong(),
                 title = name,
@@ -278,11 +282,14 @@ data class GeneratedCoverRecipe(
             collectionHueForIdentity(identity.toString().uppercase(Locale.ROOT))
 
         fun collectionHueForIdentity(identity: String): Int {
-            val canonical = runCatching {
-                UUID.fromString(identity).toString().uppercase(Locale.ROOT)
-            }.getOrDefault(identity)
+            val canonical = canonicalCollectionIdentity(identity)
             return palette[(hash("collection:$canonical") % palette.size.toUInt()).toInt()]
         }
+
+        /** UUID identities match iOS `uuidString`. Anything that is not a UUID is unchanged. */
+        internal fun canonicalCollectionIdentity(identity: String): String =
+            runCatching { UUID.fromString(identity).toString().uppercase(Locale.ROOT) }
+                .getOrDefault(identity)
 
         fun collectionSwatch(hex: String?, fallback: Int): Pair<Int, Double> {
             val value = if (hex != null && hex.length == 7 && hex.startsWith("#")) {
@@ -330,13 +337,7 @@ data class GeneratedCoverRecipe(
 
         internal fun graphemeCount(text: String): Int {
             if (text.isEmpty()) return 0
-            val iterator = BreakIterator.getCharacterInstance(Locale.ROOT)
-            iterator.setText(text)
-            var count = 0
-            while (iterator.next() != BreakIterator.DONE) {
-                count += 1
-            }
-            return count
+            return GraphemeCounters.count(text)
         }
 
         internal fun roundAwayFromZero(value: Double): Double =
@@ -420,6 +421,47 @@ fun SavedWork.generatedCoverRecipe(): GeneratedCoverRecipe =
         part = seriesPosition,
         firstAuthor = AO3AuthorIdentities.firstDisplayName(authorIdentitiesJSON)
     )
+
+/**
+ * Character count for cover placement. On device this is `android.icu.text.BreakIterator`,
+ * which matches Swift `String.count` for ZWJ emoji. Unit tests have no Android ICU, so they
+ * use `java.text.BreakIterator` (JDK 21 counts a ZWJ family as one character). Android's own
+ * `java.text.BreakIterator` splits those sequences, which is why the device path does not use it.
+ */
+private object GraphemeCounters {
+    private const val ZWJ_FAMILY =
+        "\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67\u200D\uD83D\uDC66"
+
+    private val counter: (String) -> Int = run {
+        val icu = icuCounter()
+        if (icu != null && runCatching { icu(ZWJ_FAMILY) }.getOrNull() == 1) icu else ::javaTextCount
+    }
+
+    fun count(text: String): Int = counter(text)
+
+    private fun icuCounter(): ((String) -> Int)? = runCatching {
+        val cls = Class.forName("android.icu.text.BreakIterator")
+        val factory = cls.getMethod("getCharacterInstance", Locale::class.java)
+        val setText = cls.getMethod("setText", String::class.java)
+        val next = cls.getMethod("next")
+        val done = cls.getField("DONE").getInt(null)
+        return@runCatching { text: String ->
+            val iterator = factory.invoke(null, Locale.ROOT)
+            setText.invoke(iterator, text)
+            var graphemes = 0
+            while (next.invoke(iterator) as Int != done) graphemes += 1
+            graphemes
+        }
+    }.getOrNull()
+
+    private fun javaTextCount(text: String): Int {
+        val iterator = BreakIterator.getCharacterInstance(Locale.ROOT)
+        iterator.setText(text)
+        var graphemes = 0
+        while (iterator.next() != BreakIterator.DONE) graphemes += 1
+        return graphemes
+    }
+}
 
 fun AO3WorkSummary.generatedCoverRecipe(): GeneratedCoverRecipe =
     GeneratedCoverRecipe.create(
