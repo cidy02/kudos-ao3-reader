@@ -277,6 +277,7 @@ final class BrowserModel: NSObject {
 
     /// Called when an EPUB finishes downloading: (savedFileURL, sourcePageURL).
     var onImport: ((URL, URL?) -> Void)?
+    var onOpenWork: ((Int) -> Void)?
 
     private var pendingDestinations: [WKDownload: URL] = [:]
     private var currentTheme: ReaderTheme = .light
@@ -427,6 +428,15 @@ extension BrowserModel: WKNavigationDelegate, WKDownloadDelegate {
         decidePolicyFor navigationAction: WKNavigationAction,
         decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
     ) {
+        if navigationAction.navigationType == .linkActivated,
+           (navigationAction.targetFrame?.isMainFrame ?? true),
+           let url = navigationAction.request.url,
+           case let .work(id, _) = AO3Link(url).kind,
+           let onOpenWork {
+            onOpenWork(id)
+            decisionHandler(.cancel)
+            return
+        }
         decisionHandler(BrowserThemeStyle.decide(navigationAction))
     }
 

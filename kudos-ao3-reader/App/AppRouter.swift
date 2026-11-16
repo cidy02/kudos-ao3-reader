@@ -377,6 +377,8 @@ final class AppRouter {
     /// does not switch the user into the Browse tab — Done returns them to
     /// whatever tab/subpage they came from.
     var isPresentingWebBrowser = false
+    var pendingWorkLink: (id: Int, chapterID: Int)?
+    var isPresentingLinkedWork = false
     /// A tag the Library should filter by on its next appearance (e.g. tapped on a
     /// work's detail page). Consumed + cleared by `LibraryView`.
     var pendingLibraryTag: LibraryTagFilter?
@@ -464,18 +466,18 @@ final class AppRouter {
     /// action where one exists — a tag's `/tags/<name>/works` page opens a native
     /// works list — falling back to the in-app web view for everything else.
     func openAO3Link(_ url: URL) {
-        if let author = Self.authorRoute(for: url) {
+        let link = AO3Link(url)
+        if case let .work(id, chapterID) = link.kind {
+            pendingWorkLink = (id, chapterID)
+            isPresentingLinkedWork = true
+            return
+        }
+        if link.kind != .notAO3, let author = Self.authorRoute(for: url) {
             openAuthorProfile(author)
             return
         }
-        let parts = url.pathComponents.filter { $0 != "/" }
-        // Same host gate as `open(_:)` (`isAO3URL`: https-only, apex or
-        // subdomain) — a substring check here would treat a lookalike host
-        // like `archiveofourown.org.evil.example` as native-eligible and hand
-        // its URL straight to `AO3Client.worksPage(at:)`.
-        if AO3AuthorRoute.isAO3URL(url),
-           parts.first == "tags", parts.count >= 2 {
-            pendingTagWorks = AO3TagWorksRequest(url: url, title: Self.unmungeTag(parts[1]))
+        if case let .tag(tag) = link.kind, AO3AuthorRoute.isAO3URL(url) {
+            pendingTagWorks = AO3TagWorksRequest(url: url, title: Self.unmungeTag(tag))
             selection = .browse
             return
         }

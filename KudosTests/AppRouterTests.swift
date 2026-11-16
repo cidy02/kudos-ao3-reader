@@ -544,6 +544,32 @@ struct AppRouterTests {
         #expect(router.pendingURL == nil)
     }
 
+    @Test(arguments: [
+        ("https://archiveofourown.org/works/123", 123, nil as Int?),
+        ("https://archiveofourown.org/works/123/chapters/456", 123, 456),
+        ("https://archiveofourown.org/collections/Summer/works/123", 123, nil)
+    ])
+    func workLinksPresentDetailWithoutChangingTabs(urlString: String, id: Int, chapterID: Int?) {
+        let router = AppRouter()
+        router.openAO3Link(URL(string: urlString)!)
+        #expect(router.pendingWorkLink?.id == id)
+        #expect(router.pendingWorkLink?.chapterID == chapterID)
+        #expect(router.isPresentingLinkedWork)
+        #expect(router.pendingURL == nil)
+        #expect(router.selection == .home)
+    }
+
+    @Test func seriesAndSearchLinksKeepTheWebsiteFallback() {
+        for path in ["/series/77", "/works/search?work_search%5Bquery%5D=Fluff"] {
+            let router = AppRouter()
+            let url = URL(string: "https://archiveofourown.org\(path)")!
+            router.openAO3Link(url)
+            #expect(router.pendingURL == url)
+            #expect(router.isPresentingWebBrowser)
+            #expect(!router.isPresentingLinkedWork)
+        }
+    }
+
     /// A lookalike host that merely *contains* "archiveofourown.org" must not
     /// qualify for the native tag-works path — that would hand the attacker's
     /// own host straight to `AO3Client.worksPage(at:)`. Same host gate as
@@ -564,6 +590,13 @@ struct AppRouterTests {
         #expect(router.pendingTagWorks == nil)
         #expect(router.pendingURL == nil)
         #expect(router.selection == .home)
+    }
+
+    @Test func authorWorksLinkKeepsItsNativeProfileRoute() {
+        let router = AppRouter()
+        router.openAO3Link(URL(string: "https://archiveofourown.org/users/someone/works")!)
+        #expect(router.pendingAuthorProfile == AO3AuthorRoute(username: "someone"))
+        #expect(router.pendingURL == nil)
     }
 
     @Test func openAuthorProfileBumpsEpochEvenForSameRoute() throws {

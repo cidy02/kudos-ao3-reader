@@ -8,7 +8,7 @@ All paths relative to `kudos-ao3-reader/` unless noted. Confirmed as of 2026-07-
 |---|---|
 | App entry, shared `ModelContainer`, BGTask registration | `App/MyApp.swift` |
 | Root TabView, launch housekeeping (`.task`: session restore → queue normalize → migration → Recently-Deleted sweep → index rebuild → folder sync), scene-phase sync triggers | `App/ContentView.swift` |
-| Cross-tab routing (tag→search, native author profiles, pending URLs, inspector panel ownership) | `App/AppRouter.swift`; author destinations registered by `UIComponents/AO3AuthorNavigation.swift` |
+| Cross-tab routing (tag→search, native author profiles, pending URLs, linked-work sheet, inspector panel ownership) | `App/AppRouter.swift`; AO3 URL classification in `App/AO3Link.swift`; linked-work loading in `Features/WorkDetail/LinkedWorkLandingView.swift`; author destinations registered by `UIComponents/AO3AuthorNavigation.swift` |
 
 ## Feature surfaces
 

@@ -13,6 +13,7 @@ struct AO3WebBrowserView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var model = BrowserModel()
     @State private var banner: String?
+    @State private var linkedWorkID: Int?
 
     var body: some View {
         NavigationStack {
@@ -44,6 +45,12 @@ struct AO3WebBrowserView: View {
                 }
         }
         .presentationDragIndicator(.visible)
+        .sheet(isPresented: Binding(
+            get: { linkedWorkID != nil },
+            set: { if !$0 { linkedWorkID = nil } }
+        )) {
+            if let linkedWorkID { LinkedWorkLandingView(workID: linkedWorkID) }
+        }
     }
 
     // MARK: Top toolbar (Safari-style)
@@ -93,7 +100,14 @@ struct AO3WebBrowserView: View {
             text: $model.urlString,
             placeholder: "Search AO3 or enter a URL",
             submitLabel: .go,
-            onSubmit: { model.loadFromAddressBar() }
+            onSubmit: {
+                if let url = URL(string: model.urlString),
+                   case let .work(id, _) = AO3Link(url).kind {
+                    linkedWorkID = id
+                } else {
+                    model.loadFromAddressBar()
+                }
+            }
         ) {
             Image(systemName: model.isLoading ? "arrow.trianglehead.clockwise" : "magnifyingglass")
                 .font(.caption)
@@ -129,6 +143,7 @@ struct AO3WebBrowserView: View {
     // MARK: Actions
 
     private func configureImport() {
+        model.onOpenWork = { linkedWorkID = $0 }
         let context = context
         model.onImport = { fileURL, source in
             Task {

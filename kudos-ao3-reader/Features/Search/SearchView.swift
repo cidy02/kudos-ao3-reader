@@ -1021,6 +1021,10 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     }
 
     private func runSearch() {
+        if let url = URL(string: localQuery), AO3Link(url).kind != .notAO3 {
+            router.openAO3Link(url)
+            return
+        }
         guard filters.isSearchable else { return }
         // Close the filters panel — the other AO3FilterPanel call sites
         // (NativeBrowseView's applyFilters, AO3AccountWorksList) already dismiss

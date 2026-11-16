@@ -82,6 +82,11 @@ struct ContentView: View {
             .sheet(isPresented: $router.isPresentingWebBrowser) {
                 AO3WebBrowserView()
             }
+            .sheet(isPresented: $router.isPresentingLinkedWork) {
+                if let link = router.pendingWorkLink {
+                    LinkedWorkLandingView(workID: link.id)
+                }
+            }
             #if DEBUG
             .overlay {
                 if DebugLaunchRoute.value == "comments" { CommentsDemoView() }
@@ -176,7 +181,11 @@ struct ContentView: View {
             // community-redistributed copy actually reaches the app. Converts
             // non-EPUB formats on the way in; see ExternalFileImport.
             .onOpenURL { url in
-                Task { await externalImport.handle(url) }
+                if AO3Link(url).kind != .notAO3 {
+                    router.openAO3Link(url)
+                } else {
+                    Task { await externalImport.handle(url) }
+                }
             }
             .sheet(isPresented: Binding(
                 get: { externalImport.pendingImport != nil },

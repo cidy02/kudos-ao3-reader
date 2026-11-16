@@ -28,6 +28,7 @@ struct AO3InvitationRequestLink: View {
 /// off-screen unless the automatic mechanism fails, at which point this view
 /// deliberately switches to the visible fallback.
 struct AO3LoginView: View {
+    var contextMessage: String? = nil
     @Environment(\.dismiss) private var dismiss
     @Environment(AO3AuthService.self) private var auth
     @Environment(AppRouter.self) private var router
@@ -139,6 +140,13 @@ struct AO3LoginView: View {
     private var nativeContent: some View {
         ScrollView {
             VStack(spacing: 14) {
+                if let contextMessage {
+                    Label(contextMessage, systemImage: "lock")
+                        .font(.subheadline)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(14)
+                        .background(themeManager.appTheme.cardSurface, in: RoundedRectangle(cornerRadius: 16))
+                }
                 HStack(alignment: .top, spacing: 10) {
                     Image(systemName: "lock")
                         .foregroundStyle(.green)
