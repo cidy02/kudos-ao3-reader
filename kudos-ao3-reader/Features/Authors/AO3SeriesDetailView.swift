@@ -528,6 +528,7 @@ final class AO3SeriesSubscribeModel {
     private(set) var writeFailures = 0
 
     private var activeTask: Task<Void, Never>?
+    private var isHandlingSessionExpiry = false
     private let toggleHandler: ToggleHandler
 
     init(
@@ -543,12 +544,19 @@ final class AO3SeriesSubscribeModel {
     }
 
     func reset() {
-        activeTask?.cancel()
-        activeTask = nil
+        // Don't abort or clear the alert when `.task(id: authenticationScope)` fires
+        // because `sessionDidExpire` just moved the session to `.signedOut`.
+        if !isHandlingSessionExpiry {
+            activeTask?.cancel()
+            activeTask = nil
+        }
         isSubscribed = false
         isWorking = false
         isConfirmingUnsubscribe = false
-        banner = nil
+        if !isHandlingSessionExpiry,
+           banner != AO3Error.authenticationRequired.errorDescription {
+            banner = nil
+        }
     }
 
     func cancelInFlight() {
@@ -620,9 +628,14 @@ final class AO3SeriesSubscribeModel {
                 return
             } catch AO3Error.authenticationRequired {
                 guard auth.sessionGeneration == expectedGeneration else { return }
-                await auth.sessionDidExpire(expectedGeneration: expectedGeneration)
-                self.banner = AO3Error.authenticationRequired.errorDescription
-                self.writeFailures += 1
+                isHandlingSessionExpiry = true
+                let expired = await auth.sessionDidExpire(expectedGeneration: expectedGeneration)
+                isHandlingSessionExpiry = false
+                guard !Task.isCancelled else { return }
+                if expired {
+                    self.banner = AO3Error.authenticationRequired.errorDescription
+                    self.writeFailures += 1
+                }
             } catch {
                 guard auth.sessionGeneration == expectedGeneration else { return }
                 self.banner = (error as? LocalizedError)?.errorDescription
