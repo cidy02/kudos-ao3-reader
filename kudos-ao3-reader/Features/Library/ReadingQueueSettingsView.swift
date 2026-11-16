@@ -129,7 +129,7 @@ struct ReadingQueueSettingsView: View {
                         QueueProgressStrip(progress: progress, palette: palette)
                         Text(ReadingQueueFacts.legend(progress, offlineCount: preservedWorks.count))
                             .font(.system(size: legendSize))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                     }
                     .pageBodyRow(top: 8, gutter: SubjectMetrics.gutter)
                 }
@@ -159,7 +159,7 @@ struct ReadingQueueSettingsView: View {
                         + "so it uses no extra storage."
                 )
                     .font(.system(size: footnoteSize))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
                     .pageBodyRow(top: 2, gutter: SubjectMetrics.gutter + 6)
             }

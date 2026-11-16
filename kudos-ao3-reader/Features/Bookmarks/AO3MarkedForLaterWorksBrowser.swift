@@ -326,7 +326,7 @@ struct AO3MarkedForLaterWorksBrowser: View {
     private var footer: some View {
         Text(AO3MarkedForLaterCopy.footer(currentPage: currentPage, totalPages: totalPages))
             .font(.system(size: footerSize))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, SubjectMetrics.gutter)
@@ -507,7 +507,7 @@ struct AO3MarkedForLaterDownloadFootnote: View {
     var body: some View {
         Text(text)
             .font(.system(size: footnoteSize, weight: .medium, design: .monospaced))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityLabel(text)
     }

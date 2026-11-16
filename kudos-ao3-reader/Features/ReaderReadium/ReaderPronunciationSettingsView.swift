@@ -93,7 +93,7 @@ struct ReaderPronunciationSettingsView: View {
                         } label: {
                             LabeledContent(entry.word) {
                                 Text(entry.ipa)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(.secondaryInk)
                                     // IPA is easier to compare character by
                                     // character in a fixed-width face.
                                     .monospaced()
@@ -121,7 +121,7 @@ struct ReaderPronunciationSettingsView: View {
                         } label: {
                             LabeledContent(guess.word) {
                                 Text("\(guess.count)")
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(.secondaryInk)
                                     .monospacedDigit()
                             }
                         }
@@ -411,7 +411,7 @@ struct ReaderPronunciationEditor: View {
                         .autocorrectionDisabled()
                     if let preview, preview != ipa {
                         LabeledContent("Phonemes") {
-                            Text(preview).monospaced().foregroundStyle(.secondary)
+                            Text(preview).monospaced().foregroundStyle(.secondaryInk)
                         }
                     }
                 } header: {

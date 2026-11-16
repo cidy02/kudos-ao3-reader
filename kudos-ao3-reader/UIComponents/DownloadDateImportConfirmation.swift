@@ -65,7 +65,7 @@ struct DownloadDateImportConfirmation: View {
                             }
                             Text(Self.explanation(for: item.detection))
                                 .font(.footnote)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.secondaryInk)
                         }
                         if imports.count == 1 {
                             DatePicker(

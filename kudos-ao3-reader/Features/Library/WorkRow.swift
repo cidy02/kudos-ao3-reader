@@ -15,7 +15,7 @@ struct WorkLeadingSelectionCheck: View {
             } else {
                 Image(systemName: "circle")
                     .font(.system(size: 22))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             }
         }
         .frame(width: 24, height: 24)
@@ -256,7 +256,7 @@ struct WorkRow: View {
                 if !ledgerSummaryText.isEmpty {
                     Text(ledgerSummaryText)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                         .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
@@ -418,7 +418,7 @@ struct WorkRow: View {
         if !summaryText.isEmpty {
             Text(summaryText)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .lineLimit(expandedBinding.wrappedValue || dynamicTypeSize.isAccessibilitySize ? nil : 3)
                 .multilineTextAlignment(.leading)
                 .animation(nil, value: expandedBinding.wrappedValue)
@@ -525,7 +525,7 @@ struct WorkRow: View {
         if expandedBinding.wrappedValue, nonemptyFandomNames.count > 1 {
             Text(nonemptyFandomNames.joined(separator: ", "))
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }

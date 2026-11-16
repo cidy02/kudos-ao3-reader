@@ -55,13 +55,13 @@ struct WorkDetailDisclosureHeader: View {
                             .foregroundStyle(.primary)
                         Text(digest)
                             .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                             .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     Image(systemName: "chevron.down")
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .rotationEffect(.degrees(isExpanded ? 180 : 0))
                         .accessibilityHidden(true)
                 }
@@ -117,7 +117,7 @@ extension WorkDetailView {
                         }
                         if let id = ao3WorkID {
                             if summaryTruncates {
-                                Text("·").foregroundStyle(.secondary).accessibilityHidden(true)
+                                Text("·").foregroundStyle(.secondaryInk).accessibilityHidden(true)
                             }
                             Button("Notes") { router.open(AO3Client.workURL(workID: id)) }
                                 .buttonStyle(.plain)
@@ -324,7 +324,7 @@ extension WorkDetailView {
                     if localWork != nil, seriesWorks.isEmpty {
                         Text("When you download more works from this series, they will appear here.")
                             .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                             .pageBodyRow(top: 8)
                     }
                 }
@@ -386,7 +386,7 @@ extension WorkDetailView {
                 if displaySeriesPosition > 0 {
                     Text("Part \(displaySeriesPosition)")
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -437,17 +437,17 @@ extension WorkDetailView {
             Text(number)
                 .font(.subheadline)
                 .monospacedDigit()
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .frame(minWidth: 22, alignment: .leading)
             Text(title)
                 .font(.body.weight(isCurrent ? .semibold : .regular))
-                .foregroundStyle(dimmed ? .secondary : .primary)
+                .foregroundStyle(dimmed ? AnyShapeStyle(.secondaryInk) : AnyShapeStyle(.primary))
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if isCurrent {
                 Text("This work")
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             } else if !dimmed {
                 seriesChevron
             }

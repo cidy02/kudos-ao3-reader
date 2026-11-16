@@ -329,7 +329,7 @@ struct CollectionReorderSheet: View {
                 if !work.author.isEmpty {
                     Text(work.author)
                         .font(.system(size: authorSize))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
             }
             Spacer(minLength: 0)

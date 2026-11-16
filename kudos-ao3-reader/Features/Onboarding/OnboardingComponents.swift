@@ -110,7 +110,7 @@ struct OnboardingPointRow: View {
                 Text(title).font(.headline)
                 Text(message)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)

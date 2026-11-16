@@ -150,7 +150,7 @@ struct AO3FilterPanel: View {
         if mode == .refine, !refineSource.isEmpty {
             Text(refineMatchText)
                 .font(.system(size: refineMatchSize))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .monospacedDigit()
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 16)
@@ -290,7 +290,7 @@ extension AO3FilterPanel {
                         .minimumScaleFactor(0.6)
                 }
                 Text(value)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .lineLimit(value.contains(where: \.isWhitespace) ? nil : 1)
                     .minimumScaleFactor(value.contains(where: \.isWhitespace) ? 1 : 0.6)
                     .fixedSize(horizontal: false, vertical: true)
@@ -301,7 +301,7 @@ extension AO3FilterPanel {
                 Text("Sort By")
                 Spacer()
                 Text(value)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             }
         }
     }
@@ -394,7 +394,7 @@ extension AO3FilterPanel {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Overall")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .textCase(.uppercase)
                         .padding(.horizontal, 4)
 
@@ -407,7 +407,7 @@ extension AO3FilterPanel {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Content")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .textCase(.uppercase)
                         .padding(.horizontal, 4)
 
@@ -468,7 +468,7 @@ extension AO3FilterPanel {
                         Text("Title & Creator")
                         Spacer()
                         Text(titleAndCreatorSummary)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                     }
                 }
             }
@@ -526,7 +526,7 @@ extension AO3FilterPanel {
                     Text("Language")
                     Spacer()
                     Text(filters.language.title)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
             }
 
@@ -553,7 +553,7 @@ extension AO3FilterPanel {
                     Text("Kudos")
                     Spacer()
                     Text(rangeSummary(from: filters.kudosFrom, to: filters.kudosTo))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
             }
 
@@ -572,7 +572,7 @@ extension AO3FilterPanel {
                     Text("Hits")
                     Spacer()
                     Text(rangeSummary(from: filters.hitsFrom, to: filters.hitsTo))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
             }
 
@@ -591,7 +591,7 @@ extension AO3FilterPanel {
                     Text("Comments")
                     Spacer()
                     Text(rangeSummary(from: filters.commentsFrom, to: filters.commentsTo))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
             }
 
@@ -610,7 +610,7 @@ extension AO3FilterPanel {
                     Text("Bookmarks")
                     Spacer()
                     Text(rangeSummary(from: filters.bookmarksFrom, to: filters.bookmarksTo))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
             }
         } header: {
@@ -627,7 +627,7 @@ extension AO3FilterPanel {
                         .foregroundStyle(
                             canReset
                                 ? theme.appTheme.errorColor
-                                : Color.secondary
+                                : theme.secondaryInk
                         )
                     Spacer()
                 }
@@ -1058,7 +1058,7 @@ extension AO3FilterPanel {
                             Text(sortPresentation.draft.column.title)
                             Text(AO3WorksSort.fieldsHint)
                                 .font(.system(size: sortHintSize))
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.secondaryInk)
                         }
                     }
                 }

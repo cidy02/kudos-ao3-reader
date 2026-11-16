@@ -204,7 +204,7 @@ struct AO3BookmarksWorksBrowser: View {
     private var footer: some View {
         Text(AO3BookmarksCopy.footer(currentPage: currentPage, totalPages: totalPages))
             .font(.system(size: footerSize))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, 4)

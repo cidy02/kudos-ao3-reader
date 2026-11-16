@@ -98,7 +98,7 @@ struct AccountExternalNavCard: View {
                 button
                 Text(footnote)
                     .font(.system(size: footnoteSize))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }

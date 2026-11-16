@@ -77,7 +77,7 @@ struct WaitingListView: View {
                         if let alphabeticalNote {
                             Text(alphabeticalNote)
                                 .font(.footnote)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.secondaryInk)
                                 .fixedSize(horizontal: false, vertical: true)
                                 .listRowSeparator(.hidden)
                         }
@@ -146,7 +146,7 @@ private struct WaitingScanHeader: View {
                 if let checkedLabel = status.checkedLabel {
                     Text(checkedLabel)
                         .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
 
                 Text("\(status.waitingCount.formatted()) waiting")
@@ -154,12 +154,12 @@ private struct WaitingScanHeader: View {
 
                 Text(status.followsLine)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
 
                 if let note = status.note {
                     Text(note)
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -187,11 +187,11 @@ private struct WaitingBaselineRow: View {
             if !snapshot.author.isEmpty {
                 Text(snapshot.author)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             }
             Text(detail)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
@@ -229,14 +229,14 @@ private struct WaitingMailHeader: View {
                     + since.formatted(.dateTime.month(.abbreviated).year())
             )
             .font(.subheadline.weight(.medium))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
 
             Text("\(updateCount.formatted()) waiting")
                 .font(.largeTitle.bold())
 
             Text("no requests to AO3")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
 
             if unverifiedCount > 0 {
                 Label(
@@ -244,13 +244,13 @@ private struct WaitingMailHeader: View {
                     systemImage: "exclamationmark.shield"
                 )
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
             }
 
             if let refreshError {
                 Text(refreshError)
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -277,7 +277,7 @@ private struct WaitingDayHeader: View {
                 .foregroundStyle(.primary)
             Text("\(count)")
                 .font(.caption.bold())
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .padding(.horizontal, 9)
                 .padding(.vertical, 4)
                 .background(.quaternary, in: Capsule())
@@ -433,7 +433,7 @@ struct WaitingRow: View {
             }
         }
         .font(.caption2.monospacedDigit())
-        .foregroundStyle(.secondary)
+        .foregroundStyle(.secondaryInk)
         .fixedSize(horizontal: false, vertical: true)
         .frame(width: 40, alignment: .trailing)
         .padding(.top, 12)
@@ -473,7 +473,7 @@ struct WaitingRow: View {
                 ? AccessibilitySoftBreak.opportunities(in: update.source.line)
                 : update.source.line)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .multilineTextAlignment(.leading)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -529,7 +529,7 @@ struct WaitingRow: View {
                 }
             }
             .font(.caption)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
         }
     }
 
@@ -562,7 +562,7 @@ struct WaitingRow: View {
                             in: "AO3's notification names \u{201C}\(claimedTitle)\u{201D}")
                         : "AO3's notification names \u{201C}\(claimedTitle)\u{201D}")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -571,14 +571,14 @@ struct WaitingRow: View {
                     ? AccessibilitySoftBreak.opportunities(in: whatChanged)
                     : whatChanged)
                     .font(.subheadline)
-                    .foregroundStyle(isConfirmed ? .primary : .secondary)
+                    .foregroundStyle(isConfirmed ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondaryInk))
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
 
                 if let alsoInThisEmail {
                     Text(alsoInThisEmail)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }

@@ -340,7 +340,7 @@ struct AO3CollectionDetailView: View {
     private func emptyCard(_ message: String) -> some View {
         Text(message)
             .font(.system(size: bodySize))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 14)
@@ -355,7 +355,7 @@ struct AO3CollectionDetailView: View {
                 .fixedSize(horizontal: false, vertical: true)
             Text(message)
                 .font(.system(size: bodySize))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
             Button("Try Again") {
                 loaded.remove(segment)
@@ -570,7 +570,7 @@ struct AO3CollectionPersonRow: View {
             if let count = person.workCount {
                 Text("\(count) work\(count == 1 ? "" : "s")")
                     .font(.system(size: countSize, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }

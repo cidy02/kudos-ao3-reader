@@ -228,7 +228,7 @@ struct CollectionMaintainersView: View {
                 if let subtitleText {
                     Text(subtitleText)
                         .font(.system(size: captionSize))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 if large { roleBadge(roleText).padding(.top, 4) }
@@ -418,7 +418,7 @@ struct CollectionMaintainersView: View {
                 .accentFill()
             Text("Loading maintainers…")
                 .font(.system(size: loadingSize))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .center)
@@ -432,7 +432,7 @@ struct CollectionMaintainersView: View {
                 .fixedSize(horizontal: false, vertical: true)
             Text(message)
                 .font(.system(size: failureBodySize))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
             Button("Try Again") {

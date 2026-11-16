@@ -12,7 +12,7 @@ struct AO3InvitationRequestLink: View {
     var body: some View {
         Text("No AO3 account? [Create one ↗](\(AO3InvitationRequest.url.absoluteString))")
             .font(.subheadline)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             .multilineTextAlignment(.center)
             .frame(maxWidth: .infinity)
             .environment(\.openURL, OpenURLAction { url in
@@ -208,7 +208,7 @@ struct AO3LoginView: View {
 
                 Text("These open AO3 in Kudos. Come back here to log in afterwards.")
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity)
             }
@@ -262,7 +262,7 @@ struct AO3LoginView: View {
                 .font(.headline)
             Text(auth.fallbackMessage ?? "Complete login on AO3 below.")
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
             if let error = auth.errorMessage {
                 Text(error)
                     .font(.footnote)

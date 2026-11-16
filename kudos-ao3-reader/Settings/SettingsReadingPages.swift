@@ -39,14 +39,14 @@ struct SettingsAppearancePage: View {
                 if !themeManager.matchAppAndReader {
                     Text("App Theme")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
                 ThemePreviewTilePicker(selection: appThemeBinding)
                 Toggle("Match App & Reader Theme", isOn: matchThemeBinding).accentFill()
                 if !themeManager.matchAppAndReader {
                     Text("Reader Theme")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                     ThemePreviewTilePicker(selection: readerThemeBinding)
                 }
                 #if os(iOS)
@@ -55,7 +55,7 @@ struct SettingsAppearancePage: View {
                 // Unlabelled under a "Theme" header it read as app-wide.
                 Text("Reader Text Size")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                 TextSizeSlider()
                 #endif
             } header: {

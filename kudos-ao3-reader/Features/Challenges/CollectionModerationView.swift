@@ -307,7 +307,7 @@ struct CollectionModerationView: View {
 
                 Text(CollectionModerationCopy.byline(creator: item.creatorByline, dateText: item.itemDateText))
                     .font(.system(size: captionSize))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -440,7 +440,7 @@ struct CollectionModerationView: View {
 
             Text("All submissions to this collection have been reviewed.")
                 .font(.system(size: bodySize))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity)
@@ -481,7 +481,7 @@ struct CollectionModerationView: View {
 
                 Text("Wants to join \(effectiveTitle)")
                     .font(.system(size: captionSize))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -531,7 +531,7 @@ struct CollectionModerationView: View {
 
             Text("Nobody is waiting to join \(effectiveTitle).")
                 .font(.system(size: bodySize))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity)
@@ -600,7 +600,7 @@ struct CollectionModerationView: View {
             if isAnonymous {
                 Text("Creators are hidden from everyone but maintainers.")
                     .font(.system(size: captionSize))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 14)
@@ -698,7 +698,7 @@ struct CollectionModerationView: View {
                 .accentFill()
             Text("Loading moderation…")
                 .font(.system(size: loadingSize))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .center)
@@ -712,7 +712,7 @@ struct CollectionModerationView: View {
                 .fixedSize(horizontal: false, vertical: true)
             Text(message)
                 .font(.system(size: failureBodySize))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
             Button("Try Again") {
@@ -740,7 +740,7 @@ struct CollectionModerationView: View {
             } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             }
             .accessibilityLabel("Dismiss error")
             .buttonStyle(.plain)

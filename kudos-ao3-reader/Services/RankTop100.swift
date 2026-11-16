@@ -466,7 +466,7 @@ struct RankTop100ProgressCard: View {
         if let progress = controller.progress {
             Text("\(progress.loadedWorks.formatted()) loaded · ranking updates as each page arrives")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -478,7 +478,7 @@ struct RankTop100ProgressCard: View {
         } else if let message = controller.message ?? controller.availabilityText {
             Text(message)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
                 .frame(maxWidth: .infinity, alignment: .leading)

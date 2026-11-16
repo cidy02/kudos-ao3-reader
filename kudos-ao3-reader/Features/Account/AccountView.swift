@@ -480,7 +480,7 @@ struct AccountView: View {
             Section {
                 Text(notice)
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .pageBodyRow(top: 8, gutter: SubjectMetrics.accountGutter)
             }
         }
@@ -609,7 +609,7 @@ struct AccountView: View {
                     ? "Couldn't read your latest work. Open Works to try again."
                     : "No recent works visible on AO3.")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .padding(16)
                     .subjectPanel()
                     .pageBodyRow(top: 10, gutter: SubjectMetrics.accountGutter)
@@ -648,7 +648,7 @@ struct AccountView: View {
             if items.isEmpty {
                 Text("No messages in your AO3 inbox.")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(14)
             } else {
@@ -661,7 +661,7 @@ struct AccountView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text(message)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                 Button("Try Again") { inboxModel.retry(auth: auth) }
                     .foregroundStyle(.accentInk)
             }
@@ -965,13 +965,13 @@ struct AccountView: View {
                         Section {
                             Label("Showing cached AO3 data", systemImage: "wifi.slash")
                                 .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.secondaryInk)
                                 .cardRow()
                         }
                     } else {
                         Label("Showing cached AO3 data", systemImage: "wifi.slash")
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                             .padding(.horizontal, CardListMetrics.sideMargin)
                     }
                 }
@@ -1172,7 +1172,7 @@ private extension AccountView {
             VStack(alignment: .leading, spacing: 0) {
                 Text("When you sign in, this tab shows your AO3 account and activity.")
                     .font(.system(size: previewNoticeSize))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .padding(.bottom, 14)
 
                 identitySkeletonRow
@@ -1460,7 +1460,7 @@ private extension AccountView {
                     if let subtitle = destination.subtitle {
                         Text(subtitle)
                             .font(.system(size: scopeRowSubtitleSize))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -1472,7 +1472,7 @@ private extension AccountView {
                     // artboard shows exactly that against Collections.
                     Text(count)
                         .font(.system(size: scopeRowCountSize, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
 
                 Image(systemName: "chevron.right")

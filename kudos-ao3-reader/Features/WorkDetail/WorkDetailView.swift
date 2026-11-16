@@ -485,7 +485,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                     } else if let notice {
                         Text(notice)
                             .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                     }
 
                     if preserving {
@@ -542,13 +542,13 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                     .accessibilityAddTraits(.isHeader)
                 Text("Private to this device")
                     .font(.system(size: myCopySubtitleSize))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             Button { showingMyCopy = false } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .frame(width: 28, height: 28)
                     .background(Circle().fill(themeManager.appTheme.glassFill()))
             }
@@ -1479,7 +1479,7 @@ private struct SeriesPreservationPromptSheet: View {
                         Text("Kudos saves the series one work at a time, with the usual pause between "
                             + "visits to AO3.")
                             .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                     }
 
                     Section {
@@ -1487,7 +1487,7 @@ private struct SeriesPreservationPromptSheet: View {
                         Text("Kudos saves a series automatically only when the first AO3 page shows "
                             + "the full series and it has \(threshold) works or fewer.")
                             .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                     }
 
                     Section {

@@ -1232,7 +1232,7 @@ struct ReaderSpeechMiniPlayer: View {
 
             Text(controller.spokenText)
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .tint(nil)
                 // Always reserve two lines so a short sentence (1 line) doesn't
                 // collapse the strip height under the transport row.

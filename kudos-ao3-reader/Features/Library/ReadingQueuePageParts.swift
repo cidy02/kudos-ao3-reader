@@ -338,13 +338,13 @@ struct QueuePageHeader<FilterRail: View>: View {
             if let notes = queue.notes?.trimmingCharacters(in: .whitespacesAndNewlines), !notes.isEmpty {
                 Text(notes)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
             Text(detailLine)
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
         }
 
@@ -384,7 +384,7 @@ struct QueuePageHeader<FilterRail: View>: View {
             HStack(alignment: .center, spacing: 6) {
                 Text(legend)
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .lineLimit(1)
 
                 Spacer(minLength: 8)
@@ -395,7 +395,7 @@ struct QueuePageHeader<FilterRail: View>: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text(legend)
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
 
                 tagChips(sortedTags)
             }
@@ -442,7 +442,7 @@ struct QueueHeaderDetails<FilterRail: View>: View {
                     QueueProgressStrip(progress: progress, palette: palette)
                     Text(ReadingQueueFacts.legend(progress, offlineCount: preservedIDs.count))
                         .font(.system(size: legendSize))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(.horizontal, SubjectMetrics.gutter)
@@ -490,14 +490,14 @@ struct QueueSelectionStatusRow: View {
             Text(queueName.uppercased())
                 .font(.system(size: queueNameSize, weight: .bold))
                 .tracking(11 * 0.13)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .lineLimit(1)
             Rectangle()
                 .fill(Color.primary.opacity(0.14))
                 .frame(height: 0.5)
             Text("\(selectedCount) / \(total)")
                 .font(.system(size: countSize, weight: .semibold, design: .monospaced))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
         }
         .combinedAccessibilityRow("\(queueName), \(selectedCount) of \(total) selected")
     }

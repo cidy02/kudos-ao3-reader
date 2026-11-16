@@ -358,7 +358,7 @@ struct RecentlyDeletedView: View {
     private func sectionNote(_ text: String) -> some View {
         Text(text)
             .font(.system(size: sectionNoteSize))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
             .pageBodyRow(top: 6, gutter: SubjectMetrics.accountGutter)
@@ -387,7 +387,7 @@ struct RecentlyDeletedView: View {
             }
         }
         .font(.system(size: reassuranceSize))
-        .foregroundStyle(.secondary)
+        .foregroundStyle(.secondaryInk)
         .fixedSize(horizontal: false, vertical: true)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 14)
@@ -809,7 +809,7 @@ struct RecentlyDeletedRow: View {
                     if !entry.detail.isEmpty {
                         Text(entry.detail)
                             .font(.system(size: detailSize))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                             .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -851,7 +851,7 @@ struct RecentlyDeletedRow: View {
                     if !entry.detail.isEmpty {
                         Text(entry.detail)
                             .font(.system(size: detailSize))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                             .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -907,7 +907,7 @@ struct RecentlyDeletedRow: View {
             if !fandoms.isEmpty {
                 Text(fandoms.joined(separator: ", "))
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
             }
         }
@@ -933,7 +933,7 @@ struct RecentlyDeletedRow: View {
                 .font(.system(size: daysSize, weight: .semibold))
                 .monospacedDigit()
         }
-        .foregroundStyle(urgent ? Color.red : Color.secondary)
+        .foregroundStyle(urgent ? AnyShapeStyle(Color.red) : AnyShapeStyle(.secondaryInk))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(label)
     }

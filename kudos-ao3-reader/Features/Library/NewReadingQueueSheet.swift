@@ -324,7 +324,7 @@ struct NewReadingQueueSheet: View {
                 .multilineTextAlignment(.center)
             Text(footer)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .lineLimit(2)
         }
         .frame(maxWidth: .infinity)
@@ -468,7 +468,7 @@ struct NewReadingQueueSheet: View {
                     if let subtitle = seedSubtitle(seed) {
                         Text(subtitle)
                             .font(.system(size: seedSubtitleSize))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }

@@ -169,7 +169,7 @@ struct AccountInboxPreviewRow: View {
                 if !subject.isEmpty {
                     Text("on \(subject)")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
                 if !item.postedAgo.isEmpty {
                     Text(item.postedAgo)
@@ -191,7 +191,7 @@ struct AccountInboxPreviewRow: View {
                 if !subject.isEmpty {
                     Text("on \(subject)")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .lineLimit(1)
                 }
                 Spacer(minLength: 4)
@@ -324,7 +324,7 @@ struct AccountInboxItemRow: View {
                 if !item.excerpt.isEmpty {
                     Text(item.excerpt)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .lineLimit(2)
                 }
             }
@@ -353,11 +353,11 @@ struct AccountInboxItemRow: View {
     private var unavailableContent: some View {
         HStack(alignment: .center, spacing: 10) {
             Image(systemName: "eye.slash")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .frame(width: 40, height: 40)
             Text("A comment here is unavailable")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
             Spacer(minLength: 0)
         }
         .padding(.vertical, 2)
@@ -372,13 +372,13 @@ struct AccountInboxItemRow: View {
             // so this glyph staying hidden no longer leaves selection unannounced.
             Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                 .font(.title3)
-                .foregroundStyle(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                .foregroundStyle(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondaryInk))
                 .frame(width: 24, height: 28)
                 .accessibilityHidden(true)
             if item.isUnavailable {
                 Text("A comment here is unavailable")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             } else {
                 rowBody
             }
@@ -448,13 +448,13 @@ struct AccountInboxItemRow: View {
         if item.isReplied {
             Image(systemName: "arrow.turn.up.left")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .accessibilityLabel("Replied")
         }
         if let timeLabel {
             Text(timeLabel.display)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .lineLimit(1)
         }
     }
@@ -735,7 +735,7 @@ struct AccountInboxStaleCacheRow: View {
     var body: some View {
         Label("Showing cached AO3 data", systemImage: "wifi.slash")
             .font(.subheadline)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             .frame(maxWidth: .infinity, alignment: .leading)
             .modifier(InboxPlainRow())
     }
@@ -753,7 +753,7 @@ struct AccountInboxSeeAllRow: View {
                 if let unreadCount, unreadCount > 0 {
                     Text("\(unreadCount) unread")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.semibold))

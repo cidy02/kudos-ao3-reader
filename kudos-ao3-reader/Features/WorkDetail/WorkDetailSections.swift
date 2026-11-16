@@ -52,7 +52,7 @@ extension WorkDetailView {
                         ? "AO3 hasn't provided tags for this work yet."
                         : "This imported work isn't linked to AO3, so you won't see AO3 tags here.")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .pageBodyRow(top: 6)
                 } else {
                     VStack(alignment: .leading, spacing: 6) {
@@ -88,7 +88,7 @@ extension WorkDetailView {
     private func tagGroupLabel(_ group: TagGroup) -> some View {
         Text(group.title)
             .font(.footnote)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             .padding(.top, 1)
             .accessibilityAddTraits(.isHeader)
     }
@@ -152,7 +152,7 @@ extension WorkDetailView {
             Section {
                 Text("This work isn't in your Library yet.")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .myCopyRow()
             } footer: {
                 // The pre-redesign remote lifecycle guidance (reading downloads
@@ -262,7 +262,7 @@ extension WorkDetailView {
         Text(value)
             .font(.system(size: myCopyValueSize))
             .monospacedDigit()
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             .lineLimit(1)
             .truncationMode(.middle)
     }

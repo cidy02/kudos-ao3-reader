@@ -69,7 +69,7 @@ struct AO3SeriesDetailView: View {
                 Section {
                     Label("Showing cached AO3 data", systemImage: "wifi.slash")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .cardRow()
                 }
             }
@@ -199,7 +199,7 @@ struct AO3SeriesDetailView: View {
             )
             Text(Self.facts(for: shown))
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
             if !shown.summary.isEmpty {
                 Text(shown.summary)
@@ -210,7 +210,7 @@ struct AO3SeriesDetailView: View {
             if let preserveStatus {
                 Text(preserveStatus)
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }

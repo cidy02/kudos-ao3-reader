@@ -190,26 +190,26 @@ struct LibraryQueueLedgerRow: View {
                     Spacer(minLength: 8)
                     Text(works.count.compactCount)
                         .font(.system(size: detailSize, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
                 Text(ReadingQueueFacts.cardFooter(states: states))
                     .font(.system(size: detailSize))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
                 Text(legend)
                     .font(.system(size: detailSize))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
                 if !tags.isEmpty {
                     Text(tags.joined(separator: " · "))
                         .font(.system(size: detailSize))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 if !note.isEmpty {
                     Text(note)
                         .font(.system(size: detailSize))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }

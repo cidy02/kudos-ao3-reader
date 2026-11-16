@@ -57,7 +57,7 @@ struct AO3AuthorInlineErrorRow: View {
     var body: some View {
         Label(message, systemImage: "exclamationmark.triangle")
             .font(.subheadline)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             .frame(maxWidth: .infinity, alignment: .leading)
             .cardRow()
     }
@@ -79,7 +79,7 @@ struct AO3AuthorPaginationRows: View {
             VStack(alignment: .leading, spacing: 8) {
                 Label(loadMoreError, systemImage: "exclamationmark.triangle")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                 Button("Try Loading More", action: loadMore)
                     .frame(minHeight: 44)
             }
@@ -92,7 +92,7 @@ struct AO3AuthorPaginationRows: View {
                     Spacer()
                     Text("Page \(max(1, currentPage)) of \(totalPages)")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
                 .frame(minHeight: 44)
             }
@@ -294,7 +294,7 @@ struct AO3AuthorWorksSection: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(isGiftsList ? "Gifts" : "Works")
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .padding(.horizontal, CardListMetrics.sideMargin + CardListMetrics.innerHorizontal)
             if model.contentPhase == .loading, model.works.isEmpty {
                 ProgressView()
@@ -496,7 +496,7 @@ struct AO3AuthorSeriesSection: View {
                             Text("A series groups your works in reading order. Create one on AO3, "
                                 + "then refresh this page to see it here.")
                                 .font(.system(size: emptyBodySize))
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.secondaryInk)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
 
@@ -517,7 +517,7 @@ struct AO3AuthorSeriesSection: View {
                             .padding(.horizontal, -14)
                             Text("This opens AO3 in Browse, where you can create the series.")
                                 .font(.system(size: emptyFootnoteSize))
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.secondaryInk)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                     }
@@ -624,7 +624,7 @@ struct AO3AuthorBookmarksSection: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Bookmarks")
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .padding(.horizontal, CardListMetrics.sideMargin + CardListMetrics.innerHorizontal)
             if model.contentPhase == .loading, model.bookmarks.isEmpty {
                 ProgressView()

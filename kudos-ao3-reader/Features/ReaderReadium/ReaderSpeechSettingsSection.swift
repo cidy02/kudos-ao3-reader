@@ -176,7 +176,7 @@ struct ReaderSpeechSettingsSection: View {
                     }
                     Text(currentVoiceSubtitle)
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                     sampleButton
                 }
                 .padding(.vertical, 6)
@@ -191,7 +191,7 @@ struct ReaderSpeechSettingsSection: View {
                             .fixedSize(horizontal: false, vertical: true)
                         Text(currentVoiceSubtitle)
                             .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                             .lineLimit(3)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -311,7 +311,7 @@ struct ReaderSpeechSettingsSection: View {
                         systemImage: "info.circle"
                     )
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                 }
 
                 if selectedKokoroModelPack.requiresInt8SupportFiles &&
@@ -323,7 +323,7 @@ struct ReaderSpeechSettingsSection: View {
                         systemImage: "externaldrive"
                     )
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                 }
             }
 
@@ -337,7 +337,7 @@ struct ReaderSpeechSettingsSection: View {
                     systemImage: "info.circle"
                 )
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
             }
 
             NavigationLink {
@@ -370,7 +370,7 @@ struct ReaderSpeechSettingsSection: View {
                     Text("Speed")
                     Spacer()
                     Text(rateLabel)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .monospacedDigit()
                 }
                 Slider(value: $rate, in: ReaderSpeechPreferences.rateRange, step: 0.05)
@@ -401,7 +401,7 @@ struct ReaderSpeechSettingsSection: View {
                     Text("Pitch")
                     Spacer()
                     Text(pitchLabel)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .monospacedDigit()
                 }
                 Slider(value: $pitch, in: ReaderSpeechPreferences.pitchRange, step: 0.05)
@@ -532,7 +532,7 @@ struct ReaderSpeechSettingsSection: View {
                     Spacer()
                     Text("Core ML pack")
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
                 ProgressView(value: progress).accentFill()
                 HStack {
@@ -593,7 +593,7 @@ struct ReaderSpeechSettingsSection: View {
                     systemImage: "info.circle"
                 )
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
             }
             packStatusViews
         } header: {
@@ -890,7 +890,7 @@ struct ReaderSpeechSettingsSection: View {
                         .foregroundStyle(.primary)
                     Text(subtitle)
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
                 Spacer(minLength: 8)
                 if voiceID == id {

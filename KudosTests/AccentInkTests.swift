@@ -483,6 +483,38 @@ struct AccentInkTests {
             }
         }
     }
+
+    @MainActor @Test func secondaryInkRoutesSepiaOnlyAndLeavesOtherThemesUnchanged() throws {
+        let defaults = UserDefaults.standard
+        let previous = defaults.object(forKey: "appTheme")
+        defer { defaults.set(previous, forKey: "appTheme") }
+        let manager = ThemeManager()
+
+        for theme in ReaderTheme.allCases {
+            manager.appTheme = theme
+            if theme == .sepia {
+                #expect(manager.secondaryInk == theme.appSecondaryInk)
+            } else {
+                #expect(manager.secondaryInk == .secondary)
+            }
+
+            let routed = try renderedPixels(
+                Rectangle().fill(.secondaryInk)
+                    .frame(width: 10, height: 10)
+                    .accentTint(manager.effectiveTint, on: theme)
+                    .background(theme.cardSurface)
+                    .environment(\.colorScheme, theme.colorScheme)
+            )
+            let expectedColor: Color = theme.appSecondaryInk ?? .secondary
+            let expected = try renderedPixels(
+                Rectangle().fill(expectedColor)
+                    .frame(width: 10, height: 10)
+                    .background(theme.cardSurface)
+                    .environment(\.colorScheme, theme.colorScheme)
+            )
+            #expect(routed.pixel(x: 5, y: 5) == expected.pixel(x: 5, y: 5))
+        }
+    }
     #endif
 }
 

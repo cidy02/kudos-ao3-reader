@@ -153,7 +153,7 @@ struct WorkDetailStatsCard: View {
             Text(cell.label.uppercased())
                 .font(.caption2.weight(.semibold))
                 .tracking(0.4)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
             HStack(spacing: 3) {

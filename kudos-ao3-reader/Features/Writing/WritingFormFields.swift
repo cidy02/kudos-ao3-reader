@@ -95,7 +95,7 @@ struct WritingTagsRow: View {
                 Spacer(minLength: 8)
                 Text(values.isEmpty ? "None" : "\(values.count)")
                     .font(.system(size: countSize))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .monospacedDigit()
             }
             FlowLayout(spacing: 8, rowSpacing: 8) {

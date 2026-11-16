@@ -54,7 +54,7 @@ struct WorkQuickActionTile: View {
             if let detail {
                 Text(detail)
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .multilineTextAlignment(.center)
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)

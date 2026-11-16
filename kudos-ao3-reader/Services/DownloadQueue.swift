@@ -262,7 +262,7 @@ struct DownloadQueueBanner: View {
                         if let title = queue.currentTitle {
                             Text(title)
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.secondaryInk)
                                 .lineLimit(1)
                         }
                     }

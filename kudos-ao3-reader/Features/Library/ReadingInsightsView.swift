@@ -175,7 +175,7 @@ struct ReadingInsightsView: View {
                     } label: {
                         Text(tab.title)
                             .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
-                            .foregroundStyle(isSelected ? Color.primary : Color.secondary)
+                            .foregroundStyle(isSelected ? AnyShapeStyle(Color.primary) : AnyShapeStyle(.secondaryInk))
                             .frame(maxWidth: .infinity)
                             .frame(minHeight: 28)
                             .background(
@@ -209,7 +209,7 @@ struct ReadingInsightsView: View {
 
                     Text(periodSubtitle)
                         .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .lineLimit(1)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -322,7 +322,7 @@ struct ReadingInsightsView: View {
             HStack(spacing: 10) {
                 Image(systemName: "info.circle")
                     .font(.system(size: 18))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
 
                 Text("How Reading Insights Are Counted")
                     .font(.subheadline)
@@ -401,7 +401,7 @@ struct ReadingInsightsView: View {
         } else {
             Text("Nothing read in \(periodTitle) yet, so there is no taste to show.")
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 24)
         }

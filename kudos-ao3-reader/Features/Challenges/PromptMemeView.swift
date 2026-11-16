@@ -304,7 +304,7 @@ struct PromptMemeView: View {
 
             Text(prompt.isAnonymous ? "Posted anonymously" : (prompt.displayedOwner ?? "Unknown poster"))
                 .font(.system(size: captionSize))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
 
             promptActionRow(prompt)
@@ -395,7 +395,7 @@ struct PromptMemeView: View {
                 ? "Prompts will appear here once someone posts one."
                 : "No prompts on this page match the \"\(filterSelection.rawValue)\" filter.")
                 .font(.system(size: bodySize))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity)
@@ -434,7 +434,7 @@ private extension PromptMemeView {
                 .accentFill()
             Text("Loading prompts…")
                 .font(.system(size: loadingSize))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .center)
@@ -448,7 +448,7 @@ private extension PromptMemeView {
                 .fixedSize(horizontal: false, vertical: true)
             Text(message)
                 .font(.system(size: failureBodySize))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
             Button("Try Again") {
@@ -476,7 +476,7 @@ private extension PromptMemeView {
             } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             }
             .accessibilityLabel("Dismiss error")
             .buttonStyle(.plain)

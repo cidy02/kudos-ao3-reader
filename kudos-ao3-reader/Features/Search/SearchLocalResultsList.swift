@@ -132,7 +132,7 @@ struct SearchAO3FandomRow: View {
                 if let count = fandom.workCount {
                     Text(count.formatted(.number.notation(.compactName)))
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                 }
                 Image(systemName: "chevron.right")
                     .font(.caption2.weight(.semibold))

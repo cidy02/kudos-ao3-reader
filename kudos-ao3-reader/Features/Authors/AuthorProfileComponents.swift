@@ -43,12 +43,12 @@ struct AO3AuthorHero: View {
                     if route.pseud != nil {
                         Text("Pseud of \(route.username)")
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                             .fixedSize(horizontal: false, vertical: true)
                     } else {
                         Text("AO3 user")
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                     }
 
                     if !profileTitle.isEmpty {
@@ -231,7 +231,7 @@ struct AO3AuthorAvatar: View {
     private var placeholder: some View {
         Image(systemName: isCircular ? "person.crop.circle" : "person.crop.square")
             .font(.system(size: size * 0.42, weight: .regular))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
@@ -304,7 +304,7 @@ struct AO3SeriesRow: View {
                 Text(series.summary)
                     .font(.system(size: summarySize))
                     .lineSpacing(1.5)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .lineLimit(3)
             }
 
@@ -335,7 +335,7 @@ struct AO3SeriesRow: View {
                 }
             }
             .font(.system(size: metaSize))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
 
             AO3AuthorBylineView(
                 names: series.creatorNames, identities: series.creatorIdentities,
@@ -393,14 +393,14 @@ struct AO3SeriesRow: View {
             if !series.fandoms.isEmpty {
                 Label(series.fandoms.joined(separator: ", "), systemImage: "books.vertical")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .lineLimit(2)
             }
 
             if !series.summary.isEmpty {
                 Text(series.summary)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                     .lineLimit(3)
             }
 
@@ -515,7 +515,7 @@ struct AO3BookmarkFootnote: View {
                     if !bookmark.date.isEmpty {
                         Text(bookmark.date)
                             .font(.system(size: dateSize))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryInk)
                             .accessibilityLabel("Bookmarked \(bookmark.date)")
                     }
                 }
@@ -530,7 +530,7 @@ struct AO3BookmarkFootnote: View {
                         font: .system(size: noteSize),
                         lineSpacing: 7
                     )
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
                 }
                 .fixedSize(horizontal: false, vertical: true)
             }

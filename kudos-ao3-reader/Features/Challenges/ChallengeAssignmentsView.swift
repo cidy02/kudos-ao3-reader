@@ -262,7 +262,7 @@ struct ChallengeAssignmentsView: View {
                     Text(secondary)
                         .font(.system(size: captionSize))
                         .monospacedDigit()
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -384,7 +384,7 @@ struct ChallengeAssignmentsView: View {
 
             Text(unmatchedProse(pair))
                 .font(.system(size: bodySize))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
 
             // Both buttons opened the same AO3 page; one says what it does. The
@@ -541,7 +541,7 @@ extension ChallengeAssignmentsView {
                 .accentFill()
             Text("Loading assignments…")
                 .font(.system(size: loadingSize))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .center)
@@ -551,7 +551,7 @@ extension ChallengeAssignmentsView {
     private func emptyCard(_ message: String) -> some View {
         Text(message)
             .font(.system(size: bodySize))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryInk)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 14)
@@ -566,7 +566,7 @@ extension ChallengeAssignmentsView {
                 .fixedSize(horizontal: false, vertical: true)
             Text(message)
                 .font(.system(size: failureBodySize))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryInk)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
             Button("Try Again") {
@@ -594,7 +594,7 @@ extension ChallengeAssignmentsView {
             } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryInk)
             }
             .accessibilityLabel("Dismiss error")
             .buttonStyle(.plain)
