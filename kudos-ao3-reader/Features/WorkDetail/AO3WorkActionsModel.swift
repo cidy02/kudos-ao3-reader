@@ -38,6 +38,7 @@ final class AO3WorkActionsModel {
     private(set) var workPageStates: AO3WorkActionStates?
     private var workPageStatesWorkID: Int?
     private var isFetchingWorkPageStates = false
+    private var workPageStatesRevision = 0
 
     /// One work-page GET, only when signed in and only once per work (or when
     /// `force`d after a write). Advisory labels only — see
@@ -49,6 +50,7 @@ final class AO3WorkActionsModel {
             return
         }
         if workPageStatesWorkID != workID {
+            workPageStatesRevision += 1
             workPageStates = nil
             workPageStatesWorkID = workID
         } else if workPageStates != nil, !force {
@@ -56,11 +58,12 @@ final class AO3WorkActionsModel {
         }
         guard !isFetchingWorkPageStates else { return }
         isFetchingWorkPageStates = true
+        let revision = workPageStatesRevision
         Task {
             defer { isFetchingWorkPageStates = false }
             let states = try? await auth.workActionStates(workID: workID)
             // A slow response for a previous work must not label this one.
-            guard workPageStatesWorkID == workID else { return }
+            guard workPageStatesWorkID == workID, workPageStatesRevision == revision else { return }
             workPageStates = states
         }
     }
@@ -92,14 +95,16 @@ final class AO3WorkActionsModel {
         }
     }
 
-    func subscribe(workID: Int, auth: AO3AuthService, onSubscribed: (() -> Void)? = nil) {
-        run(afterSuccessRefresh: (workID, auth)) {
-            let message = try await auth.toggleSubscribe(workID: workID)
-            // `toggleSubscribe` is a toggle — this same call unsubscribes on a
-            // second tap. Its own three return strings are the only way to
-            // tell which one happened; a hook that fired on both would queue
-            // a download on the tap that takes a work OFF the reader's list.
-            if message == "Subscribed." { onSubscribed?() }
+    func subscribe(workID: Int, to want: Bool, auth: AO3AuthService, onSubscribed: (() -> Void)? = nil) {
+        run {
+            let message = try await auth.toggleSubscribe(workID: workID, to: want)
+            if workPageStatesWorkID == workID {
+                workPageStatesRevision += 1
+                workPageStates = AO3WorkActionStates(
+                    isSubscribed: want, existingBookmark: workPageStates?.existingBookmark
+                )
+            }
+            if want { onSubscribed?() }
             return message
         }
     }

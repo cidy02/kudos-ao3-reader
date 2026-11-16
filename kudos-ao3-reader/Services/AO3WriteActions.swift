@@ -93,20 +93,50 @@ extension AO3AuthService {
         )
     }
 
-    /// Subscribes to (or, if already subscribed, unsubscribes from) a work. Reads the
-    /// work page once for the CSRF token + current subscription state, then POSTs the
-    /// matching action. Returns a message describing what happened.
-    func toggleSubscribe(workID: Int) async throws -> String {
+    /// Reads the work page once for CSRF and subscription state. With `want`, AO3's
+    /// fresh state decides whether to write, never which action the reader requested.
+    /// `nil` preserves the plain toggle for callers without an intended state.
+    func toggleSubscribe(
+        workID: Int, to want: Bool? = nil, using client: AO3Client = .shared
+    ) async throws -> String {
+        try await toggleSubscribe(
+            subscribableID: workID,
+            subscribableType: "Work",
+            pageURL: Self.workURL(workID),
+            want: want,
+            using: client
+        )
+    }
+
+    private func toggleSubscribe(
+        subscribableID: Int,
+        subscribableType: String,
+        pageURL: URL,
+        want: Bool? = nil,
+        using client: AO3Client
+    ) async throws -> String {
+        try Task.checkCancellation()
         guard isLoggedIn, let username else { throw AO3WriteError.notSignedIn }
-        let workURL = Self.workURL(workID)
-        let (html, token) = try await fetchCSRFPage(at: workURL)
+        let expectedGeneration = sessionGeneration
+        let (html, token) = try await fetchCSRFPage(at: pageURL, using: client)
+        try Task.checkCancellation()
+        try requireSessionGeneration(expectedGeneration)
 
         let state = AO3Client.parseSubscription(from: html)
-        if state.isSubscribed, let path = state.unsubscribePath, let url = Self.absoluteURL(path) {
+        guard LiveAO3SessionValidator.isLoggedIn(html: html) else {
+            throw AO3Error.authenticationRequired
+        }
+        if let want, want == state.isSubscribed {
+            return want ? "You're already subscribed." : "Unsubscribed."
+        }
+        if state.isSubscribed {
+            guard let path = state.unsubscribePath, let url = Self.absoluteURL(path) else {
+                throw AO3Error.parse
+            }
             // AO3's unsubscribe form is a POST carrying `_method=delete`.
             let body = Self.formEncoded([("_method", "delete"), ("authenticity_token", token)])
-            let request = try writeRequest(to: url, body: body, csrf: token, referer: workURL, ajax: false)
-            let (status, responseBody) = try await submitWrite(request)
+            let request = try writeRequest(to: url, body: body, csrf: token, referer: pageURL, ajax: false)
+            let (status, responseBody) = try await submitWrite(request, using: client)
             return try Self.readingsWriteResult(
                 status: status, body: responseBody,
                 success: "Unsubscribed.", rejectedFallback: "Couldn't unsubscribe."
@@ -115,22 +145,21 @@ extension AO3AuthService {
 
         let body = Self.formEncoded([
             ("authenticity_token", token),
-            ("subscription[subscribable_id]", String(workID)),
-            ("subscription[subscribable_type]", "Work")
+            ("subscription[subscribable_id]", String(subscribableID)),
+            ("subscription[subscribable_type]", subscribableType)
         ])
         let request = try writeRequest(
             to: Self.subscriptionsEndpoint(username: username),
-            body: body, csrf: token, referer: workURL, ajax: false
+            body: body, csrf: token, referer: pageURL, ajax: false
         )
-        let (status, responseBody) = try await submitWrite(request)
-        if responseBody.localizedCaseInsensitiveContains("already subscribed") {
+        let (status, responseBody) = try await submitWrite(request, using: client)
+        if let error = AO3Client.writeErrorMessage(in: responseBody),
+           error.localizedCaseInsensitiveContains("already subscribed") {
             return "You're already subscribed."
         }
-        if (200 ... 399).contains(status), AO3Client.writeErrorMessage(in: responseBody) == nil {
-            return "Subscribed."
-        }
-        throw AO3WriteError.rejected(
-            AO3Client.writeErrorMessage(in: responseBody) ?? "Couldn't subscribe."
+        return try Self.readingsWriteResult(
+            status: status, body: responseBody,
+            success: "Subscribed.", rejectedFallback: "Couldn't subscribe."
         )
     }
 
