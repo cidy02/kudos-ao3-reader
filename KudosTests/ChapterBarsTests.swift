@@ -192,6 +192,7 @@ struct ChapterBarsTests {
         #expect(layout.metrics.width == CGFloat(326 - 19 * 4) / 20) // 12.5: unrounded, as before T-514
 
         let model = ResumeCardModel(
+            coverRecipe: GeneratedCoverRecipe(id: nil, title: "The Cartographer's Daughter", author: "", fandoms: []),
             title: "The Cartographer's Daughter",
             authors: ["inkwell_moth"],
             authorIdentities: [],
@@ -264,6 +265,7 @@ struct ChapterBarsTests {
         #expect(row.accessibilityLabel == "New work, one chapter")
 
         let model = ResumeCardModel(
+            coverRecipe: GeneratedCoverRecipe(id: nil, title: "One-shot", author: "", fandoms: []),
             title: "One-shot",
             authors: ["wren"],
             authorIdentities: [],

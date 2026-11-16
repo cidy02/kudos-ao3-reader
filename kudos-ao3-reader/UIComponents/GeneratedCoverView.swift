@@ -12,6 +12,8 @@ struct GeneratedCoverView: View {
     var height: CGFloat?
     var showsWords = true
     var showsArt = true
+    var ink = 1.0
+    var cornerRadius: CGFloat?
     @State private var loadedURL: URL?
     @State private var embeddedImage: Image?
 
@@ -48,7 +50,8 @@ struct GeneratedCoverView: View {
 
     init(recipe: GeneratedCoverRecipe, width: CGFloat, epubURL: URL? = nil, epubWorkID: UUID? = nil,
          height: CGFloat? = nil,
-         showsWords: Bool = true, showsArt: Bool = true) {
+         showsWords: Bool = true, showsArt: Bool = true, ink: Double = 1,
+         cornerRadius: CGFloat? = nil) {
         self.recipe = recipe
         self.width = width
         artCacheKey = "\(String(reflecting: recipe))|\(width)|\(height ?? width * 1.42)"
@@ -57,28 +60,32 @@ struct GeneratedCoverView: View {
         self.height = height
         self.showsWords = showsWords
         self.showsArt = showsArt
+        self.ink = ink
+        self.cornerRadius = cornerRadius
     }
 
     private var coverHeight: CGFloat { height ?? width * 1.42 }
     var body: some View {
         ZStack {
+            Canvas(opaque: true) { context, size in
+                let unit = size.width / 112
+                context.scaleBy(x: unit, y: unit)
+                let art = Self.prepared(recipe: recipe, width: width, height: size.height,
+                                        key: artCacheKey as NSString)
+                drawGround(in: &context, art: art)
+                if showsArt && !(loadedURL == epubURL && embeddedImage != nil) {
+                    drawMotif(in: &context, art: art)
+                }
+            }
             if showsArt, loadedURL == epubURL, let embeddedImage {
                 embeddedImage.resizable().scaledToFill()
-                    .frame(width: width, height: coverHeight).clipped()
-            } else {
-                Canvas(opaque: true) { context, size in
-                    let unit = size.width / 112
-                    context.scaleBy(x: unit, y: unit)
-                    let art = Self.prepared(recipe: recipe, width: width, height: size.height,
-                                            key: artCacheKey as NSString)
-                    drawGround(in: &context, art: art)
-                    if showsArt { drawMotif(in: &context, art: art) }
-                }
-                if showsWords { words }
+                    .frame(width: width, height: coverHeight).clipped().opacity(ink)
             }
+            if showsWords { words }
         }
         .frame(width: width, height: coverHeight)
-        .clipShape(RoundedRectangle(cornerRadius: width * 0.125, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius ?? width * 0.125,
+                                    style: .continuous))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel([recipe.title, recipe.subtitle, recipe.author, recipe.fandom]
             .filter { !$0.isEmpty }.joined(separator: ", "))
@@ -201,6 +208,7 @@ struct GeneratedCoverView: View {
 
     private func drawMotif(in context: inout GraphicsContext, art: PreparedArt) {
         var motifContext = context
+        motifContext.opacity *= ink
         motifContext.translateBy(x: art.centre.x, y: art.centre.y)
         motifContext.rotate(by: .degrees(recipe.rotation))
         motifContext.scaleBy(x: CGFloat(recipe.scale), y: CGFloat(recipe.scale))
@@ -211,7 +219,9 @@ struct GeneratedCoverView: View {
             motifContext.stroke(art.motif, with: .color(art.motifInk), style: art.motifStyle)
         }
         if let ring = art.ring {
-            context.stroke(ring, with: .color(art.ringInk), style: art.ringStyle)
+            var ringContext = context
+            ringContext.opacity *= ink
+            ringContext.stroke(ring, with: .color(art.ringInk), style: art.ringStyle)
         }
     }
 

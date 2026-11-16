@@ -610,16 +610,12 @@ struct AuthorProfileLatestCard: View {
     /// Board 23 (Author) draws a play disc; board 35 (Account) a chevron disc.
     var discSymbol = "play.fill"
 
-    @Environment(ThemeManager.self) private var theme
+    @Environment(PrivacyGate.self) private var gate
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @AppStorage("hideMatureContent") private var hideMature = true
+    @AppStorage("matureContentMode") private var mode: MaturePrivacyMode = .obscure
     @ScaledMetric(relativeTo: .title) private var titleSize: CGFloat = 24
     @ScaledMetric(relativeTo: .subheadline) private var summarySize: CGFloat = 15
-
-    private var palette: SubjectPalette {
-        theme.appTheme.subjectPalette(
-            hue: CoverArt.workHue(fandoms: work.fandoms, title: work.title)
-        )
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -642,7 +638,7 @@ struct AuthorProfileLatestCard: View {
                             .font(.caption.weight(.semibold))
                             .textCase(.uppercase)
                             .tracking(0.6)
-                            .foregroundStyle(.primary.opacity(0.88))
+                            .foregroundStyle(Color.white.opacity(0.88))
                             .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
                     }
                     Text(work.title)
@@ -657,19 +653,20 @@ struct AuthorProfileLatestCard: View {
             if !work.summary.isEmpty {
                 Text(work.summary)
                     .font(.system(size: summarySize))
-                    .foregroundStyle(.primary.opacity(0.92))
+                    .foregroundStyle(Color.white.opacity(0.92))
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 3)
                     .fixedSize(horizontal: false, vertical: true)
             }
             if !statsLine.isEmpty {
                 Text(statsLine)
                     .font(.caption)
-                    .foregroundStyle(.primary.opacity(0.85))
+                    .foregroundStyle(Color.white.opacity(0.85))
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .foregroundStyle(.white)
         .overlay(alignment: .topTrailing) {
             // Board 23's play disc. Decorative: the whole card is already the
             // work's link (SensitiveRemoteWorkCard), and the card has no read
@@ -684,16 +681,8 @@ struct AuthorProfileLatestCard: View {
                 .accessibilityHidden(true)
         }
         .background {
-            RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
-                .fill(theme.appTheme.carouselCardSurface)
-                .overlay(
-                    RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
-                        .fill(palette.cardWash)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
-                        .strokeBorder(palette.cardBorder, lineWidth: 0.5)
-                )
+            WorkCoverCardBackground(recipe: work.generatedCoverRecipe,
+                                    showsArt: !gate.isBlurred(work, enabled: hideMature, mode: mode))
         }
     }
 
