@@ -47,10 +47,12 @@ enum HomeResumeLayout {
     }
 }
 
-/// Section titles. `layoutPriority` lets the title keep its ideal width beside
-/// the count; at accessibility sizes that width is the phone.
+/// Section titles. At accessibility sizes the title may wrap, and long tokens
+/// gain break opportunities. `layoutPriority` still keeps a title that fits —
+/// the writing editor's "Summary" — on one line beside the count. A second
+/// line there is the editor's text viewport.
 enum SectionHeaderLayout {
-    static func stacksCount(_ size: DynamicTypeSize) -> Bool {
+    static func titleWraps(_ size: DynamicTypeSize) -> Bool {
         size.isAccessibilitySize
     }
 }

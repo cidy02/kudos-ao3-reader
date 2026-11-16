@@ -678,71 +678,39 @@ struct SectionRuleHeader: View {
 
     @ViewBuilder
     private var titleBlock: some View {
-        if SectionHeaderLayout.stacksCount(dynamicTypeSize) {
-            // layoutPriority keeps the title at its ideal width beside the count.
-            // "Reading Queues" at Title 3, AX5, plus the gutters, is wider than a
-            // phone, and that width becomes the whole Home column. The count
-            // drops under the title so the title wraps in the width it is given.
-            VStack(alignment: .leading, spacing: 2) {
-                Text(AccessibilitySoftBreak.opportunities(in: title))
-                    .font(.title3.weight(.bold))
-                    .foregroundStyle(Color.primary)
-                    .lineLimit(nil)
-                    .multilineTextAlignment(.leading)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                if let countText {
-                    Text(AccessibilitySoftBreak.opportunities(in: countText))
-                        .font(.subheadline)
-                        .foregroundStyle(Color.secondary)
-                        .lineLimit(nil)
-                        .multilineTextAlignment(.leading)
-                        .fixedSize(horizontal: false, vertical: true)
-                } else if let count {
-                    Text(count.formatted())
-                        .font(.subheadline)
-                        .foregroundStyle(Color.secondary)
-                        .lineLimit(nil)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                if let note {
-                    Text(AccessibilitySoftBreak.opportunities(in: "· " + note))
-                        .font(.subheadline)
-                        .foregroundStyle(Color.secondary)
-                        .lineLimit(nil)
-                        .multilineTextAlignment(.leading)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-        } else {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(title)
-                    .font(.title3.weight(.bold))
-                    // Color.primary, not `.primary`: the hierarchical style resolves against the inherited
-                    // foreground, which a List section header sets to grey (Writing's headers rendered grey).
-                    .foregroundStyle(Color.primary)
+        // layoutPriority keeps a title that fits the proposal on one line beside
+        // the count. "Summary" plus "6 words" at AX5 is that case, and a second
+        // line is the writing editor's text viewport. A title wider than the
+        // proposal still wraps — "Reading Queues" does not widen Home.
+        let wraps = SectionHeaderLayout.titleWraps(dynamicTypeSize)
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(wraps ? AccessibilitySoftBreak.opportunities(in: title) : title)
+                .font(.title3.weight(.bold))
+                // Color.primary, not `.primary`: the hierarchical style resolves against the inherited
+                // foreground, which a List section header sets to grey (Writing's headers rendered grey).
+                .foregroundStyle(Color.primary)
+                .lineLimit(wraps ? nil : 1)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .layoutPriority(1)
+
+            if let countText {
+                Text(countText)
+                    .font(.subheadline)
+                    .foregroundStyle(Color.secondary)
                     .lineLimit(1)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .layoutPriority(1)
+            } else if let count {
+                Text(count.formatted())
+                    .font(.subheadline)
+                    .foregroundStyle(Color.secondary)
+                    .lineLimit(1)
+            }
 
-                if let countText {
-                    Text(countText)
-                        .font(.subheadline)
-                        .foregroundStyle(Color.secondary)
-                        .lineLimit(1)
-                } else if let count {
-                    Text(count.formatted())
-                        .font(.subheadline)
-                        .foregroundStyle(Color.secondary)
-                        .lineLimit(1)
-                }
-
-                if let note {
-                    Text("· " + note)
-                        .font(.subheadline)
-                        .foregroundStyle(Color.secondary)
-                        .lineLimit(1)
-                }
+            if let note {
+                Text("· " + note)
+                    .font(.subheadline)
+                    .foregroundStyle(Color.secondary)
+                    .lineLimit(1)
             }
         }
     }

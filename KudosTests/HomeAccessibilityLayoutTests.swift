@@ -12,11 +12,11 @@ struct HomeAccessibilityLayoutTests {
         #expect(HomeResumeLayout.stacksActions(.accessibility5) == true)
     }
 
-    @Test func sectionCountStaysBesideTheTitleBelowAccessibilitySizes() {
-        #expect(SectionHeaderLayout.stacksCount(.large) == false)
-        #expect(SectionHeaderLayout.stacksCount(.xxxLarge) == false)
-        #expect(SectionHeaderLayout.stacksCount(.accessibility1) == true)
-        #expect(SectionHeaderLayout.stacksCount(.accessibility5) == true)
+    @Test func sectionTitleWrapsOnlyAtAccessibilitySizes() {
+        #expect(SectionHeaderLayout.titleWraps(.large) == false)
+        #expect(SectionHeaderLayout.titleWraps(.xxxLarge) == false)
+        #expect(SectionHeaderLayout.titleWraps(.accessibility1) == true)
+        #expect(SectionHeaderLayout.titleWraps(.accessibility5) == true)
     }
 
     @Test func softBreaksLeaveAFittingWordAndOpenATokenThatCannot() {
