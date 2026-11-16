@@ -1919,6 +1919,196 @@ class SyncManifestPassthroughTest {
         assertFalse(Files.exists(filesRoot.resolve(BackupRepository.PENDING_IMPORT_MANIFEST_FILE)))
     }
 
+    @Test
+    fun winningFallbackStampsAreWrittenCappedAtOwnExportedAtAndFarFutureDropped() {
+        val now = Instant.parse("2021-01-01T00:00:00Z")
+        val workId = "10000000-0000-4000-8000-0000000000aa"
+        val unmatchedWorkId = "10000000-0000-4000-8000-0000000000bb"
+
+        val primary = JsonObject(
+            stampedManifest(
+                exportedAt = "2020-06-01T00:00:00Z",
+                workStamp = "2020-01-01T00:00:00Z",
+                workId = workId,
+                workExtraKey = "futureField",
+                workExtraValue = JsonPrimitive("older-primary"),
+                queueStamp = "2020-01-01T00:00:00Z",
+                queueExtraKey = "futureField",
+                queueExtraValue = JsonPrimitive("older-primary"),
+                awakeStamp = "2020-01-01T00:00:00Z",
+                awake = true
+            ) + mapOf(
+                "pronunciations" to JsonObject(
+                    mapOf("stamps" to JsonObject(mapOf("[global]Sam" to JsonPrimitive("2020-01-01T00:00:00Z"))))
+                )
+            )
+        )
+        val fallbackForged = JsonObject(
+            stampedManifest(
+                exportedAt = "2020-02-01T00:00:00Z",
+                workStamp = "2020-05-01T00:00:00Z",
+                workId = workId,
+                workExtraKey = "forgedOnly",
+                workExtraValue = JsonPrimitive("from-forged-fallback"),
+                queueStamp = "2020-05-01T00:00:00Z",
+                queueExtraKey = "forgedQueueKey",
+                queueExtraValue = JsonPrimitive("from-forged-fallback"),
+                awakeStamp = "2020-05-01T00:00:00Z",
+                awake = false
+            ) + mapOf(
+                "works" to JsonArray(
+                    listOf(
+                        JsonObject(
+                            mapOf(
+                                "id" to JsonPrimitive(workId),
+                                "lastModifiedAt" to JsonPrimitive("2020-05-01T00:00:00Z"),
+                                "forgedOnly" to JsonPrimitive("from-forged-fallback")
+                            )
+                        ),
+                        JsonObject(
+                            mapOf(
+                                "id" to JsonPrimitive(unmatchedWorkId),
+                                "lastModifiedAt" to JsonPrimitive("2020-05-01T00:00:00Z"),
+                                "forgedOnly" to JsonPrimitive("unmatched-fallback")
+                            )
+                        )
+                    )
+                ),
+                "pronunciations" to JsonObject(
+                    mapOf("stamps" to JsonObject(mapOf("[global]Sam" to JsonPrimitive("2020-05-01T00:00:00Z"))))
+                )
+            )
+        )
+
+        val folded = mergeFallbackManifestJson(primary, fallbackForged, now)!!
+        assertEquals(JsonPrimitive("2020-06-01T00:00:00Z"), folded["exportedAt"])
+        assertEquals(JsonPrimitive("2020-02-01T00:00:00.000Z"), workJson(folded, workId)["lastModifiedAt"])
+        assertEquals(JsonPrimitive("2020-02-01T00:00:00.000Z"), workJson(folded, unmatchedWorkId)["lastModifiedAt"])
+        assertEquals(
+            JsonPrimitive("2020-02-01T00:00:00.000Z"),
+            folded.getValue("readingQueues").jsonArray.single().jsonObject["dateUpdated"]
+        )
+        assertEquals(
+            JsonPrimitive("2020-02-01T00:00:00.000Z"),
+            folded.getValue("settings").jsonObject.getValue("modifiedAt").jsonObject["keepScreenAwake"]
+        )
+        assertEquals(
+            JsonPrimitive("2020-02-01T00:00:00.000Z"),
+            folded.getValue("pronunciations").jsonObject.getValue("stamps").jsonObject["[global]Sam"]
+        )
+
+        // A later merge with a genuine 2020-03-01 manifest must let 2020-03-01 win over the capped 2020-02-01 stamps.
+        val genuine = JsonObject(
+            stampedManifest(
+                exportedAt = "2020-03-01T00:00:00Z",
+                workStamp = "2020-03-01T00:00:00Z",
+                workId = workId,
+                workExtraKey = "futureField",
+                workExtraValue = JsonPrimitive("kept"),
+                queueStamp = "2020-03-01T00:00:00Z",
+                queueExtraKey = "futureField",
+                queueExtraValue = JsonPrimitive("kept"),
+                awakeStamp = "2020-03-01T00:00:00Z",
+                awake = true
+            ) + mapOf(
+                "works" to JsonArray(
+                    listOf(
+                        JsonObject(
+                            mapOf(
+                                "id" to JsonPrimitive(workId),
+                                "lastModifiedAt" to JsonPrimitive("2020-03-01T00:00:00Z"),
+                                "futureField" to JsonPrimitive("kept")
+                            )
+                        ),
+                        JsonObject(
+                            mapOf(
+                                "id" to JsonPrimitive(unmatchedWorkId),
+                                "lastModifiedAt" to JsonPrimitive("2020-03-01T00:00:00Z"),
+                                "futureField" to JsonPrimitive("kept-second")
+                            )
+                        )
+                    )
+                ),
+                "pronunciations" to JsonObject(
+                    mapOf("stamps" to JsonObject(mapOf("[global]Sam" to JsonPrimitive("2020-03-01T00:00:00Z"))))
+                )
+            )
+        )
+        listOf(
+            mergeFallbackManifestJson(folded, genuine, now)!!,
+            mergeFallbackManifestJson(genuine, folded, now)!!
+        ).forEach { merged ->
+            val firstWork = workJson(merged, workId)
+            assertEquals(JsonPrimitive("kept"), firstWork["futureField"])
+            assertFalse("forgedOnly" in firstWork)
+            val secondWork = workJson(merged, unmatchedWorkId)
+            assertEquals(JsonPrimitive("kept-second"), secondWork["futureField"])
+            assertFalse("forgedOnly" in secondWork)
+            val queue = merged.getValue("readingQueues").jsonArray.single().jsonObject
+            assertEquals(JsonPrimitive("kept"), queue["futureField"])
+            assertFalse("forgedQueueKey" in queue)
+            val settings = merged.getValue("settings").jsonObject
+            assertEquals(JsonPrimitive(true), settings.getValue("extras").jsonObject["keepScreenAwake"])
+            assertEquals(
+                JsonPrimitive("2020-03-01T00:00:00Z"),
+                settings.getValue("modifiedAt").jsonObject["keepScreenAwake"]
+            )
+            assertEquals(
+                JsonPrimitive("2020-03-01T00:00:00Z"),
+                merged.getValue("pronunciations").jsonObject.getValue("stamps").jsonObject["[global]Sam"]
+            )
+        }
+
+        // Unvalidated far-future stamps (> now + 24h) are stripped even on a tie against an unstamped side.
+        val unstampedPrimary = JsonObject(
+            mapOf(
+                "exportedAt" to JsonPrimitive("2020-06-01T00:00:00Z"),
+                "readingQueues" to JsonArray(
+                    listOf(JsonObject(mapOf("id" to JsonPrimitive(QUEUE_ONE), "kindRaw" to JsonPrimitive("custom"))))
+                )
+            )
+        )
+        val farFutureFallback = JsonObject(
+            mapOf(
+                "exportedAt" to JsonPrimitive("2020-02-01T00:00:00Z"),
+                "readingQueues" to JsonArray(
+                    listOf(
+                        JsonObject(
+                            mapOf(
+                                "id" to JsonPrimitive(QUEUE_ONE),
+                                "kindRaw" to JsonPrimitive("custom"),
+                                "dateUpdated" to JsonPrimitive("3000-01-01T00:00:00Z")
+                            )
+                        )
+                    )
+                ),
+                "settings" to JsonObject(
+                    mapOf(
+                        "modifiedAt" to JsonObject(mapOf("keepScreenAwake" to JsonPrimitive("3000-01-01T00:00:00Z"))),
+                        "extras" to JsonObject(mapOf("keepScreenAwake" to JsonPrimitive(true)))
+                    )
+                ),
+                "pronunciations" to JsonObject(
+                    mapOf("stamps" to JsonObject(mapOf("[global]Future" to JsonPrimitive("3000-01-01T00:00:00Z"))))
+                )
+            )
+        )
+        val sanitized = mergeFallbackManifestJson(unstampedPrimary, farFutureFallback, now)!!
+        assertFalse(
+            "dateUpdated" in sanitized.getValue("readingQueues").jsonArray.single().jsonObject
+        )
+        assertEquals(
+            JsonPrimitive(true),
+            sanitized.getValue("settings").jsonObject.getValue("extras").jsonObject["keepScreenAwake"]
+        )
+        assertFalse(
+            "keepScreenAwake" in sanitized.getValue("settings").jsonObject.getValue("modifiedAt").jsonObject
+        )
+        assertFalse(
+            "[global]Future" in sanitized.getValue("pronunciations").jsonObject.getValue("stamps").jsonObject
+        )
+    }
+
     private fun stampedManifest(
         exportedAt: String,
         workStamp: String,

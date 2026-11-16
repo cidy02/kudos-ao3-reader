@@ -301,24 +301,30 @@ internal fun mergeFallbackManifestJson(
 
     val primarySettings = primary["settings"] as? JsonObject
     val fallbackSettings = fallback["settings"] as? JsonObject
-    if (primarySettings != null && fallbackSettings != null) {
-        merged["settings"] = mergeStampedSettings(
-            primarySettings,
-            fallbackSettings,
-            primaryBounds,
-            fallbackBounds
-        )
+    if (primarySettings != null || fallbackSettings != null) {
+        val existingSettings = primary["settings"]
+        if (existingSettings == null || existingSettings is JsonNull || existingSettings is JsonObject) {
+            merged["settings"] = mergeStampedSettings(
+                primarySettings ?: JsonObject(emptyMap()),
+                fallbackSettings ?: JsonObject(emptyMap()),
+                primaryBounds,
+                fallbackBounds
+            )
+        }
     }
 
     val primaryPron = primary["pronunciations"] as? JsonObject
     val fallbackPron = fallback["pronunciations"] as? JsonObject
-    if (primaryPron != null && fallbackPron != null) {
-        merged["pronunciations"] = mergeStampedPronunciations(
-            primaryPron,
-            fallbackPron,
-            primaryBounds,
-            fallbackBounds
-        )
+    if (primaryPron != null || fallbackPron != null) {
+        val existingPron = primary["pronunciations"]
+        if (existingPron == null || existingPron is JsonNull || existingPron is JsonObject) {
+            merged["pronunciations"] = mergeStampedPronunciations(
+                primaryPron ?: JsonObject(emptyMap()),
+                fallbackPron ?: JsonObject(emptyMap()),
+                primaryBounds,
+                fallbackBounds
+            )
+        }
     }
 
     recordListDescriptors.keys.forEach { listName ->
@@ -332,13 +338,30 @@ internal fun mergeFallbackManifestJson(
             val matchedFallbackIndices = hashSetOf<Int>()
             val combined = pArray.map { element ->
                 val pObj = element as? JsonObject ?: return@map element
-                val match = matcher.match(pObj) ?: return@map pObj
-                fallbackIndexByIdentity[match]?.let { matchedFallbackIndices += it }
-                mergeRawRecord(listName, pObj, match, primaryBounds, fallbackBounds)
+                val match = matcher.match(pObj)
+                if (match == null) {
+                    withBoundedRecordStamps(listName, pObj, primaryBounds)
+                } else {
+                    fallbackIndexByIdentity[match]?.let { matchedFallbackIndices += it }
+                    mergeRawRecord(listName, pObj, match, primaryBounds, fallbackBounds)
+                }
             } + fObjects.filterIndexed { index, _ -> index !in matchedFallbackIndices }
+                .map { withBoundedRecordStamps(listName, it, fallbackBounds) }
             merged[listName] = JsonArray(combined)
         } else if ((primary[listName] == null || primary[listName] is JsonNull) && fArray != null) {
-            merged[listName] = fArray
+            merged[listName] = JsonArray(
+                fArray.map { element ->
+                    val obj = element as? JsonObject ?: return@map element
+                    withBoundedRecordStamps(listName, obj, fallbackBounds)
+                }
+            )
+        } else if (pArray != null) {
+            merged[listName] = JsonArray(
+                pArray.map { element ->
+                    val obj = element as? JsonObject ?: return@map element
+                    withBoundedRecordStamps(listName, obj, primaryBounds)
+                }
+            )
         }
     }
 
@@ -381,6 +404,18 @@ private fun boundedInstant(element: JsonElement?, exportedAt: Instant?, now: Ins
 }
 
 /**
+ * Returns [element] bounded by [bounds] when serialized into a merged manifest, so a
+ * fallback record or stamp cannot keep an uncapped timestamp under a newer primary's
+ * `exportedAt`. Non-date values stay verbatim; instants past `now + 24h` are dropped.
+ */
+private fun cappedStamp(element: JsonElement?, bounds: StampBounds): JsonElement? {
+    if (element == null) return null
+    val raw = instantOf(element) ?: return element
+    val bounded = bounds.of(element) ?: return null
+    return if (bounded == raw) element else JsonPrimitive(BackupValidator.formatInstant(bounded))
+}
+
+/**
  * Record modification stamp: `readingQueues` use `max(dateUpdated, lastMembershipChangedAt)`;
  * other lists use `lastModifiedAt` or a primitive `modifiedAt`, with creation-date fallbacks
  * for collections (`dateAdded`), memberships (`queuedAt`), and annotations (`createdAt`).
@@ -394,7 +429,12 @@ private fun recordStamp(listName: String, record: JsonObject, bounds: StampBound
             at(record["lastMembershipChangedAt"])
         ).maxOrNull()?.let { return it }
     }
-    at(record["lastModifiedAt"])?.let { return it }
+    val lastModified = record["lastModifiedAt"]
+    if (lastModified != null) {
+        at(lastModified)?.let { return it }
+        // A present-but-rejected future clock must not fall back to creation dates.
+        if (instantOf(lastModified) != null) return null
+    }
     val modified = record["modifiedAt"]
     if (modified != null && modified !is JsonObject && modified !is JsonArray) {
         at(modified)?.let { return it }
@@ -405,6 +445,38 @@ private fun recordStamp(listName: String, record: JsonObject, bounds: StampBound
         "annotations" -> at(record["createdAt"])
         else -> null
     }
+}
+
+private fun stampKeysForRecord(listName: String): List<String> = buildList {
+    if (listName == "readingQueues") {
+        add("dateUpdated")
+        add("lastMembershipChangedAt")
+    }
+    add("lastModifiedAt")
+    add("modifiedAt")
+    when (listName) {
+        "collections" -> add("dateAdded")
+        "readingQueueMemberships" -> add("queuedAt")
+        "annotations" -> add("createdAt")
+    }
+}
+
+private fun withBoundedRecordStamps(
+    listName: String,
+    record: JsonObject,
+    bounds: StampBounds
+): JsonObject {
+    var updated: MutableMap<String, JsonElement>? = null
+    stampKeysForRecord(listName).forEach { key ->
+        val value = record[key] ?: return@forEach
+        if (key == "modifiedAt" && (value is JsonObject || value is JsonArray)) return@forEach
+        val bounded = cappedStamp(value, bounds)
+        if (bounded != value) {
+            val map = updated ?: record.toMutableMap().also { updated = it }
+            if (bounded == null) map.remove(key) else map[key] = bounded
+        }
+    }
+    return updated?.let(::JsonObject) ?: record
 }
 
 /** A real stamp beats a missing one. Equal instants are a tie: the incoming date must be greater. */
@@ -452,15 +524,15 @@ private fun applyStampedValue(
 ) {
     when (stampWinner(primaryBounds.of(primaryStamp), fallbackBounds.of(fallbackStamp))) {
         StampWinner.PRIMARY -> {
-            primaryStamp?.let(onStamp)
+            cappedStamp(primaryStamp, primaryBounds)?.let(onStamp)
             primaryValue?.let(onValue)
         }
         StampWinner.FALLBACK -> {
-            fallbackStamp?.let(onStamp)
+            cappedStamp(fallbackStamp, fallbackBounds)?.let(onStamp)
             fallbackValue?.let(onValue)
         }
         StampWinner.TIE -> {
-            (primaryStamp ?: fallbackStamp)?.let(onStamp)
+            (cappedStamp(primaryStamp, primaryBounds) ?: cappedStamp(fallbackStamp, fallbackBounds))?.let(onStamp)
             (primaryValue ?: fallbackValue)?.let(onValue)
         }
     }
@@ -593,12 +665,12 @@ private fun mergeStampedPronunciations(
             applyStampedValue(
                 primaryStamp = pStamps?.get(key),
                 fallbackStamp = fStamps?.get(key),
-                primaryValue = pStamps?.get(key),
-                fallbackValue = fStamps?.get(key),
+                primaryValue = null,
+                fallbackValue = null,
                 primaryBounds = primaryBounds,
                 fallbackBounds = fallbackBounds,
                 onStamp = { mergedStamps[key] = it },
-                onValue = { mergedStamps[key] = it }
+                onValue = { _ -> }
             )
         }
         combined["stamps"] = JsonObject(mergedStamps)
@@ -626,9 +698,12 @@ private fun mergeRawRecord(
             recordStamp(listName, fallback, fallbackBounds)
         )
     ) {
-        StampWinner.PRIMARY -> primary
-        StampWinner.FALLBACK -> fallback
-        StampWinner.TIE -> JsonObject(fallback + primary)
+        StampWinner.PRIMARY -> withBoundedRecordStamps(listName, primary, primaryBounds)
+        StampWinner.FALLBACK -> withBoundedRecordStamps(listName, fallback, fallbackBounds)
+        StampWinner.TIE -> JsonObject(
+            withBoundedRecordStamps(listName, fallback, fallbackBounds) +
+                withBoundedRecordStamps(listName, primary, primaryBounds)
+        )
     }
 }
 
