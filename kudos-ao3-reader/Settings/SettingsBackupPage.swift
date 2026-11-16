@@ -377,6 +377,10 @@ struct SettingsBackupPage: View {
                 let summary = try KudosBackupService.restore(
                     backup, into: context, mode: mode
                 )
+                // A backup made during the EPUB outage can bring its false flags back: repair again.
+                UserDefaults.standard.removeObject(
+                    forKey: PersistenceMigrationService.falseAO3UnavailableRepairKey
+                )
                 if mode != .replaceLibrary {
                     applyRestoredTheme(pending.manifest.settings)
                 }

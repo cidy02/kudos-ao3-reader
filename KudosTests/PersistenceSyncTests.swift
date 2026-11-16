@@ -48,7 +48,24 @@ struct PersistenceSyncTests {
         let otherFailure = SavedWork(title: "Other 404", author: "Writer")
         otherFailure.hasEPUB = false
         otherFailure.ao3Unavailable = true
+        let inOutage = PersistenceMigrationService.ao3EPUBOutageStart.addingTimeInterval(86_400)
         for work in [noEPUB, missingFile, hasFile, fileWithStaleFlag, unflagged, otherFailure] {
+            work.lastPreservationAttemptAt = inOutage
+        }
+        // Review: a failure before the outage may be a work that really is gone, and a later
+        // check of the work page is AO3's real answer.
+        let goneBefore = SavedWork(title: "Gone before the outage", author: "Writer")
+        goneBefore.hasEPUB = false
+        goneBefore.epubPreservationStatus = .failed
+        goneBefore.ao3Unavailable = true
+        goneBefore.lastPreservationAttemptAt = PersistenceMigrationService.ao3EPUBOutageStart.addingTimeInterval(-86_400)
+        let pageCheckedGone = SavedWork(title: "Page checked, gone", author: "Writer")
+        pageCheckedGone.hasEPUB = false
+        pageCheckedGone.epubPreservationStatus = .failed
+        pageCheckedGone.ao3Unavailable = true
+        pageCheckedGone.lastPreservationAttemptAt = inOutage
+        pageCheckedGone.lastAvailabilityCheck = inOutage.addingTimeInterval(60)
+        for work in [noEPUB, missingFile, hasFile, fileWithStaleFlag, unflagged, otherFailure, goneBefore, pageCheckedGone] {
             context.insert(work)
         }
         try context.save()
@@ -62,6 +79,8 @@ struct PersistenceSyncTests {
         #expect(fileWithStaleFlag.ao3Unavailable)
         #expect(!unflagged.ao3Unavailable)
         #expect(otherFailure.ao3Unavailable)
+        #expect(goneBefore.ao3Unavailable)
+        #expect(pageCheckedGone.ao3Unavailable)
         #expect(defaults.bool(forKey: PersistenceMigrationService.falseAO3UnavailableRepairKey))
 
         noEPUB.ao3Unavailable = true

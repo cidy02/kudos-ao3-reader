@@ -151,14 +151,23 @@ enum PersistenceMigrationService {
     }
 
     static let falseAO3UnavailableRepairKey = "falseAO3UnavailableRepairT542cDone"
+    /// AO3 began answering every `.epub` with a 404 on about 2026-11-15; a failure before this
+    /// may be a work that really is gone (review: deleted, hidden, restricted to members).
+    static let ao3EPUBOutageStart = Date(timeIntervalSince1970: 1_794_614_400) // 2026-11-14 00:00 UTC
 
     /// Repairs 404s from the November 2026 EPUB-download outage without querying AO3.
     static func clearFalseAO3UnavailableFlagsIfNeeded(
         in context: ModelContext,
         defaults: UserDefaults = .standard
     ) async {
-        guard !defaults.bool(forKey: falseAO3UnavailableRepairKey),
-              PersistenceOperationGate.begin(.migration) else { return }
+        guard !defaults.bool(forKey: falseAO3UnavailableRepairKey) else { return }
+        // A launch-time Folder Sync may hold the gate; wait for it (bounded) rather than skip.
+        var gate = PersistenceOperationGate.begin(.migration)
+        for _ in 0..<120 where !gate {
+            try? await Task.sleep(for: .milliseconds(500))
+            gate = PersistenceOperationGate.begin(.migration)
+        }
+        guard gate else { return }
         defer { PersistenceOperationGate.end(.migration) }
         do {
             var processed = 0
@@ -167,6 +176,9 @@ enum PersistenceMigrationService {
             )) {
                 guard work.modelContext != nil else { continue }
                 if work.epubPreservationStatus == .failed,
+                   let attempt = work.lastPreservationAttemptAt, attempt >= ao3EPUBOutageStart,
+                   // A later look at the work page itself is AO3's real answer: leave it.
+                   (work.lastAvailabilityCheck ?? .distantPast) < attempt,
                    !FileManager.default.fileExists(atPath: work.fileURL.path) {
                     work.ao3Unavailable = false
                 }
