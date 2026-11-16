@@ -10,7 +10,8 @@ nonisolated struct GeneratedCoverRecipe: Codable, Equatable, Sendable {
     private(set) var lightness: Double
     private(set) var ground: Ground
     let motif: String
-    let tier: Int
+    /// `private(set)` so a metadata refresh can move length tier without re-resolving the pin.
+    private(set) var tier: Int
     private(set) var closedRing: Bool
     private(set) var hasRing: Bool
     private(set) var placement: Int
@@ -40,31 +41,60 @@ nonisolated struct GeneratedCoverRecipe: Codable, Equatable, Sendable {
         return KudosBackupContents.clampedArchiveDate(Date(timeIntervalSince1970: time), now: now)
     }
 
+    /// Rewrites `pinnedAt` on a decodable renderer-1 recipe and leaves every other byte alone.
+    /// Undecodable JSON and newer renderers pass through; those are not this build's to edit.
     static func clampingFuturePinIfSupported(_ json: String, now: Date = Date()) -> String {
-        guard var recipe = supportedPin(in: json), let rawTime = recipe.pinnedAt, rawTime.isFinite else {
+        guard let recipe = supportedPin(in: json), let rawTime = recipe.pinnedAt, rawTime.isFinite else {
             return json
         }
         let ceiling = now.addingTimeInterval(KudosBackupContents.maxFutureTimestampSkew).timeIntervalSince1970
         guard rawTime > ceiling else { return json }
-        recipe.pinnedAt = ceiling
-        guard let data = try? JSONEncoder().encode(recipe),
-              let clampedJSON = String(data: data, encoding: .utf8) else { return json }
-        return clampedJSON
+        if let replaced = replacingPinnedAt(in: json, with: ceiling) { return replaced }
+        var clamped = recipe
+        clamped.pinnedAt = ceiling
+        guard let data = try? JSONEncoder().encode(clamped),
+              let text = String(data: data, encoding: .utf8) else { return json }
+        return text
     }
 
     static func isAutomaticPin(in json: String?) -> Bool {
         pinnedAt(in: json) == Date(timeIntervalSince1970: 0)
     }
 
+    /// A recipe this build may draw and rewrite. Newer renderers and unknown keys are not supported,
+    /// even when the decoder would ignore them. Float spelling is not a newer schema: JSONSerialization
+    /// rewrites `0.085` so an `NSDictionary` round trip rejects a perfectly decodable renderer-1 pin.
     static func supportedPin(in json: String) -> GeneratedCoverRecipe? {
         let data = Data(json.utf8)
         guard let recipe = try? JSONDecoder().decode(Self.self, from: data),
               recipe.rendererVersion == 1, recipe.isDrawable,
-              let encoded = try? JSONEncoder().encode(recipe),
-              let original = (try? JSONSerialization.jsonObject(with: data)) as? NSDictionary,
-              let roundTripped = (try? JSONSerialization.jsonObject(with: encoded)) as? NSDictionary,
-              original.isEqual(roundTripped) else { return nil }
+              let original = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        var keyed = recipe
+        keyed.pinnedAt = 0
+        guard let encoded = try? JSONEncoder().encode(keyed),
+              let known = try? JSONSerialization.jsonObject(with: encoded) as? [String: Any],
+              Set(original.keys).subtracting(known.keys).isEmpty else { return nil }
         return recipe
+    }
+
+    /// Splices one JSON number over the `pinnedAt` value and leaves every other byte in place.
+    private static func replacingPinnedAt(in json: String, with time: Double) -> String? {
+        guard time.isFinite, let number = jsonNumber(time),
+              let regex = try? NSRegularExpression(
+                pattern: #""pinnedAt"\s*:\s*-?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?"#
+              ),
+              let match = regex.firstMatch(in: json, range: NSRange(json.startIndex..., in: json)),
+              let range = Range(match.range, in: json) else { return nil }
+        return json.replacingCharacters(in: range, with: "\"pinnedAt\":\(number)")
+    }
+
+    private static func jsonNumber(_ value: Double) -> String? {
+        guard value.isFinite,
+              let data = try? JSONSerialization.data(withJSONObject: [value]),
+              var text = String(data: data, encoding: .utf8) else { return nil }
+        text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard text.count >= 2, text.first == "[", text.last == "]" else { return nil }
+        return String(text.dropFirst().dropLast())
     }
 
     private static let palette = [20, 55, 85, 125, 150, 180, 205, 230, 260, 290, 320, 350]
@@ -251,6 +281,16 @@ nonisolated struct GeneratedCoverRecipe: Codable, Equatable, Sendable {
     }
 }
 
+extension GeneratedCoverRecipe {
+    /// Length tier and the completion ring, without re-resolving hue, motif, or fandom.
+    func updating(tier: Int, closedRing: Bool) -> GeneratedCoverRecipe {
+        var copy = self
+        copy.tier = tier
+        copy.closedRing = closedRing
+        return copy
+    }
+}
+
 extension SavedWork {
     @MainActor
     var generatedCoverRecipe: GeneratedCoverRecipe {
@@ -283,6 +323,7 @@ extension SavedWork {
             }
             recipe.pinnedAt = preserved ?? 0
         } else {
+            let ceiling = now.addingTimeInterval(KudosBackupContents.maxFutureTimestampSkew).timeIntervalSince1970
             let nextPrevious = previousTime.flatMap { time -> Double? in
                 guard time.isFinite else { return nil }
                 let clamped = KudosBackupContents.clampedArchiveDate(
@@ -291,7 +332,9 @@ extension SavedWork {
                 let stepped = clamped.nextUp
                 return stepped.isFinite ? stepped : nil
             }
-            recipe.pinnedAt = max(now.timeIntervalSince1970, nextPrevious ?? 0)
+            let candidate = max(now.timeIntervalSince1970, nextPrevious ?? 0)
+            // `ceiling.nextUp` is still above the skew limit. Never persist that.
+            recipe.pinnedAt = min(candidate, ceiling)
         }
         guard let data = try? JSONEncoder().encode(recipe),
               let json = String(data: data, encoding: .utf8) else { return }
@@ -318,13 +361,28 @@ extension SavedWork {
 
     @MainActor
     func refreshCoverAfterMetadataUpdate(hadEmptyFandoms: Bool, hadZeroWords: Bool) {
-        if let coverRecipeJSON, let pinned = GeneratedCoverRecipe.supportedPin(in: coverRecipeJSON),
-           pinned.salt == 0, (pinned.pinnedAt ?? 0) == 0,
-           pinned.fandom.isEmpty || hadEmptyFandoms || hadZeroWords {
+        guard let coverRecipeJSON,
+              let pinned = GeneratedCoverRecipe.supportedPin(in: coverRecipeJSON) else { return }
+        let automatic = (pinned.pinnedAt ?? 0) == 0
+        if automatic && pinned.salt == 0 && (pinned.fandom.isEmpty || hadEmptyFandoms || hadZeroWords) {
             pinCover(salt: 0, automatic: true)
-        } else {
-            refreshCoverIfNeeded()
+            return
         }
+        // A reader's Shuffle or Reset is not refined from tags that just arrived.
+        // Length tier and the completion ring are the only fields a refresh may move.
+        if !automatic {
+            let nextTier = coverTier
+            let nextRing = pinned.closedRing || isComplete
+            guard pinned.tier != nextTier || pinned.closedRing != nextRing else { return }
+            let updated = pinned.updating(tier: nextTier, closedRing: nextRing)
+            guard let data = try? JSONEncoder().encode(updated),
+                  let json = String(data: data, encoding: .utf8) else { return }
+            self.coverRecipeJSON = json
+            FolderSyncService.markDirty()
+            NotificationCenter.default.post(name: .kudosSyncRelevantSettingChanged, object: nil)
+            return
+        }
+        refreshCoverIfNeeded()
     }
 
     @MainActor
