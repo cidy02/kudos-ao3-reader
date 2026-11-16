@@ -87,7 +87,10 @@ nonisolated struct GeneratedCoverRecipe: Equatable, Sendable {
     init(id: Int?, title: String, author: String, fandoms: [String], tags: [String] = [],
          words: Int? = nil, complete: Bool = true, seriesID: Int? = nil, part: Int = 0,
          salt: Int = 0, postedYear: Int? = nil, firstAuthor: String? = nil) {
-        let names = fandoms.map(Self.clean).filter { !$0.isEmpty }
+        // Two tags that name one fandom ("Doctor Who (2005)" and "Doctor Who") are one fandom on
+        // a cover: no repeated label, no crossover split between identical colours.
+        var seen = Set<String>()
+        let names = fandoms.map(Self.clean).filter { !$0.isEmpty && seen.insert($0.lowercased()).inserted }
         let mainTitle = title.replacingOccurrences(of: #"^\d+\.\s*"#, with: "", options: .regularExpression)
         let titleParts = Self.splitTitle(mainTitle)
         self.title = titleParts.0
