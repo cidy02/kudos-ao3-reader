@@ -18,6 +18,8 @@ func importEPUB(
     isComplete: Bool = false,
     seriesURL: String = "",
     knownChapterCount: Int = 0,
+    verifyAvailability: Bool = true,
+    canImport: (@MainActor () -> Bool)? = nil,
     into context: ModelContext
 ) async throws -> SavedWork {
     let downloadedAt = Date()
@@ -27,6 +29,10 @@ func importEPUB(
     let meta = await Task.detached(priority: .userInitiated) {
         try? EPUBDocument.metadata(ofEPUBAt: tempURL)
     }.value
+    if let canImport, !canImport() {
+        try? FileManager.default.removeItem(at: tempURL)
+        throw CancellationError()
+    }
     if meta == nil { Log.library.notice("EPUB metadata unreadable; importing with the filename as title") }
     let fallbackTitle = tempURL.deletingPathExtension().lastPathComponent
     let title = (meta?.title).flatMap { $0.isEmpty ? nil : $0 } ?? fallbackTitle
@@ -68,7 +74,7 @@ func importEPUB(
         // Verifies the work still exists on AO3 as well as refreshing its tags —
         // one request, and it is what makes the Library's "Last Copy" badge accurate
         // from the moment of import. See `WorkAvailability`.
-        Task { await WorkAvailability.verify(existing, in: context) }
+        if verifyAvailability { Task { await WorkAvailability.verify(existing, in: context) } }
         return existing
     }
 
@@ -115,7 +121,7 @@ func importEPUB(
 
     // Refresh the work's tags from AO3's live page in the background; the EPUB
     // tags set above stand in until (and if) that succeeds.
-    Task { await WorkAvailability.verify(work, in: context) }
+    if verifyAvailability { Task { await WorkAvailability.verify(work, in: context) } }
 
     return work
 }

@@ -15,6 +15,13 @@ import SwiftUI
 @MainActor
 @Observable
 final class RemoteWorkSelectionController {
+    struct ToastTarget: Identifiable {
+        let id = UUID()
+        let work: SavedWork
+        let queue: ReadingQueue
+        let membershipID: UUID
+        let context: ModelContext
+    }
     var isSelecting = false
     var selection: Set<Int> = []
     private(set) var isProcessingBatch = false
@@ -25,15 +32,26 @@ final class RemoteWorkSelectionController {
     fileprivate var showingAddToCollection = false
     fileprivate var batchActionError: String?
     var sourceQueueID: UUID?
-    var toastQueue: ReadingQueue?
-    var toastWork: SavedWork?
-    var showingChangeQueue = false
-    private var quickQueueBusyIDs: Set<Int> = []
+    var toastTarget: ToastTarget?
+    var changeTarget: ToastTarget?
     private var toastDismissTask: Task<Void, Never>?
 
     func changeQueue() {
+        guard let toastTarget else { return }
         toastDismissTask?.cancel()
-        showingChangeQueue = true
+        changeTarget = toastTarget
+        self.toastTarget = nil
+    }
+
+    func undo() {
+        guard let target = toastTarget else { return }
+        toastDismissTask?.cancel()
+        toastTarget = nil
+        guard target.work.modelContext != nil,
+              target.work.queueMemberships.contains(where: { $0.id == target.membershipID }) else { return }
+        ReadingQueueService.removeFromQueueAndDeleteIfQueueOnly(
+            target.work, from: target.queue, in: target.context
+        )
     }
 
     static func currentQueue(in queues: [ReadingQueue], sourceID: UUID?, storedID: String?) -> ReadingQueue? {
@@ -44,33 +62,40 @@ final class RemoteWorkSelectionController {
         return active.first { $0.kind == .savedForLater }
     }
 
-    func quickAdd(_ summary: AO3WorkSummary, in context: ModelContext) {
-        guard !isSelecting, quickQueueBusyIDs.insert(summary.id).inserted else { return }
-        Task { @MainActor in
-            defer { quickQueueBusyIDs.remove(summary.id) }
-            let queues = (try? context.fetch(FetchDescriptor<ReadingQueue>())) ?? []
-            let queue = Self.currentQueue(
-                in: queues, sourceID: sourceQueueID,
-                storedID: UserDefaults.standard.string(forKey: "lastAddedReadingQueueID")
-            ) ?? ReadingQueueService.ensureSavedForLaterQueue(in: context)
-            do {
-                let work = try ReadingQueueService.ensureLocalMetadata(for: summary, in: context)
-                if !work.queueMemberships.contains(where: { $0.queue?.id == queue.id }) {
-                    _ = await ReadingQueueService.addAndPreserve(work, to: queue, in: context)
-                }
-                UserDefaults.standard.set(queue.id.uuidString, forKey: "lastAddedReadingQueueID")
-                toastQueue = queue
-                toastWork = work
-                toastDismissTask?.cancel()
-                toastDismissTask = Task { @MainActor in
-                    try? await Task.sleep(for: .seconds(5))
-                    guard !Task.isCancelled else { return }
-                    toastQueue = nil
-                    toastWork = nil
-                }
-            } catch {
-                batchActionError = error.localizedDescription
+    func quickAdd(
+        _ summary: AO3WorkSummary,
+        in context: ModelContext,
+        defaults: UserDefaults = .standard,
+        enqueue: (SavedWork, ReadingQueue, ModelContext) -> Void
+    ) {
+        guard !isSelecting else { return }
+        let queues = (try? context.fetch(FetchDescriptor<ReadingQueue>())) ?? []
+        let queue = Self.currentQueue(
+            in: queues, sourceID: sourceQueueID,
+            storedID: defaults.string(forKey: "lastAddedReadingQueueID")
+        ) ?? ReadingQueueService.ensureSavedForLaterQueue(in: context)
+        do {
+            let work = try ReadingQueueService.ensureLocalMetadata(for: summary, in: context)
+            guard !work.queueMemberships.contains(where: { $0.queue?.id == queue.id }) else {
+                AccessibilityNotification.Announcement("Already in \(queue.displayName)").post()
+                return
             }
+            let membership = ReadingQueueService.add(work, to: queue, in: context)
+            try context.save()
+            defaults.set(queue.id.uuidString, forKey: "lastAddedReadingQueueID")
+            let target = ToastTarget(work: work, queue: queue, membershipID: membership.id, context: context)
+            toastTarget = target
+            toastDismissTask?.cancel()
+            toastDismissTask = Task { @MainActor in
+                try? await Task.sleep(for: .seconds(5))
+                guard !Task.isCancelled, toastTarget?.id == target.id else { return }
+                toastTarget = nil
+            }
+            AccessibilityNotification.Announcement("Added to \(queue.displayName)").post()
+            enqueue(work, queue, context)
+        } catch {
+            context.rollback()
+            batchActionError = error.localizedDescription
         }
     }
 
@@ -297,6 +322,7 @@ struct SelectableAO3WorkRow: View {
     var showsSeparator = true
 
     @Environment(\.modelContext) private var context
+    @Environment(DownloadQueue.self) private var downloadQueue
 
     var body: some View {
         SensitiveWorkRow(
@@ -310,7 +336,16 @@ struct SelectableAO3WorkRow: View {
             qualitySignal: qualitySignal,
             rankedContext: rankedContext,
             badgeTitle: badgeTitle,
-            quickQueue: { controller.quickAdd(work, in: context) },
+            quickQueue: { controller.quickAdd(work, in: context) { saved, queue, context in
+                guard KeepOffline.queueKeeps(queue.keepsWorksOffline) else { return }
+                downloadQueue.enqueue(
+                    KeepOffline.downloadItems(for: [saved]).map { item in
+                        var item = item
+                        item.requiresOfflineQueue = true
+                        return item
+                    }, into: context
+                )
+            } },
             showsSummary: showsSummary,
             badgeCount: badgeCount,
             wide: wide,
@@ -332,13 +367,8 @@ extension View {
             .sheet(isPresented: $controller.showingAddToQueue) {
                 AddToQueueView(works: controller.resolvedQueueWorks)
             }
-            .sheet(isPresented: $controller.showingChangeQueue, onDismiss: {
-                controller.toastQueue = nil
-                controller.toastWork = nil
-            }) {
-                if let work = controller.toastWork, let queue = controller.toastQueue {
-                    AddToQueueView(work: work, movingFrom: queue)
-                }
+            .sheet(item: $controller.changeTarget) { target in
+                AddToQueueView(work: target.work, movingFrom: target.queue)
             }
             .sheet(isPresented: $controller.showingAddToCollection) {
                 AddToCollectionView(works: controller.resolvedCollectionWorks)
@@ -359,10 +389,10 @@ extension View {
             #endif
             .onDisappear { controller.batchTask?.cancel() }
             .safeAreaInset(edge: .bottom) {
-                if let queue = controller.toastQueue, controller.toastWork != nil {
-                    QueueAddedToast(queue: queue) {
+                if let target = controller.toastTarget {
+                    QueueAddedToast(queue: target.queue, change: {
                         controller.changeQueue()
-                    }
+                    }, undo: { controller.undo() })
                     .padding(.horizontal, 16)
                     .padding(.bottom, 8)
                 }

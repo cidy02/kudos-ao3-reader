@@ -484,7 +484,7 @@ struct AllReadingQueuesGridView: View {
         let isSelected = selection.contains(queue.id)
         let content = HStack(spacing: 12) {
             if isSelecting {
-                WorkSelectionBubble(isSelected: isSelected)
+                WorkLeadingSelectionCheck(isSelected: isSelected)
             }
             peekTile(queue, works: works)
 

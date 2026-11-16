@@ -15,6 +15,7 @@ final class DownloadQueue {
         let sourceURL: URL?
         let isComplete: Bool
         let seriesURL: String
+        var requiresOfflineQueue = false
         var status: Status = .queued
         /// 0…1 from the download task, when AO3 says how big the file is.
         var fraction: Double = 0
@@ -203,6 +204,14 @@ final class DownloadQueue {
         return existing.hasEPUB ? .restoreThenSkip : .downloadOverMissingEPUB
     }
 
+    static func shouldProcess(_ item: Item, existing: SavedWork?) -> Bool {
+        guard item.requiresOfflineQueue else { return true }
+        guard let existing, existing.modelContext != nil, !existing.isPendingDeletion else { return false }
+        return existing.activeQueueMemberships.contains { membership in
+            membership.queue.map { KeepOffline.queueKeeps($0.keepsWorksOffline) } == true
+        }
+    }
+
     private func run() async {
         defer { isRunning = false }
         guard let context else { return }
@@ -210,6 +219,10 @@ final class DownloadQueue {
         while let index = items.firstIndex(where: { $0.status == .queued }) {
             let item = items[index]
             let existing = item.sourceURL.flatMap { existingWork(forSource: $0, in: context) }
+            guard Self.shouldProcess(item, existing: existing) else {
+                items[index].status = .skipped
+                continue
+            }
             switch Self.disposition(for: existing) {
             case .download, .downloadOverMissingEPUB:
                 break
@@ -228,19 +241,38 @@ final class DownloadQueue {
                 let temp = try await AO3Client.shared.downloadEPUB(workID: id) { fraction in
                     Task { @MainActor [weak self] in self?.setFraction(fraction, for: id) }
                 }
-                _ = try await importEPUB(
+                guard Self.shouldProcess(
+                    item, existing: item.sourceURL.flatMap { existingWork(forSource: $0, in: context) }
+                ) else {
+                    try? FileManager.default.removeItem(at: temp)
+                    items[index].status = .skipped
+                    continue
+                }
+                let saved = try await importEPUB(
                     temp, source: item.sourceURL,
-                    isComplete: item.isComplete, seriesURL: item.seriesURL, into: context
+                    isComplete: item.isComplete, seriesURL: item.seriesURL,
+                    verifyAvailability: false,
+                    canImport: {
+                        Self.shouldProcess(
+                            item, existing: item.sourceURL.flatMap { existingWork(forSource: $0, in: context) }
+                        )
+                    }, into: context
                 )
+                if saved.modelContext != nil, !saved.isPendingDeletion {
+                    await WorkAvailability.verify(saved, in: context)
+                }
                 // A beat at 100% before the ring hands back to reading progress.
                 items[index].fraction = 1
                 try? await Task.sleep(for: .milliseconds(300))
                 items[index].status = .done
             } catch {
-                items[index].status = .failed
-                Log.library.error(
-                    "Queue download failed for work \(item.id, privacy: .private(mask: .hash)): \(error.localizedDescription, privacy: .private)"
-                )
+                items[index].status = error is CancellationError ? .skipped : .failed
+                if !(error is CancellationError) {
+                    let reason = error.localizedDescription
+                    Log.library.error(
+                        "Queue download \(item.id, privacy: .private(mask: .hash)) failed: \(reason, privacy: .private)"
+                    )
+                }
             }
         }
         Log.library.info("Download queue finished: \(self.finishedCount) processed, \(self.failedCount) failed")

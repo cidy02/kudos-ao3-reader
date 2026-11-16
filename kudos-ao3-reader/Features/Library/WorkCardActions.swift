@@ -741,7 +741,7 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
                 }
 
                 Button(action: addToQueue) {
-                    Label("Add to Queue", systemImage: "list.bullet.rectangle")
+                    Label("Choose Queue", systemImage: "list.bullet.rectangle")
                 }
                 .tint(.orange)
                 .disabled(working)
@@ -841,9 +841,6 @@ private struct RemoteWorkContextMenuModifier: ViewModifier {
             // Neutral, not the ambient accent (red) — matches WorkListMoreMenu /
             // LocalWorkContextMenuModifier. Delete keeps its system red regardless.
             .tint(Color.primary)
-            .accessibilityAction(named: "Add to Queue") {
-                if let quickQueue { quickQueue() } else { addToQueue() }
-            }
             .navigationDestination(item: $readerWork) { BookReaderView(work: $0) }
             .sheet(item: $queueWork) { AddToQueueView(work: $0) }
             .sheet(item: $collectionWork) { AddToCollectionView(work: $0) }

@@ -356,20 +356,21 @@ struct ReadingQueueStorageView: View {
 
 struct AddToQueueView: View {
     let works: [SavedWork]
-    var movingFrom: ReadingQueue?
+    @State private var sourceQueue: ReadingQueue?
 
     init(work: SavedWork, movingFrom: ReadingQueue? = nil) {
         works = [work]
-        self.movingFrom = movingFrom
+        _sourceQueue = State(initialValue: movingFrom)
     }
 
     init(works: [SavedWork]) {
         self.works = works
-        movingFrom = nil
+        _sourceQueue = State(initialValue: nil)
     }
 
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
+    @Environment(DownloadQueue.self) private var downloadQueue
     @Query(filter: #Predicate<ReadingQueue> { !$0.isPendingDeletion }, sort: \ReadingQueue.sortOrder)
     private var queues: [ReadingQueue]
     @State private var newName = ""
@@ -414,6 +415,7 @@ struct AddToQueueView: View {
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        .disabled(workingQueueIDs.contains(queue.id))
                     }
                 } header: {
                     Text("Queues")
@@ -591,9 +593,13 @@ struct AddToQueueView: View {
     }
 
     private func toggle(_ queue: ReadingQueue) {
-        if movingFrom?.id == queue.id { return }
+        guard !workingQueueIDs.contains(queue.id) else { return }
         Haptics.selection()
-        if isMember(queue), movingFrom == nil {
+        if let sourceQueue {
+            move(to: queue, from: sourceQueue)
+            return
+        }
+        if isMember(queue) {
             for work in works {
                 ReadingQueueService.removeFromQueue(work, from: queue, in: context)
             }
@@ -605,14 +611,25 @@ struct AddToQueueView: View {
             for work in nonMembers {
                 _ = await ReadingQueueService.addAndPreserve(work, to: queue, in: context)
             }
-            if let movingFrom {
-                for work in works {
-                    ReadingQueueService.removeFromQueueAndDeleteIfQueueOnly(work, from: movingFrom, in: context)
-                }
-            }
             UserDefaults.standard.set(queue.id.uuidString, forKey: "lastAddedReadingQueueID")
             workingQueueIDs.remove(queue.id)
         }
+    }
+
+    private func move(to queue: ReadingQueue, from source: ReadingQueue) {
+        if source.id != queue.id {
+            ReadingQueueService.move(works, from: source, to: queue, in: context)
+            if KeepOffline.queueKeeps(queue.keepsWorksOffline) {
+                downloadQueue.enqueue(KeepOffline.downloadItems(for: works).map { item in
+                    var item = item
+                    item.requiresOfflineQueue = true
+                    return item
+                }, into: context)
+            }
+            UserDefaults.standard.set(queue.id.uuidString, forKey: "lastAddedReadingQueueID")
+        }
+        sourceQueue = nil
+        dismiss()
     }
 
     private func seriesCompletionText(_ result: ReadingQueueService.SeriesPreservationResult) -> String {
@@ -633,15 +650,14 @@ struct AddToQueueView: View {
         guard !trimmed.isEmpty else { return }
         let queue = ReadingQueueService.createQueue(named: trimmed, in: context)
         newName = ""
+        if let sourceQueue {
+            move(to: queue, from: sourceQueue)
+            return
+        }
         workingQueueIDs.insert(queue.id)
         Task {
             for work in works {
                 _ = await ReadingQueueService.addAndPreserve(work, to: queue, in: context)
-            }
-            if let movingFrom {
-                for work in works {
-                    ReadingQueueService.removeFromQueueAndDeleteIfQueueOnly(work, from: movingFrom, in: context)
-                }
             }
             UserDefaults.standard.set(queue.id.uuidString, forKey: "lastAddedReadingQueueID")
             workingQueueIDs.remove(queue.id)
