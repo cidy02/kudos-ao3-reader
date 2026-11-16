@@ -65,7 +65,7 @@ struct AO3HTMLDownloadTests {
 
     @Test func anHTMLDownloadBecomesTheEPUBAO3WouldHaveMade() async throws {
         let html = try Self.fixture("ao3_download_multi_chapter")
-        let fetch: @Sendable (URL, Int) async -> Data? = { $0.lastPathComponent == "map.png" ? Self.png : nil }
+        let fetch: @Sendable (URL, Int) async -> Data? = { url, _ in url.lastPathComponent == "map.png" ? Self.png : nil }
         let data = try #require(try await AO3HTMLDownloadConverter.epub(fromHTML: html, fetchImage: fetch))
         let url = try write(data)
         defer { try? FileManager.default.removeItem(at: url) }
