@@ -10,6 +10,9 @@ import Testing
 
     @Test func onlyAO3OverHTTPSStaysInTheWebView() {
         #expect(verdict("https://archiveofourown.org/works/1") == .allow)
+        #expect(verdict("https://archiveofourown.org/works/1?view_full_work=true") == .allow)
+        #expect(verdict("https://archiveofourown.org/works/1?view_adult=true") == .allow)
+        #expect(verdict("https://archiveofourown.org/works/1/chapters/2") == .allow)
         #expect(verdict("https://download.archiveofourown.org/x.epub") == .allow)
         #expect(verdict("https://example.com/") == .openOutside)
         #expect(verdict("http://archiveofourown.org/works/1") == .openOutside)

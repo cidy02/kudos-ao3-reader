@@ -21,7 +21,7 @@ nonisolated struct AO3Link: Equatable {
 
     init(_ url: URL) {
         guard let scheme = url.scheme?.lowercased(), ["http", "https"].contains(scheme),
-              let host = url.host?.lowercased(),
+              url.port == nil, let host = url.host?.lowercased(),
               host == "ao3.org" || host == "archiveofourown.org"
                 || host.hasSuffix(".archiveofourown.org")
         else {
@@ -29,13 +29,14 @@ nonisolated struct AO3Link: Equatable {
             return
         }
 
-        let parts = url.pathComponents.filter { $0 != "/" }
+        let parts = url.path(percentEncoded: true).split(separator: "/")
+            .map { String($0).removingPercentEncoding ?? String($0) }
         func positiveID(_ value: String) -> Int? {
-            guard let id = Int(value), id > 0 else { return nil }
+            guard !value.isEmpty, value.utf8.allSatisfy({ (48...57).contains($0) }),
+                  let id = Int(value), id > 0 else { return nil }
             return id
         }
         // Swift has no array patterns: match on the count, then the fixed words.
-        func decoded(_ text: String) -> String { text.removingPercentEncoding ?? text }
         switch (parts.count, parts.first) {
         case (2, "works") where parts[1] == "search":
             kind = .search
@@ -50,15 +51,26 @@ nonisolated struct AO3Link: Equatable {
         case (2, "series"):
             kind = positiveID(parts[1]).map(Kind.series) ?? .otherAO3
         case (2, "users"):
-            kind = .user(username: decoded(parts[1]), pseud: nil)
+            kind = ["login", "logout", "new", "password"].contains(parts[1])
+                ? .otherAO3 : .user(username: parts[1], pseud: nil)
         case (4, "users") where parts[2] == "pseuds":
-            kind = .user(username: decoded(parts[1]), pseud: decoded(parts[3]))
+            kind = .user(username: parts[1], pseud: parts[3])
+        case (2, "tags"):
+            kind = .tag(Self.unmungeTag(parts[1]))
         case (3, "tags") where parts[2] == "works":
-            kind = .tag(parts[1])
+            kind = .tag(Self.unmungeTag(parts[1]))
         case (2, "collections"):
             kind = .collection(parts[1])
         default:
             kind = .otherAO3
         }
+    }
+
+    static func unmungeTag(_ slug: String) -> String {
+        slug.replacingOccurrences(of: "*s*", with: "/")
+            .replacingOccurrences(of: "*a*", with: "&")
+            .replacingOccurrences(of: "*d*", with: ".")
+            .replacingOccurrences(of: "*q*", with: "?")
+            .replacingOccurrences(of: "*h*", with: "#")
     }
 }

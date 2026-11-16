@@ -1022,6 +1022,8 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
 
     private func runSearch() {
         if let url = URL(string: localQuery), AO3Link(url).kind != .notAO3 {
+            router.panel = .none
+            filters.query = ""
             router.openAO3Link(url)
             return
         }

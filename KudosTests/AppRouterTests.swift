@@ -531,17 +531,26 @@ struct AppRouterTests {
     }
 
     @Test func unmungesTagSlug() {
-        #expect(AppRouter.unmungeTag("Kara%20Danvers*s*Lena%20Luthor") == "Kara Danvers/Lena Luthor")
+        #expect(AppRouter.unmungeTag("Kara Danvers*s*Lena Luthor") == "Kara Danvers/Lena Luthor")
+        #expect(AppRouter.unmungeTag("Literal%20Name") == "Literal%20Name")
         #expect(AppRouter.unmungeTag("Fluff") == "Fluff")
         #expect(AppRouter.unmungeTag("Tony*a*Pepper") == "Tony&Pepper")
     }
 
-    @Test func tagLinkRoutesToNativeTagWorks() {
+    @Test(arguments: ["/tags/Fluff", "/tags/Fluff/works"])
+    func tagLinkRoutesToNativeTagWorks(path: String) {
         let router = AppRouter()
-        router.openAO3Link(URL(string: "https://archiveofourown.org/tags/Fluff/works")!)
+        router.openAO3Link(URL(string: "https://archiveofourown.org\(path)")!)
         #expect(router.pendingTagWorks?.title == "Fluff")
         #expect(router.selection == .browse)
         #expect(router.pendingURL == nil)
+    }
+
+    @Test func encodedSlashTagInfoURLBecomesAWorksListing() {
+        let router = AppRouter()
+        router.openAO3Link(URL(string: "https://archiveofourown.org/tags/A%2FB")!)
+        #expect(router.pendingTagWorks?.title == "A/B")
+        #expect(router.pendingTagWorks?.url.absoluteString == "https://archiveofourown.org/tags/A%2FB/works")
     }
 
     @Test(arguments: [
@@ -765,12 +774,66 @@ struct AppRouterTests {
         #expect(router.isPresentingWebBrowser == false)
     }
 
-    @Test func httpAO3TagLinkIsNotTreatedAsTrusted() {
+    @Test func httpAO3TagLinkUsesTrustedCanonicalURL() {
         let router = AppRouter()
         router.openAO3Link(URL(string: "http://archiveofourown.org/tags/Fluff/works")!)
-        #expect(router.pendingTagWorks == nil)
+        #expect(router.pendingTagWorks?.url.absoluteString == "https://archiveofourown.org/tags/Fluff/works")
         #expect(router.pendingURL == nil)
         #expect(router.isPresentingWebBrowser == false)
+    }
+
+    @Test func shortHostUsesNativeAuthorAndTagRoutes() {
+        let author = AppRouter()
+        author.openAO3Link(URL(string: "https://ao3.org/users/someone")!)
+        #expect(author.pendingAuthorProfile == AO3AuthorRoute(username: "someone"))
+        let tag = AppRouter()
+        tag.openAO3Link(URL(string: "https://ao3.org/tags/Fluff")!)
+        #expect(tag.pendingTagWorks?.url.host == "archiveofourown.org")
+    }
+
+    @Test func secondWorkLinkReplacesRouteEvenWhileSheetIsVisible() {
+        let router = AppRouter()
+        router.openAO3Link(URL(string: "https://archiveofourown.org/works/111")!)
+        let firstEpoch = router.workLinkEpoch
+        router.openAO3Link(URL(string: "https://archiveofourown.org/works/222/chapters/333")!)
+        #expect(router.pendingWorkLink?.id == 222)
+        #expect(router.pendingWorkLink?.chapterID == 333)
+        #expect(router.workLinkEpoch > firstEpoch)
+    }
+
+    @Test func workLinkWaitsForWebsiteOrAccountSheetToDismiss() {
+        let browser = AppRouter()
+        browser.isPresentingWebBrowser = true
+        browser.openAO3Link(URL(string: "https://archiveofourown.org/works/123")!)
+        #expect(!browser.isPresentingWebBrowser)
+        #expect(!browser.isPresentingLinkedWork)
+        #expect(browser.pendingWorkLink?.id == 123)
+
+        let account = AppRouter()
+        account.isPresentingAccount = true
+        account.openAO3Link(URL(string: "https://archiveofourown.org/works/123")!)
+        #expect(!account.isPresentingAccount)
+        #expect(!account.isPresentingLinkedWork)
+        #expect(account.pendingWorkLink?.id == 123)
+    }
+
+    @Test func restrictedWorkLoginKeepsChapterAndDismissesLandingFirst() {
+        let router = AppRouter()
+        router.openAO3Link(URL(string: "https://archiveofourown.org/works/123/chapters/456")!)
+        router.requestLinkedWorkLogin(sessionGeneration: 7)
+        #expect(!router.isPresentingLinkedWork)
+        #expect(router.pendingLoginWorkLink?.id == 123)
+        #expect(router.pendingLoginWorkLink?.chapterID == 456)
+        #expect(router.pendingLoginSessionGeneration == 7)
+    }
+
+    @Test func landingTagTapStaysInItsSheet() {
+        let router = AppRouter()
+        router.isPresentingLinkedWork = true
+        router.searchAO3(.fandom, "Some Fandom")
+        #expect(router.pendingLandingTagSearch?.value == "Some Fandom")
+        #expect(router.pendingTagSearch == nil)
+        #expect(router.selection == .home)
     }
 
     @Test func malformedAndNonAO3UserURLsAreNotAuthorRoutes() {

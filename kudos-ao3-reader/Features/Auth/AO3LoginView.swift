@@ -29,6 +29,7 @@ struct AO3InvitationRequestLink: View {
 /// deliberately switches to the visible fallback.
 struct AO3LoginView: View {
     var contextMessage: String? = nil
+    var contextURL: URL? = nil
     @Environment(\.dismiss) private var dismiss
     @Environment(AO3AuthService.self) private var auth
     @Environment(AppRouter.self) private var router
@@ -141,11 +142,18 @@ struct AO3LoginView: View {
         ScrollView {
             VStack(spacing: 14) {
                 if let contextMessage {
-                    Label(contextMessage, systemImage: "lock")
-                        .font(.subheadline)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Label(contextMessage, systemImage: "lock")
+                            .font(.subheadline.weight(.semibold))
+                        if let contextURL {
+                            Text(contextURL.absoluteString)
+                                .font(.caption)
+                                .textSelection(.enabled)
+                        }
+                    }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(14)
-                        .background(themeManager.appTheme.cardSurface, in: RoundedRectangle(cornerRadius: 16))
+                        .background(Color.orange.opacity(0.14), in: RoundedRectangle(cornerRadius: 16))
                 }
                 HStack(alignment: .top, spacing: 10) {
                     Image(systemName: "lock")

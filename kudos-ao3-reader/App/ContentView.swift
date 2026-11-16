@@ -74,17 +74,60 @@ struct ContentView: View {
             }
             // Home's profile control opens Account as a self-contained sheet.
             // Root-hosting also gives restored/deep-linked Account routes one sink.
-            .sheet(isPresented: $router.isPresentingAccount, onDismiss: router.accountDidDismiss) {
+            .sheet(isPresented: $router.isPresentingAccount, onDismiss: {
+                router.accountDidDismiss()
+                if router.pendingWorkLink != nil { router.isPresentingLinkedWork = true }
+            }) {
                 AccountView()
             }
             // AO3 website sheet is root-hosted so `router.open` never switches the
             // user into Browse — Done returns them to the tab they left.
-            .sheet(isPresented: $router.isPresentingWebBrowser) {
+            .sheet(isPresented: Binding(
+                get: {
+                    router.isPresentingWebBrowser && !router.isPresentingLinkedWork
+                        && !router.isPresentingLinkedWorkLogin
+                },
+                set: { router.isPresentingWebBrowser = $0 }
+            ), onDismiss: {
+                if router.pendingWorkLink != nil { router.isPresentingLinkedWork = true }
+            }) {
                 AO3WebBrowserView()
             }
-            .sheet(isPresented: $router.isPresentingLinkedWork) {
+            .sheet(isPresented: Binding(
+                get: {
+                    router.isPresentingLinkedWork && !router.isPresentingAccount
+                        && router.panel == .none && !showingBugReport
+                        && whatsNewEntries.isEmpty && externalImport.pendingImport == nil
+                        && !onboardingPresented.wrappedValue && !syncFolderOnboardingPresented.wrappedValue
+                },
+                set: { router.isPresentingLinkedWork = $0 }
+            ), onDismiss: {
+                router.pendingWorkLink = nil
+                if router.pendingLoginWorkLink != nil { router.isPresentingLinkedWorkLogin = true }
+            }) {
                 if let link = router.pendingWorkLink {
-                    LinkedWorkLandingView(workID: link.id)
+                    LinkedWorkLandingView(workID: link.id, chapterID: link.chapterID)
+                        .id(router.workLinkEpoch)
+                }
+            }
+            .sheet(isPresented: $router.isPresentingLinkedWorkLogin, onDismiss: {
+                if let link = router.pendingLoginWorkLink, auth.isLoggedIn,
+                   auth.sessionGeneration != router.pendingLoginSessionGeneration {
+                    let url = link.chapterID.map {
+                        AO3Client.chapterURL(workID: link.id, chapterID: $0)
+                    } ?? AO3Client.workURL(workID: link.id)
+                    router.pendingLoginWorkLink = nil
+                    router.pendingLoginSessionGeneration = nil
+                    router.openAO3Link(url)
+                } else {
+                    router.pendingLoginWorkLink = nil
+                    router.pendingLoginSessionGeneration = nil
+                    if router.pendingWorkLink != nil { router.isPresentingLinkedWork = true }
+                }
+            }) {
+                if let link = router.pendingLoginWorkLink {
+                    AO3LoginView(contextMessage: "Restricted work",
+                                 contextURL: AO3Client.workURL(workID: link.id))
                 }
             }
             #if DEBUG

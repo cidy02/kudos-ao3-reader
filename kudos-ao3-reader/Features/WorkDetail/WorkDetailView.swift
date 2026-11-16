@@ -6,6 +6,15 @@ import SwiftUI
 // WorkDetailOverviewSections.swift / WorkDetailSections.swift.
 // swiftlint:disable file_length
 
+enum LinkedChapterTarget {
+    static func spineIndex(
+        chapterID: Int, chapters: [AO3ChapterRef], sections: [ReaderSection]
+    ) -> Int? {
+        guard let position = chapters.first(where: { $0.id == chapterID })?.position else { return nil }
+        return sections.spineIndex(forStoryChapter: position)
+    }
+}
+
 /// The single, canonical work-detail screen — used for **every** work the app can open,
 /// whether it's a locally saved work or a remote AO3 summary (Home, Library, Browse,
 /// Search, Bookmarks, AO3 lists, …). There is no separate "compact" remote detail.
@@ -27,20 +36,23 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     }
 
     let source: Source
+    let linkedChapterID: Int?
     /// True only for the title-pill sheet the reader itself presents (A2).
     /// That sheet's `WorkDetailView` is always the reader's *own* work, so
     /// `read()` has nothing useful to push — it dismisses back to the live
     /// reader underneath instead of stacking a second reader on top of it.
     private let openedFromReader: Bool
 
-    init(work: SavedWork, openedFromReader: Bool = false) {
+    init(work: SavedWork, openedFromReader: Bool = false, linkedChapterID: Int? = nil) {
         source = .saved(work)
         self.openedFromReader = openedFromReader
+        self.linkedChapterID = linkedChapterID
     }
 
-    init(remote: AO3WorkSummary) {
+    init(remote: AO3WorkSummary, linkedChapterID: Int? = nil) {
         source = .remote(remote)
         openedFromReader = false
+        self.linkedChapterID = linkedChapterID
     }
 
     @Environment(\.modelContext) var context
@@ -106,6 +118,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
     }
     #endif
     @State private var readerWork: SavedWork? // non-nil → push the reader
+    @State private var readerInitialSpineIndex: Int?
     /// The speaker button's push: the reader starts Read Aloud once the book is ready.
     @State private var readerStartsReadAloud = false
     @State var queuingSeries = false
@@ -220,7 +233,8 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         // BookReaderView routes to the Readium navigator on iOS, the legacy reader on
         // macOS — so the unified detail opens the right reader on this branch.
         .navigationDestination(item: $readerWork) {
-            BookReaderView(work: $0, startsReadAloud: readerStartsReadAloud)
+            BookReaderView(work: $0, startsReadAloud: readerStartsReadAloud,
+                           initialSpineIndex: readerInitialSpineIndex)
         }
         .sheet(isPresented: $showingAddToCollection) {
             if let work = localWork {
@@ -1270,8 +1284,12 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
         }
         withLocalWork { work in
             if WorkReaderPreparation.hasReadableEPUB(for: work) {
-                if openingContents { router.panel = .readerChapters }
-                readerWork = work
+                if linkedChapterID != nil {
+                    Task { await openLinkedChapter(in: work, openingContents: openingContents) }
+                } else {
+                    if openingContents { router.panel = .readerChapters }
+                    readerWork = work
+                }
                 return
             }
             // Freed history entry: re-download into the existing record, keeping its id
@@ -1282,8 +1300,12 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                 do {
                     try await WorkReaderPreparation.restoreReadableEPUB(for: work, in: context)
                     working = false
-                    if openingContents { router.panel = .readerChapters }
-                    readerWork = work
+                    if linkedChapterID != nil {
+                        await openLinkedChapter(in: work, openingContents: openingContents)
+                    } else {
+                        if openingContents { router.panel = .readerChapters }
+                        readerWork = work
+                    }
                 } catch let error as AO3Error {
                     loadError = error.errorDescription
                     working = false
@@ -1292,6 +1314,48 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                     working = false
                 }
             }
+        }
+    }
+
+    private func openLinkedChapter(in work: SavedWork, openingContents: Bool) async {
+        guard let linkedChapterID, let workID = ao3WorkID else { return }
+        working = true
+        defer { working = false }
+        do {
+            let generation = auth.sessionGeneration
+            let request = auth.isLoggedIn
+                ? try auth.authenticatedRequest(for: AO3Client.chapterIndexURL(workID: workID)) : nil
+            let chapters = try await AO3RequestCoordinator.shared.withSlot {
+                try await AO3Client.shared.chapterIndex(workID: workID, request: request)
+            }
+            guard auth.sessionGeneration == generation else { throw CancellationError() }
+            let fileURL = work.fileURL
+            let directory = FileManager.default.temporaryDirectory
+                .appendingPathComponent("linked-chapter-\(UUID().uuidString)", isDirectory: true)
+            let sections = try await Task.detached(priority: .userInitiated) {
+                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                defer { try? FileManager.default.removeItem(at: directory) }
+                let document = try EPUBDocument.open(epubURL: fileURL, into: directory)
+                return ReaderSectionBuilder.build(
+                    tocEntries: document.chapters.map {
+                        ReaderSectionBuilder.RawTOCEntry(title: $0.title, spineIndex: $0.spineIndex)
+                    }, spineHrefs: document.spineURLs.map(\.absoluteString)
+                )
+            }.value
+            guard auth.sessionGeneration == generation, !Task.isCancelled else { throw CancellationError() }
+            guard let spineIndex = LinkedChapterTarget.spineIndex(
+                chapterID: linkedChapterID, chapters: chapters, sections: sections
+            ) else {
+                loadError = "This chapter is not in the downloaded work."
+                return
+            }
+            readerInitialSpineIndex = spineIndex
+            if openingContents { router.panel = .readerChapters }
+            readerWork = work
+        } catch is CancellationError {
+            return
+        } catch {
+            loadError = WorkMetadataRefresh.message(for: error)
         }
     }
 

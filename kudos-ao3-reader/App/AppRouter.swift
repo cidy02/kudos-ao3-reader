@@ -190,9 +190,8 @@ struct AO3TagWorksRequest: Hashable {
     /// Links that already point at `/works` (or at a sub-listing like
     /// `/bookmarks`) are left alone.
     private static func worksListing(for url: URL) -> URL {
-        var parts = url.pathComponents.filter { $0 != "/" }
-        guard parts.first == "tags", parts.count == 2 else { return url }
-        parts.append("works")
+        guard case .tag = AO3Link(url).kind,
+              url.path(percentEncoded: true).split(separator: "/").count == 2 else { return url }
         guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return url }
         // Rebuilt from the *original* path, not from the decoded components: AO3
         // writes `&` in a tag path as `*a*` and percent-encodes the rest, and
@@ -377,7 +376,11 @@ final class AppRouter {
     /// does not switch the user into the Browse tab — Done returns them to
     /// whatever tab/subpage they came from.
     var isPresentingWebBrowser = false
-    var pendingWorkLink: (id: Int, chapterID: Int)?
+    var pendingWorkLink: (id: Int, chapterID: Int?)?
+    var pendingLoginWorkLink: (id: Int, chapterID: Int?)?
+    var pendingLoginSessionGeneration: Int?
+    var isPresentingLinkedWorkLogin = false
+    private(set) var workLinkEpoch = 0
     var isPresentingLinkedWork = false
     /// A tag the Library should filter by on its next appearance (e.g. tapped on a
     /// work's detail page). Consumed + cleared by `LibraryView`.
@@ -396,6 +399,7 @@ final class AppRouter {
     /// A tag the Search tab should search AO3 for (e.g. a tapped fandom/character/
     /// relationship chip). Consumed + cleared by `SearchView`.
     var pendingTagSearch: AO3TagSearch?
+    var pendingLandingTagSearch: AO3TagSearch?
     /// A tag's works page to show natively in Browse (e.g. an AO3 link tapped in a
     /// work's preface). Consumed + cleared by `BrowseView`.
     var pendingTagWorks: AO3TagWorksRequest?
@@ -442,15 +446,16 @@ final class AppRouter {
             openWebsiteAfterDismissingAccount(url)
             return
         }
-        if !AO3AuthorRoute.isAO3URL(url) {
+        let destination = Self.canonicalAO3URL(url)
+        if !AO3AuthorRoute.isAO3URL(destination) {
             #if os(macOS)
-            NSWorkspace.shared.open(url)
+            NSWorkspace.shared.open(destination)
             #else
-            UIApplication.shared.open(url)
+            UIApplication.shared.open(destination)
             #endif
             return
         }
-        pendingURL = url
+        pendingURL = destination
         isPresentingWebBrowser = true
     }
 
@@ -469,19 +474,46 @@ final class AppRouter {
         let link = AO3Link(url)
         if case let .work(id, chapterID) = link.kind {
             pendingWorkLink = (id, chapterID)
-            isPresentingLinkedWork = true
+            workLinkEpoch &+= 1
+            if isPresentingAccount {
+                isPresentingAccount = false
+            } else if isPresentingLinkedWorkLogin {
+                pendingLoginWorkLink = nil
+                isPresentingLinkedWorkLogin = false
+            } else if isPresentingWebBrowser && !isPresentingLinkedWork {
+                isPresentingWebBrowser = false
+            } else {
+                isPresentingWebBrowser = false
+                isPresentingLinkedWork = true
+            }
             return
         }
-        if link.kind != .notAO3, let author = Self.authorRoute(for: url) {
+        let destination = Self.canonicalAO3URL(url)
+        if link.kind != .notAO3, let author = Self.authorRoute(for: destination) {
             openAuthorProfile(author)
             return
         }
-        if case let .tag(tag) = link.kind, AO3AuthorRoute.isAO3URL(url) {
-            pendingTagWorks = AO3TagWorksRequest(url: url, title: Self.unmungeTag(tag))
+        if case let .tag(tag) = link.kind, AO3AuthorRoute.isAO3URL(destination) {
+            pendingTagWorks = AO3TagWorksRequest(url: destination, title: tag)
             selection = .browse
             return
         }
-        open(url)
+        open(destination)
+    }
+
+    private static func canonicalAO3URL(_ url: URL) -> URL {
+        guard AO3Link(url).kind != .notAO3,
+              var parts = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return url }
+        parts.scheme = "https"
+        if parts.host?.lowercased() == "ao3.org" { parts.host = "archiveofourown.org" }
+        return parts.url ?? url
+    }
+
+    func requestLinkedWorkLogin(sessionGeneration: Int) {
+        guard let pendingWorkLink else { return }
+        pendingLoginWorkLink = pendingWorkLink
+        pendingLoginSessionGeneration = sessionGeneration
+        isPresentingLinkedWork = false
     }
 
     /// Pushes a verified author route without changing tabs. Keeping the current
@@ -820,14 +852,9 @@ final class AppRouter {
         AO3AuthorRoute(url: url)
     }
 
-    /// Turns an AO3 tag URL slug back into a readable name (AO3 escapes `/ & . ? #`).
+    /// Turns a once-decoded AO3 tag slug into a readable name.
     static func unmungeTag(_ slug: String) -> String {
-        (slug.removingPercentEncoding ?? slug)
-            .replacingOccurrences(of: "*s*", with: "/")
-            .replacingOccurrences(of: "*a*", with: "&")
-            .replacingOccurrences(of: "*d*", with: ".")
-            .replacingOccurrences(of: "*q*", with: "?")
-            .replacingOccurrences(of: "*h*", with: "#")
+        AO3Link.unmungeTag(slug)
     }
 
     /// Switches to the Library and filters it to works containing `value` in `field`.
@@ -852,6 +879,10 @@ final class AppRouter {
     /// Switches to Search and runs an AO3 search for `value` in the given tag `field`
     /// (a tapped fandom/character/relationship/freeform chip → "more works with this").
     func searchAO3(_ field: AO3TagSearch.Field, _ value: String) {
+        if isPresentingLinkedWork {
+            pendingLandingTagSearch = AO3TagSearch(field: field, value: value, isFreshTabJump: false)
+            return
+        }
         let isFreshTabJump = selection != .search
         pendingTagSearch = AO3TagSearch(field: field, value: value, isFreshTabJump: isFreshTabJump)
         selection = .search

@@ -919,8 +919,9 @@ enum ReadingQueueService {
     }
 
     static func ao3SeriesID(from urlString: String) -> Int? {
-        guard let url = URL(string: urlString) else { return nil }
-        guard case let .series(id) = AO3Link(url).kind else { return nil }
+        guard let url = URL(string: urlString, relativeTo: URL(string: "https://archiveofourown.org")),
+              urlString.hasPrefix("/") || url.scheme != nil else { return nil }
+        guard case let .series(id) = AO3Link(url.absoluteURL).kind else { return nil }
         return id
     }
 
