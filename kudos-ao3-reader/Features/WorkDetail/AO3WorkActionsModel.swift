@@ -7,6 +7,9 @@ import SwiftUI
 @MainActor
 @Observable
 final class AO3WorkActionsModel {
+    typealias SubscribeHandler = @MainActor (Int, Bool, AO3AuthService) async throws -> String
+    typealias WorkActionStatesHandler = @MainActor (Int, AO3AuthService) async throws -> AO3WorkActionStates
+
     /// True while a write is in flight (disables re-taps; shows progress).
     var isWorking = false
     /// A short error or non-kudos/bookmark result shown as a host alert.
@@ -42,6 +45,36 @@ final class AO3WorkActionsModel {
     private var isFetchingWorkPageStates = false
     private var workPageStatesRevision = 0
     private var activeTask: Task<Void, Never>?
+    private var stateFetchTask: Task<Void, Never>?
+    private let subscribeHandler: SubscribeHandler
+    private let workActionStatesHandler: WorkActionStatesHandler
+
+    init(
+        using client: AO3Client = .shared,
+        subscribeHandler: SubscribeHandler? = nil,
+        workActionStatesHandler: WorkActionStatesHandler? = nil
+    ) {
+        self.subscribeHandler = subscribeHandler ?? { workID, want, auth in
+            try await auth.toggleSubscribe(workID: workID, to: want, using: client)
+        }
+        if let workActionStatesHandler {
+            self.workActionStatesHandler = workActionStatesHandler
+        } else if subscribeHandler != nil {
+            self.workActionStatesHandler = { _, _ in throw CancellationError() }
+        } else {
+            self.workActionStatesHandler = { workID, auth in
+                try await auth.workActionStates(workID: workID, using: client)
+            }
+        }
+    }
+
+    func waitForCurrentTask() async {
+        await activeTask?.value
+    }
+
+    func waitForStateFetch() async {
+        await stateFetchTask?.value
+    }
 
     /// One work-page GET, only when signed in and only once per work/session
     /// (or when `force`d after a write). Advisory labels only — see
@@ -73,7 +106,7 @@ final class AO3WorkActionsModel {
         guard !isFetchingWorkPageStates else { return }
         isFetchingWorkPageStates = true
         let revision = workPageStatesRevision
-        Task {
+        stateFetchTask = Task {
             defer {
                 if workPageStatesWorkID == workID,
                    workPageStatesGeneration == expectedGeneration,
@@ -81,7 +114,7 @@ final class AO3WorkActionsModel {
                     isFetchingWorkPageStates = false
                 }
             }
-            let states = try? await auth.workActionStates(workID: workID)
+            let states = try? await workActionStatesHandler(workID, auth)
             // A slow response for a previous work or session must not label this one.
             guard auth.sessionGeneration == expectedGeneration,
                   workPageStatesWorkID == workID,
@@ -127,7 +160,7 @@ final class AO3WorkActionsModel {
     func subscribe(workID: Int, to want: Bool, auth: AO3AuthService, onSubscribed: (() -> Void)? = nil) {
         let expectedGeneration = auth.sessionGeneration
         run(auth: auth) {
-            let message = try await auth.toggleSubscribe(workID: workID, to: want)
+            let message = try await self.subscribeHandler(workID, want, auth)
             guard auth.sessionGeneration == expectedGeneration else { throw CancellationError() }
             if self.workPageStatesWorkID == nil || self.workPageStatesWorkID == workID {
                 let sameScope = self.workPageStatesWorkID == workID

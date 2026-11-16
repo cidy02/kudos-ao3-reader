@@ -3,21 +3,44 @@ import Testing
 @testable import Kudos
 
 private final class WorkSubscribeStub: URLProtocol, @unchecked Sendable {
+    struct Hit: Sendable {
+        var method: String
+        var url: URL
+        var body: String
+        var referer: String?
+        var csrfHeader: String?
+    }
+
     private static let lock = NSLock()
     private static var html = ""
-    private static var methods: [String] = []
+    private static var postStatus = 200
+    private static var postBody = ""
+    private static var responder: (@Sendable (URLRequest) -> (status: Int, body: String))?
+    private static var hits: [Hit] = []
 
-    static func reset(html: String) {
+    static func reset(
+        html: String = "",
+        postStatus: Int = 200,
+        postBody: String = #"<div class="flash notice">You are now following A Quiet Harbour.</div>"#,
+        responder: (@Sendable (URLRequest) -> (status: Int, body: String))? = nil
+    ) {
         lock.lock()
         self.html = html
-        methods = []
+        self.postStatus = postStatus
+        self.postBody = postBody
+        self.responder = responder
+        hits = []
         lock.unlock()
     }
 
     static func recordedMethods() -> [String] {
+        recordedHits().map(\.method)
+    }
+
+    static func recordedHits() -> [Hit] {
         lock.lock()
         defer { lock.unlock() }
-        return methods
+        return hits
     }
 
     override class func canInit(with request: URLRequest) -> Bool { true }
@@ -28,23 +51,59 @@ private final class WorkSubscribeStub: URLProtocol, @unchecked Sendable {
             client?.urlProtocol(self, didFailWithError: URLError(.badURL))
             return
         }
+        let method = request.httpMethod ?? "GET"
+        let hit = Hit(
+            method: method,
+            url: url,
+            body: Self.bodyText(of: request),
+            referer: request.value(forHTTPHeaderField: "Referer"),
+            csrfHeader: request.value(forHTTPHeaderField: "X-CSRF-Token")
+        )
         Self.lock.lock()
-        Self.methods.append(request.httpMethod ?? "GET")
+        Self.hits.append(hit)
         let html = Self.html
+        let postStatus = Self.postStatus
+        let postBody = Self.postBody
+        let responder = Self.responder
         Self.lock.unlock()
+
+        let (status, body): (Int, String) = if let responder {
+            responder(request)
+        } else if method == "GET" {
+            (200, html)
+        } else {
+            (postStatus, postBody)
+        }
         let response = HTTPURLResponse(
-            url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil
+            url: url, statusCode: status, httpVersion: "HTTP/1.1", headerFields: nil
         )!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: Data(html.utf8))
+        client?.urlProtocol(self, didLoad: Data(body.utf8))
         client?.urlProtocolDidFinishLoading(self)
     }
 
     override func stopLoading() {}
+
+    /// URLSession hands a protocol its POST body as a stream.
+    private static func bodyText(of request: URLRequest) -> String {
+        if let data = request.httpBody { return String(bytes: data, encoding: .utf8) ?? "" }
+        guard let stream = request.httpBodyStream else { return "" }
+        stream.open()
+        defer { stream.close() }
+        var data = Data()
+        var buffer = [UInt8](repeating: 0, count: 4096)
+        while stream.hasBytesAvailable {
+            let count = stream.read(&buffer, maxLength: buffer.count)
+            guard count > 0 else { break }
+            data.append(buffer, count: count)
+        }
+        return String(bytes: data, encoding: .utf8) ?? ""
+    }
 }
 
 /// Covers offline parsing, form encoding, and the work Subscribe decision with a
 /// URLProtocol stub. The actual POST endpoints remain unverified against live AO3.
+@Suite(.serialized)
 struct AO3WriteActionsTests {
     @Test func parsesCSRFTokenFromMetaTag() {
         let html = """
@@ -343,6 +402,8 @@ struct AO3WriteActionsTests {
     @MainActor
     @Test func commentFormURLsRenderTheActualForms() {
         // Top-level: the interstitial hides the form without `view_adult=true`.
+        #expect(AO3AuthService.workFormURL(workID: 42).absoluteString
+            == "https://archiveofourown.org/works/42?view_adult=true")
         #expect(AO3AuthService.commentFormURL(workID: 42).absoluteString
             == "https://archiveofourown.org/works/42?view_adult=true")
         // Reply: only the focused thread page renders `form#comment_for_<parent>`.
@@ -415,6 +476,409 @@ struct AO3WriteActionsTests {
         let subscribed = try await auth.toggleSubscribe(workID: 42, to: true, using: client)
         #expect(subscribed == "You're already subscribed.")
         #expect(WorkSubscribeStub.recordedMethods() == ["GET"])
+    }
+
+    @MainActor
+    private func makeSignedInAuth(username: String = "alice") async -> AO3AuthService {
+        let auth = AO3AuthService(
+            vault: MemoryAO3SessionVault(),
+            validator: InboxTestSessionValidator(),
+            loginPerformer: DynamicInboxTestLoginPerformer(),
+            cookieManager: MockAO3CookieManager(),
+            removalTracker: MemoryAO3SessionRemovalTracker()
+        )
+        await auth.login(username: username, password: "pw")
+        return auth
+    }
+
+    private func stubWorkClient() -> AO3Client {
+        let config = AO3Client.makeAnonymousSessionConfiguration()
+        config.protocolClasses = [WorkSubscribeStub.self]
+        return AO3Client(session: URLSession(configuration: config), paceSleep: { _ in })
+    }
+
+    private func formFields(_ body: String) -> [String: String] {
+        var result: [String: String] = [:]
+        for pair in body.split(separator: "&") {
+            let parts = pair.split(separator: "=", maxSplits: 1).map(String.init)
+            let key = parts[0].removingPercentEncoding ?? parts[0]
+            result[key] = parts.count > 1 ? (parts[1].removingPercentEncoding ?? parts[1]) : ""
+        }
+        return result
+    }
+
+    private func workSubscribeHTML(subscriptionID: Int? = nil) -> String {
+        let form: String
+        if let subscriptionID {
+            form = """
+            <form action="/users/alice/subscriptions/\(subscriptionID)" method="post">
+              <input type="hidden" name="_method" value="delete">
+              <input type="submit" value="Unsubscribe">
+            </form>
+            """
+        } else {
+            form = """
+            <form action="/users/alice/subscriptions" method="post">
+              <input type="hidden" name="subscription[subscribable_id]" value="42">
+              <input type="hidden" name="subscription[subscribable_type]" value="Work">
+              <input type="submit" value="Subscribe">
+            </form>
+            """
+        }
+        return """
+        <html><head><meta name="csrf-token" content="work-csrf"></head><body class="logged-in">\(form)</body></html>
+        """
+    }
+
+    @MainActor
+    @Test func workSubscribePostsCreateAndDeleteWithWorkType() async throws {
+        let auth = await makeSignedInAuth()
+
+        // 1. Create POST for Work + flash notice confirmation.
+        WorkSubscribeStub.reset(
+            html: workSubscribeHTML(),
+            postBody: #"<div class="flash notice">You are now following A Quiet Harbour.</div>"#
+        )
+        let subMessage = try await auth.toggleSubscribe(workID: 42, to: true, using: stubWorkClient())
+        #expect(subMessage == "Subscribed.")
+        let createHits = WorkSubscribeStub.recordedHits()
+        #expect(createHits.count == 2)
+        #expect(createHits[0].method == "GET")
+        #expect(createHits[0].url.absoluteString == "https://archiveofourown.org/works/42?view_adult=true")
+        let createPost = createHits[1]
+        #expect(createPost.method == "POST")
+        #expect(createPost.url.absoluteString == "https://archiveofourown.org/users/alice/subscriptions")
+        #expect(createPost.referer == "https://archiveofourown.org/works/42?view_adult=true")
+        #expect(createPost.csrfHeader == "work-csrf")
+        let createFields = formFields(createPost.body)
+        #expect(createFields["authenticity_token"] == "work-csrf")
+        #expect(createFields["subscription[subscribable_id]"] == "42")
+        #expect(createFields["subscription[subscribable_type]"] == "Work")
+
+        // 2. Flashless 200 with summary prose saying "already subscribed" is unconfirmed.
+        WorkSubscribeStub.reset(
+            html: workSubscribeHTML(),
+            postStatus: 200,
+            postBody: "<div class='summary'><p>Reader note: already subscribed.</p></div>"
+        )
+        await #expect(throws: AO3WriteError.unconfirmed) {
+            _ = try await auth.toggleSubscribe(workID: 42, to: true, using: stubWorkClient())
+        }
+
+        // 3. Parsed error flash saying "already subscribed" returns the benign message.
+        WorkSubscribeStub.reset(
+            html: workSubscribeHTML(),
+            postStatus: 422,
+            postBody: #"<div class="flash error">You have already subscribed to this work.</div>"#
+        )
+        let already = try await auth.toggleSubscribe(workID: 42, to: true, using: stubWorkClient())
+        #expect(already == "You're already subscribed.")
+
+        // 4. Delete POST for Work.
+        WorkSubscribeStub.reset(
+            html: workSubscribeHTML(subscriptionID: 789),
+            postBody: #"<div class="flash notice">You have successfully unsubscribed from A Quiet Harbour.</div>"#
+        )
+        let unsubMessage = try await auth.toggleSubscribe(workID: 42, to: false, using: stubWorkClient())
+        #expect(unsubMessage == "Unsubscribed.")
+        let deleteHits = WorkSubscribeStub.recordedHits()
+        #expect(deleteHits.count == 2)
+        let deletePost = deleteHits[1]
+        #expect(deletePost.method == "POST")
+        #expect(deletePost.url.absoluteString == "https://archiveofourown.org/users/alice/subscriptions/789")
+        let deleteFields = formFields(deletePost.body)
+        #expect(deleteFields["_method"] == "delete")
+        #expect(deleteFields["authenticity_token"] == "work-csrf")
+    }
+
+    @MainActor
+    @Test func workSubscribeUsesViewAdultToBypassAdultInterstitial() async throws {
+        let auth = await makeSignedInAuth()
+        let subscribedFixture = try workFixture("ao3_work_bookmarked_subscribed")
+            .replacingOccurrences(of: "<body>", with: "<body class=\"logged-in\">")
+        let interstitial = """
+        <html><head><meta name="csrf-token" content="interstitial-csrf"></head>
+        <body class="logged-in"><p class="caution notice">This work could have adult content.</p>
+        <a href="/works/42?view_adult=true">Proceed</a></body></html>
+        """
+
+        WorkSubscribeStub.reset(responder: { request in
+            let hasViewAdult = request.url?.query?.contains("view_adult=true") == true
+            if request.httpMethod == "GET" {
+                return (200, hasViewAdult ? subscribedFixture : interstitial)
+            }
+            return (200, #"<div class="flash notice">Unsubscribed.</div>"#)
+        })
+
+        let states = try await auth.workActionStates(workID: 42, using: stubWorkClient())
+        #expect(states.isSubscribed)
+        #expect(states.existingBookmark?.editPath == "/bookmarks/2997787566")
+
+        WorkSubscribeStub.reset(responder: { request in
+            let hasViewAdult = request.url?.query?.contains("view_adult=true") == true
+            if request.httpMethod == "GET" {
+                return (200, hasViewAdult ? subscribedFixture : interstitial)
+            }
+            return (200, #"<div class="flash notice">Unsubscribed.</div>"#)
+        })
+        let message = try await auth.toggleSubscribe(workID: 42, to: false, using: stubWorkClient())
+        #expect(message == "Unsubscribed.")
+        let hits = WorkSubscribeStub.recordedHits()
+        #expect(hits.map(\.method) == ["GET", "POST"])
+        #expect(hits[0].url.absoluteString == "https://archiveofourown.org/works/42?view_adult=true")
+        #expect(hits[1].url.absoluteString == "https://archiveofourown.org/users/AddictedFicLover/subscriptions/757074859")
+    }
+
+    @MainActor
+    @Test func workSubscribeLoggedOutAndUnrecognisedPagesWriteNothing() async throws {
+        let auth = await makeSignedInAuth()
+        let loggedOut = """
+        <html><head><meta name="csrf-token" content="guest"></head><body class="works-show">
+          <div id="header"><a href="/users/login">Log In</a></div>
+        </body></html>
+        """
+        for want: Bool? in [nil, false, true] {
+            WorkSubscribeStub.reset(html: loggedOut)
+            await #expect(throws: AO3Error.authenticationRequired) {
+                _ = try await auth.toggleSubscribe(workID: 42, to: want, using: stubWorkClient())
+            }
+            #expect(WorkSubscribeStub.recordedMethods() == ["GET"])
+        }
+
+        let formless = """
+        <html><head><meta name="csrf-token" content="tok"></head><body class="logged-in">
+          <p class="caution notice">This work could have adult content.</p>
+        </body></html>
+        """
+        for want in [false, true] {
+            WorkSubscribeStub.reset(html: formless)
+            await #expect(throws: AO3Error.parse) {
+                _ = try await auth.toggleSubscribe(workID: 42, to: want, using: stubWorkClient())
+            }
+            #expect(WorkSubscribeStub.recordedMethods() == ["GET"])
+        }
+    }
+
+    @MainActor
+    @Test func malformedDeleteFormAndUntrustedDeletePathNeverClaimOrCreate() async throws {
+        let missingDeleteMethod = """
+        <html><head><meta name="csrf-token" content="tok"></head><body class="logged-in">
+          <form action="/users/alice/subscriptions/789" method="post">
+            <input type="submit" value="Unsubscribe">
+          </form>
+        </body></html>
+        """
+        let confirmDeleteAll = """
+        <form action="/users/alice/subscriptions/confirm_delete_all" method="post"></form>
+        """
+        let validCreateWithQuery = """
+        <form action="/users/alice/subscriptions?locale=en" method="post"></form>
+        """
+        #expect(!AO3Client.hasSubscribeForm(in: missingDeleteMethod))
+        #expect(!AO3Client.hasSubscribeForm(in: confirmDeleteAll))
+        #expect(AO3Client.hasSubscribeForm(in: validCreateWithQuery))
+
+        let auth = await makeSignedInAuth()
+        for want in [false, true] {
+            WorkSubscribeStub.reset(html: missingDeleteMethod)
+            await #expect(throws: AO3Error.parse) {
+                _ = try await auth.toggleSubscribe(workID: 42, to: want, using: stubWorkClient())
+            }
+            #expect(WorkSubscribeStub.recordedMethods() == ["GET"])
+        }
+
+        let untrustedDeletePaths = [
+            "https://evil.example/users/alice/subscriptions/789",
+            "http://[/subscriptions/789"
+        ]
+        for badAction in untrustedDeletePaths {
+            let html = """
+            <html><head><meta name="csrf-token" content="tok"></head><body class="logged-in">
+              <form action="\(badAction)" method="post">
+                <input type="hidden" name="_method" value="delete">
+              </form>
+            </body></html>
+            """
+            for want: Bool? in [nil, false, true] {
+                WorkSubscribeStub.reset(html: html)
+                await #expect(throws: AO3Error.parse) {
+                    _ = try await auth.toggleSubscribe(workID: 42, to: want, using: stubWorkClient())
+                }
+                #expect(WorkSubscribeStub.recordedMethods() == ["GET"])
+            }
+        }
+    }
+
+    // MARK: AO3WorkActionsModel subscribe & state fencing
+
+    @MainActor
+    @Test func workActionsModelUpdatesStateFromIntentEvenWhenWorkIDWasNil() async throws {
+        let auth = await makeSignedInAuth()
+        var recorded: [(Int, Bool)] = []
+        let model = AO3WorkActionsModel(subscribeHandler: { workID, want, _ in
+            recorded.append((workID, want))
+            return want ? "You're already subscribed." : "Unsubscribed."
+        })
+
+        var onSubscribedCount = 0
+        model.subscribe(workID: 42, to: true, auth: auth) { onSubscribedCount += 1 }
+        await model.waitForCurrentTask()
+        #expect(recorded == [(42, true)])
+        #expect(model.workPageStates?.isSubscribed == true)
+        #expect(model.banner == "You're already subscribed.")
+        #expect(model.writeSuccesses == 1)
+        #expect(onSubscribedCount == 1)
+
+        model.subscribe(workID: 42, to: false, auth: auth) { onSubscribedCount += 1 }
+        await model.waitForCurrentTask()
+        #expect(recorded == [(42, true), (42, false)])
+        #expect(model.workPageStates?.isSubscribed == false)
+        #expect(model.banner == "Unsubscribed.")
+        #expect(model.writeSuccesses == 2)
+        #expect(onSubscribedCount == 1)
+
+        let failing = AO3WorkActionsModel(subscribeHandler: { _, _, _ in
+            throw AO3WriteError.unconfirmed
+        })
+        var failingCallbackCount = 0
+        failing.subscribe(workID: 42, to: true, auth: auth) { failingCallbackCount += 1 }
+        await failing.waitForCurrentTask()
+        #expect(failing.workPageStates == nil)
+        #expect(failing.writeFailures == 1)
+        #expect(failingCallbackCount == 0)
+    }
+
+    @MainActor
+    @Test func workActionsModelKeepsExistingBookmarkAndRefreshesWhenStatesWereNil() async throws {
+        let auth = await makeSignedInAuth()
+        let savedBookmark = AO3ExistingBookmark(
+            editPath: "/bookmarks/99",
+            collectionNames: "",
+            input: AO3AuthService.BookmarkInput(notes: "Keep me", tags: "angst", isPrivate: true, isRec: false)
+        )
+
+        // Case A: workPageStates already synced -> subscribe keeps existingBookmark with no extra fetch.
+        var fetchCountA = 0
+        let modelA = AO3WorkActionsModel(
+            subscribeHandler: { _, want, _ in want ? "Subscribed." : "Unsubscribed." },
+            workActionStatesHandler: { _, _ in
+                fetchCountA += 1
+                return AO3WorkActionStates(isSubscribed: false, existingBookmark: savedBookmark)
+            }
+        )
+        modelA.refreshWorkPageStates(workID: 42, auth: auth)
+        await modelA.waitForStateFetch()
+        #expect(fetchCountA == 1)
+        modelA.subscribe(workID: 42, to: true, auth: auth)
+        await modelA.waitForCurrentTask()
+        #expect(fetchCountA == 1)
+        #expect(modelA.workPageStates?.isSubscribed == true)
+        #expect(modelA.workPageStates?.existingBookmark == savedBookmark)
+
+        // Case B: subscribe finishes while initial fetch is in flight -> old pre-write fetch is
+        // superseded and post-write refresh restores existingBookmark.
+        let firstFetchEntered = Signal()
+        let firstFetchRelease = Signal()
+        var fetchCountB = 0
+        let modelB = AO3WorkActionsModel(
+            subscribeHandler: { _, want, _ in want ? "Subscribed." : "Unsubscribed." },
+            workActionStatesHandler: { _, _ in
+                fetchCountB += 1
+                if fetchCountB == 1 {
+                    await firstFetchEntered.fire()
+                    await firstFetchRelease.wait()
+                    return AO3WorkActionStates(isSubscribed: false, existingBookmark: nil)
+                }
+                return AO3WorkActionStates(isSubscribed: true, existingBookmark: savedBookmark)
+            }
+        )
+        modelB.refreshWorkPageStates(workID: 42, auth: auth)
+        await firstFetchEntered.wait()
+        modelB.subscribe(workID: 42, to: true, auth: auth)
+        await modelB.waitForCurrentTask()
+        await modelB.waitForStateFetch()
+        await firstFetchRelease.fire()
+        await Task.yield()
+
+        #expect(fetchCountB == 2)
+        #expect(modelB.workPageStates?.isSubscribed == true)
+        #expect(modelB.workPageStates?.existingBookmark == savedBookmark)
+    }
+
+    @MainActor
+    @Test func workActionsModelIsolatesStatesByGenerationAndHandlesCancelAndExpiry() async throws {
+        let auth = await makeSignedInAuth(username: "alice")
+        var fetchedGenerations: [Int] = []
+        let model = AO3WorkActionsModel(
+            subscribeHandler: { _, want, _ in want ? "Subscribed." : "Unsubscribed." },
+            workActionStatesHandler: { _, service in
+                let gen = service.sessionGeneration
+                fetchedGenerations.append(gen)
+                return AO3WorkActionStates(isSubscribed: gen == 1, existingBookmark: nil)
+            }
+        )
+
+        model.refreshWorkPageStates(workID: 42, auth: auth)
+        await model.waitForStateFetch()
+        #expect(model.workPageStates?.isSubscribed == true)
+
+        // Same work, same generation -> cached, no refetch.
+        model.refreshWorkPageStates(workID: 42, auth: auth)
+        await model.waitForStateFetch()
+        #expect(fetchedGenerations.count == 1)
+
+        // Logout + re-login as same user bumps sessionGeneration -> refetches for new session.
+        await auth.logout()
+        await auth.login(username: "alice", password: "pw")
+        model.refreshWorkPageStates(workID: 42, auth: auth)
+        await model.waitForStateFetch()
+        #expect(fetchedGenerations.count == 2)
+        #expect(model.workPageStates?.isSubscribed == false)
+
+        // CancellationError is ignored quietly without banner or failure haptic.
+        let cancelled = AO3WorkActionsModel(subscribeHandler: { _, _, _ in throw CancellationError() })
+        cancelled.subscribe(workID: 42, to: true, auth: auth)
+        await cancelled.waitForCurrentTask()
+        #expect(cancelled.banner == nil)
+        #expect(cancelled.writeFailures == 0)
+
+        // Mid-flight generation change drops completion quietly.
+        let switchEntered = Signal()
+        let switchRelease = Signal()
+        var callbackAfterSwitch = 0
+        let switched = AO3WorkActionsModel(subscribeHandler: { _, _, _ in
+            await switchEntered.fire()
+            await switchRelease.wait()
+            return "Subscribed."
+        })
+        switched.subscribe(workID: 42, to: true, auth: auth) { callbackAfterSwitch += 1 }
+        await switchEntered.wait()
+        await auth.logout()
+        await auth.login(username: "bob", password: "pw")
+        await switchRelease.fire()
+        await switched.waitForCurrentTask()
+        #expect(callbackAfterSwitch == 0)
+        #expect(switched.banner == nil)
+        #expect(switched.workPageStates == nil)
+
+        // AO3Error.authenticationRequired expires the session and clears cached states.
+        let expiryModel = AO3WorkActionsModel(
+            subscribeHandler: { _, _, _ in throw AO3Error.authenticationRequired },
+            workActionStatesHandler: { _, _ in
+                AO3WorkActionStates(isSubscribed: true, existingBookmark: nil)
+            }
+        )
+        expiryModel.refreshWorkPageStates(workID: 42, auth: auth)
+        await expiryModel.waitForStateFetch()
+        #expect(expiryModel.workPageStates != nil)
+
+        expiryModel.subscribe(workID: 42, to: false, auth: auth)
+        await expiryModel.waitForCurrentTask()
+        #expect(!auth.isLoggedIn)
+        #expect(auth.sessionHealth == .expired)
+        #expect(expiryModel.workPageStates == nil)
+        #expect(expiryModel.banner == AO3Error.authenticationRequired.errorDescription)
+        #expect(expiryModel.writeFailures == 1)
     }
 
     // MARK: Work-page action states (fixtures trimmed from live captures, 2026-07-16)
