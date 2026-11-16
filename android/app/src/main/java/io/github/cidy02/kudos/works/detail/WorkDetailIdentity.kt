@@ -7,7 +7,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -29,8 +31,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.cidy02.kudos.home.HomeFacts
+import io.github.cidy02.kudos.home.ResumeCardModel
 import io.github.cidy02.kudos.ui.components.AO3StatusTint
 import io.github.cidy02.kudos.ui.components.AO3TagPalette
+import io.github.cidy02.kudos.ui.components.ChapterBarScale
+import io.github.cidy02.kudos.ui.components.ChapterBars
+import io.github.cidy02.kudos.ui.components.ChapterBarsLegend
 import io.github.cidy02.kudos.ui.subject.ReaderTheme
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.SubjectHeaderBlock
@@ -40,6 +46,8 @@ import io.github.cidy02.kudos.ui.subject.SubjectStatCell
 import io.github.cidy02.kudos.ui.subject.SubjectStatStrip
 import io.github.cidy02.kudos.ui.subject.downloadDimmed
 import io.github.cidy02.kudos.ui.subject.WorkReadingOrDownloadRing
+import io.github.cidy02.kudos.works.ChapterLengths
+import io.github.cidy02.kudos.works.WorkReadingPosition
 import java.time.Instant
 
 /**
@@ -319,19 +327,58 @@ fun WorkDetailResumeCard(
     lastReadDate: Instant?,
     palette: SubjectPalette,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    chapters: String = "",
+    isFinished: Boolean = false,
+    readiumLocator: String? = null,
+    chapterLengths: ChapterLengths? = null
 ) {
     val tokens = LocalKudosTokens.current
     val clampedProgress = readingProgress?.coerceIn(0.0, 1.0)
     val hasReadingState = clampedProgress != null
+    val resumeModel = if (chapters.isNotBlank()) {
+        ResumeCardModel(
+            title = "",
+            chapters = chapters,
+            rawProgress = clampedProgress,
+            rawChapterProgress = WorkReadingPosition.chapterProgress(readiumLocator),
+            chapterName = savedPositionTitle,
+            chapterPositions = chapterLengths?.positions,
+            isFinished = isFinished
+        )
+    } else {
+        null
+    }
+    val barLayout = resumeModel?.chapterBarLayout(chapterLengths, ChapterBarScale.Card)
+    val ctaTitle = when {
+        isBusy -> actionTitle
+        resumeModel != null -> resumeModel.detailPrimaryTitle(fallback = if (hasReadingState) "Resume" else actionTitle)
+        else -> actionTitle
+    }
 
-    val primaryLine = if (hasReadingState) {
+    val primaryLine = if (resumeModel != null) {
+        if (hasReadingState) {
+            savedPositionTitle ?: if (resumeModel.isOneChapter) "One chapter" else resumeModel.detailChapterName
+        } else {
+            resumeModel.postedLabel.ifBlank { actionTitle }
+        }
+    } else if (hasReadingState) {
         savedPositionTitle ?: "Reading"
     } else {
         actionTitle
     }
 
-    val secondaryLine = if (hasReadingState && lastReadDate != null) {
+    val secondaryLine = if (resumeModel != null) {
+        buildList {
+            if (hasReadingState && resumeModel.postedLabel.isNotBlank() && primaryLine != resumeModel.postedLabel) {
+                add(resumeModel.postedLabel)
+            }
+            resumeModel.detailProgressLine?.let { add(it) }
+            if (hasReadingState && lastReadDate != null) {
+                add(HomeFacts.relativeNamed(lastReadDate, Instant.now()))
+            }
+        }.joinToString(" · ").ifEmpty { null }
+    } else if (hasReadingState && lastReadDate != null) {
         HomeFacts.relativeNamed(lastReadDate, Instant.now())
     } else {
         null
@@ -349,64 +396,118 @@ fun WorkDetailResumeCard(
             .border(0.5.dp, tokens.glassStroke(0.14), shape)
             .clickable(enabled = !isBusy, onClick = onClick)
             .padding(horizontal = 18.dp, vertical = 16.dp)
-            .semantics { contentDescription = "$actionTitle: $primaryLine" }
+            .semantics { contentDescription = "$ctaTitle: $primaryLine" }
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(15.dp)
-        ) {
-            if (downloadFraction != null || clampedProgress != null) {
-                WorkReadingOrDownloadRing(
-                    downloadFraction = downloadFraction,
-                    progress = clampedProgress,
-                    state = null,
-                    diameter = 48.dp
-                )
-            }
-
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(3.dp)
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(15.dp)
             ) {
-                Text(
-                    text = primaryLine,
-                    fontSize = 16.5.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = tokens.primaryInk,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                if (secondaryLine != null) {
+                if (downloadFraction != null || clampedProgress != null) {
+                    WorkReadingOrDownloadRing(
+                        downloadFraction = downloadFraction,
+                        progress = clampedProgress,
+                        state = null,
+                        diameter = 48.dp
+                    )
+                }
+
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
                     Text(
-                        text = secondaryLine,
-                        fontSize = 12.5.sp,
-                        color = tokens.primaryInk.copy(alpha = 0.6f),
+                        text = primaryLine,
+                        fontSize = 16.5.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = tokens.primaryInk,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
+                    if (secondaryLine != null) {
+                        Text(
+                            text = secondaryLine,
+                            fontSize = 12.5.sp,
+                            color = tokens.primaryInk.copy(alpha = 0.6f),
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+
+                if (resumeModel != null) {
+                    Row(
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(palette.solidButtonFill, CircleShape)
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (isBusy) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                color = palette.solidButtonLabel,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Filled.PlayArrow,
+                                contentDescription = null,
+                                tint = palette.solidButtonLabel,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                        Text(
+                            text = ctaTitle,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = palette.solidButtonLabel,
+                            maxLines = 1
+                        )
+                    }
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(CircleShape)
+                            .background(palette.solidButtonFill),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (isBusy) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                color = palette.solidButtonLabel,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Filled.PlayArrow,
+                                contentDescription = null,
+                                tint = palette.solidButtonLabel,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
                 }
             }
 
-            Box(
-                modifier = Modifier
-                    .size(42.dp)
-                    .clip(CircleShape)
-                    .background(palette.solidButtonFill),
-                contentAlignment = Alignment.Center
-            ) {
-                if (isBusy) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(18.dp),
-                        color = palette.solidButtonLabel,
-                        strokeWidth = 2.dp
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Filled.PlayArrow,
-                        contentDescription = null,
-                        tint = palette.solidButtonLabel,
-                        modifier = Modifier.size(20.dp)
+            if (barLayout != null && !barLayout.isEmpty) {
+                Spacer(Modifier.height(12.dp))
+                ChapterBars(
+                    layout = barLayout,
+                    scale = ChapterBarScale.Card,
+                    onGradient = false,
+                    height = 34.dp
+                )
+                if (resumeModel != null) {
+                    Spacer(Modifier.height(8.dp))
+                    ChapterBarsLegend(
+                        totalChapters = resumeModel.totalChapters,
+                        postedChapters = resumeModel.postedChapters,
+                        isOneChapter = resumeModel.isOneChapter,
+                        onGradient = false
                     )
                 }
             }

@@ -884,6 +884,7 @@ private fun SittingWorkAndFactsColumn(
         if (work != null) {
             val progress = work.readingProgressFraction() ?: 0.0
             if (ledger) {
+                val (chapterBarLayout, chapterProgressLabel) = io.github.cidy02.kudos.works.rememberWorkChapterBarState(work)
                 WorkLedgerRow(
                     title = work.title,
                     author = work.author.ifBlank { "Anonymous" },
@@ -909,7 +910,9 @@ private fun SittingWorkAndFactsColumn(
                             else -> actions.onOpenWork(work.id)
                         }
                     },
-                    onLongClick = onOpenMenu
+                    onLongClick = onOpenMenu,
+                    chapterBarLayout = chapterBarLayout,
+                    chapterProgressLabel = chapterProgressLabel
                 )
             } else {
                 SensitiveWorkRow(
