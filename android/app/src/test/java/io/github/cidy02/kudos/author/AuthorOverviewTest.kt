@@ -98,6 +98,8 @@ class AuthorOverviewTest {
 
     private fun top(text: String) = compose.onNodeWithText(text, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.top
     private fun left(text: String) = compose.onNodeWithText(text, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.left
+    private fun coverLeft(title: String) =
+        compose.onNodeWithContentDescription("$title, Avery, Star Wars", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.left
 
     @Test fun sectionsAreInIosOrder_stripThenLatestMostKudosSeriesBookmarks() {
         showItems(header())
@@ -222,9 +224,13 @@ class AuthorOverviewTest {
             work(31, "Unrated Cover", rating = "", kudos = 800),
             work(32, "Safe Cover", kudos = 700)), 1, 1)
         showItems(header(recentWorks = null), popular = page)
+        // PopularShelf uses SubjectRemoteCoverCard -> GeneratedCoverView (iOS AuthorProfileOverviewSections /
+        // GeneratedCoverView accessibilityElement(children: .ignore)), exposing "$title, $author, $fandom".
         compose.onAllNodesWithText("Explicit Cover", useUnmergedTree = true).assertCountEquals(0)
+        compose.onAllNodesWithContentDescription("Explicit Cover", substring = true, useUnmergedTree = true).assertCountEquals(0)
         compose.onAllNodesWithText("Unrated Cover", useUnmergedTree = true).assertCountEquals(0)
-        compose.onAllNodesWithText("Safe Cover", useUnmergedTree = true).assertCountEquals(1)
+        compose.onAllNodesWithContentDescription("Unrated Cover", substring = true, useUnmergedTree = true).assertCountEquals(0)
+        compose.onAllNodesWithContentDescription("Safe Cover, Avery, Star Wars", useUnmergedTree = true).assertCountEquals(1)
         compose.onAllNodesWithContentDescription(concealed, useUnmergedTree = true).assertCountEquals(1)
     }
 
@@ -232,7 +238,8 @@ class AuthorOverviewTest {
         val recent = listOf(work(0, "Newest", kudos = 0), work(1, "Low", kudos = 1), work(2, "Hidden High", rating = "Explicit", kudos = 99), work(3, "Mid", kudos = 5))
         showItems(header(recentWorks = recent), popular = null, popularLoad = AuthorSectionLoad.Failed("Offline"))
         compose.onAllNodesWithText("Hidden High", useUnmergedTree = true).assertCountEquals(0)
-        assertTrue("Most kudos first", left("Mid") < left("Low"))
+        compose.onAllNodesWithContentDescription("Hidden High", substring = true, useUnmergedTree = true).assertCountEquals(0)
+        assertTrue("Most kudos first", coverLeft("Mid") < coverLeft("Low"))
     }
 
     // The bookmarks preview holds two cards (iOS bookmarksPreviewLimit), so each case fits in it.

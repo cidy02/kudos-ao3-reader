@@ -278,9 +278,11 @@ class FavoriteScopesScreenTest {
             kind.value = null
         }
         awaitText("READING NOW")
-        reach("Read 0")
-        assertTrue(compose.onAllNodesWithText("Read 0").fetchSemanticsNodes().isNotEmpty())
-        compose.waitUntil(15_000) { compose.onAllNodesWithText("Read 1").fetchSemanticsNodes().isEmpty() }
+        // Reading Now shelf uses SubjectWorkCoverCard -> GeneratedCoverView (iOS LibraryView / GeneratedCoverView
+        // accessibilityElement(children: .ignore)), exposing "$title, $author, $fandom".
+        compose.onAllNodes(hasScrollAction()).onFirst().performScrollToNode(hasContentDescription("Read 0, alpha, Fandom 0"))
+        assertTrue(compose.onAllNodesWithContentDescription("Read 0, alpha, Fandom 0").fetchSemanticsNodes().isNotEmpty())
+        compose.waitUntil(15_000) { compose.onAllNodesWithContentDescription("Read 1", substring = true).fetchSemanticsNodes().isEmpty() }
         assertNull(LibraryFilterRequest.takeFreeform())
         assertEquals(0, client.requests.size)
     }

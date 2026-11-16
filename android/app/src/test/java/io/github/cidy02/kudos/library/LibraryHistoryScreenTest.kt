@@ -117,6 +117,10 @@ class LibraryHistoryScreenTest {
         compose.onNode(pageList).performScrollToNode(hasText(text))
     }
 
+    private fun reachCover(label: String) {
+        compose.onNode(pageList).performScrollToNode(hasContentDescription(label))
+    }
+
     private fun selectScope(title: String) {
         reach(title)
         compose.onNodeWithText(title).performClick()
@@ -255,7 +259,9 @@ class LibraryHistoryScreenTest {
         compose.onNodeWithContentDescription("More").performClick()
         compose.onNodeWithText("Layout").performClick()
         compose.onNodeWithText("Compact").performClick()
-        reach("Active")
+        // Compact layout uses SubjectWorkCoverCard -> GeneratedCoverView (iOS LibrarySectionListView / GeneratedCoverView).
+        reachCover("Active, A, Doctor Who")
+        compose.onNodeWithContentDescription("Active, A, Doctor Who").assertExists()
         compose.onNodeWithText("Read ×2").assertDoesNotExist()
     }
 
@@ -295,8 +301,9 @@ class LibraryHistoryScreenTest {
         compose.onNodeWithText("Ledger").assertExists()
         compose.onNodeWithText("Detailed").assertExists()
         compose.onNodeWithText("Compact").performClick()
-        reach("Active")
-        compose.onNodeWithText("Active").assertExists()
+        // Compact layout uses SubjectWorkCoverCard -> GeneratedCoverView (iOS LibrarySectionListView / GeneratedCoverView).
+        reachCover("Active, A, Doctor Who")
+        compose.onNodeWithContentDescription("Active, A, Doctor Who").assertExists()
         compose.onNodeWithContentDescription("More").performClick()
         compose.onNodeWithText("Expand All Cards").assertDoesNotExist()
         compose.onNodeWithText("Layout").performClick()
