@@ -564,57 +564,52 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         }
     }
 
-    /// One non-retrying queue count request, independent of Rank Top 100 state.
-    func queueSourcePage(_ url: URL, authenticatedRequest: URLRequest? = nil) async throws -> AO3SearchPage {
+    /// UserDefaults key for the process-wide 429 hold on queue-source counts.
+    nonisolated static let queueSourceHoldKey = "queueSources.retryAfterUntil"
+
+    /// Queue counts are anonymous: signed-in Find More loads its own page.
+    func queueSourcePage(_ url: URL) async throws -> AO3SearchPage {
         try Self.rejectIfUntrusted(url)
         if let page = URLComponents(url: url, resolvingAgainstBaseURL: false)?
             .queryItems?.first(where: { $0.name == "page" })?.value, page != "1" {
             throw AO3Error.network("Queue counts may fetch page 1 only.")
         }
-        let holdKey = "queueSources.retryAfterUntil"
+        try Self.throwIfQueueSourceHeld()
         do {
             return try await Self.queueSourceCoordinator.withSlot { [self] in
                 try await AO3RequestCoordinator.shared.withSlot {
+                    try Self.throwIfQueueSourceHeld()
                     try await pace()
                     try await paceQueueSource()
                     try Task.checkCancellation()
-                    if let until = UserDefaults.standard.object(forKey: holdKey) as? Date, until > Date() {
-                        throw AO3Error.rateLimited(retryAfter: until.timeIntervalSinceNow)
-                    }
+                    try Self.throwIfQueueSourceHeld()
                     do {
-                        var request = authenticatedRequest ?? URLRequest(url: url)
-                        request.url = url
+                        var request = URLRequest(url: url)
                         request.setValue(AO3RequestDefaults.userAgent(feature: .queueSourceCounts),
                                          forHTTPHeaderField: "User-Agent")
-                        let data: Data
-                        if authenticatedRequest != nil {
-                            request.httpShouldHandleCookies = false
-                            let (body, response) = try await session.data(for: request, delegate: redirectCookieRelay)
-                            defer { evictFromSharedCache(request, responseURL: response.url) }
-                            try checkStatus(response) { body }
-                            if Self.isLoginRedirect(path: response.url?.path) {
-                                throw AO3Error.authenticationRequired
-                            }
-                            data = body
-                        } else {
-                            let (body, response) = try await session.data(for: request)
-                            defer { Self.purgeSessionCookie(from: session.configuration.httpCookieStorage, url: url) }
-                            try checkStatus(response) { body }
-                            data = body
-                        }
-                        return try Self.parseSearchPage(Self.htmlString(from: data), page: 1)
+                        let (body, response) = try await session.data(for: request)
+                        defer { Self.purgeSessionCookie(from: session.configuration.httpCookieStorage, url: url) }
+                        try checkStatus(response) { body }
+                        return try Self.parseSearchPage(Self.htmlString(from: body), page: 1)
                     } catch AO3Error.rateLimited(let retryAfter) {
                         // Save before releasing the coordinator slot to close the 429 race.
                         let delay = retryAfter.flatMap { $0.isFinite ? max($0, 0) : nil } ?? 6 * 60 * 60
                         let until = Date().addingTimeInterval(delay)
-                        let current = UserDefaults.standard.object(forKey: holdKey) as? Date ?? .distantPast
-                        UserDefaults.standard.set(max(until, current), forKey: holdKey)
+                        let current = UserDefaults.standard.object(forKey: Self.queueSourceHoldKey) as? Date
+                            ?? .distantPast
+                        UserDefaults.standard.set(max(until, current), forKey: Self.queueSourceHoldKey)
                         throw AO3Error.rateLimited(retryAfter: retryAfter)
                     }
                 }
             }
         } catch let error as URLError where error.code == .cancelled {
             throw CancellationError()
+        }
+    }
+
+    nonisolated static func throwIfQueueSourceHeld(now: Date = Date()) throws {
+        if let until = UserDefaults.standard.object(forKey: queueSourceHoldKey) as? Date, until > now {
+            throw AO3Error.rateLimited(retryAfter: until.timeIntervalSinceNow)
         }
     }
 

@@ -43,7 +43,7 @@ private final class QueueSourceProbe: URLProtocol, @unchecked Sendable {
 @Suite(.serialized)
 struct QueueSourceRequestTests {
     @Test func firstPageCarriesItsOwnFeatureAnd429HoldSurvivesAnotherOpen() async throws {
-        let holdKey = "queueSources.retryAfterUntil"
+        let holdKey = AO3Client.queueSourceHoldKey
         for retryAfter in [Optional("120"), nil] {
             UserDefaults.standard.removeObject(forKey: holdKey)
             defer { UserDefaults.standard.removeObject(forKey: holdKey) }
@@ -75,5 +75,28 @@ struct QueueSourceRequestTests {
             }
             #expect(QueueSourceProbe.sent.count == 1)
         }
+    }
+
+    @Test func holdIsCheckedBeforePacing() async throws {
+        let holdKey = AO3Client.queueSourceHoldKey
+        UserDefaults.standard.removeObject(forKey: holdKey)
+        defer { UserDefaults.standard.removeObject(forKey: holdKey) }
+        UserDefaults.standard.set(Date().addingTimeInterval(60), forKey: holdKey)
+        QueueSourceProbe.reset(retryAfter: nil)
+        var paced = 0
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [QueueSourceProbe.self]
+        let client = AO3Client(
+            session: URLSession(configuration: configuration),
+            paceSleep: { _ in paced += 1 }
+        )
+        let url = try #require(AO3Client.searchURL(filters: AO3SearchFilters(), page: 1))
+        do {
+            _ = try await client.queueSourcePage(url)
+            Issue.record("Expected the persisted 429 hold")
+        } catch AO3Error.rateLimited {
+        }
+        #expect(paced == 0)
+        #expect(QueueSourceProbe.sent.isEmpty)
     }
 }

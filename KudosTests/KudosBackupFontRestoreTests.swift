@@ -10,7 +10,7 @@ extension PersistenceGateSuites {
 struct KudosBackupFontRestoreTests {
     private func setupSchema() throws -> ModelContext {
         let schema = Schema([
-            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self, SavedSearch.self,
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self, SavedSearch.self, QueueSavedSearchLink.self,
             WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self, SyncTombstone.self,
             ReadingAnnotation.self
         ])

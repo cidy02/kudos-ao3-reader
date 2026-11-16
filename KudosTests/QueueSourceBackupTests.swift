@@ -129,6 +129,52 @@ struct QueueSourceBackupTests {
         #expect(restored.searchLinks.first?.newResultCount == 0)
     }
 
+    @Test func replaceLibraryRestoresOlderSourceStamps() throws {
+        let source = try context()
+        let queue = ReadingQueue(name: "Queue")
+        let search = SavedSearch(name: "Search", filters: AO3SearchFilters())
+        search.lastOpenedAt = Date(timeIntervalSince1970: 1_000)
+        queue.searchSourcesModifiedAt = Date(timeIntervalSince1970: 1_000)
+        let link = QueueSavedSearchLink(queue: queue, search: search)
+        link.lastCheckedAt = Date(timeIntervalSince1970: 1_000)
+        link.newResultCount = 3
+        source.insert(queue)
+        source.insert(search)
+        source.insert(link)
+        try source.save()
+        let snapshot = try KudosBackupService.makeContents(
+            works: [], bookmarks: [], fonts: [], readingQueues: [queue],
+            savedSearches: [search], defaults: try defaults()
+        )
+        let target = try context()
+        _ = try KudosBackupService.restore(snapshot, into: target, defaults: try defaults())
+        let restoredQueue = try #require(try target.fetch(FetchDescriptor<ReadingQueue>()).first {
+            $0.id == queue.id
+        })
+        let restoredSearch = try #require(try target.fetch(FetchDescriptor<SavedSearch>()).first {
+            $0.id == search.id
+        })
+        restoredSearch.lastOpenedAt = Date(timeIntervalSince1970: 2_000)
+        restoredQueue.searchSourcesModifiedAt = Date(timeIntervalSince1970: 2_000)
+        restoredQueue.searchLinks.first?.lastCheckedAt = Date(timeIntervalSince1970: 2_000)
+        restoredQueue.searchLinks.first?.newResultCount = 0
+        try target.save()
+        _ = try KudosBackupService.restore(
+            snapshot, into: target, defaults: try defaults(), mode: .merge
+        )
+        #expect(restoredSearch.lastOpenedAt == Date(timeIntervalSince1970: 2_000))
+        #expect(restoredQueue.searchSourcesModifiedAt == Date(timeIntervalSince1970: 2_000))
+        #expect(restoredQueue.searchLinks.first?.lastCheckedAt == Date(timeIntervalSince1970: 2_000))
+        #expect(restoredQueue.searchLinks.first?.newResultCount == 0)
+        _ = try KudosBackupService.restore(
+            snapshot, into: target, defaults: try defaults(), mode: .replaceLibrary
+        )
+        #expect(restoredSearch.lastOpenedAt == Date(timeIntervalSince1970: 1_000))
+        #expect(restoredQueue.searchSourcesModifiedAt == Date(timeIntervalSince1970: 1_000))
+        #expect(restoredQueue.searchLinks.first?.lastCheckedAt == Date(timeIntervalSince1970: 1_000))
+        #expect(restoredQueue.searchLinks.first?.newResultCount == 3)
+    }
+
     @Test func clearingSourcesTravelsAsAnEmptyRecordedList() throws {
         let source = try context()
         let queue = ReadingQueue(name: "Queue")

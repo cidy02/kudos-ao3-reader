@@ -3290,7 +3290,7 @@ enum KudosBackupService {
                 existing.dateAdded = archived.dateAdded
                 existing.filters = archived.filters
                 if let opened = archived.lastOpenedAt,
-                   opened > (existing.lastOpenedAt ?? .distantPast) {
+                   mode == .replaceLibrary || opened > (existing.lastOpenedAt ?? .distantPast) {
                     existing.lastOpenedAt = opened
                 }
             } else {
@@ -3310,7 +3310,8 @@ enum KudosBackupService {
                   let queue = queuesByID[archived.id]
             else { continue }
             let sourceStamp = archived.searchSourcesModifiedAt ?? archived.dateUpdated
-            let applyMembership = sourceStamp > (queue.searchSourcesModifiedAt ?? .distantPast)
+            let applyMembership = mode == .replaceLibrary
+                || sourceStamp > (queue.searchSourcesModifiedAt ?? .distantPast)
             if applyMembership {
                 let incomingIDs = Set(sources.map(\.searchID))
                 for link in queue.searchLinks where link.search.map({ !incomingIDs.contains($0.id) }) ?? true {
@@ -3330,7 +3331,7 @@ enum KudosBackupService {
                     return created
                 }()
                 if let checked = source.lastCheckedAt,
-                   checked > (link.lastCheckedAt ?? .distantPast) {
+                   mode == .replaceLibrary || checked > (link.lastCheckedAt ?? .distantPast) {
                     link.lastCheckedAt = checked
                     link.newResultCount = source.newResultCount
                 }

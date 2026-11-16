@@ -368,6 +368,7 @@ struct ReadingQueueBrowserView: View {
                 #endif
             }
             .onChange(of: selectedQueue?.id) { _, _ in startSourceCheck() }
+            .onChange(of: works.count) { _, _ in startSourceCheck() }
             .onChange(of: router.selection) { _, tab in
                 if tab != sourceOpeningTab {
                     sourceCheckTask?.cancel()
@@ -439,7 +440,7 @@ struct ReadingQueueBrowserView: View {
             .toolbar { manageToolbar }
             .sheet(isPresented: $showingEdit) {
                 if let selectedQueue {
-                    EditReadingQueueSheet(queue: selectedQueue, cachedSourcePages: sourcePages)
+                    EditReadingQueueSheet(queue: selectedQueue)
                 }
             }
             .confirmationDialog(
@@ -962,6 +963,7 @@ extension ReadingQueueBrowserView {
         guard let selectedQueueID,
               let selectedQueue = orderedQueues.first(where: { $0.id == selectedQueueID })
         else { return }
+        guard !ReadingQueueService.orderedWorks(in: selectedQueue).isEmpty else { return }
         guard sourceCheckQueueID != selectedQueueID else { return }
         let previous = sourceCheckTask
         previous?.cancel()
@@ -975,13 +977,15 @@ extension ReadingQueueBrowserView {
 
     private func checkSources(in queue: ReadingQueue) async {
         await QueueSourceChecks.run(
-            sources: queue.searchLinks.filter { $0.search != nil },
+            sources: queue.searchLinks.filter {
+                $0.search.map { QueueSourceChecks.countsNewResults($0.filters) } ?? false
+            },
             checkedAt: { $0.lastCheckedAt },
             now: Date.init,
             sleep: { try await Task.sleep(for: .seconds($0)) },
             attempt: { link, date in
-                // Persist before dispatch, including failures and page exits.
                 link.lastCheckedAt = date
+                FolderSyncService.markDirty()
                 return context.saveBestEffort(reason: "Saving queue source check failed")
             },
             fetch: { link in
@@ -994,6 +998,7 @@ extension ReadingQueueBrowserView {
                 guard selectedQueue?.id == queue.id, let search = link.search else { return }
                 sourcePages[search.id] = page
                 link.newResultCount = QueueSourceChecks.count(page, since: search.lastOpenedAt)
+                FolderSyncService.markDirty()
                 _ = context.saveBestEffort(reason: "Saving queue source count failed")
             }
         )
@@ -1002,7 +1007,8 @@ extension ReadingQueueBrowserView {
     private func openSearch(_ search: SavedSearch, in queue: ReadingQueue) {
         router.currentQueueID = queue.id
         router.pendingQueueSearch = QueueSearchRoute(
-            searchID: search.id, queueID: queue.id, page: sourcePages[search.id]
+            searchID: search.id, queueID: queue.id,
+            page: QueueSourceChecks.cachedPageForFindMore(sourcePages[search.id], isLoggedIn: auth.isLoggedIn)
         )
         router.selection = .search
     }

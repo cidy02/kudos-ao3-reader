@@ -271,19 +271,27 @@ struct QueuePageHeader<FilterRail: View>: View {
                 ($0.search?.name ?? "") < ($1.search?.name ?? "")
             }) { link in
                 if let search = link.search {
+                    let count = QueueSourceChecks.displayedCount(
+                        link.newResultCount, filters: search.filters
+                    )
+                    let layout = dynamicTypeSize.isAccessibilitySize
+                        ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+                        : AnyLayout(HStackLayout(alignment: .center, spacing: 10))
                     Button { onFindMore(search) } label: {
                         HStack(spacing: 10) {
                             Image(systemName: "magnifyingglass")
                                 .foregroundStyle(.secondary)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Find More").font(.subheadline.weight(.semibold))
-                                Text(search.name).font(.caption).foregroundStyle(.secondary)
-                            }
-                            Spacer(minLength: 4)
-                            if let count = link.newResultCount, count > 0 {
-                                Text(QueueSourceChecks.badge(count))
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(.tint)
+                            layout {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Find More").font(.subheadline.weight(.semibold))
+                                    Text(search.name).font(.caption).foregroundStyle(.secondary)
+                                }
+                                if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 4) }
+                                if let count {
+                                    Text(QueueSourceChecks.badge(count))
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(.tint)
+                                }
                             }
                             Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
                         }
@@ -291,8 +299,9 @@ struct QueuePageHeader<FilterRail: View>: View {
                         .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Find more works: \(search.name), "
-                        + "\(link.newResultCount.map(QueueSourceChecks.badge) ?? "new count unavailable") on AO3")
+                    .accessibilityLabel(QueueSourceChecks.findMoreAccessibilityLabel(
+                        name: search.name, count: link.newResultCount, filters: search.filters
+                    ))
                 }
             }
 

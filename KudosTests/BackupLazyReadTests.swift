@@ -297,7 +297,7 @@ extension PersistenceGateSuites.KudosBackupTests {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
             WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
-            SyncTombstone.self, ReadingAnnotation.self, SavedSearch.self
+            SyncTombstone.self, ReadingAnnotation.self, SavedSearch.self, QueueSavedSearchLink.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [configuration])

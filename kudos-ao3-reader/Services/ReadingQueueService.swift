@@ -266,6 +266,10 @@ enum ReadingQueueService {
         let linkedIDs = Set(queue.searchLinks.compactMap { $0.search?.id })
         if let searches = try? context.fetch(FetchDescriptor<SavedSearch>()) {
             for search in searches where options.searchIDs.contains(search.id) && !linkedIDs.contains(search.id) {
+                if search.lastOpenedAt == nil {
+                    search.lastOpenedAt = Date()
+                    FolderSyncService.markDirty()
+                }
                 context.insert(QueueSavedSearchLink(queue: queue, search: search))
                 changed = true
                 sourcesChanged = true

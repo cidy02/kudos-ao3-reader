@@ -17,6 +17,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     #endif
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     // Local-first search sources (Global Search, Phase 2): matched on-device, live.
     @Query(filter: #Predicate<SavedWork> { !$0.isPendingDeletion }, sort: \SavedWork.dateAdded, order: .reverse)
@@ -577,29 +578,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
             List {
                 Section {
                     ForEach(savedSearches) { saved in
-                        Button { runSaved(saved) } label: {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(saved.name).foregroundStyle(.primary)
-                                if let subtitle = savedSearchSubtitle(saved.filters) {
-                                    Text(subtitle)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(1)
-                                }
-                                }
-                                Spacer(minLength: 4)
-                                if let count = saved.queueLinks.compactMap(\.newResultCount).max(), count > 0 {
-                                    Text(QueueSourceChecks.badge(count))
-                                        .font(.caption.weight(.semibold))
-                                        .foregroundStyle(.tint)
-                                }
-                            }
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Open saved search \(saved.name), "
-                            + "\(saved.queueLinks.compactMap(\.newResultCount).max().map(QueueSourceChecks.badge) ?? "no new count")")
+                        savedSearchRow(saved)
                     }
                     .onDelete(perform: deleteSavedSearches)
                     .cardRow()
@@ -616,6 +595,44 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
             }
             .cardList()
         }
+    }
+
+    @ViewBuilder
+    private func savedSearchRow(_ saved: SavedSearch) -> some View {
+        let count = QueueSourceChecks.displayedCount(
+            saved.queueLinks.compactMap(\.newResultCount).max(),
+            filters: saved.filters
+        )
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: 4))
+        Button { runSaved(saved) } label: {
+            layout {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(saved.name).foregroundStyle(.primary)
+                    if let subtitle = savedSearchSubtitle(saved.filters) {
+                        Text(subtitle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+                if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 4) }
+                if let count {
+                    Text(QueueSourceChecks.badge(count))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tint)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(QueueSourceChecks.savedSearchAccessibilityLabel(
+            name: saved.name,
+            count: saved.queueLinks.compactMap(\.newResultCount).max(),
+            isLinked: !saved.queueLinks.isEmpty,
+            filters: saved.filters
+        ))
     }
 
     /// Shown when nothing's typed yet and there are no saved searches.
@@ -719,7 +736,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
             works: localWorks,
             isSelecting: $isSelectingLocal,
             selection: $localSelection,
-            onSearchAO3: runSearch,
+            onSearchAO3: { runSearch() },
             onSearchFandom: { setIncludedFandom($0); runSearch() }
         )
         // Leaving the live matches (an AO3 search, or a cleared query) ends a
@@ -865,7 +882,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     // MARK: Search bar + filter button
 
     private var searchField: some View {
-        GlassFieldBar(text: $filters.query, placeholder: "Library and AO3", onSubmit: runSearch) {
+        GlassFieldBar(text: $filters.query, placeholder: "Library and AO3", onSubmit: { runSearch() }) {
             Image(systemName: "magnifyingglass")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -947,7 +964,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         AO3FilterPanel(
             filters: $filters,
             canReset: filters.hasActiveFilters,
-            onApply: runSearch,
+            onApply: { runSearch() },
             onSave: presentSaveDialog,
             onReset: {
                 resetRankTop100()
@@ -1034,7 +1051,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         }
     }
 
-    private func runSearch() {
+    private func runSearch(recordingOpenOf savedSearchID: UUID? = nil) {
         guard filters.isSearchable else { return }
         // Close the filters panel — the other AO3FilterPanel call sites
         // (NativeBrowseView's applyFilters, AO3AccountWorksList) already dismiss
@@ -1050,7 +1067,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         isLibraryExpanded = false
         localMatches = computeLocalMatches()
         resetRankTop100()
-        load(page: 1)
+        load(page: 1, recordingOpenOf: savedSearchID)
     }
 
     /// Runs a fresh AO3 search for a single tag (from a tapped chip), placing it in the
@@ -1133,7 +1150,10 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     private func commitSavedSearch() {
         let name = saveName.trimmingCharacters(in: .whitespaces)
         guard !name.isEmpty, filters.isSearchable else { return }
-        context.insert(SavedSearch(name: name, filters: filters))
+        let search = SavedSearch(name: name, filters: filters)
+        search.lastOpenedAt = Date()
+        context.insert(search)
+        FolderSyncService.markDirty()
         try? context.save()
         saveName = ""
     }
@@ -1153,10 +1173,9 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         isLibraryExpanded = false
         filters = saved.filters
         router.panel = .none
-        saved.lastOpenedAt = Date()
-        for link in saved.queueLinks { link.newResultCount = 0 }
-        try? context.save()
-        if let cachedPage {
+        if QueueSourceChecks.recordsOpenImmediately(hasCachedPage: cachedPage != nil),
+           let cachedPage {
+            recordSavedSearchOpen(saved)
             loadTask?.cancel()
             loadToken += 1
             results = cachedPage.works
@@ -1173,8 +1192,15 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
             lastAppendError = nil
             phase = .loaded
         } else {
-            runSearch()
+            runSearch(recordingOpenOf: saved.id)
         }
+    }
+
+    private func recordSavedSearchOpen(_ saved: SavedSearch) {
+        saved.lastOpenedAt = Date()
+        for link in saved.queueLinks { link.newResultCount = 0 }
+        FolderSyncService.markDirty()
+        try? context.save()
     }
 
     private func deleteSavedSearches(at offsets: IndexSet) {
@@ -1200,7 +1226,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         load(page: page)
     }
 
-    private func load(page: Int) {
+    private func load(page: Int, recordingOpenOf savedSearchID: UUID? = nil) {
         rankTop100.cancel()
         // A next-page load, refresh or Try Again after an un-applied filter edit
         // would otherwise ask for page N of a query whose page 1 never loaded.
@@ -1258,6 +1284,13 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                     )
                 }
                 phase = .loaded
+                if let savedSearchID,
+                   QueueSourceChecks.shouldRecordOpen(
+                    page: page, loadToken: token, expectedToken: loadToken
+                   ),
+                   let saved = savedSearches.first(where: { $0.id == savedSearchID }) {
+                    recordSavedSearchOpen(saved)
+                }
                 #if DEBUG
                 // `shot:remoteselect` (board 15): select mode with two works picked.
                 if DebugLaunchRoute.takeSheet("remoteselect") {

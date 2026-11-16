@@ -58,11 +58,9 @@ struct NewReadingQueueSheet: View {
     /// from is left out. Set through `init(name:hue:editing:onSave:onCancel:)`.
     var isEditing = false
     var editingQueue: ReadingQueue?
-    var cachedSourcePages: [UUID: AO3SearchPage] = [:]
 
     @Environment(\.modelContext) private var context
     @Environment(ThemeManager.self) private var theme
-    @Environment(AppRouter.self) private var router
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Query(sort: \Tag.name) private var allTags: [Tag]
     @Query(sort: \SavedSearch.name) private var savedSearches: [SavedSearch]
@@ -149,23 +147,8 @@ struct NewReadingQueueSheet: View {
                         groupLabel("Find More")
                         ForEach(savedSearches.filter { options.searchIDs.contains($0.id) }) { search in
                             HStack {
-                                Button {
-                                    if let editingQueue {
-                                        router.currentQueueID = editingQueue.id
-                                        router.pendingQueueSearch = QueueSearchRoute(
-                                            searchID: search.id, queueID: editingQueue.id,
-                                            page: cachedSourcePages[search.id]
-                                        )
-                                        onCancel()
-                                        router.selection = .search
-                                    }
-                                } label: {
-                                    Label(search.name, systemImage: "magnifyingglass")
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityLabel("Find more works with saved search \(search.name)")
-                                Spacer()
+                                Label(search.name, systemImage: "magnifyingglass")
+                                    .frame(maxWidth: .infinity, alignment: .leading)
                                 Button("Remove \(search.name)", systemImage: "minus.circle") {
                                     options.searchIDs.removeAll { $0 == search.id }
                                 }
@@ -264,23 +247,40 @@ struct NewReadingQueueSheet: View {
         }
         .sheet(isPresented: $showingSearchPicker) {
             NavigationStack {
-                List(savedSearches) { search in
-                    Button {
-                        if !options.searchIDs.contains(search.id) { options.searchIDs.append(search.id) }
-                        showingSearchPicker = false
-                    } label: {
-                        HStack {
-                            Text(search.name)
-                            Spacer()
-                            if options.searchIDs.contains(search.id) {
-                                Image(systemName: "checkmark").foregroundStyle(.tint)
+                Group {
+                    if savedSearches.isEmpty {
+                        ContentUnavailableView {
+                            Label("No Saved Searches", systemImage: "magnifyingglass")
+                        } description: {
+                            Text("Save a search from the Search tab, then add it here.")
+                        }
+                    } else {
+                        List(savedSearches) { search in
+                            Button {
+                                if !options.searchIDs.contains(search.id) {
+                                    options.searchIDs.append(search.id)
+                                }
+                                showingSearchPicker = false
+                            } label: {
+                                HStack {
+                                    Text(search.name)
+                                    Spacer()
+                                    if options.searchIDs.contains(search.id) {
+                                        Image(systemName: "checkmark").foregroundStyle(.tint)
+                                    }
+                                }
                             }
+                            .accessibilityLabel("Choose saved search \(search.name)")
                         }
                     }
-                    .accessibilityLabel("Choose saved search \(search.name)")
                 }
                 .appThemedScroll()
                 .navigationTitle("Saved Searches")
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { showingSearchPicker = false }
+                    }
+                }
             }
         }
     }
@@ -538,14 +538,12 @@ extension NewReadingQueueSheet {
         hue: Binding<Double?>,
         editing options: NewQueueOptions,
         queue: ReadingQueue,
-        cachedSourcePages: [UUID: AO3SearchPage],
         onSave: @escaping (NewQueueOptions) -> Bool,
         onCancel: @escaping () -> Void
     ) {
         self.init(name: name, hue: hue, onCreate: onSave, onCancel: onCancel)
         isEditing = true
         editingQueue = queue
-        self.cachedSourcePages = cachedSourcePages
         _options = State(initialValue: options)
     }
 }
@@ -555,16 +553,14 @@ extension NewReadingQueueSheet {
 /// nothing is written until Save.
 struct EditReadingQueueSheet: View {
     let queue: ReadingQueue
-    let cachedSourcePages: [UUID: AO3SearchPage]
 
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @State private var name: String
     @State private var hue: Double?
 
-    init(queue: ReadingQueue, cachedSourcePages: [UUID: AO3SearchPage] = [:]) {
+    init(queue: ReadingQueue) {
         self.queue = queue
-        self.cachedSourcePages = cachedSourcePages
         _name = State(initialValue: queue.name)
         _hue = State(initialValue: queue.hue)
     }
@@ -580,7 +576,6 @@ struct EditReadingQueueSheet: View {
                 searchIDs: queue.searchLinks.compactMap { $0.search?.id }
             ),
             queue: queue,
-            cachedSourcePages: cachedSourcePages,
             onSave: { options in
                 let offlineTurnedOn = ReadingQueueService.updateQueue(
                     queue, name: name, hue: hue, options: options, in: context

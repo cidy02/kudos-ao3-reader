@@ -15,8 +15,12 @@ enum QueueSourceChecks {
         .prefix(5).map { $0 }
     }
 
+    /// AO3 search blurbs carry a calendar day, not a time. A work is new when
+    /// that day is on or after the UTC day of `lastOpenedAt`. A search that has
+    /// never been opened or baselined counts 0 — never the whole first page.
     static func count(_ page: AO3SearchPage, since opened: Date?) -> Int {
-        guard let opened else { return page.works.count }
+        guard let opened else { return 0 }
+        let cutoff = utcDay(of: opened)
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.calendar = Calendar(identifier: .gregorian)
@@ -25,14 +29,69 @@ enum QueueSourceChecks {
             formatter.dateFormat = format
             let dates = page.works.map { formatter.date(from: $0.dateUpdated) }
             if dates.contains(where: { $0 != nil }) {
-                return dates.filter { $0.map { $0 > opened } ?? false }.count
+                return dates.filter { $0.map { $0 >= cutoff } ?? false }.count
             }
         }
         return 0
     }
 
+    /// New-result counts are only meaningful when page 1 is newest-first.
+    static func countsNewResults(_ filters: AO3SearchFilters) -> Bool {
+        (filters.sort == .dateUpdated || filters.sort == .datePosted)
+            && filters.sortDirection == .descending
+    }
+
+    static func displayedCount(_ count: Int?, filters: AO3SearchFilters) -> Int? {
+        guard countsNewResults(filters), let count, count > 0 else { return nil }
+        return count
+    }
+
     static func badge(_ count: Int) -> String {
         count >= 20 ? "20+ new" : "\(count) new"
+    }
+
+    /// Unlinked searches, zero counts, and non-date sorts have no count phrase.
+    static func savedSearchAccessibilityLabel(
+        name: String, count: Int?, isLinked: Bool, filters: AO3SearchFilters
+    ) -> String {
+        let base = "Open saved search \(name)"
+        guard isLinked, let shown = displayedCount(count, filters: filters) else { return base }
+        return "\(base), \(badge(shown))"
+    }
+
+    static func findMoreAccessibilityLabel(
+        name: String, count: Int?, filters: AO3SearchFilters
+    ) -> String {
+        let base = "Find more works: \(name)"
+        guard let shown = displayedCount(count, filters: filters) else {
+            return "\(base) on AO3"
+        }
+        return "\(base), \(badge(shown)) on AO3"
+    }
+
+    /// Queue counts stay anonymous. A signed-in Find More must load its own page.
+    static func cachedPageForFindMore(_ page: AO3SearchPage?, isLoggedIn: Bool) -> AO3SearchPage? {
+        isLoggedIn ? nil : page
+    }
+
+    static func recordsOpenImmediately(hasCachedPage: Bool) -> Bool {
+        hasCachedPage
+    }
+
+    static func shouldRecordOpen(page: Int, loadToken: Int, expectedToken: Int) -> Bool {
+        page == 1 && loadToken == expectedToken
+    }
+
+    /// Offline and unreachable errors mean the request never got an answer.
+    static func isUnreachable(_ error: Error) -> Bool {
+        guard let error = error as? URLError else { return false }
+        switch error.code {
+        case .notConnectedToInternet, .networkConnectionLost, .cannotConnectToHost,
+             .cannotFindHost, .dnsLookupFailed, .timedOut:
+            return true
+        default:
+            return false
+        }
     }
 
     @MainActor
@@ -49,6 +108,7 @@ enum QueueSourceChecks {
         let selected = eligible(sources, checkedAt: checkedAt, now: now())
         var previousStart: Date?
         for source in selected {
+            var started: Date?
             do {
                 try Task.checkCancellation()
                 if let previousStart {
@@ -56,23 +116,39 @@ enum QueueSourceChecks {
                     if remaining > 0 { try await sleep(remaining) }
                 }
                 try Task.checkCancellation()
-                let started = now()
-                guard attempt(source, started) else { return }
+                started = now()
                 previousStart = started
                 let page = try await fetch(source)
                 try Task.checkCancellation()
+                guard let started, attempt(source, started) else { return }
                 received(source, page)
             } catch is CancellationError {
                 return
+            } catch let error as URLError where error.code == .cancelled {
+                return
+            } catch let error where isUnreachable(error) {
+                // No answer: leave lastCheckedAt alone and stop the pass.
+                return
             } catch AO3Error.rateLimited {
+                // The 429 hold is the cooldown; do not stamp a source we may not
+                // have actually requested (a hold can throw before URLSession).
                 return
             } catch AO3Error.forbidden {
+                if let started { _ = attempt(source, started) }
                 return
             } catch AO3Error.maintenance {
+                if let started { _ = attempt(source, started) }
                 return
             } catch {
-                // The attempt remains stamped; another eligible source may run.
+                // The attempt is stamped; another eligible source may run.
+                if let started { _ = attempt(source, started) }
             }
         }
+    }
+
+    private static func utcDay(of date: Date) -> Date {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        return calendar.startOfDay(for: date)
     }
 }
