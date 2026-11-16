@@ -1543,18 +1543,18 @@ actor AO3Client { // swiftlint:disable:this type_body_length
             refusal = error
         }
 
-        guard let workURL = URL(string: "\(base)/works/\(workID)?view_adult=true"),
-              let page = try? await getHTML(workURL)
-        else {
-            try Task.checkCancellation()
+        guard let workURL = URL(string: "\(base)/works/\(workID)?view_adult=true") else {
             throw refusal
         }
+        let page = try await getHTML(workURL)
         guard let offered = Self.parseDownloadFormats(from: page) else {
             // No menu on this page (a work restricted to signed-in readers shows a
             // guest none): HTML may still be there, and if not the first answer stands.
-            if let file = try? await downloadHTMLAsEPUB(workID: workID, onProgress: onProgress) { return file }
-            try Task.checkCancellation()
-            throw refusal
+            do {
+                return try await downloadHTMLAsEPUB(workID: workID, onProgress: onProgress)
+            } catch let error as AO3Error where error.mayMeanEPUBIsNotOffered || error == .parse {
+                throw refusal
+            }
         }
         if offered.contains("epub") { throw refusal }
         guard offered.contains("html") else {
