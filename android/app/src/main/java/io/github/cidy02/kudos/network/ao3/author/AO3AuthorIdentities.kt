@@ -53,4 +53,12 @@ object AO3AuthorIdentities {
         val pseud = identity.text("pseud")
         return if (pseud == null || pseud == username) username else "$pseud ($username)"
     }
+
+    /** First decoded identity's `displayName`, matching iOS `verifiedAuthorIdentities.first?.displayName`. */
+    fun firstDisplayName(json: String): String? {
+        if (json.isBlank()) return null
+        val identities = runCatching { Json.parseToJsonElement(json) as? JsonArray }.getOrNull() ?: return null
+        val first = identities.firstOrNull() as? JsonObject ?: return null
+        return (first["displayName"] as? JsonPrimitive)?.contentOrNull
+    }
 }
