@@ -497,27 +497,7 @@ final class AppRouter {
             return
         }
         if case let .work(id, chapterID) = link.kind {
-            pendingWorkLink = (id, chapterID)
-            workLinkEpoch &+= 1
-            if isPresentingAccount {
-                isPresentingAccount = false
-            } else if isPresentingLinkedWorkLogin || opensWebsiteAfterLinkedWorkLoginDismiss {
-                pendingLoginWorkLink = nil
-                pendingLoginSessionGeneration = nil
-                opensWebsiteAfterLinkedWorkLoginDismiss = false
-                websiteURLAfterLinkedWorkLoginDismiss = nil
-                isPresentingLinkedWorkLogin = false
-            } else if isDismissingLinkedWorkForLogin || reopenLinkedWorkAfterDismiss {
-                isDismissingLinkedWorkForLogin = false
-                pendingLoginWorkLink = nil
-                pendingLoginSessionGeneration = nil
-                reopenLinkedWorkAfterDismiss = true
-            } else if isPresentingWebBrowser && !isPresentingLinkedWork {
-                isPresentingWebBrowser = false
-            } else {
-                isPresentingWebBrowser = false
-                isPresentingLinkedWork = true
-            }
+            openWorkLink(id: id, chapterID: chapterID)
             return
         }
         let destination = Self.canonicalAO3URL(url)
@@ -537,6 +517,30 @@ final class AppRouter {
             return
         }
         open(destination)
+    }
+
+    private func openWorkLink(id: Int, chapterID: Int?) {
+        pendingWorkLink = (id, chapterID)
+        workLinkEpoch &+= 1
+        if isPresentingAccount {
+            isPresentingAccount = false
+        } else if isPresentingLinkedWorkLogin || opensWebsiteAfterLinkedWorkLoginDismiss {
+            pendingLoginWorkLink = nil
+            pendingLoginSessionGeneration = nil
+            opensWebsiteAfterLinkedWorkLoginDismiss = false
+            websiteURLAfterLinkedWorkLoginDismiss = nil
+            isPresentingLinkedWorkLogin = false
+        } else if isDismissingLinkedWorkForLogin || reopenLinkedWorkAfterDismiss {
+            isDismissingLinkedWorkForLogin = false
+            pendingLoginWorkLink = nil
+            pendingLoginSessionGeneration = nil
+            reopenLinkedWorkAfterDismiss = true
+        } else if isPresentingWebBrowser && !isPresentingLinkedWork {
+            isPresentingWebBrowser = false
+        } else {
+            isPresentingWebBrowser = false
+            isPresentingLinkedWork = true
+        }
     }
 
     private static func canonicalAO3URL(_ url: URL) -> URL {
