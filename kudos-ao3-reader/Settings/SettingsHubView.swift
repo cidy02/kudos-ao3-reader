@@ -20,6 +20,9 @@ struct SettingsHubView: View {
     @AppStorage("autoPreserveSeriesWorkThreshold") private var seriesLimit = 5
     @AppStorage("hideMatureContent") private var hideMatureContent = true
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
+    @AppStorage(ReaderSpeechPreferences.engineKey) private var speechEngineID = ""
+    @AppStorage(ReaderSpeechPreferences.voiceIDKey) private var speechVoiceID = ""
+    @AppStorage(ReaderSpeechPreferences.voiceNameKey) private var speechVoiceName = ""
 
     @State private var folderSyncStatus = FolderSyncService.snapshot()
     @State private var searchText = ""
@@ -97,7 +100,10 @@ struct SettingsHubView: View {
             hidesMature: hideMatureContent,
             matureMode: matureMode,
             folderSync: folderSyncStatus,
-            auth: auth.status
+            auth: auth.status,
+            speechEngineID: speechEngineID,
+            speechVoiceID: speechVoiceID,
+            speechVoiceName: speechVoiceName
         )
     }
 }

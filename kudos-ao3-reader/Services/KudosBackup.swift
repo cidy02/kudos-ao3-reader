@@ -1647,6 +1647,9 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
     /// that never chose cannot reset one that did through folder sync. Apply writes only a
     /// value this build knows. Additive — no manifest version bump.
     var workSymbolPlacement: String?
+    /// Settings › Listening's picked voice display name (`ReaderSpeechPreferences.voiceNameKey`).
+    /// Nil when absent or nothing is stored so exports with no pinned voice omit it.
+    var readerSpeechVoiceName: String?
 
     init(
         readerFontID: String,
@@ -1671,7 +1674,8 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         autoPreserveSmallSeriesOnSaveForLater: Bool,
         autoPreserveSeriesWorkThreshold: Int,
         libraryPageArrangement: LibraryPageArrangement? = nil,
-        workSymbolPlacement: String? = nil
+        workSymbolPlacement: String? = nil,
+        readerSpeechVoiceName: String? = nil
     ) {
         self.readerFontID = readerFontID
         self.readerMode = readerMode
@@ -1696,6 +1700,7 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         self.autoPreserveSeriesWorkThreshold = autoPreserveSeriesWorkThreshold
         self.libraryPageArrangement = libraryPageArrangement
         self.workSymbolPlacement = workSymbolPlacement
+        self.readerSpeechVoiceName = readerSpeechVoiceName
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -1722,6 +1727,7 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         case autoPreserveSeriesWorkThreshold
         case libraryPageArrangement
         case workSymbolPlacement
+        case readerSpeechVoiceName
     }
 
     init(from decoder: Decoder) throws {
@@ -1773,6 +1779,10 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
             workSymbolPlacement: (try? container.decodeIfPresent(
                 String.self,
                 forKey: .workSymbolPlacement
+            )) ?? nil,
+            readerSpeechVoiceName: (try? container.decodeIfPresent(
+                String.self,
+                forKey: .readerSpeechVoiceName
             )) ?? nil
         )
     }
@@ -1830,7 +1840,8 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
             )),
             libraryPageArrangement: LibraryPageArrangement.stored(in: defaults),
             // Only a stored choice, like `accentColorHex`.
-            workSymbolPlacement: defaults.string(forKey: WorkSymbolPlacement.storageKey)
+            workSymbolPlacement: defaults.string(forKey: WorkSymbolPlacement.storageKey),
+            readerSpeechVoiceName: nonEmptyString(defaults, ReaderSpeechPreferences.voiceNameKey)
         )
     }
 
@@ -1902,6 +1913,16 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         if let workSymbolPlacement, WorkSymbolPlacement(rawValue: workSymbolPlacement) != nil {
             defaults.set(workSymbolPlacement, forKey: WorkSymbolPlacement.storageKey)
         }
+        if let readerSpeechVoiceName = readerSpeechVoiceName?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !readerSpeechVoiceName.isEmpty {
+            defaults.set(readerSpeechVoiceName, forKey: ReaderSpeechPreferences.voiceNameKey)
+        }
+    }
+
+    private static func nonEmptyString(_ defaults: UserDefaults, _ key: String) -> String? {
+        guard let value = defaults.string(forKey: key)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty else { return nil }
+        return value
     }
 
     private static func bool(

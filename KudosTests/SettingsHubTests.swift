@@ -97,13 +97,15 @@ struct SettingsHubTests {
             appTheme: .dark, readerTheme: .sepia, themesMatched: false, fontName: "Georgia",
             readingMode: .paged, downloadOnSubscribe: true, autoPreserveSeries: true, seriesLimit: 7,
             hidesMature: false, matureMode: .hide, folderSync: Self.sync(connected: true, auto: false),
-            auth: .signedIn(username: "reader")
+            auth: .signedIn(username: "reader"),
+            speechEngineID: "kokoro", speechVoiceID: "af_bella", speechVoiceName: "Bella"
         )
         let second = SettingsHubInputs(
             appTheme: .oled, readerTheme: .sepia, themesMatched: true, fontName: "Menlo",
             readingMode: .scroll, downloadOnSubscribe: false, autoPreserveSeries: true, seriesLimit: 3,
             hidesMature: false, matureMode: .obscure, folderSync: Self.sync(connected: true, auto: true),
-            auth: .signedOut
+            auth: .signedOut,
+            speechEngineID: "system", speechVoiceID: "com.apple.voice.compact.en-US.Samantha", speechVoiceName: "Samantha"
         )
         let third = SettingsHubInputs(
             appTheme: .sepia, readerTheme: .dark, themesMatched: true, fontName: "System",
@@ -114,16 +116,19 @@ struct SettingsHubTests {
         let cases: [(SettingsHubInputs, [SettingsRoute: String])] = [
             (first, [
                 .appearance: "Dark, Sepia reader", .font: "Georgia", .reader: "Paged",
+                .listening: "Kokoro · Bella",
                 .downloads: "On subscribe", .readingQueues: "Auto up to 7 works", .syncFolder: "Paused",
                 .account: "reader", .privacySettings: "Off", .about: Changelog.currentVersion
             ]),
             (second, [
                 .appearance: "OLED", .font: "Menlo", .reader: "Scrolled",
+                .listening: "Apple · Samantha",
                 .downloads: "Manual", .readingQueues: "Auto up to 3 works", .syncFolder: "On",
                 .account: "Not signed in", .privacySettings: "Off", .about: Changelog.currentVersion
             ]),
             (third, [
                 .appearance: "Sepia", .font: "System", .reader: "Paged",
+                .listening: "Automatic",
                 .downloads: "On subscribe", .readingQueues: "Ask first", .syncFolder: "Off",
                 .account: "Checking…", .privacySettings: "Hide mature works", .about: Changelog.currentVersion
             ])
@@ -228,5 +233,85 @@ struct SettingsHubTests {
     @Test func hubFirstSectionFooterCarriesFactAndVoiceOverValue() {
         #expect(SettingsHubView.hubFooterText == "Changes here affect Kudos, not your AO3 account")
         #expect(SettingsHubView.hubFooterAccessibilityValue == "These settings are stored on this device only and are never sent to AO3.")
+    }
+
+    // MARK: Listening & Backup
+
+    @Test func listeningValueShowsEngineAndVoiceOrAutomatic() {
+        #expect(SettingsHubValue.listening(engineID: "", voiceID: "", voiceName: "") == "Automatic")
+        #expect(SettingsHubValue.listening(engineID: "kokoro", voiceID: "", voiceName: "") == "Automatic")
+        #expect(SettingsHubValue.listening(engineID: "system", voiceID: "", voiceName: "Samantha") == "Automatic")
+        #expect(SettingsHubValue.listening(engineID: "", voiceID: "af_bella", voiceName: "") == "Automatic")
+
+        #expect(
+            SettingsHubValue.listening(engineID: "kokoro", voiceID: "af_bella", voiceName: "Bella")
+                == "Kokoro · Bella"
+        )
+        #expect(
+            SettingsHubValue.listening(engineID: "", voiceID: "af_bella", voiceName: "Bella")
+                == "Kokoro · Bella"
+        )
+        #expect(
+            SettingsHubValue.listening(
+                engineID: "system",
+                voiceID: "com.apple.voice.compact.en-US.Samantha",
+                voiceName: "Samantha"
+            ) == "Apple · Samantha"
+        )
+        #expect(
+            SettingsHubValue.listening(
+                engineID: "",
+                voiceID: "com.apple.voice.compact.en-US.Samantha",
+                voiceName: "Samantha"
+            ) == "Apple · Samantha"
+        )
+    }
+
+    @Test func speechVoiceNameRoundTripsThroughBackupSettingsAndIsOmittedWhenUnset() throws {
+        let sourceSuite = "SettingsHubTests.source.\(UUID().uuidString)"
+        let source = try #require(UserDefaults(suiteName: sourceSuite))
+        defer { source.removePersistentDomain(forName: sourceSuite) }
+
+        // Unset -> omitted from exported JSON.
+        let unsetCaptured = KudosBackupSettings.capture(defaults: source)
+        #expect(unsetCaptured.readerSpeechVoiceName == nil)
+        let unsetJSON = try #require(
+            JSONSerialization.jsonObject(with: JSONEncoder().encode(unsetCaptured)) as? [String: Any]
+        )
+        #expect(unsetJSON["readerSpeechVoiceName"] == nil)
+
+        // Empty string -> also omitted from exported JSON.
+        source.set("", forKey: ReaderSpeechPreferences.voiceNameKey)
+        let emptyCaptured = KudosBackupSettings.capture(defaults: source)
+        #expect(emptyCaptured.readerSpeechVoiceName == nil)
+        let emptyJSON = try #require(
+            JSONSerialization.jsonObject(with: JSONEncoder().encode(emptyCaptured)) as? [String: Any]
+        )
+        #expect(emptyJSON["readerSpeechVoiceName"] == nil)
+
+        // Stored voice name -> travels through JSON and restores to destination.
+        source.set("Bella", forKey: ReaderSpeechPreferences.voiceNameKey)
+        let setCaptured = KudosBackupSettings.capture(defaults: source)
+        #expect(setCaptured.readerSpeechVoiceName == "Bella")
+        let encoded = try JSONEncoder().encode(setCaptured)
+        let setJSON = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        #expect(setJSON["readerSpeechVoiceName"] as? String == "Bella")
+
+        let decoded = try JSONDecoder().decode(KudosBackupSettings.self, from: encoded)
+        #expect(decoded.readerSpeechVoiceName == "Bella")
+
+        let destinationSuite = "SettingsHubTests.dest.\(UUID().uuidString)"
+        let destination = try #require(UserDefaults(suiteName: destinationSuite))
+        defer { destination.removePersistentDomain(forName: destinationSuite) }
+        decoded.apply(to: destination)
+        #expect(destination.string(forKey: ReaderSpeechPreferences.voiceNameKey) == "Bella")
+
+        // Absent key in incoming backup leaves existing local value intact.
+        let unsetDecoded = try JSONDecoder().decode(
+            KudosBackupSettings.self,
+            from: JSONEncoder().encode(unsetCaptured)
+        )
+        unsetDecoded.apply(to: destination)
+        #expect(destination.string(forKey: ReaderSpeechPreferences.voiceNameKey) == "Bella")
     }
 }

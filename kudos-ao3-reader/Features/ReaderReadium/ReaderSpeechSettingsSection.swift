@@ -17,6 +17,7 @@ struct ReaderSpeechSettingsSection: View {
 
     @AppStorage(ReaderSpeechPreferences.engineKey) private var engineID = ""
     @AppStorage(ReaderSpeechPreferences.voiceIDKey) private var voiceID = ""
+    @AppStorage(ReaderSpeechPreferences.voiceNameKey) private var voiceName = ""
     @AppStorage(ReaderSpeechPreferences.readAuthorNotesKey) private var readAuthorNotes = true
     @AppStorage(ReaderSpeechPreferences.rateKey)
     private var rate = ReaderSpeechPreferences.defaultRate
@@ -463,6 +464,7 @@ struct ReaderSpeechSettingsSection: View {
             Button(role: .destructive) {
                 engineID = ""
                 voiceID = ""
+                voiceName = ""
                 rate = ReaderSpeechPreferences.defaultRate
                 pitch = ReaderSpeechPreferences.defaultPitch
                 kokoroModelPackID = KokoroModelPack.defaultPack.rawValue
@@ -746,6 +748,16 @@ struct ReaderSpeechSettingsSection: View {
             cachedKokoroRuntimeConfiguration = nil
             voices = ReaderSpeechPreferences.catalogVoices()
         }
+        syncStoredVoiceName()
+    }
+
+    private func syncStoredVoiceName() {
+        if voiceID.isEmpty {
+            if !voiceName.isEmpty { voiceName = "" }
+        } else if let matched = voices.first(where: { $0.identifier == voiceID }),
+                  voiceName != matched.name {
+            voiceName = matched.name
+        }
     }
 
     /// Whether *any* Kokoro engine can run: Core ML on iOS 27+, sherpa-onnx
@@ -856,6 +868,7 @@ struct ReaderSpeechSettingsSection: View {
             Section {
                 voiceRow(
                     id: "",
+                    storedName: "",
                     title: "Automatic (best available)",
                     subtitle: automaticSubtitle
                 )
@@ -865,6 +878,7 @@ struct ReaderSpeechSettingsSection: View {
                 ForEach(sortedVoices, id: \.identifier) { voice in
                     voiceRow(
                         id: voice.identifier,
+                        storedName: voice.name,
                         title: voice.name,
                         subtitle: voiceSubtitle(voice)
                     )
@@ -880,9 +894,10 @@ struct ReaderSpeechSettingsSection: View {
         .navigationBarTitleDisplayMode(.inline)
         .onAppear(perform: updateVoices)
     }
-    private func voiceRow(id: String, title: String, subtitle: String) -> some View {
+    private func voiceRow(id: String, storedName: String, title: String, subtitle: String) -> some View {
         Button {
             voiceID = id
+            voiceName = storedName
         } label: {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 2) {

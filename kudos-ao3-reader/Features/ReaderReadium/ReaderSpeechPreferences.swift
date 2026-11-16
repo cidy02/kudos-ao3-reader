@@ -1,8 +1,4 @@
-#if os(iOS)
-import AVFoundation
 import Foundation
-import ReadiumNavigator
-import ReadiumShared
 
 /// Persisted read-aloud preferences and pure helpers for voice selection / text
 /// cleanup. Phase 1 keeps Apple's `AVSpeechSynthesizer` (via Readium) and aims
@@ -11,14 +7,54 @@ import ReadiumShared
 ///
 /// Personal Voice is intentionally excluded — fanfic read in the listener's own
 /// voice is a product choice we don't offer.
-enum ReaderSpeechPreferences {
+nonisolated enum ReaderSpeechPreferences {
     static let engineKey = "readerSpeechEngine"
     static let readAuthorNotesKey = "readerSpeechReadAuthorNotes"
     static let voiceIDKey = "readerSpeechVoiceID"
+    static let voiceNameKey = "readerSpeechVoiceName"
     static let rateKey = "readerSpeechRate"
     static let pitchKey = "readerSpeechPitch"
     static let kokoroModelPackKey = "readerSpeechKokoroModelPack"
     static let kokoroExecutionProviderKey = "readerSpeechKokoroExecutionProvider"
+
+    static var voiceName: String {
+        get { UserDefaults.standard.string(forKey: voiceNameKey) ?? "" }
+        set { UserDefaults.standard.set(newValue, forKey: voiceNameKey) }
+    }
+
+    static func isKokoroVoiceIdentifier(_ identifier: String) -> Bool {
+        let parts = identifier.split(separator: "_", maxSplits: 1, omittingEmptySubsequences: true)
+        guard parts.count == 2, parts[0].count == 2, !parts[1].isEmpty else { return false }
+        let prefix = Array(parts[0])
+        return (prefix[0] == "a" || prefix[0] == "b") && (prefix[1] == "f" || prefix[1] == "m")
+    }
+
+    /// Formats the Settings › Listening hub row value purely from stored
+    /// preferences without loading any speech engine or voice catalog.
+    static func listeningSummary(engineID: String, voiceID: String, voiceName: String) -> String {
+        let trimmedID = voiceID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedName = voiceName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedID.isEmpty, !trimmedName.isEmpty else { return "Automatic" }
+
+        let engineLabel: String
+        switch engineID {
+        case "kokoro":
+            engineLabel = "Kokoro"
+        case "system":
+            engineLabel = "Apple"
+        default:
+            engineLabel = isKokoroVoiceIdentifier(trimmedID) ? "Kokoro" : "Apple"
+        }
+        return "\(engineLabel) · \(trimmedName)"
+    }
+}
+
+#if os(iOS)
+import AVFoundation
+import ReadiumNavigator
+import ReadiumShared
+
+extension ReaderSpeechPreferences {
 
     /// Multiplier on `AVSpeechUtteranceDefaultSpeechRate`. 1.0 = system default.
     static let rateRange: ClosedRange<Double> = 0.5 ... 1.5
