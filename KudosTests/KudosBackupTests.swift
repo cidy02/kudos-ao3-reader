@@ -148,6 +148,32 @@ struct KudosBackupTests {
         #expect(localWork.coverRecipeJSON == localPin)
     }
 
+    @Test func futureSkewedIncomingPinIsClampedDuringBackupRestore() throws {
+        let id = UUID()
+        let incomingContext = try coverContext()
+        let incoming = SavedWork(id: id, title: "Skewed", author: "Author")
+        incomingContext.insert(incoming)
+        incoming.pinCover(salt: 1)
+        var obj = try #require(
+            JSONSerialization.jsonObject(with: Data(#require(incoming.coverRecipeJSON).utf8)) as? [String: Any]
+        )
+        obj["pinnedAt"] = 32_503_680_000.0 // Year 3000
+        incoming.coverRecipeJSON = try #require(
+            String(data: JSONSerialization.data(withJSONObject: obj), encoding: .utf8)
+        )
+
+        let targetContext = try coverContext()
+        _ = try KudosBackupService.restore(
+            coverContents(incoming), into: targetContext, defaults: try testDefaults()
+        )
+        let restored = try #require(try targetContext.fetch(FetchDescriptor<SavedWork>()).first)
+        let ceiling = Date().addingTimeInterval(KudosBackupContents.maxFutureTimestampSkew)
+        let twoDaysLater = Date().addingTimeInterval(2 * 24 * 60 * 60)
+        let storedPinTime = try #require(GeneratedCoverRecipe.pinnedAt(in: restored.coverRecipeJSON, now: twoDaysLater))
+        #expect(storedPinTime <= ceiling)
+        #expect(restored.generatedCoverRecipe.salt == 1)
+    }
+
     @Test func futureUndecodablePinPassesThroughRestoreAndActions() throws {
         let id = UUID()
         let context = try coverContext()

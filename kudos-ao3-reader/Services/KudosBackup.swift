@@ -4843,7 +4843,7 @@ enum KudosBackupService {
                localJSON: work.coverRecipeJSON,
                incomingJSON: coverRecipeJSON
            ) {
-            work.coverRecipeJSON = coverRecipeJSON
+            work.coverRecipeJSON = GeneratedCoverRecipe.clampingFuturePinIfSupported(coverRecipeJSON)
         }
         work.workTagsFetched = work.workTagsFetched || archived.workTagsFetched
         work.ao3Unavailable = work.ao3Unavailable || archived.ao3Unavailable
@@ -4906,8 +4906,9 @@ enum KudosBackupService {
 
     private static func shouldApplyIncomingCover(localJSON: String?, incomingJSON: String) -> Bool {
         guard let localJSON else { return true }
-        let localTime = GeneratedCoverRecipe.pinnedAt(in: localJSON)
-        let incomingTime = GeneratedCoverRecipe.pinnedAt(in: incomingJSON)
+        let now = Date()
+        let localTime = GeneratedCoverRecipe.pinnedAt(in: localJSON, now: now)
+        let incomingTime = GeneratedCoverRecipe.pinnedAt(in: incomingJSON, now: now)
         let epoch = Date(timeIntervalSince1970: 0)
         if localTime == epoch, incomingTime == epoch,
            let local = GeneratedCoverRecipe.supportedPin(in: localJSON),

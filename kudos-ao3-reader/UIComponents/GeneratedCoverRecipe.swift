@@ -34,10 +34,22 @@ nonisolated struct GeneratedCoverRecipe: Codable, Equatable, Sendable {
 
     private struct PinTime: Decodable { let pinnedAt: Double? }
 
-    static func pinnedAt(in json: String?) -> Date? {
+    static func pinnedAt(in json: String?, now: Date = Date()) -> Date? {
         guard let json, let time = try? JSONDecoder().decode(PinTime.self, from: Data(json.utf8)).pinnedAt,
               time.isFinite else { return nil }
-        return Date(timeIntervalSince1970: time)
+        return KudosBackupContents.clampedArchiveDate(Date(timeIntervalSince1970: time), now: now)
+    }
+
+    static func clampingFuturePinIfSupported(_ json: String, now: Date = Date()) -> String {
+        guard var recipe = supportedPin(in: json), let rawTime = recipe.pinnedAt, rawTime.isFinite else {
+            return json
+        }
+        let ceiling = now.addingTimeInterval(KudosBackupContents.maxFutureTimestampSkew).timeIntervalSince1970
+        guard rawTime > ceiling else { return json }
+        recipe.pinnedAt = ceiling
+        guard let data = try? JSONEncoder().encode(recipe),
+              let clampedJSON = String(data: data, encoding: .utf8) else { return json }
+        return clampedJSON
     }
 
     static func isAutomaticPin(in json: String?) -> Bool {
@@ -261,11 +273,25 @@ extension SavedWork {
             current.pinnedAt = nil
             if current == recipe { return }
         }
+        let now = Date()
         if automatic {
-            let preserved = previousTime.flatMap { $0.isFinite && $0 > 0 ? $0 : nil }
+            let preserved = previousTime.flatMap { time -> Double? in
+                guard time.isFinite, time > 0 else { return nil }
+                return KudosBackupContents.clampedArchiveDate(
+                    Date(timeIntervalSince1970: time), now: now
+                ).timeIntervalSince1970
+            }
             recipe.pinnedAt = preserved ?? 0
         } else {
-            recipe.pinnedAt = max(Date().timeIntervalSince1970, previousTime?.nextUp ?? 0)
+            let nextPrevious = previousTime.flatMap { time -> Double? in
+                guard time.isFinite else { return nil }
+                let clamped = KudosBackupContents.clampedArchiveDate(
+                    Date(timeIntervalSince1970: time), now: now
+                ).timeIntervalSince1970
+                let stepped = clamped.nextUp
+                return stepped.isFinite ? stepped : nil
+            }
+            recipe.pinnedAt = max(now.timeIntervalSince1970, nextPrevious ?? 0)
         }
         guard let data = try? JSONEncoder().encode(recipe),
               let json = String(data: data, encoding: .utf8) else { return }

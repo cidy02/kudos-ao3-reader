@@ -102,6 +102,31 @@ struct GeneratedCoverRecipeTests {
         #expect(notifications.withLock { $0 } == 2)
     }
 
+    @Test @MainActor func futureSkewedAndMaxFinitePinnedAtAreClampedWithoutBreakingPinCover() throws {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let ceiling = now.addingTimeInterval(KudosBackupContents.maxFutureTimestampSkew)
+        let year3000 = #"{"pinnedAt":32503680000}"#
+        #expect(GeneratedCoverRecipe.pinnedAt(in: year3000, now: now) == ceiling)
+
+        let work = SavedWork(title: "Skewed", author: "Writer")
+        work.pinCover(salt: 0)
+        var obj = try #require(
+            JSONSerialization.jsonObject(with: Data(#require(work.coverRecipeJSON).utf8)) as? [String: Any]
+        )
+        obj["pinnedAt"] = Double.greatestFiniteMagnitude
+        let rawMax = try #require(String(data: JSONSerialization.data(withJSONObject: obj), encoding: .utf8))
+        work.coverRecipeJSON = rawMax
+
+        #expect(GeneratedCoverRecipe.pinnedAt(in: work.coverRecipeJSON, now: now) == ceiling)
+
+        // Previously `Double.greatestFiniteMagnitude.nextUp == .infinity` broke JSONEncoder on Shuffle/Reset.
+        work.pinCover(salt: 1)
+        let shuffledCeiling = Date().addingTimeInterval(KudosBackupContents.maxFutureTimestampSkew)
+        #expect(work.generatedCoverRecipe.salt == 1)
+        let repinnedAt = try #require(GeneratedCoverRecipe.pinnedAt(in: work.coverRecipeJSON))
+        #expect(repinnedAt <= shuffledCeiling)
+    }
+
     @Test @MainActor func unknownRecipeFieldsAreNeverReencodedByCoverActions() throws {
         let work = SavedWork(title: "Future fields", author: "Writer")
         work.pinCover(salt: 0)
