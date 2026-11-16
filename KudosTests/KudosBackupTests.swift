@@ -72,6 +72,47 @@ struct KudosBackupTests {
         #expect(local.coverRecipeJSON == incoming.coverRecipeJSON)
     }
 
+    @Test func laterBackfillDoesNotOverwriteEarlierShuffleAndTwoBackfillsConverge() async throws {
+        let id = UUID()
+        let phone = try coverContext()
+        let ipad = try coverContext()
+        let shuffled = SavedWork(id: id, title: "Shared", author: "Author")
+        phone.insert(shuffled)
+        shuffled.pinCover(salt: 1)
+        let shuffledPin = try #require(shuffled.coverRecipeJSON)
+
+        let stale = SavedWork(id: id, title: "Shared", author: "Author")
+        ipad.insert(stale)
+        try ipad.save()
+        await PersistenceMigrationService.backfillCoverRecipes(in: ipad, defaults: try testDefaults())
+        #expect(GeneratedCoverRecipe.isAutomaticPin(in: stale.coverRecipeJSON))
+
+        _ = try KudosBackupService.restore(coverContents(stale), into: phone, defaults: try testDefaults())
+        #expect(shuffled.coverRecipeJSON == shuffledPin)
+        _ = try KudosBackupService.restore(coverContents(shuffled), into: ipad, defaults: try testDefaults())
+        #expect(stale.coverRecipeJSON == shuffledPin)
+
+        // Two automatic pins converge deterministically on the richer pin rather than ping-ponging.
+        let bareID = UUID()
+        let plainCtx = try coverContext()
+        let richCtx = try coverContext()
+        let plain = SavedWork(id: bareID, title: "Converge", author: "Author")
+        plain.pinCover(salt: 0, automatic: true)
+        plainCtx.insert(plain)
+        let rich = SavedWork(id: bareID, title: "Converge", author: "Author")
+        rich.workFandoms = ["Sherlock Holmes"]
+        rich.wordCount = 92_000
+        rich.isComplete = true
+        rich.pinCover(salt: 0, automatic: true)
+        let richPin = try #require(rich.coverRecipeJSON)
+        richCtx.insert(rich)
+
+        _ = try KudosBackupService.restore(coverContents(plain), into: richCtx, defaults: try testDefaults())
+        #expect(rich.coverRecipeJSON == richPin)
+        _ = try KudosBackupService.restore(coverContents(rich), into: plainCtx, defaults: try testDefaults())
+        #expect(plain.coverRecipeJSON == richPin)
+    }
+
     @Test func futureUndecodablePinPassesThroughRestoreAndActions() throws {
         let id = UUID()
         let context = try coverContext()

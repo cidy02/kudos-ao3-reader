@@ -4839,10 +4839,7 @@ enum KudosBackupService {
         work.workRelationships = TagMerge.merged(work.workRelationships, archived.workRelationships)
         work.workFreeforms = TagMerge.merged(work.workFreeforms, archived.workFreeforms)
         if let coverRecipeJSON = archived.coverRecipeJSON,
-           work.coverRecipeJSON == nil || SyncMerge.shouldApplyIncoming(
-               localModifiedAt: GeneratedCoverRecipe.pinnedAt(in: work.coverRecipeJSON),
-               incomingModifiedAt: GeneratedCoverRecipe.pinnedAt(in: coverRecipeJSON)
-           ) {
+           shouldApplyIncomingCover(localJSON: work.coverRecipeJSON, incomingJSON: coverRecipeJSON) {
             work.coverRecipeJSON = coverRecipeJSON
         }
         work.workTagsFetched = work.workTagsFetched || archived.workTagsFetched
@@ -4902,6 +4899,22 @@ enum KudosBackupService {
         work.lastModifiedAt = adoptsArchiveClock
             ? incomingModifiedAt
             : max(work.lastModifiedAt, incomingModifiedAt)
+    }
+
+    private static func shouldApplyIncomingCover(localJSON: String?, incomingJSON: String) -> Bool {
+        guard let localJSON else { return true }
+        let localTime = GeneratedCoverRecipe.pinnedAt(in: localJSON)
+        let incomingTime = GeneratedCoverRecipe.pinnedAt(in: incomingJSON)
+        let epoch = Date(timeIntervalSince1970: 0)
+        if localTime == epoch, incomingTime == epoch,
+           let local = GeneratedCoverRecipe.supportedPin(in: localJSON),
+           let incoming = GeneratedCoverRecipe.supportedPin(in: incomingJSON) {
+            let localRank = (local.fandom.isEmpty ? 0 : 1, local.closedRing ? 1 : 0, local.tier)
+            let incomingRank = (incoming.fandom.isEmpty ? 0 : 1, incoming.closedRing ? 1 : 0, incoming.tier)
+            if incomingRank != localRank { return incomingRank > localRank }
+            return incomingJSON > localJSON
+        }
+        return SyncMerge.shouldApplyIncoming(localModifiedAt: localTime, incomingModifiedAt: incomingTime)
     }
 
     private static func mergedText(current: String, incoming: String, incomingWins: Bool) -> String {

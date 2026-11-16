@@ -40,6 +40,10 @@ nonisolated struct GeneratedCoverRecipe: Codable, Equatable, Sendable {
         return Date(timeIntervalSince1970: time)
     }
 
+    static func isAutomaticPin(in json: String?) -> Bool {
+        pinnedAt(in: json) == Date(timeIntervalSince1970: 0)
+    }
+
     static func supportedPin(in json: String) -> GeneratedCoverRecipe? {
         let data = Data(json.utf8)
         guard let recipe = try? JSONDecoder().decode(Self.self, from: data),
@@ -248,7 +252,7 @@ extension SavedWork {
     var coverTier: Int { GeneratedCoverRecipe.tier(for: wordCount) }
 
     @MainActor
-    func pinCover(salt: Int) {
+    func pinCover(salt: Int, automatic: Bool = false) {
         var recipe = resolvedCover(salt: salt)
         var previousTime: Double?
         if let coverRecipeJSON {
@@ -257,7 +261,12 @@ extension SavedWork {
             current.pinnedAt = nil
             if current == recipe { return }
         }
-        recipe.pinnedAt = max(Date().timeIntervalSince1970, previousTime?.nextUp ?? 0)
+        if automatic {
+            let preserved = previousTime.flatMap { $0.isFinite && $0 > 0 ? $0 : nil }
+            recipe.pinnedAt = preserved ?? 0
+        } else {
+            recipe.pinnedAt = max(Date().timeIntervalSince1970, previousTime?.nextUp ?? 0)
+        }
         guard let data = try? JSONEncoder().encode(recipe),
               let json = String(data: data, encoding: .utf8) else { return }
         coverRecipeJSON = json
@@ -268,7 +277,7 @@ extension SavedWork {
     func refreshCoverIfNeeded() {
         guard let coverRecipeJSON, let pinned = GeneratedCoverRecipe.supportedPin(in: coverRecipeJSON),
               (!pinned.closedRing && isComplete) || pinned.tier != coverTier else { return }
-        pinCover(salt: pinned.salt)
+        pinCover(salt: pinned.salt, automatic: (pinned.pinnedAt ?? 0) == 0)
     }
 
     @MainActor

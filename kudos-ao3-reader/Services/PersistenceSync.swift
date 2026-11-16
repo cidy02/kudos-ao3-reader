@@ -160,24 +160,21 @@ enum PersistenceMigrationService {
         return result
     }
 
-    static func backfillCoverRecipes(in context: ModelContext, defaults: UserDefaults = .standard) async {
-        let key = "coverRecipesBackfilled"
-        guard !defaults.bool(forKey: key), PersistenceOperationGate.begin(.migration) else { return }
+    static func backfillCoverRecipes(in context: ModelContext, defaults _: UserDefaults = .standard) async {
+        guard PersistenceOperationGate.begin(.migration) else { return }
         defer { PersistenceOperationGate.end(.migration) }
         do {
+            let descriptor = FetchDescriptor<SavedWork>(predicate: #Predicate { $0.coverRecipeJSON == nil })
             var processed = 0
             var changed = false
-            for work in try context.fetch(FetchDescriptor<SavedWork>()) {
-                guard work.modelContext != nil else { continue }
-                if work.coverRecipeJSON == nil {
-                    work.pinCover(salt: 0)
-                    changed = true
-                }
+            for work in try context.fetch(descriptor) {
+                guard work.modelContext != nil, work.coverRecipeJSON == nil else { continue }
+                work.pinCover(salt: 0, automatic: true)
+                changed = true
                 processed += 1
                 if processed.isMultiple(of: yieldInterval) { await Task.yield() }
             }
             if changed { try context.save() }
-            defaults.set(true, forKey: key)
         } catch {
             Log.library.error("Cover recipe backfill failed: \(error.localizedDescription, privacy: .public)")
         }

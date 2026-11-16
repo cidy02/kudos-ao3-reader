@@ -878,7 +878,9 @@ enum ReadingQueueService {
             into: context
         )
         applyRemoteMetadata(summary, to: saved)
-        saved.pinCover(salt: 0)
+        if saved.coverRecipeJSON == nil || GeneratedCoverRecipe.isAutomaticPin(in: saved.coverRecipeJSON) {
+            saved.pinCover(salt: 0, automatic: saved.workFandoms.isEmpty || saved.wordCount == 0)
+        }
         try? context.save()
         return saved
     }
@@ -915,7 +917,7 @@ enum ReadingQueueService {
         if work.seriesURL.isEmpty { work.seriesURL = summary.seriesURL ?? "" }
         if work.seriesPosition == 0 { work.seriesPosition = summary.seriesPosition ?? 0 }
         if work.ao3SeriesID == nil { work.ao3SeriesID = ao3SeriesID(from: work.seriesURL) }
-        if work.coverRecipeJSON == nil { work.pinCover(salt: 0) }
+        if work.coverRecipeJSON == nil { work.pinCover(salt: 0, automatic: true) }
         work.refreshCoverIfNeeded()
         work.markModified()
         WorkSearchIndex.reindex(work)

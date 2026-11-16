@@ -66,6 +66,21 @@ struct GeneratedCoverRecipeTests {
         #expect(work.lastModifiedAt == workClock)
     }
 
+    @Test @MainActor func automaticPinCarriesEpochZeroWhileReaderActionsStampNow() {
+        let auto = SavedWork(title: "Auto", author: "Writer")
+        auto.pinCover(salt: 0, automatic: true)
+        #expect(GeneratedCoverRecipe.pinnedAt(in: auto.coverRecipeJSON) == Date(timeIntervalSince1970: 0))
+        #expect(GeneratedCoverRecipe.isAutomaticPin(in: auto.coverRecipeJSON))
+
+        auto.pinCover(salt: 1)
+        #expect((GeneratedCoverRecipe.pinnedAt(in: auto.coverRecipeJSON)?.timeIntervalSince1970 ?? 0) > 0)
+        #expect(!GeneratedCoverRecipe.isAutomaticPin(in: auto.coverRecipeJSON))
+
+        auto.pinCover(salt: 0) // Reader Reset Cover must not drop back to epoch 0.
+        #expect((GeneratedCoverRecipe.pinnedAt(in: auto.coverRecipeJSON)?.timeIntervalSince1970 ?? 0) > 0)
+        #expect(!GeneratedCoverRecipe.isAutomaticPin(in: auto.coverRecipeJSON))
+    }
+
     @Test @MainActor func unknownRecipeFieldsAreNeverReencodedByCoverActions() throws {
         let work = SavedWork(title: "Future fields", author: "Writer")
         work.pinCover(salt: 0)

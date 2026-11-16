@@ -58,7 +58,7 @@ func importEPUB(
             throw error
         }
         existing.markModified()
-        if existing.coverRecipeJSON == nil { existing.pinCover(salt: 0) }
+        if existing.coverRecipeJSON == nil { existing.pinCover(salt: 0, automatic: true) }
         existing.refreshCoverIfNeeded()
         WorkSearchIndex.reindex(existing)
         try? context.save()
@@ -111,7 +111,7 @@ func importEPUB(
     }
 
     context.insert(work)
-    work.pinCover(salt: 0)
+    work.pinCover(salt: 0, automatic: true)
     WorkSearchIndex.reindex(work)
     try? context.save()
     Log.library.info("Imported work “\(title)”")

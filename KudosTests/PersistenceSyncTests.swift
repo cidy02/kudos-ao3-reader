@@ -20,7 +20,7 @@ struct PersistenceSyncTests {
         return try ModelContainer(for: schema, configurations: [configuration])
     }
 
-    @Test func coverBackfillPinsOldRowsOnceWithoutChangingWorkClocks() async throws {
+    @Test func coverBackfillPinsNilRowsEachLaunchWithoutChangingWorkClocks() async throws {
         let container = try container()
         let context = container.mainContext
         let defaults = try testDefaults()
@@ -32,13 +32,23 @@ struct PersistenceSyncTests {
 
         await PersistenceMigrationService.backfillCoverRecipes(in: context, defaults: defaults)
         let pin = try #require(work.coverRecipeJSON)
-        #expect(GeneratedCoverRecipe.pinnedAt(in: pin) != nil)
+        #expect(GeneratedCoverRecipe.pinnedAt(in: pin) == Date(timeIntervalSince1970: 0))
+        #expect(GeneratedCoverRecipe.isAutomaticPin(in: pin))
         #expect(work.lastModifiedAt == originalClock)
-        #expect(defaults.bool(forKey: "coverRecipesBackfilled"))
+
+        // A later nil-cover row (e.g. restored from a pre-T-524c backup or synced from
+        // Android) is still picked up on the next launch pass without touching existing pins.
+        let lateArrival = SavedWork(title: "Restored later", author: "Writer")
+        let lateClock = Date(timeIntervalSince1970: 1_700_000_500)
+        lateArrival.lastModifiedAt = lateClock
+        context.insert(lateArrival)
+        try context.save()
 
         await PersistenceMigrationService.backfillCoverRecipes(in: context, defaults: defaults)
         #expect(work.coverRecipeJSON == pin)
         #expect(work.lastModifiedAt == originalClock)
+        #expect(GeneratedCoverRecipe.pinnedAt(in: lateArrival.coverRecipeJSON) == Date(timeIntervalSince1970: 0))
+        #expect(lateArrival.lastModifiedAt == lateClock)
     }
 
     @Test func migrationIsIdempotentAndMarksMissingEPUBRecoverable() async throws {
