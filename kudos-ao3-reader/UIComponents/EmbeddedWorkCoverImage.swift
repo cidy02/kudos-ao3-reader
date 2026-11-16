@@ -25,7 +25,7 @@ nonisolated enum EmbeddedWorkCoverImage {
     }
 
     static func data(at epubURL: URL) -> Data? {
-        guard let archive = try? Data(contentsOf: epubURL),
+        guard let archive = try? Data(contentsOf: epubURL, options: .mappedIfSafe),
               let zip = try? MiniZip(data: archive),
               let container = zip.data(named: "META-INF/container.xml"),
               let opfPath = EPUBDocument.rootfilePath(from: container) else { return nil }
@@ -62,6 +62,7 @@ nonisolated enum EmbeddedWorkCoverImage {
         let firstChapter = sections.first(where: { $0.kind == .chapter })?.spineIndex ?? 0
         var best: Candidate?
         for index in 0...firstChapter where pages.indices.contains(index) {
+            if Task.isCancelled { return nil }
             let pageURL = pages[index]
             guard let pageName = entryName(pageURL),
                   let pageData = zip.data(named: pageName),
@@ -69,6 +70,7 @@ nonisolated enum EmbeddedWorkCoverImage {
                   let page = try? SwiftSoup.parse(xhtml),
                   let images = try? page.select("img[src]").array() else { continue }
             for image in images {
+                if Task.isCancelled { return nil }
                 guard let src = try? image.attr("src"),
                       !src.isEmpty, !src.hasPrefix("//"),
                       let url = URL(string: src, relativeTo: pageURL)?.absoluteURL,

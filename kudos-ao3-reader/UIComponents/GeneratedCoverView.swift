@@ -12,6 +12,7 @@ struct GeneratedCoverView: View {
     var height: CGFloat?
     var showsWords = true
     var showsArt = true
+    var clipsRoundedCorners = true
     @State private var loadedURL: URL?
     @State private var embeddedImage: Image?
 
@@ -48,7 +49,7 @@ struct GeneratedCoverView: View {
 
     init(recipe: GeneratedCoverRecipe, width: CGFloat, epubURL: URL? = nil, epubWorkID: UUID? = nil,
          height: CGFloat? = nil,
-         showsWords: Bool = true, showsArt: Bool = true) {
+         showsWords: Bool = true, showsArt: Bool = true, clipsRoundedCorners: Bool = true) {
         self.recipe = recipe
         self.width = width
         artCacheKey = "\(String(reflecting: recipe))|\(width)|\(height ?? width * 1.42)"
@@ -57,6 +58,7 @@ struct GeneratedCoverView: View {
         self.height = height
         self.showsWords = showsWords
         self.showsArt = showsArt
+        self.clipsRoundedCorners = clipsRoundedCorners
     }
 
     private var coverHeight: CGFloat { height ?? width * 1.42 }
@@ -78,7 +80,8 @@ struct GeneratedCoverView: View {
             }
         }
         .frame(width: width, height: coverHeight)
-        .clipShape(RoundedRectangle(cornerRadius: width * 0.125, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: clipsRoundedCorners ? width * 0.125 : 0,
+                                    style: .continuous))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel([recipe.title, recipe.subtitle, recipe.author, recipe.fandom]
             .filter { !$0.isEmpty }.joined(separator: ", "))

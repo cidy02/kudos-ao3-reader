@@ -4,99 +4,192 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 /// Changes only the exported copy. The original EPUB and its recorded digest never move.
-enum EPUBCoverExport {
+nonisolated enum EPUBCoverExport {
+    enum ExportError: LocalizedError {
+        case coverUnavailable
+        var errorDescription: String? { "A cover could not be created for this work." }
+    }
+
     static func copy(from source: URL, to destination: URL, includeCover: Bool,
                      coverJPEG: Data? = nil) throws {
-        let original = try Data(contentsOf: source)
-        guard includeCover else { try original.write(to: destination, options: .atomic); return }
-        let zip = try MiniZip(data: original)
+        try Task.checkCancellation()
+        guard includeCover else { try FileManager.default.copyItem(at: source, to: destination); return }
+        let zip = try MiniZip(data: Data(contentsOf: source, options: .mappedIfSafe))
         guard let container = zip.data(named: "META-INF/container.xml"),
               let opfPath = EPUBDocument.rootfilePath(from: container),
-              let opfData = zip.data(named: opfPath),
-              let opf = String(data: opfData, encoding: .utf8) else { throw EPUBError.missingPackage }
+              let opfData = zip.data(named: opfPath) else { throw EPUBError.missingPackage }
         let parser = OPFParser()
         guard parser.parse(opfData) else { throw EPUBError.malformedPackage }
         // Existing declarations win, even when this app would choose different art.
-        if parser.coverMetaID != nil || parser.manifestProps.values.contains(where: {
-            $0.split(separator: " ").contains("cover-image")
+        if parser.coverMetaID != nil || parser.hasGuideCover || parser.manifestProps.values.contains(where: {
+            $0.split(whereSeparator: \.isWhitespace).contains("cover-image")
         }) {
-            try original.write(to: destination, options: .atomic)
+            try FileManager.default.copyItem(at: source, to: destination)
             return
         }
-        guard let coverJPEG else { throw EPUBError.missingPackage }
-        let opfDir = (opfPath as NSString).deletingLastPathComponent
-        func path(_ name: String) -> String { opfDir.isEmpty ? name : opfDir + "/" + name }
-        var base = "kudos-export-cover"
-        while zip.names.contains(path(base + ".jpg")) || zip.names.contains(path(base + ".xhtml")) {
-            base += "-1"
-        }
-        let imageID = "kudos-export-cover-image"
-        let pageID = "kudos-export-cover-page"
-        guard !parser.manifest.keys.contains(imageID), !parser.manifest.keys.contains(pageID),
-              let metadataEnd = opf.range(of: "</metadata>", options: .caseInsensitive),
-              let manifestEnd = opf.range(of: "</manifest>", options: .caseInsensitive),
-              let spineStart = opf.range(of: "<spine", options: .caseInsensitive),
-              let spineOpenEnd = opf[spineStart.lowerBound...].firstIndex(of: ">") else {
+        guard let coverJPEG else { throw ExportError.coverUnavailable }
+        let utf8 = opfData.contains(0) ? nil : String(data: opfData, encoding: .utf8)
+        let utf16 = opfData.starts(with: [0x00, 0x3C])
+            ? String(data: opfData, encoding: .utf16BigEndian)
+            : opfData.starts(with: [0x3C, 0x00])
+                ? String(data: opfData, encoding: .utf16LittleEndian)
+                : String(data: opfData, encoding: .utf16)
+        guard var opf = utf8 ?? utf16 else {
             throw EPUBError.malformedPackage
         }
-        var edited = opf
-        // Insert backwards so ranges from the original text remain valid.
-        let firstPage = parser.spine.first.flatMap { parser.manifest[$0] }
-            .flatMap { zip.data(named: path($0.removingPercentEncoding ?? $0)) }
-            .flatMap { String(data: $0, encoding: .utf8) }
-        if firstPage?.range(of: "<img", options: .caseInsensitive) == nil {
-            edited.insert(contentsOf: "<itemref idref=\"\(pageID)\"/>", at: edited.index(after: spineOpenEnd))
+        // A UTF-16 source is written as UTF-8 along with its new archive entry.
+        opf = opf.replacingOccurrences(of: #"encoding\s*=\s*(['"])utf-16(?:le|be)?\1"#,
+                                       with: "encoding=\"utf-8\"",
+                                       options: [.regularExpression, .caseInsensitive])
+        let opfDir = (opfPath as NSString).deletingLastPathComponent
+        func path(_ name: String) -> String { opfDir.isEmpty ? name : opfDir + "/" + name }
+        let existingNames = Set(zip.names.map { $0.lowercased() })
+        var base = "kudos-export-cover"
+        while existingNames.contains(path(base + ".jpg").lowercased())
+                || existingNames.contains(path(base + ".xhtml").lowercased()) {
+            base += "-1"
         }
-        edited.insert(contentsOf: "<item id=\"\(imageID)\" href=\"\(base).jpg\" media-type=\"image/jpeg\" properties=\"cover-image\"/><item id=\"\(pageID)\" href=\"\(base).xhtml\" media-type=\"application/xhtml+xml\"/>", at: manifestEnd.lowerBound)
-        edited.insert(contentsOf: "<meta name=\"cover\" content=\"\(imageID)\"/>", at: metadataEnd.lowerBound)
+        var imageID = "kudos-export-cover-image"
+        while parser.manifest[imageID] != nil { imageID += "-1" }
+        var pageID = "kudos-export-cover-page"
+        while parser.manifest[pageID] != nil || pageID == imageID { pageID += "-1" }
+        let edited = try addingCoverDeclarations(to: opf, imageID: imageID,
+                                                 pageID: pageID, base: base)
         let page = """
         <?xml version="1.0" encoding="utf-8"?>
-        <html xmlns="http://www.w3.org/1999/xhtml"><head><title>Cover</title></head><body style="margin:0"><img src="\(base).jpg" alt="Cover" style="width:100%;height:auto"/></body></html>
+        <!DOCTYPE html>
+        <html xmlns="http://www.w3.org/1999/xhtml"><head><title>Cover</title>
+        <style type="text/css">
+        html,body{height:100%;margin:0}
+        img{display:block;max-width:100%;max-height:100%;width:auto;height:auto;margin:auto}
+        </style>
+        </head><body><img src="\(base).jpg" alt="Cover"/></body></html>
         """
-        var entries: [(name: String, data: Data)] = []
-        for name in zip.names {
-            guard let data = zip.data(named: name) else { throw MiniZipError.truncatedRecord }
-            entries.append((name, name == opfPath ? Data(edited.utf8) : data))
+        guard FileManager.default.createFile(atPath: destination.path, contents: nil) else {
+            throw CocoaError(.fileWriteNoPermission)
         }
-        entries.append((path(base + ".jpg"), coverJPEG))
-        entries.append((path(base + ".xhtml"), Data(page.utf8)))
-        try MiniZip.archiveData(entries).write(to: destination, options: .atomic)
+        let handle = try FileHandle(forWritingTo: destination)
+        do {
+            let writer = MiniZip.ArchiveWriter { try handle.write(contentsOf: $0) }
+            try writer.append(name: "mimetype", data: Data("application/epub+zip".utf8))
+            for name in zip.names where name != "mimetype" {
+                try Task.checkCancellation()
+                guard let data = zip.data(named: name) else { throw MiniZipError.truncatedRecord }
+                try writer.append(name: name, data: name == opfPath ? Data(edited.utf8) : data)
+            }
+            try writer.append(name: path(base + ".jpg"), data: coverJPEG)
+            try writer.append(name: path(base + ".xhtml"), data: Data(page.utf8))
+            try writer.finish()
+            try handle.close()
+        } catch {
+            try? handle.close()
+            try? FileManager.default.removeItem(at: destination)
+            throw error
+        }
+    }
+
+    /// Match XML tag positions after masking comments; edits use UTF-16 offsets in the original.
+    private static func addingCoverDeclarations(
+        to opf: String, imageID: String, pageID: String, base: String
+    ) throws -> String {
+        let masked = NSMutableString(string: opf)
+        let fullRange = NSRange(location: 0, length: masked.length)
+        let comments = try NSRegularExpression(pattern: #"<!--[\s\S]*?-->"#)
+        for match in comments.matches(in: opf, range: fullRange).reversed() {
+            masked.replaceCharacters(in: match.range,
+                                     with: String(repeating: " ", count: match.range.length))
+        }
+        let source = masked as String
+        func tag(_ pattern: String) throws -> (NSRange, String) {
+            let regex = try NSRegularExpression(pattern: pattern, options: [.caseInsensitive])
+            guard let match = regex.firstMatch(in: source,
+                                               range: NSRange(location: 0, length: masked.length)) else {
+                throw EPUBError.malformedPackage
+            }
+            return (match.range, (opf as NSString).substring(with: match.range))
+        }
+        let metadata = try tag(#"</\s*(?:[A-Za-z_][\w.-]*:)?metadata\s*>"#)
+        let manifest = try tag(#"</\s*(?:[A-Za-z_][\w.-]*:)?manifest\s*>"#)
+        let spine = try tag(#"<\s*(?:[A-Za-z_][\w.-]*:)?spine\b(?:[^>"']|"[^"]*"|'[^']*')*>"#)
+        func prefix(_ tag: String, name: String) -> String {
+            let pattern = #"(?:[A-Za-z_][\w.-]*:)?"# + name
+            let match = tag.range(of: pattern, options: [.regularExpression, .caseInsensitive])
+            guard let match else { return "" }
+            let qualified = String(tag[match])
+            return qualified.contains(":") ? String(qualified.prefix(while: { $0 != ":" })) + ":" : ""
+        }
+        let metaPrefix = prefix(metadata.1, name: "metadata")
+        let itemPrefix = prefix(manifest.1, name: "manifest")
+        let spinePrefix = prefix(spine.1, name: "spine")
+        let package = try tag(#"<\s*(?:[A-Za-z_][\w.-]*:)?package\b(?:[^>"']|"[^"]*"|'[^']*')*>"#)
+        let epub2 = package.1.range(of: #"\bversion\s*=\s*['"]2\."#,
+                                    options: .regularExpression) != nil
+        let imageProperties = epub2 ? "" : " properties=\"cover-image\""
+        let meta = "<\(metaPrefix)meta name=\"cover\" content=\"\(imageID)\"/>"
+        let items = "<\(itemPrefix)item id=\"\(imageID)\" href=\"\(base).jpg\""
+            + " media-type=\"image/jpeg\"\(imageProperties)/>"
+            + "<\(itemPrefix)item id=\"\(pageID)\" href=\"\(base).xhtml\" media-type=\"application/xhtml+xml\"/>"
+        let itemref = "<\(spinePrefix)itemref idref=\"\(pageID)\"/>"
+        let selfClosing = spine.1.trimmingCharacters(in: .whitespacesAndNewlines).hasSuffix("/>")
+        let spineEdit = selfClosing
+            ? (spine.0, String(spine.1.dropLast(2)) + ">" + itemref + "</\(spinePrefix)spine>")
+            : (NSRange(location: NSMaxRange(spine.0), length: 0), itemref)
+        let edits: [(NSRange, String)] = [
+            (NSRange(location: metadata.0.location, length: 0), meta),
+            (NSRange(location: manifest.0.location, length: 0), items),
+            spineEdit
+        ]
+        let result = NSMutableString(string: opf)
+        for (range, replacement) in edits.sorted(by: { $0.0.location > $1.0.location }) {
+            result.replaceCharacters(in: range, with: replacement)
+        }
+        return result as String
+    }
+
+    static func embeddedJPEG(at url: URL) -> Data? {
+        encodedEmbeddedJPEG(EmbeddedWorkCoverImage.data(at: url))
+    }
+
+    static func encodedEmbeddedJPEG(_ embedded: Data?) -> Data? {
+        guard let embedded,
+              let source = CGImageSourceCreateWithData(embedded as CFData, nil),
+              let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceThumbnailMaxPixelSize: 2400
+              ] as CFDictionary) else { return nil }
+        return encodeJPEG(image)
     }
 
     @MainActor
     static func jpeg(for work: SavedWork) -> Data? {
-        if let embedded = EmbeddedWorkCoverImage.data(at: work.fileURL),
-           let source = CGImageSourceCreateWithData(embedded as CFData, nil),
-           let image = CGImageSourceCreateImageAtIndex(source, 0, nil) {
-            let width = 1600, height = 2400
-            let scale = max(CGFloat(width) / CGFloat(image.width), CGFloat(height) / CGFloat(image.height))
-            let drawnWidth = CGFloat(image.width) * scale
-            let drawnHeight = CGFloat(image.height) * scale
-            if let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8,
-                                       bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
-                                       bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) {
-                context.setFillColor(CGColor(gray: 1, alpha: 1))
-                context.fill(CGRect(x: 0, y: 0, width: width, height: height))
-                context.draw(image, in: CGRect(x: (CGFloat(width) - drawnWidth) / 2,
-                                               y: (CGFloat(height) - drawnHeight) / 2,
-                                               width: drawnWidth, height: drawnHeight))
-                if let fitted = context.makeImage() { return encodeJPEG(fitted) }
-            }
-        }
-        // The same recipe and drawing view used by the library cover.
+        embeddedJPEG(at: work.fileURL) ?? generatedJPEG(for: work)
+    }
+
+    @MainActor
+    static func generatedJPEG(for work: SavedWork) -> Data? {
+        generatedJPEG(recipe: work.generatedCoverRecipe)
+    }
+
+    @MainActor
+    static func generatedJPEG(recipe: GeneratedCoverRecipe) -> Data? {
         let renderer = ImageRenderer(content: GeneratedCoverView(
-            recipe: work.generatedCoverRecipe, width: 1600, height: 2400, showsArt: true
-        ).background(.white))
+            recipe: recipe, width: 1600, height: 2400,
+            showsArt: true, clipsRoundedCorners: false
+        ))
         renderer.scale = 1
         return renderer.cgImage.flatMap(encodeJPEG)
     }
 
     private static func encodeJPEG(_ image: CGImage) -> Data? {
         let output = NSMutableData()
-        guard let destination = CGImageDestinationCreateWithData(output, UTType.jpeg.identifier as CFString, 1, nil) else {
+        guard let destination = CGImageDestinationCreateWithData(
+            output, UTType.jpeg.identifier as CFString, 1, nil
+        ) else {
             return nil
         }
-        CGImageDestinationAddImage(destination, image, [kCGImageDestinationLossyCompressionQuality: 0.86] as CFDictionary)
+        CGImageDestinationAddImage(destination, image,
+                                   [kCGImageDestinationLossyCompressionQuality: 0.86] as CFDictionary)
         return CGImageDestinationFinalize(destination) ? output as Data : nil
     }
 }
