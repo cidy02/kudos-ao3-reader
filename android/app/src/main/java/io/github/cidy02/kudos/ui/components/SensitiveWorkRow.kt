@@ -376,7 +376,10 @@ fun SensitiveWorkRow(
                                     )
                                 }
                                 if (savedCard && expandable) {
-                                    IconButton(onClick = if (obscured || (selecting && !selectionAllowsDetails)) cardTap else { { expanded = !expanded } }) {
+                                    IconButton(
+                                        onClick = if (obscured || (selecting && !selectionAllowsDetails)) cardTap else { { expanded = !expanded } },
+                                        modifier = Modifier.size(48.dp)
+                                    ) {
                                         Icon(
                                             imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
                                             contentDescription = if (expanded) "Show less" else "Show more",
@@ -467,7 +470,8 @@ fun SensitiveWorkRow(
                                     }
                                     if (!savedCard && expandable) {
                                         IconButton(
-                                            onClick = { expanded = !expanded }
+                                            onClick = { expanded = !expanded },
+                                            modifier = Modifier.size(48.dp)
                                         ) {
                                             Icon(
                                                 imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
@@ -709,7 +713,10 @@ private fun LedgerBody(
         }
         val unfold: @Composable () -> Unit = {
             if (expandable) {
-                IconButton(onClick = onToggleExpanded) {
+                IconButton(
+                    onClick = onToggleExpanded,
+                    modifier = Modifier.size(48.dp)
+                ) {
                     Icon(
                         imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
                         contentDescription = if (expanded) "Show less" else "Show more",
