@@ -34,28 +34,29 @@ nonisolated struct AO3Link: Equatable {
             guard let id = Int(value), id > 0 else { return nil }
             return id
         }
-        switch parts {
-        case ["works", "search"]:
+        // Swift has no array patterns: match on the count, then the fixed words.
+        func decoded(_ text: String) -> String { text.removingPercentEncoding ?? text }
+        switch (parts.count, parts.first) {
+        case (2, "works") where parts[1] == "search":
             kind = .search
-        case ["works", let id], ["collections", _, "works", let id]:
-            kind = positiveID(id).map { .work(id: $0, chapterID: nil) } ?? .otherAO3
-        case ["works", let id, "chapters", let chapter]:
-            if let workID = positiveID(id), let chapterID = positiveID(chapter) {
+        case (2, "works"):
+            kind = positiveID(parts[1]).map { .work(id: $0, chapterID: nil) } ?? .otherAO3
+        case (4, "collections") where parts[2] == "works":
+            kind = positiveID(parts[3]).map { .work(id: $0, chapterID: nil) } ?? .otherAO3
+        case (4, "works") where parts[2] == "chapters":
+            if let workID = positiveID(parts[1]), let chapterID = positiveID(parts[3]) {
                 kind = .work(id: workID, chapterID: chapterID)
             } else { kind = .otherAO3 }
-        case ["series", let id]:
-            kind = positiveID(id).map(Kind.series) ?? .otherAO3
-        case ["users", let username]:
-            kind = .user(username: username.removingPercentEncoding ?? username, pseud: nil)
-        case ["users", let username, "pseuds", let pseud]:
-            kind = .user(
-                username: username.removingPercentEncoding ?? username,
-                pseud: pseud.removingPercentEncoding ?? pseud
-            )
-        case ["tags", let tag, "works"]:
-            kind = .tag(tag)
-        case ["collections", let slug]:
-            kind = .collection(slug)
+        case (2, "series"):
+            kind = positiveID(parts[1]).map(Kind.series) ?? .otherAO3
+        case (2, "users"):
+            kind = .user(username: decoded(parts[1]), pseud: nil)
+        case (4, "users") where parts[2] == "pseuds":
+            kind = .user(username: decoded(parts[1]), pseud: decoded(parts[3]))
+        case (3, "tags") where parts[2] == "works":
+            kind = .tag(parts[1])
+        case (2, "collections"):
+            kind = .collection(parts[1])
         default:
             kind = .otherAO3
         }
