@@ -242,12 +242,14 @@ struct AO3SeriesDetailView: View {
                         if subscribeModel.isWorking {
                             ProgressView()
                                 .controlSize(.small)
-                                .tint(.white)
+                                .tint(ThemeManager.label(on: theme.effectiveTint))
                         } else {
                             // The bell is Subscribe app-wide (owner, 2026-11-09).
                             Image(systemName: subscribeModel.isSubscribed ? "bell.slash" : "bell")
                         }
                         Text(subscribeModel.isSubscribed ? "Unsubscribe" : "Subscribe")
+                            .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                     .frame(maxWidth: .infinity)
                 }
@@ -256,6 +258,7 @@ struct AO3SeriesDetailView: View {
                     subscribeModel.isWorking || !subscribeModel.hasSyncedSubscription
                 )
                 .accessibilityLabel(subscribeModel.isSubscribed ? "Unsubscribe" : "Subscribe")
+                .accessibilityValue(subscribeModel.isWorking ? "In progress" : "")
                 .accessibilityAddTraits(subscribeModel.isSubscribed ? [.isSelected] : [])
                 .confirmationDialog(
                     "Unsubscribe from \(shownSeries.title)?",
