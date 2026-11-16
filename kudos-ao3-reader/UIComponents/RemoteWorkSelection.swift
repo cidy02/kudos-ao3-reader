@@ -20,6 +20,7 @@ final class RemoteWorkSelectionController {
         let work: SavedWork
         let queue: ReadingQueue
         let membershipID: UUID
+        let createdOrRevivedWork: Bool
         let context: ModelContext
     }
     var isSelecting = false
@@ -49,9 +50,13 @@ final class RemoteWorkSelectionController {
         toastTarget = nil
         guard target.work.modelContext != nil,
               target.work.queueMemberships.contains(where: { $0.id == target.membershipID }) else { return }
-        ReadingQueueService.removeFromQueueAndDeleteIfQueueOnly(
-            target.work, from: target.queue, in: target.context
-        )
+        if target.createdOrRevivedWork {
+            ReadingQueueService.removeFromQueueAndDeleteIfQueueOnly(
+                target.work, from: target.queue, in: target.context
+            )
+        } else {
+            ReadingQueueService.removeFromQueue(target.work, from: target.queue, in: target.context)
+        }
     }
 
     static func currentQueue(in queues: [ReadingQueue], sourceID: UUID?, storedID: String?) -> ReadingQueue? {
@@ -75,6 +80,8 @@ final class RemoteWorkSelectionController {
             storedID: defaults.string(forKey: "lastAddedReadingQueueID")
         ) ?? ReadingQueueService.ensureSavedForLaterQueue(in: context)
         do {
+            let createdOrRevivedWork = ReadingQueueService.existingWork(for: summary, in: context)
+                .map(\.isPendingDeletion) ?? true
             let work = try ReadingQueueService.ensureLocalMetadata(for: summary, in: context)
             guard !work.queueMemberships.contains(where: { $0.queue?.id == queue.id }) else {
                 AccessibilityNotification.Announcement("Already in \(queue.displayName)").post()
@@ -83,7 +90,10 @@ final class RemoteWorkSelectionController {
             let membership = ReadingQueueService.add(work, to: queue, in: context)
             try context.save()
             defaults.set(queue.id.uuidString, forKey: "lastAddedReadingQueueID")
-            let target = ToastTarget(work: work, queue: queue, membershipID: membership.id, context: context)
+            let target = ToastTarget(
+                work: work, queue: queue, membershipID: membership.id,
+                createdOrRevivedWork: createdOrRevivedWork, context: context
+            )
             toastTarget = target
             toastDismissTask?.cancel()
             toastDismissTask = Task { @MainActor in

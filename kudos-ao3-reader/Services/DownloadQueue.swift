@@ -77,13 +77,25 @@ final class DownloadQueue {
     func enqueue(_ newItems: [Item], into context: ModelContext) {
         self.context = context
         if !isRunning { items.removeAll() }
-        var seen = Set(items.map(\.id))
-        for item in newItems where seen.insert(item.id).inserted {
-            items.append(item)
-        }
+        Self.merge(newItems, into: &items)
         if !isRunning, !items.isEmpty {
             isRunning = true // set synchronously so a rapid second enqueue appends
             Task { await run() }
+        }
+    }
+
+    static func merge(_ newItems: [Item], into items: inout [Item]) {
+        for item in newItems {
+            guard let index = items.firstIndex(where: { $0.id == item.id }) else {
+                items.append(item)
+                continue
+            }
+            switch items[index].status {
+            case .queued, .downloading:
+                if !item.requiresOfflineQueue { items[index].requiresOfflineQueue = false }
+            case .done, .skipped, .failed:
+                items[index] = item
+            }
         }
     }
 
@@ -242,7 +254,7 @@ final class DownloadQueue {
                     Task { @MainActor [weak self] in self?.setFraction(fraction, for: id) }
                 }
                 guard Self.shouldProcess(
-                    item, existing: item.sourceURL.flatMap { existingWork(forSource: $0, in: context) }
+                    items[index], existing: item.sourceURL.flatMap { existingWork(forSource: $0, in: context) }
                 ) else {
                     try? FileManager.default.removeItem(at: temp)
                     items[index].status = .skipped
@@ -254,12 +266,15 @@ final class DownloadQueue {
                     verifyAvailability: false,
                     canImport: {
                         Self.shouldProcess(
-                            item, existing: item.sourceURL.flatMap { existingWork(forSource: $0, in: context) }
+                            self.items[index], existing: item.sourceURL.flatMap { existingWork(forSource: $0, in: context) }
                         )
                     }, into: context
                 )
                 if saved.modelContext != nil, !saved.isPendingDeletion {
                     await WorkAvailability.verify(saved, in: context)
+                    if saved.modelContext != nil, !saved.isPendingDeletion {
+                        Self.finishImportedWork(saved, in: context)
+                    }
                 }
                 // A beat at 100% before the ring hands back to reading progress.
                 items[index].fraction = 1
@@ -276,6 +291,15 @@ final class DownloadQueue {
             }
         }
         Log.library.info("Download queue finished: \(self.finishedCount) processed, \(self.failedCount) failed")
+    }
+
+    static func finishImportedWork(_ work: SavedWork, in context: ModelContext) {
+        ReadingQueueService.normalize(work)
+        if work.isQueuedForLater {
+            work.metadataSyncStatus = work.ao3Unavailable ? .failed
+                : (work.needsAO3Refresh ? .incomplete : .complete)
+        }
+        context.saveBestEffort(reason: "Saving queued import status failed")
     }
 }
 

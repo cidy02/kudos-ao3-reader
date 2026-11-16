@@ -1,6 +1,10 @@
 import Foundation
 import SwiftData
+import SwiftUI
 import Testing
+#if os(iOS)
+import UIKit
+#endif
 @testable import Kudos
 
 @MainActor
@@ -157,6 +161,113 @@ struct QueueQuickAddTests {
         controller.undo()
         #expect(work.activeQueueMemberships.map(\.id) == [replacement.id])
     }
+
+    @Test func undoPreservesReadingHistoryEPUBAndRemovesSwipeCreatedWork() throws {
+        let context = try context()
+        let queue = ReadingQueue(name: "Offline")
+        context.insert(queue)
+        let existing = SavedWork(
+            title: "Read Before", author: "Writer", sourceURL: summary(511).workURL.absoluteString
+        )
+        existing.ao3WorkID = 511
+        existing.lastReadDate = Date()
+        context.insert(existing)
+        let epub = Data("reading copy".utf8)
+        try epub.write(to: existing.fileURL)
+        defer { try? FileManager.default.removeItem(at: existing.fileURL) }
+
+        let controller = RemoteWorkSelectionController()
+        controller.sourceQueueID = queue.id
+        let settings = try defaults()
+        controller.quickAdd(summary(511), in: context, defaults: settings) { _, _, _ in }
+        controller.undo()
+        #expect(!existing.isPendingDeletion)
+        #expect(existing.activeQueueMemberships.isEmpty)
+        #expect(existing.lastReadDate != nil)
+        #expect(existing.hasEPUB)
+        #expect(try Data(contentsOf: existing.fileURL) == epub)
+
+        controller.quickAdd(summary(512), in: context, defaults: settings) { _, _, _ in }
+        let created = try #require(controller.toastTarget?.work)
+        controller.undo()
+        #expect(created.isPendingDeletion)
+        #expect(created.activeQueueMemberships.isEmpty)
+    }
+
+    @Test func finishedDownloadsCanBeQueuedAgainAndExplicitDownloadUpgradesActiveItems() {
+        var incoming = DownloadQueue.Item(
+            id: 513, title: "Retry", sourceURL: nil, isComplete: true, seriesURL: ""
+        )
+        incoming.requiresOfflineQueue = true
+        for status in [DownloadQueue.Status.skipped, .done, .failed] {
+            var previous = DownloadQueue.Item(
+                id: 513, title: "Old", sourceURL: nil, isComplete: true, seriesURL: ""
+            )
+            previous.requiresOfflineQueue = true
+            previous.status = status
+            var items = [previous]
+            DownloadQueue.merge([incoming], into: &items)
+            #expect(items == [incoming])
+        }
+
+        for status in [DownloadQueue.Status.queued, .downloading] {
+            var previous = incoming
+            previous.status = status
+            var items = [previous]
+            var explicit = incoming
+            explicit.requiresOfflineQueue = false
+            DownloadQueue.merge([explicit], into: &items)
+            #expect(items.count == 1)
+            #expect(items[0].status == status)
+            #expect(!items[0].requiresOfflineQueue)
+        }
+    }
+
+    @Test func queuedImportReconcilesPreservationAndMetadataWithoutRelaunch() async throws {
+        let context = try context()
+        let queue = ReadingQueue(name: "Offline")
+        context.insert(queue)
+        let remote = summary(514)
+        let work = try ReadingQueueService.ensureLocalMetadata(for: remote, in: context)
+        ReadingQueueService.add(work, to: queue, in: context)
+        let sample = try #require(Bundle(for: BundleAnchor.self).url(forResource: "sample", withExtension: "epub"))
+        let temp = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".epub")
+        try FileManager.default.copyItem(at: sample, to: temp)
+        defer {
+            try? FileManager.default.removeItem(at: temp)
+            try? FileManager.default.removeItem(at: work.fileURL)
+        }
+        let saved = try await importEPUB(temp, source: remote.workURL, verifyAvailability: false, into: context)
+        #expect(saved.id == work.id)
+        #expect(saved.epubPreservationStatus == .queued)
+        #expect(saved.metadataSyncStatus == .pending)
+        DownloadQueue.finishImportedWork(saved, in: context)
+        #expect(saved.epubPreservationStatus == .preserved)
+        #expect(saved.preservedAt != nil)
+        #expect(saved.metadataSyncStatus == .incomplete)
+        try context.save()
+    }
+
+    #if os(iOS)
+    @Test func updateMarkerKeepsItsWidthUnlessBadgeTitleOptsIntoWrapping() {
+        let size = CGSize(width: 80, height: 300)
+        let fixed = UIHostingController(rootView: UpdateMarker(text: "In a long queue")
+            .dynamicTypeSize(.accessibility5))
+        let wrapping = UIHostingController(rootView: UpdateMarker(text: "In a long queue", wraps: true)
+            .dynamicTypeSize(.accessibility5))
+        #expect(fixed.sizeThatFits(in: size).width > size.width)
+        #expect(wrapping.sizeThatFits(in: size).width <= size.width)
+        #expect(!UpdateMarker(text: "+1").wraps)
+    }
+
+    @Test func toastActionsStackAtAX5WithTwoFullHitTargets() {
+        #expect(QueueAddedToast.stacksActions(.accessibility5))
+        #expect(!QueueAddedToast.stacksActions(.large))
+        let toast = QueueAddedToast(queue: ReadingQueue(name: "Offline"), change: {}, undo: {})
+        let host = UIHostingController(rootView: toast.actions.dynamicTypeSize(.accessibility5))
+        #expect(host.sizeThatFits(in: CGSize(width: 160, height: 500)).height >= 94)
+    }
+    #endif
 
     @Test func downloadPolicySkipsUndoneAndListOnlyWorks() throws {
         let context = try context()

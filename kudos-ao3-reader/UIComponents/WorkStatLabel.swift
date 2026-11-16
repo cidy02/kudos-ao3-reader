@@ -95,6 +95,7 @@ struct UpdateMarker: View {
     let text: String
     var isConfirmed = true
     var spokenLabel: String?
+    var wraps = false
 
     @Environment(\.accentInk) private var accentInk
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -111,7 +112,7 @@ struct UpdateMarker: View {
                 .overlay(Circle().strokeBorder(isConfirmed ? Color.clear : Color.secondary, lineWidth: 1.5))
                 .frame(width: 8, height: 8)
         }
-        .fixedSize(horizontal: false, vertical: true)
+        .fixedSize(horizontal: !wraps, vertical: true)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(spokenLabel ?? text)
     }

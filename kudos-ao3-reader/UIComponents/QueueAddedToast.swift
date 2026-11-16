@@ -48,20 +48,29 @@ struct QueueAddedToast: View {
         }
     }
 
-    private var actions: some View {
-        HStack(spacing: 4) {
+    var actions: some View {
+        let layout = Self.stacksActions(dynamicTypeSize)
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 6))
+            : AnyLayout(HStackLayout(spacing: 6))
+        return layout {
             action("Undo", perform: undo)
             action("Change", perform: change)
         }
     }
 
+    static func stacksActions(_ size: DynamicTypeSize) -> Bool { size.isAccessibilitySize }
+
     private func action(_ title: String, perform: @escaping () -> Void) -> some View {
-        Button(title, action: perform)
-            .fontWeight(.semibold)
-            .foregroundStyle(.white)
+        Button(action: perform) {
+            Text(title)
+                .fontWeight(.semibold)
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(.white.opacity(0.18), in: Capsule())
+        }
             .buttonStyle(.plain)
-            .padding(.horizontal, 8)
-            .background(.white.opacity(0.18), in: Capsule())
             .minimumHitTarget()
     }
 }

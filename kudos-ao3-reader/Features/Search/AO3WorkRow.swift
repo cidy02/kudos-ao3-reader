@@ -837,7 +837,7 @@ extension AO3WorkRow {
                         }
                         if isExpandable || badgeTitle != nil {
                             HStack(spacing: 5) {
-                                if let badgeTitle { UpdateMarker(text: badgeTitle) }
+                                if let badgeTitle { UpdateMarker(text: badgeTitle, wraps: true) }
                                 if isExpandable && showsExpandButton {
                                     Spacer(minLength: 0)
                                     expandButton
@@ -850,7 +850,7 @@ extension AO3WorkRow {
                         fandomLabel
                         crossoverMark
                         Spacer(minLength: 0)
-                        if let badgeTitle { UpdateMarker(text: badgeTitle) }
+                        if let badgeTitle { UpdateMarker(text: badgeTitle, wraps: true) }
                         if isExpandable && showsExpandButton {
                             expandButton
                         }
