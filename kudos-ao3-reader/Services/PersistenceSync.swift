@@ -151,8 +151,36 @@ enum PersistenceMigrationService {
         }
         await backfillEPUBDigests(in: context)
         let current = PersistenceStatusStore.snapshot(defaults: defaults).migrationState
-        guard current != .completed else { return current }
-        return await run(in: context, defaults: defaults)
+        if current == .completed {
+            await backfillCoverRecipes(in: context, defaults: defaults)
+            return current
+        }
+        let result = await run(in: context, defaults: defaults)
+        if result == .completed { await backfillCoverRecipes(in: context, defaults: defaults) }
+        return result
+    }
+
+    static func backfillCoverRecipes(in context: ModelContext, defaults: UserDefaults = .standard) async {
+        let key = "coverRecipesBackfilled"
+        guard !defaults.bool(forKey: key), PersistenceOperationGate.begin(.migration) else { return }
+        defer { PersistenceOperationGate.end(.migration) }
+        do {
+            var processed = 0
+            var changed = false
+            for work in try context.fetch(FetchDescriptor<SavedWork>()) {
+                guard work.modelContext != nil else { continue }
+                if work.coverRecipeJSON == nil {
+                    work.pinCover(salt: 0)
+                    changed = true
+                }
+                processed += 1
+                if processed.isMultiple(of: yieldInterval) { await Task.yield() }
+            }
+            if changed { try context.save() }
+            defaults.set(true, forKey: key)
+        } catch {
+            Log.library.error("Cover recipe backfill failed: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     /// Gives content identities to books that have none, a bounded number per

@@ -20,6 +20,27 @@ struct PersistenceSyncTests {
         return try ModelContainer(for: schema, configurations: [configuration])
     }
 
+    @Test func coverBackfillPinsOldRowsOnceWithoutChangingWorkClocks() async throws {
+        let container = try container()
+        let context = container.mainContext
+        let defaults = try testDefaults()
+        let work = SavedWork(title: "Before covers", author: "Writer")
+        let originalClock = Date(timeIntervalSince1970: 1_700_000_000)
+        work.lastModifiedAt = originalClock
+        context.insert(work)
+        try context.save()
+
+        await PersistenceMigrationService.backfillCoverRecipes(in: context, defaults: defaults)
+        let pin = try #require(work.coverRecipeJSON)
+        #expect(GeneratedCoverRecipe.pinnedAt(in: pin) != nil)
+        #expect(work.lastModifiedAt == originalClock)
+        #expect(defaults.bool(forKey: "coverRecipesBackfilled"))
+
+        await PersistenceMigrationService.backfillCoverRecipes(in: context, defaults: defaults)
+        #expect(work.coverRecipeJSON == pin)
+        #expect(work.lastModifiedAt == originalClock)
+    }
+
     @Test func migrationIsIdempotentAndMarksMissingEPUBRecoverable() async throws {
         let container = try container()
         let context = container.mainContext

@@ -18,6 +18,7 @@ struct SettingsAppearancePage: View {
     @State private var showCustomize = false
     @State private var showCustomWarning = false
     @State private var customPick: Task<Void, Never>?
+    @State private var updateCoversTask: Task<Void, Never>?
     @State private var pickerBridge = AccentColorPickerBridge()
     @AppStorage(WorkSymbolPlacement.storageKey) private var symbolPlacement: WorkSymbolPlacement = .defaultValue
     @AppStorage("useEmbeddedCoverArt") private var useEmbeddedCoverArt = true
@@ -104,12 +105,25 @@ struct SettingsAppearancePage: View {
                 Toggle("Use art from the work when there is some", isOn: $useEmbeddedCoverArt)
                     .accentFill()
                 Button("Update Covers") {
-                    guard let works = try? modelContext.fetch(FetchDescriptor<SavedWork>()) else { return }
-                    for work in works where !work.isPendingDeletion {
-                        work.pinCover(salt: work.generatedCoverRecipe.salt)
+                    guard updateCoversTask == nil else { return }
+                    updateCoversTask = Task { @MainActor in
+                        defer { updateCoversTask = nil }
+                        guard let works = try? modelContext.fetch(FetchDescriptor<SavedWork>()) else { return }
+                        var changed = false
+                        var processed = 0
+                        for work in works {
+                            if Task.isCancelled { break }
+                            guard work.modelContext != nil, !work.isPendingDeletion else { continue }
+                            let oldJSON = work.coverRecipeJSON
+                            work.pinCover(salt: work.generatedCoverRecipe.salt)
+                            changed = changed || work.coverRecipeJSON != oldJSON
+                            processed += 1
+                            if processed.isMultiple(of: 50) { await Task.yield() }
+                        }
+                        if changed { modelContext.saveBestEffort(reason: "Updating covers failed") }
                     }
-                    modelContext.saveBestEffort(reason: "Updating covers failed")
                 }
+                .disabled(updateCoversTask != nil)
             }
             .onChange(of: useEmbeddedCoverArt) { _, _ in
                 NotificationCenter.default.post(name: .kudosSyncRelevantSettingChanged, object: nil)
@@ -158,6 +172,7 @@ struct SettingsAppearancePage: View {
         }
         .onDisappear {
             customPick?.cancel()
+            updateCoversTask?.cancel()
             pickerBridge.close()
         }
         #if DEBUG

@@ -12,6 +12,99 @@ extension PersistenceGateSuites {
 @MainActor
 @Suite(.serialized)
 struct KudosBackupTests {
+    private func coverContext() throws -> ModelContext {
+        let schema = Schema([
+            SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
+            WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
+            SavedSearch.self, SyncTombstone.self, ReadingAnnotation.self
+        ])
+        return try ModelContainer(for: schema,
+            configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]).mainContext
+    }
+
+    private func coverContents(_ work: SavedWork) throws -> KudosBackupContents {
+        try KudosBackupService.makeContents(works: [work], bookmarks: [], fonts: [],
+                                            readingQueues: [], defaults: testDefaults())
+    }
+
+    @Test func shuffleSurvivesLaterUnrelatedWorkEditAndTwoWaySync() throws {
+        let id = UUID()
+        let phone = try coverContext()
+        let ipad = try coverContext()
+        let shuffled = SavedWork(id: id, title: "Shared", author: "Author")
+        let edited = SavedWork(id: id, title: "Shared", author: "Author")
+        ipad.insert(edited)
+        edited.pinCover(salt: 0)
+        let initialJSON = try #require(edited.coverRecipeJSON)
+        var initialPin = try #require(JSONSerialization.jsonObject(with: Data(initialJSON.utf8)) as? [String: Any])
+        initialPin["pinnedAt"] = Date().timeIntervalSince1970 - 60
+        edited.coverRecipeJSON = try #require(String(
+            data: JSONSerialization.data(withJSONObject: initialPin), encoding: .utf8
+        ))
+        phone.insert(shuffled)
+        let workClock = shuffled.lastModifiedAt
+        shuffled.pinCover(salt: 1)
+        let shuffledJSON = shuffled.coverRecipeJSON
+        #expect(shuffled.lastModifiedAt == workClock)
+
+        edited.title = "Later unrelated edit"
+        edited.markModified(Date().addingTimeInterval(60))
+        _ = try KudosBackupService.restore(coverContents(edited), into: phone, defaults: testDefaults())
+        #expect(shuffled.title == edited.title)
+        #expect(shuffled.coverRecipeJSON == shuffledJSON)
+
+        _ = try KudosBackupService.restore(coverContents(shuffled), into: ipad, defaults: testDefaults())
+        #expect(edited.coverRecipeJSON == shuffledJSON)
+        #expect(edited.generatedCoverRecipe.salt == 1)
+    }
+
+    @Test func nilLocalPinAdoptsIncomingDespiteNewerWorkClock() throws {
+        let id = UUID()
+        let context = try coverContext()
+        let local = SavedWork(id: id, title: "Local", author: "Author")
+        local.markModified(Date().addingTimeInterval(60))
+        context.insert(local)
+        let incoming = SavedWork(id: id, title: "Older", author: "Author")
+        incoming.pinCover(salt: 3)
+
+        _ = try KudosBackupService.restore(coverContents(incoming), into: context, defaults: testDefaults())
+        #expect(local.title == "Local")
+        #expect(local.coverRecipeJSON == incoming.coverRecipeJSON)
+    }
+
+    @Test func futureUndecodablePinPassesThroughRestoreAndActions() throws {
+        let id = UUID()
+        let context = try coverContext()
+        let local = SavedWork(id: id, title: "Shared", author: "Author")
+        context.insert(local)
+        local.pinCover(salt: 0)
+        let incoming = SavedWork(id: id, title: "Shared", author: "Author")
+        incoming.pinCover(salt: 1)
+        let json = try #require(incoming.coverRecipeJSON)
+        var object = try #require(JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
+        object["rendererVersion"] = 2
+        object["ground"] = 99
+        object["futureField"] = "keep me"
+        object["pinnedAt"] = Date().timeIntervalSince1970 + 60
+        let raw = try #require(String(data: JSONSerialization.data(withJSONObject: object), encoding: .utf8))
+        incoming.coverRecipeJSON = raw
+
+        _ = try KudosBackupService.restore(coverContents(incoming), into: context, defaults: testDefaults())
+        #expect(local.coverRecipeJSON == raw)
+        #expect(local.generatedCoverRecipe.rendererVersion == 1)
+        local.pinCover(salt: local.generatedCoverRecipe.salt + 1) // Shuffle
+        local.pinCover(salt: 0) // Reset and Update Covers
+        local.refreshCoverIfNeeded() // Completion/tier refresh
+        #expect(local.coverRecipeJSON == raw)
+
+        let roundTripped = try KudosBackupContents.decodeManifest(coverContents(local).manifestData())
+        #expect(roundTripped.works.first?.coverRecipeJSON == raw)
+        let third = try coverContext()
+        _ = try KudosBackupService.restore(KudosBackupContents(manifest: roundTripped),
+                                            into: third, defaults: testDefaults())
+        #expect(try third.fetch(FetchDescriptor<SavedWork>()).first?.coverRecipeJSON == raw)
+    }
+
     @Test func coverKeysAreAdditiveAndOlderArchivesKeepThePreference() throws {
         let work = SavedWork(title: "Older work", author: "Author")
         let old = try JSONSerialization.jsonObject(with: JSONEncoder().encode(KudosBackupWork(work: work)))

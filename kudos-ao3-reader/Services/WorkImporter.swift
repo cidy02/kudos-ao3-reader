@@ -59,7 +59,7 @@ func importEPUB(
         }
         existing.markModified()
         if existing.coverRecipeJSON == nil { existing.pinCover(salt: 0) }
-        _ = existing.generatedCoverRecipe
+        existing.refreshCoverIfNeeded()
         WorkSearchIndex.reindex(existing)
         try? context.save()
         if revived {

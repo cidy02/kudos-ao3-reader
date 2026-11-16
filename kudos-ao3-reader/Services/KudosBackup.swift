@@ -4838,9 +4838,11 @@ enum KudosBackupService {
         work.workCharacters = TagMerge.merged(work.workCharacters, archived.workCharacters)
         work.workRelationships = TagMerge.merged(work.workRelationships, archived.workRelationships)
         work.workFreeforms = TagMerge.merged(work.workFreeforms, archived.workFreeforms)
-        if let coverRecipeJSON = archived.coverRecipeJSON, incomingWins,
-           let recipe = try? JSONDecoder().decode(GeneratedCoverRecipe.self, from: Data(coverRecipeJSON.utf8)),
-           recipe.isDrawable {
+        if let coverRecipeJSON = archived.coverRecipeJSON,
+           work.coverRecipeJSON == nil || SyncMerge.shouldApplyIncoming(
+               localModifiedAt: GeneratedCoverRecipe.pinnedAt(in: work.coverRecipeJSON),
+               incomingModifiedAt: GeneratedCoverRecipe.pinnedAt(in: coverRecipeJSON)
+           ) {
             work.coverRecipeJSON = coverRecipeJSON
         }
         work.workTagsFetched = work.workTagsFetched || archived.workTagsFetched

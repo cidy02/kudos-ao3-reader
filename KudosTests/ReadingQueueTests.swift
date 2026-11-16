@@ -48,6 +48,17 @@ struct ReadingQueueTests {
         )
     }
 
+    @Test func seriesWorkPinsAfterSeriesMetadataArrives() throws {
+        let context = try makeContext()
+        let remote = summary(50, seriesURL: "https://archiveofourown.org/series/5")
+        let work = try ReadingQueueService.ensureLocalMetadata(for: remote, in: context)
+
+        #expect(work.ao3SeriesID == 5)
+        #expect(work.generatedCoverRecipe.part == 50)
+        #expect(work.generatedCoverRecipe.shapeSeed == remote.generatedCoverRecipe.shapeSeed)
+        #expect(work.generatedCoverRecipe.motif == remote.generatedCoverRecipe.motif)
+    }
+
     @Test func freshLibraryCreatesOnlyThePermanentEmptyQueue() throws {
         let context = try makeContext()
         let queue = ReadingQueueService.ensureSavedForLaterQueue(in: context)

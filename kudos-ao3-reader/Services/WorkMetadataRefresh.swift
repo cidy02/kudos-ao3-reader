@@ -172,7 +172,7 @@ enum WorkMetadataRefresh {
         }
         if let position = metadata.seriesPosition, position > 0 { work.seriesPosition = position }
         if !metadata.tagGroups.isEmpty { work.workTagsFetched = true }
-        if work.coverRecipeJSON != nil { _ = work.generatedCoverRecipe }
+        work.refreshCoverIfNeeded()
         work.lastUpdateCheck = Date()
         work.markModified()
     }

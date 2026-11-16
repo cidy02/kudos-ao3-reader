@@ -5,6 +5,7 @@ nonisolated struct GeneratedCoverRecipe: Codable, Equatable, Sendable {
     enum Ground: Int, Codable, Sendable { case gradient, split, band, solid, crossover }
     let rendererVersion: Int
     let salt: Int
+    var pinnedAt: Double?
     private(set) var hues: [Int]
     private(set) var lightness: Double
     private(set) var ground: Ground
@@ -29,6 +30,25 @@ nonisolated struct GeneratedCoverRecipe: Codable, Equatable, Sendable {
     var isDrawable: Bool {
         !hues.isEmpty && (0...3).contains(tier) && (0...2).contains(placement)
             && (0..<Int.max).contains(salt)
+    }
+
+    private struct PinTime: Decodable { let pinnedAt: Double? }
+
+    static func pinnedAt(in json: String?) -> Date? {
+        guard let json, let time = try? JSONDecoder().decode(PinTime.self, from: Data(json.utf8)).pinnedAt,
+              time.isFinite else { return nil }
+        return Date(timeIntervalSince1970: time)
+    }
+
+    static func supportedPin(in json: String) -> GeneratedCoverRecipe? {
+        let data = Data(json.utf8)
+        guard let recipe = try? JSONDecoder().decode(Self.self, from: data),
+              recipe.rendererVersion == 1, recipe.isDrawable,
+              let encoded = try? JSONEncoder().encode(recipe),
+              let original = (try? JSONSerialization.jsonObject(with: data)) as? NSDictionary,
+              let roundTripped = (try? JSONSerialization.jsonObject(with: encoded)) as? NSDictionary,
+              original.isEqual(roundTripped) else { return nil }
+        return recipe
     }
 
     private static let palette = [20, 55, 85, 125, 150, 180, 205, 230, 260, 290, 320, 350]
@@ -96,6 +116,7 @@ nonisolated struct GeneratedCoverRecipe: Codable, Equatable, Sendable {
          salt: Int = 0, postedYear: Int? = nil, firstAuthor: String? = nil) {
         rendererVersion = 1
         self.salt = salt
+        pinnedAt = nil
         let names = fandoms.map(Self.clean).filter { !$0.isEmpty }
         let mainTitle = title.replacingOccurrences(of: #"^\d+\.\s*"#, with: "", options: .regularExpression)
         let titleParts = Self.splitTitle(mainTitle)
@@ -217,13 +238,7 @@ nonisolated struct GeneratedCoverRecipe: Codable, Equatable, Sendable {
 extension SavedWork {
     @MainActor
     var generatedCoverRecipe: GeneratedCoverRecipe {
-        if let coverRecipeJSON, let data = coverRecipeJSON.data(using: .utf8),
-           let pinned = try? JSONDecoder().decode(GeneratedCoverRecipe.self, from: data),
-           pinned.isDrawable {
-            if (!pinned.closedRing && isComplete) || pinned.tier != coverTier {
-                pinCover(salt: pinned.salt)
-                return generatedCoverRecipe
-            }
+        if let coverRecipeJSON, let pinned = GeneratedCoverRecipe.supportedPin(in: coverRecipeJSON) {
             return pinned
         }
         return resolvedCover(salt: 0)
@@ -234,11 +249,26 @@ extension SavedWork {
 
     @MainActor
     func pinCover(salt: Int) {
-        let recipe = resolvedCover(salt: salt)
+        var recipe = resolvedCover(salt: salt)
+        var previousTime: Double?
+        if let coverRecipeJSON {
+            guard var current = GeneratedCoverRecipe.supportedPin(in: coverRecipeJSON) else { return }
+            previousTime = current.pinnedAt
+            current.pinnedAt = nil
+            if current == recipe { return }
+        }
+        recipe.pinnedAt = max(Date().timeIntervalSince1970, previousTime?.nextUp ?? 0)
         guard let data = try? JSONEncoder().encode(recipe),
               let json = String(data: data, encoding: .utf8) else { return }
         coverRecipeJSON = json
-        markModified()
+        FolderSyncService.markDirty()
+    }
+
+    @MainActor
+    func refreshCoverIfNeeded() {
+        guard let coverRecipeJSON, let pinned = GeneratedCoverRecipe.supportedPin(in: coverRecipeJSON),
+              (!pinned.closedRing && isComplete) || pinned.tier != coverTier else { return }
+        pinCover(salt: pinned.salt)
     }
 
     @MainActor

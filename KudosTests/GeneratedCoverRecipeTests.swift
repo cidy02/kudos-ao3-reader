@@ -23,10 +23,14 @@ struct GeneratedCoverRecipeTests {
         work.wordCount = 9_998
         #expect(work.generatedCoverRecipe == original)
         work.wordCount = 10_000
+        #expect(work.generatedCoverRecipe == original)
+        work.refreshCoverIfNeeded()
         let longer = work.generatedCoverRecipe
         #expect(longer.tier == 1)
         #expect(longer.author == "Renamed")
         work.isComplete = true
+        #expect(!work.generatedCoverRecipe.closedRing)
+        work.refreshCoverIfNeeded()
         #expect(work.generatedCoverRecipe.closedRing)
 
         work.pinCover(salt: work.generatedCoverRecipe.salt + 1)
@@ -38,6 +42,44 @@ struct GeneratedCoverRecipeTests {
         #expect(work.generatedCoverRecipe.author == "Renamed")
         work.pinCover(salt: work.generatedCoverRecipe.salt)
         #expect(work.generatedCoverRecipe.author == "Updated again")
+    }
+
+    @Test @MainActor func readingCoverNeverWritesThePinOrWorkClock() {
+        let work = SavedWork(title: "Read only cover", author: "Writer")
+        work.wordCount = 9_999
+        work.pinCover(salt: 0)
+        let pin = work.coverRecipeJSON
+        let workClock = work.lastModifiedAt
+        work.pinCover(salt: 0) // Update Covers leaves an unchanged pin alone.
+        #expect(work.coverRecipeJSON == pin)
+        work.wordCount = 10_000
+        work.isComplete = true
+
+        #expect(work.generatedCoverRecipe.tier == 0)
+        #expect(!work.generatedCoverRecipe.closedRing)
+        #expect(work.coverRecipeJSON == pin)
+        #expect(work.lastModifiedAt == workClock)
+
+        work.refreshCoverIfNeeded()
+        #expect(work.generatedCoverRecipe.tier == 1)
+        #expect(work.generatedCoverRecipe.closedRing)
+        #expect(work.lastModifiedAt == workClock)
+    }
+
+    @Test @MainActor func unknownRecipeFieldsAreNeverReencodedByCoverActions() throws {
+        let work = SavedWork(title: "Future fields", author: "Writer")
+        work.pinCover(salt: 0)
+        let json = try #require(work.coverRecipeJSON)
+        var object = try #require(JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
+        object["futureField"] = ["value": 42]
+        let raw = try #require(String(data: JSONSerialization.data(withJSONObject: object), encoding: .utf8))
+        work.coverRecipeJSON = raw
+
+        work.pinCover(salt: 1)
+        work.pinCover(salt: 0)
+        work.refreshCoverIfNeeded()
+        #expect(work.coverRecipeJSON == raw)
+        #expect(work.generatedCoverRecipe.rendererVersion == 1)
     }
 
     @Test func fandomLabelUsesTheBareFandomName() {
