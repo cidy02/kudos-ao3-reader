@@ -124,7 +124,11 @@ struct CrossPlatformFixtureFields {
         #expect(font.fileName == fontFile)
         #expect(font.dateAdded == fontDate)
         #expect(try Data(contentsOf: font.fileURL) == fontBytes)
-        #expect(KudosBackupPronunciations.capture() == pronunciations)
+        // The corrections themselves. Since T-541 a correction that arrives by sync is also
+        // given the time of the copy it came in, which Android's folder does not carry.
+        var captured = KudosBackupPronunciations.capture()
+        captured.stamps = nil
+        #expect(captured == pronunciations)
         let collections = try context.fetch(FetchDescriptor<WorkCollection>())
         let collection = try #require(collections.first { $0.id == collectionID })
         #expect(collection.deletedAt == deletedAt)
