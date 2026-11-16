@@ -229,6 +229,27 @@ nonisolated struct AO3Comment: Identifiable, Equatable, Sendable {
         return identity.route
     }
 
+    /// Target account for "Mute <name>" in the comment menu.
+    ///
+    /// Visible only for signed-in readers on another registered, non-orphan,
+    /// non-anonymous, non-guest commenter's live comment.
+    func muteTargetRoute(isLoggedIn: Bool, currentUsername: String?) -> AO3AuthorRoute? {
+        guard isLoggedIn,
+              !isDeleted,
+              !isThreadCutoff,
+              !isGuest,
+              !isAnonymousCreator,
+              editPath == nil,
+              deletePath == nil,
+              let current = currentUsername?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !current.isEmpty,
+              let route = profileRoute,
+              !route.isOrphanAccount,
+              route.username.localizedCaseInsensitiveCompare(current) != .orderedSame
+        else { return nil }
+        return route
+    }
+
     var threadActionURL: URL? { Self.ao3URL(for: threadPath) }
     var parentThreadURL: URL? { Self.ao3URL(for: parentThreadPath) }
     var cutoffThreadURL: URL? { Self.ao3URL(for: cutoffThreadPath) }

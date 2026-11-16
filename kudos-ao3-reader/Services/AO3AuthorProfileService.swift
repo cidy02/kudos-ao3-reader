@@ -223,16 +223,19 @@ final class AO3AuthorProfileModel {
     private let pageLoader: PageLoader
     private let dashboardOnly: Bool
     private let overviewMode: Bool
+    private let reloadsHeaderAfterModeration: Bool
 
     init(
         route: AO3AuthorRoute,
         dashboardOnly: Bool = false,
         overviewMode: Bool = false,
+        reloadsHeaderAfterModeration: Bool = true,
         pageLoader: PageLoader? = nil
     ) {
         self.route = route
         self.dashboardOnly = dashboardOnly
         self.overviewMode = overviewMode
+        self.reloadsHeaderAfterModeration = reloadsHeaderAfterModeration
         self.pageLoader = pageLoader ?? { url, auth, bypassCache in
             try await AO3AuthorProfileFetcher.page(
                 at: url,
@@ -533,7 +536,9 @@ final class AO3AuthorProfileModel {
             return message
         } onSuccess: { message in
             actionMessage = message
-            await reloadHeaderTracked(auth: auth)
+            if reloadsHeaderAfterModeration {
+                await reloadHeaderTracked(auth: auth)
+            }
         }
     }
 
@@ -585,7 +590,9 @@ final class AO3AuthorProfileModel {
             return message
         } onSuccess: { message in
             actionMessage = message
-            await reloadHeaderTracked(auth: auth)
+            if reloadsHeaderAfterModeration {
+                await reloadHeaderTracked(auth: auth)
+            }
         }
     }
 

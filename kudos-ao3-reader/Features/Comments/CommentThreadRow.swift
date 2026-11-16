@@ -434,6 +434,8 @@ struct CommentThreadHandlers {
     /// what makes the synthesized memberwise init treat this param as optional
     /// too, so `.noop` below keeps compiling unchanged.
     var onOpenAuthor: ((AO3AuthorRoute) -> Void)?
+    /// Mutes a commenter on AO3 through the shared moderation confirm/submit path.
+    var onMute: ((AO3AuthorRoute) -> Void)?
 
     static let noop = CommentThreadHandlers(
         onReply: { _ in },
@@ -1555,6 +1557,15 @@ private struct CommentPostRow: View {
            let chapter = comment.storyChapterPosition {
             Button { handlers.onGoToChapter(comment) } label: {
                 Label("Go to Chapter \(chapter)", systemImage: "book")
+            }
+        }
+        if let onMute = handlers.onMute,
+           let muteTarget = comment.muteTargetRoute(
+               isLoggedIn: auth.isLoggedIn,
+               currentUsername: auth.username
+           ) {
+            Button { onMute(muteTarget) } label: {
+                Label("Mute \(comment.author)", systemImage: "speaker.slash")
             }
         }
         if comment.editPath != nil {
