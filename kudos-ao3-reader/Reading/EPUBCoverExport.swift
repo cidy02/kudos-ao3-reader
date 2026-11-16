@@ -28,13 +28,7 @@ nonisolated enum EPUBCoverExport {
             return
         }
         guard let coverJPEG else { throw ExportError.coverUnavailable }
-        let utf8 = opfData.contains(0) ? nil : String(data: opfData, encoding: .utf8)
-        let utf16 = opfData.starts(with: [0x00, 0x3C])
-            ? String(data: opfData, encoding: .utf16BigEndian)
-            : opfData.starts(with: [0x3C, 0x00])
-                ? String(data: opfData, encoding: .utf16LittleEndian)
-                : String(data: opfData, encoding: .utf16)
-        guard var opf = utf8 ?? utf16 else {
+        guard var opf = decodeOPF(opfData) else {
             throw EPUBError.malformedPackage
         }
         // A UTF-16 source is written as UTF-8 along with its new archive entry.
@@ -146,6 +140,29 @@ nonisolated enum EPUBCoverExport {
         return result as String
     }
 
+    private static func decodeOPF(_ data: Data) -> String? {
+        if !data.contains(0), let utf8 = String(data: data, encoding: .utf8) {
+            return utf8
+        }
+        let hasBOM = data.starts(with: [0xFE, 0xFF]) || data.starts(with: [0xFF, 0xFE])
+        let candidate: String?
+        if hasBOM {
+            candidate = String(data: data, encoding: .utf16)
+        } else if data.starts(with: [0x00, 0x3C]) {
+            candidate = String(data: data, encoding: .utf16BigEndian)
+        } else if data.starts(with: [0x3C, 0x00]) {
+            candidate = String(data: data, encoding: .utf16LittleEndian)
+        } else {
+            return nil
+        }
+        guard let candidate else { return nil }
+        let hasDeclaration = candidate.range(
+            of: #"<\?xml\b[^>]*\bencoding\s*=\s*['"]utf-16(?:le|be)?['"]"#,
+            options: [.regularExpression, .caseInsensitive]
+        ) != nil
+        return (hasBOM || hasDeclaration) ? candidate : nil
+    }
+
     static func embeddedJPEG(at url: URL) -> Data? {
         encodedEmbeddedJPEG(EmbeddedWorkCoverImage.data(at: url))
     }
@@ -158,7 +175,33 @@ nonisolated enum EPUBCoverExport {
                 kCGImageSourceCreateThumbnailWithTransform: true,
                 kCGImageSourceThumbnailMaxPixelSize: 2400
               ] as CFDictionary) else { return nil }
-        return encodeJPEG(image)
+        return encodeJPEG(flattenedOntoWhiteIfNeeded(image))
+    }
+
+    private static func flattenedOntoWhiteIfNeeded(_ image: CGImage) -> CGImage {
+        switch image.alphaInfo {
+        case .none, .noneSkipLast, .noneSkipFirst:
+            return image
+        default:
+            break
+        }
+        let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+        guard let context = CGContext(
+            data: nil,
+            width: image.width,
+            height: image.height,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
+        ) else {
+            return image
+        }
+        let bounds = CGRect(x: 0, y: 0, width: image.width, height: image.height)
+        context.setFillColor(red: 1, green: 1, blue: 1, alpha: 1)
+        context.fill(bounds)
+        context.draw(image, in: bounds)
+        return context.makeImage() ?? image
     }
 
     @MainActor
