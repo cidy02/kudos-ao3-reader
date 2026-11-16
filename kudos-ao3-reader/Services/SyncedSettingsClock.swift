@@ -27,6 +27,9 @@ nonisolated enum SyncedSettingsClock {
     private static let inferredKey = "sync.settings.inferred"
     private static let baselineKey = "sync.settings.baseline"
     private static let unset = "\u{0}unset"
+    /// Present in the baseline once this device has looked at its settings at least once.
+    /// After that, a setting or an entry appearing for the first time is an edit made here.
+    private static let watchingMarker = "\u{0}watching"
 
     /// The stamps this device sends: real edit times only. A value that arrived with an
     /// inferred date leaves here unstamped, so the next device infers again rather than
@@ -56,9 +59,12 @@ nonisolated enum SyncedSettingsClock {
     }
 
     /// Stamps every setting (and every entry of a map setting) whose value differs from the
-    /// one last seen, and returns all local stamps. A setting seen for the first time gets
-    /// no stamp: nobody is known to have changed it. Writes nothing when nothing moved, since
-    /// this runs on every `UserDefaults` change and a write would announce another.
+    /// one last seen, and returns all local stamps. On the very first look nothing is stamped:
+    /// nobody is known to have changed anything. From then on a setting that was absent and
+    /// now has a value is an edit like any other (Codex's third T-541 review: the reader's
+    /// first choice for an untouched setting was never stamped, so it was never uploaded and
+    /// an older stamped copy could replace it). Writes nothing when nothing moved, since this
+    /// runs on every `UserDefaults` change and a write would announce another.
     @discardableResult
     static func noteLocalChanges(
         keys: [String], mapKeys: Set<String> = [], in defaults: UserDefaults, now: Date = Date()
@@ -66,17 +72,18 @@ nonisolated enum SyncedSettingsClock {
         var baseline = (defaults.dictionary(forKey: baselineKey) as? [String: String]) ?? [:]
         var stamps = (defaults.dictionary(forKey: stampsKey) as? [String: Double]) ?? [:]
         var inferred = (defaults.dictionary(forKey: inferredKey) as? [String: Double]) ?? [:]
+        let watching = baseline[watchingMarker] != nil
         var baselineMoved = false
         var stamped = false
 
         func check(_ id: String, _ current: String) {
             guard baseline[id] != current else { return }
-            if baseline[id] != nil {
+            let known = baseline[id] != nil
+            // Absent before and absent now is no change, only a baseline worth keeping.
+            if known || (watching && current != unset) {
                 stamps[id] = now.timeIntervalSince1970
                 inferred[id] = nil
                 stamped = true
-            } else if current == unset {
-                return
             }
             baseline[id] = current
             baselineMoved = true
@@ -91,6 +98,10 @@ nonisolated enum SyncedSettingsClock {
             for name in Set(current.keys).union(seen) {
                 check(entryID(key, name), current[name].map { fingerprint($0) } ?? unset)
             }
+        }
+        if !watching {
+            baseline[watchingMarker] = "1"
+            baselineMoved = true
         }
         if baselineMoved { defaults.set(baseline, forKey: baselineKey) }
         if stamped {

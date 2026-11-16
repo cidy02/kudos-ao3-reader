@@ -189,6 +189,30 @@ struct SyncedSettingsTests {
         #expect(defaults.string(forKey: "readerCustomPaperHex") == "#F4ECD8")
     }
 
+    @Test func aFirstChoiceForAnUntouchedSettingIsStampedAndAnnounced() {
+        let defaults = freshDefaults()
+        let keys = ["readerFontPt", "readerLineSpacing"]
+        let maps: Set<String> = ["commentDrafts"]
+        defaults.set(1.4, forKey: "readerLineSpacing")
+        // First look: nothing is stamped, an existing value included.
+        #expect(!SyncedSettingsClock.stampChanges(keys: keys + ["commentDrafts"], mapKeys: maps, in: defaults))
+        #expect(SyncedSettingsClock.stamps(in: defaults).isEmpty)
+        // The reader then sets a setting that was absent: an edit, stamped, so the observer uploads it.
+        let when = Date(timeIntervalSince1970: 2_000_000_000)
+        defaults.set(20.0, forKey: "readerFontPt")
+        #expect(SyncedSettingsClock.stampChanges(keys: keys + ["commentDrafts"], mapKeys: maps, in: defaults, now: when))
+        #expect(SyncedSettingsClock.stamps(in: defaults)["readerFontPt"] == when)
+        #expect(SyncedSettingsClock.stamps(in: defaults)["readerLineSpacing"] == nil)
+        // A new entry in a map setting is an edit too.
+        defaults.set(["work-1": "draft"], forKey: "commentDrafts")
+        #expect(SyncedSettingsClock.stampChanges(keys: keys + ["commentDrafts"], mapKeys: maps, in: defaults, now: when))
+        #expect(SyncedSettingsClock.stamps(in: defaults)[SyncedSettingsClock.entryID("commentDrafts", "work-1")] == when)
+        // An older stamped copy from elsewhere then loses to that first choice.
+        let older = SyncedSettingsClock.Stamp(date: when.addingTimeInterval(-60), inferred: false)
+        let local = SyncedSettingsClock.localStamps(in: defaults)["readerFontPt"]
+        #expect(!SyncedSettingsClock.incomingWins(local: local, incoming: older, fromSync: true))
+    }
+
     @Test func checkingForChangesWritesNothingWhenNothingChanged() {
         let defaults = freshDefaults()
         defaults.set(18.0, forKey: "readerFontPt")
