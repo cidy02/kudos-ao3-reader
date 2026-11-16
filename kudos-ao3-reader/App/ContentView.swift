@@ -102,8 +102,7 @@ struct ContentView: View {
                 },
                 set: { router.isPresentingLinkedWork = $0 }
             ), onDismiss: {
-                router.pendingWorkLink = nil
-                if router.pendingLoginWorkLink != nil { router.isPresentingLinkedWorkLogin = true }
+                router.linkedWorkDidDismiss()
             }) {
                 if let link = router.pendingWorkLink {
                     LinkedWorkLandingView(workID: link.id, chapterID: link.chapterID)

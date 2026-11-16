@@ -865,6 +865,49 @@ struct AppRouterTests {
         #expect(router.pendingURL == url)
     }
 
+    @Test func workLinkFromSearchFiltersWaitsForPanelDismissal() {
+        let router = AppRouter()
+        router.selection = .search
+        router.panel = .searchFilters
+        router.openAO3Link(URL(string: "https://archiveofourown.org/works/123")!)
+
+        #expect(router.panel == .none)
+        #expect(!router.isPresentingLinkedWork)
+        #expect(router.pendingWorkLink == nil)
+
+        router.panelDidDismiss()
+
+        #expect(router.isPresentingLinkedWork)
+        #expect(router.pendingWorkLink?.id == 123)
+    }
+
+    @Test func secondWorkLinkDuringLoginHandoffReplacesStaleLogin() {
+        let router = AppRouter()
+        router.openAO3Link(URL(string: "https://archiveofourown.org/works/111")!)
+        router.requestLinkedWorkLogin(sessionGeneration: 3)
+        router.openAO3Link(URL(string: "https://archiveofourown.org/works/222")!)
+
+        router.linkedWorkDidDismiss()
+
+        #expect(router.pendingWorkLink?.id == 222)
+        #expect(router.isPresentingLinkedWork)
+        #expect(!router.isPresentingLinkedWorkLogin)
+        #expect(router.pendingLoginWorkLink == nil)
+    }
+
+    @Test func externalTagLinkWhileLandingIsUpStaysInSheet() {
+        let router = AppRouter()
+        router.isPresentingLinkedWork = true
+        router.isPresentingWebBrowser = true
+        router.openAO3Link(URL(string: "https://archiveofourown.org/tags/Fluff")!)
+
+        #expect(router.pendingLandingTagWorks?.title == "Fluff")
+        #expect(router.pendingLandingTagWorks?.url.absoluteString == "https://archiveofourown.org/tags/Fluff/works")
+        #expect(router.pendingTagWorks == nil)
+        #expect(!router.isPresentingWebBrowser)
+        #expect(router.selection == .home)
+    }
+
     @Test func malformedAndNonAO3UserURLsAreNotAuthorRoutes() {
         #expect(AppRouter.authorRoute(
             for: URL(string: "https://archiveofourown.org/users/login")!

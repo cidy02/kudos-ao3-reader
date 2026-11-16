@@ -321,7 +321,8 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 }
                 .filterPanelPresentation(
                     isPresented: router.isShowing(.searchFilters),
-                    detents: [.medium, .large]
+                    detents: [.medium, .large],
+                    onDismiss: { router.panelDidDismiss() }
                 ) {
                     // Width applies on iPad/macOS, where this is a real inspector;
                     // iPhone gets a sheet, and its grabber, from the modifier.
@@ -354,7 +355,10 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 }
                 .remoteWorkSelectionChrome(bulkSelection)
                 .onChange(of: router.selection) { _, selection in
-                    if selection != .search { rankTop100.cancel() }
+                    if selection != .search {
+                        rankTop100.cancel()
+                        if router.panel == .searchFilters { router.panel = .none }
+                    }
                 }
                 .onChange(of: scenePhase) { _, phase in
                     if phase != .active { rankTop100.cancel() }
@@ -1022,7 +1026,6 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
 
     private func runSearch() {
         if let url = URL(string: localQuery), AO3Link(url).kind != .notAO3 {
-            router.panel = .none
             filters.query = ""
             router.openAO3Link(url)
             return

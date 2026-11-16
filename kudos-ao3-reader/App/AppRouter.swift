@@ -382,8 +382,11 @@ final class AppRouter {
     var isPresentingLinkedWorkLogin = false
     private var opensWebsiteAfterLinkedWorkLoginDismiss = false
     private var websiteURLAfterLinkedWorkLoginDismiss: URL?
+    private var isDismissingLinkedWorkForLogin = false
+    private var reopenLinkedWorkAfterDismiss = false
     private(set) var workLinkEpoch = 0
     var isPresentingLinkedWork = false
+    private var pendingAO3LinkAfterPanelDismiss: URL?
     /// A tag the Library should filter by on its next appearance (e.g. tapped on a
     /// work's detail page). Consumed + cleared by `LibraryView`.
     var pendingLibraryTag: LibraryTagFilter?
@@ -402,6 +405,7 @@ final class AppRouter {
     /// relationship chip). Consumed + cleared by `SearchView`.
     var pendingTagSearch: AO3TagSearch?
     var pendingLandingTagSearch: AO3TagSearch?
+    var pendingLandingTagWorks: AO3TagWorksRequest?
     /// A tag's works page to show natively in Browse (e.g. an AO3 link tapped in a
     /// work's preface). Consumed + cleared by `BrowseView`.
     var pendingTagWorks: AO3TagWorksRequest?
@@ -482,6 +486,16 @@ final class AppRouter {
     /// works list — falling back to the in-app web view for everything else.
     func openAO3Link(_ url: URL) {
         let link = AO3Link(url)
+        guard link.kind != .notAO3 else {
+            open(url)
+            return
+        }
+        if (panel == .searchFilters && selection == .search)
+            || (panel == .libraryFilters && selection == .library) {
+            pendingAO3LinkAfterPanelDismiss = url
+            panel = .none
+            return
+        }
         if case let .work(id, chapterID) = link.kind {
             pendingWorkLink = (id, chapterID)
             workLinkEpoch &+= 1
@@ -493,6 +507,11 @@ final class AppRouter {
                 opensWebsiteAfterLinkedWorkLoginDismiss = false
                 websiteURLAfterLinkedWorkLoginDismiss = nil
                 isPresentingLinkedWorkLogin = false
+            } else if isDismissingLinkedWorkForLogin || reopenLinkedWorkAfterDismiss {
+                isDismissingLinkedWorkForLogin = false
+                pendingLoginWorkLink = nil
+                pendingLoginSessionGeneration = nil
+                reopenLinkedWorkAfterDismiss = true
             } else if isPresentingWebBrowser && !isPresentingLinkedWork {
                 isPresentingWebBrowser = false
             } else {
@@ -502,13 +521,19 @@ final class AppRouter {
             return
         }
         let destination = Self.canonicalAO3URL(url)
-        if link.kind != .notAO3, let author = Self.authorRoute(for: destination) {
+        if let author = Self.authorRoute(for: destination) {
             openAuthorProfile(author)
             return
         }
         if case let .tag(tag) = link.kind, AO3AuthorRoute.isAO3URL(destination) {
-            pendingTagWorks = AO3TagWorksRequest(url: destination, title: tag)
-            selection = .browse
+            let request = AO3TagWorksRequest(url: destination, title: tag)
+            if isPresentingLinkedWork {
+                isPresentingWebBrowser = false
+                pendingLandingTagWorks = request
+            } else {
+                pendingTagWorks = request
+                selection = .browse
+            }
             return
         }
         open(destination)
@@ -526,7 +551,28 @@ final class AppRouter {
         guard let pendingWorkLink else { return }
         pendingLoginWorkLink = pendingWorkLink
         pendingLoginSessionGeneration = sessionGeneration
+        isDismissingLinkedWorkForLogin = true
+        reopenLinkedWorkAfterDismiss = false
         isPresentingLinkedWork = false
+    }
+
+    func linkedWorkDidDismiss() {
+        if isDismissingLinkedWorkForLogin {
+            isDismissingLinkedWorkForLogin = false
+            pendingWorkLink = nil
+            if pendingLoginWorkLink != nil { isPresentingLinkedWorkLogin = true }
+        } else if reopenLinkedWorkAfterDismiss {
+            reopenLinkedWorkAfterDismiss = false
+            if pendingWorkLink != nil { isPresentingLinkedWork = true }
+        } else {
+            pendingWorkLink = nil
+        }
+    }
+
+    func panelDidDismiss() {
+        guard let url = pendingAO3LinkAfterPanelDismiss else { return }
+        pendingAO3LinkAfterPanelDismiss = nil
+        openAO3Link(url)
     }
 
     /// Pushes a verified author route without changing tabs. Keeping the current

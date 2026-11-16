@@ -79,6 +79,11 @@ struct LinkedWorkLandingView: View {
         .onChange(of: router.authorProfileNavigationEpoch) { _, _ in
             if let route = router.consumePendingAuthorProfile() { path.append(route) }
         }
+        .onChange(of: router.pendingLandingTagWorks, initial: true) { _, request in
+            guard let request else { return }
+            router.pendingLandingTagWorks = nil
+            path.append(request)
+        }
         .onChange(of: router.pendingLandingTagSearch) { _, request in
             guard let request else { return }
             router.pendingLandingTagSearch = nil
