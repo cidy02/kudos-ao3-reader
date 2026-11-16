@@ -302,7 +302,7 @@ internal fun mergeFallbackManifestJson(primary: JsonObject?, fallback: JsonObjec
                 val pObj = element as? JsonObject ?: return@map element
                 val match = matcher.match(pObj) ?: return@map pObj
                 fallbackIndexByIdentity[match]?.let { matchedFallbackIndices += it }
-                mergeRawRecord(pObj, match)
+                mergeRawRecord(listName, pObj, match)
             } + fObjects.filterIndexed { index, _ -> index !in matchedFallbackIndices }
             merged[listName] = JsonArray(combined)
         } else if ((primary[listName] == null || primary[listName] is JsonNull) && fArray != null) {
@@ -327,12 +327,29 @@ private fun instantOf(element: JsonElement?): Instant? {
         ?: runCatching { OffsetDateTime.parse(text).toInstant() }.getOrNull()
 }
 
-/** `lastModifiedAt`, or a primitive `modifiedAt`. A `modifiedAt` object is not a record stamp. */
-private fun recordStamp(record: JsonObject): Instant? {
+/**
+ * Record modification stamp: `readingQueues` use `max(dateUpdated, lastMembershipChangedAt)`;
+ * other lists use `lastModifiedAt` or a primitive `modifiedAt`, with creation-date fallbacks
+ * for collections (`dateAdded`), memberships (`queuedAt`), and annotations (`createdAt`).
+ */
+private fun recordStamp(listName: String, record: JsonObject): Instant? {
+    if (listName == "readingQueues") {
+        listOfNotNull(
+            instantOf(record["dateUpdated"]),
+            instantOf(record["lastMembershipChangedAt"])
+        ).maxOrNull()?.let { return it }
+    }
     instantOf(record["lastModifiedAt"])?.let { return it }
-    val modified = record["modifiedAt"] ?: return null
-    if (modified is JsonObject || modified is JsonArray) return null
-    return instantOf(modified)
+    val modified = record["modifiedAt"]
+    if (modified != null && modified !is JsonObject && modified !is JsonArray) {
+        instantOf(modified)?.let { return it }
+    }
+    return when (listName) {
+        "collections" -> instantOf(record["dateAdded"])
+        "readingQueueMemberships" -> instantOf(record["queuedAt"])
+        "annotations" -> instantOf(record["createdAt"])
+        else -> null
+    }
 }
 
 /** A real stamp beats a missing one. Equal instants are a tie: the incoming date must be greater. */
@@ -519,8 +536,8 @@ private fun mergeStampedPronunciations(primary: JsonObject, fallback: JsonObject
  * The newer record stamp wins the whole record, so a key that record omits stays removed.
  * No stamp, or a tie, keeps keys that only one side has and lets the primary overwrite collisions.
  */
-private fun mergeRawRecord(primary: JsonObject, fallback: JsonObject): JsonObject {
-    return when (stampWinner(recordStamp(primary), recordStamp(fallback))) {
+private fun mergeRawRecord(listName: String, primary: JsonObject, fallback: JsonObject): JsonObject {
+    return when (stampWinner(recordStamp(listName, primary), recordStamp(listName, fallback))) {
         StampWinner.PRIMARY -> primary
         StampWinner.FALLBACK -> fallback
         StampWinner.TIE -> JsonObject(fallback + primary)

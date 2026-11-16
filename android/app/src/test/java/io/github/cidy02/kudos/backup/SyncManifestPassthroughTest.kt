@@ -1129,6 +1129,94 @@ class SyncManifestPassthroughTest {
         )
     }
 
+    @Test
+    fun readingQueuesAndFallbackRecordStampsGovernRemovalsAndOlderCopies() {
+        val olderQueue = JsonObject(
+            mapOf(
+                "id" to JsonPrimitive(QUEUE_ONE),
+                "kindRaw" to JsonPrimitive("savedForLater"),
+                "dateUpdated" to JsonPrimitive("2026-06-26T10:00:00.000Z"),
+                "futureField" to JsonPrimitive("stale")
+            )
+        )
+        val newerQueueWithoutExtra = JsonObject(
+            mapOf(
+                "id" to JsonPrimitive(QUEUE_ONE),
+                "kindRaw" to JsonPrimitive("savedForLater"),
+                "dateUpdated" to JsonPrimitive("2026-06-26T10:00:00.000Z"),
+                "lastMembershipChangedAt" to JsonPrimitive("2026-06-26T14:00:00.000Z")
+            )
+        )
+        val olderCollection = JsonObject(
+            mapOf(
+                "id" to JsonPrimitive(COLLECTION_ONE),
+                "dateAdded" to JsonPrimitive("2026-06-26T09:00:00.000Z"),
+                "futureCollectionKey" to JsonPrimitive("old")
+            )
+        )
+        val newerCollection = JsonObject(
+            mapOf(
+                "id" to JsonPrimitive(COLLECTION_ONE),
+                "dateAdded" to JsonPrimitive("2026-06-26T12:00:00.000Z")
+            )
+        )
+        val olderMembership = JsonObject(
+            mapOf(
+                "id" to JsonPrimitive(MEMBERSHIP_ONE),
+                "queuedAt" to JsonPrimitive("2026-06-26T09:00:00.000Z"),
+                "futureField" to JsonPrimitive("old")
+            )
+        )
+        val newerMembership = JsonObject(
+            mapOf(
+                "id" to JsonPrimitive(MEMBERSHIP_ONE),
+                "queuedAt" to JsonPrimitive("2026-06-26T12:00:00.000Z")
+            )
+        )
+        val olderAnnotation = JsonObject(
+            mapOf(
+                "id" to JsonPrimitive(ANNOTATION_ONE),
+                "createdAt" to JsonPrimitive("2026-06-26T09:00:00.000Z"),
+                "futureField" to JsonPrimitive("old")
+            )
+        )
+        val newerAnnotation = JsonObject(
+            mapOf(
+                "id" to JsonPrimitive(ANNOTATION_ONE),
+                "createdAt" to JsonPrimitive("2026-06-26T12:00:00.000Z")
+            )
+        )
+
+        val newerManifest = JsonObject(
+            mapOf(
+                "readingQueues" to JsonArray(listOf(newerQueueWithoutExtra)),
+                "collections" to JsonArray(listOf(newerCollection)),
+                "readingQueueMemberships" to JsonArray(listOf(newerMembership)),
+                "annotations" to JsonArray(listOf(newerAnnotation))
+            )
+        )
+        val olderManifest = JsonObject(
+            mapOf(
+                "readingQueues" to JsonArray(listOf(olderQueue)),
+                "collections" to JsonArray(listOf(olderCollection)),
+                "readingQueueMemberships" to JsonArray(listOf(olderMembership)),
+                "annotations" to JsonArray(listOf(olderAnnotation))
+            )
+        )
+
+        val newerPrimary = mergeFallbackManifestJson(newerManifest, olderManifest)!!
+        assertFalse("futureField" in newerPrimary.getValue("readingQueues").jsonArray.single().jsonObject)
+        assertFalse("futureCollectionKey" in newerPrimary.getValue("collections").jsonArray.single().jsonObject)
+        assertFalse("futureField" in newerPrimary.getValue("readingQueueMemberships").jsonArray.single().jsonObject)
+        assertFalse("futureField" in newerPrimary.getValue("annotations").jsonArray.single().jsonObject)
+
+        val olderPrimary = mergeFallbackManifestJson(olderManifest, newerManifest)!!
+        assertFalse("futureField" in olderPrimary.getValue("readingQueues").jsonArray.single().jsonObject)
+        assertFalse("futureCollectionKey" in olderPrimary.getValue("collections").jsonArray.single().jsonObject)
+        assertFalse("futureField" in olderPrimary.getValue("readingQueueMemberships").jsonArray.single().jsonObject)
+        assertFalse("futureField" in olderPrimary.getValue("annotations").jsonArray.single().jsonObject)
+    }
+
     private fun iosT541ManifestJson(): JsonObject {
         val pair = Ed25519Sign.KeyPair.newKeyPair()
         runBlocking { settingsRepository.trustTombstonePublicKey(pair.publicKey.toLowerHex()) }
