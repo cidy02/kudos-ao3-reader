@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Unpublished writing the editor saved for crash recovery, carried in a backup and through
 /// the sync folder (T-541; owner, 2026-11-16: backups and the sync folder are a complete

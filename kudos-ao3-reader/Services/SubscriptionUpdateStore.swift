@@ -108,8 +108,10 @@ protocol SubscriptionUpdateStoring {
     func delete() throws
 }
 
-/// Derived mail state in Application Support, excluded from device backups and
-/// deliberately outside SwiftData, folder sync, and `.kudosbackup` exports.
+/// Mail state in Application Support, outside SwiftData and excluded from the device's own
+/// iCloud backup. Since T-541 `updates.json` (with the reader's Save / Not for me choices)
+/// travels in `.kudosbackup` and folder sync (`KudosBackupDocument`, newer file wins);
+/// `cursor.json`, the read position of the mail sign-in, stays on this device.
 struct FileSubscriptionUpdateStore: SubscriptionUpdateStoring {
     private let directoryURL: URL
     private var stateURL: URL { directoryURL.appendingPathComponent("updates.json") }

@@ -1,7 +1,9 @@
 import CryptoKit
 import Foundation
 
-/// Device-local crash recovery, separate from AO3 drafts and library backups.
+/// Crash recovery for unpublished writing, separate from AO3 drafts. Since T-541 the copies
+/// travel in backups and the sync folder (`KudosBackupRecoveryCopy`), added or replaced only
+/// by a newer save of the same session, never removed by absence.
 /// Store text only: no cookies, form tokens, or account names in filenames.
 ///
 /// The editor writes through `WritingRecoveryWriter`, off the main thread and
