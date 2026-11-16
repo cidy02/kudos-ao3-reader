@@ -469,9 +469,12 @@ struct WaitingRow: View {
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
                 .background(update.source.color, in: Capsule())
-            Text(update.source.line)
+            Text(isAccessibilitySize
+                ? AccessibilitySoftBreak.opportunities(in: update.source.line)
+                : update.source.line)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .multilineTextAlignment(.leading)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -484,8 +487,9 @@ struct WaitingRow: View {
     }
 
     private var titleText: some View {
-        Text(headline)
+        Text(isAccessibilitySize ? AccessibilitySoftBreak.opportunities(in: headline) : headline)
             .font(.headline)
+            .multilineTextAlignment(.leading)
             .fixedSize(horizontal: false, vertical: true)
     }
 
@@ -553,15 +557,22 @@ struct WaitingRow: View {
                 metadata
                 if let claimedTitle {
                     // Quoted and attributed: the email said this, AO3 did not.
-                    Text("AO3's notification names \u{201C}\(claimedTitle)\u{201D}")
+                    Text(isAccessibilitySize
+                        ? AccessibilitySoftBreak.opportunities(
+                            in: "AO3's notification names \u{201C}\(claimedTitle)\u{201D}")
+                        : "AO3's notification names \u{201C}\(claimedTitle)\u{201D}")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                Text(whatChanged)
+                Text(isAccessibilitySize
+                    ? AccessibilitySoftBreak.opportunities(in: whatChanged)
+                    : whatChanged)
                     .font(.subheadline)
                     .foregroundStyle(isConfirmed ? .primary : .secondary)
+                    .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
 
                 if let alsoInThisEmail {
