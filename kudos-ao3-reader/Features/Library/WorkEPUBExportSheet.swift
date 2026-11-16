@@ -1,4 +1,5 @@
 #if os(iOS)
+import SwiftData
 import SwiftUI
 import UIKit
 
