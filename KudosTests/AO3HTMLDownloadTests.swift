@@ -381,6 +381,9 @@ struct AO3HTMLDownloadTests {
         #expect(AO3ImageStubProtocol.requestedURLs == [directURL, redirectTarget])
     }
 
+    // URLSession hands a response to its delegate only after 512 bytes of body (or the end of the
+    // transfer), whatever the Content-Type: chunks smaller than that made every cancel look late.
+    // Real images are larger, so the chunks and caps here are sized like them.
     @Test func perImageAndTotalImageCapsAreEnforced() async throws {
         ImageStubProtocol.reset()
         let bareConfig = AO3HTMLDownloadConverter.makeImageSessionConfiguration()
@@ -391,41 +394,43 @@ struct AO3HTMLDownloadTests {
         // Content-Length above cap aborts before reading body.
         let headerOverCap = URL(string: "https://img.example/header-over.png")!
         ImageStubProtocol.responses[headerOverCap] = .chunks(
-            [Self.png, Data(repeating: 0, count: 64)], contentLength: 100
+            [Self.png + Data(repeating: 0, count: 600), Data(repeating: 0, count: 600), Data(repeating: 0, count: 600)],
+            contentLength: 5_000
         )
         #expect(
             await AO3HTMLDownloadConverter.fetchRemoteImage(
-                headerOverCap, session: bareSession, ao3Client: ao3Client, maxBytes: 16
+                headerOverCap, session: bareSession, ao3Client: ao3Client, maxBytes: 1_000
             ) == nil
         )
-        #expect(!ImageStubProtocol.finishedURLs.contains(headerOverCap))
+        #expect(!ImageStubProtocol.finishedURLs.contains(headerOverCap), "\(ImageStubProtocol.events)")
 
         // Chunked response without Content-Length aborts as soon as bytes exceed cap.
         let streamOverCap = URL(string: "https://img.example/stream-over.png")!
         ImageStubProtocol.responses[streamOverCap] = .chunks(
-            [Data(repeating: 1, count: 10), Data(repeating: 2, count: 10)], contentLength: nil
+            [Data(repeating: 1, count: 600), Data(repeating: 2, count: 600), Data(repeating: 3, count: 600)],
+            contentLength: nil
         )
         #expect(
             await AO3HTMLDownloadConverter.fetchRemoteImage(
-                streamOverCap, session: bareSession, ao3Client: ao3Client, maxBytes: 16
+                streamOverCap, session: bareSession, ao3Client: ao3Client, maxBytes: 1_000
             ) == nil
         )
-        #expect(!ImageStubProtocol.finishedURLs.contains(streamOverCap))
+        #expect(!ImageStubProtocol.finishedURLs.contains(streamOverCap), "\(ImageStubProtocol.events)")
 
         // The AO3 route must stop the same stream without retrying it.
         let ao3OverCap = URL(string: "https://archiveofourown.org/images/over.png")!
         ImageStubProtocol.responses[ao3OverCap] = .chunks(
-            [Data(repeating: 1, count: 10), Data(repeating: 2, count: 10), Data(repeating: 3, count: 10)],
+            [Data(repeating: 1, count: 600), Data(repeating: 2, count: 600), Data(repeating: 3, count: 600)],
             contentLength: nil
         )
         let ao3Config = AO3Client.makeAnonymousSessionConfiguration()
         ao3Config.protocolClasses = [ImageStubProtocol.self]
         let cappedAO3Client = AO3Client(session: URLSession(configuration: ao3Config), paceSleep: { _ in })
         #expect(await AO3HTMLDownloadConverter.fetchRemoteImage(
-            ao3OverCap, session: bareSession, ao3Client: cappedAO3Client, maxBytes: 16
+            ao3OverCap, session: bareSession, ao3Client: cappedAO3Client, maxBytes: 1_000
         ) == nil)
         #expect(ImageStubProtocol.requestedURLs.filter { $0 == ao3OverCap }.count == 1)
-        #expect(!ImageStubProtocol.finishedURLs.contains(ao3OverCap))
+        #expect(!ImageStubProtocol.finishedURLs.contains(ao3OverCap), "\(ImageStubProtocol.events)")
 
         // Total cap checks `total + size <= max` before appending.
         let html = try Self.fixture("ao3_download_single_chapter").replacingOccurrences(
@@ -544,6 +549,13 @@ private final class ImageStubProtocol: URLProtocol, @unchecked Sendable {
     nonisolated(unsafe) static var responses: [URL: StubResponse] = [:]
     nonisolated(unsafe) static var requestedURLs: [URL] = []
     nonisolated(unsafe) static var finishedURLs: [URL] = []
+    /// What the stub saw, in order, with milliseconds since start — printed when a cap check fails.
+    nonisolated(unsafe) static var events: [String] = []
+    nonisolated(unsafe) static var epoch = Date()
+    static func note(_ text: String) {
+        eventLock.withLock { events.append("\(Int(Date().timeIntervalSince(epoch) * 1000))ms \(text)") }
+    }
+    private static let eventLock = NSLock()
     private var cancelled = false
     private var pendingChunks: [Data] = []
     private var nextChunk = 0
@@ -553,12 +565,15 @@ private final class ImageStubProtocol: URLProtocol, @unchecked Sendable {
         responses = [:]
         requestedURLs = []
         finishedURLs = []
+        events = []
+        epoch = Date()
     }
 
     override class func canInit(with _: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
     override func startLoading() {
+        Self.note("start \(request.url?.lastPathComponent ?? "?") thread=\(Thread.isMainThread ? "main" : "bg")")
         guard let url = request.url, let stub = Self.responses[url] else {
             client?.urlProtocol(self, didFailWithError: URLError(.fileDoesNotExist))
             return
@@ -601,11 +616,13 @@ private final class ImageStubProtocol: URLProtocol, @unchecked Sendable {
     @objc private func deliverNextChunk() {
         guard !isCancelled, let url = loadingURL else { return }
         if nextChunk < pendingChunks.count {
+            Self.note("chunk \(nextChunk) \(url.lastPathComponent) thread=\(Thread.isMainThread ? "main" : "bg")")
             client?.urlProtocol(self, didLoad: pendingChunks[nextChunk])
             nextChunk += 1
             perform(#selector(deliverNextChunk), with: nil, afterDelay: 0.05)
         } else {
             Self.finishedURLs.append(url)
+            Self.note("finish \(url.lastPathComponent)")
             client?.urlProtocolDidFinishLoading(self)
         }
     }
@@ -614,6 +631,7 @@ private final class ImageStubProtocol: URLProtocol, @unchecked Sendable {
     private var isCancelled: Bool { lock.withLock { cancelled } }
 
     override func stopLoading() {
+        Self.note("stop \(request.url?.lastPathComponent ?? "?")")
         lock.withLock { cancelled = true }
     }
 }
