@@ -11,16 +11,12 @@ nonisolated enum EmbeddedWorkCoverImage {
         let pixelArea: Int
     }
 
-    static func preferred(_ candidates: [Candidate]) -> Data? {
-        candidates.reduce(nil as Candidate?) { current, candidate in
-            guard let current else { return candidate }
-            return better(candidate, than: current) ? candidate : current
-        }?.data
-    }
-
-    private static func better(_ candidate: Candidate, than current: Candidate) -> Bool {
-        if candidate.frontMatter != current.frontMatter { return candidate.frontMatter }
-        return candidate.pixelArea > current.pixelArea
+    static func preferred(_ current: Candidate?, _ candidate: Candidate) -> Candidate {
+        guard let current else { return candidate }
+        if candidate.frontMatter != current.frontMatter {
+            return candidate.frontMatter ? candidate : current
+        }
+        return candidate.pixelArea > current.pixelArea ? candidate : current
     }
 
     static func accepts(width: Int, height: Int) -> Bool {
@@ -29,26 +25,47 @@ nonisolated enum EmbeddedWorkCoverImage {
     }
 
     static func data(at epubURL: URL) -> Data? {
-        let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cover-image-\(UUID().uuidString)", isDirectory: true)
-        guard (try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)) != nil else {
-            return nil
+        guard let archive = try? Data(contentsOf: epubURL),
+              let zip = try? MiniZip(data: archive),
+              let container = zip.data(named: "META-INF/container.xml"),
+              let opfPath = EPUBDocument.rootfilePath(from: container) else { return nil }
+        let root = URL(fileURLWithPath: "/KudosGeneratedCoverArt", isDirectory: true)
+        let rootPath = root.path + "/"
+        func entryName(_ url: URL) -> String? {
+            let path = url.standardizedFileURL.path
+            guard url.isFileURL, path.hasPrefix(rootPath) else { return nil }
+            return String(path.dropFirst(rootPath.count))
         }
-        defer { try? FileManager.default.removeItem(at: directory) }
-        guard let document = try? EPUBDocument.open(epubURL: epubURL, into: directory) else { return nil }
+        let opfURL = root.appendingPathComponent(opfPath).standardizedFileURL
+        guard let opfName = entryName(opfURL),
+              let opfData = zip.data(named: opfName) else { return nil }
+        let parser = OPFParser()
+        guard parser.parse(opfData) else { return nil }
+        let opfDir = opfURL.deletingLastPathComponent()
+        let pages: [URL] = parser.spine.compactMap { id in
+            guard let href = parser.manifest[id],
+                  let url = URL(string: href, relativeTo: opfDir)?.absoluteURL,
+                  entryName(url) != nil else { return nil }
+            return url
+        }
+        guard !pages.isEmpty else { return nil }
+        let chapters = EPUBDocument.tableOfContents(
+            parser: parser, opfDir: opfDir, spineCount: pages.count,
+            readData: { url in entryName(url).flatMap(zip.data(named:)) }
+        )
         let sections = ReaderSectionBuilder.build(
-            tocEntries: document.chapters.map {
+            tocEntries: chapters.map {
                 ReaderSectionBuilder.RawTOCEntry(title: $0.title, spineIndex: $0.spineIndex)
             },
-            spineHrefs: document.spineURLs.map(\.lastPathComponent)
+            spineHrefs: pages.map(\.lastPathComponent)
         )
         let firstChapter = sections.first(where: { $0.kind == .chapter })?.spineIndex ?? 0
-        let root = directory.resolvingSymlinksInPath().standardizedFileURL.path + "/"
         var best: Candidate?
-        for index in 0...firstChapter where document.spineURLs.indices.contains(index) {
-            let pageURL = document.spineURLs[index].resolvingSymlinksInPath().standardizedFileURL
-            guard pageURL.isFileURL, pageURL.path.hasPrefix(root),
-                  let xhtml = try? String(contentsOf: pageURL, encoding: .utf8),
+        for index in 0...firstChapter where pages.indices.contains(index) {
+            let pageURL = pages[index]
+            guard let pageName = entryName(pageURL),
+                  let pageData = zip.data(named: pageName),
+                  let xhtml = String(data: pageData, encoding: .utf8),
                   let page = try? SwiftSoup.parse(xhtml),
                   let images = try? page.select("img[src]").array() else { continue }
             for image in images {
@@ -56,21 +73,19 @@ nonisolated enum EmbeddedWorkCoverImage {
                       !src.isEmpty, !src.hasPrefix("//"),
                       let url = URL(string: src, relativeTo: pageURL)?.absoluteURL,
                       url.isFileURL else { continue }
-                let file = url.resolvingSymlinksInPath().standardizedFileURL
-                guard file.path.hasPrefix(root),
-                      let bytes = try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize,
+                guard let name = entryName(url),
+                      let bytes = zip.uncompressedSize(named: name),
                       bytes <= 20_000_000,
-                      let imageSource = CGImageSourceCreateWithURL(file as CFURL,
+                      let data = zip.data(named: name),
+                      let imageSource = CGImageSourceCreateWithData(data as CFData,
                           [kCGImageSourceShouldCache: false] as CFDictionary),
                       let properties = CGImageSourceCopyPropertiesAtIndex(imageSource, 0, nil) as? NSDictionary,
                       let width = properties[kCGImagePropertyPixelWidth] as? Int,
                       let height = properties[kCGImagePropertyPixelHeight] as? Int,
-                      accepts(width: width, height: height),
-                      let data = try? Data(contentsOf: file) else { continue }
+                      accepts(width: width, height: height) else { continue }
                 let candidate = Candidate(data: data, frontMatter: index < firstChapter,
                                           pixelArea: width * height)
-                if let best, !better(candidate, than: best) { continue }
-                best = candidate
+                best = preferred(best, candidate)
             }
         }
         return best?.data

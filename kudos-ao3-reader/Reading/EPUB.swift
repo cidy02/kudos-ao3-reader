@@ -161,7 +161,8 @@ nonisolated struct EPUBDocument {
 
     /// Builds the chapter list from the EPUB3 nav document or the NCX, falling
     /// back to one generic entry per spine item.
-    private static func tableOfContents(parser: OPFParser, opfDir: URL, spineCount: Int) -> [TOCEntry] {
+    static func tableOfContents(parser: OPFParser, opfDir: URL, spineCount: Int,
+                                readData: (URL) -> Data? = { try? Data(contentsOf: $0) }) -> [TOCEntry] {
         // Map each spine item's file name to its index.
         var keyToIndex: [String: Int] = [:]
         for (index, idref) in parser.spine.enumerated() {
@@ -182,7 +183,7 @@ nonisolated struct EPUBDocument {
         }
 
         var pairs: [(title: String, src: String)] = []
-        if let tocHref, let data = try? Data(contentsOf: opfDir.appendingPathComponent(tocHref)) {
+        if let tocHref, let data = readData(opfDir.appendingPathComponent(tocHref)) {
             if isNav {
                 let navParser = NavTOCParser()
                 navParser.parse(data)
@@ -200,7 +201,7 @@ nonisolated struct EPUBDocument {
                 ?? parser.manifestMedia.first(where: { $0.value == "application/x-dtbncx+xml" })?.key
             if let ncxID,
                let ncxHref = parser.manifest[ncxID],
-               let data = try? Data(contentsOf: opfDir.appendingPathComponent(ncxHref)) {
+               let data = readData(opfDir.appendingPathComponent(ncxHref)) {
                 let ncxParser = NCXParser()
                 ncxParser.parse(data)
                 pairs = ncxParser.entries
@@ -328,7 +329,7 @@ nonisolated struct EPUBDocument {
     }
 
     /// Pulls the OPF path out of META-INF/container.xml.
-    private static func rootfilePath(from containerData: Data) -> String? {
+    static func rootfilePath(from containerData: Data) -> String? {
         final class ContainerDelegate: NSObject, XMLParserDelegate {
             var path: String?
             func parser(

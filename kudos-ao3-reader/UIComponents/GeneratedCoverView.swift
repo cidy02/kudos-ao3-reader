@@ -2,16 +2,16 @@ import SwiftUI
 
 /// A cover in its own 112-unit coordinate system. Wordless instances are decorative.
 struct GeneratedCoverView: View {
-    // The spec's 86–88% white misses 4.5:1 on the lightest ground; 92% clears it.
-    private static let secondaryTextOpacity = 0.92
+    static let fandomOpacity = 0.88
+    static let bylineOpacity = 0.86
     let recipe: GeneratedCoverRecipe
     let width: CGFloat
+    let artCacheKey: String
     var epubURL: URL?
     var epubWorkID: UUID?
     var height: CGFloat?
     var showsWords = true
     var showsArt = true
-    @Environment(\.displayScale) private var displayScale
     @State private var loadedURL: URL?
     @State private var embeddedImage: Image?
 
@@ -51,6 +51,7 @@ struct GeneratedCoverView: View {
          showsWords: Bool = true, showsArt: Bool = true) {
         self.recipe = recipe
         self.width = width
+        artCacheKey = "\(String(reflecting: recipe))|\(width)|\(height ?? width * 1.42)"
         self.epubURL = epubURL
         self.epubWorkID = epubWorkID
         self.height = height
@@ -69,7 +70,7 @@ struct GeneratedCoverView: View {
                     let unit = size.width / 112
                     context.scaleBy(x: unit, y: unit)
                     let art = Self.prepared(recipe: recipe, width: width, height: size.height,
-                                            displayScale: displayScale)
+                                            key: artCacheKey as NSString)
                     drawGround(in: &context, art: art)
                     if showsArt { drawMotif(in: &context, art: art) }
                 }
@@ -91,16 +92,17 @@ struct GeneratedCoverView: View {
         }
     }
 
+    static func lighterGroundLightness(_ lightness: Double) -> Double { min(lightness + 0.07, 0.50) }
+
     private static func prepared(recipe: GeneratedCoverRecipe, width: CGFloat,
-                                 height: CGFloat, displayScale: CGFloat) -> PreparedArt {
-        let key = "\(String(reflecting: recipe))|\(width)|\(height)|\(displayScale)" as NSString
+                                 height: CGFloat, key: NSString) -> PreparedArt {
         if let cached = artCache.object(forKey: key) { return cached }
         let h = height * 112 / max(width, 1)
         let l = recipe.lightness
         let hue = Double(recipe.hues[0])
         let chroma = recipe.groundChroma
         let main = oklch(l, chroma, hue)
-        let light = oklch(l + 0.07, chroma + 0.005, hue + 14)
+        let light = oklch(lighterGroundLightness(l), chroma + 0.005, hue + 14)
         let dark = oklch(l - 0.05, 0.08, hue - 10)
         let bounds = Path(CGRect(x: 0, y: 0, width: 112, height: h))
         var ground: [(Path, GraphicsContext.Shading)] = []
@@ -159,12 +161,13 @@ struct GeneratedCoverView: View {
             ring = path
         }
         let filled = recipe.motif == "petals" || recipe.motif == "halftone"
+        let strokeFloor = Self.strokeFloor(for: width)
         let art = PreparedArt(
             ground: ground, motif: motifPath, ring: ring, centre: centre,
             motifStyle: StrokeStyle(lineWidth: CGFloat(max(recipe.lineWidth,
-                sparse ? 0.9 * 112 / Double(width) : 0) / recipe.scale), lineCap: .round, lineJoin: .round),
+                sparse ? strokeFloor : 0) / recipe.scale), lineCap: .round, lineJoin: .round),
             ringStyle: StrokeStyle(lineWidth: CGFloat(max(1.2,
-                sparse ? 0.9 * 112 / Double(width) : 0)), lineCap: .round),
+                sparse ? strokeFloor : 0)), lineCap: .round),
             motifInk: Color.white.opacity(recipe.opacity * (filled ? 0.8 : 1)),
             ringInk: Color.white.opacity(recipe.opacity), filled: filled
         )
@@ -172,9 +175,12 @@ struct GeneratedCoverView: View {
         return art
     }
 
+    static func strokeFloor(for width: CGFloat) -> Double { 0.9 * 112 / max(Double(width), 1) }
+
     // Invert the area of x + y <= cut so 135° bands cover exact fractions of the card.
     static func crossoverCut(_ fraction: CGFloat, height: CGFloat) -> CGFloat {
         let w: CGFloat = 112
+        if height <= 0 { return w * fraction }
         if fraction <= 0 { return 0 }
         if fraction >= 1 { return w + height }
         var low: CGFloat = 0
@@ -232,10 +238,10 @@ struct GeneratedCoverView: View {
                 Text(recipe.subtitle).lineLimit(2)
                     .font(.system(size: width * 0.09, design: .serif).italic())
                     .multilineTextAlignment(recipe.placement == 2 ? .trailing : .leading)
-                    .foregroundStyle(Color.white.opacity(Self.secondaryTextOpacity))
+                    .foregroundStyle(Color.white.opacity(Self.bylineOpacity))
             }
             Text(recipe.author).lineLimit(1).font(.system(size: width * 0.09).italic())
-                .foregroundStyle(Color.white.opacity(Self.secondaryTextOpacity))
+                .foregroundStyle(Color.white.opacity(Self.bylineOpacity))
             if recipe.placement == 1 { Spacer(minLength: 0); fandomLabel }
             if recipe.placement == 2 { Spacer(minLength: 0) }
         }
@@ -247,14 +253,18 @@ struct GeneratedCoverView: View {
         HStack(spacing: 3) {
             Text(recipe.fandom.uppercased()).lineLimit(1)
                 .truncationMode(.tail)
+                .tracking(width / 112 * 0.6)
+                .foregroundStyle(Color.white.opacity(Self.fandomOpacity))
             Spacer(minLength: 2)
             if recipe.part > 0 {
                 Text("PART \(recipe.part <= 5 ? ["", "I", "II", "III", "IV", "V"][recipe.part] : String(recipe.part))")
                     .fixedSize(horizontal: true, vertical: false)
+                    .fontWeight(.bold)
+                    .tracking(width / 112 * 0.6)
+                    .foregroundStyle(Color.white)
             }
         }
         .font(.system(size: width * 0.076, weight: .semibold))
-        .foregroundStyle(Color.white.opacity(Self.secondaryTextOpacity))
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 

@@ -103,7 +103,7 @@ struct GeneratedCoverRecipeTests {
         #expect(first.titleStyle == joined.titleStyle)
     }
 
-    @Test func unrelatedTagsAndSizeDoNotChangeRecipe() {
+    @Test func unrelatedTagsDoNotChangeRecipe() {
         let base = GeneratedCoverRecipe(id: 42, title: "The Work", author: "First",
                                         fandoms: ["Original Work"], tags: ["Fantasy"])
         let extra = GeneratedCoverRecipe(id: 42, title: "The Work", author: "First",
@@ -150,15 +150,19 @@ struct GeneratedCoverRecipeTests {
         }
     }
 
-    @Test func whiteContrastAcrossGroundRange() {
+    @Test @MainActor func whiteContrastAcrossGroundRange() {
+        #expect(GeneratedCoverView.bylineOpacity == 0.86)
+        #expect(GeneratedCoverView.fandomOpacity == 0.88)
+        #expect(GeneratedCoverView.lighterGroundLightness(0.46) == 0.50)
         for hue in 0..<360 {
-            for (lightness, chroma) in [(0.32, 0.085), (0.46, 0.085), (0.53, 0.09), (0.27, 0.08)] {
+            for (lightness, chroma) in [(0.32, 0.085), (0.46, 0.085), (0.50, 0.09),
+                                        (0.27, 0.08), (0.47, 0.017)] {
                 let (red, green, blue) = GeneratedCoverView.rgb(lightness, chroma, Double(hue))
                 func linear(_ value: Double) -> Double {
                     value <= 0.04045 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
                 }
                 let luminance = 0.2126 * linear(red) + 0.7152 * linear(green) + 0.0722 * linear(blue)
-                for opacity in [0.92, 1.0] {
+                for opacity in [GeneratedCoverView.bylineOpacity, GeneratedCoverView.fandomOpacity, 1.0] {
                     let foreground = [red, green, blue].map { opacity + (1 - opacity) * $0 }
                     let textLuminance = 0.2126 * linear(foreground[0])
                         + 0.7152 * linear(foreground[1]) + 0.0722 * linear(foreground[2])
@@ -166,6 +170,18 @@ struct GeneratedCoverRecipeTests {
                 }
             }
         }
+    }
+
+    @Test @MainActor func vectorCacheKeyIsStableAndZeroWidthHasFiniteStroke() {
+        let recipe = GeneratedCoverRecipe(id: 42, title: "Title", author: "Author", fandoms: ["Original Work"])
+        let first = GeneratedCoverView(recipe: recipe, width: 112)
+        let second = GeneratedCoverView(recipe: recipe, width: 112)
+        let small = GeneratedCoverView(recipe: recipe, width: 40)
+        #expect(first.artCacheKey == second.artCacheKey)
+        #expect(first.artCacheKey != small.artCacheKey)
+        #expect(GeneratedCoverView.strokeFloor(for: 0).isFinite)
+        #expect(GeneratedCoverView.strokeFloor(for: 0) == GeneratedCoverView.strokeFloor(for: 1))
+        #expect(GeneratedCoverView.crossoverCut(0.6, height: 0).isFinite)
     }
 
     @Test func collectionColourSnapsToPalette() {
@@ -197,7 +213,10 @@ struct GeneratedCoverRecipeTests {
             EmbeddedWorkCoverImage.Candidate(data: Data([2]), frontMatter: true, pixelArea: 500_000),
             EmbeddedWorkCoverImage.Candidate(data: Data([3]), frontMatter: true, pixelArea: 1_000_000)
         ]
-        #expect(EmbeddedWorkCoverImage.preferred(images) == Data([3]))
+        let chosen = images.reduce(nil as EmbeddedWorkCoverImage.Candidate?) {
+            EmbeddedWorkCoverImage.preferred($0, $1)
+        }
+        #expect(chosen?.data == Data([3]))
     }
 
     @Test func embeddedArtScansFrontMatterInARealEPUB() throws {
@@ -250,9 +269,13 @@ struct GeneratedCoverRecipeTests {
             entry("META-INF/container.xml", Data(container.utf8)),
             entry("OEBPS/content.opf", Data(opf.utf8)),
             entry("OEBPS/toc.ncx", Data(toc.utf8)),
-            entry("OEBPS/front.xhtml", Data("<html><body><img src='front.png'/></body></html>".utf8)),
+            entry("OEBPS/front.xhtml", Data("<html><body><img src='front%2520.png'/></body></html>".utf8)),
             entry("OEBPS/chapter.xhtml", Data("<html><body><img src='chapter.png'/></body></html>".utf8)),
-            entry("OEBPS/front.png", front), entry("OEBPS/chapter.png", chapter)
+            entry("OEBPS/front%20.png", front), entry("OEBPS/chapter.png", chapter),
+            // Selective entry reads succeed; extracting this unrelated, malformed entry cannot.
+            HostileZipFixture.Entry(name: "unrelated.bin", payload: Data([0]),
+                                    declaredCompressedSize: 1_000_000,
+                                    declaredUncompressedSize: 1_000_000)
         ])
         let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".epub")
         defer { try? FileManager.default.removeItem(at: file) }
