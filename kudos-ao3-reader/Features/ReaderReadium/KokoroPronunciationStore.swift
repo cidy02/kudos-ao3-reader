@@ -188,6 +188,7 @@ nonisolated struct KokoroPronunciationStore: Sendable {
         }
         file.stamp([word], in: layer)
         try save(file)
+        LocalSnapshotChange.post()
     }
 
     /// Remove one override, and drop the layer's dictionary when it empties
@@ -206,6 +207,7 @@ nonisolated struct KokoroPronunciationStore: Sendable {
         }
         file.stamp([word], in: layer)
         try save(file)
+        LocalSnapshotChange.post()
     }
 
     /// Merges layers. Work wins over fandom over global. Exact spelling is

@@ -107,6 +107,14 @@ struct SubscriptionUpdateState: Codable, Equatable, Sendable {
                 result.decisions.append(theirs)
             }
         }
+        // `capped` keeps the last `limit`, so the list must run oldest to newest; appending
+        // the other copy's choices put older ones last (fifth review). Undated count as oldest.
+        result.decisions = result.decisions.enumerated().sorted { left, right in
+            let l = left.element.decidedAt ?? .distantPast, r = right.element.decidedAt ?? .distantPast
+            return l == r ? left.offset < right.offset : l < r
+        }.map(\.element)
+        // A device that has never refreshed has no counts of its own to keep.
+        if local.updates.isEmpty, local.lastRefreshAt == nil { result.counts = incoming.counts }
         return result.capped()
     }
 

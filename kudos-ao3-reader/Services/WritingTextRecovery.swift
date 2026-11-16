@@ -107,6 +107,7 @@ nonisolated struct WritingTextRecovery {
         )
         try JSONEncoder().encode(entry).write(to: url, options: .atomic)
         try? prune(around: url)
+        if directory == Self.defaultDirectory { LocalSnapshotChange.post() }
         if directory == Self.defaultDirectory,
            let username = keyDigest.flatMap({ Self.registeredUsername(forKeyDigest: $0) }) {
             WritingTabEvents.notifyDraftSaved(username: username)

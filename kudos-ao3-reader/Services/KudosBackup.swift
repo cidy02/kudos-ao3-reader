@@ -863,10 +863,11 @@ nonisolated struct KudosBackupPronunciations: Codable, Equatable {
             for id in (stamps ?? [:]).keys {
                 guard let (layer, word) = KokoroPronunciationStore.entry(from: id),
                       value(for: word, in: layer) == nil,
-                      file.value(for: word, in: layer) != nil,
                       SyncedSettingsClock.incomingWins(local: local(id), incoming: own(id), fromSync: fromSync)
                 else { continue }
-                file.set(nil, for: word, in: layer)
+                // The stamp is kept even where the word was never here, so this device's next
+                // sync-up carries the removal on (fifth review).
+                if file.value(for: word, in: layer) != nil { file.set(nil, for: word, in: layer) }
                 record(id, own(id))
             }
         }
@@ -2015,8 +2016,10 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         // the values so the reader's other devices can tell newer from older.
         let observed = observedKeys(in: defaults)
         SyncedSettingsClock.noteLocalChanges(keys: observed.keys, mapKeys: observed.maps, in: defaults)
+        // Any key this build knows, held here or not: a reset adopted from elsewhere travels on.
         let stamps = SyncedSettingsClock.stamps(in: defaults).filter { id, _ in
-            observed.keys.contains(SyncedSettingsClock.entry(from: id)?.key ?? id)
+            let key = SyncedSettingsClock.entry(from: id)?.key ?? id
+            return observed.keys.contains(key) || extraKind(for: key) != nil
         }
         settings.modifiedAt = stamps.isEmpty ? nil : stamps
         var extras: [String: KudosBackupSettingValue] = [:]
@@ -2086,10 +2089,14 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
     }
 
     func apply(to defaults: UserDefaults = .standard, fromSync: Bool = false, archiveDate: Date? = nil) {
+        // Restored `ttsDev*` tuning must reach a reader that already read it (fifth review).
+        defer { if defaults === UserDefaults.standard { ReaderSpeechTuning.invalidate() } }
         // T-541. Until now every restore assigned every setting, so each sync-down put the
         // folder's copy over whatever had been changed here since. Now a sync writes a setting
         // only when its stamp is newer than this device's (`SyncedSettingsClock.incomingWins`).
-        let observed = Self.observedKeys(in: defaults, adding: Array((extras ?? [:]).keys))
+        // Keys named only by a reset's stamp count too, so a device that never held them keeps it.
+        let resetKeys = (modifiedAt ?? [:]).keys.map { SyncedSettingsClock.entry(from: $0)?.key ?? $0 }
+        let observed = Self.observedKeys(in: defaults, adding: Array((extras ?? [:]).keys) + resetKeys)
         let localStamps = SyncedSettingsClock.noteLocalChanges(
             keys: observed.keys, mapKeys: observed.maps, in: defaults
         )
@@ -2115,7 +2122,8 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         }
         // A map setting merges entry by entry: comment drafts typed on two devices both stay.
         func merge(_ incoming: [String: String], into key: String) {
-            var local = defaults.dictionary(forKey: key) as? [String: String] ?? [:]
+            let stored = defaults.dictionary(forKey: key) as? [String: String]
+            var local = stored ?? [:]
             var adopted: [(String, SyncedSettingsClock.Stamp?)] = []
             for (entry, value) in incoming where local[entry] != value {
                 let id = SyncedSettingsClock.entryID(key, entry)
@@ -2127,13 +2135,14 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
             if !extrasIncomplete {
                 for id in (modifiedAt ?? [:]).keys {
                     guard let (owner, entry) = SyncedSettingsClock.entry(from: id), owner == key,
-                          incoming[entry] == nil, local[entry] != nil, wins(id, ownStamp(id)) else { continue }
+                          incoming[entry] == nil, wins(id, ownStamp(id)) else { continue }
+                    // Kept even where the entry was never here, so the removal travels on.
                     local[entry] = nil
                     adopted.append((entry, ownStamp(id)))
                 }
             }
             guard !adopted.isEmpty else { return }
-            defaults.set(local, forKey: key)
+            if local != (stored ?? [:]) { defaults.set(local, forKey: key) }
             for (entry, stamp) in adopted {
                 SyncedSettingsClock.adopt(key: key, entry: entry, value: local[entry], stamp: stamp, in: defaults)
             }
@@ -2212,6 +2221,10 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
                 write(value.object, key)
             }
         }
+        // A map emptied elsewhere is absent from `extras` but its entries' removal stamps are not.
+        for key in observed.maps where extras?[key] == nil && Self.extraKind(for: key) != nil {
+            merge([:], into: key)
+        }
         // A choice reset on another device arrives as a stamp with no value. It is removed
         // here only on the key's own real stamp (a copy that does not know the key carries
         // neither, and that is not a reset), never when part of the copy was unreadable, and on
@@ -2225,14 +2238,16 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
             (LibraryPageArrangement.storageKey, libraryPageArrangement == nil),
             (WorkSymbolPlacement.storageKey, workSymbolPlacement == nil)
         ]
-        for named in namedOptional where named.absent && defaults.object(forKey: named.key) != nil {
+        // The stamp is adopted even where the value was never set here, so this device's next
+        // sync-up carries the reset on instead of dropping it (fifth review).
+        for named in namedOptional where named.absent {
             guard let own = ownStamp(named.key), wins(named.key, own) else { continue }
             defaults.removeObject(forKey: named.key)
             SyncedSettingsClock.adopt(key: named.key, stamp: own, in: defaults)
         }
         guard !extrasIncomplete else { return }
         for key in observed.keys where !observed.maps.contains(key) && Self.extraKind(for: key) != nil
-            && extras?[key] == nil && defaults.object(forKey: key) != nil {
+            && extras?[key] == nil {
             guard let own = ownStamp(key), wins(key, own) else { continue }
             defaults.removeObject(forKey: key)
             SyncedSettingsClock.adopt(key: key, stamp: own, in: defaults)
@@ -2990,7 +3005,8 @@ enum KudosBackupService {
             } else {
                 switch tombstones.collectionResolution(
                     id: archived.id,
-                    incomingModifiedAt: incomingModifiedAt
+                    incomingModifiedAt: incomingModifiedAt,
+                    archived: archived
                 ) {
                 case .suppressStaleData:
                     suppressedCollections += 1
@@ -3208,7 +3224,8 @@ enum KudosBackupService {
             let hadExistingQueue = queuesByID[archived.id] != nil
             let resolution = kind == .savedForLater ? .noTombstone : tombstones.queueResolution(
                 id: archived.id,
-                incomingModifiedAt: incomingModifiedAt
+                incomingModifiedAt: incomingModifiedAt,
+                archived: archived
             )
             if kind == .savedForLater {
                 queue = savedForLaterQueue
@@ -4746,18 +4763,49 @@ enum KudosBackupService {
             return tombstone.lastModifiedAt >= archivedModifiedAt
         }
 
-        func collectionResolution(id: UUID, incomingModifiedAt: Date?) -> SyncMerge.TombstoneResolution {
-            SyncMerge.tombstoneResolution(
+        func collectionResolution(
+            id: UUID, incomingModifiedAt: Date?, archived: KudosBackupCollection? = nil
+        ) -> SyncMerge.TombstoneResolution {
+            let tombstone = collectionTombstonesByID[id]
+            if let archived, Self.isRecentlyDeletedCopy(
+                isDeleted: archived.isDeleted, deletedAt: archived.deletedAt,
+                scheduledAt: archived.permanentDeletionScheduledAt, modifiedAt: incomingModifiedAt,
+                tombstone: tombstone, permanentReason: SyncTombstones.collectionPermanentlyDeletedReason
+            ) { return .noTombstone }
+            return SyncMerge.tombstoneResolution(
                 incomingModifiedAt: incomingModifiedAt,
-                tombstoneDeletedAt: collectionTombstonesByID[id]?.lastModifiedAt
+                tombstoneDeletedAt: tombstone?.lastModifiedAt
             )
         }
 
-        func queueResolution(id: UUID, incomingModifiedAt: Date?) -> SyncMerge.TombstoneResolution {
-            SyncMerge.tombstoneResolution(
+        func queueResolution(
+            id: UUID, incomingModifiedAt: Date?, archived: KudosBackupReadingQueue? = nil
+        ) -> SyncMerge.TombstoneResolution {
+            let tombstone = queueTombstonesByID[id]
+            if let archived, Self.isRecentlyDeletedCopy(
+                isDeleted: archived.isDeleted, deletedAt: archived.deletedAt,
+                scheduledAt: archived.permanentDeletionScheduledAt, modifiedAt: incomingModifiedAt,
+                tombstone: tombstone, permanentReason: SyncTombstones.queuePermanentlyDeletedReason
+            ) { return .noTombstone }
+            return SyncMerge.tombstoneResolution(
                 incomingModifiedAt: incomingModifiedAt,
-                tombstoneDeletedAt: queueTombstonesByID[id]?.lastModifiedAt
+                tombstoneDeletedAt: tombstone?.lastModifiedAt
             )
+        }
+
+        /// The works rule in `suppressesResurrection`, for collections and queues (fifth T-541
+        /// review): an archive's copy of something moved to Recently Deleted is the deletion
+        /// itself, not data it predates, so it is restored into Recently Deleted while its
+        /// window is open — unless a permanent delete followed.
+        private static func isRecentlyDeletedCopy(
+            isDeleted: Bool?, deletedAt: Date?, scheduledAt: Date?, modifiedAt: Date?,
+            tombstone: SyncTombstone?, permanentReason: String
+        ) -> Bool {
+            guard isDeleted == true, let deletedAt, let tombstone,
+                  tombstone.deletionReason != permanentReason else { return false }
+            let scheduled = scheduledAt ?? deletedAt.addingTimeInterval(PreservedWorkService.recoveryWindow)
+            return scheduled > Date()
+                && tombstone.lastModifiedAt <= max(modifiedAt ?? deletedAt, deletedAt).addingTimeInterval(120)
         }
 
         func annotationResolution(id: UUID, incomingModifiedAt: Date?) -> SyncMerge.TombstoneResolution {

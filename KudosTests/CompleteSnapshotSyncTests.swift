@@ -78,5 +78,40 @@ struct CompleteSnapshotSyncTests {
         let arrived = try #require(try thereStore.mainContext.fetch(FetchDescriptor<SavedWork>()).first { $0.id == work.id })
         #expect(arrived.isPendingDeletion)
     }
+
+    /// Fifth review: Recently Deleted collections and queues arrive the same way, and one deleted
+    /// for good afterwards does not come back.
+    @Test func recentlyDeletedCollectionsAndQueuesArriveAndPermanentDeletesStayGone() async throws {
+        let shared = try folder()
+        defer { try? FileManager.default.removeItem(at: shared) }
+        let here = try defaults(), there = try defaults()
+        let hereStore = try container(), thereStore = try container()
+        defer { FolderSyncService.disconnect(defaults: here); FolderSyncService.disconnect(defaults: there) }
+        let context = hereStore.mainContext
+        let shelf = WorkCollection(name: "Recoverable shelf")
+        let queue = ReadingQueue(name: "Recoverable queue", kind: .custom)
+        let goneShelf = WorkCollection(name: "Gone shelf")
+        [shelf, goneShelf].forEach(context.insert)
+        context.insert(queue)
+        try context.save()
+        PreservedWorkService.softDelete(shelf, in: context)
+        PreservedWorkService.softDelete(queue, in: context)
+        PreservedWorkService.softDelete(goneShelf, in: context)
+        PreservedWorkService.deletePermanently(goneShelf, in: context)
+        let permanent = try context.fetch(FetchDescriptor<SyncTombstone>())
+            .filter { $0.deletionReason == SyncTombstones.collectionPermanentlyDeletedReason }
+        #expect(permanent.count == 1)
+        try FolderSyncService.connect(to: shared, defaults: here)
+        _ = try await FolderSyncService.syncNow(in: context, defaults: here)
+
+        try FolderSyncService.connect(to: shared, defaults: there)
+        _ = try await FolderSyncService.syncNow(in: thereStore.mainContext, defaults: there)
+
+        let shelves = try thereStore.mainContext.fetch(FetchDescriptor<WorkCollection>())
+        let queues = try thereStore.mainContext.fetch(FetchDescriptor<ReadingQueue>())
+        #expect(shelves.first { $0.id == shelf.id }?.isPendingDeletion == true)
+        #expect(queues.first { $0.id == queue.id }?.isPendingDeletion == true)
+        #expect(!shelves.contains { $0.id == goneShelf.id })
+    }
 }
 }

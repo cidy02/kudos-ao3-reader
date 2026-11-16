@@ -218,6 +218,37 @@ struct SyncedSettingsTests {
         }
     }
 
+    /// Fifth review: a device that never held a value still keeps the reset's stamp, so its own
+    /// next export carries the reset on and an offline device's older value cannot come back.
+    @Test func aDeviceThatNeverHadTheValueStillPassesTheResetOn() throws {
+        let removedAt = Date().addingTimeInterval(-5)
+        let paperEntry = SyncedSettingsClock.entryID("ao3CommentDrafts", "me|w1-c0-p0")
+        var reset = KudosBackupSettings.capture(defaults: freshDefaults())
+        reset.accentColorHex = nil
+        reset.modifiedAt = [
+            "readerCustomPaperHex": removedAt, "accentColorHex": removedAt, paperEntry: removedAt
+        ]
+        let untouched = freshDefaults()
+        try throughJSON(reset).apply(to: untouched, fromSync: true, archiveDate: removedAt)
+        #expect(untouched.object(forKey: "readerCustomPaperHex") == nil)
+        #expect(untouched.object(forKey: "ao3CommentDrafts") == nil)    // nothing invented
+
+        let passedOn = KudosBackupSettings.capture(defaults: untouched)
+        for id in ["readerCustomPaperHex", "accentColorHex", paperEntry] {
+            #expect(passedOn.modifiedAt?[id] != nil, "\(id) stamp dropped")
+        }
+
+        // The offline device's older value then loses to the passed-on reset.
+        let offline = freshDefaults()
+        offline.set("#F4ECD8", forKey: "readerCustomPaperHex")
+        offline.set(["me|w1-c0-p0": "old"], forKey: "ao3CommentDrafts")
+        SyncedSettingsClock.adopt(key: "readerCustomPaperHex", stamp: .init(date: removedAt.addingTimeInterval(-100), inferred: false), in: offline)
+        SyncedSettingsClock.adopt(key: "ao3CommentDrafts", entry: "me|w1-c0-p0", value: "old", stamp: .init(date: removedAt.addingTimeInterval(-100), inferred: false), in: offline)
+        try throughJSON(passedOn).apply(to: offline, fromSync: true, archiveDate: Date())
+        #expect(offline.object(forKey: "readerCustomPaperHex") == nil)
+        #expect((offline.dictionary(forKey: "ao3CommentDrafts") as? [String: String])?["me|w1-c0-p0"] == nil)
+    }
+
     /// Codex's third review: the reader font is part of the snapshot, but never a custom font
     /// whose file is not on this device.
     @Test func theReaderFontTravelsUnlessItsFileIsMissing() {

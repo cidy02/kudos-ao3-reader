@@ -386,6 +386,9 @@ enum SyncTombstones {
     /// Android, so nothing destructive is ever decided on it (Codex's fourth review); a signed
     /// marker on both platforms is T-541b.
     nonisolated static let workPermanentlyDeletedReason = "workPermanentlyDeleted"
+    /// The same, for a collection or a reading queue (fifth T-541 review).
+    nonisolated static let collectionPermanentlyDeletedReason = "collectionPermanentlyDeleted"
+    nonisolated static let queuePermanentlyDeletedReason = "queuePermanentlyDeleted"
 
     static func recordDeletion(of work: SavedWork, in context: ModelContext, permanently: Bool = false) {
         insertSigned(
@@ -402,27 +405,27 @@ enum SyncTombstones {
         )
     }
 
-    static func recordDeletion(of collection: WorkCollection, in context: ModelContext) {
+    static func recordDeletion(of collection: WorkCollection, in context: ModelContext, permanently: Bool = false) {
         insertSigned(
             SyncTombstone(
                 recordID: collection.id,
                 recordType: .workCollection,
                 createdAt: TombstoneSigning.now(),
                 deletedOnDeviceID: PersistenceDevice.currentID(),
-                deletionReason: "collectionDeleted"
+                deletionReason: permanently ? collectionPermanentlyDeletedReason : "collectionDeleted"
             ),
             in: context
         )
     }
 
-    static func recordDeletion(of queue: ReadingQueue, in context: ModelContext) {
+    static func recordDeletion(of queue: ReadingQueue, in context: ModelContext, permanently: Bool = false) {
         insertSigned(
             SyncTombstone(
                 recordID: queue.id,
                 recordType: .readingQueue,
                 createdAt: TombstoneSigning.now(),
                 deletedOnDeviceID: PersistenceDevice.currentID(),
-                deletionReason: "queueDeleted"
+                deletionReason: permanently ? queuePermanentlyDeletedReason : "queueDeleted"
             ),
             in: context
         )

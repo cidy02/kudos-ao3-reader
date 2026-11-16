@@ -11,6 +11,17 @@ extension Notification.Name {
     static let kudosSyncRelevantSettingChanged = Notification.Name("kudosSyncRelevantSettingChanged")
 }
 
+/// A reader's change to data that travels in the snapshot but lives outside SwiftData and
+/// UserDefaults (drafts, pronunciations, mail choices, subscription scans), so Folder Sync uploads
+/// it (T-541, fifth review). Never posted by a restore's own writes: two devices would ping-pong.
+nonisolated enum LocalSnapshotChange {
+    static func post() {
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: .kudosSyncRelevantSettingChanged, object: nil)
+        }
+    }
+}
+
 struct FolderSyncSnapshot: Equatable {
     var isConnected: Bool
     var folderDisplayName: String

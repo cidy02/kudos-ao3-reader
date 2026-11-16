@@ -61,6 +61,7 @@ final class MailSubscriptionDriver {
         do {
             try store.saveState(next)
             state = next
+            LocalSnapshotChange.post()
         } catch {
             state = previous
             errorMessage = Self.message(for: error)
@@ -231,6 +232,7 @@ final class MailSubscriptionDriver {
                 try store.saveState(nextState)
                 try store.saveCursor(returnedCursor)
                 state = nextState
+                LocalSnapshotChange.post()
                 cursor = returnedCursor
                 moreWaiting = harvest.moreWaiting
                 batches += 1
