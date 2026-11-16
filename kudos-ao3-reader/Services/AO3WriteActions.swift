@@ -143,6 +143,12 @@ extension AO3AuthService {
             )
         }
 
+        // Public pages still return 200 with a guest CSRF meta when the session
+        // has expired; fail before POSTing instead of sending an unauthenticated write.
+        guard LiveAO3SessionValidator.isLoggedIn(html: html) else {
+            throw AO3Error.authenticationRequired
+        }
+
         let body = Self.formEncoded([
             ("authenticity_token", token),
             ("subscription[subscribable_id]", String(subscribableID)),

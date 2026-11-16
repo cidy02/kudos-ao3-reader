@@ -346,4 +346,28 @@ struct AO3SeriesSubscribeTests {
         let already = try await auth.toggleSubscribe(seriesID: 42, using: stubClient())
         #expect(already == "You're already subscribed.")
     }
+
+    @Test func loggedOutSeriesPageThrowsAuthenticationRequiredBeforePOST() async throws {
+        let loggedOutSeriesHTML = """
+        <html>
+          <head><meta name="csrf-token" content="guest-csrf"></head>
+          <body class="series-show">
+            <div id="header"><a href="/users/login">Log In</a></div>
+            <div id="main"><h2 class="heading">The Coast Road</h2></div>
+          </body>
+        </html>
+        """
+        SeriesSubscribeStub.reset(getHTML: loggedOutSeriesHTML)
+        let auth = makeAuth()
+        await auth.login(username: "alice", password: "pw")
+
+        await #expect(throws: AO3Error.authenticationRequired) {
+            _ = try await auth.toggleSubscribe(seriesID: 42, using: stubClient())
+        }
+
+        let hits = SeriesSubscribeStub.recorded()
+        #expect(hits.count == 1)
+        #expect(hits[0].method == "GET")
+        #expect(hits.filter { $0.method == "POST" }.isEmpty)
+    }
 }
