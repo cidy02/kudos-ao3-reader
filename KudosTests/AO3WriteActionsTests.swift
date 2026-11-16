@@ -713,17 +713,18 @@ struct AO3WriteActionsTests {
 
     @MainActor
     @Test func workActionsModelUpdatesStateFromIntentEvenWhenWorkIDWasNil() async throws {
+        struct Call: Equatable { let workID: Int; let want: Bool }
         let auth = await makeSignedInAuth()
-        var recorded: [(Int, Bool)] = []
+        var recorded: [Call] = []
         let model = AO3WorkActionsModel(subscribeHandler: { workID, want, _ in
-            recorded.append((workID, want))
+            recorded.append(Call(workID: workID, want: want))
             return want ? "You're already subscribed." : "Unsubscribed."
         })
 
         var onSubscribedCount = 0
         model.subscribe(workID: 42, to: true, auth: auth) { onSubscribedCount += 1 }
         await model.waitForCurrentTask()
-        #expect(recorded == [(42, true)])
+        #expect(recorded == [Call(workID: 42, want: true)])
         #expect(model.workPageStates?.isSubscribed == true)
         #expect(model.banner == "You're already subscribed.")
         #expect(model.writeSuccesses == 1)
@@ -731,7 +732,7 @@ struct AO3WriteActionsTests {
 
         model.subscribe(workID: 42, to: false, auth: auth) { onSubscribedCount += 1 }
         await model.waitForCurrentTask()
-        #expect(recorded == [(42, true), (42, false)])
+        #expect(recorded == [Call(workID: 42, want: true), Call(workID: 42, want: false)])
         #expect(model.workPageStates?.isSubscribed == false)
         #expect(model.banner == "Unsubscribed.")
         #expect(model.writeSuccesses == 2)
