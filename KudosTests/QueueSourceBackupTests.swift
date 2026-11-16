@@ -123,7 +123,10 @@ struct QueueSourceBackupTests {
         let target = try context()
         _ = try KudosBackupService.restore(beforeVisit, into: target, defaults: try defaults())
         _ = try KudosBackupService.restore(afterVisit, into: target, defaults: try defaults())
-        let restored = try #require(try target.fetch(FetchDescriptor<ReadingQueue>()).first)
+        // A restore also adds the system Saved for Later queue, so pick ours by id.
+        let restored = try #require(try target.fetch(FetchDescriptor<ReadingQueue>()).first {
+            $0.id == queue.id
+        })
         #expect(restored.searchLinks.first?.newResultCount == 0)
         _ = try KudosBackupService.restore(beforeVisit, into: target, defaults: try defaults())
         #expect(restored.searchLinks.first?.newResultCount == 0)
