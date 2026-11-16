@@ -1,5 +1,6 @@
 package io.github.cidy02.kudos.works.detail
 
+import androidx.compose.ui.geometry.Offset
 import android.app.Application
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.CompositionLocalProvider
@@ -68,7 +69,8 @@ class WorkDetailVersionEComposeTest {
                     LocalKudosTokens.current.scopePalette)
             }
         } }
-        compose.onNodeWithText("Friends").performTouchInput { click(center) }
+        // The row fills its width; its centre is past the word, so tap the word itself.
+        compose.onNodeWithText("Friends").performTouchInput { click(centerLeft + Offset(8f, 0f)) }
         assertEquals(SearchSubjectField.RELATIONSHIP to "Friends", tapped)
     }
 
