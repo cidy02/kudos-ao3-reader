@@ -4,14 +4,21 @@ import io.github.cidy02.kudos.network.ao3.AO3Client
 import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.AO3Result
 import io.github.cidy02.kudos.network.ao3.OkHttpAO3Client
+import io.github.cidy02.kudos.network.ao3.await
 import io.github.cidy02.kudos.network.ao3.browse.AO3BrowseUrls
+import io.github.cidy02.kudos.network.ao3.installDemoNetworkBlock
 import io.github.cidy02.kudos.works.converters.AO3HtmlDownloadConverter
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
+import okhttp3.CookieJar
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.jsoup.Jsoup
+import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 /**
@@ -25,7 +32,7 @@ import java.util.concurrent.TimeUnit
 class AO3EpubDownloader(
     private val client: AO3Client = OkHttpAO3Client(),
     private val urlBuilder: AO3DownloadUrlBuilder = AO3DownloadUrlBuilder(),
-    private val fetchImage: suspend (String) -> ByteArray? = ::fetchRemoteImage,
+    private val fetchImage: (suspend (String) -> ByteArray?)? = null,
     private val now: () -> Long = System::currentTimeMillis
 ) {
     /** While this is in the future, AO3 has said EPUB is off the menu: go straight to HTML. */
@@ -63,7 +70,9 @@ class AO3EpubDownloader(
             is AO3Result.Failure -> result
             is AO3Result.Success ->
                 if (isHtmlPath(url)) {
-                    withContext(Dispatchers.Default) { AO3HtmlDownloadConverter.toEpub(result.value.body, fetchImage) }
+                    withContext(Dispatchers.Default) {
+                        AO3HtmlDownloadConverter.toEpub(result.value.body, ::resolveImage)
+                    }
                         ?.let { AO3Result.Success(it) }
                         ?: AO3Result.Failure(AO3Error.Parse("AO3 returned a page instead of the work's HTML download."))
                 } else {
@@ -106,6 +115,21 @@ class AO3EpubDownloader(
                 .takeIf { it.isNotEmpty() }
     }
 
+    private suspend fun resolveImage(url: String): ByteArray? =
+        fetchImage?.invoke(url) ?: defaultFetchImage(url)
+
+    private suspend fun defaultFetchImage(url: String): ByteArray? {
+        val parsed = url.toHttpUrlOrNull() ?: return null
+        if (AO3BrowseUrls.isAo3Host(parsed.host)) {
+            if (!parsed.isHttps) return null
+            val result = client.getBytes(url, maxBytes = MAX_IMAGE_BYTES)
+            return (result as? AO3Result.Success)?.value?.body
+                ?.takeIf { it.size.toLong() <= MAX_IMAGE_BYTES }
+        }
+        if (parsed.scheme != "http" && parsed.scheme != "https") return null
+        return fetchRemoteImage(url)
+    }
+
     private fun validate(bytes: ByteArray, contentType: String?): AO3Result<ByteArray> {
         if (bytes.isEmpty()) {
             return AO3Result.Failure(AO3Error.Validation("AO3 returned an empty EPUB download."))
@@ -131,19 +155,50 @@ private fun AO3Error.mayMeanEpubIsNotOffered(): Boolean = when (this) {
     else -> false
 }
 
-private const val MAX_IMAGE_BYTES = 8L * 1024 * 1024
+internal const val MAX_IMAGE_BYTES = 8L * 1024 * 1024
 
-/** Its own client: an image host is not AO3, and gets none of AO3's cookies. */
-private val imageClient by lazy { OkHttpClient.Builder().callTimeout(20, TimeUnit.SECONDS).build() }
-
-private suspend fun fetchRemoteImage(url: String): ByteArray? = withContext(Dispatchers.IO) {
-    runCatching {
-        imageClient.newCall(Request.Builder().url(url).build()).execute().use { response ->
-            val source = response.body.source()
-            // Reads at most one byte past the limit, so an endless response cannot fill memory.
-            if (!response.isSuccessful || source.request(MAX_IMAGE_BYTES + 1)) null else source.readByteArray()
+/** Its own client: an image host is not AO3, and sends and keeps no cookies. */
+internal fun newExternalImageClient(): OkHttpClient = OkHttpClient.Builder()
+    .cookieJar(CookieJar.NO_COOKIES)
+    .installDemoNetworkBlock()
+    // Never let an external image redirect onto AO3 without pacing/UA.
+    .addNetworkInterceptor { chain ->
+        if (AO3BrowseUrls.isAo3Host(chain.request().url.host)) {
+            throw IOException("AO3 host images must use AO3Client")
         }
-    }.getOrNull()
+        chain.proceed(chain.request())
+    }
+    .callTimeout(20, TimeUnit.SECONDS)
+    .build()
+
+private val imageClient by lazy { newExternalImageClient() }
+
+internal suspend fun fetchRemoteImage(
+    url: String,
+    httpClient: OkHttpClient = imageClient
+): ByteArray? = withContext(Dispatchers.IO) {
+    val call = httpClient.newCall(Request.Builder().url(url).build())
+    val cancelOnJob = currentCoroutineContext()[Job]?.invokeOnCompletion { cause ->
+        if (cause != null) call.cancel()
+    }
+    try {
+        val response = call.await()
+        response.use { res ->
+            val body = res.body
+            if (!res.isSuccessful || body.contentLength() > MAX_IMAGE_BYTES) {
+                return@withContext null
+            }
+            val source = body.source()
+            // Reads at most one byte past the limit, so an endless response cannot fill memory.
+            if (source.request(MAX_IMAGE_BYTES + 1)) null else source.readByteArray()
+        }
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (_: Exception) {
+        null
+    } finally {
+        cancelOnJob?.dispose()
+    }
 }
 
 private fun ByteArray.hasZipSignature(): Boolean {

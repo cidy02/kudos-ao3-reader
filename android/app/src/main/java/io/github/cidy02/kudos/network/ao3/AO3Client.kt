@@ -54,6 +54,13 @@ interface AO3Client {
         }
     }
 
+    /** Variant that stops reading once a body exceeds [maxBytes]. */
+    suspend fun getBytes(
+        url: String,
+        headers: Map<String, String> = emptyMap(),
+        maxBytes: Long?
+    ): AO3Result<AO3BinaryResponse> = getBytes(url, headers)
+
     companion object {
         private val MAINTENANCE_H2_REGEX = Regex(
             """<h2[^>]*>\s*the archive is down for maintenance""",
@@ -194,18 +201,27 @@ class OkHttpAO3Client(
         url: String,
         headers: Map<String, String>
     ): AO3Result<AO3BinaryResponse> {
-        return getBytes(url, headers, onProgress = {})
+        return getBytes(url, headers, onProgress = {}, maxBytes = null)
+    }
+
+    override suspend fun getBytes(
+        url: String,
+        headers: Map<String, String>,
+        maxBytes: Long?
+    ): AO3Result<AO3BinaryResponse> {
+        return getBytes(url, headers, onProgress = {}, maxBytes = maxBytes)
     }
 
     override suspend fun getBytesWithProgress(
         url: String,
         onProgress: (Double) -> Unit
-    ): AO3Result<AO3BinaryResponse> = getBytes(url, emptyMap(), onProgress)
+    ): AO3Result<AO3BinaryResponse> = getBytes(url, emptyMap(), onProgress, maxBytes = null)
 
     private suspend fun getBytes(
         url: String,
         headers: Map<String, String>,
-        onProgress: (Double) -> Unit
+        onProgress: (Double) -> Unit,
+        maxBytes: Long?
     ): AO3Result<AO3BinaryResponse> {
         rejectedUrl(url)?.let { return it }
         val key = try {
@@ -218,7 +234,8 @@ class OkHttpAO3Client(
             method = AO3HttpMethod.GET,
             url = key.canonicalUrl,
             headers = headers,
-            onProgress = onProgress
+            onProgress = onProgress,
+            maxBytes = maxBytes
         )
     }
 
@@ -324,7 +341,8 @@ class OkHttpAO3Client(
         method: AO3HttpMethod,
         url: String,
         headers: Map<String, String>,
-        onProgress: (Double) -> Unit
+        onProgress: (Double) -> Unit,
+        maxBytes: Long? = null
     ): AO3Result<AO3BinaryResponse> {
         var retryNumber = 0
         while (true) {
@@ -335,7 +353,7 @@ class OkHttpAO3Client(
             val result = try {
                 coordinator.coordinate {
                     currentCoroutineContext().ensureActive()
-                    performBinaryOnce(method, url, headers, onProgress)
+                    performBinaryOnce(method, url, headers, onProgress, maxBytes)
                 }
             } catch (e: AO3MaintenanceException) {
                 return AO3Result.Failure(AO3Error.Maintenance)
@@ -354,13 +372,14 @@ class OkHttpAO3Client(
         method: AO3HttpMethod,
         url: String,
         headers: Map<String, String>,
-        onProgress: (Double) -> Unit
+        onProgress: (Double) -> Unit,
+        maxBytes: Long? = null
     ): AO3Result<AO3BinaryResponse> {
         val request = buildRequest(method, url, headers)
         return try {
             val response = okHttpClient.newCall(request).await()
             withContext(Dispatchers.IO) {
-                response.use { mapBinaryResponse(it, originalUrl = url, onProgress = onProgress) }
+                response.use { mapBinaryResponse(it, originalUrl = url, onProgress = onProgress, maxBytes = maxBytes) }
             }
         } catch (error: CancellationException) {
             throw error
@@ -488,16 +507,25 @@ class OkHttpAO3Client(
     private fun mapBinaryResponse(
         response: Response,
         originalUrl: String,
-        onProgress: (Double) -> Unit
+        onProgress: (Double) -> Unit,
+        maxBytes: Long? = null
     ): AO3Result<AO3BinaryResponse> {
         val body = response.body
         val length = body.contentLength()
+        if (maxBytes != null && length > maxBytes) {
+            return AO3Result.Failure(AO3Error.Validation("Download exceeded maximum allowed size."))
+        }
         val output = java.io.ByteArrayOutputStream()
         body.byteStream().use { input ->
             val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+            var totalRead = 0L
             while (true) {
                 val count = input.read(buffer)
                 if (count < 0) break
+                totalRead += count
+                if (maxBytes != null && totalRead > maxBytes) {
+                    return AO3Result.Failure(AO3Error.Validation("Download exceeded maximum allowed size."))
+                }
                 output.write(buffer, 0, count)
                 if (response.isSuccessful && length > 0) {
                     onProgress((output.size().toDouble() / length).coerceIn(0.0, 1.0))
@@ -545,24 +573,24 @@ class OkHttpAO3Client(
             else -> AO3Result.Failure(AO3Error.Http(statusCode))
         }
     }
+}
 
-    private suspend fun Call.await(): Response {
-        return suspendCancellableCoroutine { continuation ->
-            continuation.invokeOnCancellation { cancel() }
-            enqueue(object : Callback {
-                override fun onFailure(call: Call, e: IOException) {
-                    if (continuation.isActive) continuation.resumeWithException(e)
-                }
+internal suspend fun Call.await(): Response {
+    return suspendCancellableCoroutine { continuation ->
+        continuation.invokeOnCancellation { cancel() }
+        enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                if (continuation.isActive) continuation.resumeWithException(e)
+            }
 
-                override fun onResponse(call: Call, response: Response) {
-                    if (continuation.isActive) {
-                        continuation.resume(response)
-                    } else {
-                        response.close()
-                    }
+            override fun onResponse(call: Call, response: Response) {
+                if (continuation.isActive) {
+                    continuation.resume(response)
+                } else {
+                    response.close()
                 }
-            })
-        }
+            }
+        })
     }
 }
 

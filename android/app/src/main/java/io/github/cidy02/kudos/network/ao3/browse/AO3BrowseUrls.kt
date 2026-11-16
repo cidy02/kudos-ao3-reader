@@ -33,7 +33,7 @@ object AO3BrowseUrls {
         return parsed.scheme == "https" && isAo3Host(parsed.host)
     }
 
-    private fun isAo3Host(host: String): Boolean =
+    internal fun isAo3Host(host: String): Boolean =
         host.equals(AO3Constants.WORKS_HOST, ignoreCase = true) ||
             host.endsWith(".${AO3Constants.WORKS_HOST}", ignoreCase = true)
 }

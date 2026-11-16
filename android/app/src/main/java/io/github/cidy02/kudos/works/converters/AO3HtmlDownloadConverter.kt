@@ -24,7 +24,7 @@ import org.jsoup.safety.Safelist
  */
 object AO3HtmlDownloadConverter {
     private const val MAX_IMAGES = 60
-    private const val MAX_TOTAL_IMAGE_BYTES = 40 * 1024 * 1024
+    private const val MAX_TOTAL_IMAGE_BYTES = 40L * 1024 * 1024
 
     /** AO3's `barebones` layout rules that are about structure rather than typography. */
     private const val STYLESHEET = """
@@ -141,7 +141,7 @@ img { max-width: 100%; height: auto; }
     ): Map<String, ByteArray> {
         val images = LinkedHashMap<String, ByteArray>()
         val pathOfUrl = HashMap<String, String?>()
-        var total = 0
+        var total = 0L
         for (image in elements.flatMap { it.select("img") }) {
             val url = image.absUrl("src")
             val path = if (url in pathOfUrl) pathOfUrl[url] else {
@@ -151,7 +151,8 @@ img { max-width: 100%; height: auto; }
                     null
                 }
                 val extension = data?.let(::imageExtension)
-                (if (data != null && extension != null) "images/image-${images.size + 1}.$extension" else null).also {
+                val fits = data != null && extension != null && total + data.size <= MAX_TOTAL_IMAGE_BYTES
+                (if (fits) "images/image-${images.size + 1}.$extension" else null).also {
                     pathOfUrl[url] = it
                     if (it != null && data != null) {
                         images[it] = data

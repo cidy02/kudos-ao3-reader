@@ -4,15 +4,27 @@ import io.github.cidy02.kudos.network.ao3.AO3BinaryResponse
 import io.github.cidy02.kudos.network.ao3.AO3Client
 import io.github.cidy02.kudos.network.ao3.AO3Error
 import io.github.cidy02.kudos.network.ao3.AO3HttpResponse
+import io.github.cidy02.kudos.network.ao3.AO3NetworkConfig
+import io.github.cidy02.kudos.network.ao3.AO3RequestCoordinator
 import io.github.cidy02.kudos.network.ao3.AO3Result
+import io.github.cidy02.kudos.network.ao3.OkHttpAO3Client
 import io.github.cidy02.kudos.works.EpubImportMetadata
 import io.github.cidy02.kudos.works.converters.AO3HtmlDownloadConverter
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
+import mockwebserver3.MockResponse
+import mockwebserver3.MockWebServer
+import okio.Buffer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.concurrent.TimeUnit
 import java.util.zip.ZipInputStream
 
 /**
@@ -200,6 +212,123 @@ class AO3HtmlDownloadTest {
         assertEquals(listOf(url), client.requests)
     }
 
+    @Test
+    fun imageClientSendsAndKeepsNoCookiesAndBlocksAo3Redirects() = runBlocking {
+        val server = MockWebServer()
+        server.start()
+        try {
+            server.enqueue(
+                MockResponse.Builder()
+                    .code(200)
+                    .addHeader("Set-Cookie", "tracker=secret; Path=/")
+                    .body(Buffer().write(PNG))
+                    .build()
+            )
+            server.enqueue(MockResponse.Builder().code(200).body(Buffer().write(PNG)).build())
+            server.enqueue(
+                MockResponse.Builder()
+                    .code(302)
+                    .addHeader("Location", "https://archiveofourown.org/images/offsite.png")
+                    .build()
+            )
+            val client = newExternalImageClient()
+            assertTrue(fetchRemoteImage(server.url("/1.png").toString(), client)!!.contentEquals(PNG))
+            assertTrue(fetchRemoteImage(server.url("/2.png").toString(), client)!!.contentEquals(PNG))
+            assertNull(fetchRemoteImage(server.url("/redirect.png").toString(), client))
+
+            server.takeRequest(1, TimeUnit.SECONDS)
+            val second = server.takeRequest(1, TimeUnit.SECONDS)!!
+            assertNull(second.headers["Cookie"])
+        } finally {
+            server.close()
+        }
+    }
+
+    @Test
+    fun perImageCapRejectsOversizedBodiesAndAo3ClientEnforcesMaxBytes() = runBlocking {
+        val server = MockWebServer()
+        server.start()
+        try {
+            val oversized = ByteArray(MAX_IMAGE_BYTES.toInt() + 64) { 0x41 }.apply {
+                PNG.copyInto(this)
+            }
+            server.enqueue(
+                MockResponse.Builder()
+                    .code(200)
+                    .chunkedBody(Buffer().write(oversized), 65536)
+                    .build()
+            )
+            server.enqueue(MockResponse.Builder().code(200).body(Buffer().write(oversized)).build())
+            val client = newExternalImageClient()
+            assertNull(fetchRemoteImage(server.url("/chunked.png").toString(), client))
+
+            val config = AO3NetworkConfig(maxRetries = 0, minDelayBetweenRequestsMillis = 0)
+            val ao3Client = OkHttpAO3Client(
+                okHttpClient = OkHttpAO3Client.defaultOkHttpClient(config),
+                config = config,
+                coordinator = AO3RequestCoordinator(config),
+                isAllowedUrl = { true }
+            )
+            val result = ao3Client.getBytes(server.url("/ao3-huge.png").toString(), maxBytes = MAX_IMAGE_BYTES)
+            assertTrue((result as AO3Result.Failure).error is AO3Error.Validation)
+        } finally {
+            server.close()
+        }
+    }
+
+    @Test
+    fun ao3HostedImagesRouteThroughAo3ClientAndInsecureAo3IsSkipped() = runTest {
+        val html = SINGLE_CHAPTER.replace(
+            "<p>All of it, at once.</p>",
+            "<p>All of it, at once.</p><p><img src=\"/ao3-art.png\"></p><p><img src=\"http://archiveofourown.org/plain.png\"></p>"
+        )
+        val client = ScriptedClient(page = workPage("html"), html = html, binaryImages = mapOf(
+            "https://archiveofourown.org/ao3-art.png" to PNG
+        ))
+        val epub = (AO3EpubDownloader(client).download(7) as AO3Result.Success).value
+        val files = unzip(epub)
+        assertTrue(files.containsKey("OEBPS/images/image-1.png"))
+        assertFalse(files.containsKey("OEBPS/images/image-2.png"))
+        assertTrue(client.requests.contains("https://archiveofourown.org/ao3-art.png"))
+        assertFalse(client.requests.any { it.contains("plain.png") })
+    }
+
+    @Test
+    fun externalImageFetchCancelsWithCoroutine() = runBlocking {
+        val server = MockWebServer()
+        server.start()
+        try {
+            server.enqueue(
+                MockResponse.Builder()
+                    .code(200)
+                    .headersDelay(10, TimeUnit.SECONDS)
+                    .body("late")
+                    .build()
+            )
+            withTimeout(3_000) {
+                val job = launch {
+                    fetchRemoteImage(server.url("/slow.png").toString(), newExternalImageClient())
+                }
+                delay(50)
+                job.cancelAndJoin()
+            }
+        } finally {
+            server.close()
+        }
+    }
+
+    @Test
+    fun totalImageCapEnforcesTotalPlusSizeAtMostMax() = runTest {
+        val sevenMiB = ByteArray(7 * 1024 * 1024).apply { PNG.copyInto(this) }
+        val imgs = (1..6).joinToString("") { "<img src=\"https://img.example/pic-$it.png\">" }
+        val html = SINGLE_CHAPTER.replace("<p>All of it, at once.</p>", "<p>All of it, at once.</p>$imgs")
+        val epub = AO3HtmlDownloadConverter.toEpub(html.toByteArray()) { sevenMiB }!!
+        val files = unzip(epub)
+        assertTrue(files.containsKey("OEBPS/images/image-5.png"))
+        assertFalse(files.containsKey("OEBPS/images/image-6.png"))
+        assertFalse(files.getValue("OEBPS/section-1.xhtml").contains("pic-6.png"))
+    }
+
     private fun unzip(bytes: ByteArray): Map<String, String> = LinkedHashMap<String, String>().also { files ->
         ZipInputStream(bytes.inputStream()).use { zip ->
             while (true) {
@@ -214,7 +343,8 @@ class AO3HtmlDownloadTest {
 private class ScriptedClient(
     private val page: String,
     private val html: String,
-    private val epub: AO3Result<AO3BinaryResponse>? = null
+    private val epub: AO3Result<AO3BinaryResponse>? = null,
+    private val binaryImages: Map<String, ByteArray> = emptyMap()
 ) : AO3Client {
     val requests = mutableListOf<String>()
 
@@ -225,6 +355,9 @@ private class ScriptedClient(
 
     override suspend fun getBytes(url: String, headers: Map<String, String>): AO3Result<AO3BinaryResponse> {
         requests += url
+        binaryImages[url]?.let { img ->
+            return AO3Result.Success(AO3BinaryResponse(url, 200, mapOf("Content-Type" to listOf("image/png")), img))
+        }
         if (url.substringBefore('?').endsWith(".epub")) {
             epub?.let { return it }
         }
