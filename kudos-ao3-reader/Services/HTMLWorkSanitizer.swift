@@ -90,6 +90,30 @@ nonisolated enum HTMLWorkSanitizer {
         return lines.joined(separator: "\n")
     }
 
+    /// The sanitizer for AO3's own HTML download, which is rebuilt into the EPUB AO3
+    /// would have served and so must keep what that EPUB has: images, and the `id`s
+    /// that "see the end of the work for notes" links to.
+    ///
+    /// The caller has already pointed every `<img>` at a file inside the EPUB or
+    /// removed it, and every in-work link at the chapter file holding its target —
+    /// which is why relative URLs are kept here and nowhere else. Still the same
+    /// allowlist otherwise: the work's text is as much a stranger's markup as any.
+    static func ao3DownloadFragment(ofAll elements: [Element]) throws -> String {
+        let raw = try elements.map { try $0.outerHtml() }.joined(separator: "\n")
+        let dirty = try SwiftSoup.parseBodyFragment(raw, "https://archiveofourown.org/")
+        let allowed = try allowlist()
+            .preserveRelativeLinks(true)
+            .addTags("img")
+            .addAttributes("img", "src", "alt", "title", "width", "height")
+            .addAttributes(":all", "id")
+        let clean = try Cleaner(headWhitelist: nil, bodyWhitelist: allowed).clean(dirty)
+        clean.outputSettings()
+            .syntax(syntax: .xml)
+            .escapeMode(.xhtml)
+            .prettyPrint(pretty: false)
+        return try clean.body()?.html() ?? ""
+    }
+
     // MARK: - Internals
 
     private static func sanitizedFragment(rawHTML: String) throws -> String {

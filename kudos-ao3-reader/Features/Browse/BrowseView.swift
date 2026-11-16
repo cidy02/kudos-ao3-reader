@@ -133,6 +133,13 @@ struct AO3WebBrowserView: View {
         model.onImport = { fileURL, source in
             Task {
                 do {
+                    var fileURL = fileURL
+                    if fileURL.pathExtension.lowercased() == "html" {
+                        fileURL = try await AO3HTMLDownloadConverter.epubFile(
+                            fromHTMLFile: fileURL,
+                            named: fileURL.deletingPathExtension().lastPathComponent + ".epub"
+                        )
+                    }
                     let work = try await importEPUB(fileURL, source: source, into: context)
                     show("Saved “\(work.title)” to Library")
                 } catch {

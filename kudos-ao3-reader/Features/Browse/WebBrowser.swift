@@ -413,9 +413,13 @@ extension BrowserModel: WKNavigationDelegate, WKDownloadDelegate {
         decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void
     ) {
         let response = navigationResponse.response
+        // AO3's HTML download is imported like its EPUB (it is rebuilt into one):
+        // while HTML is the only format on the menu, that is the link a reader taps.
+        let isHTMLDownload = response.url?.path.hasPrefix("/downloads/") == true
+            && response.url?.pathExtension.lowercased() == "html"
         let isEPUB = response.mimeType == "application/epub+zip"
             || response.url?.pathExtension.lowercased() == "epub"
-        guard isEPUB else { return decisionHandler(.allow) }
+        guard isEPUB || isHTMLDownload else { return decisionHandler(.allow) }
         let wanted = BrowserThemeStyle.mayImportDownload(
             from: response.url, isForMainFrame: navigationResponse.isForMainFrame
         )

@@ -20,6 +20,10 @@ nonisolated struct EPUBBuilder {
     struct Chapter {
         let title: String
         let bodyXHTML: String
+        /// True when the body already shows its own heading (AO3's HTML download
+        /// does), so the title names the section in the contents list and is not
+        /// printed a second time above it.
+        var hasOwnHeading = false
     }
 
     struct Metadata {
@@ -37,6 +41,11 @@ nonisolated struct EPUBBuilder {
         /// `dc:identifier`. Injectable so tests can pin it and so a re-conversion
         /// of the same source file produces a byte-identical archive.
         var identifier: String
+        /// `dc:date`, `yyyy-MM-dd`. Empty when unknown.
+        var date: String
+        /// calibre's series pair, which is how an AO3 EPUB names its series.
+        var seriesTitle: String
+        var seriesIndex: Int?
 
         init(
             title: String,
@@ -45,7 +54,10 @@ nonisolated struct EPUBBuilder {
             language: String = "en",
             sourceURL: String = "",
             subjects: [String] = [],
-            identifier: String = UUID().uuidString
+            identifier: String = UUID().uuidString,
+            date: String = "",
+            seriesTitle: String = "",
+            seriesIndex: Int? = nil
         ) {
             self.title = title
             self.author = author
@@ -54,6 +66,9 @@ nonisolated struct EPUBBuilder {
             self.sourceURL = sourceURL
             self.subjects = subjects
             self.identifier = identifier
+            self.date = date
+            self.seriesTitle = seriesTitle
+            self.seriesIndex = seriesIndex
         }
     }
 
@@ -98,10 +113,15 @@ nonisolated struct EPUBBuilder {
     ///
     /// `modified` becomes EPUB 3's required `dcterms:modified`; it is a parameter
     /// rather than `Date()` so callers that want reproducible output can pin it.
+    ///
+    /// `images` are stored beside the chapters at the given relative paths
+    /// (`images/x.jpg`), which is what a chapter's `<img src>` must then say.
     static func archive(
         metadata: Metadata,
         chapters: [Chapter],
-        modified: Date = Date()
+        modified: Date = Date(),
+        images: [(path: String, data: Data)] = [],
+        extraCSS: String = ""
     ) throws -> Data {
         guard !chapters.isEmpty else { throw BuildError.noChapters }
 
@@ -113,9 +133,11 @@ nonisolated struct EPUBBuilder {
         var entries: [(name: String, data: Data)] = [
             ("mimetype", Data("application/epub+zip".utf8)),
             ("META-INF/container.xml", Data(containerXML().utf8)),
-            (opfPath, Data(packageDocument(metadata, names: names, chapters: chapters, modified: modified).utf8)),
+            (opfPath, Data(packageDocument(
+                metadata, names: names, chapters: chapters, modified: modified, images: images.map(\.path)
+            ).utf8)),
             (navPath, Data(navigationDocument(metadata, names: names, chapters: chapters).utf8)),
-            (stylesheetPath, Data(stylesheet.utf8))
+            (stylesheetPath, Data((extraCSS.isEmpty ? stylesheet : stylesheet + "\n" + extraCSS).utf8))
         ]
         for (index, chapter) in chapters.enumerated() {
             entries.append((
@@ -123,6 +145,7 @@ nonisolated struct EPUBBuilder {
                 Data(chapterDocument(chapter, language: metadata.language).utf8)
             ))
         }
+        entries.append(contentsOf: images.map { ("OEBPS/\($0.path)", $0.data) })
         return try MiniZip.archiveData(entries)
     }
 
@@ -145,10 +168,13 @@ nonisolated struct EPUBBuilder {
         _ metadata: Metadata,
         names: [String],
         chapters: [Chapter],
-        modified: Date
+        modified: Date,
+        images: [String] = []
     ) -> String {
         let manifestItems = names.enumerated().map { index, name in
             "    <item id=\"chapter-\(index + 1)\" href=\"\(name)\" media-type=\"application/xhtml+xml\"/>"
+        } + images.enumerated().map { index, path in
+            "    <item id=\"image-\(index + 1)\" href=\"\(escaped(path))\" media-type=\"\(imageMediaType(path))\"/>"
         }
         let spineItems = names.indices.map { "    <itemref idref=\"chapter-\($0 + 1)\"/>" }
         let subjects = metadata.subjects
@@ -168,6 +194,15 @@ nonisolated struct EPUBBuilder {
         }
         if !metadata.sourceURL.isEmpty {
             metadataLines.append("    <dc:source>\(escaped(metadata.sourceURL))</dc:source>")
+        }
+        if !metadata.date.isEmpty {
+            metadataLines.append("    <dc:date>\(escaped(metadata.date))</dc:date>")
+        }
+        if !metadata.seriesTitle.isEmpty {
+            metadataLines.append("    <meta name=\"calibre:series\" content=\"\(escaped(metadata.seriesTitle))\"/>")
+            metadataLines.append(
+                "    <meta name=\"calibre:series_index\" content=\"\(metadata.seriesIndex ?? 1)\"/>"
+            )
         }
         // Word count, stated because nothing downstream can otherwise know it: a
         // converted work has no AO3 stats page, and the Library card and filters read
@@ -247,7 +282,7 @@ nonisolated struct EPUBBuilder {
             <link rel="stylesheet" type="text/css" href="style.css"/>
           </head>
           <body>
-            <h1>\(escaped(chapter.title))</h1>
+        \(chapter.hasOwnHeading ? "" : "    <h1>\(escaped(chapter.title))</h1>")
         \(chapter.bodyXHTML)
           </body>
         </html>
@@ -255,6 +290,15 @@ nonisolated struct EPUBBuilder {
     }
 
     // MARK: - Helpers
+
+    private static func imageMediaType(_ path: String) -> String {
+        switch (path as NSString).pathExtension.lowercased() {
+        case "png": "image/png"
+        case "gif": "image/gif"
+        case "webp": "image/webp"
+        default: "image/jpeg"
+        }
+    }
 
     /// Counts words across a work's chapter bodies.
     ///

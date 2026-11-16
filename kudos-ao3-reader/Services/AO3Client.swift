@@ -1515,10 +1515,89 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         )
     }
 
+    /// Hands back a work as an EPUB file, whichever format AO3 is serving.
+    ///
+    /// AO3 normally offers EPUB. When it does not (after the November 2026 outage
+    /// only HTML came back), the work's own download menu says what it does offer,
+    /// and the HTML download is rebuilt into the EPUB AO3 would have made from it —
+    /// so no caller learns there was a difference.
+    ///
+    /// EPUB is still asked for first, which costs nothing while AO3 is whole; only
+    /// an answer that is not an EPUB is worth a second request, to read the menu.
+    ///
     /// `onProgress` gets 0…1 as the file arrives, when AO3 sends its size.
     func downloadEPUB(workID: Int, onProgress: (@Sendable (Double) -> Void)? = nil) async throws -> URL {
         Log.network.info("Downloading EPUB for work \(workID, privacy: .private(mask: .hash))")
-        guard let url = URL(string: "\(base)/downloads/\(workID)/work.epub") else {
+        if Date() < htmlOnlyUntil {
+            return try await downloadHTMLAsEPUB(workID: workID, onProgress: onProgress)
+        }
+        let refusal: Error
+        do {
+            let file = try await download(workID: workID, format: "epub", onProgress: onProgress)
+            if Self.isZip(file) { return file }
+            // What otwarchive's `DownloadsController#show` sends when a format
+            // cannot be made: a redirect to the work page, which arrives as a 200.
+            try? FileManager.default.removeItem(at: file)
+            refusal = AO3Error.parse
+        } catch let error as AO3Error where error.mayMeanEPUBIsNotOffered {
+            refusal = error
+        }
+
+        guard let workURL = URL(string: "\(base)/works/\(workID)?view_adult=true"),
+              let page = try? await getHTML(workURL)
+        else {
+            try Task.checkCancellation()
+            throw refusal
+        }
+        guard let offered = Self.parseDownloadFormats(from: page) else {
+            // No menu on this page (a work restricted to signed-in readers shows a
+            // guest none): HTML may still be there, and if not the first answer stands.
+            if let file = try? await downloadHTMLAsEPUB(workID: workID, onProgress: onProgress) { return file }
+            try Task.checkCancellation()
+            throw refusal
+        }
+        if offered.contains("epub") { throw refusal }
+        guard offered.contains("html") else {
+            throw AO3Error.network("AO3 isn't offering EPUB or HTML downloads right now.")
+        }
+        // The list is the site's, not the work's, so it holds for the next download too.
+        htmlOnlyUntil = Date().addingTimeInterval(Self.htmlOnlyMemory)
+        return try await downloadHTMLAsEPUB(workID: workID, onProgress: onProgress)
+    }
+
+    /// While this is in the future, AO3 has said EPUB is off the menu: go straight to HTML.
+    private var htmlOnlyUntil = Date.distantPast
+    /// Long enough to spare a series the refused request per work, short enough to
+    /// notice EPUB's return.
+    private static let htmlOnlyMemory: TimeInterval = 15 * 60
+
+    /// The formats a work page's download menu offers, lower-case ("epub", "html"…),
+    /// or nil when the page has no menu.
+    ///
+    /// otwarchive 452391b648f2, `app/views/works/_work_header_navigation.html.erb`:
+    /// `li.download` holds one link per `ArchiveConfig.DOWNLOAD_FORMATS` entry, each
+    /// to `/downloads/<id>/<name>.<format>?updated_at=…` (`download_url_for_work`).
+    static func parseDownloadFormats(from html: String) -> Set<String>? {
+        guard let links = try? SwiftSoup.parse(html).select("li.download a[href*=/downloads/]").array() else {
+            return nil
+        }
+        let formats = Set(links.compactMap { link -> String? in
+            guard let path = (try? link.attr("href"))?.split(separator: "?").first else { return nil }
+            let format = (String(path) as NSString).pathExtension.lowercased()
+            return format.isEmpty ? nil : format
+        })
+        return formats.isEmpty ? nil : formats
+    }
+
+    private func downloadHTMLAsEPUB(workID: Int, onProgress: (@Sendable (Double) -> Void)?) async throws -> URL {
+        let html = try await download(workID: workID, format: "html", onProgress: onProgress)
+        return try await AO3HTMLDownloadConverter.epubFile(fromHTMLFile: html, named: "\(workID).epub")
+    }
+
+    private func download(
+        workID: Int, format: String, onProgress: (@Sendable (Double) -> Void)?
+    ) async throws -> URL {
+        guard let url = URL(string: "\(base)/downloads/\(workID)/work.\(format)") else {
             throw AO3Error.network("Bad download URL.")
         }
         let tempURL = try await withRetry { () -> URL in
@@ -1530,10 +1609,16 @@ actor AO3Client { // swiftlint:disable:this type_body_length
             try checkStatus(response) { try? Data(contentsOf: tempURL) }
             return tempURL
         }
-        let destination = Storage.tempDownloadURL(suggestedName: "\(workID).epub")
+        let destination = Storage.tempDownloadURL(suggestedName: "\(workID).\(format)")
         try? FileManager.default.removeItem(at: destination)
         try FileManager.default.moveItem(at: tempURL, to: destination)
         return destination
+    }
+
+    private static func isZip(_ file: URL) -> Bool {
+        guard let handle = try? FileHandle(forReadingFrom: file) else { return false }
+        defer { try? handle.close() }
+        return (try? handle.read(upToCount: 2)) == Data("PK".utf8)
     }
 
     /// Fetches a work's canonical tags from its AO3 page (fandoms, relationships,
@@ -2268,6 +2353,18 @@ private final class DownloadProgressDelegate: NSObject, URLSessionTaskDelegate, 
     func urlSession(_: URLSession, didCreateTask task: URLSessionTask) {
         observation = task.progress.observe(\.fractionCompleted) { [onProgress] progress, _ in
             onProgress(progress.fractionCompleted)
+        }
+    }
+}
+
+private extension AO3Error {
+    /// AO3 answered, and the answer was a refusal of the EPUB route itself. Being
+    /// unreachable, blocked (403), overloaded (5xx) or told to slow down is not
+    /// that — asking again in another format would only add load.
+    nonisolated var mayMeanEPUBIsNotOffered: Bool {
+        switch self {
+        case .notFound, .http: true
+        default: false
         }
     }
 }

@@ -24,6 +24,8 @@ nonisolated enum HTMLWorkConverter {
     /// title information that exists.
     static func convert(html: String, fallbackTitle: String) throws -> Result {
         let document = try SwiftSoup.parse(html)
+        // AO3's own download first: its shape is known exactly, so nothing is guessed.
+        if let download = try AO3HTMLDownloadConverter.read(document) { return download }
         let metadata = try readMetadata(document, fallbackTitle: fallbackTitle)
         let chapters = try readChapters(document, workTitle: metadata.title)
         guard !chapters.isEmpty else { throw EPUBBuilder.BuildError.noChapters }
