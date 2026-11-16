@@ -35,6 +35,7 @@ class WorkReadingCopyTest {
     private lateinit var importer: WorkImporter
     private var downloads = 0
     private var fail = false
+    private var refused = false
     private var failOnDownload: Int? = null
     private var cancelOnDownload: Int? = null
     private var downloadError: AO3Error = AO3Error.NotFound
@@ -49,11 +50,15 @@ class WorkReadingCopyTest {
         works = WorkRepository(database, store)
         val fake = object : AO3Client {
             override suspend fun get(url: String, headers: Map<String, String>): AO3Result<AO3HttpResponse> =
-                error("Read must not enrich a listing before obtaining its EPUB")
+                // A refused download is followed by one look at the work's page, to learn whether
+                // the work is gone or only its EPUB (AO3EpubDownloader). Here the work is gone.
+                if (refused) AO3Result.Failure(AO3Error.NotFound)
+                else error("Read must not enrich a listing before obtaining its EPUB")
             override suspend fun getBytes(url: String, headers: Map<String, String>): AO3Result<AO3BinaryResponse> {
                 downloads++
                 if (downloads == cancelOnDownload) throw CancellationException("Leaving the list")
-                return if (fail || downloads == failOnDownload) AO3Result.Failure(downloadError) else AO3Result.Success(
+                refused = fail || downloads == failOnDownload
+                return if (refused) AO3Result.Failure(downloadError) else AO3Result.Success(
                     AO3BinaryResponse(url, 200, mapOf("Content-Type" to listOf("application/epub+zip")), bytes))
             }
         }

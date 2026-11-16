@@ -11,6 +11,9 @@ class AO3DownloadUrlBuilder {
             .toString()
     }
 
+    /** The same route with `.html`: the one format AO3 keeps when it withdraws the ebook ones. */
+    fun htmlDownloadUrl(workId: Long): String = epubDownloadUrl(workId).removeSuffix("epub") + "html"
+
     fun workMetadataUrl(workId: Long): String {
         require(workId > 0) { "AO3 work id must be positive." }
         return AO3Constants.baseHttpUrl.newBuilder()
