@@ -108,7 +108,7 @@ enum SettingsRoute: Hashable, CaseIterable {
     private var searchKeywords: [String] {
         switch self {
         case .appearance: ["theme", "dark", "light", "sepia", "oled", "accent", "color", "colour", "mode",
-                           "symbols", "rating", "warnings", "list"]
+                           "symbols", "rating", "warnings", "list", "cover", "covers", "art"]
         case .font: ["typeface", "serif", "sans", "size", "custom font", "text"]
         case .reader: ["paged", "scrolled", "spread", "awake", "page jump", "reading"]
         case .listening: ["tts", "speech", "voice", "kokoro", "audio", "read aloud", "speed", "pitch", "pronunciation"]

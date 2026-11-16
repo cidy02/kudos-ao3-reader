@@ -264,12 +264,12 @@ extension SavedWork {
     var coverTier: Int { GeneratedCoverRecipe.tier(for: wordCount) }
 
     @MainActor
-    func pinCover(salt: Int, automatic: Bool = false) {
-        var recipe = resolvedCover(salt: salt)
-        var previousTime: Double?
-        if let coverRecipeJSON {
-            guard var current = GeneratedCoverRecipe.supportedPin(in: coverRecipeJSON) else { return }
-            previousTime = current.pinnedAt
+    func pinCover(salt: Int? = nil, automatic: Bool = false) {
+        let existing = coverRecipeJSON.flatMap(GeneratedCoverRecipe.supportedPin(in:))
+        if coverRecipeJSON != nil, existing == nil { return }
+        var recipe = resolvedCover(salt: salt ?? existing?.salt ?? 0)
+        let previousTime = existing?.pinnedAt
+        if var current = existing {
             current.pinnedAt = nil
             if current == recipe { return }
         }

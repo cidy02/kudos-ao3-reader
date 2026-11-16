@@ -19,6 +19,7 @@ struct SettingsAppearancePage: View {
     @State private var showCustomWarning = false
     @State private var customPick: Task<Void, Never>?
     @State private var updateCoversTask: Task<Void, Never>?
+    @State private var updateCoversStatus: String?
     @State private var pickerBridge = AccentColorPickerBridge()
     @AppStorage(WorkSymbolPlacement.storageKey) private var symbolPlacement: WorkSymbolPlacement = .defaultValue
     @AppStorage("useEmbeddedCoverArt") private var useEmbeddedCoverArt = true
@@ -101,29 +102,45 @@ struct SettingsAppearancePage: View {
                 NotificationCenter.default.post(name: .kudosSyncRelevantSettingChanged, object: nil)
             }
 
-            Section("Covers") {
+            Section {
                 Toggle("Use art from the work when there is some", isOn: $useEmbeddedCoverArt)
                     .accentFill()
                 Button("Update Covers") {
                     guard updateCoversTask == nil else { return }
+                    updateCoversStatus = "Updating covers…"
                     updateCoversTask = Task { @MainActor in
                         defer { updateCoversTask = nil }
-                        guard let works = try? modelContext.fetch(FetchDescriptor<SavedWork>()) else { return }
-                        var changed = false
+                        guard let works = try? modelContext.fetch(FetchDescriptor<SavedWork>()) else {
+                            updateCoversStatus = nil
+                            return
+                        }
+                        var updatedCount = 0
                         var processed = 0
                         for work in works {
                             if Task.isCancelled { break }
                             guard work.modelContext != nil, !work.isPendingDeletion else { continue }
                             let oldJSON = work.coverRecipeJSON
-                            work.pinCover(salt: work.generatedCoverRecipe.salt)
-                            changed = changed || work.coverRecipeJSON != oldJSON
+                            work.pinCover()
+                            if work.coverRecipeJSON != oldJSON { updatedCount += 1 }
                             processed += 1
                             if processed.isMultiple(of: 50) { await Task.yield() }
                         }
-                        if changed { modelContext.saveBestEffort(reason: "Updating covers failed") }
+                        if updatedCount > 0 { modelContext.saveBestEffort(reason: "Updating covers failed") }
+                        if Task.isCancelled {
+                            updateCoversStatus = "Stopped updating covers."
+                        } else if updatedCount == 0 {
+                            updateCoversStatus = "All covers are up to date."
+                        } else {
+                            let noun = updatedCount == 1 ? "cover" : "covers"
+                            updateCoversStatus = "Updated \(updatedCount) \(noun)."
+                        }
                     }
                 }
                 .disabled(updateCoversTask != nil)
+            } header: {
+                Text("Covers")
+            } footer: {
+                if let updateCoversStatus { Text(updateCoversStatus) }
             }
             .onChange(of: useEmbeddedCoverArt) { _, _ in
                 NotificationCenter.default.post(name: .kudosSyncRelevantSettingChanged, object: nil)

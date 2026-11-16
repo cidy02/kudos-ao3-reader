@@ -220,6 +220,8 @@ struct SettingsHubTests {
         #expect(SettingsRoute.importFiles.matches(query: "epub", currentValue: ""))
         #expect(SettingsRoute.privacySettings.matches(query: "mature", currentValue: "Off"))
         #expect(SettingsRoute.backup.matches(query: "archive", currentValue: ""))
+        #expect(SettingsRoute.appearance.matches(query: "cover", currentValue: ""))
+        #expect(SettingsRoute.appearance.matches(query: "art", currentValue: ""))
 
         // Non-matching query
         #expect(!SettingsRoute.font.matches(query: "xyznonexistent", currentValue: "Georgia"))
