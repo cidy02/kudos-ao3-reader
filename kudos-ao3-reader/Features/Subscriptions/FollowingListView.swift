@@ -429,7 +429,7 @@ private struct FollowingRow: View {
                 }
                 if !work.chapters.isEmpty { WorkStatLabel(text: work.chapters, symbol: "book") }
                 if let words = work.words { WorkStatLabel(text: words.formatted(), symbol: "textformat.size") }
-                if !work.dateUpdated.isEmpty { WorkStatLabel(text: work.dateUpdated, symbol: "calendar") }
+                if !work.dateUpdated.isEmpty { WorkStatLabel(text: WorkStat.displayDate(work.dateUpdated), symbol: "calendar") }
             }
             .font(.caption)
             .foregroundStyle(.secondary)

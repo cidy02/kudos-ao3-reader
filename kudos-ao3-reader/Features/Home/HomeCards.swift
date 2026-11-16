@@ -338,7 +338,7 @@ struct AO3WorkCoverCard: View {
         var parts: [String] = []
         if let words = work.words { parts.append("\(words.compactCount) words") }
         if !work.chapters.isEmpty { parts.append(work.chapters) }
-        if !work.dateUpdated.isEmpty { parts.append(work.dateUpdated) }
+        if !work.dateUpdated.isEmpty { parts.append(WorkStat.displayDate(work.dateUpdated)) }
         let text = parts.joined(separator: " · ")
         return text.isEmpty ? nil : text
     }

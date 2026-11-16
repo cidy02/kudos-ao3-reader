@@ -710,7 +710,7 @@ struct AuthorProfileLatestCard: View {
 
     private var statsLine: String {
         var parts: [String] = []
-        if !work.dateUpdated.isEmpty { parts.append("Updated \(work.dateUpdated)") }
+        if !work.dateUpdated.isEmpty { parts.append("Updated \(WorkStat.displayDate(work.dateUpdated))") }
         if let words = work.words { parts.append("\(words.formatted()) words") }
         if let kudos = work.kudos { parts.append("♥ \(kudos.compactCount)") }
         if let hits = work.hits { parts.append("\(hits.compactCount) hits") }
@@ -789,7 +789,7 @@ struct AuthorProfileSeriesCard: View {
         if series.isComplete == true {
             parts.append("complete")
         } else if !series.dateUpdated.isEmpty {
-            parts.append(series.dateUpdated)
+            parts.append(WorkStat.displayDate(series.dateUpdated))
         }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }

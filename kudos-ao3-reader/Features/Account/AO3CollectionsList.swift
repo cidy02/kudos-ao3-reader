@@ -777,7 +777,7 @@ struct AO3CollectionCard: View {
             }
             Spacer(minLength: 8)
             if !collection.updatedAtText.isEmpty {
-                Text(collection.updatedAtText)
+                Text(WorkStat.displayDate(collection.updatedAtText))
                     .font(.system(size: metaSize))
                     .foregroundStyle(.secondary)
                     .monospacedDigit()

@@ -159,10 +159,11 @@ struct AO3WorkRow: View {
             }
             ledgerFacts
             if let bookmark, !bookmark.date.isEmpty {
-                Text(bookmark.date)
+                let dateText = WorkStat.displayDate(bookmark.date)
+                Text(dateText)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .accessibilityLabel("Bookmarked \(bookmark.date)")
+                    .accessibilityLabel("Bookmarked \(dateText)")
             }
         }
     }

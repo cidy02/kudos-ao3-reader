@@ -56,7 +56,7 @@ struct AO3ReadingsParsingTests {
 
         #expect(entries[1].lastVisited == "04 Mar 2024")
         #expect(entries[1].lastVisitedIsRelative == false)
-        #expect(entries[1].lastVisitedDisplay == "Last visited 04 Mar 2024")
+        #expect(entries[1].lastVisitedDisplay == "Last visited \(WorkStat.displayDate("04 Mar 2024"))")
 
         #expect(entries[2].lastVisited == "about 1 month")
         #expect(entries[2].lastVisitedDisplay == "Last visited about 1 month ago")

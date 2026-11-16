@@ -316,7 +316,7 @@ struct AO3SeriesRow: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(figures.joined(separator: "  ·  "))
                         if !series.dateUpdated.isEmpty {
-                            Text(series.dateUpdated)
+                            Text(WorkStat.displayDate(series.dateUpdated))
                         }
                     }
                 } else {
@@ -329,7 +329,7 @@ struct AO3SeriesRow: View {
                         }
                         Spacer(minLength: 8)
                         if !series.dateUpdated.isEmpty {
-                            Text(series.dateUpdated)
+                            Text(WorkStat.displayDate(series.dateUpdated))
                         }
                     }
                 }
@@ -435,7 +435,7 @@ struct AO3SeriesRow: View {
                     )
                 }
                 if !series.dateUpdated.isEmpty {
-                    WorkStatLabel(text: series.dateUpdated, symbol: "calendar")
+                    WorkStatLabel(text: WorkStat.displayDate(series.dateUpdated), symbol: "calendar")
                 }
             }
             .font(.caption2)
@@ -513,10 +513,11 @@ struct AO3BookmarkFootnote: View {
                     if bookmark.isRecommendation { SubjectStateBadge(title: "Rec", color: .secondary) }
                     Spacer(minLength: 0)
                     if !bookmark.date.isEmpty {
-                        Text(bookmark.date)
+                        let dateText = WorkStat.displayDate(bookmark.date)
+                        Text(dateText)
                             .font(.system(size: dateSize))
                             .foregroundStyle(.secondary)
-                            .accessibilityLabel("Bookmarked \(bookmark.date)")
+                            .accessibilityLabel("Bookmarked \(dateText)")
                     }
                 }
             }
