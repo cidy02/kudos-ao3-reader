@@ -70,7 +70,10 @@ class AO3EpubDownloader(
         // read what the work's download menu offers instead.
         val pageHtml = prefetchedWorkPageHtml ?: when (val page = client.get(urlBuilder.workMetadataUrl(workId))) {
             is AO3Result.Success -> page.value.body
-            is AO3Result.Failure -> return page
+            is AO3Result.Failure -> {
+                // A later 404 cannot turn the HTML received at the EPUB URL into a missing work.
+                return if (page.error is AO3Error.NotFound && epub.error is AO3Error.Parse) epub else page
+            }
         }
         val offered = offeredFormats(pageHtml)
         return when {
@@ -169,13 +172,13 @@ class AO3EpubDownloader(
 
     private fun validate(bytes: ByteArray, contentType: String?): AO3Result<ByteArray> {
         if (bytes.isEmpty()) {
-            return AO3Result.Failure(AO3Error.Validation("AO3 returned an empty EPUB download."))
+            return AO3Result.Failure(AO3Error.Parse("AO3 returned an empty EPUB download."))
         }
         if (contentType?.contains("html", ignoreCase = true) == true || bytes.looksLikeHtml()) {
             return AO3Result.Failure(AO3Error.Parse("AO3 returned an HTML page instead of an EPUB."))
         }
         if (!bytes.hasZipSignature()) {
-            return AO3Result.Failure(AO3Error.Validation("AO3 EPUB download did not look like a ZIP/EPUB file."))
+            return AO3Result.Failure(AO3Error.Parse("AO3 EPUB download did not look like a ZIP/EPUB file."))
         }
         return AO3Result.Success(bytes)
     }
@@ -188,7 +191,7 @@ class AO3EpubDownloader(
  * down is not that — asking again in another format would only add load.
  */
 private fun AO3Error.mayMeanEpubIsNotOffered(): Boolean = when (this) {
-    AO3Error.NotFound, AO3Error.BadRequest, is AO3Error.Http, is AO3Error.Parse, is AO3Error.Validation -> true
+    AO3Error.NotFound, AO3Error.BadRequest, is AO3Error.Http, is AO3Error.Parse -> true
     else -> false
 }
 

@@ -158,6 +158,21 @@ class AO3HtmlDownloadTest {
     }
 
     @Test
+    fun aNonZipEpubAnswerCanFallBackToHtml() = runTest {
+        val client = ScriptedClient(
+            page = workPage("html"),
+            html = SINGLE_CHAPTER,
+            epub = AO3Result.Success(AO3BinaryResponse(
+                "https://archiveofourown.org/downloads/7/work.epub", 200,
+                mapOf("Content-Type" to listOf("application/octet-stream")), "not a zip".toByteArray()
+            ))
+        )
+        val result = AO3EpubDownloader(client, fetchImage = { null }).download(7)
+        assertTrue(EpubImportMetadata.isReadablePackage((result as AO3Result.Success).value))
+        assertEquals(3, client.requests.size)
+    }
+
+    @Test
     fun anEpubThatFailsWhileStillOnTheMenuIsAFailureAndHtmlIsNotAsked() = runTest {
         val client = ScriptedClient(page = workPage("epub", "html"), html = SINGLE_CHAPTER)
         val result = AO3EpubDownloader(client, fetchImage = { null }).download(7)
@@ -514,7 +529,7 @@ class AO3HtmlDownloadTest {
         val epub = AO3HtmlDownloadConverter.toEpub(html.toByteArray())!!
         val files = unzip(epub)
         assertEquals(
-            listOf("Preface", "The Long & Winding"),
+            listOf("Preface", "The Long &amp; Winding"),
             Regex("<a href=\"section-\\d\\.xhtml\">([^<]+)</a>").findAll(files.getValue("OEBPS/nav.xhtml"))
                 .map { it.groupValues[1] }.toList()
         )

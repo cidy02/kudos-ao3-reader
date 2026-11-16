@@ -70,7 +70,9 @@ class ReadingQueueRepositorySeriesTest {
         override suspend fun get(url: String, headers: Map<String, String>): AO3Result<AO3HttpResponse> =
             coordinator.coordinate {
                 reads += url to clock()
-                val html = pages[url] ?: return@coordinate AO3Result.Failure(AO3Error.Forbidden)
+                val id = url.substringAfter("/works/").substringBefore('?').toLongOrNull()
+                val html = pages[url] ?: return@coordinate AO3Result.Failure(
+                    id?.let { failures[it] } ?: AO3Error.Forbidden)
                 AO3Result.Success(AO3HttpResponse(url, 200, emptyMap(), html))
             }
         override suspend fun getBytes(url: String, headers: Map<String, String>): AO3Result<AO3BinaryResponse> =
