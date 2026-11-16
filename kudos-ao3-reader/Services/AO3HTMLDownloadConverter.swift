@@ -196,7 +196,7 @@ nonisolated enum AO3HTMLDownloadConverter {
         fetchImage: @Sendable (URL, Int) async -> Data? = fetchRemoteImage,
         maxTotalImageBytes: Int = maxTotalImageBytes
     ) async throws -> Data? {
-        let document = SwiftSoup.parse(html, baseURI)
+        let document = try SwiftSoup.parse(html, baseURI)
         // otwarchive 452391b648f2: downloads/show renders both direct body children.
         guard try document.select("body > div#preface").first() != nil,
               try document.select("body > div#chapters").first() != nil else { return nil }
