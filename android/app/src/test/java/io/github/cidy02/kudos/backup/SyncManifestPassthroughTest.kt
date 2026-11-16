@@ -1271,6 +1271,53 @@ class SyncManifestPassthroughTest {
         assertEquals(JsonPrimitive("undated-draft"), exportedManifest()["writingRecovery"])
     }
 
+    @Test
+    fun autoSyncPausedBeforeExportGateDoesNotOverwriteLastManifestStore() = runTest {
+        val folderFixture = iosT541ManifestJson()
+        val folderBytes = BackupJson.encodeToString(JsonObject.serializer(), folderFixture).toByteArray(Charsets.UTF_8)
+        writeChild(ensureKudosLibrary(), BackupPaths.MANIFEST, "application/json", folderBytes)
+        // Own-manifest digest skips Phase 1 import so the first gate entry is Phase 2 export.
+        settingsRepository.updateSyncLastManifestDigest(BackupPaths.sha256(folderBytes))
+
+        val replacedFixture = JsonObject(
+            folderFixture + mapOf("writingRecovery" to JsonPrimitive("from-replace"))
+        )
+        SyncLastManifestStore(filesRoot).save(replacedFixture)
+
+        val pausingGate = object : PersistenceGate() {
+            override suspend fun <T> withLock(action: suspend () -> T): T {
+                settingsRepository.updateSyncIsEnabled(false)
+                return super.withLock(action)
+            }
+        }
+        val gatedBackup = BackupRepository(
+            database = database,
+            workFileStore = workFileStore,
+            fontFileStore = fontFileStore,
+            settingsRepository = settingsRepository,
+            persistenceGate = pausingGate,
+            clock = { clockInstant },
+            uuidFactory = { "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" },
+            appVersion = "test"
+        )
+        val gatedSync = SyncRepository(
+            context = context,
+            settingsRepository = settingsRepository,
+            backupRepository = gatedBackup,
+            workFileStore = workFileStore,
+            fontFileStore = fontFileStore,
+            persistenceGate = pausingGate,
+            clock = { clockInstant }
+        )
+
+        val result = gatedSync.runAutoSync()
+        assertTrue(result is SyncResult.Success)
+        assertEquals(
+            JsonPrimitive("from-replace"),
+            SyncLastManifestStore(filesRoot).load()!!["writingRecovery"]
+        )
+    }
+
     private fun iosT541ManifestJson(): JsonObject {
         val pair = Ed25519Sign.KeyPair.newKeyPair()
         runBlocking { settingsRepository.trustTombstonePublicKey(pair.publicKey.toLowerHex()) }

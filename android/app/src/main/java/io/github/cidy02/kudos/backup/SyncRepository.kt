@@ -362,10 +362,6 @@ class SyncRepository(
                 folderViewIsCurrent = syncDir.listFiles().isEmpty()
             }
 
-            // A folder whose manifest we actually read becomes the store. An empty folder
-            // leaves the previous store in place, and the commit below is its first write.
-            readManifestJson?.let { lastManifestStore.save(it) }
-
             // 2. Export incrementally
             val pronunciationsUnreadable = persistenceGate.withLock {
                 // iOS holds its gate for the whole run, so a Replace can never come between a
@@ -373,6 +369,9 @@ class SyncRepository(
                 // Replace that paused sync meanwhile must not have its library published or the
                 // folder pruned by works it removed (review of 3fy, F7).
                 if (!folderImportStillAllowed()) throw ImportDeclined()
+                // A folder whose manifest we actually read becomes the store. An empty folder
+                // leaves the previous store in place, and the commit below is its first write.
+                readManifestJson?.let { lastManifestStore.save(it) }
                 val snapshot = backupRepository.captureLibrarySnapshot()
                 // Same single-source rule as the User-Agent: a hardcoded version here
                 // drifts silently and lands in every archive the user exports.
