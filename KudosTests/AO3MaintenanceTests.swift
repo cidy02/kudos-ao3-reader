@@ -60,6 +60,25 @@ struct AO3MaintenanceTests {
         #expect(MaintenanceStubProtocol.loads.withLock { $0 } == 1)
     }
 
+    @Test func maintenanceImageHoldsTheNextRequestOffTheNetwork() async throws {
+        MaintenanceStubProtocol.body = try Self.fixture("ao3_maintenance")
+        MaintenanceStubProtocol.loads.withLock { $0 = 0 }
+        let config = AO3Client.makeAnonymousSessionConfiguration()
+        config.protocolClasses = [MaintenanceStubProtocol.self]
+        let client = AO3Client(session: URLSession(configuration: config), paceSleep: { _ in })
+
+        await #expect(throws: AO3Error.maintenance) {
+            _ = try await client.imageData(
+                at: URL(string: "https://archiveofourown.org/images/maintenance.png")!,
+                maxBytes: 1_000
+            )
+        }
+        await #expect(throws: AO3Error.maintenance) {
+            _ = try await client.getHTML(URL(string: "https://archiveofourown.org/works/2")!)
+        }
+        #expect(MaintenanceStubProtocol.loads.withLock { $0 } == 1)
+    }
+
     @Test func pullToRefreshAsksAO3AgainDuringTheHold() async throws {
         MaintenanceStubProtocol.body = try Self.fixture("ao3_maintenance")
         MaintenanceStubProtocol.loads.withLock { $0 = 0 }

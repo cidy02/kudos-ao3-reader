@@ -45,8 +45,11 @@ fi
 
 # 3. No new URLSessions talking to AO3 — all AO3 traffic goes through AO3Client
 #    (pacing, retry, coalescing). The auth validator's session is the one exception.
-HITS=$(grep -rl "URLSession(configuration" --include="*.swift" "$APP" \
-  | grep -v "Services/AO3AuthService.swift" | grep -v "Services/AO3Client.swift" || true)
+#    Allow only AO3HTMLDownloadConverter's cookie-less imageSession and
+#    fetchWithBareSession constructors for NON-AO3 images; AO3 images use AO3Client.
+HITS=$(grep -Rn "URLSession(configuration" --include="*.swift" "$APP" \
+  | grep -v "Services/AO3AuthService.swift" | grep -v "Services/AO3Client.swift" \
+  | grep -Ev 'Services/AO3HTMLDownloadConverter\.swift:[0-9]+:[[:space:]]*(static let imageSession = URLSession\(configuration: makeImageSessionConfiguration\(\)\)|let streamingSession = URLSession\(configuration: session.configuration, delegate: delegate, delegateQueue: nil\))$' || true)
 if [ -n "$HITS" ]; then
   fail "URLSession created outside AO3Client/AO3AuthService" \
     "$HITS

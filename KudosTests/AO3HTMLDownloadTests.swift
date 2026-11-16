@@ -1,6 +1,7 @@
 import Foundation
 @testable import Kudos
 import SwiftSoup
+import Synchronization
 import Testing
 
 /// AO3 serving HTML only (November 2026). The fixtures are written out from
@@ -170,6 +171,20 @@ struct AO3HTMLDownloadTests {
         #expect(chapterTwo.contains("All\u{FFFD}it."))
     }
 
+    @Test func browseHTMLFileUsesTheEPUBImportPath() async throws {
+        let htmlFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("html")
+        try Data(Self.fixture("ao3_download_single_chapter").utf8).write(to: htmlFile)
+        defer { try? FileManager.default.removeItem(at: htmlFile) }
+
+        let epubURL = try await AO3HTMLDownloadConverter.importableFile(htmlFile)
+        defer { try? FileManager.default.removeItem(at: epubURL) }
+        #expect(!FileManager.default.fileExists(atPath: htmlFile.path))
+        #expect(epubURL.pathExtension == "epub")
+        #expect(try EPUBDocument.metadata(ofEPUBAt: epubURL).title == "One Shot")
+    }
+
     @Test func rtlDirectionSurvivesSanitizationOnBlocksAndBody() async throws {
         let html = try Self.fixture("ao3_download_single_chapter")
             .replacingOccurrences(of: "<body>", with: "<body dir=\"rtl\">")
@@ -196,6 +211,21 @@ struct AO3HTMLDownloadTests {
 
     @Test func anOrdinaryPageIsNotABook() async throws {
         #expect(try await AO3HTMLDownloadConverter.epub(fromHTML: Self.workPage("html"), fetchImage: { _, _ in nil }) == nil)
+    }
+
+    @Test func missingDownloadStructureNeverFetchesImages() async throws {
+        let fetches = Mutex(0)
+        let image = "<img src=\"https://img.example/should-not-load.png\">"
+        for html in [
+            "<html><body><div id=\"chapters\">\(image)</div></body></html>",
+            "<html><body><div id=\"preface\">\(image)</div></body></html>",
+        ] {
+            #expect(try await AO3HTMLDownloadConverter.epub(fromHTML: html, fetchImage: { _, _ in
+                fetches.withLock { $0 += 1 }
+                return Self.png
+            }) == nil)
+        }
+        #expect(fetches.withLock { $0 } == 0)
     }
 
     @Test func aDownloadedHTMLFileImportedByHandIsReadTheSameWay() throws {
@@ -381,6 +411,32 @@ struct AO3HTMLDownloadTests {
         #expect(AO3ImageStubProtocol.requestedURLs == [directURL, redirectTarget])
     }
 
+    @Test func ao3ImageRejectsCleartextRedirectBeforeSendingCookies() async throws {
+        ImageStubProtocol.reset()
+        let secure = URL(string: "https://archiveofourown.org/images/redirect.png")!
+        let cleartext = URL(string: "http://archiveofourown.org/images/redirect.png")!
+        ImageStubProtocol.responses[secure] = .redirect(to: cleartext)
+        ImageStubProtocol.responses[cleartext] = .chunks([Self.png], contentLength: Self.png.count)
+        let config = AO3Client.makeAnonymousSessionConfiguration()
+        config.protocolClasses = [ImageStubProtocol.self]
+        let session = URLSession(configuration: config)
+        let client = AO3Client(session: session, paceSleep: { _ in })
+
+        // Check the delegate answer directly too: ATS may block HTTP before a stub sees it.
+        let followed = Mutex<Bool?>(nil)
+        AO3HTMLDownloadConverter.ImageFetchDelegate(maxBytes: 1_000, ao3Only: true).urlSession(
+            session, task: session.dataTask(with: secure),
+            willPerformHTTPRedirection: HTTPURLResponse(
+                url: secure, statusCode: 302, httpVersion: nil, headerFields: ["Location": cleartext.absoluteString]
+            )!,
+            newRequest: URLRequest(url: cleartext)
+        ) { request in followed.withLock { $0 = request != nil } }
+        #expect(followed.withLock { $0 } == false)
+
+        #expect(try await client.imageData(at: secure, maxBytes: 1_000) == nil)
+        #expect(ImageStubProtocol.requestedURLs == [secure])
+    }
+
     // URLSession hands a response to its delegate only after 512 bytes of body (or the end of the
     // transfer), whatever the Content-Type: chunks smaller than that made every cancel look late.
     // Real images are larger, so the chunks and caps here are sized like them.
@@ -394,7 +450,7 @@ struct AO3HTMLDownloadTests {
         // Content-Length above cap aborts before reading body.
         let headerOverCap = URL(string: "https://img.example/header-over.png")!
         ImageStubProtocol.responses[headerOverCap] = .chunks(
-            [Self.png + Data(repeating: 0, count: 600), Data(repeating: 0, count: 600), Data(repeating: 0, count: 600)],
+            [Self.png + Data(repeating: 0, count: 600), Data(repeating: 0, count: 100), Data(repeating: 0, count: 100)],
             contentLength: 5_000
         )
         #expect(

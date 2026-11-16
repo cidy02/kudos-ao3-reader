@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import WebKit
 @testable import Kudos
 
 /// Audit A19-1 and A19-2: what the web views that hold the AO3 session may load.
@@ -41,5 +42,16 @@ import Testing
         #expect(BrowserThemeStyle.mayImportDownload(from: ao3, isForMainFrame: true))
         #expect(!BrowserThemeStyle.mayImportDownload(from: ao3, isForMainFrame: false))
         #expect(!BrowserThemeStyle.mayImportDownload(from: URL(string: "https://example.com/x.epub"), isForMainFrame: true))
+    }
+
+    @Test func htmlDownloadResponseMustBeFromAO3() {
+        let html = URL(string: "https://download.archiveofourown.org/downloads/7/One_Shot.html")!
+        let outside = URL(string: "https://example.com/downloads/7/One_Shot.html")!
+        #expect(BrowserThemeStyle.downloadPolicy(for: html, mimeType: "text/html", isForMainFrame: true) == .download)
+        #expect(BrowserThemeStyle.downloadPolicy(for: html, mimeType: "text/html", isForMainFrame: false) == .cancel)
+        #expect(BrowserThemeStyle.downloadPolicy(for: outside, mimeType: "text/html", isForMainFrame: true) == .cancel)
+        #expect(BrowserThemeStyle.downloadPolicy(
+            for: URL(string: "https://example.com/page.html"), mimeType: "text/html", isForMainFrame: true
+        ) == .allow)
     }
 }

@@ -98,6 +98,17 @@ enum BrowserThemeStyle {
         isForMainFrame && isAO3URL(url)
     }
 
+    /// AO3's HTML download is rebuilt as an EPUB when it reaches the import path.
+    static func downloadPolicy(
+        for url: URL?, mimeType: String?, isForMainFrame: Bool
+    ) -> WKNavigationResponsePolicy {
+        let isHTMLDownload = url?.path.hasPrefix("/downloads/") == true
+            && url?.pathExtension.lowercased() == "html"
+        let isEPUB = mimeType == "application/epub+zip" || url?.pathExtension.lowercased() == "epub"
+        guard isEPUB || isHTMLDownload else { return .allow }
+        return mayImportDownload(from: url, isForMainFrame: isForMainFrame) ? .download : .cancel
+    }
+
     static func css(for theme: ReaderTheme) -> String? {
         guard let palette = palette(for: theme) else { return nil }
         return """
@@ -413,17 +424,9 @@ extension BrowserModel: WKNavigationDelegate, WKDownloadDelegate {
         decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void
     ) {
         let response = navigationResponse.response
-        // AO3's HTML download is imported like its EPUB (it is rebuilt into one):
-        // while HTML is the only format on the menu, that is the link a reader taps.
-        let isHTMLDownload = response.url?.path.hasPrefix("/downloads/") == true
-            && response.url?.pathExtension.lowercased() == "html"
-        let isEPUB = response.mimeType == "application/epub+zip"
-            || response.url?.pathExtension.lowercased() == "epub"
-        guard isEPUB || isHTMLDownload else { return decisionHandler(.allow) }
-        let wanted = BrowserThemeStyle.mayImportDownload(
-            from: response.url, isForMainFrame: navigationResponse.isForMainFrame
-        )
-        decisionHandler(wanted ? .download : .cancel)
+        decisionHandler(BrowserThemeStyle.downloadPolicy(
+            for: response.url, mimeType: response.mimeType, isForMainFrame: navigationResponse.isForMainFrame
+        ))
     }
 
     func webView(

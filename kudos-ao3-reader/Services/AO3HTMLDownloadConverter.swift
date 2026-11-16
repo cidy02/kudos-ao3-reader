@@ -196,10 +196,14 @@ nonisolated enum AO3HTMLDownloadConverter {
         fetchImage: @Sendable (URL, Int) async -> Data? = fetchRemoteImage,
         maxTotalImageBytes: Int = maxTotalImageBytes
     ) async throws -> Data? {
+        let document = SwiftSoup.parse(html, baseURI)
+        // otwarchive 452391b648f2: downloads/show renders both direct body children.
+        guard try document.select("body > div#preface").first() != nil,
+              try document.select("body > div#chapters").first() != nil else { return nil }
         var images: [(path: String, data: Data)] = []
         var paths: [String: String] = [:]
         var total = 0
-        for source in try imageSources(in: html) where images.count < maxImages && total < maxTotalImageBytes {
+        for source in try imageSources(in: document) where images.count < maxImages && total < maxTotalImageBytes {
             try Task.checkCancellation()
             let remaining = min(maxImageBytes, maxTotalImageBytes - total)
             guard remaining > 0 else { break }
@@ -221,7 +225,7 @@ nonisolated enum AO3HTMLDownloadConverter {
             total += data.count
         }
 
-        guard let result = try read(SwiftSoup.parse(html, baseURI), imagePaths: paths) else { return nil }
+        guard let result = try read(document, imagePaths: paths) else { return nil }
         let day = ISO8601DateFormatter()
         day.formatOptions = [.withFullDate]
         return try EPUBBuilder.archive(
@@ -255,9 +259,19 @@ nonisolated enum AO3HTMLDownloadConverter {
         return destination
     }
 
-    private static func imageSources(in html: String) throws -> [String] {
+    /// Browse's downloaded file follows the same HTML-to-EPUB path as the fallback.
+    static func importableFile(_ file: URL, ao3Client: AO3Client = .shared) async throws -> URL {
+        guard file.pathExtension.lowercased() == "html" else { return file }
+        return try await epubFile(
+            fromHTMLFile: file,
+            named: file.deletingPathExtension().lastPathComponent + ".epub",
+            ao3Client: ao3Client
+        )
+    }
+
+    private static func imageSources(in document: Document) throws -> [String] {
         var seen = Set<String>()
-        return try SwiftSoup.parse(html, baseURI).select("#preface img, #chapters img, #afterword img").array()
+        return try document.select("#preface img, #chapters img, #afterword img").array()
             .compactMap { try? $0.absUrl("src") }
             .filter { !$0.isEmpty && seen.insert($0).inserted }
     }
@@ -323,7 +337,7 @@ nonisolated enum AO3HTMLDownloadConverter {
             return data
         case let .redirectToAO3(targetURL):
             return await fetchFromAO3(targetURL, ao3Client: ao3Client, maxBytes: maxBytes)
-        case .failed:
+        case .maintenance, .failed:
             return nil
         }
     }
@@ -336,9 +350,10 @@ nonisolated enum AO3HTMLDownloadConverter {
         try? await ao3Client.imageData(at: url, maxBytes: maxBytes)
     }
 
-    private enum BareFetchOutcome: Sendable {
+    enum BareFetchOutcome: Sendable {
         case data(Data)
         case redirectToAO3(URL)
+        case maintenance
         case failed
     }
 
@@ -363,28 +378,13 @@ nonisolated enum AO3HTMLDownloadConverter {
         return result
     }
 
-    static func fetchAO3Image(_ url: URL, session: URLSession, maxBytes: Int) async -> Data? {
-        let delegate = ImageFetchDelegate(maxBytes: maxBytes, ao3Only: true)
-        let streamingSession = URLSession(configuration: session.configuration, delegate: delegate, delegateQueue: nil)
-        let task = streamingSession.dataTask(with: url)
-        delegate.attach(task: task)
-        let result = await withTaskCancellationHandler {
-            await withCheckedContinuation { continuation in delegate.start(continuation: continuation) }
-        } onCancel: {
-            delegate.cancel()
-            streamingSession.invalidateAndCancel()
-        }
-        streamingSession.finishTasksAndInvalidate()
-        if case let .data(data) = result { return data }
-        return nil
-    }
-
-    private final class ImageFetchDelegate: NSObject, URLSessionDataDelegate, @unchecked Sendable {
+    final class ImageFetchDelegate: NSObject, URLSessionDataDelegate, @unchecked Sendable {
         private let maxBytes: Int
         private let ao3Only: Bool
         private let lock = NSLock()
         private var buffer = Data()
         private var redirectedToAO3URL: URL?
+        private var maintenance = false
         private var failed = false
         private var isCancelled = false
         private var continuation: CheckedContinuation<BareFetchOutcome, Never>?
@@ -443,7 +443,12 @@ nonisolated enum AO3HTMLDownloadConverter {
             }
             if AO3HTMLDownloadConverter.isAO3Host(target) {
                 if ao3Only {
-                    completionHandler(newRequest)
+                    if AO3RequestDefaults.isTrustedURL(target) {
+                        completionHandler(newRequest)
+                    } else {
+                        lock.withLock { failed = true }
+                        completionHandler(nil)
+                    }
                 } else {
                     lock.withLock { redirectedToAO3URL = target }
                     completionHandler(nil)
@@ -466,7 +471,10 @@ nonisolated enum AO3HTMLDownloadConverter {
             completionHandler: @escaping (URLSession.ResponseDisposition) -> Void
         ) {
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-                lock.withLock { failed = true }
+                lock.withLock {
+                    maintenance = (response as? HTTPURLResponse)?.statusCode == 418
+                    failed = true
+                }
                 completionHandler(.cancel)
                 return
             }
@@ -510,6 +518,7 @@ nonisolated enum AO3HTMLDownloadConverter {
                 if let ao3URL = redirectedToAO3URL {
                     return (cont, .redirectToAO3(ao3URL))
                 }
+                if maintenance { return (cont, .maintenance) }
                 if error != nil || failed || isCancelled {
                     return (cont, .failed)
                 }

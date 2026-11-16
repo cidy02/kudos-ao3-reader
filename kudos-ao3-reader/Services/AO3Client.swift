@@ -296,7 +296,24 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         try Self.rejectIfUntrusted(url)
         try await pace()
         defer { Self.purgeSessionCookie(from: session.configuration.httpCookieStorage, url: url) }
-        return await AO3HTMLDownloadConverter.fetchAO3Image(url, session: session, maxBytes: maxBytes)
+        let delegate = AO3HTMLDownloadConverter.ImageFetchDelegate(maxBytes: maxBytes, ao3Only: true)
+        let streamingSession = URLSession(configuration: session.configuration, delegate: delegate, delegateQueue: nil)
+        let task = streamingSession.dataTask(with: url)
+        delegate.attach(task: task)
+        let result = await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in delegate.start(continuation: continuation) }
+        } onCancel: {
+            delegate.cancel()
+            streamingSession.invalidateAndCancel()
+        }
+        streamingSession.finishTasksAndInvalidate()
+        switch result {
+        case let .data(data): return data
+        case .maintenance:
+            holdForMaintenance()
+            throw AO3Error.maintenance
+        case .redirectToAO3, .failed: return nil
+        }
     }
 
     private static func htmlString(from data: Data) -> String {
