@@ -963,7 +963,13 @@ extension ReadingQueueBrowserView {
         guard let selectedQueueID,
               let selectedQueue = orderedQueues.first(where: { $0.id == selectedQueueID })
         else { return }
-        guard !ReadingQueueService.orderedWorks(in: selectedQueue).isEmpty else { return }
+        guard !ReadingQueueService.orderedWorks(in: selectedQueue).isEmpty else {
+            // An empty queue shows no Find More: stop the previous queue's pass too (third review).
+            sourceCheckTask?.cancel()
+            sourceCheckTask = nil
+            sourceCheckQueueID = nil
+            return
+        }
         guard sourceCheckQueueID != selectedQueueID else { return }
         let previous = sourceCheckTask
         previous?.cancel()

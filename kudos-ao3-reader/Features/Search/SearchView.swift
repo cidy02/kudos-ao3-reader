@@ -69,6 +69,9 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
     /// token is stale (superseded by a newer search, or by returning to Browse
     /// before it finished) discards its result instead of re-showing results.
     @State private var loadToken = 0
+    /// A saved search whose page 1 has not loaded yet: Try Again and pull to refresh still
+    /// record its open when they succeed, so its "new" badge clears (T-526 third review).
+    @State private var pendingSavedSearchOpen: (id: UUID, filters: AO3SearchFilters)?
     /// The in-flight search, so a superseded one is actually cancelled rather
     /// than left to finish and have its result thrown away. Without this the
     /// pacer serializes the doomed request's start slot ahead of the one the
@@ -624,6 +627,8 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                         .foregroundStyle(.tint)
                 }
             }
+            // Stacked at AX sizes there is no Spacer: the whole row stays tappable (third review).
+            .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -1045,14 +1050,22 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
             current: currentPage,
             hasResults: !results.isEmpty
         ) {
-            load(page: page)
+            load(page: page, recordingOpenOf: pendingSavedSearchID)
         } else {
-            runSearch()
+            runSearch(recordingOpenOf: pendingSavedSearchID)
         }
+    }
+
+    /// The pending saved search's ID while the filters on screen are still its own.
+    private var pendingSavedSearchID: UUID? {
+        guard let pending = pendingSavedSearchOpen, pending.filters == filters else { return nil }
+        return pending.id
     }
 
     private func runSearch(recordingOpenOf savedSearchID: UUID? = nil) {
         guard filters.isSearchable else { return }
+        // Any other search replaces the pending saved one.
+        if savedSearchID == nil { pendingSavedSearchOpen = nil }
         // Close the filters panel — the other AO3FilterPanel call sites
         // (NativeBrowseView's applyFilters, AO3AccountWorksList) already dismiss
         // on apply; this was the one left open after running the search.
@@ -1192,11 +1205,13 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
             lastAppendError = nil
             phase = .loaded
         } else {
+            pendingSavedSearchOpen = (saved.id, saved.filters)
             runSearch(recordingOpenOf: saved.id)
         }
     }
 
     private func recordSavedSearchOpen(_ saved: SavedSearch) {
+        if pendingSavedSearchOpen?.id == saved.id { pendingSavedSearchOpen = nil }
         saved.lastOpenedAt = Date()
         for link in saved.queueLinks { link.newResultCount = 0 }
         FolderSyncService.markDirty()
@@ -1410,7 +1425,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         // refresh instead of leaving it to finish and spend a paced request slot
         // ahead of the page the user is actually waiting for. Awaiting the task
         // holds the pull-to-refresh spinner until the load it started is done.
-        load(page: 1)
+        load(page: 1, recordingOpenOf: pendingSavedSearchID)
         // `loadTask` is unstructured, so awaiting it plainly would drop the
         // cancellation edge this function used to get for free when it awaited the
         // AO3 request directly: SwiftUI cancels the `.refreshable` task when the

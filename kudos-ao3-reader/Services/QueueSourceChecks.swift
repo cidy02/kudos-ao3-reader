@@ -87,7 +87,7 @@ enum QueueSourceChecks {
         guard let error = error as? URLError else { return false }
         switch error.code {
         case .notConnectedToInternet, .networkConnectionLost, .cannotConnectToHost,
-             .cannotFindHost, .dnsLookupFailed, .timedOut:
+             .cannotFindHost, .dnsLookupFailed, .timedOut, .dataNotAllowed, .internationalRoamingOff:
             return true
         default:
             return false

@@ -86,8 +86,10 @@ struct QueueSourceRequestTests {
         var paced = 0
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [QueueSourceProbe.self]
+        // A pending pace interval, so a hold checked after pace() would have slept first.
         let client = AO3Client(
             session: URLSession(configuration: configuration),
+            nextAllowedRequestAt: Date().addingTimeInterval(60),
             paceSleep: { _ in paced += 1 }
         )
         let url = try #require(AO3Client.searchURL(filters: AO3SearchFilters(), page: 1))

@@ -293,6 +293,8 @@ struct QueuePageHeader<FilterRail: View>: View {
                                         .foregroundStyle(.tint)
                                 }
                             }
+                            // Stacked at AX sizes there is no Spacer: keep the card full width (third review).
+                            .frame(maxWidth: .infinity, alignment: .leading)
                             Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
                         }
                         .padding(12)
