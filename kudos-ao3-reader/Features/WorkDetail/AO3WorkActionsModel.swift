@@ -98,10 +98,10 @@ final class AO3WorkActionsModel {
     func subscribe(workID: Int, to want: Bool, auth: AO3AuthService, onSubscribed: (() -> Void)? = nil) {
         run {
             let message = try await auth.toggleSubscribe(workID: workID, to: want)
-            if workPageStatesWorkID == workID {
-                workPageStatesRevision += 1
-                workPageStates = AO3WorkActionStates(
-                    isSubscribed: want, existingBookmark: workPageStates?.existingBookmark
+            if self.workPageStatesWorkID == workID {
+                self.workPageStatesRevision += 1
+                self.workPageStates = AO3WorkActionStates(
+                    isSubscribed: want, existingBookmark: self.workPageStates?.existingBookmark
                 )
             }
             if want { onSubscribed?() }
