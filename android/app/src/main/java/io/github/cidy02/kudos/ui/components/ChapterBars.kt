@@ -927,7 +927,8 @@ fun WorkChapterBarLine(
         ChapterBars(
             layout = layout,
             scale = ChapterBarScale.Row,
-            accessibilityLabel = spoken,
+            // The row announces the summary; the child must not announce it again.
+            accessibilityLabel = "",
             modifier = Modifier.weight(1f)
         )
         if (label != null) {

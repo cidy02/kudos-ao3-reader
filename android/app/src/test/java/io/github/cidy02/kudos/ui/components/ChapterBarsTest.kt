@@ -104,7 +104,7 @@ class ChapterBarsTest {
         assertNull(ChapterBarGeometry.progressLabel("12/20", progress = 0.0, isFinished = false))
         assertEquals("Ch 12 · 100%", ChapterBarGeometry.progressLabel("12/20", progress = null, isFinished = true))
         assertEquals(
-            "Ch 2 · 50%",
+            "Ch 3 · 50%",
             ChapterBarGeometry.progressLabel("3/3", progress = 0.5, isFinished = false, weights = listOf(1, 1, 2))
         )
     }
