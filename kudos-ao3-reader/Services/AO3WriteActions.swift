@@ -109,11 +109,15 @@ extension AO3AuthService {
     /// same subscriptions POST/delete flow as `toggleSubscribe(workID:)`, with
     /// `subscription[subscribable_type] = "Series"` (otwarchive `SubscriptionsController#create`,
     /// `SeriesController#show`, `series/_series_navigation.html.erb`, `subscriptions/_form.html.erb`).
-    func toggleSubscribe(seriesID: Int, using client: AO3Client = .shared) async throws -> String {
+    /// `want` is the state the reader asked for. With it, AO3's fresh page decides only whether a
+    /// write is needed, never which one: a stale screen or a retry after a lost answer can no longer
+    /// send the opposite write (Codex's T-549 review). `nil` keeps the plain toggle.
+    func toggleSubscribe(seriesID: Int, to want: Bool? = nil, using client: AO3Client = .shared) async throws -> String {
         try await toggleSubscribe(
             subscribableID: seriesID,
             subscribableType: "Series",
             pageURL: AO3Client.seriesURL(seriesID: seriesID),
+            want: want,
             using: client
         )
     }
@@ -122,6 +126,7 @@ extension AO3AuthService {
         subscribableID: Int,
         subscribableType: String,
         pageURL: URL,
+        want: Bool? = nil,
         using client: AO3Client
     ) async throws -> String {
         try Task.checkCancellation()
@@ -132,6 +137,9 @@ extension AO3AuthService {
         try requireSessionGeneration(expectedGeneration)
 
         let state = AO3Client.parseSubscription(from: html)
+        if let want, want == state.isSubscribed {
+            return want ? "You're already subscribed." : "Unsubscribed."
+        }
         if state.isSubscribed, let path = state.unsubscribePath, let url = Self.absoluteURL(path) {
             // AO3's unsubscribe form is a POST carrying `_method=delete`.
             let body = Self.formEncoded([("_method", "delete"), ("authenticity_token", token)])

@@ -207,6 +207,26 @@ struct AO3SeriesSubscribeTests {
         #expect(posted["authenticity_token"] == "series-csrf")
     }
 
+    /// Codex's review: the reader's intent decides the write, AO3's fresh page only whether one is
+    /// needed. A stale "subscribed" screen confirming Unsubscribe must not resubscribe, and a retried
+    /// Subscribe after a lost answer must not unsubscribe.
+    @Test func aStaleScreenOrARetryNeverSendsTheOppositeWrite() async throws {
+        let auth = makeAuth()
+        await auth.login(username: "alice", password: "pw")
+
+        // Already unsubscribed elsewhere; the reader asks to unsubscribe.
+        SeriesSubscribeStub.reset(getHTML: seriesHTML(seriesID: 42))
+        let gone = try await auth.toggleSubscribe(seriesID: 42, to: false, using: stubClient())
+        #expect(gone == "Unsubscribed.")
+        #expect(SeriesSubscribeStub.recorded().map(\.method) == ["GET"])
+
+        // The first Subscribe landed but its answer was lost; the retry finds the delete form.
+        SeriesSubscribeStub.reset(getHTML: seriesHTML(seriesID: 42, subscriptionID: 789))
+        let again = try await auth.toggleSubscribe(seriesID: 42, to: true, using: stubClient())
+        #expect(again == "You're already subscribed.")
+        #expect(SeriesSubscribeStub.recorded().map(\.method) == ["GET"])
+    }
+
     @Test func signedOutDoesNotSendAnyRequest() async throws {
         SeriesSubscribeStub.reset(getHTML: seriesHTML(seriesID: 42))
         let auth = makeAuth()
@@ -220,7 +240,7 @@ struct AO3SeriesSubscribeTests {
         #expect(AO3SeriesSubscribeModel.showsSubscribe(isLoggedIn: true))
 
         var handlerCalls = 0
-        let model = AO3SeriesSubscribeModel { _, _ in
+        let model = AO3SeriesSubscribeModel { _, _, _ in
             handlerCalls += 1
             return "Subscribed."
         }
@@ -245,8 +265,8 @@ struct AO3SeriesSubscribeTests {
         }
 
         let client = stubClient()
-        let model = AO3SeriesSubscribeModel { seriesID, auth in
-            try await auth.toggleSubscribe(seriesID: seriesID, using: client)
+        let model = AO3SeriesSubscribeModel { seriesID, want, auth in
+            try await auth.toggleSubscribe(seriesID: seriesID, to: want, using: client)
         }
         model.tapped(seriesID: 42, auth: auth)
         await model.waitForCurrentTask()
@@ -264,7 +284,7 @@ struct AO3SeriesSubscribeTests {
 
         // 1. Cancelling the unsubscribe confirmation dialog sends zero requests.
         var handlerCalls = 0
-        let model = AO3SeriesSubscribeModel { _, _ in
+        let model = AO3SeriesSubscribeModel { _, _, _ in
             handlerCalls += 1
             return "Unsubscribed."
         }
@@ -317,8 +337,8 @@ struct AO3SeriesSubscribeTests {
         }
 
         let unconfirmedClient = stubClient()
-        let model = AO3SeriesSubscribeModel { seriesID, auth in
-            try await auth.toggleSubscribe(seriesID: seriesID, using: unconfirmedClient)
+        let model = AO3SeriesSubscribeModel { seriesID, want, auth in
+            try await auth.toggleSubscribe(seriesID: seriesID, to: want, using: unconfirmedClient)
         }
         model.tapped(seriesID: 42, auth: auth)
         await model.waitForCurrentTask()
@@ -380,7 +400,7 @@ struct AO3SeriesSubscribeTests {
 
         let writeEntered = Signal()
         let writeRelease = Signal()
-        let model = AO3SeriesSubscribeModel { _, _ in
+        let model = AO3SeriesSubscribeModel { _, _, _ in
             await writeEntered.fire()
             await writeRelease.wait()
             return "Subscribed."

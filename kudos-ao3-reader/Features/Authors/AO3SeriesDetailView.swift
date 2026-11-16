@@ -538,7 +538,8 @@ struct AO3SeriesDetailView: View {
 @MainActor
 @Observable
 final class AO3SeriesSubscribeModel {
-    typealias ToggleHandler = @MainActor (Int, AO3AuthService) async throws -> String
+    /// Series ID, the state the reader asked for, the session.
+    typealias ToggleHandler = @MainActor (Int, Bool, AO3AuthService) async throws -> String
 
     private(set) var isSubscribed = false
     private(set) var hasSyncedSubscription = false
@@ -553,8 +554,8 @@ final class AO3SeriesSubscribeModel {
     private let toggleHandler: ToggleHandler
 
     init(
-        toggleHandler: @escaping ToggleHandler = { seriesID, auth in
-            try await auth.toggleSubscribe(seriesID: seriesID)
+        toggleHandler: @escaping ToggleHandler = { seriesID, want, auth in
+            try await auth.toggleSubscribe(seriesID: seriesID, to: want)
         }
     ) {
         self.toggleHandler = toggleHandler
@@ -633,6 +634,7 @@ final class AO3SeriesSubscribeModel {
         onSuccess: (@MainActor () async -> Void)?
     ) {
         let expectedGeneration = auth.sessionGeneration
+        let want = !isSubscribed
         isWorking = true
         activeTask = Task { [weak self] in
             guard let self else { return }
@@ -641,9 +643,9 @@ final class AO3SeriesSubscribeModel {
                 self.activeTask = nil
             }
             do {
-                let message = try await self.toggleHandler(seriesID, auth)
+                let message = try await self.toggleHandler(seriesID, want, auth)
                 guard auth.sessionGeneration == expectedGeneration else { return }
-                self.isSubscribed = (message != "Unsubscribed.")
+                self.isSubscribed = want
                 self.banner = message
                 self.writeSuccesses += 1
                 await onSuccess?()
