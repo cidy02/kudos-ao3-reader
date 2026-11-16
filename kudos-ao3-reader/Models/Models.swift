@@ -234,6 +234,13 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
         statusChangedAt = status == nil ? nil : date
         statusWasRecorded = true
         stackBaselineChapterCount = status == .stacking ? postedChapterCount : 0
+        if status != .stopped {
+            stoppedAt = nil
+            stopReasonRaw = ""
+            stopTag = ""
+            stopNote = ""
+        }
+        markModified(date)
     }
 
     enum ExplicitReadingStatus: String { case reading, onHold, stacking, stopped }

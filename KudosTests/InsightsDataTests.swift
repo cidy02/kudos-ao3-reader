@@ -83,7 +83,11 @@ struct InsightsDataTests {
         ]
         #expect(works.map(\.insightsReadingStatus) == expected)
         let counts = Dictionary(grouping: works, by: \.insightsReadingStatus)
-        #expect(SavedWork.InsightsReadingStatus.allCases.reduce(0) { $0 + (counts[$1]?.count ?? 0) } == works.count)
+        let expectedCounts: [SavedWork.InsightsReadingStatus: Int] = [
+            .stopped: 1, .onHold: 1, .stacking: 1, .finished: 1,
+            .caughtUp: 1, .reading: 2, .savedForLater: 1
+        ]
+        #expect(counts.mapValues(\.count) == expectedCounts)
         let stack = works[2]
         stack.chapters = "4/?"
         stack.setReadingStatus(.stacking)
@@ -93,6 +97,29 @@ struct InsightsDataTests {
         stack.chapters = "0/?"
         stack.setReadingStatus(.stacking)
         #expect(stack.shouldResumeStacking(postedChapters: 3))
+    }
+
+    @Test func statusChangeStampsSyncClock() {
+        let work = SavedWork(title: "A", author: "B")
+        work.syncStatus = .synced
+        let changedAt = work.lastModifiedAt.addingTimeInterval(60)
+        work.setReadingStatus(.reading, at: changedAt)
+        #expect(work.lastModifiedAt == changedAt)
+        #expect(work.syncStatus == .pending)
+    }
+
+    @Test func leavingStoppedClearsStopDetails() {
+        let work = SavedWork(title: "A", author: "B")
+        work.setReadingStatus(.stopped)
+        work.stoppedAt = .now
+        work.stopReasonRaw = "other"
+        work.stopTag = "Tag"
+        work.stopNote = "Note"
+        work.setReadingStatus(.stacking)
+        #expect(work.stoppedAt == nil)
+        #expect(work.stopReasonRaw.isEmpty)
+        #expect(work.stopTag.isEmpty)
+        #expect(work.stopNote.isEmpty)
     }
 
     @Test func snapshotUsesStoredBylineOrVerifiedDisplayNames() {
