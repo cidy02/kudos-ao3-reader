@@ -102,7 +102,7 @@ extension AO3AuthService {
         try await toggleSubscribe(
             subscribableID: workID,
             subscribableType: "Work",
-            pageURL: Self.workURL(workID),
+            pageURL: Self.workFormURL(workID: workID),
             want: want,
             using: client
         )
@@ -423,9 +423,11 @@ extension AO3AuthService {
     /// re-reads the live page at submit time, so a stale label can never
     /// mis-route an action (`toggleSubscribe` and `saveBookmark` both decide
     /// from the fresh HTML, not from this snapshot).
-    func workActionStates(workID: Int) async throws -> AO3WorkActionStates {
+    func workActionStates(
+        workID: Int, using client: AO3Client = .shared
+    ) async throws -> AO3WorkActionStates {
         guard isLoggedIn else { throw AO3WriteError.notSignedIn }
-        let (html, _) = try await fetchCSRFPage(at: Self.workURL(workID))
+        let (html, _) = try await fetchCSRFPage(at: Self.workFormURL(workID: workID), using: client)
         return AO3WorkActionStates(
             isSubscribed: AO3Client.parseSubscription(from: html).isSubscribed,
             existingBookmark: AO3Client.parseExistingBookmark(from: html)
@@ -555,10 +557,16 @@ extension AO3AuthService {
         URL(string: "https://archiveofourown.org/works/\(workID)/comments")!
     }
 
+    /// A work page carrying `view_adult=true` so adult works render their real
+    /// forms (comments, subscription, bookmark) instead of the interstitial.
+    static func workFormURL(workID: Int) -> URL {
+        URL(string: "https://archiveofourown.org/works/\(workID)?view_adult=true")!
+    }
+
     /// The page a top-level comment's CSRF + pseud are scraped from. `view_adult`
     /// so an adult work renders the real comment form, not the interstitial.
     static func commentFormURL(workID: Int) -> URL {
-        URL(string: "https://archiveofourown.org/works/\(workID)?view_adult=true")!
+        workFormURL(workID: workID)
     }
 
     static func subscriptionsEndpoint(username: String) -> URL {
