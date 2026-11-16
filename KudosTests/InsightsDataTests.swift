@@ -10,7 +10,7 @@ struct InsightsDataTests {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
             WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
-            SavedSearch.self, SyncTombstone.self, ReadingAnnotation.self,
+            SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self, ReadingAnnotation.self,
             ReadingSession.self, ReadingFavorite.self, FandomReadWatermark.self
         ])
         return try ModelContainer(for: schema, configurations: [

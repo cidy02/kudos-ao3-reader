@@ -13,7 +13,7 @@ struct SaveFailureRollbackTests {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
             WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
-            SavedSearch.self, SyncTombstone.self
+            SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self
         ])
         // An in-memory store can't be opened read-only, so: make a store on disk, then reopen it
         // read-only. That container's saves are refused, as a full disk or a store error would be.
@@ -36,7 +36,7 @@ struct SaveFailureRollbackTests {
         let schema = Schema([
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
             WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
-            SavedSearch.self, SyncTombstone.self
+            SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self
         ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let context = ModelContext(try ModelContainer(for: schema, configurations: [configuration]))

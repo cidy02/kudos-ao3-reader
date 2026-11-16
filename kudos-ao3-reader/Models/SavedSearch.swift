@@ -20,11 +20,29 @@ import SwiftData
     var name: String = ""
     var dateAdded: Date = Date()
     var filters: AO3SearchFilters = AO3SearchFilters()
+    var lastOpenedAt: Date?
+    @Relationship(deleteRule: .cascade, inverse: \QueueSavedSearchLink.search)
+    var queueLinks: [QueueSavedSearchLink] = []
 
     init(name: String, filters: AO3SearchFilters) {
         id = UUID()
         self.name = name
         self.filters = filters
         dateAdded = Date()
+    }
+}
+
+/// One queue source. The join owns its count and cooldown; deleting either end
+/// removes the join without deleting the other end.
+@Model final class QueueSavedSearchLink {
+    var id: UUID = UUID()
+    var queue: ReadingQueue?
+    var search: SavedSearch?
+    var lastCheckedAt: Date?
+    var newResultCount: Int?
+
+    init(queue: ReadingQueue, search: SavedSearch) {
+        self.queue = queue
+        self.search = search
     }
 }
