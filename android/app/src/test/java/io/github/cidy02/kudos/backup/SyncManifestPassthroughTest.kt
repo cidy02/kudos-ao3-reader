@@ -1263,12 +1263,19 @@ class SyncManifestPassthroughTest {
         assertEquals(JsonPrimitive("tied-draft"), exportedManifest()["writingRecovery"])
 
         val undatedImport = JsonObject(
-            base.filterKeys { it != "exportedAt" } + mapOf(
+            base + mapOf(
+                "exportedAt" to JsonPrimitive(""),
                 "writingRecovery" to JsonPrimitive("undated-draft")
             )
         )
         backupRepository.importV2ZipBytes(zipManifest(undatedImport), mode = BackupImportMode.MERGE)
         assertEquals(JsonPrimitive("undated-draft"), exportedManifest()["writingRecovery"])
+
+        val missingKeyResult = mergeImportedManifestJson(
+            incoming = JsonObject(mapOf("writingRecovery" to JsonPrimitive("missing-key-draft"))),
+            existing = newerImport
+        )
+        assertEquals(JsonPrimitive("missing-key-draft"), missingKeyResult["writingRecovery"])
     }
 
     @Test
