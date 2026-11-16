@@ -890,6 +890,11 @@ nonisolated struct KudosBackupPronunciations: Codable, Equatable {
         stamps = decoded?.values
         stampsIncomplete = decoded.map(\.hadFailures) ?? container.contains(.stamps)
     }
+
+    // `stampsIncomplete` is a reading of the archive, not data: never written back out.
+    private enum CodingKeys: String, CodingKey {
+        case global, fandoms, works, stamps
+    }
 }
 
 nonisolated struct KudosBackupTombstone: Codable, Equatable {
