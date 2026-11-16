@@ -8,6 +8,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.time.Instant
+import java.time.OffsetDateTime
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.json.Json
@@ -323,6 +324,7 @@ private data class EntryStamp(val stampKey: String, val owner: String, val entry
 private fun instantOf(element: JsonElement?): Instant? {
     val text = (element as? JsonPrimitive)?.contentOrNull ?: return null
     return runCatching { Instant.parse(text) }.getOrNull()
+        ?: runCatching { OffsetDateTime.parse(text).toInstant() }.getOrNull()
 }
 
 /** `lastModifiedAt`, or a primitive `modifiedAt`. A `modifiedAt` object is not a record stamp. */

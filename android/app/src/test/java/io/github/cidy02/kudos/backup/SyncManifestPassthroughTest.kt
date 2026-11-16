@@ -1085,6 +1085,50 @@ class SyncManifestPassthroughTest {
         }
     }
 
+    @Test
+    fun offsetIso8601TimestampsRankAndCompareLikeUtcInstants() {
+        val olderUtc = JsonObject(
+            mapOf(
+                "exportedAt" to JsonPrimitive("2026-06-26T12:00:00.000Z"),
+                "writingRecovery" to JsonPrimitive("older-utc"),
+                "settings" to JsonObject(
+                    mapOf(
+                        "modifiedAt" to JsonObject(
+                            mapOf("keepScreenAwake" to JsonPrimitive("2026-06-26T12:00:00.000Z"))
+                        ),
+                        "extras" to JsonObject(mapOf("keepScreenAwake" to JsonPrimitive(false)))
+                    )
+                )
+            )
+        )
+        val newerOffset = JsonObject(
+            mapOf(
+                // 12:00-02:00 == 14:00Z, strictly newer than 12:00Z.
+                "exportedAt" to JsonPrimitive("2026-06-26T12:00:00-02:00"),
+                "writingRecovery" to JsonPrimitive("newer-offset"),
+                "settings" to JsonObject(
+                    mapOf(
+                        "modifiedAt" to JsonObject(
+                            mapOf("keepScreenAwake" to JsonPrimitive("2026-06-26T12:00:00-02:00"))
+                        ),
+                        "extras" to JsonObject(mapOf("keepScreenAwake" to JsonPrimitive(true)))
+                    )
+                )
+            )
+        )
+        val folded = foldManifestCopies(
+            listOf(
+                RawManifestCopy(olderUtc, modifiedAtMillis = 9_000, liveName = true),
+                RawManifestCopy(newerOffset, modifiedAtMillis = 1_000, liveName = false)
+            )
+        )!!
+        assertEquals(JsonPrimitive("newer-offset"), folded["writingRecovery"])
+        assertEquals(
+            JsonPrimitive(true),
+            folded.getValue("settings").jsonObject.getValue("extras").jsonObject["keepScreenAwake"]
+        )
+    }
+
     private fun iosT541ManifestJson(): JsonObject {
         val pair = Ed25519Sign.KeyPair.newKeyPair()
         runBlocking { settingsRepository.trustTombstonePublicKey(pair.publicKey.toLowerHex()) }
