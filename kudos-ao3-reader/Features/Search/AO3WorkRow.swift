@@ -186,13 +186,14 @@ struct AO3WorkRow: View {
             wide: wide || summaryRunsFullWidth,
             showsSeparator: showsSeparator,
             separatorInset: rowSeparatorInset,
-            insertsByline: hasStandardByline
+            insertsByline: hasStandardByline,
+            showsUnderTitleTrailing: showsStandardTrailing
         ) {
             selectionCheck
         } symbols: { arrangement in
             symbols(arrangement)
-        } heading: { includesByline in
-            standardHeading(includesByline: includesByline)
+        } heading: { includesTrailing in
+            standardHeading(includesByline: includesTrailing, includesTrailing: includesTrailing)
         } byline: {
             standardByline
         } remainder: {
@@ -234,7 +235,15 @@ struct AO3WorkRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.leading, fullWidthLeadingPadding)
+        } trailing: {
+            if showsStandardTrailing { expandButton }
         }
+    }
+
+    /// Under the Title the expand control leaves the title line. Search and
+    /// fandom rows keep theirs on the kicker, which is already above the title.
+    private var showsStandardTrailing: Bool {
+        !symbolPlacement.keepsTrailingControlsInTitleLine && isExpandable && showsExpandButton
     }
 
     /// Fandom label, title, author, summary, every stat, and equal chapter bars.
@@ -321,7 +330,7 @@ struct AO3WorkRow: View {
         return !work.authors.isEmpty || !nonemptyFandoms.isEmpty
     }
 
-    private func standardHeading(includesByline: Bool) -> some View {
+    private func standardHeading(includesByline: Bool, includesTrailing: Bool) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             if presentation == .fandomTop {
                 fandomLabel
@@ -341,7 +350,7 @@ struct AO3WorkRow: View {
                 if !work.dateUpdated.isEmpty {
                     WorkUpdatedDateBadge(dateUpdated: work.dateUpdated)
                 }
-                if isExpandable && showsExpandButton { expandButton }
+                if includesTrailing, isExpandable, showsExpandButton { expandButton }
             }
             if includesByline { standardByline }
         }

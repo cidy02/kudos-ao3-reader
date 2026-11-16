@@ -38,6 +38,19 @@ struct WorkSymbolPlacementTests {
         #expect(lines.map(\.spacingBefore) == [0, 6, 6, 12])
     }
 
+    /// The star and the expand control sit beside the title block, which includes
+    /// the strip. Putting them back in the title line makes that line 44 pt tall
+    /// and the strip's 6 pt gap is no longer the gap under the title.
+    @Test func underTitleTrailingControlsDoNotPushTheStripDown() {
+        #expect(WorkSymbolPlacement.beside.keepsTrailingControlsInTitleLine)
+        #expect(!WorkSymbolPlacement.underTitle.keepsTrailingControlsInTitleLine)
+        let cluster = WorkSymbolPlacement.underTitleTrailingCluster
+        #expect(cluster == [.heading, .symbols, .byline])
+        let lines = WorkSymbolPlacement.underTitleLines
+        #expect(lines.first { $0.kind == .symbols }?.spacingBefore == 6)
+        #expect(lines.map(\.kind).filter { cluster.contains($0) } == cluster)
+    }
+
     /// Beside keeps every inset the row had before the setting.
     @Test func besideKeepsTheExistingSeparatorInsets() {
         let inset = { (stacked: Bool, wide: Bool, selecting: CGFloat?) in
