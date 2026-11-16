@@ -24,6 +24,55 @@ final class RemoteWorkSelectionController {
     fileprivate var resolvedCollectionWorks: [SavedWork] = []
     fileprivate var showingAddToCollection = false
     fileprivate var batchActionError: String?
+    var sourceQueueID: UUID?
+    var toastQueue: ReadingQueue?
+    var toastWork: SavedWork?
+    var showingChangeQueue = false
+    private var quickQueueBusyIDs: Set<Int> = []
+    private var toastDismissTask: Task<Void, Never>?
+
+    func changeQueue() {
+        toastDismissTask?.cancel()
+        showingChangeQueue = true
+    }
+
+    static func currentQueue(in queues: [ReadingQueue], sourceID: UUID?, storedID: String?) -> ReadingQueue? {
+        let active = queues.filter { !$0.isPendingDeletion }
+        if let sourceID, let queue = active.first(where: { $0.id == sourceID }) { return queue }
+        if let storedID, let id = UUID(uuidString: storedID),
+           let queue = active.first(where: { $0.id == id }) { return queue }
+        return active.first { $0.kind == .savedForLater }
+    }
+
+    func quickAdd(_ summary: AO3WorkSummary, in context: ModelContext) {
+        guard !isSelecting, quickQueueBusyIDs.insert(summary.id).inserted else { return }
+        Task { @MainActor in
+            defer { quickQueueBusyIDs.remove(summary.id) }
+            let queues = (try? context.fetch(FetchDescriptor<ReadingQueue>())) ?? []
+            let queue = Self.currentQueue(
+                in: queues, sourceID: sourceQueueID,
+                storedID: UserDefaults.standard.string(forKey: "lastAddedReadingQueueID")
+            ) ?? ReadingQueueService.ensureSavedForLaterQueue(in: context)
+            do {
+                let work = try ReadingQueueService.ensureLocalMetadata(for: summary, in: context)
+                if !work.queueMemberships.contains(where: { $0.queue?.id == queue.id }) {
+                    _ = await ReadingQueueService.addAndPreserve(work, to: queue, in: context)
+                }
+                UserDefaults.standard.set(queue.id.uuidString, forKey: "lastAddedReadingQueueID")
+                toastQueue = queue
+                toastWork = work
+                toastDismissTask?.cancel()
+                toastDismissTask = Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(5))
+                    guard !Task.isCancelled else { return }
+                    toastQueue = nil
+                    toastWork = nil
+                }
+            } catch {
+                batchActionError = error.localizedDescription
+            }
+        }
+    }
 
     /// The selected summaries, in the host's current display order.
     func selected(in results: [AO3WorkSummary]) -> [AO3WorkSummary] {
@@ -247,6 +296,8 @@ struct SelectableAO3WorkRow: View {
     var wide = false
     var showsSeparator = true
 
+    @Environment(\.modelContext) private var context
+
     var body: some View {
         SensitiveWorkRow(
             work: work,
@@ -259,6 +310,7 @@ struct SelectableAO3WorkRow: View {
             qualitySignal: qualitySignal,
             rankedContext: rankedContext,
             badgeTitle: badgeTitle,
+            quickQueue: { controller.quickAdd(work, in: context) },
             showsSummary: showsSummary,
             badgeCount: badgeCount,
             wide: wide,
@@ -280,6 +332,14 @@ extension View {
             .sheet(isPresented: $controller.showingAddToQueue) {
                 AddToQueueView(works: controller.resolvedQueueWorks)
             }
+            .sheet(isPresented: $controller.showingChangeQueue, onDismiss: {
+                controller.toastQueue = nil
+                controller.toastWork = nil
+            }) {
+                if let work = controller.toastWork, let queue = controller.toastQueue {
+                    AddToQueueView(work: work, movingFrom: queue)
+                }
+            }
             .sheet(isPresented: $controller.showingAddToCollection) {
                 AddToCollectionView(works: controller.resolvedCollectionWorks)
             }
@@ -298,6 +358,15 @@ extension View {
             .toolbar(controller.isSelecting ? .hidden : .automatic, for: .tabBar)
             #endif
             .onDisappear { controller.batchTask?.cancel() }
+            .safeAreaInset(edge: .bottom) {
+                if let queue = controller.toastQueue, controller.toastWork != nil {
+                    QueueAddedToast(queue: queue) {
+                        controller.changeQueue()
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 8)
+                }
+            }
             // A tick per row ticked, but not for the clear when selection mode ends.
             .sensoryFeedback(.selection, trigger: controller.selection.count) { _, _ in controller.isSelecting }
     }

@@ -356,13 +356,16 @@ struct ReadingQueueStorageView: View {
 
 struct AddToQueueView: View {
     let works: [SavedWork]
+    var movingFrom: ReadingQueue?
 
-    init(work: SavedWork) {
+    init(work: SavedWork, movingFrom: ReadingQueue? = nil) {
         works = [work]
+        self.movingFrom = movingFrom
     }
 
     init(works: [SavedWork]) {
         self.works = works
+        movingFrom = nil
     }
 
     @Environment(\.modelContext) private var context
@@ -588,8 +591,9 @@ struct AddToQueueView: View {
     }
 
     private func toggle(_ queue: ReadingQueue) {
+        if movingFrom?.id == queue.id { return }
         Haptics.selection()
-        if isMember(queue) {
+        if isMember(queue), movingFrom == nil {
             for work in works {
                 ReadingQueueService.removeFromQueue(work, from: queue, in: context)
             }
@@ -601,6 +605,12 @@ struct AddToQueueView: View {
             for work in nonMembers {
                 _ = await ReadingQueueService.addAndPreserve(work, to: queue, in: context)
             }
+            if let movingFrom {
+                for work in works {
+                    ReadingQueueService.removeFromQueueAndDeleteIfQueueOnly(work, from: movingFrom, in: context)
+                }
+            }
+            UserDefaults.standard.set(queue.id.uuidString, forKey: "lastAddedReadingQueueID")
             workingQueueIDs.remove(queue.id)
         }
     }
@@ -628,6 +638,12 @@ struct AddToQueueView: View {
             for work in works {
                 _ = await ReadingQueueService.addAndPreserve(work, to: queue, in: context)
             }
+            if let movingFrom {
+                for work in works {
+                    ReadingQueueService.removeFromQueueAndDeleteIfQueueOnly(work, from: movingFrom, in: context)
+                }
+            }
+            UserDefaults.standard.set(queue.id.uuidString, forKey: "lastAddedReadingQueueID")
             workingQueueIDs.remove(queue.id)
         }
     }

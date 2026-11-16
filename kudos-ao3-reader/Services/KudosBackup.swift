@@ -1745,6 +1745,7 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
     /// that never chose cannot reset one that did through folder sync. Apply writes only a
     /// value this build knows. Additive — no manifest version bump.
     var workSymbolPlacement: String?
+    var lastAddedReadingQueueID: String?
 
     init(
         readerFontID: String,
@@ -1769,7 +1770,8 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         autoPreserveSmallSeriesOnSaveForLater: Bool,
         autoPreserveSeriesWorkThreshold: Int,
         libraryPageArrangement: LibraryPageArrangement? = nil,
-        workSymbolPlacement: String? = nil
+        workSymbolPlacement: String? = nil,
+        lastAddedReadingQueueID: String? = nil
     ) {
         self.readerFontID = readerFontID
         self.readerMode = readerMode
@@ -1794,6 +1796,7 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         self.autoPreserveSeriesWorkThreshold = autoPreserveSeriesWorkThreshold
         self.libraryPageArrangement = libraryPageArrangement
         self.workSymbolPlacement = workSymbolPlacement
+        self.lastAddedReadingQueueID = lastAddedReadingQueueID
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -1820,6 +1823,7 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         case autoPreserveSeriesWorkThreshold
         case libraryPageArrangement
         case workSymbolPlacement
+        case lastAddedReadingQueueID
     }
 
     init(from decoder: Decoder) throws {
@@ -1871,6 +1875,10 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
             workSymbolPlacement: (try? container.decodeIfPresent(
                 String.self,
                 forKey: .workSymbolPlacement
+            )) ?? nil,
+            lastAddedReadingQueueID: (try? container.decodeIfPresent(
+                String.self,
+                forKey: .lastAddedReadingQueueID
             )) ?? nil
         )
     }
@@ -1928,7 +1936,8 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
             )),
             libraryPageArrangement: LibraryPageArrangement.stored(in: defaults),
             // Only a stored choice, like `accentColorHex`.
-            workSymbolPlacement: defaults.string(forKey: WorkSymbolPlacement.storageKey)
+            workSymbolPlacement: defaults.string(forKey: WorkSymbolPlacement.storageKey),
+            lastAddedReadingQueueID: defaults.string(forKey: "lastAddedReadingQueueID")
         )
     }
 
@@ -1999,6 +2008,9 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         // Same rule; a value this build does not know is ignored.
         if let workSymbolPlacement, WorkSymbolPlacement(rawValue: workSymbolPlacement) != nil {
             defaults.set(workSymbolPlacement, forKey: WorkSymbolPlacement.storageKey)
+        }
+        if let lastAddedReadingQueueID, UUID(uuidString: lastAddedReadingQueueID) != nil {
+            defaults.set(lastAddedReadingQueueID, forKey: "lastAddedReadingQueueID")
         }
     }
 

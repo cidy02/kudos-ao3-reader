@@ -306,6 +306,7 @@ struct SensitiveWorkRow: View {
     var qualitySignal: WorkSignal? = nil
     var rankedContext: RankedWork? = nil
     var remoteBadgeTitle: String?
+    var quickQueue: (() -> Void)?
     var showsSummary = true
     var showsTags = true
     var showsProgress = true
@@ -389,6 +390,7 @@ struct SensitiveWorkRow: View {
         qualitySignal: WorkSignal? = nil,
         rankedContext: RankedWork? = nil,
         badgeTitle: String? = nil,
+        quickQueue: (() -> Void)? = nil,
         showsSummary: Bool = true,
         badgeCount: Int = 0,
         wide: Bool = false,
@@ -409,6 +411,7 @@ struct SensitiveWorkRow: View {
         self.qualitySignal = qualitySignal
         self.rankedContext = rankedContext
         self.remoteBadgeTitle = badgeTitle
+        self.quickQueue = quickQueue
         self.showsSummary = showsSummary
         self.badgeCount = badgeCount
         self.wide = wide
@@ -510,6 +513,7 @@ struct SensitiveWorkRow: View {
                 qualitySignal: qualitySignal,
                 rankedContext: rankedContext,
                 badgeTitle: remoteBadgeTitle,
+                quickQueue: quickQueue,
                 showsSummary: showsSummary,
                 badgeCount: badgeCount,
                 wide: wide,
@@ -646,6 +650,7 @@ struct SensitiveWorkRow: View {
                 qualitySignal: qualitySignal,
                 rankedContext: rankedContext,
                 badgeTitle: remoteBadgeTitle,
+                quickQueue: quickQueue,
                 showsSummary: showsSummary,
                 badgeCount: badgeCount,
                 wide: wide,
