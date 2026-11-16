@@ -457,8 +457,8 @@ nonisolated enum AO3HTMLDownloadConverter {
         }
 
         func urlSession(
-            _: URLSession,
-            dataTask _: URLSessionDataTask,
+            session: URLSession,
+            dataTask: URLSessionDataTask,
             didReceive response: URLResponse,
             completionHandler: @escaping (URLSession.ResponseDisposition) -> Void
         ) {
@@ -471,6 +471,8 @@ nonisolated enum AO3HTMLDownloadConverter {
             let contentLength = max(response.expectedContentLength, headerLength)
             if contentLength > Int64(maxBytes) {
                 lock.withLock { failed = true }
+                dataTask.cancel()
+                session.invalidateAndCancel()
                 completionHandler(.cancel)
                 return
             }
@@ -480,7 +482,7 @@ nonisolated enum AO3HTMLDownloadConverter {
             completionHandler(.allow)
         }
 
-        func urlSession(_: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
             let shouldCancel = lock.withLock { () -> Bool in
                 guard !failed, !isCancelled else { return true }
                 if data.count > maxBytes - buffer.count {
@@ -493,6 +495,7 @@ nonisolated enum AO3HTMLDownloadConverter {
             }
             if shouldCancel {
                 dataTask.cancel()
+                session.invalidateAndCancel()
             }
         }
 
