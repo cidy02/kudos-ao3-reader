@@ -110,8 +110,9 @@ struct GeneratedCoverRecipeTests {
 
         let work = SavedWork(title: "Skewed", author: "Writer")
         work.pinCover(salt: 0)
+        let pinJSON = try #require(work.coverRecipeJSON)
         var obj = try #require(
-            JSONSerialization.jsonObject(with: Data(#require(work.coverRecipeJSON).utf8)) as? [String: Any]
+            JSONSerialization.jsonObject(with: Data(pinJSON.utf8)) as? [String: Any]
         )
         obj["pinnedAt"] = Double.greatestFiniteMagnitude
         let rawMax = try #require(String(data: JSONSerialization.data(withJSONObject: obj), encoding: .utf8))

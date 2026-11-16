@@ -119,8 +119,9 @@ struct KudosBackupTests {
         let archivedWork = SavedWork(id: id, title: "Snapshot", author: "Author")
         archivedContext.insert(archivedWork)
         archivedWork.pinCover(salt: 0)
+        let snapshotRaw = try #require(archivedWork.coverRecipeJSON)
         var snapshotObj = try #require(
-            JSONSerialization.jsonObject(with: Data(#require(archivedWork.coverRecipeJSON).utf8)) as? [String: Any]
+            JSONSerialization.jsonObject(with: Data(snapshotRaw.utf8)) as? [String: Any]
         )
         snapshotObj["pinnedAt"] = Date().timeIntervalSince1970 - 600
         archivedWork.coverRecipeJSON = try #require(String(
@@ -154,8 +155,9 @@ struct KudosBackupTests {
         let incoming = SavedWork(id: id, title: "Skewed", author: "Author")
         incomingContext.insert(incoming)
         incoming.pinCover(salt: 1)
+        let rawIncoming = try #require(incoming.coverRecipeJSON)
         var obj = try #require(
-            JSONSerialization.jsonObject(with: Data(#require(incoming.coverRecipeJSON).utf8)) as? [String: Any]
+            JSONSerialization.jsonObject(with: Data(rawIncoming.utf8)) as? [String: Any]
         )
         obj["pinnedAt"] = 32_503_680_000.0 // Year 3000
         incoming.coverRecipeJSON = try #require(
