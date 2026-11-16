@@ -457,6 +457,9 @@ struct KudosBackupFontRestoreTests {
         }
     }
 
+    /// Since T-541 the reader font travels with a snapshot, but only to a font this device can
+    /// draw (M21): an id that is neither a built-in family nor a custom font with its file here
+    /// leaves the local choice alone. A known family is taken.
     @Test func localReaderFontIDRetention() throws {
         let context = try setupSchema()
         let defaults = try testDefaults()
@@ -473,6 +476,13 @@ struct KudosBackupFontRestoreTests {
         _ = try KudosBackupService.restore(contents, into: context, defaults: defaults)
 
         #expect(defaults.string(forKey: "readerFontID") == "local-font-id")
+
+        archiveDefaults.set("georgia", forKey: "readerFontID")
+        let known = try KudosBackupService.makeContents(
+            works: [], bookmarks: [], fonts: [], readingQueues: [], defaults: archiveDefaults
+        )
+        _ = try KudosBackupService.restore(KudosBackupContents(manifest: known.manifest), into: context, defaults: defaults)
+        #expect(defaults.string(forKey: "readerFontID") == "georgia")
     }
 
     private struct CaseVariantFixture {

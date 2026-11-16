@@ -206,17 +206,17 @@ struct SyncedSettingsTests {
         let defaults = freshDefaults()
         defaults.set("system", forKey: "readerFontID")
         var incoming = KudosBackupSettings.capture(defaults: defaults)
-        incoming.readerFontID = "serif"
+        incoming.readerFontID = "georgia"
         incoming.modifiedAt = ["readerFontID": Date().addingTimeInterval(-5)]
         incoming.apply(to: defaults, fromSync: true, archiveDate: Date().addingTimeInterval(-5))
-        #expect(defaults.string(forKey: "readerFontID") == "serif")
+        #expect(defaults.string(forKey: "readerFontID") == "georgia")
 
         var missing = KudosBackupSettings.capture(defaults: defaults)
         missing.readerFontID = "custom:not-here.ttf"
         missing.modifiedAt = ["readerFontID": Date()]
         missing.skipsReaderFont = true
         missing.apply(to: defaults, fromSync: true, archiveDate: Date())
-        #expect(defaults.string(forKey: "readerFontID") == "serif")
+        #expect(defaults.string(forKey: "readerFontID") == "georgia")
     }
 
     @Test func aFirstChoiceForAnUntouchedSettingIsStampedAndAnnounced() {

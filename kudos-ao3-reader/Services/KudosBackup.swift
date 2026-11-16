@@ -3878,6 +3878,13 @@ enum KudosBackupService {
         try context.save()
         if mode != .replaceLibrary {
             var settings = contents.manifest.settings
+            // M21 still holds for the font the reader is switched to: a built-in family this
+            // build knows, or a custom font whose file is here. Anything else leaves this
+            // device's choice alone.
+            if !settings.readerFontID.hasPrefix("custom:"),
+               !ReaderFontOption.builtIns.contains(where: { $0.id == settings.readerFontID }) {
+                settings.skipsReaderFont = true
+            }
             if settings.readerFontID.hasPrefix("custom:") {
                 let fileName = String(settings.readerFontID.dropFirst("custom:".count))
                 if !FileManager.default.fileExists(
