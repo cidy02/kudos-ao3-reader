@@ -43,6 +43,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 /**
  * A-509c items 1 and 5 (iOS T-509): the fandom is the coloured label above the title and opens
@@ -52,6 +53,7 @@ import org.robolectric.annotation.Config
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = Application::class, qualifiers = "w411dp-h1600dp")
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 class WorkFandomKickerTest {
     @get:Rule val compose = createComposeRule()
     private var searched: Pair<SearchSubjectField, String>? = null
@@ -263,7 +265,7 @@ class WorkFandomKickerTest {
         compose.waitForIdle()
         val link = compose.onNodeWithContentDescription("Fandom: Dr").fetchSemanticsNode().boundsInRoot
         val linkText = compose.onNodeWithText("DR", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
-        val title = compose.onNodeWithTag("title").fetchSemanticsNode().boundsInRoot
+        val title = compose.onNodeWithTag("title", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         val minimum = with(compose.density) { 48.dp.toPx() }
         assertTrue("height ${link.height}px < ${minimum}px", link.height >= minimum - 1f)
         assertTrue("width ${link.width}px < ${minimum}px", link.width >= minimum - 1f)
@@ -277,7 +279,7 @@ class WorkFandomKickerTest {
         kickerColumn()
         compose.runOnIdle { plain = false }
         compose.waitForIdle()
-        compose.onNodeWithTag("title").performClick()
+        compose.onNodeWithTag("title", useUnmergedTree = true).performClick()
         assertEquals(1, rowTaps)
         assertEquals(0, linkOpened)
         compose.onNodeWithContentDescription("Fandom: Dr").performClick()
