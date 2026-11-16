@@ -3714,6 +3714,10 @@ enum KudosBackupService {
         }
 
         var restoredFonts = 0
+        // Archived file name → the name it landed under, so the reader font can follow a font
+        // restored under a collision-safe name (Codex's fourth review; Android's
+        // `retargetRenamedFont` does the same).
+        var restoredFontNames: [String: String] = [:]
         for (archived, data) in validatedFonts {
             let foldedName = archived.fileName.lowercased()
             let existingMatches = fontsByFoldedFileName[foldedName] ?? []
@@ -3774,6 +3778,7 @@ enum KudosBackupService {
             if shouldWrite {
                 try data.write(to: font.fileURL, options: .atomic)
             }
+            restoredFontNames[archived.fileName] = font.fileName
             restoredFonts += 1
         }
 
@@ -3890,6 +3895,10 @@ enum KudosBackupService {
             if !settings.readerFontID.hasPrefix("custom:"),
                !ReaderFontOption.builtIns.contains(where: { $0.id == settings.readerFontID }) {
                 settings.skipsReaderFont = true
+            }
+            if settings.readerFontID.hasPrefix("custom:"),
+               let landed = restoredFontNames[String(settings.readerFontID.dropFirst("custom:".count))] {
+                settings.readerFontID = "custom:" + landed
             }
             if settings.readerFontID.hasPrefix("custom:") {
                 let fileName = String(settings.readerFontID.dropFirst("custom:".count))
