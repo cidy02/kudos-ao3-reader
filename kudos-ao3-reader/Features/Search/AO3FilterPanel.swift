@@ -626,8 +626,8 @@ extension AO3FilterPanel {
                     Text("Reset All Filters")
                         .foregroundStyle(
                             canReset
-                                ? theme.appTheme.errorColor
-                                : theme.secondaryInk
+                                ? AnyShapeStyle(theme.appTheme.errorColor)
+                                : AnyShapeStyle(.secondaryInk)
                         )
                     Spacer()
                 }

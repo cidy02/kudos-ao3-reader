@@ -1616,6 +1616,7 @@ struct LibraryUnreadCard: View {
     let addedWords: Int
     let readWords: Int
     @Environment(ThemeManager.self) private var theme
+    @Environment(\.secondaryInk) private var secondaryInk
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -1644,7 +1645,7 @@ struct LibraryUnreadCard: View {
             // Added vs Read
             VStack(spacing: 6) {
                 let maxW = max(1, max(addedWords, readWords))
-                barRow(label: "Added", words: addedWords, color: theme.secondaryInk, maxVal: maxW)
+                barRow(label: "Added", words: addedWords, color: secondaryInk ?? Color.secondary, maxVal: maxW)
                 barRow(label: "Read", words: readWords, color: theme.accentInk, maxVal: maxW)
             }
         }
@@ -1697,6 +1698,7 @@ struct LibraryUnreadCard: View {
 struct LibraryWhereEverythingStandsCard: View {
     let partition: ReadingStatusPartition
     @Environment(ThemeManager.self) private var theme
+    @Environment(\.secondaryInk) private var secondaryInk
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -1712,7 +1714,7 @@ struct LibraryWhereEverythingStandsCard: View {
                 Divider().overlay(theme.appTheme.cardBorder)
                 statusRow(icon: "square.stack.3d.up.fill", color: Color(red: 0.37, green: 0.36, blue: 0.90), label: "Letting Chapters Stack", detail: "back when 3 more are posted", count: partition.stackingCount)
                 Divider().overlay(theme.appTheme.cardBorder)
-                statusRow(icon: "pause.circle.fill", color: theme.secondaryInk, label: "On Hold", count: partition.onHoldCount)
+                statusRow(icon: "pause.circle.fill", color: secondaryInk ?? Color.secondary, label: "On Hold", count: partition.onHoldCount)
                 Divider().overlay(theme.appTheme.cardBorder)
                 statusRow(icon: "bookmark.fill", color: Color(red: 0.69, green: 0.49, blue: 0.07), label: "Saved for Later", count: partition.savedForLaterCount)
                 Divider().overlay(theme.appTheme.cardBorder)

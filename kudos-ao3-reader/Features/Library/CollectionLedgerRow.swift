@@ -136,8 +136,8 @@ private struct MiniatureWorkCover: View {
                     .font(.system(size: 8))
                     .foregroundStyle(
                         themeManager.appTheme.isDarkFamily
-                            ? Color.white.opacity(0.62)
-                            : themeManager.secondaryInk
+                            ? AnyShapeStyle(Color.white.opacity(0.62))
+                            : AnyShapeStyle(.secondaryInk)
                     )
                     .lineLimit(1)
             }

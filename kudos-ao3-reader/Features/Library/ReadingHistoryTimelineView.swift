@@ -519,7 +519,7 @@ private struct ReadingHistoryChart: View {
                 .lineStyle(StrokeStyle(lineWidth: 0.5))
             if average > 0 {
                 RuleMark(y: .value("Average", average / 60))
-                    .foregroundStyle(themeManager.secondaryInk)
+                    .foregroundStyle(.secondaryInk)
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
                     .annotation(position: .top, alignment: .trailing, spacing: 2) {
                         Text("avg \(ReadingInsights.durationLabel(average))")

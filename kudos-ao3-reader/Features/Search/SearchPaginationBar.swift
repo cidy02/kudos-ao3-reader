@@ -160,8 +160,8 @@ struct SearchPaginationBar: View {
                     .font(.system(size: totalPagesSize, weight: .medium, design: .monospaced))
                     .foregroundStyle(
                         themeManager.appTheme.isDarkFamily
-                            ? Color.white.opacity(0.60)
-                            : themeManager.secondaryInk
+                            ? AnyShapeStyle(Color.white.opacity(0.60))
+                            : AnyShapeStyle(.secondaryInk)
                     )
             }
 
@@ -174,8 +174,8 @@ struct SearchPaginationBar: View {
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(
                         themeManager.appTheme.isDarkFamily
-                            ? Color.white.opacity(0.60)
-                            : themeManager.secondaryInk
+                            ? AnyShapeStyle(Color.white.opacity(0.60))
+                            : AnyShapeStyle(.secondaryInk)
                     )
             }
         }
