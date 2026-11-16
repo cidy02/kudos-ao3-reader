@@ -138,6 +138,8 @@ extension AO3AuthService {
 
         let state = AO3Client.parseSubscription(from: html)
         if let want, want == state.isSubscribed {
+            // A signed-out page reads as "not subscribed": that is not AO3 agreeing (Codex re-review).
+            guard LiveAO3SessionValidator.isLoggedIn(html: html) else { throw AO3Error.authenticationRequired }
             return want ? "You're already subscribed." : "Unsubscribed."
         }
         if state.isSubscribed, let path = state.unsubscribePath, let url = Self.absoluteURL(path) {

@@ -227,6 +227,25 @@ struct AO3SeriesSubscribeTests {
         #expect(SeriesSubscribeStub.recorded().map(\.method) == ["GET"])
     }
 
+    /// Codex re-review: the Unsubscribe dialog's intent survives a page refresh while it is open.
+    @Test func confirmingUnsubscribeSendsUnsubscribeEvenAfterAResync() async throws {
+        let auth = makeAuth()
+        await auth.login(username: "alice", password: "pw")
+        var received: [Bool] = []
+        let model = AO3SeriesSubscribeModel { _, want, _ in
+            received.append(want)
+            return want ? "Subscribed." : "Unsubscribed."
+        }
+        model.syncFromSeriesPage(html: seriesHTML(seriesID: 42, subscriptionID: 789), isLoggedIn: true)
+        model.tapped(seriesID: 42, auth: auth)
+        #expect(model.isConfirmingUnsubscribe)
+        model.syncFromSeriesPage(html: seriesHTML(seriesID: 42), isLoggedIn: true)   // refreshed meanwhile
+        model.confirmUnsubscribe(seriesID: 42, auth: auth)
+        await model.waitForCurrentTask()
+        #expect(received == [false])
+        #expect(!model.isSubscribed)
+    }
+
     @Test func signedOutDoesNotSendAnyRequest() async throws {
         SeriesSubscribeStub.reset(getHTML: seriesHTML(seriesID: 42))
         let auth = makeAuth()
@@ -387,9 +406,13 @@ struct AO3SeriesSubscribeTests {
         await #expect(throws: AO3Error.authenticationRequired) {
             _ = try await auth.toggleSubscribe(seriesID: 42, using: stubClient())
         }
+        // Codex re-review: an explicit Unsubscribe must not read a signed-out page as success.
+        await #expect(throws: AO3Error.authenticationRequired) {
+            _ = try await auth.toggleSubscribe(seriesID: 42, to: false, using: stubClient())
+        }
 
         let hits = SeriesSubscribeStub.recorded()
-        #expect(hits.count == 1)
+        #expect(hits.count == 2)
         #expect(hits[0].method == "GET")
         #expect(hits.filter { $0.method == "POST" }.isEmpty)
     }

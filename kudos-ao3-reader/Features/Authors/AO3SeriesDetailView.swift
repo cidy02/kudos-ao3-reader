@@ -608,7 +608,7 @@ final class AO3SeriesSubscribeModel {
             isConfirmingUnsubscribe = true
             return
         }
-        performToggle(seriesID: seriesID, auth: auth, onSuccess: onSuccess)
+        performToggle(seriesID: seriesID, want: true, auth: auth, onSuccess: onSuccess)
     }
 
     func confirmUnsubscribe(
@@ -617,7 +617,8 @@ final class AO3SeriesSubscribeModel {
         onSuccess: (@MainActor () async -> Void)? = nil
     ) {
         guard !isWorking, auth.isLoggedIn else { return }
-        performToggle(seriesID: seriesID, auth: auth, onSuccess: onSuccess)
+        // The dialog asked to unsubscribe; a page refresh while it was open must not turn that around.
+        performToggle(seriesID: seriesID, want: false, auth: auth, onSuccess: onSuccess)
     }
 
     func cancelUnsubscribe() {
@@ -630,11 +631,11 @@ final class AO3SeriesSubscribeModel {
 
     private func performToggle(
         seriesID: Int,
+        want: Bool,
         auth: AO3AuthService,
         onSuccess: (@MainActor () async -> Void)?
     ) {
         let expectedGeneration = auth.sessionGeneration
-        let want = !isSubscribed
         isWorking = true
         activeTask = Task { [weak self] in
             guard let self else { return }
