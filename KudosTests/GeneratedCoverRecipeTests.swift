@@ -14,6 +14,10 @@ struct GeneratedCoverRecipeTests {
         #expect(doctor.fandom == "Doctor Who")
         #expect(frozen.fandom == "Frozen")
         #expect(media.fandom == "Avatar: The Last Airbender")
+        // Two tags for one fandom: one name, one colour.
+        let twice = GeneratedCoverRecipe(id: 4, title: "T", author: "d", fandoms: ["Doctor Who (2005)", "Doctor Who"])
+        #expect(twice.fandom == "Doctor Who")
+        #expect(twice.hues.count == 1)
     }
 
     @Test func referenceShelf() {

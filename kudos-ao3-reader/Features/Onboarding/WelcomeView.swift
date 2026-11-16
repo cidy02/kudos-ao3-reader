@@ -43,25 +43,23 @@ struct WelcomeView: View {
 
     private var points: some View {
         VStack(alignment: .leading, spacing: 22) {
+            #if os(iOS)
+            let readAnywhereMessage = "Download works and read them offline, with themes, fonts, and Read Aloud."
+            #else
+            let readAnywhereMessage = "Download works and read them offline, with themes and custom fonts."
+            #endif
             OnboardingPointRow(
-                symbol: "book", title: "Built for AO3 Readers",
-                message: "An unofficial reader for Archive of Our Own. Kudos is free and open "
-                    + "source, has no ads, and isn't affiliated with AO3 or the OTW."
+                symbol: "book", title: "Read anywhere",
+                message: readAnywhereMessage
             )
             OnboardingPointRow(
-                symbol: "lock.shield", title: "Your Privacy Matters",
-                message: "Kudos has no ads, analytics, tracking, or hidden data collection. Your "
-                    + "AO3 sign-in and the information Kudos needs stay on your device."
+                symbol: "heart", title: "All of AO3, native",
+                message: "Search, browse fandoms, leave kudos and comments, and keep up with subscriptions."
             )
             OnboardingPointRow(
-                symbol: "heart", title: "Community Built",
-                message: "Kudos is made by fans. It doesn't accept donations, but you can "
-                    + "contribute to the project."
-            )
-            OnboardingPointRow(
-                symbol: "ladybug", title: "Need Help?",
-                message: "Found a bug? Shake your device to send a report, or open an issue on "
-                    + "GitHub. The AO3 team can't help with Kudos, so please don't contact them about it."
+                symbol: "lock.shield", title: "Yours, on this device",
+                message: "Your library, queues, and history stay on your device. No tracking, "
+                    + "and mature works can hide behind Face ID."
             )
         }
     }

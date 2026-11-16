@@ -142,10 +142,10 @@ struct MediaBrowserView: View {
     /// Board 13: Jump Back In followed by a two-column masonry of solid colour cards.
     private var categoryGrid: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 26) {
+            VStack(alignment: .leading, spacing: 16) {
                 jumpBackInSection
 
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 8) {
                     Text("Categories")
                         .font(.title3.weight(.bold))
                         .foregroundStyle(.primary)
@@ -153,7 +153,7 @@ struct MediaBrowserView: View {
                         .accessibilityAddTraits(.isHeader)
 
                     let columns = dynamicTypeSize.isAccessibilitySize ? 1 : 2
-                    MasonryLayout(columns: columns, spacing: 10, rowSpacing: 10) {
+                    MasonryLayout(columns: columns, spacing: 10, rowSpacing: 8) {
                         ForEach(categories) { category in
                             categoryCardView(category)
                                 .onAppear { visibleCategoryIDs.insert(category.id) }
@@ -165,7 +165,8 @@ struct MediaBrowserView: View {
 
                 openWebsiteRow
             }
-            .padding(.vertical, 12)
+            .padding(.top, 4)
+            .padding(.bottom, 12)
         }
         .refreshable {
             await AO3Client.shared.invalidateCachedResponses()
@@ -180,10 +181,10 @@ struct MediaBrowserView: View {
         let stats = statsByCategory[category.id]
         let chips = stats?.clusterFandoms ?? []
 
-        return VStack(alignment: .leading, spacing: 10) {
+        return VStack(alignment: .leading, spacing: 6) {
             NavigationLink(value: category) {
                 HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: 1) {
                         Text(wrapSafeName(category.name))
                             .font(.system(size: categoryNameSize, weight: .bold))
                             .foregroundStyle(Color.white)
@@ -226,11 +227,13 @@ struct MediaBrowserView: View {
                         .accessibilityLabel("\(saved) downloaded")
                     }
                 }
+                .frame(minHeight: 44, alignment: .topLeading)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel(categoryHeaderAccessibilityLabel(category, stats: stats))
 
-            VStack(spacing: 6) {
+            VStack(spacing: 4) {
                 ForEach(chips) { chip in
                     Button {
                         onSelectFandom(chip.names, chip.title)
@@ -243,9 +246,9 @@ struct MediaBrowserView: View {
                             chipTitleSize: chipTitleSize,
                             chipCountSize: chipCountSize
                         )
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .frame(minHeight: 30)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 3)
+                        .frame(minHeight: 26)
                         .background(Color.white.opacity(0.18), in: Capsule())
                     }
                     .buttonStyle(.plain)
@@ -271,15 +274,16 @@ struct MediaBrowserView: View {
                             .accessibilityHidden(true)
                     }
                     .foregroundStyle(Color.white)
-                    .frame(minHeight: 24)
+                    .frame(minHeight: 22)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 2)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("All \(stats?.familyCount ?? stats?.fandomCount ?? 0) fandoms in \(category.name)")
             }
         }
-        .padding(12)
+        .padding(10)
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .background(
             RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
