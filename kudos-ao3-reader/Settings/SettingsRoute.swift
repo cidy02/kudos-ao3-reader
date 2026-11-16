@@ -28,7 +28,7 @@ enum SettingsRoute: Hashable, CaseIterable {
         case .font: "Font"
         case .reader: "Reader"
         case .listening: "Listening"
-        case .downloads: "Downloads"
+        case .downloads: "Storage"
         case .preservation: "Preservation"
         case .readingQueues: "Reading Queues"
         case .library: "Library"
@@ -112,7 +112,7 @@ enum SettingsRoute: Hashable, CaseIterable {
         case .font: ["typeface", "serif", "sans", "size", "custom font", "text"]
         case .reader: ["paged", "scrolled", "spread", "awake", "page jump", "reading"]
         case .listening: ["tts", "speech", "voice", "kokoro", "audio", "read aloud", "speed", "pitch", "pronunciation"]
-        case .downloads: ["offline", "storage", "keep", "subscribe", "space", "disk"]
+        case .downloads: ["downloads", "offline", "storage", "keep", "subscribe", "space", "disk"]
         case .preservation: ["availability", "archive", "check", "missing", "works"]
         case .readingQueues: ["queue", "order", "auto-preserve", "series"]
         case .library: ["delete", "confirm", "zero counts", "stats", "shelves"]
