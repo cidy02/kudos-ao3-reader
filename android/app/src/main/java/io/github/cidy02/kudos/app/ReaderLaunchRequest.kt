@@ -24,6 +24,12 @@ object ReaderLaunchRequest {
 
     fun peek(workId: String): Pending? = pending?.takeIf { it.workId == workId }
 
+    fun consumeWhenReady(workId: String, speechReady: Boolean): Pending? {
+        val current = peek(workId) ?: return null
+        if (current.startReadAloud && !speechReady) return null
+        return consume(workId)
+    }
+
     fun consume(workId: String): Pending? {
         val current = pending ?: return null
         if (current.workId != workId) return null

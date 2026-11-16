@@ -21,6 +21,13 @@ class WorkDetailPresentationTest {
         assertEquals(99L, WorkDetailPresentation.summaryFromLocal(work.copy(sourceUrl = "https://archiveofourown.org/works/99"))?.id)
     }
 
+    @Test fun completedLocalOnlyWorkKeepsItsCompletionInTheDetailStrip() {
+        val imported = SavedWork(title = "Import", author = "A", dateAdded = Instant.EPOCH,
+            sourceUrl = "file:///import.epub", isComplete = true)
+        assertEquals(true, WorkDetailPresentation.completion(imported, null))
+        assertNull(WorkDetailPresentation.completion(imported.copy(isComplete = false), null))
+    }
+
     @Test fun queueAndCollectionLabelsPluralize() {
         assertEquals("Add to Queue", WorkDetailPresentation.queueLabel(0))
         assertEquals("In 1 Queue", WorkDetailPresentation.queueLabel(1))

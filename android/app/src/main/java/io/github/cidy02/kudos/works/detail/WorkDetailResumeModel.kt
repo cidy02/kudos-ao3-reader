@@ -88,6 +88,15 @@ data class ResumeCardModel(
         newChapterCount = 0
     )
 
+    val chapterBarsLabel: String?
+        get() {
+            val posted = ChapterBarModel.postedChapterCount(chapters)
+            val planned = maxOf(ChapterBarModel.totalChapterCount(chapters) ?: posted, posted)
+            if (planned <= 128) return null
+            val read = progress?.let { "${(it * 100).toInt()} percent read, " }.orEmpty()
+            return "$read$posted of $planned chapters posted"
+        }
+
     companion object {
         private val CHAPTER_NUMBER_REGEX = Regex("""(?i)\bch(?:apter)?\s*(\d+)""")
         private val CHAPTER_PREFIX_REGEX = Regex("""(?i)^ch(?:apter)?\s*\d+\s*[:.,\-]?\s*""")

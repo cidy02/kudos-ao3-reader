@@ -368,6 +368,7 @@ fun WorkDetailResumeCard(
                         scale = ChapterBarScale.Card,
                         onGradient = true,
                         height = 34.dp,
+                        accessibilityLabel = model.chapterBarsLabel,
                         modifier = barsModifier
                     )
                     ChapterBarsLegend(hasUnposted = items.any { it.role is ChapterBarRole.NotPosted })

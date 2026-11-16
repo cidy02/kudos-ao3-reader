@@ -11,6 +11,9 @@ import java.util.Locale
 import kotlin.math.roundToInt
 
 object WorkDetailPresentation {
+    fun completion(local: SavedWork?, remote: AO3WorkSummary?): Boolean? =
+        local?.knownCompletion ?: remote?.isComplete
+
     enum class PostRemovalAction { KeepLocal, ShowRemote, Dismiss }
 
     enum class MyCopyKind { Progress, Downloaded, File, Tags, Collections, Queues }

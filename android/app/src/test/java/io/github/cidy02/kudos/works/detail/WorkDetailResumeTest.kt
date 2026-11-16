@@ -41,6 +41,12 @@ class WorkDetailResumeTest {
         assertEquals(ChapterBarRole.PostedUnread, items[1].role)
     }
 
+    @Test fun extremeChapterMetadataProducesBoundedBarsAndKeepsExactSpokenCounts() {
+        val model = ResumeCardModel("T", emptyList(), "4/2147483647", 0.5, null, null, 0)
+        assertEquals(128, model.chapterItems(null).size)
+        assertTrue(model.chapterBarsLabel!!.contains("4 of 2147483647 chapters posted"))
+    }
+
     @Test
     fun workReadingPositionExtractsChapterProgressFromEnvelopeAndRawJson() {
         val raw = """{"href":"ch3.xhtml","locations":{"progression":0.42,"totalProgression":0.6}}"""
@@ -102,5 +108,26 @@ class WorkDetailResumeTest {
         assertTrue(consumed!!.openContents)
         assertFalse(consumed.startReadAloud)
         assertNull(ReaderLaunchRequest.consume("work-1"))
+    }
+
+    @Test fun readAloudLaunchWaitsForSpeechReadinessThenStartsOnlyOnce() {
+        class FakeSpeechController {
+            var ready = false
+            var starts = 0
+            fun receive() {
+                ReaderLaunchRequest.consumeWhenReady("work-speech", ready)?.let {
+                    if (it.startReadAloud) starts++
+                }
+            }
+        }
+        val speech = FakeSpeechController()
+        ReaderLaunchRequest.request("work-speech", startReadAloud = true)
+        speech.receive()
+        assertNotNull(ReaderLaunchRequest.peek("work-speech"))
+        speech.ready = true
+        speech.receive()
+        speech.receive()
+        assertEquals(1, speech.starts)
+        assertNull(ReaderLaunchRequest.peek("work-speech"))
     }
 }

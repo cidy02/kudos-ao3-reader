@@ -1723,11 +1723,7 @@ private fun WorkDetailContent(
             Spacer(Modifier.height(10.dp))
 
             // 2. Tight four-symbol strip (Rating, Category, Warnings, Complete)
-            val knownCompletion = if (state.ao3WorkId != null) {
-                local?.isComplete ?: state.remote?.isComplete
-            } else {
-                state.remote?.isComplete
-            }
+            val knownCompletion = WorkDetailPresentation.completion(local, state.remote)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()

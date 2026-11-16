@@ -389,8 +389,10 @@ private fun ReaderReading(
             }
             val tocEntries = remember(publication) { ReadiumTocAdapter.entries(publication) }
             val sections = remember(publication) { ReadiumTocAdapter.sections(publication) }
-            LaunchedEffect(publication, launchNonce) {
-                val launch = io.github.cidy02.kudos.app.ReaderLaunchRequest.consume(state.work.id)
+            LaunchedEffect(publication, launchNonce, speechStatus) {
+                val launch = io.github.cidy02.kudos.app.ReaderLaunchRequest.consumeWhenReady(
+                    state.work.id, speechStatus != SpeechStatus.UNAVAILABLE
+                )
                     ?: return@LaunchedEffect
                 if (launch.openContents) {
                     tocInitialTab = 0
@@ -400,7 +402,7 @@ private fun ReaderReading(
                     val active = speechStatus == SpeechStatus.PLAYING || speechStatus == SpeechStatus.PAUSED
                     if (speechStatus == SpeechStatus.MODEL_NOT_DOWNLOADED) {
                         showTtsControls = true
-                    } else if (!active && speechStatus != SpeechStatus.UNAVAILABLE) {
+                    } else if (!active) {
                         val from = state.liveProgress?.locatorJson
                             ?.let { ReadiumNavigatorController.locatorFromJson(it) }
                         speechController.startReading(

@@ -111,8 +111,12 @@ object ChapterBarGeometry {
         heights: List<Double>? = null,
         newChapterCount: Int = 0
     ): List<ChapterBarItem> {
-        val clampedPlanned = maxOf(0, planned)
-        val clampedPosted = min(maxOf(0, posted), clampedPlanned)
+        // A screen cannot resolve more than 128 bars; keep original counts in labels.
+        val clampedPlanned = planned.coerceIn(0, 128)
+        val clampedPosted = if (planned > 128) {
+            (posted.coerceAtLeast(0).toLong() * 128 / planned).toInt()
+                .coerceIn(if (posted > 0) 1 else 0, 128)
+        } else min(maxOf(0, posted), clampedPlanned)
         if (clampedPlanned <= 0) return emptyList()
 
         fun usable(values: List<Double>?): List<Double>? =
@@ -183,6 +187,7 @@ object ChapterBarGeometry {
         val fraction = progress.coerceIn(0.0, 1.0)
         if (fraction >= 1.0) return posted
         val known = weights?.takeIf { it.size == posted && it.all { value -> value > 0.0 } }
+        if (known == null) return (fraction * posted).toInt().coerceIn(0, posted - 1) + 1
         val postedWeights = List(posted) { index -> known?.get(index) ?: 1.0 }
         val total = postedWeights.sum()
         var remaining = fraction * total
