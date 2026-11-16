@@ -90,10 +90,16 @@ nonisolated struct KudosBackupDocument: Codable, Equatable, Sendable {
 
     /// Writes a file when this device has none or the incoming one is newer. Each store
     /// validates what it reads (a scan for another account is ignored), so this checks only
-    /// that the name is one it knows and the bytes are JSON.
+    /// that the name is one it knows and the bytes are JSON. The mail list is the exception:
+    /// it holds the reader's choices, so it is merged, never replaced (`mergeMailList`).
+    @MainActor
     static func apply(_ documents: [Self], root: URL = URL.applicationSupportDirectory) {
         let now = Date()
         for document in documents where document.data.count <= maximumBytes {
+            if document.name == "mail/updates.json" {
+                mergeMailList(document.data, root: root)
+                continue
+            }
             guard let url = location(for: document.name, root: root),
                   (try? JSONSerialization.jsonObject(with: document.data)) != nil else { continue }
             let incomingDate = KudosBackupContents.clampedArchiveDate(document.modifiedAt, now: now)
@@ -112,6 +118,22 @@ nonisolated struct KudosBackupDocument: Codable, Equatable, Sendable {
             } catch {
                 Log.library.notice("A data file from the backup could not be written.")
             }
+        }
+    }
+
+    /// A copy from elsewhere joins this device's list through `SubscriptionUpdateState.merged`;
+    /// a copy that does not decode as one changes nothing.
+    @MainActor
+    private static func mergeMailList(_ data: Data, root: URL) {
+        guard let incoming = try? JSONDecoder().decode(SubscriptionUpdateState.self, from: data) else { return }
+        let store = FileSubscriptionUpdateStore(directoryURL: root.appendingPathComponent("KudosMail", isDirectory: true))
+        guard let local = try? store.loadState() else { return }
+        let merged = SubscriptionUpdateState.merged(local: local, incoming: incoming)
+        guard merged != local else { return }
+        do {
+            try store.saveState(merged)
+        } catch {
+            Log.library.notice("The mail list from the backup could not be merged.")
         }
     }
 

@@ -370,13 +370,48 @@ struct SyncedSettingsTests {
         #expect(KudosBackupDocument.location(for: "subscriptionScan/../../x.json", root: root) == nil)
 
         let json = Data(#"{"items":[]}"#.utf8)
-        KudosBackupDocument.apply([.init(name: "mail/updates.json", data: json, modifiedAt: Date(timeIntervalSince1970: 1_700_000_000))], root: root)
-        let url = try #require(KudosBackupDocument.location(for: "mail/updates.json", root: root))
+        let scan = "subscriptionScan/user%3Aalice.json"
+        KudosBackupDocument.apply([.init(name: scan, data: json, modifiedAt: Date(timeIntervalSince1970: 1_700_000_000))], root: root)
+        let url = try #require(KudosBackupDocument.location(for: scan, root: root))
         #expect(try Data(contentsOf: url) == json)
         // An older copy does not replace it.
-        KudosBackupDocument.apply([.init(name: "mail/updates.json", data: Data("{}".utf8), modifiedAt: Date(timeIntervalSince1970: 1_600_000_000))], root: root)
+        KudosBackupDocument.apply([.init(name: scan, data: Data("{}".utf8), modifiedAt: Date(timeIntervalSince1970: 1_600_000_000))], root: root)
         #expect(try Data(contentsOf: url) == json)
-        #expect(KudosBackupDocument.capture(root: root).map(\.name) == ["mail/updates.json"])
+        #expect(KudosBackupDocument.capture(root: root).map(\.name) == [scan])
+    }
+
+    /// Codex's third review: a stale device that refreshed its mail (so its file is newer) must
+    /// not erase a choice made later on another device.
+    @Test func aStaleMailRefreshKeepsTheOtherDevicesLaterChoice() throws {
+        let root = try temporaryFolder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = FileSubscriptionUpdateStore(directoryURL: root.appendingPathComponent("KudosMail", isDirectory: true))
+        // This device decided "Not for me" on work 7 at 1,000; work 9 was saved here at 1,000.
+        try store.saveState(SubscriptionUpdateState(decisions: [
+            SubscriptionDecision(workID: 7, action: .notForMe, decidedAt: Date(timeIntervalSince1970: 1_000)),
+            SubscriptionDecision(workID: 9, action: .saved, decidedAt: Date(timeIntervalSince1970: 1_000))
+        ]))
+        // The stale device's copy: refreshed later, an older choice on work 7, a newer one on 9,
+        // an undated one (an older build) on 7 too, and a choice for a new work 11.
+        let stale = SubscriptionUpdateState(
+            lastRefreshAt: Date(timeIntervalSince1970: 5_000),
+            decisions: [
+                SubscriptionDecision(workID: 7, action: .saved, decidedAt: Date(timeIntervalSince1970: 500)),
+                SubscriptionDecision(workID: 9, action: .notForMe, decidedAt: Date(timeIntervalSince1970: 2_000)),
+                SubscriptionDecision(workID: 11, action: .saved)
+            ]
+        )
+        KudosBackupDocument.apply([.init(name: "mail/updates.json", data: try JSONEncoder().encode(stale),
+                                         modifiedAt: Date(timeIntervalSince1970: 5_000))], root: root)
+        let merged = try store.loadState()
+        let actions = Dictionary(uniqueKeysWithValues: merged.decisions.map { ($0.workID, $0.action) })
+        #expect(actions[7] == .notForMe)
+        #expect(actions[9] == .notForMe)
+        #expect(actions[11] == .saved)
+        #expect(merged.lastRefreshAt == Date(timeIntervalSince1970: 5_000))
+        // An undated choice never beats a dated one.
+        let undated = SubscriptionUpdateState(decisions: [SubscriptionDecision(workID: 7, action: .saved)])
+        #expect(SubscriptionUpdateState.merged(local: merged, incoming: undated).decisions.first { $0.workID == 7 }?.action == .notForMe)
     }
 
     private func pronunciationStore() -> KokoroPronunciationStore {
