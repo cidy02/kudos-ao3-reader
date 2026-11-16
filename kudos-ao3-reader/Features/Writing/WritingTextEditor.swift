@@ -415,11 +415,11 @@ struct WritingTextEditor: View {
                         get: { copy.id }, set: { selectedRecovery = $0 }
                     )) {
                         ForEach(recoveries) { item in
-                            Text(item.entry.savedAt.formatted(date: .abbreviated, time: .standard)).tag(item.id)
+                            Text(WorkStat.displayDate(item.entry.savedAt, time: .standard)).tag(item.id)
                         }
                     }
                 }
-                Text("A recovery copy was saved on this device \(recovery.savedAt.formatted()).")
+                Text("A recovery copy was saved on this device \(WorkStat.displayDate(recovery.savedAt, time: .shortened)).")
                 if recovery.originalDigest != WritingTextRecovery.digest(original) {
                     Text("The text on the form has changed since this copy began. Review the copy before restoring it.")
                 }

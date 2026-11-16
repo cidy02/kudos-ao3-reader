@@ -955,7 +955,7 @@ enum CollectionModerationCopy {
     /// The spec's "kestrelmoon · submitted 3 Nov", without a date AO3 did not print.
     static func byline(creator: String, dateText: String) -> String {
         let date = dateText.trimmingCharacters(in: .whitespacesAndNewlines)
-        return date.isEmpty ? creator : "\(creator) · submitted \(date)"
+        return date.isEmpty ? creator : "\(creator) · submitted \(WorkStat.displayDate(date))"
     }
 
     /// After the last item on a page is decided: AO3 moves later items up, so

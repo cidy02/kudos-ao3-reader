@@ -317,7 +317,7 @@ struct AO3SeriesDetailView: View {
         }
         if series.isRestricted { parts.append("restricted") }
         if let complete = series.isComplete { parts.append(complete ? "complete" : "in progress") }
-        if !series.dateUpdated.isEmpty { parts.append(series.dateUpdated) }
+        if !series.dateUpdated.isEmpty { parts.append(WorkStat.displayDate(series.dateUpdated)) }
         return parts.joined(separator: " · ")
     }
 

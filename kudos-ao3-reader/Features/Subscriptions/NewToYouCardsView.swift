@@ -259,7 +259,7 @@ struct NewToYouCardsView: View {
                     if !work.chapters.isEmpty { cardStat(work.chapters, symbol: "book") }
                     if let words = work.words { cardStat(words.formatted(), symbol: "textformat.size") }
                     if let kudos = work.kudos { cardStat(kudos.formatted(), symbol: "heart") }
-                    if !work.dateUpdated.isEmpty { cardStat(work.dateUpdated, symbol: "calendar") }
+                    if !work.dateUpdated.isEmpty { cardStat(WorkStat.displayDate(work.dateUpdated), symbol: "calendar") }
                 }
             }
             .font(.caption)

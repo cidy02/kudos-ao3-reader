@@ -209,7 +209,7 @@ private struct WaitingBaselineRow: View {
             }
         }
         if !snapshot.updatedText.isEmpty {
-            parts.append("Updated \(snapshot.updatedText)")
+            parts.append("Updated \(WorkStat.displayDate(snapshot.updatedText))")
         }
         parts.append("Baseline")
         return parts.joined(separator: " · ")
@@ -267,7 +267,7 @@ private struct WaitingDayHeader: View {
         let calendar = Calendar.current
         if calendar.isDateInToday(start) { return "Today" }
         if calendar.isDateInYesterday(start) { return "Yesterday" }
-        return start.formatted(date: .abbreviated, time: .omitted)
+        return WorkStat.displayDate(start)
     }
 
     var body: some View {

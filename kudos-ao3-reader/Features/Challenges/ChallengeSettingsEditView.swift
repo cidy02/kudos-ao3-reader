@@ -319,7 +319,7 @@ struct ChallengeSettingsEditView: View {
                     // form has no input for it, so it is read-only and usually unknown.
                     SubjectFormRow(
                         label: row.label,
-                        value: settings.assignmentsSentAt?.formatted(date: .abbreviated, time: .shortened) ?? "Manual",
+                        value: settings.assignmentsSentAt.map { WorkStat.displayDate($0, time: .shortened) } ?? "Manual",
                         isMonospaced: settings.assignmentsSentAt != nil
                     )
                 }

@@ -380,7 +380,7 @@ struct QualityResponseSheet: View {
                 VStack(spacing: 0) {
                     QualityResponseRow(
                         label: "Last chapter",
-                        detail: work.dateUpdated
+                        detail: WorkStat.displayDate(work.dateUpdated)
                     )
                 }
                 .background(theme.cardSurface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))

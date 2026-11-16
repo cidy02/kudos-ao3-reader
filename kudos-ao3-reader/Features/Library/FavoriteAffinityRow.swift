@@ -281,7 +281,7 @@ struct FavoriteAffinityRow: View {
             parts.append(FandomDisplayName.bareTitle(fandom))
         }
         if !work.dateUpdated.isEmpty {
-            parts.append("updated \(work.dateUpdated)")
+            parts.append("updated \(WorkStat.displayDate(work.dateUpdated))")
         }
         if let words = work.words, words > 0 {
             parts.append("\(words.formatted(.number.notation(.compactName))) words")
@@ -337,7 +337,7 @@ struct FavoriteAffinityRow: View {
             parts.append(ReadingInsights.durationLabel(row.totalSeconds))
         }
         if let lastRead = row.lastRead {
-            parts.append("last read \(lastRead.formatted(date: .abbreviated, time: .omitted))")
+            parts.append("last read \(WorkStat.displayDate(lastRead))")
         }
         return parts.joined(separator: " · ")
     }

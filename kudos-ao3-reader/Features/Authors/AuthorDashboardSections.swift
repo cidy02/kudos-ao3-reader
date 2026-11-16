@@ -118,7 +118,7 @@ struct AO3DashboardSections: View {
                         AO3DashboardCompactCard(
                             fandoms: bookmark.work.fandoms,
                             title: bookmark.work.title,
-                            meta: ([bookmark.work.authors.joined(separator: ", ")] + [bookmark.date])
+                            meta: ([bookmark.work.authors.joined(separator: ", ")] + [WorkStat.displayDate(bookmark.date)])
                                 .filter { !$0.isEmpty }
                                 .joined(separator: " · ")
                         )
