@@ -445,7 +445,7 @@ final class RankTop100Controller {
         case .releaseDisabled: "Rank Top 100 is disabled in this release."
         case let .retryAfter(date): "AO3 asked Kudos to wait until \(date.formatted(date: .omitted, time: .shortened))."
         case let .throttledUntil(date):
-            "Rank Top 100 is off until \(date.formatted(date: .abbreviated, time: .shortened))."
+            "Rank Top 100 is off until \(WorkStat.displayDate(date, time: .shortened))."
         case let .budgetRenews(date):
             "The 10-page budget renews at \(date.formatted(date: .omitted, time: .shortened))."
         }

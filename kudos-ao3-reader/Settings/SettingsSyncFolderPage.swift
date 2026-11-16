@@ -210,11 +210,11 @@ struct FolderSyncSettingsSection: View {
             }
 
             if let date = persistenceStatus.lastMigrationAttempt {
-                LabeledContent("Last Checked", value: date.formatted(date: .abbreviated, time: .shortened))
+                LabeledContent("Last Checked", value: WorkStat.displayDate(date, time: .shortened))
             }
 
             if let date = folderStatus.lastSyncAt {
-                LabeledContent("Last Synced", value: date.formatted(date: .abbreviated, time: .shortened))
+                LabeledContent("Last Synced", value: WorkStat.displayDate(date, time: .shortened))
             }
 
             Button(action: onRetryPreparation) {
@@ -263,7 +263,7 @@ struct FolderSyncDetailsView: View {
                 LabeledContent("Auto Sync", value: folderStatus.autoSyncEnabled ? "On" : "Off")
                 LabeledContent("Pending Changes", value: folderStatus.isDirty ? "Yes" : "No")
                 if let date = folderStatus.lastSyncAt {
-                    LabeledContent("Last Synced", value: date.formatted(date: .abbreviated, time: .standard))
+                    LabeledContent("Last Synced", value: WorkStat.displayDate(date, time: .standard))
                 }
                 if !folderStatus.lastError.isEmpty {
                     LabeledContent("Last Error", value: folderStatus.lastError)

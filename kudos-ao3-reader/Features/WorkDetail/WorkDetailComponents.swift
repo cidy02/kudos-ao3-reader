@@ -205,7 +205,7 @@ enum WorkDetailPresentation {
             MyCopyRow(kind: .progress, label: "Progress", value: progressValue, action: nil),
             MyCopyRow(
                 kind: .downloaded, label: "Downloaded",
-                value: downloadedAt?.formatted(date: .abbreviated, time: .omitted) ?? "Not recorded",
+                value: downloadedAt.map { WorkStat.displayDate($0) } ?? "Not recorded",
                 action: .edit
             ),
             MyCopyRow(kind: .tags, label: "Your Tags", value: listed(tags), action: .add),

@@ -398,7 +398,7 @@ extension WorkDetailView {
     private func libraryActivitySection(for work: SavedWork) -> some View {
         Group {
             myCopyHeader("Activity")
-            myCopyValueRow("Added", work.dateAdded.formatted(date: .abbreviated, time: .shortened))
+            myCopyValueRow("Added", WorkStat.displayDate(work.dateAdded, time: .shortened))
             Button { showingDownloadedDateEditor = true } label: {
                 HStack(spacing: 10) {
                     Text("Downloaded")
@@ -406,7 +406,7 @@ extension WorkDetailView {
                         .foregroundStyle(.primary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     myCopyValue(
-                        work.downloadedAt?.formatted(date: .abbreviated, time: .omitted)
+                        work.downloadedAt.map { WorkStat.displayDate($0) }
                             ?? "Not recorded"
                     )
                     Image(systemName: "chevron.right")
@@ -420,7 +420,7 @@ extension WorkDetailView {
             .myCopyRow()
             myCopyValueRow(
                 "Last opened",
-                work.lastReadDate.map { $0.formatted(date: .abbreviated, time: .shortened) } ?? "Never"
+                work.lastReadDate.map { WorkStat.displayDate($0, time: .shortened) } ?? "Never"
             )
             // Bar and label share one source: `readingProgress`'s chapter
             // fallback draws a bar for works never opened.

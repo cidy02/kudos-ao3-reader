@@ -319,7 +319,7 @@ struct ChallengeAssignmentsView: View {
     private func secondaryLine(for assignment: AO3ChallengeAssignment) -> String? {
         var parts: [String] = []
         if let sentAt = assignment.sentAt {
-            parts.append("Assigned \(mediumDate(sentAt))")
+            parts.append("Assigned \(WorkStat.displayDate(sentAt))")
         }
         if let due = worksDueAt?.dateText {
             parts.append("due \(due)")
@@ -435,16 +435,7 @@ struct ChallengeAssignmentsView: View {
             .padding(.horizontal, 4)
     }
 
-    // MARK: - Helpers & Actions
-
-    private func mediumDate(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = .autoupdatingCurrent
-        formatter.timeZone = .autoupdatingCurrent
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .none
-        return formatter.string(from: date)
-    }
+    // MARK: - Actions
 
     private func load() async {
         loadGeneration = AO3CollectionSessionReload.nextLoadGeneration(loadGeneration)
