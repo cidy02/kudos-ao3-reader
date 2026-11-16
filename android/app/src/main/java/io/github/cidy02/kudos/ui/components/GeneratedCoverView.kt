@@ -436,7 +436,7 @@ private fun prepareArt(
     )
     val sparse = width < 64.0
     val density = doubleArrayOf(0.7, 0.95, 1.2, 1.5)[if (sparse) 0 else recipe.tier]
-    val random = GeneratedCoverRecipe.Random(seed = recipe.shapeSeed)
+    val random = GeneratedCoverRecipe.Random(state = recipe.shapeSeed)
     val motifPath = buildMotifPath(recipe.motif, centre, radius = 46.0, density = density, rng = random)
 
     val ring: Path? = if (recipe.hasRing) {

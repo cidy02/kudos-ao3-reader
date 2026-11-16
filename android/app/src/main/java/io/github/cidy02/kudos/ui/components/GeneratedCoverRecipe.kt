@@ -210,7 +210,7 @@ data class GeneratedCoverRecipe(
                 else -> 3
             }
             val shapeSeed = hash((if (seriesKey == null) "shape:" else "series-shape:") + key)
-            val random = Random(seed = hash((if (seriesKey == null) "fine:" else "series-fine:") + key))
+            val random = Random(state = hash((if (seriesKey == null) "fine:" else "series-fine:") + key))
             val treatment = Ground.entries[random.integer(0, 3)]
             val ground = if (names.size > 1) Ground.CROSSOVER else treatment
             val rotation = round2(
