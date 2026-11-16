@@ -163,7 +163,6 @@ struct AO3SeriesDetailView: View {
             }
             .onDisappear {
                 loadTask?.cancel()
-                subscribeModel.cancelInFlight()
             }
             .sensoryFeedback(.success, trigger: subscribeModel.writeSuccesses)
             .sensoryFeedback(.error, trigger: subscribeModel.writeFailures)
