@@ -918,7 +918,7 @@ private fun PushedTopBar(
  * destination; it is a shell root on both. The bar stays put when a list scrolls.
  */
 @Composable
-private fun ShellNavigationBar(
+internal fun ShellNavigationBar(
     currentRoute: String?,
     showsWriting: Boolean,
     onNavigate: (String) -> Unit,
