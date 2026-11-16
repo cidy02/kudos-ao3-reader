@@ -29,6 +29,7 @@ nonisolated struct AO3SubscriptionsIndex: Sendable {
 /// typed errors — one place owns the politeness rules.
 actor AO3Client { // swiftlint:disable:this type_body_length
     static let shared = AO3Client()
+    private static let queueSourceCoordinator = AO3RequestCoordinator(limit: 1)
 
     private let base = "https://archiveofourown.org"
     private let session: URLSession
@@ -563,51 +564,72 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         }
     }
 
-    /// The queue-open count uses the same non-retrying 3-second request path as
-    /// Rank Top 100, with its own identifiable User-Agent feature.
+    /// One non-retrying queue count request, independent of Rank Top 100 state.
     func queueSourcePage(_ url: URL, authenticatedRequest: URLRequest? = nil) async throws -> AO3SearchPage {
         try Self.rejectIfUntrusted(url)
-        let holdKey = "queueSources.retryAfterUntil"
-        if let until = UserDefaults.standard.object(forKey: holdKey) as? Date,
-           until > Date() {
-            throw AO3Error.rateLimited(retryAfter: until.timeIntervalSinceNow)
+        if let page = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            .queryItems?.first(where: { $0.name == "page" })?.value, page != "1" {
+            throw AO3Error.network("Queue counts may fetch page 1 only.")
         }
-        let request = RankTop100PageRequest(page: 1, url: url, scope: "")
+        let holdKey = "queueSources.retryAfterUntil"
         do {
-            return try await AO3RequestCoordinator.shared.withSlot { [self] in
-                try await performRankTop100Fetch(
-                    request, authenticatedRequest: authenticatedRequest, feature: .queueSourceCounts
-                )
+            return try await Self.queueSourceCoordinator.withSlot { [self] in
+                try await AO3RequestCoordinator.shared.withSlot {
+                    try await pace()
+                    try await paceQueueSource()
+                    try Task.checkCancellation()
+                    if let until = UserDefaults.standard.object(forKey: holdKey) as? Date, until > Date() {
+                        throw AO3Error.rateLimited(retryAfter: until.timeIntervalSinceNow)
+                    }
+                    do {
+                        var request = authenticatedRequest ?? URLRequest(url: url)
+                        request.url = url
+                        request.setValue(AO3RequestDefaults.userAgent(feature: .queueSourceCounts),
+                                         forHTTPHeaderField: "User-Agent")
+                        let data: Data
+                        if authenticatedRequest != nil {
+                            request.httpShouldHandleCookies = false
+                            let (body, response) = try await session.data(for: request, delegate: redirectCookieRelay)
+                            defer { evictFromSharedCache(request, responseURL: response.url) }
+                            try checkStatus(response) { body }
+                            if Self.isLoginRedirect(path: response.url?.path) {
+                                throw AO3Error.authenticationRequired
+                            }
+                            data = body
+                        } else {
+                            let (body, response) = try await session.data(for: request)
+                            defer { Self.purgeSessionCookie(from: session.configuration.httpCookieStorage, url: url) }
+                            try checkStatus(response) { body }
+                            data = body
+                        }
+                        return try Self.parseSearchPage(Self.htmlString(from: data), page: 1)
+                    } catch AO3Error.rateLimited(let retryAfter) {
+                        // Save before releasing the coordinator slot to close the 429 race.
+                        let delay = retryAfter.flatMap { $0.isFinite ? max($0, 0) : nil } ?? 6 * 60 * 60
+                        let until = Date().addingTimeInterval(delay)
+                        let current = UserDefaults.standard.object(forKey: holdKey) as? Date ?? .distantPast
+                        UserDefaults.standard.set(max(until, current), forKey: holdKey)
+                        throw AO3Error.rateLimited(retryAfter: retryAfter)
+                    }
+                }
             }
-        } catch AO3Error.rateLimited(let retryAfter) {
-            if let retryAfter {
-                UserDefaults.standard.set(Date().addingTimeInterval(retryAfter), forKey: holdKey)
-            }
-            throw AO3Error.rateLimited(retryAfter: retryAfter)
+        } catch let error as URLError where error.code == .cancelled {
+            throw CancellationError()
         }
     }
 
     private func performRankTop100Fetch(
         _ pageRequest: RankTop100PageRequest,
-        authenticatedRequest: URLRequest?,
-        feature: AO3AutomatedFeature = .rankTop100
+        authenticatedRequest: URLRequest?
     ) async throws -> AO3SearchPage {
         var request = authenticatedRequest ?? URLRequest(url: pageRequest.url)
         request.url = pageRequest.url
         request.setValue(
-            AO3RequestDefaults.userAgent(feature: feature),
+            AO3RequestDefaults.userAgent(feature: .rankTop100),
             forHTTPHeaderField: "User-Agent"
         )
-        // Queue counts claim their 3 s slot after the global pacer so a wait
-        // there cannot compress the interval between actual queue requests.
-        switch feature {
-        case .rankTop100:
-            try await paceRankTop100()
-            try await pace()
-        case .queueSourceCounts:
-            try await pace()
-            try await paceQueueSource()
-        }
+        try await paceRankTop100()
+        try await pace()
 
         let data: Data
         if authenticatedRequest != nil {

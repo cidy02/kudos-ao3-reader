@@ -302,7 +302,8 @@ struct NewReadingQueueSheet: View {
     }
 
     private var coverPreview: some View {
-        let coverWorks = editingQueue?.memberships.compactMap(\.work) ?? seedWorks
+        let coverWorks = editingQueue?.memberships.compactMap(\.work)
+            .filter { !$0.isPendingDeletion } ?? seedWorks
         let backs = coverWorks
             .filter { !gate.isConcealed($0, enabled: hideMature) }
             .prefix(CoverStackLayout.maxBacks)

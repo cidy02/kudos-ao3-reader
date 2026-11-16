@@ -3334,6 +3334,11 @@ enum KudosBackupService {
                     link.lastCheckedAt = checked
                     link.newResultCount = source.newResultCount
                 }
+                // A visit clears the badge even when no new check has run.
+                if let opened = search.lastOpenedAt,
+                   opened > (link.lastCheckedAt ?? .distantPast) {
+                    link.newResultCount = 0
+                }
             }
         }
         // Searches this device still has that a trusted tombstone says were

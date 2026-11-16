@@ -1143,7 +1143,7 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
         guard let route = router.pendingQueueSearch,
               let saved = savedSearches.first(where: { $0.id == route.searchID })
         else { return }
-        router.pendingQueueSearch = nil
+        _ = router.consumeQueueSearchRoute()
         runSaved(saved, cachedPage: route.page)
         path = NavigationPath()
     }

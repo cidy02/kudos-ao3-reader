@@ -98,6 +98,37 @@ struct QueueSourceBackupTests {
         #expect(try context.fetch(FetchDescriptor<QueueSavedSearchLink>()).isEmpty)
     }
 
+    @Test func openingSearchClearsBadgeAcrossRestoreAndOlderCountCannotReviveIt() throws {
+        let source = try context()
+        let queue = ReadingQueue(name: "Queue")
+        let search = SavedSearch(name: "Search", filters: AO3SearchFilters())
+        let link = QueueSavedSearchLink(queue: queue, search: search)
+        link.lastCheckedAt = Date(timeIntervalSince1970: 1_000)
+        link.newResultCount = 3
+        source.insert(queue)
+        source.insert(search)
+        source.insert(link)
+        try source.save()
+        let beforeVisit = try KudosBackupService.makeContents(
+            works: [], bookmarks: [], fonts: [], readingQueues: [queue],
+            savedSearches: [search], defaults: try defaults()
+        )
+        search.lastOpenedAt = Date(timeIntervalSince1970: 2_000)
+        link.newResultCount = 0
+        try source.save()
+        let afterVisit = try KudosBackupService.makeContents(
+            works: [], bookmarks: [], fonts: [], readingQueues: [queue],
+            savedSearches: [search], defaults: try defaults()
+        )
+        let target = try context()
+        _ = try KudosBackupService.restore(beforeVisit, into: target, defaults: try defaults())
+        _ = try KudosBackupService.restore(afterVisit, into: target, defaults: try defaults())
+        let restored = try #require(try target.fetch(FetchDescriptor<ReadingQueue>()).first)
+        #expect(restored.searchLinks.first?.newResultCount == 0)
+        _ = try KudosBackupService.restore(beforeVisit, into: target, defaults: try defaults())
+        #expect(restored.searchLinks.first?.newResultCount == 0)
+    }
+
     @Test func clearingSourcesTravelsAsAnEmptyRecordedList() throws {
         let source = try context()
         let queue = ReadingQueue(name: "Queue")

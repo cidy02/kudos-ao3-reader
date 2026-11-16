@@ -68,6 +68,7 @@ struct ReadingQueueBrowserView: View {
     @State private var sourceCheckTask: Task<Void, Never>?
     @State private var sourceCheckQueueID: UUID?
     @State private var sourceOpeningTab: AppTab?
+    @State private var isPageVisible = false
     @State private var draggedWorkID: UUID?
     @State private var pendingCompactOrder: [UUID]?
     @State private var isSelecting = false
@@ -356,6 +357,7 @@ struct ReadingQueueBrowserView: View {
             isActive: !works.isEmpty && !isReordering
         )
             .onAppear {
+                isPageVisible = true
                 resolveInitialSelection()
                 sourceOpeningTab = router.selection
                 startSourceCheck()
@@ -370,15 +372,20 @@ struct ReadingQueueBrowserView: View {
                 if tab != sourceOpeningTab {
                     sourceCheckTask?.cancel()
                     sourceCheckQueueID = nil
+                } else {
+                    startSourceCheck()
                 }
             }
             .onChange(of: scenePhase) { _, phase in
                 if phase != .active {
                     sourceCheckTask?.cancel()
                     sourceCheckQueueID = nil
+                } else {
+                    startSourceCheck()
                 }
             }
             .onDisappear {
+                isPageVisible = false
                 sourceCheckTask?.cancel()
                 sourceCheckQueueID = nil
             }
@@ -951,13 +958,19 @@ extension ReadingQueueBrowserView {
     // MARK: - Actions
 
     private func startSourceCheck() {
+        guard isPageVisible, scenePhase == .active, router.selection == sourceOpeningTab else { return }
         guard let selectedQueueID,
               let selectedQueue = orderedQueues.first(where: { $0.id == selectedQueueID })
         else { return }
         guard sourceCheckQueueID != selectedQueueID else { return }
-        sourceCheckTask?.cancel()
+        let previous = sourceCheckTask
+        previous?.cancel()
         sourceCheckQueueID = selectedQueueID
-        sourceCheckTask = Task { await checkSources(in: selectedQueue) }
+        sourceCheckTask = Task {
+            await previous?.value
+            guard !Task.isCancelled else { return }
+            await checkSources(in: selectedQueue)
+        }
     }
 
     private func checkSources(in queue: ReadingQueue) async {
@@ -974,7 +987,7 @@ extension ReadingQueueBrowserView {
             fetch: { link in
                 guard let search = link.search,
                       let url = AO3Client.searchURL(filters: search.filters, page: 1)
-                else { throw CancellationError() }
+                else { throw AO3Error.network("Bad queue source URL.") }
                 return try await AO3Client.shared.queueSourcePage(url)
             },
             received: { link, page in

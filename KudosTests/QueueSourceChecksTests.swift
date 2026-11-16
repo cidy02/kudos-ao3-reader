@@ -5,6 +5,22 @@ import Testing
 @MainActor
 @Suite(.serialized)
 struct QueueSourceChecksTests {
+    private actor Signal {
+        private var fired = false
+        private var waiter: CheckedContinuation<Void, Never>?
+
+        func fire() {
+            fired = true
+            waiter?.resume()
+            waiter = nil
+        }
+
+        func wait() async {
+            if fired { return }
+            await withCheckedContinuation { waiter = $0 }
+        }
+    }
+
     private func page(_ dates: [String]) -> AO3SearchPage {
         AO3SearchPage(works: dates.enumerated().map { index, date in
             var work = AO3WorkSummary.subscription(id: index + 1, title: "Work", authors: [])
@@ -17,7 +33,8 @@ struct QueueSourceChecksTests {
         let now = Date(timeIntervalSince1970: 100_000)
         let checks = [now.addingTimeInterval(-30), nil, now.addingTimeInterval(-50_000),
                       now.addingTimeInterval(-40_000), now.addingTimeInterval(-30_000),
-                      now.addingTimeInterval(-22_000), now.addingTimeInterval(-21_000)]
+                      now.addingTimeInterval(-22_000), now.addingTimeInterval(-21_000),
+                      now.addingTimeInterval(-21_601)]
         let selected = QueueSourceChecks.eligible(Array(checks.indices), checkedAt: { checks[$0] }, now: now)
         #expect(selected == [1, 2, 3, 4, 5])
         #expect(QueueSourceChecks.eligible([0], checkedAt: { _ in now.addingTimeInterval(-21_599) }, now: now).isEmpty)
@@ -61,6 +78,55 @@ struct QueueSourceChecksTests {
             fetch: { _ in throw CancellationError() }, received: { _, _ in }
         )
         #expect(attempts == [1])
+    }
+
+    @Test func cancellingThePageTaskStopsAnInFlightPass() async {
+        let started = Signal()
+        var attempts: [Int] = []
+        let task = Task {
+            await QueueSourceChecks.run(
+                sources: [1, 2], checkedAt: { _ in nil }, now: Date.init,
+                sleep: { _ in }, attempt: { source, _ in attempts.append(source); return true },
+                fetch: { _ in
+                    await started.fire()
+                    try await Task.sleep(for: .seconds(2))
+                    return page([])
+                }, received: { _, _ in }
+            )
+        }
+        await started.wait()
+        task.cancel()
+        await task.value
+        #expect(attempts == [1])
+    }
+
+    @Test func forbiddenAndMaintenanceStopThePass() async {
+        for failure in [AO3Error.forbidden, AO3Error.maintenance] {
+            var attempts: [Int] = []
+            await QueueSourceChecks.run(
+                sources: [1, 2], checkedAt: { _ in nil }, now: Date.init,
+                sleep: { _ in }, attempt: { source, _ in attempts.append(source); return true },
+                fetch: { _ in throw failure }, received: { _, _ in }
+            )
+            #expect(attempts == [1])
+        }
+    }
+
+    @Test func oneRequestIsInFlightAtATime() async {
+        var inFlight = 0
+        var peak = 0
+        await QueueSourceChecks.run(
+            sources: [1, 2, 3], checkedAt: { _ in nil }, now: Date.init,
+            sleep: { _ in }, attempt: { _, _ in true },
+            fetch: { _ in
+                inFlight += 1
+                peak = max(peak, inFlight)
+                await Task.yield()
+                inFlight -= 1
+                return page([])
+            }, received: { _, _ in }
+        )
+        #expect(peak == 1)
     }
 
     @Test func countUsesOnlyFirstPageAndCapsBadge() {

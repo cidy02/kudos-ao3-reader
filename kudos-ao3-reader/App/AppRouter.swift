@@ -403,6 +403,12 @@ final class AppRouter {
     var pendingTagSearch: AO3TagSearch?
     var pendingQueueSearch: QueueSearchRoute?
     var currentQueueID: UUID?
+    func consumeQueueSearchRoute() -> QueueSearchRoute? {
+        guard let route = pendingQueueSearch else { return nil }
+        currentQueueID = route.queueID
+        pendingQueueSearch = nil
+        return route
+    }
     /// A tag's works page to show natively in Browse (e.g. an AO3 link tapped in a
     /// work's preface). Consumed + cleared by `BrowseView`.
     var pendingTagWorks: AO3TagWorksRequest?

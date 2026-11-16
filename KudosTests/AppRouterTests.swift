@@ -4,6 +4,16 @@ import Testing
 
 @MainActor
 struct AppRouterTests {
+    @Test func consumingFindMoreKeepsTheCurrentQueue() {
+        let router = AppRouter()
+        let queueID = UUID()
+        let route = QueueSearchRoute(searchID: UUID(), queueID: queueID, page: nil)
+        router.pendingQueueSearch = route
+        #expect(router.consumeQueueSearchRoute()?.id == route.id)
+        #expect(router.pendingQueueSearch == nil)
+        #expect(router.currentQueueID == queueID)
+    }
+
     @Test func mainTabsFollowTheWritingTabRule() {
         let router = AppRouter()
         #expect(router.mainTabs == [.home, .library, .browse])
