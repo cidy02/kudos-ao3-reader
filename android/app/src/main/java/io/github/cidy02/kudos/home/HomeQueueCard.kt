@@ -61,11 +61,12 @@ fun HomeQueueCard(
         CoverStack(
             kind = CoverStackKind.Queue,
             name = queue.displayName,
-            hue = queueHue,
+            hue = queue.hue,
             pickedHex = queue.colorHex,
             backs = backs.take(CoverStackLayout.maxBacks),
             width = 72.dp,
-            height = 72.dp
+            height = 72.dp,
+            identity = queue.id
         )
         Column(
             modifier = Modifier.weight(1f),

@@ -8,23 +8,26 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.outlined.VisibilityOff
-import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
@@ -33,6 +36,8 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -42,12 +47,16 @@ import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.home.HomeFacts
 import io.github.cidy02.kudos.library.readingProgressFraction
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
-import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.contentDescription
+import io.github.cidy02.kudos.ui.components.GeneratedCoverRecipe
+import io.github.cidy02.kudos.ui.components.GeneratedCoverView
+import io.github.cidy02.kudos.ui.components.LocalWorkEpubFileResolver
+import io.github.cidy02.kudos.ui.components.generatedCoverRecipe
 import io.github.cidy02.kudos.ui.components.statusChips
 import io.github.cidy02.kudos.works.DownloadQueue
 import io.github.cidy02.kudos.works.DownloadQueueStatus
 import io.github.cidy02.kudos.works.WorkTags
+import java.io.File
+import kotlin.math.roundToInt
 
 /** `CarouselCardMetrics`: 164 × 164√2, work corner 16, queue tile corner 12. */
 object HomeCardMetrics {
@@ -115,102 +124,122 @@ fun SubjectWorkCoverCard(
     isSelected: Boolean = false
 ) {
     val tokens = LocalKudosTokens.current
-    val cardSize = scaledHomeCardSize()
-    val ringDiameter = SubjectMetrics.ringDiameter * LocalDensity.current.fontScale
-    val hue = HomeFacts.workHue(work.workFandoms, work.title)
-    val palette = SubjectPalette.fromHue(hue, tokens.theme)
-    val shape = RoundedCornerShape(HomeCardMetrics.radius)
-    val dim by animateFloatAsState(
-        targetValue = if (downloadFraction != null) 1f else 0f,
-        animationSpec = tween(250),
-        label = "coverDim"
-    )
-    val resolved = HomeFacts.resolvedCoverProgress(
+    val epubResolver = LocalWorkEpubFileResolver.current
+    val recipe = remember(
+        work.id,
+        work.ao3WorkID,
+        work.sourceUrl,
+        work.ao3SeriesID,
+        work.seriesPosition,
+        work.seriesUrl,
+        work.title,
+        work.author,
+        work.authorIdentitiesJSON,
+        work.workFandoms,
+        work.workTags,
+        work.workFreeforms,
+        work.workTagsFetched,
+        work.wordCount,
+        work.chapters,
+        work.isComplete,
+        work.datePublished,
+        work.dateUpdated
+    ) {
+        work.generatedCoverRecipe()
+    }
+    val epubFile = remember(work.id, work.hasEpub, obscured, epubResolver) {
+        if (!obscured && work.hasEpub) epubResolver(work.id) else null
+    }
+    val resolvedProgress = HomeFacts.resolvedCoverProgress(
         explicit = progress,
         footer = footer,
         isFinished = work.isFinished,
         saved = work.readingProgressFraction()
     )
-    Box(
-        modifier
-            .padding(top = 2.dp, bottom = 8.dp)
-            .size(cardSize.width, cardSize.height)
-            .downloadDimmed(dim)
+    val accessibility = isAccessibilityFontScale()
+    val metaLine = remember(resolvedProgress, work.chapters, footer, work.wordCount) {
+        workCoverMetaLine(
+            progress = resolvedProgress,
+            chapters = work.chapters,
+            footer = footer,
+            words = work.wordCount
+        )
+    }
+    val plusBadge = remember(footer) { footer?.let(::updateMarkerText) }
+
+    WorkSummaryCoverSurface(
+        recipe = recipe,
+        modifier = modifier,
+        epubFile = epubFile,
+        epubWorkId = work.id,
+        obscured = obscured,
+        isSelecting = isSelecting,
+        isSelected = isSelected,
+        downloadFraction = downloadFraction
     ) {
-        Box(
-            Modifier
-                .fillMaxSize()
-                .then(if (obscured) Modifier.blur(8.dp) else Modifier)
-                .hiddenMatureWorkSemantics(obscured, isSelecting, isSelected)
-        ) {
-            CoverSurface(palette = palette, shape = shape, hero = false) {
-                Column(
-                    Modifier
-                        .fillMaxSize()
-                        .padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(5.dp)
+        if (obscured) {
+            Text(
+                text = "Hidden mature work",
+                color = tokens.secondaryInk,
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        } else {
+            if (downloadFraction != null) {
+                CoverProgressBar(
+                    progress = downloadFraction,
+                    accessibilityLabel = "Download progress"
+                )
+            } else if (resolvedProgress != null) {
+                CoverProgressBar(
+                    progress = resolvedProgress,
+                    accessibilityLabel = "Reading progress"
+                )
+            }
+            HomeStatusTray(
+                rating = work.rating,
+                categories = work.workCategories,
+                warnings = work.workWarnings,
+                isComplete = work.knownCompletion,
+                arrangement = HomeStatusArrangement.Strip,
+                tileSize = 24.dp,
+                announces = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+            if (metaLine != null || plusBadge != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    val fandom = HomeFacts.primaryFandom(work.workFandoms)
-                    if (fandom != null) {
-                        SubjectKicker(text = fandom, palette = palette, size = 9.sp)
-                    }
                     Text(
-                        text = work.title,
-                        color = tokens.primaryInk,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        // iOS caps the title at two lines without reserving the second,
-                        // so a one-line title leaves the ring its full 68dp.
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
+                        text = metaLine.orEmpty(),
+                        color = tokens.secondaryInk,
+                        fontSize = 12.sp,
+                        maxLines = if (accessibility) Int.MAX_VALUE else 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
                     )
-                    Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        when {
-                            resolved != null || downloadFraction != null -> WorkReadingOrDownloadRing(
-                                downloadFraction = downloadFraction,
-                                progress = resolved,
-                                state = if ((resolved ?: 0.0) >= 1.0) "Finished" else "Reading",
-                                diameter = ringDiameter
-                            )
-                            footer != null -> {
-                                val plus = updateMarkerText(footer)
-                                if (plus != null) UpdateMarker(plus, spoken = newChaptersSpoken(plus))
-                                else UpdateMarker(footer, confirmed = false)
-                            }
-                        }
+                    if (plusBadge != null) {
+                        UpdateMarker(plusBadge, spoken = newChaptersSpoken(plusBadge))
                     }
-                    if (work.author.isNotBlank()) {
-                        Text(
-                            text = work.author,
-                            color = tokens.primaryInk.withOpacity(0.78),
-                            fontSize = 12.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                    HomeStatusTray(
-                        rating = work.rating,
-                        categories = work.workCategories,
-                        warnings = work.workWarnings,
-                        isComplete = work.knownCompletion,
-                        arrangement = HomeStatusArrangement.Strip,
-                        tileSize = 24.dp,
-                        announces = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
                 }
             }
-        }
-        if (obscured && !isSelecting) {
-            RevealCapsule(Modifier.align(Alignment.Center))
-        }
-        if (isSelecting) {
-            SelectionChrome(isSelected = isSelected, shape = shape)
+            work.preservationBadge?.let { badge ->
+                Text(
+                    text = badge,
+                    color = tokens.secondaryInk,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
 }
 
-/** Remote subscription card. Centre slot is the AO3 updated date, not a reading ring. */
+/** Remote subscription / author card. Uses the same generated cover and slot layout as local cards. */
 @Composable
 fun SubjectRemoteCoverCard(
     summary: AO3WorkSummary,
@@ -219,83 +248,184 @@ fun SubjectRemoteCoverCard(
     obscured: Boolean = false
 ) {
     val tokens = LocalKudosTokens.current
-    val cardSize = scaledHomeCardSize()
-    val hue = HomeFacts.workHue(summary.fandoms, summary.title)
-    val palette = SubjectPalette.fromHue(hue, tokens.theme)
-    val shape = RoundedCornerShape(HomeCardMetrics.radius)
-    Box(modifier.padding(top = 2.dp, bottom = 8.dp).size(cardSize.width, cardSize.height)) {
-        Box(
-            Modifier
-                .fillMaxSize()
-                .then(if (obscured) Modifier.blur(8.dp) else Modifier)
-                .hiddenMatureWorkSemantics(obscured)
-        ) {
-        CoverSurface(palette = palette, shape = shape, hero = false) {
-            Column(
-                Modifier
-                    .fillMaxSize()
-                    .padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(5.dp)
-            ) {
-                val fandom = HomeFacts.primaryFandom(summary.fandoms)
-                if (fandom != null) {
-                    SubjectKicker(
-                        text = fandom,
-                        palette = palette,
-                        size = 9.sp,
-                        modifier = Modifier.padding(end = if (showsProvenance) 36.dp else 0.dp)
-                    )
-                }
+    val accessibility = isAccessibilityFontScale()
+    val recipe = remember(summary) { summary.generatedCoverRecipe() }
+    val remoteMeta = remember(summary.wordCount, summary.chapters, summary.updatedDate) {
+        buildList {
+            summary.wordCount?.takeIf { it > 0 }?.let { add("${it.compactCount()} words") }
+            if (summary.chapters.isNotBlank()) add(summary.chapters)
+            if (summary.updatedDate.isNotBlank()) add(summary.updatedDate)
+        }.joinToString(" · ").ifEmpty { null }
+    }
+
+    WorkSummaryCoverSurface(
+        recipe = recipe,
+        modifier = modifier,
+        obscured = obscured,
+        showsProvenance = showsProvenance
+    ) {
+        if (obscured) {
+            Text(
+                text = "Hidden mature work",
+                color = tokens.secondaryInk,
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        } else {
+            HomeStatusTray(
+                rating = summary.rating,
+                categories = summary.categories,
+                warnings = summary.warnings,
+                isComplete = summary.isComplete,
+                arrangement = HomeStatusArrangement.Strip,
+                tileSize = 24.dp,
+                announces = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+            if (remoteMeta != null) {
                 Text(
-                    text = summary.title,
-                    color = tokens.primaryInk,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    minLines = 2,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(end = if (showsProvenance && fandom == null) 36.dp else 0.dp)
-                )
-                Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    if (summary.updatedDate.isNotBlank()) {
-                        UpdateBadge(summary.updatedDate)
-                    }
-                }
-                Text(
-                    text = summary.authorText,
-                    color = tokens.primaryInk.withOpacity(0.78),
+                    text = remoteMeta,
+                    color = tokens.secondaryInk,
                     fontSize = 12.sp,
-                    maxLines = 1,
+                    maxLines = if (accessibility) Int.MAX_VALUE else 2,
                     overflow = TextOverflow.Ellipsis
-                )
-                HomeStatusTray(
-                    rating = summary.rating,
-                    categories = summary.categories,
-                    warnings = summary.warnings,
-                    isComplete = summary.isComplete,
-                    arrangement = HomeStatusArrangement.Strip,
-                    tileSize = 24.dp,
-                    announces = true,
-                    modifier = Modifier.fillMaxWidth()
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun WorkSummaryCoverSurface(
+    recipe: GeneratedCoverRecipe,
+    modifier: Modifier = Modifier,
+    epubFile: File? = null,
+    epubWorkId: String? = null,
+    obscured: Boolean = false,
+    isSelecting: Boolean = false,
+    isSelected: Boolean = false,
+    showsProvenance: Boolean = false,
+    downloadFraction: Double? = null,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    val cardSize = scaledHomeCardSize()
+    val coverShape = RoundedCornerShape(HomeCardMetrics.radius)
+    val dim by animateFloatAsState(
+        targetValue = if (downloadFraction != null) 1f else 0f,
+        animationSpec = tween(250),
+        label = "coverDim"
+    )
+    BoxWithConstraints(
+        modifier = modifier
+            .padding(top = 2.dp, bottom = 8.dp)
+            .downloadDimmed(dim)
+    ) {
+        val coverWidth = when {
+            constraints.hasBoundedWidth && constraints.minWidth == constraints.maxWidth -> maxWidth
+            constraints.hasBoundedWidth -> minOf(cardSize.width, maxWidth)
+            else -> cardSize.width
         }
-        if (obscured) RevealCapsule(Modifier.align(Alignment.Center))
-        if (showsProvenance) {
-            Text(
-                text = "AO3",
-                color = tokens.secondaryInk,
-                fontSize = 9.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(10.dp)
-                    .background(tokens.glassFill(0.16), CircleShape)
-                    .padding(horizontal = 6.dp, vertical = 2.dp)
+        val coverHeight = coverWidth * 1.42f
+        Column(
+            modifier = Modifier
+                .width(coverWidth)
+                .hiddenMatureWorkSemantics(obscured, isSelecting, isSelected),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Box(modifier = Modifier.size(coverWidth, coverHeight)) {
+                GeneratedCoverView(
+                    recipe = recipe,
+                    width = coverWidth,
+                    height = coverHeight,
+                    epubFile = if (obscured) null else epubFile,
+                    epubWorkId = if (obscured) null else epubWorkId,
+                    showsWords = !obscured,
+                    showsArt = !obscured,
+                    cornerRadius = HomeCardMetrics.radius,
+                    modifier = if (obscured) Modifier.blur(6.dp) else Modifier
+                )
+                if (obscured && !isSelecting) {
+                    RevealCapsule(Modifier.align(Alignment.Center))
+                }
+                if (showsProvenance && !obscured) {
+                    Text(
+                        text = "AO3",
+                        color = Color.White.copy(alpha = 0.8f),
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.64.sp,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(10.dp)
+                            .background(Color.Black.copy(alpha = 0.4f), CircleShape)
+                            .padding(horizontal = 6.dp, vertical = 3.dp)
+                            .clearAndSetSemantics { contentDescription = "From AO3" }
+                    )
+                }
+                if (isSelecting) {
+                    SelectionChrome(isSelected = isSelected, shape = coverShape)
+                }
+            }
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                content = content
             )
         }
     }
+}
+
+@Composable
+private fun CoverProgressBar(
+    progress: Double,
+    accessibilityLabel: String
+) {
+    val tokens = LocalKudosTokens.current
+    val fraction = progress.coerceIn(0.0, 1.0).toFloat()
+    val percent = (fraction * 100f).roundToInt()
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(3.dp)
+            .clip(CircleShape)
+            .background(tokens.glassFill(0.14))
+            .clearAndSetSemantics { contentDescription = "$accessibilityLabel: $percent percent" }
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(fraction)
+                .height(3.dp)
+                .clip(CircleShape)
+                .background(tokens.accentInk)
+        )
+    }
+}
+
+private fun workCoverMetaLine(
+    progress: Double?,
+    chapters: String,
+    footer: String?,
+    words: Int
+): String? {
+    if (progress != null) {
+        val posted = chapters.substringBefore('/').trim().toIntOrNull() ?: 0
+        val total = chapters.substringAfter('/', "").trim().takeIf { it.isNotEmpty() && it != "?" }?.toIntOrNull()
+        val fraction = progress.coerceIn(0.0, 1.0)
+        val parts = buildList {
+            if (posted > 0) {
+                val current = (kotlin.math.round(fraction * (posted - 1)).toInt() + 1).coerceIn(1, posted)
+                add(if (total != null) "Ch $current of $total" else "Ch $current")
+            }
+            add("${(fraction * 100.0).roundToInt()}%")
+        }
+        return parts.joinToString(" · ")
+    }
+    if (footer != null && updateMarkerText(footer) == null) return footer
+    return buildList {
+        if (words > 0) add("${words.compactCount()} words")
+        if (chapters.isNotBlank()) add(chapters)
+    }.joinToString(" · ").ifEmpty { null }
 }
 
 @Composable

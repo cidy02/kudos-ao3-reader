@@ -1,8 +1,7 @@
 package io.github.cidy02.kudos.ui.components
 
-import android.graphics.Paint
-import android.graphics.Typeface
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,25 +15,18 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import io.github.cidy02.kudos.core.model.SavedWork
-import io.github.cidy02.kudos.home.HomeFacts
 import io.github.cidy02.kudos.ui.subject.LocalKudosTokens
 import io.github.cidy02.kudos.ui.subject.ReaderTheme
-import io.github.cidy02.kudos.ui.subject.SubjectPalette
-import io.github.cidy02.kudos.ui.subject.hsb
-import io.github.cidy02.kudos.ui.subject.parseStoredColor
 import io.github.cidy02.kudos.ui.subject.withOpacity
 import kotlin.math.PI
-import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
@@ -284,8 +276,11 @@ fun CoverStack(
             val back = layout.backs[index]
             BackCover(
                 work = backs[index],
+                width = back.frame.width.dp,
+                height = back.frame.height.dp,
                 dimming = back.dimming,
                 shape = shape,
+                cornerRadius = layout.cornerRadius.dp,
                 modifier = Modifier
                     .offset(x = back.frame.minX.dp, y = back.frame.minY.dp)
                     .size(width = back.frame.width.dp, height = back.frame.height.dp)
@@ -318,18 +313,19 @@ fun CoverStack(
 }
 
 /**
- * Convenience overload for a collection or queue's own card in front (colour gradient + serif initial).
+ * Convenience overload for a collection or queue's own generated cover in front.
  */
 @Composable
 fun CoverStack(
     kind: CoverStackKind,
     name: String,
-    hue: Double,
+    hue: Double?,
     pickedHex: String?,
     backs: List<SavedWork>,
     width: Dp,
     height: Dp,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    identity: String? = null
 ) {
     CoverStack(
         kind = kind,
@@ -343,7 +339,10 @@ fun CoverStack(
             name = name,
             hue = hue,
             pickedHex = pickedHex,
-            coverWidth = layout.front.width.dp
+            coverWidth = layout.front.width.dp,
+            coverHeight = layout.front.height.dp,
+            cornerRadius = layout.cornerRadius.dp,
+            identity = identity
         )
     }
 }
@@ -352,88 +351,72 @@ fun CoverStack(
 fun CoverStackNameFace(
     kind: CoverStackKind,
     name: String,
-    hue: Double,
+    hue: Double?,
     pickedHex: String?,
     coverWidth: Dp,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    coverHeight: Dp = coverWidth / CoverStackLayout.coverAspect.toFloat(),
+    cornerRadius: Dp = coverWidth * 0.125f,
+    identity: String? = null
 ) {
-    val tokens = LocalKudosTokens.current
-    val initial = remember(name) {
-        name.trim().firstOrNull()?.uppercaseChar()?.toString().orEmpty()
-    }
-    val colors = remember(kind, tokens.theme, hue, pickedHex) {
-        when (kind) {
-            CoverStackKind.Collection -> {
-                val (start, end) = carouselCollectionGradient(tokens.theme, hue, pickedHex)
-                listOf(start, end)
-            }
-            CoverStackKind.Queue -> {
-                val base = pickedHex?.let(::parseStoredColor)
-                    ?: SubjectPalette.fromHue(hue, tokens.theme).accent
-                listOf(base.mixWith(Color.Black, 0.38), base)
-            }
-        }
-    }
-    val paint = remember {
-        Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.argb((0.15f * 255).toInt(), 255, 255, 255)
-            typeface = Typeface.create(Typeface.SERIF, Typeface.BOLD)
-        }
-    }
-    Canvas(modifier = modifier.fillMaxSize()) {
-        drawRect(
-            brush = Brush.linearGradient(
-                colors = colors,
-                start = Offset(size.width * 0.2887f, size.height * 0.0468f),
-                end = Offset(size.width * 0.7113f, size.height * 0.9532f)
-            )
+    val recipe = remember(name, identity, hue, pickedHex) {
+        val fallback = hue?.let { (it * 360.0).toInt() }
+            ?: identity?.let { GeneratedCoverRecipe.collectionHueForIdentity(it) }
+            ?: (GeneratedCoverRecipe.hash("collection:$name") % 360u).toInt()
+        val swatch = GeneratedCoverRecipe.collectionSwatch(pickedHex, fallback = fallback)
+        GeneratedCoverRecipe.forCollection(
+            name = name,
+            identity = identity,
+            hue = swatch.first,
+            graphite = swatch.second == 0.012
         )
-        if (initial.isNotEmpty()) {
-            val widthPx = coverWidth.toPx()
-            paint.textSize = widthPx * 1.05f
-            drawContext.canvas.nativeCanvas.drawText(
-                initial,
-                -widthPx * 0.06f,
-                size.height + widthPx * 0.11f,
-                paint
-            )
-        }
     }
+    GeneratedCoverView(
+        recipe = recipe,
+        width = coverWidth,
+        height = coverHeight,
+        showsWords = false,
+        cornerRadius = cornerRadius,
+        modifier = modifier
+    )
 }
 
 @Composable
 private fun BackCover(
     work: SavedWork,
+    width: Dp,
+    height: Dp,
     dimming: Double,
     shape: RoundedCornerShape,
+    cornerRadius: Dp,
     modifier: Modifier = Modifier
 ) {
     val tokens = LocalKudosTokens.current
-    val hue = remember(work.workFandoms, work.title) {
-        workArtHueDegrees(work.workFandoms, work.title)
+    val resolveEpub = LocalWorkEpubFileResolver.current
+    val epubFile = remember(work.id, work.hasEpub) {
+        if (work.hasEpub) resolveEpub(work.id) else null
     }
-    val colors = remember(hue) {
-        listOf(
-            hslColor(hue.toDouble(), saturation = 0.46, lightness = 0.27),
-            hslColor(((hue + 22) % 360).toDouble(), saturation = 0.50, lightness = 0.41)
-        )
-    }
+    val recipe = remember(work) { work.generatedCoverRecipe() }
     Box(
         modifier = modifier
             .clip(shape)
             .border(0.5.dp, tokens.glassStroke(0.10), shape)
     ) {
-        Canvas(Modifier.fillMaxSize()) {
-            drawRect(
-                brush = Brush.linearGradient(
-                    colors = colors,
-                    start = Offset(size.width * 0.2887f, size.height * 0.0468f),
-                    end = Offset(size.width * 0.7113f, size.height * 0.9532f)
-                )
+        GeneratedCoverView(
+            recipe = recipe,
+            width = width,
+            height = height,
+            epubFile = epubFile,
+            epubWorkId = work.id,
+            showsWords = false,
+            cornerRadius = cornerRadius
+        )
+        if (dimming > 0.0) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = dimming.toFloat().coerceIn(0f, 1f)))
             )
-            if (dimming > 0.0) {
-                drawRect(Color.Black.copy(alpha = dimming.toFloat().coerceIn(0f, 1f)))
-            }
         }
     }
 }
@@ -485,63 +468,6 @@ private fun CornerTab(
             }
         }
     }
-}
-
-internal fun carouselCollectionGradient(
-    theme: ReaderTheme,
-    hue: Double,
-    pickedHex: String? = null
-): Pair<Color, Color> {
-    val picked = pickedHex?.let(::parseStoredColor)
-    if (picked != null) {
-        return picked to picked.mixWith(Color.Black, 0.30)
-    }
-    return when (theme) {
-        ReaderTheme.Dark, ReaderTheme.Oled ->
-            hsb(hue, 0.50, 0.80) to hsb(hue, 0.62, 0.55)
-        ReaderTheme.Light ->
-            hsb(hue, 0.45, 0.85) to hsb(hue, 0.58, 0.62)
-        ReaderTheme.Sepia ->
-            hsb(hue, 0.40, 0.80) to hsb(hue, 0.52, 0.58)
-    }
-}
-
-private fun workArtHueDegrees(fandoms: List<String>, title: String): Int {
-    val familyHue = (HomeFacts.workHue(fandoms, title) * 360.0).toInt()
-    val seed = title.fold(0) { acc, ch -> (acc * 31 + ch.code) and 0x7fffffff }
-    val shade = (seed % 29) - 14
-    return (familyHue + shade + 360) % 360
-}
-
-private fun Color.mixWith(other: Color, fraction: Double): Color {
-    val t = fraction.toFloat().coerceIn(0f, 1f)
-    return Color(
-        red = red + (other.red - red) * t,
-        green = green + (other.green - green) * t,
-        blue = blue + (other.blue - blue) * t,
-        alpha = alpha + (other.alpha - alpha) * t
-    )
-}
-
-private fun hslColor(hue: Double, saturation: Double, lightness: Double): Color {
-    val chroma = (1.0 - abs(2.0 * lightness - 1.0)) * saturation
-    val normalizedHue = ((hue % 360.0) + 360.0) % 360.0
-    val sector = normalizedHue / 60.0
-    val second = chroma * (1.0 - abs(sector % 2.0 - 1.0))
-    val (r, g, b) = when {
-        sector < 1.0 -> Triple(chroma, second, 0.0)
-        sector < 2.0 -> Triple(second, chroma, 0.0)
-        sector < 3.0 -> Triple(0.0, chroma, second)
-        sector < 4.0 -> Triple(0.0, second, chroma)
-        sector < 5.0 -> Triple(second, 0.0, chroma)
-        else -> Triple(chroma, 0.0, second)
-    }
-    val match = lightness - chroma / 2.0
-    return Color(
-        red = (r + match).toFloat().coerceIn(0f, 1f),
-        green = (g + match).toFloat().coerceIn(0f, 1f),
-        blue = (b + match).toFloat().coerceIn(0f, 1f)
-    )
 }
 
 private fun stackFrontShadow(theme: ReaderTheme, shape: RoundedCornerShape): Modifier {

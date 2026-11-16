@@ -36,7 +36,15 @@ import kotlinx.coroutines.ensureActive
 internal suspend fun ReadingQueueRepository.queuePreviews(): List<LibraryQueuePreview> {
     ensureSavedForLaterQueue()
     return listQueues().map { queue ->
-        LibraryQueuePreview(id = queue.id, name = queue.displayName, workCount = listWorks(queue.id).size)
+        val works = listWorks(queue.id)
+        LibraryQueuePreview(
+            id = queue.id,
+            name = queue.displayName,
+            workCount = works.size,
+            hue = queue.hue,
+            colorHex = queue.colorHex,
+            previewWorks = works.mapNotNull { it.work }
+        )
     }
 }
 

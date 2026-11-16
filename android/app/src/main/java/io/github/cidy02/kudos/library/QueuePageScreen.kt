@@ -331,16 +331,16 @@ fun QueuePageScreen(
                 val visibleHeaderWorks = works.filter {
                     LibraryPrivacy.visibility(it, shownSettings.privacy, reveal) == LibraryPrivacyVisibility.Visible
                 }
-                val queueHue = current.hue ?: ReadingQueueFacts.coverHue(current.displayName)
                 val coverStack: @Composable () -> Unit = {
                     io.github.cidy02.kudos.ui.components.CoverStack(
                         kind = io.github.cidy02.kudos.ui.components.CoverStackKind.Queue,
                         name = current.displayName,
-                        hue = queueHue,
+                        hue = current.hue,
                         pickedHex = current.colorHex,
                         backs = visibleHeaderWorks.take(io.github.cidy02.kudos.ui.components.CoverStackLayout.maxBacks),
                         width = 96.dp,
-                        height = 96.dp
+                        height = 96.dp,
+                        identity = current.id
                     )
                 }
                 if (io.github.cidy02.kudos.ui.subject.isAccessibilityFontScale()) {

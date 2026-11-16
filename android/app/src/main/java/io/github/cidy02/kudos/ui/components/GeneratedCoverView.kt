@@ -109,7 +109,8 @@ fun GeneratedCoverView(
     epubWorkId: String? = null,
     height: Dp? = null,
     showsWords: Boolean = true,
-    showsArt: Boolean = true
+    showsArt: Boolean = true,
+    cornerRadius: Dp = width * 0.125f
 ) {
     val coverHeight = height ?: (width * 1.42f)
     val context = LocalContext.current
@@ -147,7 +148,7 @@ fun GeneratedCoverView(
     Box(
         modifier = modifier
             .size(width = width, height = coverHeight)
-            .clip(RoundedCornerShape(width * 0.125f))
+            .clip(RoundedCornerShape(cornerRadius))
             .then(semanticsModifier)
     ) {
         val currentEmbedded = embeddedImage

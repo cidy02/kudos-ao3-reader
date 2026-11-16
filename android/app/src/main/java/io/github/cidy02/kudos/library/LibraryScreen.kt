@@ -124,6 +124,9 @@ import io.github.cidy02.kudos.data.local.dao.ReadingLogDao
 import io.github.cidy02.kudos.data.preferences.SettingsRepository
 import io.github.cidy02.kudos.app.PrivacyGate
 import io.github.cidy02.kudos.app.LocalShellOverlayState
+import io.github.cidy02.kudos.ui.components.CoverStack
+import io.github.cidy02.kudos.ui.components.CoverStackKind
+import io.github.cidy02.kudos.ui.components.CoverStackLayout
 import io.github.cidy02.kudos.ui.components.EmptyStateCard
 import io.github.cidy02.kudos.ui.components.ErrorStateCard
 import io.github.cidy02.kudos.ui.components.LoadingStateCard
@@ -817,6 +820,9 @@ private fun LibraryContent(
                         )
                         shelf.id == LibraryShelf.Queues.id -> ReadingQueuesShelf(
                             queues = state.readingQueues,
+                            visibleWorkIds = remember(state.collectionMembers) {
+                                LibraryPrivacy.nameableWorks(state.collectionMembers).map { it.id }.toSet()
+                            },
                             collapsed = collapsed["queues"],
                             onToggleCollapsed = { collapsed.toggle("queues") },
                             onSeeAll = onOpenReadingQueues,
@@ -2328,6 +2334,7 @@ private fun ContextMenuItem(
 @Composable
 private fun ReadingQueuesShelf(
     queues: List<LibraryQueuePreview>,
+    visibleWorkIds: Set<String>,
     collapsed: Boolean,
     onToggleCollapsed: () -> Unit,
     onSeeAll: () -> Unit,
@@ -2345,7 +2352,9 @@ private fun ReadingQueuesShelf(
         AnimatedVisibility(visible = !collapsed) {
             LazyRow(
                 contentPadding = PaddingValues(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(WorkCoverCardMetrics.shelfSpacing),
+                horizontalArrangement = Arrangement.spacedBy(
+                    io.github.cidy02.kudos.ui.subject.SubjectWorkCardMetrics.coverStackSpacing
+                ),
                 verticalAlignment = Alignment.Top
             ) {
                 item(key = "new-queue") {
@@ -2356,13 +2365,11 @@ private fun ReadingQueuesShelf(
                     )
                 }
                 items(queues, key = { "queue-${it.id}" }) { queue ->
-                    NamedShelfTile(
-                        title = queue.name,
-                        subtitle = when (queue.workCount) {
-                            0 -> "Empty"
-                            1 -> "1 work"
-                            else -> "${queue.workCount} works"
-                        },
+                    QueueShelfTile(
+                        queue = queue,
+                        visibleBacks = queue.previewWorks
+                            .filter { it.id in visibleWorkIds }
+                            .take(CoverStackLayout.maxBacks),
                         onClick = { onOpenQueue(queue.id) }
                     )
                 }
@@ -2512,44 +2519,49 @@ private fun CreateShelfTile(
 }
 
 @Composable
-private fun NamedShelfTile(
-    title: String,
-    subtitle: String,
+private fun QueueShelfTile(
+    queue: LibraryQueuePreview,
+    visibleBacks: List<SavedWork>,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val tokens = LocalKudosTokens.current
+    val cardWidth = io.github.cidy02.kudos.ui.subject.SubjectWorkCardMetrics.width
+    val tileHeight = cardWidth * (140f / 150f)
+    val subtitle = when (queue.workCount) {
+        0 -> "Empty"
+        1 -> "1 work"
+        else -> "${queue.workCount} works"
+    }
     Column(
-        modifier = modifier.width(WorkCoverCardMetrics.width),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+        modifier = modifier
+            .width(cardWidth)
+            .clickable(onClick = onClick)
+            .semantics { contentDescription = "${queue.name}, $subtitle" },
+        verticalArrangement = Arrangement.spacedBy(7.dp)
     ) {
-        Surface(
-            onClick = onClick,
-            shape = MaterialTheme.shapes.large,
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(WorkCoverCardMetrics.height - 48.dp)
-                .semantics { contentDescription = "$title, $subtitle" }
-        ) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = Icons.Outlined.Folder,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.75f),
-                    modifier = Modifier.size(36.dp)
-                )
-            }
-        }
+        CoverStack(
+            kind = CoverStackKind.Queue,
+            name = queue.name,
+            hue = queue.hue,
+            pickedHex = queue.colorHex,
+            backs = visibleBacks,
+            width = cardWidth,
+            height = tileHeight,
+            identity = queue.id
+        )
         Text(
-            text = title,
-            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+            text = queue.name,
+            color = tokens.primaryInk,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.SemiBold,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis
         )
         Text(
             text = subtitle,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = tokens.secondaryInk,
+            fontSize = 12.sp,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
