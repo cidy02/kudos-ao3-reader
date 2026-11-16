@@ -46,7 +46,6 @@ class WritingTextRecovery(
         val newWorkKeys = NEW_WORK_FIELDS.map { field ->
             keyDigest(normalizedAccount = normalized, target = "work:new", field = field)
         }.toSet()
-        val diskIndex = readAccountIndex()
         for (url in allCopyURLs()) {
             val keyDigest = keyDigestPrefix(url) ?: continue
             val entryAccountDigest = runCatching { load(url)?.accountDigest }.getOrNull()
@@ -54,12 +53,8 @@ class WritingTextRecovery(
                 if (entryAccountDigest == targetDigest) return true
                 continue
             }
-            val ownerDigest = diskIndex[keyDigest] ?: registeredAccountDigest(keyDigest)
-            if (ownerDigest != null) {
-                if (ownerDigest == targetDigest) return true
-                continue
-            }
-            if (keyDigest in newWorkKeys) return true
+            // As on iOS: a copy that does not name its owner counts only for the account that opened it here.
+            if (registeredAccountDigest(keyDigest) == targetDigest || keyDigest in newWorkKeys) return true
         }
         return false
     }
@@ -102,8 +97,12 @@ class WritingTextRecovery(
 
     internal fun saveDigest(text: String, originalDigest: String, to: Path) {
         Files.createDirectories(directory)
+        val keyDigest = keyDigestPrefix(to)
         val now = clock.instant()
-        val entry = Entry(text, originalDigest, (now.epochSecond - foundationEpoch).toDouble() + now.nano / 1e9)
+        val entry = Entry(
+            text, originalDigest, (now.epochSecond - foundationEpoch).toDouble() + now.nano / 1e9,
+            keyDigest?.let(::registeredAccountDigest)
+        )
         val bytes = encode(entry)
         val temporary = Files.createTempFile(directory, ".writing-", ".tmp")
         try {
@@ -115,11 +114,6 @@ class WritingTextRecovery(
             Files.move(temporary, to, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
         } finally {
             Files.deleteIfExists(temporary)
-        }
-        val keyDigest = keyDigestPrefix(to)
-        val accountDigest = keyDigest?.let(::registeredAccountDigest)
-        if (keyDigest != null && accountDigest != null) {
-            runCatching { recordAccountIndex(keyDigest, accountDigest) }
         }
         runCatching { prune(to) }
         if (onDraftSaved != null && keyDigest != null) {
@@ -151,48 +145,11 @@ class WritingTextRecovery(
         .sortedWith(compareByDescending<Pair<Path, FileTime>> { it.second }.thenByDescending { it.first.fileName.toString() })
         .map { it.first }
 
-    private fun readAccountIndex(): Map<String, String> {
-        val indexPath = directory.resolve(ACCOUNT_INDEX_FILE)
-        if (!Files.exists(indexPath)) return emptyMap()
-        return runCatching {
-            Files.readAllLines(indexPath, Charsets.UTF_8)
-                .mapNotNull { line ->
-                    val sep = line.indexOf('=')
-                    if (sep <= 0 || sep >= line.lastIndex) null
-                    else line.substring(0, sep) to line.substring(sep + 1)
-                }
-                .toMap()
-        }.getOrDefault(emptyMap())
-    }
-
-    private fun recordAccountIndex(keyDigest: String, accountDigest: String) {
-        synchronized(indexLock) {
-            val current = readAccountIndex().toMutableMap()
-            if (current[keyDigest] == accountDigest) return
-            current[keyDigest] = accountDigest
-            val content = current.entries.joinToString("\n") { "${it.key}=${it.value}" }
-                .toByteArray(Charsets.UTF_8)
-            val indexPath = directory.resolve(ACCOUNT_INDEX_FILE)
-            val temporary = Files.createTempFile(directory, ".account-index-", ".tmp")
-            try {
-                FileOutputStream(temporary.toFile()).use { output ->
-                    output.write(content)
-                    output.fd.sync()
-                }
-                Files.move(temporary, indexPath, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
-            } finally {
-                Files.deleteIfExists(temporary)
-            }
-        }
-    }
-
     companion object {
         const val copyLimit = 5
         private const val foundationEpoch = 978_307_200L
-        private const val ACCOUNT_INDEX_FILE = ".account-index"
         private val NEW_WORK_FIELDS = listOf("content", "summary", "notes", "endnotes")
         private val json = Json { ignoreUnknownKeys = true }
-        private val indexLock = Any()
         private val accountDigestByKeyDigest = ConcurrentHashMap<String, String>()
         private val usernameByKeyDigest = ConcurrentHashMap<String, String>()
 
@@ -242,6 +199,8 @@ class WritingTextRecovery(
                 put("originalDigest", entry.originalDigest)
                 put("savedAt", if (entry.savedAt == entry.savedAt.toLong().toDouble())
                     JsonPrimitive(entry.savedAt.toLong()) else JsonPrimitive(entry.savedAt))
+                // iOS's JSONEncoder leaves a nil optional out.
+                entry.accountDigest?.let { put("accountDigest", it) }
             }
             // Default Foundation JSONEncoder escapes forward slashes too, without ASCII-escaping Unicode.
             return value.toString().replace("/", "\\/").toByteArray(Charsets.UTF_8)
