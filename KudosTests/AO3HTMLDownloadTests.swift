@@ -545,6 +545,9 @@ private final class ImageStubProtocol: URLProtocol, @unchecked Sendable {
     nonisolated(unsafe) static var requestedURLs: [URL] = []
     nonisolated(unsafe) static var finishedURLs: [URL] = []
     private var cancelled = false
+    private var pendingChunks: [Data] = []
+    private var nextChunk = 0
+    private var loadingURL: URL?
 
     static func reset() {
         responses = [:]
@@ -587,24 +590,26 @@ private final class ImageStubProtocol: URLProtocol, @unchecked Sendable {
             // A real server sends a body over time: deliver it a chunk at a time, so a client
             // that cancels on the response or mid-body is seen to stop the transfer. Delivered
             // all at once inside `startLoading`, the load finished before any cancel arrived.
-            deliver(chunks, from: 0, url: url)
+            pendingChunks = chunks
+            nextChunk = 0
+            loadingURL = url
+            // URLProtocolClient callbacks must run on startLoading's thread.
+            perform(#selector(deliverNextChunk), with: nil, afterDelay: 0.05)
         }
     }
 
-    private func deliver(_ chunks: [Data], from index: Int, url: URL) {
-        Self.queue.asyncAfter(deadline: .now() + 0.05) { [self] in
-            guard !isCancelled else { return }
-            if index < chunks.count {
-                client?.urlProtocol(self, didLoad: chunks[index])
-                deliver(chunks, from: index + 1, url: url)
-            } else {
-                Self.finishedURLs.append(url)
-                client?.urlProtocolDidFinishLoading(self)
-            }
+    @objc private func deliverNextChunk() {
+        guard !isCancelled, let url = loadingURL else { return }
+        if nextChunk < pendingChunks.count {
+            client?.urlProtocol(self, didLoad: pendingChunks[nextChunk])
+            nextChunk += 1
+            perform(#selector(deliverNextChunk), with: nil, afterDelay: 0.05)
+        } else {
+            Self.finishedURLs.append(url)
+            client?.urlProtocolDidFinishLoading(self)
         }
     }
 
-    private static let queue = DispatchQueue(label: "ImageStubProtocol")
     private let lock = NSLock()
     private var isCancelled: Bool { lock.withLock { cancelled } }
 

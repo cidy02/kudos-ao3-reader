@@ -357,6 +357,7 @@ nonisolated enum AO3HTMLDownloadConverter {
             }
         } onCancel: {
             delegate.cancel()
+            streamingSession.invalidateAndCancel()
         }
         streamingSession.finishTasksAndInvalidate()
         return result
@@ -371,6 +372,7 @@ nonisolated enum AO3HTMLDownloadConverter {
             await withCheckedContinuation { continuation in delegate.start(continuation: continuation) }
         } onCancel: {
             delegate.cancel()
+            streamingSession.invalidateAndCancel()
         }
         streamingSession.finishTasksAndInvalidate()
         if case let .data(data) = result { return data }
