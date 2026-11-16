@@ -7,6 +7,39 @@ import UniformTypeIdentifiers
 
 @Suite("Generated cover recipe")
 struct GeneratedCoverRecipeTests {
+    @Test @MainActor func pinnedCoverChangesOnlyForItsTriggers() {
+        let work = SavedWork(title: "Original", author: "First")
+        work.workFandoms = ["Original Work"]
+        work.workTags = ["Angst"]
+        work.wordCount = 9_999
+        work.pinCover(salt: 0)
+        let original = work.generatedCoverRecipe
+        #expect(original.rendererVersion == 1)
+        #expect(original.salt == 0)
+
+        work.author = "Renamed"
+        work.workTags = ["Fluff"]
+        work.workFandoms = ["Other"]
+        work.wordCount = 9_998
+        #expect(work.generatedCoverRecipe == original)
+        work.wordCount = 10_000
+        let longer = work.generatedCoverRecipe
+        #expect(longer.tier == 1)
+        #expect(longer.author == "Renamed")
+        work.isComplete = true
+        #expect(work.generatedCoverRecipe.closedRing)
+
+        work.pinCover(salt: work.generatedCoverRecipe.salt + 1)
+        #expect(work.generatedCoverRecipe.salt == 1)
+        #expect(work.generatedCoverRecipe.shapeSeed != longer.shapeSeed)
+        work.pinCover(salt: 0)
+        #expect(work.generatedCoverRecipe.salt == 0)
+        work.author = "Updated again"
+        #expect(work.generatedCoverRecipe.author == "Renamed")
+        work.pinCover(salt: work.generatedCoverRecipe.salt)
+        #expect(work.generatedCoverRecipe.author == "Updated again")
+    }
+
     @Test func fandomLabelUsesTheBareFandomName() {
         let doctor = GeneratedCoverRecipe(id: 1, title: "Sodium Lights", author: "a", fandoms: ["Doctor Who (2005)"])
         let frozen = GeneratedCoverRecipe(id: 2, title: "Winter Garden", author: "b", fandoms: ["Frozen (Disney Movies)"])

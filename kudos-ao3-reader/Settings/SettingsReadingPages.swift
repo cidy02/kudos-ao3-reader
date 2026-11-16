@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 #if os(iOS)
 import UIKit
 #elseif os(macOS)
@@ -12,12 +13,14 @@ import AppKit
 /// App-wide theme, accent colour, and text size. The reader's own theme picker
 /// stays in the reader's sheet. Sepia keeps its warm brown for controls.
 struct SettingsAppearancePage: View {
+    @Environment(\.modelContext) private var modelContext
     @Environment(ThemeManager.self) private var themeManager
     @State private var showCustomize = false
     @State private var showCustomWarning = false
     @State private var customPick: Task<Void, Never>?
     @State private var pickerBridge = AccentColorPickerBridge()
     @AppStorage(WorkSymbolPlacement.storageKey) private var symbolPlacement: WorkSymbolPlacement = .defaultValue
+    @AppStorage("useEmbeddedCoverArt") private var useEmbeddedCoverArt = true
 
     /// Bindings into the central ThemeManager (an @Observable in the environment).
     private var appThemeBinding: Binding<ReaderTheme> {
@@ -94,6 +97,21 @@ struct SettingsAppearancePage: View {
             // Backed up like the Library layout (UserDefaults, which the folder-sync
             // observer does not query), so it marks the sync folder dirty the same way.
             .onChange(of: symbolPlacement) { _, _ in
+                NotificationCenter.default.post(name: .kudosSyncRelevantSettingChanged, object: nil)
+            }
+
+            Section("Covers") {
+                Toggle("Use art from the work when there is some", isOn: $useEmbeddedCoverArt)
+                    .accentFill()
+                Button("Update Covers") {
+                    guard let works = try? modelContext.fetch(FetchDescriptor<SavedWork>()) else { return }
+                    for work in works where !work.isPendingDeletion {
+                        work.pinCover(salt: work.generatedCoverRecipe.salt)
+                    }
+                    modelContext.saveBestEffort(reason: "Updating covers failed")
+                }
+            }
+            .onChange(of: useEmbeddedCoverArt) { _, _ in
                 NotificationCenter.default.post(name: .kudosSyncRelevantSettingChanged, object: nil)
             }
 

@@ -1,8 +1,10 @@
 import Foundation
 
 /// The choices that identify a cover. No process-random hashing or UI state enters this value.
-nonisolated struct GeneratedCoverRecipe: Equatable, Sendable {
-    enum Ground: Int, Sendable { case gradient, split, band, solid, crossover }
+nonisolated struct GeneratedCoverRecipe: Codable, Equatable, Sendable {
+    enum Ground: Int, Codable, Sendable { case gradient, split, band, solid, crossover }
+    let rendererVersion: Int
+    let salt: Int
     private(set) var hues: [Int]
     private(set) var lightness: Double
     private(set) var ground: Ground
@@ -23,6 +25,11 @@ nonisolated struct GeneratedCoverRecipe: Equatable, Sendable {
     let fandom: String
     let part: Int
     private(set) var groundChroma: Double = 0.085
+
+    var isDrawable: Bool {
+        !hues.isEmpty && (0...3).contains(tier) && (0...2).contains(placement)
+            && (0..<Int.max).contains(salt)
+    }
 
     private static let palette = [20, 55, 85, 125, 150, 180, 205, 230, 260, 290, 320, 350]
     private static let parents = ["Persuasion": "Jane Austen", "Pride and Prejudice": "Jane Austen",
@@ -87,6 +94,8 @@ nonisolated struct GeneratedCoverRecipe: Equatable, Sendable {
     init(id: Int?, title: String, author: String, fandoms: [String], tags: [String] = [],
          words: Int? = nil, complete: Bool = true, seriesID: Int? = nil, part: Int = 0,
          salt: Int = 0, postedYear: Int? = nil, firstAuthor: String? = nil) {
+        rendererVersion = 1
+        self.salt = salt
         let names = fandoms.map(Self.clean).filter { !$0.isEmpty }
         let mainTitle = title.replacingOccurrences(of: #"^\d+\.\s*"#, with: "", options: .regularExpression)
         let titleParts = Self.splitTitle(mainTitle)
@@ -105,7 +114,7 @@ nonisolated struct GeneratedCoverRecipe: Equatable, Sendable {
         let selectedFamilies = Set(tags.compactMap { Self.tones[$0] })
         let workKey = String(id ?? Int(Self.hash("work:" + mainTitle + "|" + author)))
         let seriesKey = seriesID.map(String.init)
-        let key = seriesKey ?? workKey + (salt == 0 ? "" : ":" + String(salt))
+        let key = (seriesKey ?? workKey) + (salt == 0 ? "" : ":" + String(salt))
         motif = if let seriesKey {
             Self.kinds[Int(Self.hash("series-kind:" + seriesKey) % UInt32(Self.kinds.count))]
         } else if selectedFamilies.count == 1, let family = selectedFamilies.first, let choices = Self.families[family] {
@@ -115,7 +124,7 @@ nonisolated struct GeneratedCoverRecipe: Equatable, Sendable {
         }
         titleStyle = Int((authorHash >> 5) % 3)
         placement = !subtitle.isEmpty ? 2 : self.title.count <= 16 ? 1 : 0
-        tier = (words ?? 30_000) < 10_000 ? 0 : (words ?? 30_000) < 40_000 ? 1 : (words ?? 30_000) < 100_000 ? 2 : 3
+        tier = Self.tier(for: words ?? 30_000)
         closedRing = complete
         hasRing = true
         shapeSeed = Self.hash((seriesKey == nil ? "shape:" : "series-shape:") + key)
@@ -186,6 +195,10 @@ nonisolated struct GeneratedCoverRecipe: Equatable, Sendable {
 
     private static func round2(_ value: Double) -> Double { (value * 100).rounded() / 100 }
 
+    static func tier(for words: Int) -> Int {
+        words < 10_000 ? 0 : words < 40_000 ? 1 : words < 100_000 ? 2 : 3
+    }
+
     struct Random {
         private var state: UInt32
         init(seed: UInt32) { state = seed }
@@ -204,13 +217,39 @@ nonisolated struct GeneratedCoverRecipe: Equatable, Sendable {
 extension SavedWork {
     @MainActor
     var generatedCoverRecipe: GeneratedCoverRecipe {
+        if let coverRecipeJSON, let data = coverRecipeJSON.data(using: .utf8),
+           let pinned = try? JSONDecoder().decode(GeneratedCoverRecipe.self, from: data),
+           pinned.isDrawable {
+            if (!pinned.closedRing && isComplete) || pinned.tier != coverTier {
+                pinCover(salt: pinned.salt)
+                return generatedCoverRecipe
+            }
+            return pinned
+        }
+        return resolvedCover(salt: 0)
+    }
+
+    @MainActor
+    var coverTier: Int { GeneratedCoverRecipe.tier(for: wordCount) }
+
+    @MainActor
+    func pinCover(salt: Int) {
+        let recipe = resolvedCover(salt: salt)
+        guard let data = try? JSONEncoder().encode(recipe),
+              let json = String(data: data, encoding: .utf8) else { return }
+        coverRecipeJSON = json
+        markModified()
+    }
+
+    @MainActor
+    private func resolvedCover(salt: Int) -> GeneratedCoverRecipe {
         GeneratedCoverRecipe(id: ao3WorkID, title: title, author: author,
                              fandoms: workFandoms, tags: workTagsFetched ? workFreeforms : workTags,
                              words: wordCount,
                              complete: isComplete,
                              seriesID: ao3SeriesID ?? ReadingQueueService.ao3SeriesID(from: seriesURL),
                              part: seriesPosition,
-                             firstAuthor: verifiedAuthorIdentities.first?.displayName)
+                             salt: salt, firstAuthor: verifiedAuthorIdentities.first?.displayName)
     }
 }
 

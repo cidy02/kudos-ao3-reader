@@ -960,6 +960,8 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
     /// (`createdAt`, `isDeleted`), and a decoder that has never heard of it is
     /// unaffected.
     let epubDigest: String?
+    /// Omitted for older/Android records; absence never clears a local pin.
+    let coverRecipeJSON: String?
 
     @MainActor
     init(work: SavedWork) {
@@ -1044,6 +1046,7 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         legacyReaderProgress = .some(work.legacyReaderProgress)
         hiddenFromHistoryAt = .some(work.hiddenFromHistoryAt)
         epubDigest = work.epubDigest.isEmpty ? nil : work.epubDigest
+        coverRecipeJSON = work.coverRecipeJSON
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -1117,6 +1120,7 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         case legacyReaderProgress
         case hiddenFromHistoryAt
         case epubDigest
+        case coverRecipeJSON
     }
 
     init(from decoder: Decoder) throws {
@@ -1211,6 +1215,7 @@ nonisolated struct KudosBackupWork: Codable, Equatable {
         hiddenFromHistoryAt = container.contains(.hiddenFromHistoryAt)
             ? .some(try container.decode(Date?.self, forKey: .hiddenFromHistoryAt)) : nil
         epubDigest = try container.decodeIfPresent(String.self, forKey: .epubDigest)
+        coverRecipeJSON = try container.decodeIfPresent(String.self, forKey: .coverRecipeJSON)
     }
 }
 
@@ -1745,6 +1750,8 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
     /// that never chose cannot reset one that did through folder sync. Apply writes only a
     /// value this build knows. Additive — no manifest version bump.
     var workSymbolPlacement: String?
+    /// Nil means an older backup has no opinion about the local preference.
+    var useEmbeddedCoverArt: Bool?
 
     init(
         readerFontID: String,
@@ -1769,7 +1776,8 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         autoPreserveSmallSeriesOnSaveForLater: Bool,
         autoPreserveSeriesWorkThreshold: Int,
         libraryPageArrangement: LibraryPageArrangement? = nil,
-        workSymbolPlacement: String? = nil
+        workSymbolPlacement: String? = nil,
+        useEmbeddedCoverArt: Bool? = nil
     ) {
         self.readerFontID = readerFontID
         self.readerMode = readerMode
@@ -1794,6 +1802,7 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         self.autoPreserveSeriesWorkThreshold = autoPreserveSeriesWorkThreshold
         self.libraryPageArrangement = libraryPageArrangement
         self.workSymbolPlacement = workSymbolPlacement
+        self.useEmbeddedCoverArt = useEmbeddedCoverArt
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -1820,6 +1829,7 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         case autoPreserveSeriesWorkThreshold
         case libraryPageArrangement
         case workSymbolPlacement
+        case useEmbeddedCoverArt
     }
 
     init(from decoder: Decoder) throws {
@@ -1871,7 +1881,8 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
             workSymbolPlacement: (try? container.decodeIfPresent(
                 String.self,
                 forKey: .workSymbolPlacement
-            )) ?? nil
+            )) ?? nil,
+            useEmbeddedCoverArt: (try? container.decodeIfPresent(Bool.self, forKey: .useEmbeddedCoverArt)) ?? nil
         )
     }
 
@@ -1928,7 +1939,9 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
             )),
             libraryPageArrangement: LibraryPageArrangement.stored(in: defaults),
             // Only a stored choice, like `accentColorHex`.
-            workSymbolPlacement: defaults.string(forKey: WorkSymbolPlacement.storageKey)
+            workSymbolPlacement: defaults.string(forKey: WorkSymbolPlacement.storageKey),
+            useEmbeddedCoverArt: defaults.object(forKey: "useEmbeddedCoverArt") == nil
+                ? nil : defaults.bool(forKey: "useEmbeddedCoverArt")
         )
     }
 
@@ -2000,6 +2013,7 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         if let workSymbolPlacement, WorkSymbolPlacement(rawValue: workSymbolPlacement) != nil {
             defaults.set(workSymbolPlacement, forKey: WorkSymbolPlacement.storageKey)
         }
+        if let useEmbeddedCoverArt { defaults.set(useEmbeddedCoverArt, forKey: "useEmbeddedCoverArt") }
     }
 
     private static func bool(
@@ -4824,6 +4838,11 @@ enum KudosBackupService {
         work.workCharacters = TagMerge.merged(work.workCharacters, archived.workCharacters)
         work.workRelationships = TagMerge.merged(work.workRelationships, archived.workRelationships)
         work.workFreeforms = TagMerge.merged(work.workFreeforms, archived.workFreeforms)
+        if let coverRecipeJSON = archived.coverRecipeJSON, incomingWins,
+           let recipe = try? JSONDecoder().decode(GeneratedCoverRecipe.self, from: Data(coverRecipeJSON.utf8)),
+           recipe.isDrawable {
+            work.coverRecipeJSON = coverRecipeJSON
+        }
         work.workTagsFetched = work.workTagsFetched || archived.workTagsFetched
         work.ao3Unavailable = work.ao3Unavailable || archived.ao3Unavailable
         work.isQueuedForLater = work.isQueuedForLater || archived.isQueuedForLater

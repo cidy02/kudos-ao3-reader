@@ -12,6 +12,34 @@ extension PersistenceGateSuites {
 @MainActor
 @Suite(.serialized)
 struct KudosBackupTests {
+    @Test func coverKeysAreAdditiveAndOlderArchivesKeepThePreference() throws {
+        let work = SavedWork(title: "Older work", author: "Author")
+        let old = try JSONSerialization.jsonObject(with: JSONEncoder().encode(KudosBackupWork(work: work)))
+            as? [String: Any]
+        #expect(old?["coverRecipeJSON"] == nil)
+        let decoded = try JSONDecoder().decode(KudosBackupWork.self,
+            from: JSONSerialization.data(withJSONObject: old ?? [:]))
+        #expect(decoded.coverRecipeJSON == nil)
+
+        let defaults = try testDefaults()
+        let settings = KudosBackupSettings.capture(defaults: defaults)
+        #expect(settings.useEmbeddedCoverArt == nil)
+        let oldSettings = try JSONSerialization.jsonObject(with: JSONEncoder().encode(settings))
+            as? [String: Any]
+        #expect(oldSettings?["useEmbeddedCoverArt"] == nil)
+        defaults.set(false, forKey: "useEmbeddedCoverArt")
+        let switched = KudosBackupSettings.capture(defaults: defaults)
+        #expect(switched.useEmbeddedCoverArt == false)
+        let roundTripped = try JSONDecoder().decode(KudosBackupSettings.self,
+            from: JSONEncoder().encode(switched))
+        #expect(roundTripped.useEmbeddedCoverArt == false)
+        defaults.set(true, forKey: "useEmbeddedCoverArt")
+        settings.apply(to: defaults)
+        #expect(defaults.bool(forKey: "useEmbeddedCoverArt"))
+        switched.apply(to: defaults)
+        #expect(defaults.bool(forKey: "useEmbeddedCoverArt") == false)
+    }
+
     @Test func archiveRoundTripPreservesManifestAndAssets() throws {
         let defaults = try testDefaults()
         defaults.set("sepia", forKey: "appTheme")
@@ -21,6 +49,7 @@ struct KudosBackupTests {
         work.isSaved = true
         work.wordCount = 42_000
         work.workFandoms = ["Archive Test"]
+        work.pinCover(salt: 2)
         work.tags = [Tag(name: "Comfort Read")]
         work.kudos = 890
         work.bookmarks = 56
@@ -71,6 +100,7 @@ struct KudosBackupTests {
         #expect(decoded.manifest.works.first?.kudos == 890)
         #expect(decoded.manifest.works.first?.bookmarks == 56)
         #expect(decoded.manifest.works.first?.downloadedAt == work.downloadedAt)
+        #expect(decoded.manifest.works.first?.coverRecipeJSON == work.coverRecipeJSON)
         #expect(decoded.manifest.bookmarks.first?.urlString == bookmark.urlString)
         #expect(decoded.manifest.bookmarks.first?.id == bookmark.id)
         #expect(decoded.manifest.fonts.first?.fileName == font.fileName)
@@ -221,6 +251,8 @@ struct KudosBackupTests {
             title: "Old Title",
             author: "Old Author"
         )
+        existing.pinCover(salt: 1)
+        let localCover = existing.coverRecipeJSON
         existing.markModified(olderLocalDate)
         context.insert(existing)
         let targetDefaults = try testDefaults()
@@ -240,6 +272,7 @@ struct KudosBackupTests {
         #expect(restoredWorks.count == 1)
         #expect(restored.title == "Restored Work")
         #expect(restored.author == "Writer")
+        #expect(restored.coverRecipeJSON == localCover)
         #expect(restored.isFavorite)
         #expect(restored.isFinished)
         #expect(restored.wordCount == 99_001)

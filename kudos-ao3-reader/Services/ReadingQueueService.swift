@@ -878,6 +878,7 @@ enum ReadingQueueService {
             into: context
         )
         applyRemoteMetadata(summary, to: saved)
+        saved.pinCover(salt: 0)
         try? context.save()
         return saved
     }
@@ -910,6 +911,8 @@ enum ReadingQueueService {
         if work.language.isEmpty { work.language = summary.language }
         if work.dateUpdated.isEmpty { work.dateUpdated = summary.dateUpdated }
         if let complete = summary.isComplete { work.isComplete = complete }
+        if work.coverRecipeJSON == nil { work.pinCover(salt: 0) }
+        _ = work.generatedCoverRecipe
         if work.seriesTitle.isEmpty { work.seriesTitle = summary.seriesTitle ?? "" }
         if work.seriesURL.isEmpty { work.seriesURL = summary.seriesURL ?? "" }
         if work.seriesPosition == 0 { work.seriesPosition = summary.seriesPosition ?? 0 }
