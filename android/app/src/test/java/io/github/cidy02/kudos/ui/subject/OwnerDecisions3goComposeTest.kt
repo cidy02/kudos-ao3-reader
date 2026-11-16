@@ -22,6 +22,7 @@ import io.github.cidy02.kudos.ui.theme.AppAccents
 import io.github.cidy02.kudos.ui.theme.DefaultAccentHex
 import io.github.cidy02.kudos.ui.theme.KudosTheme
 import io.github.cidy02.kudos.ui.theme.KudosThemeMode
+import io.github.cidy02.kudos.works.detail.ResumeCardModel
 import io.github.cidy02.kudos.works.detail.WorkDetailResumeCard
 import io.github.cidy02.kudos.works.detail.WorkDetailTagSections
 import org.junit.After
@@ -108,11 +109,30 @@ class OwnerDecisions3goComposeTest {
     @Test fun ringsShowThisDownloadsFractionAndReturnToReadingAndCardsDimOnlyWhileDownloading() {
         var fraction by mutableStateOf<Double?>(0.37)
         val work = SavedWork(title = "Work", author = "Author", hasEpub = true)
+        val resumeModel = ResumeCardModel(
+            title = work.title,
+            fandoms = emptyList(),
+            chapters = "",
+            rawProgress = null,
+            rawChapterProgress = null,
+            chapterName = null,
+            newChapterCount = 0
+        )
         compose.setContent { KudosTheme(KudosThemeMode.Dark) {
             Column {
                 WorkReadingOrDownloadRing(fraction, 0.12, "Reading", Modifier.testTag("ring"))
-                WorkDetailResumeCard("Read", false, fraction, null, null, null,
-                    LocalKudosTokens.current.scopePalette, {}, Modifier.testTag("resume"))
+                WorkDetailResumeCard(
+                    actionTitle = "Read",
+                    model = resumeModel,
+                    chapterLengths = null,
+                    isBusy = false,
+                    downloadFraction = fraction,
+                    canUpdateDownload = false,
+                    onPrimaryClick = {},
+                    onContentsClick = {},
+                    onReadAloudClick = {},
+                    modifier = Modifier.testTag("resume")
+                )
                 SensitiveWorkRow(work, {}, modifier = Modifier.testTag("row"), downloadFraction = fraction)
             }
         } }
