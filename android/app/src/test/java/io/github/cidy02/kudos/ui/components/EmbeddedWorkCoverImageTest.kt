@@ -16,6 +16,9 @@ import java.util.zip.ZipOutputStream
 import javax.imageio.ImageIO
 import kotlin.math.max
 import kotlin.math.roundToInt
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
@@ -215,6 +218,7 @@ class EmbeddedWorkCoverImageTest {
         val started = CountDownLatch(1)
         val gate = CountDownLatch(1)
 
+        val loaderJob = SupervisorJob()
         val loader = GeneratedCoverArtLoader(
             directory = File(dir, "cache"),
             scan = { file ->
@@ -226,16 +230,18 @@ class EmbeddedWorkCoverImageTest {
                 null
             },
             downsample = { it },
-            decode = { it }
+            decode = { it },
+            scope = CoroutineScope(loaderJob + Dispatchers.IO)
         )
 
-        val first = launch { loader.image(UUID.randomUUID().toString(), firstFile) }
+        val first = launch(Dispatchers.IO) { loader.image(UUID.randomUUID().toString(), firstFile) }
         assertTrue(started.await(5, TimeUnit.SECONDS))
-        val second = launch { loader.image(UUID.randomUUID().toString(), secondFile) }
-        delay(20)
+        val second = launch(Dispatchers.IO) { loader.image(UUID.randomUUID().toString(), secondFile) }
+        delay(50)
         second.cancelAndJoin()
         gate.countDown()
         first.join()
+        loaderJob.children.toList().forEach { it.join() }
         assertEquals(1, scans.get())
     }
 }
