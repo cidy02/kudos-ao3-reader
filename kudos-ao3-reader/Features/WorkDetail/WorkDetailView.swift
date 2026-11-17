@@ -198,8 +198,8 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                     )
                     showingSeriesQueuePrompt = true
                 }
-                if DebugLaunchRoute.takeSheet("bookmarkform") {
-                    workActions.startBookmark(workID: ao3WorkID ?? 0, auth: auth)
+                if DebugLaunchRoute.takeSheet("bookmarkform"), let workID = ao3WorkID {
+                    workActions.startBookmark(workID: workID, auth: auth)
                 }
                 #endif
             }
@@ -300,7 +300,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             message: { PreservedWorkService.deleteConfirmationMessage(for: $0) },
             perform: deleteFromLibrary
         )
-        .ao3WorkActions(workActions, workID: ao3WorkID ?? 0, auth: auth)
+        .ao3WorkActions(workActions, workID: ao3WorkID, auth: auth)
         .sensoryFeedback(.selection, trigger: localWork?.isFavorite ?? false)
         .toolbar { detailToolbar }
         .screenTint(workPalette)

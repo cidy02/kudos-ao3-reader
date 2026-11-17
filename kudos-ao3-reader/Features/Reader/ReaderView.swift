@@ -167,7 +167,7 @@ struct ReaderView: View {
         .preferredColorScheme(pageColors.colorScheme)
         .ao3WorkActions(
             workActions,
-            workID: WorkTags.ao3WorkID(from: work.sourceURL) ?? 0,
+            workID: WorkTags.ao3WorkID(from: work.sourceURL),
             auth: auth,
             readerSections: sections,
             onOpenReaderChapter: { jump(to: $0) }

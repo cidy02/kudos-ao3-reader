@@ -16,19 +16,23 @@ private final class WorkSubscribeStub: URLProtocol, @unchecked Sendable {
     private static var postStatus = 200
     private static var postBody = ""
     private static var responder: (@Sendable (URLRequest) -> (status: Int, body: String))?
+    /// Runs on the URLProtocol thread for a GET, before the response is delivered.
+    private static var onGet: (@Sendable () -> Void)?
     private static var hits: [Hit] = []
 
     static func reset(
         html: String = "",
         postStatus: Int = 200,
         postBody: String = #"<div class="flash notice">You are now following A Quiet Harbour.</div>"#,
-        responder: (@Sendable (URLRequest) -> (status: Int, body: String))? = nil
+        responder: (@Sendable (URLRequest) -> (status: Int, body: String))? = nil,
+        onGet: (@Sendable () -> Void)? = nil
     ) {
         lock.lock()
         self.html = html
         self.postStatus = postStatus
         self.postBody = postBody
         self.responder = responder
+        self.onGet = onGet
         hits = []
         lock.unlock()
     }
@@ -65,7 +69,12 @@ private final class WorkSubscribeStub: URLProtocol, @unchecked Sendable {
         let postStatus = Self.postStatus
         let postBody = Self.postBody
         let responder = Self.responder
+        let onGet = Self.onGet
         Self.lock.unlock()
+
+        if method == "GET" {
+            onGet?()
+        }
 
         let (status, body): (Int, String) = if let responder {
             responder(request)
@@ -98,6 +107,30 @@ private final class WorkSubscribeStub: URLProtocol, @unchecked Sendable {
             data.append(buffer, count: count)
         }
         return String(bytes: data, encoding: .utf8) ?? ""
+    }
+}
+
+/// Blocks a bookmark GET on the URLProtocol thread until the test switches accounts.
+private final class BookmarkGetHold: @unchecked Sendable {
+    private let entered = DispatchSemaphore(value: 0)
+    private let release = DispatchSemaphore(value: 0)
+
+    func onGet() {
+        entered.signal()
+        release.wait()
+    }
+
+    func waitUntilEntered() async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            DispatchQueue.global().async {
+                self.entered.wait()
+                continuation.resume()
+            }
+        }
+    }
+
+    func unblock() {
+        release.signal()
     }
 }
 
@@ -934,7 +967,9 @@ struct AO3WriteActionsTests {
         model.startBookmark(workID: 42, auth: auth)
         #expect(model.bookmarkInput == AO3AuthService.BookmarkInput())
         #expect(!model.bookmarkIsUpdate)
-        model.bookmarkSessionDidChange()
+        model.bookmarkSessionDidChange(
+            wasLoggedIn: true, previousUsername: "alice", auth: auth
+        )
         #expect(model.workPageStates == nil)
     }
 
@@ -962,7 +997,9 @@ struct AO3WriteActionsTests {
 
         await auth.logout()
         await auth.login(username: "bob", password: "pw")
-        model.bookmarkSessionDidChange()
+        model.bookmarkSessionDidChange(
+            wasLoggedIn: true, previousUsername: "alice", auth: auth
+        )
         model.startBookmark(workID: 42, auth: auth)
         #expect(model.bookmarkInput.notes.isEmpty)
         await release.fire()
@@ -976,6 +1013,221 @@ struct AO3WriteActionsTests {
         #expect(model.writeSuccesses == 0)
         #expect(model.writeFailures == 0)
         #expect(refreshCount == 0)
+    }
+
+    /// An adult work's edit form is behind `view_adult=true`. Reading the plain
+    /// work URL gets the interstitial and this POST would create instead of put.
+    @MainActor
+    @Test func adultBookmarkEditPostsPutAfterViewAdultGet() async throws {
+        let auth = await makeSignedInAuth()
+        let bookmarked = try workFixture("ao3_work_bookmarked_subscribed")
+        let interstitial = """
+        <html><head><meta name="csrf-token" content="interstitial-csrf"></head>
+        <body><p class="caution notice">This work could have adult content.</p>
+        <a href="/works/42?view_adult=true">Proceed</a></body></html>
+        """
+        WorkSubscribeStub.reset(responder: { request in
+            let adult = request.url?.query?.contains("view_adult=true") == true
+            if request.httpMethod == "GET" {
+                return (200, adult ? bookmarked : interstitial)
+            }
+            return (200, #"<div class="flash notice">Bookmark was successfully updated.</div>"#)
+        })
+        let message = try await auth.saveBookmark(
+            workID: 42,
+            input: AO3AuthService.BookmarkInput(notes: "adult-note"),
+            using: stubWorkClient()
+        )
+        #expect(message == "Bookmark updated.")
+        let hits = WorkSubscribeStub.recordedHits()
+        #expect(hits.map(\.method) == ["GET", "POST"])
+        let formURL = "https://archiveofourown.org/works/42?view_adult=true"
+        #expect(hits[0].url.absoluteString == formURL)
+        #expect(hits[1].url.absoluteString == "https://archiveofourown.org/bookmarks/2997787566")
+        #expect(hits[1].referer == formURL)
+        let fields = formFields(hits[1].body)
+        #expect(fields["_method"] == "put")
+        #expect(fields["bookmark[bookmarker_notes]"] == "adult-note")
+    }
+
+    /// Logout and a switch to bob land while the bookmark GET is still open.
+    /// Bob is signed in before the GET returns, so only the generation check
+    /// stops alice's notes from posting on bob's session.
+    @MainActor
+    @Test func bookmarkGetDoesNotPostAfterAccountSwitch() async {
+        let auth = await makeSignedInAuth(username: "alice")
+        let hold = BookmarkGetHold()
+        let page = """
+        <html><head><meta name="csrf-token" content="fixture-token"></head>
+        <body><form action="/bookmarks/9" method="post">
+        <input type="hidden" name="_method" value="put"></form></body></html>
+        """
+        WorkSubscribeStub.reset(html: page, onGet: { hold.onGet() })
+        let client = stubWorkClient()
+        let save = Task { @MainActor in
+            try await auth.saveBookmark(
+                workID: 42,
+                input: AO3AuthService.BookmarkInput(notes: "alice-note"),
+                using: client
+            )
+        }
+        await hold.waitUntilEntered()
+        await auth.logout()
+        await auth.login(username: "bob", password: "pw")
+        hold.unblock()
+        await #expect(throws: CancellationError.self) {
+            _ = try await save.value
+        }
+        #expect(WorkSubscribeStub.recordedMethods() == ["GET"])
+    }
+
+    /// The session-change path: a sign-in from signed-out keeps the draft and
+    /// moves the composer onto the new generation; an account switch clears it.
+    @MainActor
+    @Test func composerKeepsTextAcrossSignInAndClearsOnAccountSwitch() async {
+        let auth = AO3AuthService(
+            vault: MemoryAO3SessionVault(),
+            validator: InboxTestSessionValidator(),
+            loginPerformer: DynamicInboxTestLoginPerformer(),
+            cookieManager: MockAO3CookieManager(),
+            removalTracker: MemoryAO3SessionRemovalTracker()
+        )
+        var writeCount = 0
+        var capturedNotes = ""
+        let model = AO3WorkActionsModel(
+            workActionStatesHandler: { _, _ in
+                AO3WorkActionStates(isSubscribed: false, existingBookmark: nil)
+            },
+            bookmarkHandler: { _, input, _ in
+                writeCount += 1
+                capturedNotes = input.notes
+                return "Bookmarked."
+            }
+        )
+
+        model.startBookmark(workID: 42, auth: auth)
+        model.bookmarkInput.notes = "still typing"
+        model.bookmarkSessionDidChange(wasLoggedIn: false, previousUsername: nil, auth: auth)
+        #expect(model.bookmarkInput.notes == "still typing")
+        #expect(model.showingBookmark)
+
+        let signedOutGeneration = auth.sessionGeneration
+        await auth.login(username: "alice", password: "pw")
+        #expect(auth.sessionGeneration != signedOutGeneration)
+        model.refreshWorkPageStates(workID: 42, auth: auth)
+        await model.waitForStateFetch()
+        #expect(model.workPageStates != nil)
+        model.bookmarkSessionDidChange(wasLoggedIn: false, previousUsername: nil, auth: auth)
+        #expect(model.bookmarkInput.notes == "still typing")
+        #expect(model.showingBookmark)
+        #expect(model.workPageStates == nil)
+        model.submitBookmark(workID: 42, auth: auth)
+        await model.waitForCurrentTask()
+        #expect(writeCount == 1)
+        #expect(capturedNotes == "still typing")
+
+        model.startBookmark(workID: 42, auth: auth)
+        model.bookmarkInput.notes = "same account"
+        let generationBeforeVerify = auth.sessionGeneration
+        await auth.verifySession()
+        #expect(auth.sessionGeneration != generationBeforeVerify)
+        #expect(auth.username == "alice")
+        model.refreshWorkPageStates(workID: 42, auth: auth)
+        await model.waitForStateFetch()
+        #expect(model.workPageStates != nil)
+        model.bookmarkSessionDidChange(
+            wasLoggedIn: true, previousUsername: "alice", auth: auth
+        )
+        #expect(model.bookmarkInput.notes == "same account")
+        #expect(model.showingBookmark)
+        #expect(model.workPageStates == nil)
+        model.submitBookmark(workID: 42, auth: auth)
+        await model.waitForCurrentTask()
+        #expect(writeCount == 2)
+        #expect(capturedNotes == "same account")
+
+        model.startBookmark(workID: 42, auth: auth)
+        model.bookmarkInput.notes = "alice only"
+        model.refreshWorkPageStates(workID: 42, auth: auth)
+        await model.waitForStateFetch()
+        #expect(model.workPageStates != nil)
+        await auth.logout()
+        await auth.login(username: "bob", password: "pw")
+        model.bookmarkSessionDidChange(
+            wasLoggedIn: true, previousUsername: "alice", auth: auth
+        )
+        #expect(model.bookmarkInput.notes.isEmpty)
+        #expect(!model.showingBookmark)
+        #expect(model.workPageStates == nil)
+    }
+
+    /// Cancelling the in-flight save is what stops it after the session changes.
+    /// The handler is released only after `bookmarkSessionDidChange`, so a missing
+    /// `activeTask?.cancel()` returns success instead of `CancellationError`.
+    @MainActor
+    @Test func bookmarkSessionChangeCancelsInFlightSave() async {
+        let auth = await makeSignedInAuth(username: "alice")
+        let started = Signal()
+        let release = Signal()
+        final class Probe {
+            var sawCancel = false
+            var finishedWithoutCancel = false
+        }
+        let probe = Probe()
+        let model = AO3WorkActionsModel(bookmarkHandler: { _, _, _ in
+            await started.fire()
+            await release.wait()
+            if Task.isCancelled {
+                probe.sawCancel = true
+                throw CancellationError()
+            }
+            probe.finishedWithoutCancel = true
+            return "Bookmarked."
+        })
+        model.startBookmark(workID: 42, auth: auth)
+        model.submitBookmark(workID: 42, auth: auth)
+        await started.wait()
+        await auth.logout()
+        await auth.login(username: "bob", password: "pw")
+        model.bookmarkSessionDidChange(
+            wasLoggedIn: true, previousUsername: "alice", auth: auth
+        )
+        await release.fire()
+        await model.waitForCurrentTask()
+        #expect(probe.sawCancel)
+        #expect(!probe.finishedWithoutCancel)
+        #expect(model.writeSuccesses == 0)
+    }
+
+    /// "Bookmark updated." stays up for the two-second dismissal. A generation
+    /// change during that wait must not close the sheet — the dismissal task
+    /// checks the generation it captured, and this test does not call
+    /// `bookmarkSessionDidChange` on the second session.
+    @MainActor
+    @Test func bookmarkUpdateDismissalWaitsOutAndIgnoresTheNextSession() async throws {
+        let auth = await makeSignedInAuth(username: "alice")
+        let model = AO3WorkActionsModel(
+            bookmarkHandler: { _, _, _ in "Bookmark updated." }
+        )
+        model.startBookmark(workID: 42, auth: auth)
+        model.submitBookmark(workID: 42, auth: auth)
+        await model.waitForCurrentTask()
+        #expect(model.showingBookmark)
+        #expect(model.bookmarkSuccess == "Bookmark updated.")
+        try await Task.sleep(for: .seconds(3))
+        #expect(!model.showingBookmark)
+        #expect(model.bookmarkSuccess == nil)
+
+        model.startBookmark(workID: 42, auth: auth)
+        model.submitBookmark(workID: 42, auth: auth)
+        await model.waitForCurrentTask()
+        #expect(model.showingBookmark)
+        #expect(model.bookmarkSuccess == "Bookmark updated.")
+        await auth.logout()
+        await auth.login(username: "bob", password: "pw")
+        try await Task.sleep(for: .seconds(3))
+        #expect(model.showingBookmark)
+        #expect(model.bookmarkSuccess == "Bookmark updated.")
     }
 
     // MARK: Work-page action states (fixtures trimmed from live captures, 2026-07-16)

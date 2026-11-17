@@ -449,10 +449,18 @@ extension AO3AuthService {
     /// existing bookmark renders an *edit* form (`/bookmarks/<id>` +
     /// `_method=put`, verified live 2026-07-16) whose action is reused here, so
     /// a stale menu label can never turn an update into a duplicate create.
-    func saveBookmark(workID: Int, input: BookmarkInput) async throws -> String {
+    func saveBookmark(
+        workID: Int, input: BookmarkInput, using client: AO3Client = .shared
+    ) async throws -> String {
+        // Before any await: the GET below is the window where the account can change.
+        let expectedGeneration = sessionGeneration
         guard isLoggedIn else { throw AO3WriteError.notSignedIn }
-        let workURL = Self.workURL(workID)
-        let (html, token) = try await fetchCSRFPage(at: workURL)
+        // Adult works answer this URL with the real edit form. The plain work URL
+        // is the interstitial (a CSRF token and no bookmark form), so the POST
+        // below would create a second bookmark.
+        let workURL = Self.workFormURL(workID: workID)
+        let (html, token) = try await fetchCSRFPage(at: workURL, using: client)
+        try requireSessionGeneration(expectedGeneration)
 
         let existing = AO3Client.parseExistingBookmark(from: html)
         var params: [(String, String)] = []
@@ -476,7 +484,7 @@ extension AO3AuthService {
             to: endpoint,
             body: Self.formEncoded(params), csrf: token, referer: workURL, ajax: false
         )
-        let (status, responseBody) = try await submitWrite(request)
+        let (status, responseBody) = try await submitWrite(request, using: client)
         if (200 ... 399).contains(status), AO3Client.writeErrorMessage(in: responseBody) == nil {
             return existing == nil ? "Bookmarked." : "Bookmark updated."
         }

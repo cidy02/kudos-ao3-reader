@@ -268,16 +268,33 @@ final class AO3WorkActionsModel {
         showingBookmark = true
     }
 
-    func bookmarkSessionDidChange() {
+    /// Drops cached work-page state on every generation change. An open composer
+    /// keeps its text across a sign-in from signed-out and a same-account refresh;
+    /// a username change or a sign-out clears it. `wasLoggedIn` / `previousUsername`
+    /// are the session from before this bump — `login` bumps once while still
+    /// signed out, then again when the new account is accepted.
+    func bookmarkSessionDidChange(
+        wasLoggedIn: Bool, previousUsername: String?, auth: AO3AuthService
+    ) {
+        activeTask?.cancel()
         workPageStatesRevision += 1
         workPageStates = nil
         workPageStatesWorkID = nil
         workPageStatesGeneration = nil
         hasSyncedWorkPageStates = false
         isFetchingWorkPageStates = false
-        bookmarkGeneration = nil
         bookmarkedWorkID = nil
         bookmarkedWorkGeneration = nil
+
+        let signedOut = wasLoggedIn && !auth.isLoggedIn
+        let usernameChanged = wasLoggedIn && previousUsername != auth.username
+        if showingBookmark && !signedOut && !usernameChanged {
+            if auth.isLoggedIn {
+                bookmarkGeneration = auth.sessionGeneration
+            }
+            return
+        }
+        bookmarkGeneration = nil
         bookmarkInput = AO3AuthService.BookmarkInput()
         bookmarkError = nil
         bookmarkSuccess = nil
@@ -349,6 +366,29 @@ extension View {
             onOpenReaderChapter: onOpenReaderChapter
         ))
     }
+
+    /// No AO3 id means no bookmark or comments sheet. Callers pass the optional
+    /// id through; this does not substitute 0.
+    @ViewBuilder
+    func ao3WorkActions(
+        _ actions: AO3WorkActionsModel,
+        workID: Int?,
+        auth: AO3AuthService,
+        readerSections: [ReaderSection] = [],
+        onOpenReaderChapter: ((Int) -> Void)? = nil
+    ) -> some View {
+        if let workID {
+            ao3WorkActions(
+                actions,
+                workID: workID,
+                auth: auth,
+                readerSections: readerSections,
+                onOpenReaderChapter: onOpenReaderChapter
+            )
+        } else {
+            self
+        }
+    }
 }
 
 private struct AO3WorkActionsModifier: ViewModifier {
@@ -357,6 +397,11 @@ private struct AO3WorkActionsModifier: ViewModifier {
     let auth: AO3AuthService
     var readerSections: [ReaderSection]
     var onOpenReaderChapter: ((Int) -> Void)?
+    /// Session observed before the latest generation bump. Seeded on appear so a
+    /// sign-in is not mistaken for an account switch (`nil` username → the new name).
+    @State private var trackedLoggedIn = false
+    @State private var trackedUsername: String?
+    @State private var seededSession = false
 
     func body(content: Content) -> some View {
         content
@@ -366,8 +411,22 @@ private struct AO3WorkActionsModifier: ViewModifier {
                     .modifier(ScopeSurfaceAccent())
                 #endif
             }
+            .onAppear {
+                guard !seededSession else { return }
+                trackedLoggedIn = auth.isLoggedIn
+                trackedUsername = auth.username
+                seededSession = true
+            }
             .onChange(of: auth.sessionGeneration) { _, _ in
-                actions.bookmarkSessionDidChange()
+                let wasLoggedIn = trackedLoggedIn
+                let previousUsername = trackedUsername
+                actions.bookmarkSessionDidChange(
+                    wasLoggedIn: wasLoggedIn,
+                    previousUsername: previousUsername,
+                    auth: auth
+                )
+                trackedLoggedIn = auth.isLoggedIn
+                trackedUsername = auth.username
             }
             .commentsSheet(
                 isPresented: $actions.showingCommentsScreen,
