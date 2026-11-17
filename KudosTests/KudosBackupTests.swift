@@ -542,7 +542,15 @@ struct KudosBackupTests {
         #expect(restoredWorks.count == 1)
         #expect(restored.title == "Restored Work")
         #expect(restored.author == "Writer")
-        #expect(restored.coverRecipeJSON == localCover)
+        // The local Shuffle wins (salt and pinnedAt kept); its length tier follows the merged
+        // word count, so a stale pin cannot hide a refresh (Codex's final T-524c review).
+        let localJSON = try #require(localCover)
+        let restoredJSON = try #require(restored.coverRecipeJSON)
+        let localPin = try #require(GeneratedCoverRecipe.supportedPin(in: localJSON))
+        let restoredPin = try #require(GeneratedCoverRecipe.supportedPin(in: restoredJSON))
+        #expect(restoredPin.salt == localPin.salt)
+        #expect(restoredPin.pinnedAt == localPin.pinnedAt)
+        #expect(restoredPin.tier == restored.coverTier)
         #expect(restored.isFavorite)
         #expect(restored.isFinished)
         #expect(restored.wordCount == 99_001)
