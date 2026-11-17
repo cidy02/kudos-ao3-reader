@@ -297,6 +297,214 @@ struct QueueQuickAddTests {
         #expect(try context.fetchCount(FetchDescriptor<SavedWork>()) == 2)
     }
 
+    @Test func undoOfPendingWorkAlreadyInQueueSoftDeletesWithoutRemovingMembership() throws {
+        let context = try context()
+        let queue = ReadingQueue(name: "Later")
+        context.insert(queue)
+        let work = SavedWork(
+            title: "Already Queued", author: "Writer", sourceURL: summary(521).workURL.absoluteString
+        )
+        work.ao3WorkID = 521
+        context.insert(work)
+        let epub = Data("already queued".utf8)
+        try epub.write(to: work.fileURL)
+        defer { try? FileManager.default.removeItem(at: work.fileURL) }
+        ReadingQueueService.add(work, to: queue, in: context)
+        let membershipID = try #require(work.queueMemberships.first?.id)
+        let deletedAt = Date(timeIntervalSinceNow: -10 * 86_400)
+        let scheduledAt = Date(timeIntervalSinceNow: 30 * 86_400)
+        PreservedWorkService.softDelete(work, priorDates: (deletedAt, scheduledAt), in: context)
+
+        let controller = RemoteWorkSelectionController()
+        controller.sourceQueueID = queue.id
+        controller.quickAdd(summary(521), in: context, defaults: try defaults()) { _, _, _ in }
+        #expect(!work.isPendingDeletion)
+        #expect(
+            controller.toastTarget?.priorWorkState
+                == .revived(deletedAt: deletedAt, scheduledAt: scheduledAt)
+        )
+        #expect(work.queueMemberships.map(\.id) == [membershipID])
+        controller.undo()
+        #expect(work.isPendingDeletion)
+        #expect(work.deletedAt == deletedAt)
+        #expect(work.permanentDeletionScheduledAt == scheduledAt)
+        #expect(work.queueMemberships.map(\.id) == [membershipID])
+        #expect(try Data(contentsOf: work.fileURL) == epub)
+    }
+
+    @Test func undoSoftDeletesWhenOnlyRememberedMembershipsRemain() throws {
+        let context = try context()
+        let kept = ReadingQueue(name: "Kept")
+        let swiped = ReadingQueue(name: "Swiped")
+        context.insert(kept)
+        context.insert(swiped)
+        let work = SavedWork(
+            title: "In Two Queues", author: "Writer", sourceURL: summary(522).workURL.absoluteString
+        )
+        work.ao3WorkID = 522
+        context.insert(work)
+        let epub = Data("two queues".utf8)
+        try epub.write(to: work.fileURL)
+        defer { try? FileManager.default.removeItem(at: work.fileURL) }
+        ReadingQueueService.add(work, to: kept, in: context)
+        let keptMembership = try #require(work.queueMemberships.first?.id)
+        let deletedAt = Date(timeIntervalSinceNow: -20 * 86_400)
+        let scheduledAt = Date(timeIntervalSinceNow: 40 * 86_400)
+        PreservedWorkService.softDelete(work, priorDates: (deletedAt, scheduledAt), in: context)
+
+        let controller = RemoteWorkSelectionController()
+        controller.sourceQueueID = swiped.id
+        controller.quickAdd(summary(522), in: context, defaults: try defaults()) { _, _, _ in }
+        #expect(work.activeQueueMemberships.count == 2)
+        controller.undo()
+        #expect(work.isPendingDeletion)
+        #expect(work.deletedAt == deletedAt)
+        #expect(work.permanentDeletionScheduledAt == scheduledAt)
+        #expect(work.queueMemberships.map(\.id) == [keptMembership])
+        #expect(try Data(contentsOf: work.fileURL) == epub)
+    }
+
+    @Test func undoLeavesRevivedWorkLiveWhenCollectionFavoriteOrSaveArrivesDuringToast() throws {
+        let context = try context()
+        let queue = ReadingQueue(name: "List")
+        context.insert(queue)
+        let settings = try defaults()
+        let controller = RemoteWorkSelectionController()
+        controller.sourceQueueID = queue.id
+        let deletedAt = Date(timeIntervalSinceNow: -5 * 86_400)
+        let scheduledAt = Date(timeIntervalSinceNow: 30 * 86_400)
+        func revive(_ id: Int) throws -> SavedWork {
+            let work = SavedWork(
+                title: "Work \(id)", author: "Writer", sourceURL: summary(id).workURL.absoluteString
+            )
+            work.ao3WorkID = id
+            work.isSaved = false
+            work.isFavorite = false
+            context.insert(work)
+            try Data("bytes \(id)".utf8).write(to: work.fileURL)
+            PreservedWorkService.softDelete(work, priorDates: (deletedAt, scheduledAt), in: context)
+            controller.quickAdd(summary(id), in: context, defaults: settings) { _, _, _ in }
+            return work
+        }
+
+        let collected = try revive(523)
+        defer { try? FileManager.default.removeItem(at: collected.fileURL) }
+        let collection = WorkCollection(name: "Shelf")
+        context.insert(collection)
+        collected.collections.append(collection)
+        controller.undo()
+        #expect(!collected.isPendingDeletion)
+        #expect(collected.collections.map(\.id) == [collection.id])
+        #expect(try Data(contentsOf: collected.fileURL) == Data("bytes 523".utf8))
+
+        let favorited = try revive(524)
+        defer { try? FileManager.default.removeItem(at: favorited.fileURL) }
+        favorited.isFavorite = true
+        controller.undo()
+        #expect(!favorited.isPendingDeletion)
+        #expect(favorited.isFavorite)
+        #expect(try Data(contentsOf: favorited.fileURL) == Data("bytes 524".utf8))
+
+        let saved = try revive(525)
+        defer { try? FileManager.default.removeItem(at: saved.fileURL) }
+        #expect(saved.isSaved == false)
+        saved.isSaved = true
+        controller.undo()
+        #expect(!saved.isPendingDeletion)
+        #expect(saved.isSaved)
+        #expect(try Data(contentsOf: saved.fileURL) == Data("bytes 525".utf8))
+    }
+
+    @Test func undoSkipsResoftDeleteWhenModifiedAfterTheToast() throws {
+        let context = try context()
+        let queue = ReadingQueue(name: "List")
+        context.insert(queue)
+        let work = SavedWork(
+            title: "Synced", author: "Writer", sourceURL: summary(526).workURL.absoluteString
+        )
+        work.ao3WorkID = 526
+        context.insert(work)
+        let epub = Data("synced copy".utf8)
+        try epub.write(to: work.fileURL)
+        defer { try? FileManager.default.removeItem(at: work.fileURL) }
+        let deletedAt = Date(timeIntervalSinceNow: -15 * 86_400)
+        let scheduledAt = Date(timeIntervalSinceNow: 30 * 86_400)
+        PreservedWorkService.softDelete(work, priorDates: (deletedAt, scheduledAt), in: context)
+
+        let controller = RemoteWorkSelectionController()
+        controller.sourceQueueID = queue.id
+        controller.quickAdd(summary(526), in: context, defaults: try defaults()) { _, _, _ in }
+        work.lastModifiedAt = Date().addingTimeInterval(120)
+        try context.save()
+        controller.undo()
+        #expect(!work.isPendingDeletion)
+        #expect(work.deletedAt == nil)
+        #expect(try Data(contentsOf: work.fileURL) == epub)
+    }
+
+    @Test func secondSwipeKeepsRevivedDates() throws {
+        let context = try context()
+        let first = ReadingQueue(name: "First")
+        let second = ReadingQueue(name: "Second")
+        context.insert(first)
+        context.insert(second)
+        let work = SavedWork(
+            title: "Swiped Twice", author: "Writer", sourceURL: summary(527).workURL.absoluteString
+        )
+        work.ao3WorkID = 527
+        context.insert(work)
+        let epub = Data("swiped twice".utf8)
+        try epub.write(to: work.fileURL)
+        defer { try? FileManager.default.removeItem(at: work.fileURL) }
+        let deletedAt = Date(timeIntervalSinceNow: -12 * 86_400)
+        let scheduledAt = Date(timeIntervalSinceNow: 30 * 86_400)
+        PreservedWorkService.softDelete(work, priorDates: (deletedAt, scheduledAt), in: context)
+
+        let controller = RemoteWorkSelectionController()
+        let settings = try defaults()
+        controller.sourceQueueID = first.id
+        controller.quickAdd(summary(527), in: context, defaults: settings) { _, _, _ in }
+        controller.sourceQueueID = second.id
+        controller.quickAdd(summary(527), in: context, defaults: settings) { _, _, _ in }
+        #expect(
+            controller.toastTarget?.priorWorkState
+                == .revived(deletedAt: deletedAt, scheduledAt: scheduledAt)
+        )
+        #expect(work.activeQueueMemberships.count == 2)
+        controller.undo()
+        #expect(!work.isPendingDeletion)
+        #expect(work.activeQueueMemberships.map { $0.queue?.id } == [first.id])
+        #expect(try Data(contentsOf: work.fileURL) == epub)
+    }
+
+    @Test func undoFloorKeepsPassedDeletionDateAtLeastSevenDaysOut() throws {
+        let context = try context()
+        let queue = ReadingQueue(name: "List")
+        context.insert(queue)
+        let work = SavedWork(
+            title: "Past Due", author: "Writer", sourceURL: summary(528).workURL.absoluteString
+        )
+        work.ao3WorkID = 528
+        context.insert(work)
+        let epub = Data("past due".utf8)
+        try epub.write(to: work.fileURL)
+        defer { try? FileManager.default.removeItem(at: work.fileURL) }
+        let deletedAt = Date(timeIntervalSinceNow: -100 * 86_400)
+        let passed = Date(timeIntervalSinceNow: -86_400)
+        PreservedWorkService.softDelete(work, priorDates: (deletedAt, passed), in: context)
+
+        let controller = RemoteWorkSelectionController()
+        controller.sourceQueueID = queue.id
+        controller.quickAdd(summary(528), in: context, defaults: try defaults()) { _, _, _ in }
+        let beforeUndo = Date()
+        controller.undo()
+        let scheduled = try #require(work.permanentDeletionScheduledAt)
+        #expect(scheduled.timeIntervalSince(beforeUndo) >= 7 * 86_400 - 1)
+        #expect(work.deletedAt == deletedAt)
+        #expect(work.isPendingDeletion)
+        #expect(try Data(contentsOf: work.fileURL) == epub)
+    }
+
     @Test func finishedDownloadsCanBeQueuedAgainAndExplicitDownloadUpgradesActiveItems() async throws {
         var incoming = DownloadQueue.Item(
             id: 513, title: "Retry", sourceURL: summary(513).workURL, isComplete: true, seriesURL: ""

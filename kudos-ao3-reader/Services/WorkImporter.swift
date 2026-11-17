@@ -64,6 +64,7 @@ func importEPUB(
             throw error
         }
         existing.markModified()
+        RevivedSwipeImport.noteIfArmed(existing)
         WorkSearchIndex.reindex(existing)
         try? context.save()
         if revived {
