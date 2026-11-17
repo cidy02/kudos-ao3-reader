@@ -218,7 +218,7 @@ struct FollowedTagsListView: View {
             } label: {
                 Image(systemName: "slider.horizontal.3")
                     .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.accentInk)
+                    .foregroundStyle(Color.primary)
                     .frame(minWidth: 32, minHeight: 32)
                     .contentShape(Rectangle())
             }

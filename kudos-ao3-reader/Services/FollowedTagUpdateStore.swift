@@ -16,6 +16,9 @@ final class FollowedTagUpdateStore {
     private(set) var updates: [SubscriptionUpdate] = []
     private(set) var isChecking = false
 
+    @ObservationIgnored private var activeCheckToken: UUID?
+    @ObservationIgnored private var activeCheckTask: Task<Void, Never>?
+
     private let fileURL: URL?
 
     init(directory: URL? = FollowedTagUpdateStore.defaultDirectory()) {
@@ -100,8 +103,15 @@ final class FollowedTagUpdateStore {
 
     // MARK: Foreground Check Runner
 
+    /// Cancels any foreground pass in flight without blocking the caller.
+    func cancelCheck() {
+        activeCheckTask?.cancel()
+    }
+
     /// Sequentially checks due tags while `screen` stays active.
     ///
+    /// Cancels and awaits unwind of any superseded foreground check so rapid screen
+    /// switches (e.g. Home -> Subscriptions) never drop the destination screen's pass.
     /// Never runs outside `Subscriptions` or `Home`, honours the 6-hour per-tag gate
     /// unless `ignoringCooldown` (pull to refresh) is true, pauses >= 3 s between
     /// requests, and stops cleanly on cancellation or AO3 rate/maintenance/403/5xx errors.
@@ -115,7 +125,50 @@ final class FollowedTagUpdateStore {
         sleep: ((TimeInterval) async throws -> Void)? = nil,
         fetch: ((FollowedTag) async throws -> AO3TagFeed)? = nil
     ) async {
-        guard !isChecking else { return }
+        let token = UUID()
+        let previousTask = activeCheckTask
+        activeCheckToken = token
+        previousTask?.cancel()
+
+        let task = Task { @MainActor [weak self] in
+            if let previousTask {
+                await previousTask.value
+            }
+            guard let self, !Task.isCancelled, self.activeCheckToken == token else { return }
+            await self.performCheck(
+                screen: screen,
+                in: context,
+                ignoringCooldown: ignoringCooldown,
+                isScreenActive: isScreenActive,
+                defaults: defaults,
+                now: now,
+                sleep: sleep,
+                fetch: fetch
+            )
+        }
+        activeCheckTask = task
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+        if activeCheckToken == token {
+            activeCheckTask = nil
+            activeCheckToken = nil
+        }
+    }
+
+    // swiftlint:disable:next function_parameter_count
+    private func performCheck(
+        screen: FollowedTagCheckScreen,
+        in context: ModelContext,
+        ignoringCooldown: Bool,
+        isScreenActive: @escaping () -> Bool,
+        defaults: UserDefaults,
+        now: @escaping @Sendable () -> Date,
+        sleep: ((TimeInterval) async throws -> Void)?,
+        fetch: ((FollowedTag) async throws -> AO3TagFeed)?
+    ) async {
         let tags = (try? context.fetch(FetchDescriptor<FollowedTag>())) ?? []
         pruneOrphanedTags(keepingTagIDs: Set(tags.map(\.ao3TagID)))
         guard !tags.isEmpty else { return }

@@ -99,6 +99,7 @@ struct SubscriptionsView: View {
     private func cancelTagCheck() {
         tagCheckTask?.cancel()
         tagCheckTask = nil
+        tagUpdates.cancelCheck()
     }
 
     private func refreshFollowedTags() async {

@@ -415,7 +415,12 @@ struct FollowedTagChecksTests {
         context.insert(saved)
         try context.save()
 
-        let stopErrors: [AO3Error] = [.forbidden, .server(status: 502), .maintenance]
+        let stopErrors: [any Error] = [
+            AO3Error.forbidden,
+            AO3Error.server(status: 502),
+            AO3Error.maintenance,
+            URLError(.notConnectedToInternet)
+        ]
         for error in stopErrors {
             var fetched: [Int] = []
             var stamped: [Int] = []
@@ -435,6 +440,67 @@ struct FollowedTagChecksTests {
             #expect(fetched == [1])
             #expect(stamped == [1])
         }
+
+        // Cancelling the enclosing Task mid-sleep aborts unstarted tags cleanly.
+        var taskFetched: [Int] = []
+        var taskStamped: [Int] = []
+        var checkTask: Task<Void, Never>?
+        checkTask = Task { @MainActor in
+            await FollowedTagChecks.run(
+                tags: [1, 2],
+                screen: .subscriptions,
+                showOnHome: { _ in true },
+                checkedAt: { _ in nil },
+                isScreenActive: { true },
+                isRateLimitHeld: { _ in false },
+                now: Date.init,
+                sleep: { _ in
+                    checkTask?.cancel()
+                    try Task.checkCancellation()
+                },
+                attempt: { id, _ in taskStamped.append(id); return true },
+                fetch: { id in taskFetched.append(id); return sampleFeed() },
+                received: { _, _, _ in }
+            )
+        }
+        await checkTask?.value
+        #expect(taskFetched == [1])
+        #expect(taskStamped == [1])
+
+        // Consecutive live client calls invoke the 3-second pacer floor between requests.
+        let (defaults, suiteName) = try isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        final class PaceRecorder: @unchecked Sendable {
+            private let lock = NSLock()
+            var waits: [TimeInterval] = []
+            func append(_ wait: TimeInterval) {
+                lock.lock()
+                waits.append(wait)
+                lock.unlock()
+            }
+        }
+        let recorder = PaceRecorder()
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [FollowedTagProbe.self]
+        let validFeed = Data(
+            """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <feed xmlns="http://www.w3.org/2005/Atom">
+              <id>tag:archiveofourown.org,2005:/tags/1/feed</id>
+              <title>Tag</title>
+            </feed>
+            """.utf8
+        )
+        FollowedTagProbe.reset { _, _ in
+            FollowedTagProbe.StubResponse(statusCode: 200, headers: [:], body: validFeed)
+        }
+        let client = AO3Client(
+            session: URLSession(configuration: config),
+            paceSleep: { wait in recorder.append(wait) }
+        )
+        _ = try await client.followedTagFeed(tagID: 1, defaults: defaults)
+        _ = try await client.followedTagFeed(tagID: 2, defaults: defaults)
+        #expect(recorder.waits.contains { $0 >= 2.5 })
 
         let remaining = try context.fetch(FetchDescriptor<SavedWork>())
         #expect(remaining.count == 1)

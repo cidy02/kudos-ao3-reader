@@ -923,6 +923,7 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
     private func cancelHomeTagCheck() {
         followedTagCheckTask?.cancel()
         followedTagCheckTask = nil
+        followedTagUpdates.cancelCheck()
     }
 
     private func openHomeSubscriptionUpdate(_ update: SubscriptionUpdate) {
