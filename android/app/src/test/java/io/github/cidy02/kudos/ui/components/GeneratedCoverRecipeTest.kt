@@ -2,17 +2,57 @@ package io.github.cidy02.kudos.ui.components
 
 import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.network.ao3.search.AO3WorkSummary
+import java.text.BreakIterator
+import java.util.Locale
 import java.util.UUID
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.pow
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNotSame
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
 
 class GeneratedCoverRecipeTest {
+    private val jvmGraphemeCounter: (String) -> Int = { text ->
+        val iterator = BreakIterator.getCharacterInstance(Locale.ROOT)
+        iterator.setText(text)
+        var graphemes = 0
+        while (iterator.next() != BreakIterator.DONE) graphemes += 1
+        graphemes
+    }
+    private lateinit var productionGraphemeCounter: (String) -> Int
+
+    @Before
+    fun installJvmGraphemeCounter() {
+        productionGraphemeCounter = GeneratedCoverRecipe.graphemeCounter
+        GeneratedCoverRecipe.graphemeCounter = jvmGraphemeCounter
+    }
+
+    @After
+    fun restoreGraphemeCounter() {
+        GeneratedCoverRecipe.graphemeCounter = productionGraphemeCounter
+    }
+
+    @Test
+    fun productionGraphemeCounterSelectsAndroidIcuAndNotJvmCounter() {
+        assertSame(GeneratedCoverRecipe.AndroidIcuGraphemeCounter, productionGraphemeCounter)
+        assertNotSame(jvmGraphemeCounter, productionGraphemeCounter)
+        // Pure JVM unit tests lack Robolectric shadows, so invoking the production counter
+        // directly proves it targets Android's android.icu.text.BreakIterator stub rather than
+        // silently using java.text.BreakIterator.
+        val stubFailure = runCatching { productionGraphemeCounter("A") }.exceptionOrNull()
+        assertTrue(
+            "Expected production counter to invoke Android ICU, got $stubFailure",
+            stubFailure is RuntimeException
+        )
+    }
+
     @Test
     fun fnv1aHashMatchesSwift() {
         val expected = listOf(
@@ -483,6 +523,31 @@ class GeneratedCoverRecipeTest {
         val plain = GeneratedCoverRecipe.forCollection(name = "Shelf", identity = "same-id", hue = 150)
         val shouted = GeneratedCoverRecipe.forCollection(name = "Shelf", identity = "SAME-ID", hue = 150)
         assertNotEquals(plain.shapeSeed, shouted.shapeSeed)
+
+        assertEquals("1-2-3-4-5", GeneratedCoverRecipe.canonicalCollectionIdentity("1-2-3-4-5"))
+        assertEquals("a-b-c-d-e", GeneratedCoverRecipe.canonicalCollectionIdentity("a-b-c-d-e"))
+        val shortHex = GeneratedCoverRecipe.forCollection(name = "Shelf", identity = "1-2-3-4-5", hue = 150)
+        val paddedUuid = GeneratedCoverRecipe.forCollection(
+            name = "Shelf",
+            identity = "00000001-0002-0003-0004-000000000005",
+            hue = 150
+        )
+        assertNotEquals(paddedUuid.shapeSeed, shortHex.shapeSeed)
+        val shortHexId = GeneratedCoverRecipe.hash("collection:1-2-3-4-5").toLong().toString()
+        assertEquals(GeneratedCoverRecipe.hash("shape:$shortHexId"), shortHex.shapeSeed)
+    }
+
+    @Test
+    fun fandomCleanTrimsNonBreakingSpacesLikeSwift() {
+        val recipe = GeneratedCoverRecipe.create(
+            id = 21L,
+            title = "T",
+            author = "a",
+            fandoms = listOf("Doctor Who\u00A0(2005)", "\u202FDoctor Who\u00A0", "\u2007\u0085")
+        )
+        assertEquals("Doctor Who", recipe.fandom)
+        assertEquals(1, recipe.hues.size)
+        assertNotEquals(GeneratedCoverRecipe.Ground.CROSSOVER, recipe.ground)
     }
 
     @Test

@@ -291,6 +291,72 @@ class EmbeddedWorkCoverImageTest {
         assertTrue(EmbeddedWorkCoverImage.imageEntrySkipped(20_000_001L))
         assertFalse(EmbeddedWorkCoverImage.imageEntrySkipped(20_000_000L))
         assertFalse(EmbeddedWorkCoverImage.imageEntrySkipped(32_000L))
+
+        val art = solidPng(width = 320, red = 70)
+        val epub = storedZip(
+            "unknown-size.epub",
+            listOf(
+                "mimetype" to "application/epub+zip".toByteArray(StandardCharsets.UTF_8),
+                "META-INF/container.xml" to containerXml("OEBPS/content.opf"),
+                "OEBPS/content.opf" to idTocOpf(),
+                "OEBPS/nav.xhtml" to """
+                    <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><body>
+                    <nav epub:type="toc"><a href="chapter.xhtml">Chapter 1</a></nav></body></html>
+                """.trimIndent().toByteArray(StandardCharsets.UTF_8),
+                "OEBPS/preface.xhtml" to "<html><body><p>Preface</p></body></html>".toByteArray(),
+                "OEBPS/chapter.xhtml" to "<html><body><img src='art.png'/></body></html>".toByteArray(),
+                "OEBPS/art.png" to art
+            )
+        )
+        assertArrayEquals(art, EmbeddedWorkCoverImage.data(epub, imageCodec = jvmCodec))
+        assertNull(
+            EmbeddedWorkCoverImage.data(
+                epubFile = epub,
+                imageCodec = jvmCodec,
+                entrySize = { entry -> if (entry.name == "OEBPS/art.png") -1L else entry.size }
+            )
+        )
+    }
+
+    @Test
+    fun percentDecodeKeepsSurrogatePairsIntactAndMatchesAstralTocHref() {
+        assertEquals("📖 1.xhtml", EmbeddedWorkCoverImage.percentDecode("📖%201.xhtml"))
+        assertEquals("📖+1.xhtml", EmbeddedWorkCoverImage.percentDecode("📖%2B1.xhtml"))
+        assertEquals("📖 1.xhtml", EmbeddedWorkCoverImage.percentDecode("%F0%9F%93%96%201.xhtml"))
+        assertEquals("📖%ZZ1.xhtml", EmbeddedWorkCoverImage.percentDecode("📖%ZZ1.xhtml"))
+        assertEquals("📖%FF1.xhtml", EmbeddedWorkCoverImage.percentDecode("📖%FF1.xhtml"))
+
+        val art = solidPng(width = 320, red = 55)
+        val epub = storedZip(
+            "astral-toc.epub",
+            listOf(
+                "mimetype" to "application/epub+zip".toByteArray(StandardCharsets.UTF_8),
+                "META-INF/container.xml" to containerXml("OEBPS/content.opf"),
+                "OEBPS/content.opf" to """
+                    <?xml version="1.0"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+                    <metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>Astral</dc:title>
+                    <dc:creator>Author</dc:creator><dc:language>en</dc:language></metadata>
+                    <manifest>
+                    <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+                    <item id="preface" href="preface.xhtml" media-type="application/xhtml+xml"/>
+                    <item id="chapter" href="📖 1.xhtml" media-type="application/xhtml+xml"/>
+                    </manifest>
+                    <spine><itemref idref="preface"/><itemref idref="chapter"/></spine>
+                    </package>
+                """.trimIndent().toByteArray(StandardCharsets.UTF_8),
+                "OEBPS/nav.xhtml" to """
+                    <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><body>
+                    <nav epub:type="toc">
+                    <a href="preface.xhtml">Preface</a>
+                    <a href="📖%201.xhtml">Chapter 1</a>
+                    </nav></body></html>
+                """.trimIndent().toByteArray(StandardCharsets.UTF_8),
+                "OEBPS/preface.xhtml" to "<html><body><p>Preface</p></body></html>".toByteArray(),
+                "OEBPS/📖 1.xhtml" to "<html><body><img src='art.png'/></body></html>".toByteArray(),
+                "OEBPS/art.png" to art
+            )
+        )
+        assertArrayEquals(art, EmbeddedWorkCoverImage.data(epub, imageCodec = jvmCodec))
     }
 
     @Test

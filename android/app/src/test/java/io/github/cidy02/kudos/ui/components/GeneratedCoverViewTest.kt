@@ -1,6 +1,7 @@
 package io.github.cidy02.kudos.ui.components
 
 import android.app.Application
+import android.graphics.Bitmap
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -19,8 +20,11 @@ import io.github.cidy02.kudos.ui.subject.SubjectRemoteCoverCard
 import io.github.cidy02.kudos.ui.subject.SubjectWorkCoverCard
 import io.github.cidy02.kudos.ui.theme.KudosTheme
 import io.github.cidy02.kudos.ui.theme.KudosThemeMode
+import java.io.ByteArrayOutputStream
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertSame
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -155,5 +159,42 @@ class GeneratedCoverViewTest {
         assertEquals(a, b)
         assertNotEquals(a, wider)
         assertNotEquals(a, other)
+    }
+
+    @Test fun productionIcuGraphemeCounterCountsZwjFamilyAsOneInRobolectric() {
+        val family = "\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67\u200D\uD83D\uDC66"
+        assertSame(GeneratedCoverRecipe.AndroidIcuGraphemeCounter, GeneratedCoverRecipe.graphemeCounter)
+        assertEquals(1, GeneratedCoverRecipe.graphemeCount(family))
+        assertEquals(
+            1,
+            GeneratedCoverRecipe.create(
+                id = 16L,
+                title = "AAAAAAAAAAAAAAA$family",
+                author = "a",
+                fandoms = listOf("Original Work")
+            ).placement
+        )
+    }
+
+    @Test fun androidEmbeddedImageCodecCompressesJpegAtQuality100() {
+        val bitmap = Bitmap.createBitmap(320, 480, Bitmap.Config.ARGB_8888)
+        val pngBytes = ByteArrayOutputStream().also {
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
+        }.toByteArray()
+        bitmap.recycle()
+
+        val previous = AndroidEmbeddedImageCodec.compressBitmap
+        var capturedQuality: Int? = null
+        AndroidEmbeddedImageCodec.compressBitmap = { bmp, format, quality, out ->
+            capturedQuality = quality
+            previous(bmp, format, quality, out)
+        }
+        try {
+            val jpeg = AndroidEmbeddedImageCodec.downsampledJpeg(pngBytes)
+            assertNotNull(jpeg)
+            assertEquals(100, capturedQuality)
+        } finally {
+            AndroidEmbeddedImageCodec.compressBitmap = previous
+        }
     }
 }

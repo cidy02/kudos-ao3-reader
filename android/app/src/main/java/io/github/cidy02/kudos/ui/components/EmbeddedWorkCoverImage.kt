@@ -15,6 +15,7 @@ import java.nio.ByteBuffer
 import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
 import java.util.Locale
+import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import kotlin.math.max
 import kotlin.math.min
@@ -29,6 +30,10 @@ interface EmbeddedImageCodec {
 }
 
 object AndroidEmbeddedImageCodec : EmbeddedImageCodec {
+    @Volatile
+    internal var compressBitmap: (Bitmap, Bitmap.CompressFormat, Int, ByteArrayOutputStream) -> Boolean =
+        { bitmap, format, quality, out -> bitmap.compress(format, quality, out) }
+
     override fun dimensions(bytes: ByteArray): Pair<Int, Int>? {
         val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
@@ -59,7 +64,7 @@ object AndroidEmbeddedImageCodec : EmbeddedImageCodec {
         }
         return try {
             val out = ByteArrayOutputStream()
-            if (scaled.compress(Bitmap.CompressFormat.JPEG, EmbeddedWorkCoverImage.JPEG_QUALITY, out)) {
+            if (compressBitmap(scaled, Bitmap.CompressFormat.JPEG, EmbeddedWorkCoverImage.JPEG_QUALITY, out)) {
                 out.toByteArray()
             } else {
                 null
@@ -152,6 +157,12 @@ object EmbeddedWorkCoverImage {
     fun data(
         epubFile: File,
         imageCodec: EmbeddedImageCodec = AndroidEmbeddedImageCodec
+    ): ByteArray? = data(epubFile = epubFile, imageCodec = imageCodec, entrySize = { it.size })
+
+    internal fun data(
+        epubFile: File,
+        imageCodec: EmbeddedImageCodec = AndroidEmbeddedImageCodec,
+        entrySize: (ZipEntry) -> Long
     ): ByteArray? {
         if (!epubFile.isFile) return null
         return runCatching {
@@ -197,7 +208,7 @@ object EmbeddedWorkCoverImage {
                         val imgUri = resolveRelative(pageUri, src) ?: continue
                         val name = entryName(imgUri) ?: continue
                         val entry = zip.getEntry(name) ?: continue
-                        if (imageEntrySkipped(entry.size)) continue
+                        if (imageEntrySkipped(entrySize(entry))) continue
                         val data = readEntry(zip, name, MAX_IMAGE_BYTES) ?: continue
                         val (width, height) = imageCodec.dimensions(data) ?: continue
                         if (!accepts(width, height)) continue
@@ -359,29 +370,39 @@ object EmbeddedWorkCoverImage {
         return percentDecode(last).lowercase(Locale.ROOT)
     }
 
-    private fun percentDecode(value: String): String {
+    internal fun percentDecode(value: String): String {
         if ('%' !in value) return value
-        val bytes = ByteArrayOutputStream(value.length)
+        val out = StringBuilder(value.length)
+        val pending = ByteArrayOutputStream()
+        val decoder = StandardCharsets.UTF_8.newDecoder()
+            .onMalformedInput(CodingErrorAction.REPORT)
+            .onUnmappableCharacter(CodingErrorAction.REPORT)
+
+        fun flushPending(): Boolean {
+            if (pending.size() == 0) return true
+            val decoded = runCatching {
+                decoder.reset().decode(ByteBuffer.wrap(pending.toByteArray())).toString()
+            }.getOrNull() ?: return false
+            out.append(decoded)
+            pending.reset()
+            return true
+        }
+
         var index = 0
         while (index < value.length) {
             val char = value[index]
             if (char == '%') {
                 if (index + 2 >= value.length) return value
                 val byte = hexByte(value[index + 1], value[index + 2]) ?: return value
-                bytes.write(byte)
+                pending.write(byte)
                 index += 3
                 continue
             }
-            bytes.write(char.toString().toByteArray(StandardCharsets.UTF_8))
+            if (!flushPending()) return value
+            out.append(char)
             index += 1
         }
-        return runCatching {
-            StandardCharsets.UTF_8.newDecoder()
-                .onMalformedInput(CodingErrorAction.REPORT)
-                .onUnmappableCharacter(CodingErrorAction.REPORT)
-                .decode(ByteBuffer.wrap(bytes.toByteArray()))
-                .toString()
-        }.getOrDefault(value)
+        return if (flushPending()) out.toString() else value
     }
 
     private fun hexByte(hi: Char, lo: Char): Int? {
