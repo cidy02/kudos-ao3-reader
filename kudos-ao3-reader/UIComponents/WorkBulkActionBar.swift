@@ -13,6 +13,10 @@ struct WorkBulkActionBar: View {
     var onDeleted: () -> Void = {}
     /// Called when the checkmark is tapped to exit selection mode without deleting.
     var onDone: () -> Void = {}
+    #if os(iOS)
+    /// Shelf lists host their sheet outside a Menu and provide this action.
+    var onExportEPUB: (() -> Void)? = nil
+    #endif
 
     @Environment(\.modelContext) private var context
     @Environment(DownloadQueue.self) private var downloadQueue
@@ -53,7 +57,9 @@ struct WorkBulkActionBar: View {
         Menu {
             #if os(iOS)
             if selectedWorks.contains(where: \.hasEPUB) {
-                Button { showingEPUBExport = true } label: {
+                Button {
+                    if let onExportEPUB { onExportEPUB() } else { showingEPUBExport = true }
+                } label: {
                     Label("Export EPUBs…", systemImage: "square.and.arrow.up")
                 }
             }

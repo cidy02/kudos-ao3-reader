@@ -607,6 +607,7 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                             Button { showingEPUBExport = true } label: {
                                 Label("Export EPUB…", systemImage: "square.and.arrow.up")
                             }
+                            .disabled(working)
                         }
                         #endif
                     }
