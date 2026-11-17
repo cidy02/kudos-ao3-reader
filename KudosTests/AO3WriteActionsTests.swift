@@ -1,4 +1,6 @@
 import Foundation
+import SwiftData
+import SwiftUI
 import Testing
 @testable import Kudos
 
@@ -16,8 +18,8 @@ private final class WorkSubscribeStub: URLProtocol, @unchecked Sendable {
     private static var postStatus = 200
     private static var postBody = ""
     private static var responder: (@Sendable (URLRequest) -> (status: Int, body: String))?
-    /// Runs on the URLProtocol thread for a GET, before the response is delivered.
-    private static var onGet: (@Sendable () -> Void)?
+    /// Runs asynchronously before a GET response is delivered (never blocking the URLProtocol thread).
+    private static var onGet: (@Sendable () async -> Void)?
     private static var hits: [Hit] = []
 
     static func reset(
@@ -25,7 +27,7 @@ private final class WorkSubscribeStub: URLProtocol, @unchecked Sendable {
         postStatus: Int = 200,
         postBody: String = #"<div class="flash notice">You are now following A Quiet Harbour.</div>"#,
         responder: (@Sendable (URLRequest) -> (status: Int, body: String))? = nil,
-        onGet: (@Sendable () -> Void)? = nil
+        onGet: (@Sendable () async -> Void)? = nil
     ) {
         lock.lock()
         self.html = html
@@ -50,6 +52,13 @@ private final class WorkSubscribeStub: URLProtocol, @unchecked Sendable {
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
+    private struct Snapshot: Sendable {
+        var html: String
+        var postStatus: Int
+        var postBody: String
+        var responder: (@Sendable (URLRequest) -> (status: Int, body: String))?
+    }
+
     override func startLoading() {
         guard let url = request.url else {
             client?.urlProtocol(self, didFailWithError: URLError(.badURL))
@@ -65,23 +74,38 @@ private final class WorkSubscribeStub: URLProtocol, @unchecked Sendable {
         )
         Self.lock.lock()
         Self.hits.append(hit)
-        let html = Self.html
-        let postStatus = Self.postStatus
-        let postBody = Self.postBody
-        let responder = Self.responder
+        let snapshot = Snapshot(
+            html: Self.html,
+            postStatus: Self.postStatus,
+            postBody: Self.postBody,
+            responder: Self.responder
+        )
         let onGet = Self.onGet
         Self.lock.unlock()
 
-        if method == "GET" {
-            onGet?()
+        if method == "GET", let onGet {
+            Task {
+                await onGet()
+                self.deliverResponse(url: url, method: method, request: request, snapshot: snapshot)
+            }
+            return
         }
 
-        let (status, body): (Int, String) = if let responder {
+        deliverResponse(url: url, method: method, request: request, snapshot: snapshot)
+    }
+
+    private func deliverResponse(
+        url: URL,
+        method: String,
+        request: URLRequest,
+        snapshot: Snapshot
+    ) {
+        let (status, body): (Int, String) = if let responder = snapshot.responder {
             responder(request)
         } else if method == "GET" {
-            (200, html)
+            (200, snapshot.html)
         } else {
-            (postStatus, postBody)
+            (snapshot.postStatus, snapshot.postBody)
         }
         let response = HTTPURLResponse(
             url: url, statusCode: status, httpVersion: "HTTP/1.1", headerFields: nil
@@ -110,28 +134,40 @@ private final class WorkSubscribeStub: URLProtocol, @unchecked Sendable {
     }
 }
 
-/// Blocks a bookmark GET on the URLProtocol thread until the test switches accounts.
-private final class BookmarkGetHold: @unchecked Sendable {
-    private let entered = DispatchSemaphore(value: 0)
-    private let release = DispatchSemaphore(value: 0)
+/// Suspends `cookieManager.install` so tests can observe `AO3AuthService.accept()`'s
+/// generation bump while `status` is still `.signingIn` before `finishAccepting` marks `.signedIn`.
+@MainActor
+private final class GatedInstallAO3CookieManager: AO3CookieManaging {
+    var installed: AO3Session?
+    private var shouldGateNextInstall = false
+    private var installEntered = Signal()
+    private var releaseInstall = Signal()
 
-    func onGet() {
-        entered.signal()
-        release.wait()
+    func armGate() {
+        shouldGateNextInstall = true
+        installEntered = Signal()
+        releaseInstall = Signal()
     }
 
-    func waitUntilEntered() async {
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            DispatchQueue.global().async {
-                self.entered.wait()
-                continuation.resume()
-            }
+    func waitUntilInstallEntered() async {
+        await installEntered.wait()
+    }
+
+    func unblockInstall() async {
+        await releaseInstall.fire()
+    }
+
+    func install(_ session: AO3Session) async {
+        if shouldGateNextInstall {
+            shouldGateNextInstall = false
+            await installEntered.fire()
+            await releaseInstall.wait()
         }
+        installed = session
     }
 
-    func unblock() {
-        release.signal()
-    }
+    func clear() async { installed = nil }
+    func capture() async -> [AO3StoredCookie] { [] }
 }
 
 /// Covers offline parsing, form encoding, and the work Subscribe decision with a
@@ -967,9 +1003,7 @@ struct AO3WriteActionsTests {
         model.startBookmark(workID: 42, auth: auth)
         #expect(model.bookmarkInput == AO3AuthService.BookmarkInput())
         #expect(!model.bookmarkIsUpdate)
-        model.bookmarkSessionDidChange(
-            wasLoggedIn: true, previousUsername: "alice", auth: auth
-        )
+        model.syncSession(auth: auth)
         #expect(model.workPageStates == nil)
     }
 
@@ -997,9 +1031,7 @@ struct AO3WriteActionsTests {
 
         await auth.logout()
         await auth.login(username: "bob", password: "pw")
-        model.bookmarkSessionDidChange(
-            wasLoggedIn: true, previousUsername: "alice", auth: auth
-        )
+        model.syncSession(auth: auth)
         model.startBookmark(workID: 42, auth: auth)
         #expect(model.bookmarkInput.notes.isEmpty)
         await release.fire()
@@ -1056,13 +1088,20 @@ struct AO3WriteActionsTests {
     @MainActor
     @Test func bookmarkGetDoesNotPostAfterAccountSwitch() async {
         let auth = await makeSignedInAuth(username: "alice")
-        let hold = BookmarkGetHold()
+        let entered = Signal()
+        let release = Signal()
         let page = """
         <html><head><meta name="csrf-token" content="fixture-token"></head>
         <body><form action="/bookmarks/9" method="post">
         <input type="hidden" name="_method" value="put"></form></body></html>
         """
-        WorkSubscribeStub.reset(html: page, onGet: { hold.onGet() })
+        WorkSubscribeStub.reset(
+            html: page,
+            onGet: {
+                await entered.fire()
+                await release.wait()
+            }
+        )
         let client = stubWorkClient()
         let save = Task { @MainActor in
             try await auth.saveBookmark(
@@ -1071,25 +1110,33 @@ struct AO3WriteActionsTests {
                 using: client
             )
         }
-        await hold.waitUntilEntered()
+        await entered.wait()
         await auth.logout()
         await auth.login(username: "bob", password: "pw")
-        hold.unblock()
+        await release.fire()
         await #expect(throws: CancellationError.self) {
             _ = try await save.value
         }
         #expect(WorkSubscribeStub.recordedMethods() == ["GET"])
     }
 
-    /// The session-change path: a sign-in from signed-out keeps the draft and
-    /// moves the composer onto the new generation; an account switch clears it.
+    /// Drives the same `syncSession(auth:)` entry point the modifier calls across
+    /// `accept()`'s two-step generation-then-status transition, case-only username
+    /// updates on refresh, mid-login view attachment, and account switch / logout.
     @MainActor
     @Test func composerKeepsTextAcrossSignInAndClearsOnAccountSwitch() async {
+        let validator = ConfigurableAO3SessionValidator(
+            result: .valid(AO3Session(
+                username: "Alice",
+                cookies: [AO3StoredCookie(name: "_otwarchive_session", value: "refreshed")]
+            ))
+        )
+        let cookieManager = GatedInstallAO3CookieManager()
         let auth = AO3AuthService(
             vault: MemoryAO3SessionVault(),
-            validator: InboxTestSessionValidator(),
+            validator: validator,
             loginPerformer: DynamicInboxTestLoginPerformer(),
-            cookieManager: MockAO3CookieManager(),
+            cookieManager: cookieManager,
             removalTracker: MemoryAO3SessionRemovalTracker()
         )
         var writeCount = 0
@@ -1105,129 +1152,257 @@ struct AO3WriteActionsTests {
             }
         )
 
+        model.syncSession(auth: auth)
         model.startBookmark(workID: 42, auth: auth)
         model.bookmarkInput.notes = "still typing"
-        model.bookmarkSessionDidChange(wasLoggedIn: false, previousUsername: nil, auth: auth)
+        model.syncSession(auth: auth)
         #expect(model.bookmarkInput.notes == "still typing")
         #expect(model.showingBookmark)
 
-        let signedOutGeneration = auth.sessionGeneration
-        await auth.login(username: "alice", password: "pw")
-        #expect(auth.sessionGeneration != signedOutGeneration)
-        model.refreshWorkPageStates(workID: 42, auth: auth)
-        await model.waitForStateFetch()
-        #expect(model.workPageStates != nil)
-        model.bookmarkSessionDidChange(wasLoggedIn: false, previousUsername: nil, auth: auth)
+        // Two-step `accept()`: `sessionGeneration` advances while `status` is still
+        // `.signingIn` (`isLoggedIn == false`) awaiting cookie installation.
+        cookieManager.armGate()
+        let loginTask = Task { @MainActor in
+            await auth.login(username: "alice", password: "pw")
+        }
+        await cookieManager.waitUntilInstallEntered()
+        #expect(!auth.isLoggedIn)
+        model.syncSession(auth: auth)
         #expect(model.bookmarkInput.notes == "still typing")
         #expect(model.showingBookmark)
-        #expect(model.workPageStates == nil)
+        // Must not arm Save before `auth.isLoggedIn` becomes true.
+        model.submitBookmark(workID: 42, auth: auth)
+        await model.waitForCurrentTask()
+        #expect(writeCount == 0)
+
+        await cookieManager.unblockInstall()
+        await loginTask.value
+        #expect(auth.isLoggedIn)
+        // `finishAccepting` flipped `status` to `.signedIn` without bumping generation again.
+        model.syncSession(auth: auth)
+        #expect(model.bookmarkInput.notes == "still typing")
+        #expect(model.showingBookmark)
         model.submitBookmark(workID: 42, auth: auth)
         await model.waitForCurrentTask()
         #expect(writeCount == 1)
         #expect(capturedNotes == "still typing")
 
+        // Same-account `verifySession()` returning mixed-case `"Alice"` keeps composer.
         model.startBookmark(workID: 42, auth: auth)
         model.bookmarkInput.notes = "same account"
-        let generationBeforeVerify = auth.sessionGeneration
         await auth.verifySession()
-        #expect(auth.sessionGeneration != generationBeforeVerify)
-        #expect(auth.username == "alice")
-        model.refreshWorkPageStates(workID: 42, auth: auth)
-        await model.waitForStateFetch()
-        #expect(model.workPageStates != nil)
-        model.bookmarkSessionDidChange(
-            wasLoggedIn: true, previousUsername: "alice", auth: auth
-        )
+        #expect(auth.username == "Alice")
+        model.syncSession(auth: auth)
         #expect(model.bookmarkInput.notes == "same account")
         #expect(model.showingBookmark)
-        #expect(model.workPageStates == nil)
         model.submitBookmark(workID: 42, auth: auth)
         await model.waitForCurrentTask()
         #expect(writeCount == 2)
         #expect(capturedNotes == "same account")
 
-        model.startBookmark(workID: 42, auth: auth)
-        model.bookmarkInput.notes = "alice only"
-        model.refreshWorkPageStates(workID: 42, auth: auth)
-        await model.waitForStateFetch()
-        #expect(model.workPageStates != nil)
+        // View attaching `syncSession` mid-login still binds to Alice once signed in,
+        // refuses `submitBookmark` on logout before sync, and clears on `syncSession`.
         await auth.logout()
+        cookieManager.armGate()
+        let reloginTask = Task { @MainActor in
+            await auth.login(username: "alice", password: "pw")
+        }
+        await cookieManager.waitUntilInstallEntered()
+        let midLoginModel = AO3WorkActionsModel(bookmarkHandler: { _, _, _ in
+            writeCount += 1
+            return "Bookmarked."
+        })
+        midLoginModel.syncSession(auth: auth)
+        await cookieManager.unblockInstall()
+        await reloginTask.value
+        midLoginModel.syncSession(auth: auth)
+
+        midLoginModel.startBookmark(workID: 42, auth: auth)
+        midLoginModel.bookmarkInput.notes = "alice only"
+        await auth.logout()
+        // Even before `syncSession` runs, `submitBookmark` refuses mismatched owner.
+        midLoginModel.submitBookmark(workID: 42, auth: auth)
+        await midLoginModel.waitForCurrentTask()
+        #expect(writeCount == 2)
+
+        midLoginModel.syncSession(auth: auth)
+        #expect(midLoginModel.bookmarkInput.notes.isEmpty)
+        #expect(!midLoginModel.showingBookmark)
+
         await auth.login(username: "bob", password: "pw")
-        model.bookmarkSessionDidChange(
-            wasLoggedIn: true, previousUsername: "alice", auth: auth
-        )
-        #expect(model.bookmarkInput.notes.isEmpty)
-        #expect(!model.showingBookmark)
-        #expect(model.workPageStates == nil)
+        midLoginModel.syncSession(auth: auth)
+        #expect(midLoginModel.bookmarkInput.notes.isEmpty)
+        #expect(!midLoginModel.showingBookmark)
     }
 
-    /// Cancelling the in-flight save is what stops it after the session changes.
-    /// The handler is released only after `bookmarkSessionDidChange`, so a missing
-    /// `activeTask?.cancel()` returns success instead of `CancellationError`.
+    /// `sessionDidExpire` advances `sessionGeneration` before awaiting WebKit cookie
+    /// clearing; `syncSession` must not cancel `activeTask` and swallow the expiry banner.
     @MainActor
-    @Test func bookmarkSessionChangeCancelsInFlightSave() async {
+    @Test func sessionSyncDoesNotCancelInFlightWriteAndPreservesExpiryBanner() async {
+        let cookieManager = GatedClearAO3CookieManager()
+        let auth = AO3AuthService(
+            vault: MemoryAO3SessionVault(),
+            validator: InboxTestSessionValidator(),
+            loginPerformer: DynamicInboxTestLoginPerformer(),
+            cookieManager: cookieManager,
+            removalTracker: MemoryAO3SessionRemovalTracker()
+        )
+        await auth.login(username: "alice", password: "pw")
+
+        let model = AO3WorkActionsModel(
+            subscribeHandler: { _, _, _ in throw AO3Error.authenticationRequired }
+        )
+        cookieManager.gateNextClear()
+        model.subscribe(workID: 42, to: true, auth: auth)
+        await cookieManager.clearEntered.wait()
+
+        // Mirrors SwiftUI `.onChange(of: auth.sessionGeneration)` while `clear()` awaits.
+        model.syncSession(auth: auth)
+        await cookieManager.releaseClear.fire()
+        await model.waitForCurrentTask()
+
+        #expect(!auth.isLoggedIn)
+        #expect(auth.sessionHealth == .expired)
+        #expect(model.banner == AO3Error.authenticationRequired.errorDescription)
+        #expect(model.writeFailures == 1)
+    }
+
+    /// A same-account `verifySession()` while a write task is in flight must not
+    /// cancel `activeTask` (after AO3 may have already accepted the POST).
+    @MainActor
+    @Test func sessionSyncDuringSameAccountRefreshDoesNotCancelInFlightBookmark() async {
         let auth = await makeSignedInAuth(username: "alice")
         let started = Signal()
         let release = Signal()
-        final class Probe {
-            var sawCancel = false
-            var finishedWithoutCancel = false
-        }
-        let probe = Probe()
+        var sawCancel = false
         let model = AO3WorkActionsModel(bookmarkHandler: { _, _, _ in
             await started.fire()
             await release.wait()
-            if Task.isCancelled {
-                probe.sawCancel = true
-                throw CancellationError()
-            }
-            probe.finishedWithoutCancel = true
+            sawCancel = Task.isCancelled
             return "Bookmarked."
         })
         model.startBookmark(workID: 42, auth: auth)
         model.submitBookmark(workID: 42, auth: auth)
         await started.wait()
-        await auth.logout()
-        await auth.login(username: "bob", password: "pw")
-        model.bookmarkSessionDidChange(
-            wasLoggedIn: true, previousUsername: "alice", auth: auth
-        )
+
+        await auth.verifySession()
+        model.syncSession(auth: auth)
         await release.fire()
         await model.waitForCurrentTask()
-        #expect(probe.sawCancel)
-        #expect(!probe.finishedWithoutCancel)
-        #expect(model.writeSuccesses == 0)
+
+        #expect(!sawCancel)
     }
 
-    /// "Bookmark updated." stays up for the two-second dismissal. A generation
-    /// change during that wait must not close the sheet — the dismissal task
-    /// checks the generation it captured, and this test does not call
-    /// `bookmarkSessionDidChange` on the second session.
+    /// "Bookmark updated." waits out its dismissal delay deterministically:
+    /// same-session and same-account `verifySession()` dismissals complete as expected,
+    /// while an un-synced switch to another session leaves the sheet alone.
     @MainActor
-    @Test func bookmarkUpdateDismissalWaitsOutAndIgnoresTheNextSession() async throws {
+    @Test func bookmarkUpdateDismissalWaitsOutAndIgnoresTheNextSession() async {
         let auth = await makeSignedInAuth(username: "alice")
+        final class SleepGates {
+            var entered = Signal()
+            var release = Signal()
+            func arm() {
+                entered = Signal()
+                release = Signal()
+            }
+        }
+        let gates = SleepGates()
         let model = AO3WorkActionsModel(
-            bookmarkHandler: { _, _, _ in "Bookmark updated." }
+            bookmarkHandler: { _, _, _ in "Bookmark updated." },
+            bookmarkDismissalSleep: {
+                await gates.entered.fire()
+                await gates.release.wait()
+            }
         )
+
+        // 1. Normal same-session dismissal.
+        gates.arm()
         model.startBookmark(workID: 42, auth: auth)
         model.submitBookmark(workID: 42, auth: auth)
         await model.waitForCurrentTask()
+        await gates.entered.wait()
         #expect(model.showingBookmark)
         #expect(model.bookmarkSuccess == "Bookmark updated.")
-        try await Task.sleep(for: .seconds(3))
+        await gates.release.fire()
+        await model.waitForBookmarkDismissal()
         #expect(!model.showingBookmark)
         #expect(model.bookmarkSuccess == nil)
 
+        // 2. Same-account `verifySession()` during the wait still dismisses on time.
+        gates.arm()
         model.startBookmark(workID: 42, auth: auth)
         model.submitBookmark(workID: 42, auth: auth)
         await model.waitForCurrentTask()
-        #expect(model.showingBookmark)
-        #expect(model.bookmarkSuccess == "Bookmark updated.")
+        await gates.entered.wait()
+        await auth.verifySession()
+        model.syncSession(auth: auth)
+        await gates.release.fire()
+        await model.waitForBookmarkDismissal()
+        #expect(!model.showingBookmark)
+        #expect(model.bookmarkSuccess == nil)
+
+        // 3. Un-synced session switch to bob leaves the sheet untouched when sleep wakes.
+        gates.arm()
+        model.startBookmark(workID: 42, auth: auth)
+        model.submitBookmark(workID: 42, auth: auth)
+        await model.waitForCurrentTask()
+        await gates.entered.wait()
         await auth.logout()
         await auth.login(username: "bob", password: "pw")
-        try await Task.sleep(for: .seconds(3))
+        await gates.release.fire()
+        await model.waitForBookmarkDismissal()
         #expect(model.showingBookmark)
         #expect(model.bookmarkSuccess == "Bookmark updated.")
+    }
+
+    @MainActor
+    @Test func optionalWorkIDModifierPreservesViewIdentityAndBookmarkShotTargetsAO3Work() throws {
+        let auth = AO3AuthService(
+            vault: MemoryAO3SessionVault(),
+            validator: InboxTestSessionValidator(),
+            loginPerformer: DynamicInboxTestLoginPerformer(),
+            cookieManager: MockAO3CookieManager(),
+            removalTracker: MemoryAO3SessionRemovalTracker()
+        )
+        let model = AO3WorkActionsModel()
+        let nilView = Color.clear.ao3WorkActions(model, workID: nil, auth: auth)
+        let idView = Color.clear.ao3WorkActions(model, workID: 42, auth: auth)
+        let nilType = String(describing: type(of: nilView as Any))
+        let idType = String(describing: type(of: idView as Any))
+        #expect(nilType == idType)
+        #expect(!nilType.contains("_ConditionalContent"))
+
+        let defaults = UserDefaults.standard
+        let oldDemo = defaults.object(forKey: "KudosDemoLibrary")
+        let oldRoute = defaults.object(forKey: "KudosDebugRoute")
+        defer {
+            if let oldDemo {
+                defaults.set(oldDemo, forKey: "KudosDemoLibrary")
+            } else {
+                defaults.removeObject(forKey: "KudosDemoLibrary")
+            }
+            if let oldRoute {
+                defaults.set(oldRoute, forKey: "KudosDebugRoute")
+            } else {
+                defaults.removeObject(forKey: "KudosDebugRoute")
+            }
+        }
+        defaults.set(true, forKey: "KudosDemoLibrary")
+        defaults.set("shot:bookmarkform", forKey: "KudosDebugRoute")
+
+        let schema = Schema([
+            SavedWork.self, ReadingQueue.self, SavedSearch.self,
+            QueueSavedSearchLink.self, WorkCollection.self, Tag.self
+        ])
+        let container = try ModelContainer(
+            for: schema,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+        DemoLibrary.seedIfRequested(in: container.mainContext)
+        let works = try container.mainContext.fetch(FetchDescriptor<SavedWork>())
+        let target = try #require(DebugLaunchRoute.homeWork(in: works))
+        #expect(target.ao3WorkID != nil)
     }
 
     // MARK: Work-page action states (fixtures trimmed from live captures, 2026-07-16)

@@ -690,6 +690,7 @@ enum DebugShots {
     private static let neon = "queue:Neon reread"
     private static let neonDetails = "queue-details:Neon reread"
     private static let sodium = "work:Sodium Lights"
+    private static let river = "work:What the River Keeps"
     private static let readSodium = "read:Sodium Lights"
     private static let readRiver = "read:What the River Keeps"
     private static let winter = "acct:ao3collection:winter_exchange"
@@ -722,7 +723,7 @@ enum DebugShots {
         ("tagpicker", DebugShot(route: starSearch, sheets: ["tagpicker"])),
         ("downloaddate", DebugShot(route: sodium, sheets: ["downloaddate"])),
         ("seriespreserve", DebugShot(route: sodium, sheets: ["seriespreserve"])),
-        ("bookmarkform", DebugShot(route: sodium, sheets: ["bookmarkform"])),
+        ("bookmarkform", DebugShot(route: river, sheets: ["bookmarkform"])),
         ("readercontents", DebugShot(route: readSodium, sheets: ["readercontents"])),
         ("readerfind", DebugShot(route: readSodium, sheets: ["readerfind"], query: "lights")),
         ("readerdisplay", DebugShot(route: readSodium, sheets: ["readerdisplay"])),

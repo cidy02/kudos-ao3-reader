@@ -198,9 +198,6 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
                     )
                     showingSeriesQueuePrompt = true
                 }
-                if DebugLaunchRoute.takeSheet("bookmarkform"), let workID = ao3WorkID {
-                    workActions.startBookmark(workID: workID, auth: auth)
-                }
                 #endif
             }
         }
@@ -215,6 +212,11 @@ struct WorkDetailView: View { // swiftlint:disable:this type_body_length
             // switching sections re-renders from this already-loaded state without
             // re-fetching anything.
             resolveExistingIfNeeded()
+            #if DEBUG
+            if let workID = ao3WorkID, DebugLaunchRoute.takeSheet("bookmarkform") {
+                workActions.startBookmark(workID: workID, auth: auth)
+            }
+            #endif
             guard let work = localWork else { return }
             ReadingQueueService.normalize(work)
             await WorkTags.backfillFromEPUB(for: work, in: context)
