@@ -48,29 +48,39 @@ struct QueueAddedToast: View {
         }
     }
 
-    var actions: some View {
-        let layout = Self.stacksActions(dynamicTypeSize)
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 6))
-            : AnyLayout(HStackLayout(spacing: 6))
-        return layout {
-            action("Undo", perform: undo)
-            action("Change", perform: change)
-        }
-    }
+    /// Its own view so it reads the dynamic type size where it is drawn (a property on the toast
+    /// would read the toast's environment, which a test or a preview never sets).
+    var actions: some View { Actions(change: change, undo: undo) }
 
     static func stacksActions(_ size: DynamicTypeSize) -> Bool { size.isAccessibilitySize }
 
-    private func action(_ title: String, perform: @escaping () -> Void) -> some View {
-        Button(action: perform) {
-            Text(title)
-                .fontWeight(.semibold)
-                .foregroundStyle(.white)
-                .lineLimit(1)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(.white.opacity(0.18), in: Capsule())
+    struct Actions: View {
+        let change: () -> Void
+        let undo: () -> Void
+        @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+        var body: some View {
+            let layout = QueueAddedToast.stacksActions(dynamicTypeSize)
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 6))
+                : AnyLayout(HStackLayout(spacing: 6))
+            layout {
+                action("Undo", perform: undo)
+                action("Change", perform: change)
+            }
         }
-        .buttonStyle(.plain)
-        .minimumHitTarget()
+
+        private func action(_ title: String, perform: @escaping () -> Void) -> some View {
+            Button(action: perform) {
+                Text(title)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(.white.opacity(0.18), in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .minimumHitTarget()
+        }
     }
 }
