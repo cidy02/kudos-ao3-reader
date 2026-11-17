@@ -18,7 +18,7 @@ import SwiftUI
             SavedWork.self, Tag.self, Bookmark.self, CustomFont.self,
             WorkCollection.self, ReadingQueue.self, ReadingQueueMembership.self,
             SavedSearch.self, QueueSavedSearchLink.self, SyncTombstone.self, ReadingAnnotation.self,
-            ReadingSession.self, ReadingFavorite.self, FandomReadWatermark.self
+            ReadingSession.self, ReadingFavorite.self, FandomReadWatermark.self, FollowedTag.self
         ])
         do {
             return try ModelContainer(for: schema)

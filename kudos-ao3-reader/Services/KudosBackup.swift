@@ -620,6 +620,9 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
     let readingSessions: [KudosBackupReadingSession]
     let readingFavorites: [KudosBackupReadingFavorite]
     let fandomReadWatermarks: [KudosBackupFandomReadWatermark]
+    /// Locally followed tags. Optional and omitted (`nil`) when empty so manifests
+    /// match older iOS/Android golden archives verbatim.
+    let followedTags: [KudosBackupFollowedTag]?
     let settings: KudosBackupSettings
     /// Read-aloud pronunciation corrections. Hand-made, unreconstructible, and
     /// small, so they travel with the reader rather than being stranded on one
@@ -650,6 +653,7 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
         readingSessions: [KudosBackupReadingSession] = [],
         readingFavorites: [KudosBackupReadingFavorite] = [],
         fandomReadWatermarks: [KudosBackupFandomReadWatermark] = [],
+        followedTags: [KudosBackupFollowedTag]? = nil,
         settings: KudosBackupSettings,
         pronunciations: KudosBackupPronunciations = .empty,
         tombstones: [KudosBackupTombstone] = []
@@ -667,6 +671,7 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
         self.readingSessions = readingSessions
         self.readingFavorites = readingFavorites
         self.fandomReadWatermarks = fandomReadWatermarks
+        self.followedTags = followedTags.flatMap { $0.isEmpty ? nil : $0 }
         self.pronunciations = pronunciations
         self.settings = settings
         self.tombstones = tombstones
@@ -686,6 +691,7 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
         case readingSessions
         case readingFavorites
         case fandomReadWatermarks
+        case followedTags
         case settings
         case pronunciations
         case tombstones
@@ -730,6 +736,10 @@ nonisolated struct KudosBackupManifest: Codable, Equatable {
             [KudosBackupFandomReadWatermark].self,
             forKey: .fandomReadWatermarks
         ) ?? []
+        followedTags = try container.decodeIfPresent(
+            [KudosBackupFollowedTag].self,
+            forKey: .followedTags
+        )
         settings = try container.decode(KudosBackupSettings.self, forKey: .settings)
         pronunciations = try container.decodeIfPresent(
             KudosBackupPronunciations.self,
@@ -1524,6 +1534,71 @@ nonisolated struct KudosBackupFandomReadWatermark: Codable, Equatable {
     }
 }
 
+/// Additive backup representation of `FollowedTag`. Optional runtime values leave
+/// `nil` rather than emitting placeholder keys until a feed check or user edit sets them.
+nonisolated struct KudosBackupFollowedTag: Codable, Equatable {
+    let id: UUID
+    let ao3TagID: Int
+    let name: String
+    let tagCategoryRaw: String?
+    let tagURLString: String?
+    let showOnHome: Bool
+    let completeOnly: Bool
+    let hideExplicit: Bool
+    let followedAt: Date
+    let lastCheckedAt: Date?
+    let lastSeenWorkID: Int?
+    let lastSeenPublishedAt: Date?
+    let seenWorkIDs: [Int]?
+    let lastModifiedAt: Date
+
+    private enum CodingKeys: String, CodingKey {
+        case id, ao3TagID, name, tagCategoryRaw, tagURLString
+        case showOnHome, completeOnly, hideExplicit
+        case followedAt, lastCheckedAt, lastSeenWorkID, lastSeenPublishedAt, seenWorkIDs
+        case lastModifiedAt
+    }
+
+    @MainActor
+    init(tag: FollowedTag) {
+        id = tag.id
+        ao3TagID = tag.ao3TagID
+        name = tag.name
+        tagCategoryRaw = tag.tagCategoryRaw
+        tagURLString = tag.tagURLString
+        showOnHome = tag.showOnHome
+        completeOnly = tag.completeOnly
+        hideExplicit = tag.hideExplicit
+        followedAt = tag.followedAt
+        lastCheckedAt = tag.lastCheckedAt
+        lastSeenWorkID = tag.lastSeenWorkID
+        lastSeenPublishedAt = tag.lastSeenPublishedAt
+        let ids = tag.seenWorkIDs
+        seenWorkIDs = ids.isEmpty ? nil : ids
+        lastModifiedAt = tag.lastModifiedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        ao3TagID = try container.decodeIfPresent(Int.self, forKey: .ao3TagID) ?? 0
+        name = try container.decodeIfPresent(String.self, forKey: .name) ?? ""
+        tagCategoryRaw = try container.decodeIfPresent(String.self, forKey: .tagCategoryRaw)
+        tagURLString = try container.decodeIfPresent(String.self, forKey: .tagURLString)
+        showOnHome = try container.decodeIfPresent(Bool.self, forKey: .showOnHome) ?? true
+        completeOnly = try container.decodeIfPresent(Bool.self, forKey: .completeOnly) ?? false
+        hideExplicit = try container.decodeIfPresent(Bool.self, forKey: .hideExplicit) ?? false
+        followedAt = try container.decodeIfPresent(Date.self, forKey: .followedAt) ?? Date()
+        lastCheckedAt = try container.decodeIfPresent(Date.self, forKey: .lastCheckedAt)
+        lastSeenWorkID = try container.decodeIfPresent(Int.self, forKey: .lastSeenWorkID)
+        lastSeenPublishedAt = try container.decodeIfPresent(Date.self, forKey: .lastSeenPublishedAt)
+        let decodedIDs = try container.decodeIfPresent([Int].self, forKey: .seenWorkIDs)
+        seenWorkIDs = decodedIDs?.isEmpty == true ? nil : decodedIDs
+        lastModifiedAt = try container.decodeIfPresent(Date.self, forKey: .lastModifiedAt)
+            ?? followedAt
+    }
+}
+
 /// Matches Android `BackupCollection` (`backup/BackupManifest.kt`):
 /// `id`, `name`, `dateAdded`, `workIDs`, optional `description`/`sortOrder`
 /// (`String?` / `Int?`), plus the Apple sync tombstone fields.
@@ -2216,6 +2291,7 @@ enum KudosBackupService {
         readingSessions: [ReadingSession] = [],
         readingFavorites: [ReadingFavorite] = [],
         fandomReadWatermarks: [FandomReadWatermark] = [],
+        followedTags: [FollowedTag] = [],
         tombstones: [SyncTombstone] = [],
         defaults: UserDefaults = .standard
     ) throws -> KudosBackupContents {
@@ -2265,6 +2341,7 @@ enum KudosBackupService {
             readingSessions: readingSessions.map(KudosBackupReadingSession.init),
             readingFavorites: readingFavorites.map(KudosBackupReadingFavorite.init),
             fandomReadWatermarks: fandomReadWatermarks.map(KudosBackupFandomReadWatermark.init),
+            followedTags: followedTags.map(KudosBackupFollowedTag.init),
             settings: .capture(defaults: defaults),
             pronunciations: .capture(),
             tombstones: tombstones.map(KudosBackupTombstone.init)
@@ -3372,6 +3449,9 @@ enum KudosBackupService {
         restoreFandomReadWatermarks(
             contents: contents, context: context, tombstones: tombstones, mode: mode
         )
+        restoreFollowedTags(
+            contents: contents, context: context, tombstones: tombstones, mode: mode
+        )
 
         let existingBookmarks = try context.fetch(FetchDescriptor<Bookmark>())
         var bookmarksByURL = Dictionary(
@@ -4083,6 +4163,114 @@ enum KudosBackupService {
         }
     }
 
+    /// Restores locally followed tags when `manifest.followedTags` is present.
+    ///
+    /// Older iOS backups and Android archives omit `followedTags` (`nil`), in which case
+    /// existing local followed tags are left completely untouched.
+    private static func restoreFollowedTags(
+        contents: KudosBackupContents,
+        context: ModelContext,
+        tombstones: TombstoneIndex,
+        mode: BackupImportMode
+    ) {
+        guard let archivedTags = contents.manifest.followedTags else { return }
+
+        let existing = (try? context.fetch(FetchDescriptor<FollowedTag>())) ?? []
+        var byID = Dictionary(existing.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        var byAO3TagID = Dictionary(
+            existing.map { ($0.ao3TagID, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        var resolvedLocalIDs: Set<UUID> = []
+
+        for archived in archivedTags {
+            guard archived.ao3TagID > 0 else { continue }
+            if mode != .replaceLibrary {
+                switch tombstones.followedTagResolution(
+                    id: archived.id,
+                    incomingModifiedAt: archived.lastModifiedAt
+                ) {
+                case .suppressStaleData:
+                    continue
+                case .reviveNewerData, .preserveAmbiguous, .noTombstone:
+                    break
+                }
+            }
+
+            if let local = byID[archived.id] ?? byAO3TagID[archived.ao3TagID] {
+                resolvedLocalIDs.insert(local.id)
+                if mode == .merge, byID[archived.id] != nil { continue }
+                guard SyncMerge.shouldApplyIncoming(
+                    localModifiedAt: local.lastModifiedAt,
+                    incomingModifiedAt: archived.lastModifiedAt
+                ) else { continue }
+                local.ao3TagID = archived.ao3TagID
+                local.name = archived.name
+                local.tagCategoryRaw = archived.tagCategoryRaw
+                local.tagURLString = archived.tagURLString
+                local.showOnHome = archived.showOnHome
+                local.completeOnly = archived.completeOnly
+                local.hideExplicit = archived.hideExplicit
+                local.followedAt = archived.followedAt
+                if let archivedChecked = archived.lastCheckedAt,
+                   local.lastCheckedAt == nil
+                    || archivedChecked > (local.lastCheckedAt ?? .distantPast) {
+                    local.lastCheckedAt = archivedChecked
+                }
+                if let archivedWorkID = archived.lastSeenWorkID,
+                   local.lastSeenPublishedAt == nil
+                    || (archived.lastSeenPublishedAt ?? .distantPast)
+                    >= (local.lastSeenPublishedAt ?? .distantPast) {
+                    local.lastSeenWorkID = archivedWorkID
+                    local.lastSeenPublishedAt = archived.lastSeenPublishedAt
+                }
+                if let archivedSeen = archived.seenWorkIDs, !archivedSeen.isEmpty {
+                    local.seenWorkIDs = archivedSeen + local.seenWorkIDs
+                }
+                local.lastModifiedAt = archived.lastModifiedAt
+                byID[local.id] = local
+                byAO3TagID[local.ao3TagID] = local
+            } else {
+                if mode == .replaceLibrary {
+                    guard resolvedLocalIDs.count < FollowedTag.maxFollowedCount else { continue }
+                } else {
+                    guard byID.count < FollowedTag.maxFollowedCount else { continue }
+                }
+                let tag = FollowedTag(
+                    id: archived.id,
+                    ao3TagID: archived.ao3TagID,
+                    name: archived.name,
+                    tagCategoryRaw: archived.tagCategoryRaw,
+                    tagURLString: archived.tagURLString,
+                    showOnHome: archived.showOnHome,
+                    completeOnly: archived.completeOnly,
+                    hideExplicit: archived.hideExplicit,
+                    followedAt: archived.followedAt,
+                    lastCheckedAt: archived.lastCheckedAt,
+                    lastSeenWorkID: archived.lastSeenWorkID,
+                    lastSeenPublishedAt: archived.lastSeenPublishedAt,
+                    seenWorkIDs: archived.seenWorkIDs ?? [],
+                    lastModifiedAt: archived.lastModifiedAt
+                )
+                context.insert(tag)
+                byID[tag.id] = tag
+                byAO3TagID[tag.ao3TagID] = tag
+                resolvedLocalIDs.insert(tag.id)
+            }
+        }
+
+        applyTombstonesToExisting(existing, in: context, mode: mode) {
+            tombstones.followedTagResolution(id: $0.id, incomingModifiedAt: $0.lastModifiedAt)
+        }
+
+        if mode == .replaceLibrary {
+            for tag in existing where !resolvedLocalIDs.contains(tag.id) {
+                SyncTombstones.recordDeletion(of: tag, in: context)
+                context.delete(tag)
+            }
+        }
+    }
+
     /// Prevents backup import from resurrecting a record the user explicitly deleted on
     /// this device. A work tombstone only suppresses recreation when it is at least as
     /// new as the archived snapshot — an archived work with a strictly newer modification
@@ -4389,6 +4577,7 @@ enum KudosBackupService {
         private var readingSessionTombstonesByID: [UUID: SyncTombstone] = [:]
         private var readingFavoriteTombstonesByID: [UUID: SyncTombstone] = [:]
         private var fandomReadWatermarkTombstonesByID: [UUID: SyncTombstone] = [:]
+        private var followedTagTombstonesByID: [UUID: SyncTombstone] = [:]
 
         init(_ tombstones: [SyncTombstone]) {
             for tombstone in tombstones {
@@ -4424,6 +4613,8 @@ enum KudosBackupService {
                     indexNewest(tombstone, byReadingFavoriteID: tombstone.recordID)
                 case .fandomReadWatermark:
                     indexNewest(tombstone, byFandomReadWatermarkID: tombstone.recordID)
+                case .followedTag:
+                    indexNewest(tombstone, byFollowedTagID: tombstone.recordID)
                 }
             }
         }
@@ -4531,6 +4722,16 @@ enum KudosBackupService {
             fandomReadWatermarkTombstonesByID[id] = tombstone
         }
 
+        private mutating func indexNewest(
+            _ tombstone: SyncTombstone, byFollowedTagID id: UUID
+        ) {
+            if let existing = followedTagTombstonesByID[id],
+               existing.lastModifiedAt >= tombstone.lastModifiedAt {
+                return
+            }
+            followedTagTombstonesByID[id] = tombstone
+        }
+
         /// Whether importing this archived work would resurrect an explicit local delete.
         func suppressesResurrection(of archived: KudosBackupWork) -> Bool {
             let tombstone: SyncTombstone? = if let archivedAO3WorkID = archived.ao3WorkID ?? WorkTags.ao3WorkID(from: archived.sourceURL),
@@ -4606,6 +4807,15 @@ enum KudosBackupService {
             SyncMerge.tombstoneResolution(
                 incomingModifiedAt: incomingModifiedAt,
                 tombstoneDeletedAt: fandomReadWatermarkTombstonesByID[id]?.lastModifiedAt
+            )
+        }
+
+        func followedTagResolution(
+            id: UUID, incomingModifiedAt: Date?
+        ) -> SyncMerge.TombstoneResolution {
+            SyncMerge.tombstoneResolution(
+                incomingModifiedAt: incomingModifiedAt,
+                tombstoneDeletedAt: followedTagTombstonesByID[id]?.lastModifiedAt
             )
         }
 

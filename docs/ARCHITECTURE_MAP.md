@@ -62,6 +62,7 @@ All paths relative to `kudos-ao3-reader/` unless noted. Confirmed as of 2026-07-
 | Mail subscription updates (derived, device-only, capped; excluded from backups/sync) | `Services/SubscriptionUpdateStore.swift` |
 | Subscription scan snapshots (derived, per-auth-scope, device-only; excluded from backup/sync) | `Services/SubscriptionScanStore.swift` (`KudosSubscriptionScan` in Application Support) |
 | New to you cards (new works from author/series follows, with persisted decisions) | `Features/Subscriptions/NewToYouDeck.swift` |
+| Followed tags (local Atom feed follows, capped at 20, Home/Subscriptions foreground checks) | `Models/FollowedTag.swift`, `Models/AO3TagFeed.swift`, `Services/AO3Client+TagFeed.swift`, `Services/FollowedTagChecks.swift`, `Services/FollowedTagUpdateStore.swift`, `Features/Subscriptions/FollowTagSheet.swift`, `FollowedTagsListView.swift` |
 | Design doc | `docs/iCloudPersistence.md` |
 
 ## Identity, search, dedup

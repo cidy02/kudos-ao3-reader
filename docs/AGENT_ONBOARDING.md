@@ -9,7 +9,7 @@ Native SwiftUI + SwiftData reader for Archive of Our Own (iOS/iPadOS/macOS, AGPL
 ## High-level architecture
 
 - **UI**: SwiftUI, 4 tabs + global Search (`App/ContentView.swift` TabView; routing via `AppRouter`).
-- **Models**: the `@Model` classes in `Models/` — `Models.swift` holds `SavedWork`, `WorkCollection`, `ReadingQueue`, `ReadingQueueMembership`, `Tag`, `Bookmark`, `CustomFont`, `ReadingAnnotation`, `SyncTombstone`; `SavedSearch`, `ReadingSession`, `ReadingFavorite` and `FandomReadWatermark` each have their own file. Remote value types in `Models/AO3Models.swift`.
+- **Models**: the `@Model` classes in `Models/` — `Models.swift` holds `SavedWork`, `WorkCollection`, `ReadingQueue`, `ReadingQueueMembership`, `Tag`, `Bookmark`, `CustomFont`, `ReadingAnnotation`, `SyncTombstone`; `SavedSearch`, `ReadingSession`, `ReadingFavorite`, `FandomReadWatermark`, and `FollowedTag` each have their own file. Remote value types in `Models/AO3Models.swift` and `Models/AO3TagFeed.swift`.
 - **Services**: `Services/` — one file per concern (see ARCHITECTURE_MAP).
 - **Reader**: iOS → Readium (`Features/ReaderReadium/`); macOS → legacy WKWebView reader (`Features/Reader/`, `#if os(macOS)`). Readium SPM products are `platformFilter = ios`.
 - **Concurrency**: `@MainActor` almost everywhere that touches SwiftData; `AO3Client` is an actor.

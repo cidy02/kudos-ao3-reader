@@ -6,6 +6,7 @@ struct SubscriptionsView: View {
     enum Tab: String, CaseIterable, Identifiable {
         case waiting = "Waiting"
         case following = "Following"
+        case tags = "Tags"
         case tidyUp = "Tidy up"
 
         var id: String { rawValue }
@@ -26,13 +27,22 @@ struct SubscriptionsView: View {
 
     @Environment(AO3AuthService.self) private var auth
     @Environment(ThemeManager.self) private var theme
+    @Environment(AppRouter.self) private var router
     @Environment(SubscriptionScanService.self) private var scan
+    @Environment(FollowedTagUpdateStore.self) private var tagUpdates
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     #if os(iOS)
     @Environment(MailSubscriptionDriver.self) private var mailDriver
     #endif
 
+    @Query(sort: \FollowedTag.followedAt) private var followedTags: [FollowedTag]
+
     @State private var selectedTab: Tab
+    @State private var isScreenVisible = false
+    @State private var hostTab: AppTab?
+    @State private var tagCheckTask: Task<Void, Never>?
 
     /// Home opens Following when it showed followed works rather than updates.
     init(initialTab: Tab = .waiting) {
@@ -65,18 +75,76 @@ struct SubscriptionsView: View {
         "\(auth.username ?? "")|\(auth.isLoggedIn)|\(reloadToken)|\(selectedTab.rawValue)"
     }
 
+    private var isTagCheckActive: Bool {
+        isScreenVisible && scenePhase == .active && (hostTab == nil || router.selection == hostTab)
+    }
+
+    private var visibleTagUpdates: [SubscriptionUpdate] {
+        tagUpdates.visibleUpdates(for: followedTags, homeOnly: false)
+    }
+
+    private func startTagCheckIfNeeded() {
+        guard isTagCheckActive else { return }
+        tagCheckTask?.cancel()
+        tagCheckTask = Task {
+            await tagUpdates.checkIfNeeded(
+                screen: .subscriptions,
+                in: modelContext,
+                ignoringCooldown: false,
+                isScreenActive: { isTagCheckActive }
+            )
+        }
+    }
+
+    private func cancelTagCheck() {
+        tagCheckTask?.cancel()
+        tagCheckTask = nil
+    }
+
+    private func refreshFollowedTags() async {
+        guard isTagCheckActive else { return }
+        cancelTagCheck()
+        await tagUpdates.checkIfNeeded(
+            screen: .subscriptions,
+            in: modelContext,
+            ignoringCooldown: true,
+            isScreenActive: { isTagCheckActive }
+        )
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            Picker("Subscription section", selection: $selectedTab) {
-                ForEach(Tab.allCases) { tab in
-                    Text(tab.rawValue).tag(tab)
+            if dynamicTypeSize.isAccessibilitySize {
+                AccessibilityChipRail(horizontalPadding: CardListMetrics.sideMargin) {
+                    ForEach(Tab.allCases) { tab in
+                        Button {
+                            selectedTab = tab
+                        } label: {
+                            SubjectChip(
+                                text: tab.rawValue,
+                                style: .pill(isSelected: selectedTab == tab),
+                                palette: theme.scopePalette
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .minimumHitTarget(32)
+                        .accessibilityLabel(tab.rawValue)
+                        .accessibilityAddTraits(selectedTab == tab ? .isSelected : [])
+                    }
                 }
+                .padding(.vertical, 8)
+            } else {
+                Picker("Subscription section", selection: $selectedTab) {
+                    ForEach(Tab.allCases) { tab in
+                        Text(tab.rawValue).tag(tab)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .controlSize(.large)
+                .frame(minHeight: 44)
+                .padding(.horizontal, CardListMetrics.sideMargin)
+                .padding(.vertical, 8)
             }
-            .pickerStyle(.segmented)
-            .controlSize(.large)
-            .frame(minHeight: 44)
-            .padding(.horizontal, CardListMetrics.sideMargin)
-            .padding(.vertical, 8)
 
             tabContent
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -92,6 +160,13 @@ struct SubscriptionsView: View {
                         // The app's one "…" order (pass2-1, T-284): Mature first.
                         if hideMature {
                             MatureRevealToggle()
+                        }
+                        if !visibleTagUpdates.isEmpty {
+                            Button {
+                                tagUpdates.markAllSeen()
+                            } label: {
+                                Label("Mark Tag Updates Seen", systemImage: "checkmark.circle")
+                            }
                         }
                         NavigationLink {
                             SubscriptionsSourcesView()
@@ -111,6 +186,29 @@ struct SubscriptionsView: View {
                     } label: {
                         Label("More", systemImage: "ellipsis.circle")
                     }
+                }
+            }
+            .onAppear {
+                if hostTab == nil { hostTab = router.selection }
+                isScreenVisible = true
+                startTagCheckIfNeeded()
+            }
+            .onDisappear {
+                isScreenVisible = false
+                cancelTagCheck()
+            }
+            .onChange(of: router.selection) { _, _ in
+                if isTagCheckActive {
+                    startTagCheckIfNeeded()
+                } else {
+                    cancelTagCheck()
+                }
+            }
+            .onChange(of: scenePhase) { _, newPhase in
+                if newPhase == .active, isTagCheckActive {
+                    startTagCheckIfNeeded()
+                } else {
+                    cancelTagCheck()
                 }
             }
             .task(id: loadKey) {
@@ -149,6 +247,11 @@ struct SubscriptionsView: View {
             waitingContent
         case .following:
             followingContent(scope: .following)
+        case .tags:
+            FollowedTagsListView(
+                showsStandaloneHeader: true,
+                onRefresh: { await refreshFollowedTags() }
+            )
         case .tidyUp:
             followingContent(scope: .tidyUp)
         }
@@ -186,32 +289,38 @@ struct SubscriptionsView: View {
 
     @ViewBuilder
     private var waitingContent: some View {
+        let localTagUpdates = visibleTagUpdates
         #if os(iOS)
         if mailDriver.isConnected {
             WaitingListView(
-                updates: mailDriver.updates,
+                updates: mailDriver.updates + localTagUpdates,
                 showsEmptyState: false,
                 mailSince: mailDriver.since,
                 unverifiedCount: mailDriver.unverifiedCount,
-                refreshError: mailDriver.errorMessage
+                refreshError: mailDriver.errorMessage,
+                onOpenTagUpdate: { tagUpdates.markSeen(tagID: $0) }
             )
             .task { await mailDriver.refreshIfNeeded() }
-            .refreshable { await mailDriver.refresh() }
+            .refreshable {
+                await mailDriver.refresh()
+                await refreshFollowedTags()
+            }
         } else {
-            scanOrDisconnectedWaiting
+            scanOrDisconnectedWaiting(tagUpdates: localTagUpdates)
         }
         #else
-        scanOrDisconnectedWaiting
+        scanOrDisconnectedWaiting(tagUpdates: localTagUpdates)
         #endif
     }
 
     /// Mail wins while it is connected. Otherwise a scan that has already looked
-    /// at follows shows those rows; a cold account keeps the source prompt.
+    /// at follows or locally followed tags show those rows; a cold account keeps
+    /// the source prompt.
     @ViewBuilder
-    private var scanOrDisconnectedWaiting: some View {
+    private func scanOrDisconnectedWaiting(tagUpdates localTagUpdates: [SubscriptionUpdate]) -> some View {
         if showsScanWaiting {
             WaitingListView(
-                updates: scan.updates,
+                updates: scan.updates + localTagUpdates,
                 showsPosition: true,
                 showsEmptyState: false,
                 scanStatus: scanStatus,
@@ -219,8 +328,17 @@ struct SubscriptionsView: View {
                 alphabeticalNote: scan.partialBaselines.isEmpty
                     ? nil
                     : SubscriptionScanCopy.alphabeticalHonesty,
-                onCheck: canStartScan ? { startScan() } : nil
+                onCheck: canStartScan ? { startScan() } : nil,
+                onOpenTagUpdate: { tagUpdates.markSeen(tagID: $0) }
             )
+            .refreshable { await refreshFollowedTags() }
+        } else if !localTagUpdates.isEmpty || !followedTags.isEmpty {
+            WaitingListView(
+                updates: localTagUpdates,
+                showsEmptyState: true,
+                onOpenTagUpdate: { tagUpdates.markSeen(tagID: $0) }
+            )
+            .refreshable { await refreshFollowedTags() }
         } else {
             disconnectedWaiting
         }
@@ -510,7 +628,9 @@ private struct SubscriptionsSourcesView: View {
     let view = NavigationStack { SubscriptionsView() }
         .environment(AO3AuthService())
         .environment(ThemeManager())
+        .environment(AppRouter())
         .environment(SubscriptionScanService())
+        .environment(FollowedTagUpdateStore())
     #if os(iOS)
     view.environment(MailSubscriptionDriver())
     #else

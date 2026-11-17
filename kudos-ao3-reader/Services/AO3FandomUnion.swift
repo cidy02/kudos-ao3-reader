@@ -35,14 +35,20 @@ nonisolated enum AO3FandomUnion {
         return "filter_ids:(\(ids.map(String.init).joined(separator: " OR ")))"
     }
 
-    /// The numeric filter id from a tag's works page. AO3 prints it in the Atom
-    /// feed link; the filter sidebar's `include_work_search[fandom_ids][]`
-    /// checkboxes carry the same number for the page's own tag, and are the
-    /// fallback when the feed control is absent.
-    static func filterID(fromTagWorksPage html: String, tagName: String) -> Int? {
+    /// The numeric `Tag.id` from a tag's works page Atom feed link
+    /// (`/tags/<id>/feed.atom`). AO3 emits this link only for `Fandom`,
+    /// `Character`, `Relationship`, and category `"F/F"`, and redirects
+    /// `/tags/:id/feed.atom` to the HTML works listing for all other tag types.
+    static func feedTagID(fromTagWorksPage html: String) -> Int? {
         guard let document = try? SwiftSoup.parse(html) else { return nil }
+        return feedTagID(in: document)
+    }
+
+    /// Document overload for callers that already parsed the HTML (such as
+    /// `AO3Client.parseWorksList`) so the HTML is not parsed twice.
+    static func feedTagID(in document: Document) -> Int? {
         // Only AO3's feed controls identify this page. A URL quoted inside a
-        // work summary must not resolve a different fandom for the whole family.
+        // work summary must not resolve a different tag.
         let feeds = (try? document.select(
             "head link[rel=alternate][type='application/atom+xml'], "
                 + "#main > div.navigation.actions > ul.user.navigation.actions a[href]"
@@ -57,6 +63,16 @@ nonisolated enum AO3FandomUnion {
             else { continue }
             return id
         }
+        return nil
+    }
+
+    /// The numeric filter id from a tag's works page. AO3 prints it in the Atom
+    /// feed link; the filter sidebar's `include_work_search[fandom_ids][]`
+    /// checkboxes carry the same number for the page's own tag, and are the
+    /// fallback when the feed control is absent.
+    static func filterID(fromTagWorksPage html: String, tagName: String) -> Int? {
+        guard let document = try? SwiftSoup.parse(html) else { return nil }
+        if let id = feedTagID(in: document) { return id }
 
         // works/_filters.html.erb nests the input in its label. tags_helper's
         // label_for_filter appends a work count; remove only that final suffix,

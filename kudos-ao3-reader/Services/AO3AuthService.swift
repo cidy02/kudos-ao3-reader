@@ -246,11 +246,13 @@ struct LiveAO3SessionValidator: AO3SessionValidating {
 nonisolated enum AO3AutomatedFeature: CaseIterable, Sendable {
     case rankTop100
     case queueSourceCounts
+    case followedTagFeeds
 
     var token: String {
         switch self {
         case .rankTop100: "feature=rank-top-100"
         case .queueSourceCounts: "feature=queue-source-counts"
+        case .followedTagFeeds: "feature=followed-tag-feeds"
         }
     }
 
@@ -258,6 +260,7 @@ nonisolated enum AO3AutomatedFeature: CaseIterable, Sendable {
         switch self {
         case .rankTop100: "reader-requested pages 2-5"
         case .queueSourceCounts: "queue-open first-page counts"
+        case .followedTagFeeds: "followed-tag foreground feed checks"
         }
     }
 }

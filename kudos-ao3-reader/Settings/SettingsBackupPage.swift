@@ -45,6 +45,8 @@ struct SettingsBackupPage: View {
     @Query(sort: \ReadingFavorite.createdAt) private var readingFavorites: [ReadingFavorite]
     @Query(sort: \FandomReadWatermark.lastVisitedAt)
     private var fandomReadWatermarks: [FandomReadWatermark]
+    @Query(sort: \FollowedTag.followedAt)
+    private var followedTags: [FollowedTag]
 
     @State private var isChoosingBackup = false
     @State private var exportingBackup = false
@@ -219,6 +221,7 @@ struct SettingsBackupPage: View {
                 readingSessions: readingSessions,
                 readingFavorites: readingFavorites,
                 fandomReadWatermarks: fandomReadWatermarks,
+                followedTags: followedTags,
                 tombstones: syncTombstones
             )
         } catch {
@@ -428,6 +431,7 @@ struct SettingsBackupPage: View {
                     readingSessions: readingSessions,
                     readingFavorites: readingFavorites,
                     fandomReadWatermarks: fandomReadWatermarks,
+                    followedTags: followedTags,
                     tombstones: syncTombstones
                 )
                 let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]

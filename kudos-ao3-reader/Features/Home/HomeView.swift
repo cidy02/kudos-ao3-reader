@@ -24,17 +24,20 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
     @AppStorage("matureContentMode") private var matureMode: MaturePrivacyMode = .obscure
     @AppStorage(WorkSymbolPlacement.storageKey) private var symbolPlacement: WorkSymbolPlacement = .defaultValue
     @Environment(SubscriptionScanService.self) private var subscriptionScan
+    @Environment(FollowedTagUpdateStore.self) private var followedTagUpdates
     #if os(iOS)
     @Environment(MailSubscriptionDriver.self) private var mailDriver
     #endif
 
     /// What the Subscriptions screen's Waiting tab shows, newest first: mail while it
-    /// is connected, otherwise the scan's. Hide mode's omissions as in Waiting.
+    /// is connected, otherwise the scan's, plus any followed tag flagged Show on Home.
+    /// Hide mode's omissions as in Waiting.
     private var recentSubscriptionUpdates: [SubscriptionUpdate] {
         var updates = subscriptionScan.updates
         #if os(iOS)
         if mailDriver.isConnected { updates = mailDriver.updates }
         #endif
+        updates += followedTagUpdates.visibleUpdates(for: followedTags, homeOnly: true)
         return updates
             .filter {
                 !gate.isHidden(remoteID: Int(clamping: $0.workID), rating: $0.rating, enabled: hideMature, mode: matureMode)
@@ -55,8 +58,12 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
     private var homeCollections: [WorkCollection]
     @Query(sort: \ReadingSession.startedAt, order: .reverse)
     private var readingSessions: [ReadingSession]
+    @Query(sort: \FollowedTag.followedAt)
+    private var followedTags: [FollowedTag]
     @State private var readingStats = HomeReadingStats()
     @State private var path = NavigationPath()
+    @State private var isHomeVisible = false
+    @State private var followedTagCheckTask: Task<Void, Never>?
     @Namespace private var cardZoomNamespace
     @State private var subscriptions: [AO3WorkSummary] = []
     @State private var accountAvatarURL: URL?
@@ -319,6 +326,31 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                 .onChange(of: scenePhase) { _, newPhase in
                     if newPhase == .active {
                         updateReadingStats()
+                        startHomeTagCheckIfNeeded()
+                    } else {
+                        cancelHomeTagCheck()
+                    }
+                }
+                .onAppear {
+                    isHomeVisible = true
+                    startHomeTagCheckIfNeeded()
+                }
+                .onDisappear {
+                    isHomeVisible = false
+                    cancelHomeTagCheck()
+                }
+                .onChange(of: router.selection) { _, selection in
+                    if selection == .home {
+                        startHomeTagCheckIfNeeded()
+                    } else {
+                        cancelHomeTagCheck()
+                    }
+                }
+                .onChange(of: path.isEmpty) { _, isEmpty in
+                    if isEmpty {
+                        startHomeTagCheckIfNeeded()
+                    } else {
+                        cancelHomeTagCheck()
                     }
                 }
                 .task(id: auth.isLoggedIn) {
@@ -722,10 +754,21 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
             SectionRuleHeader(
                 title: "Subscriptions",
                 count: updates.isEmpty ? totalCount : updates.count,
-                actionTitle: (updates.isEmpty ? visibleEntries.count : updates.count) > 2 ? "See All" : nil,
-                onSeeAll: visibleEntries.isEmpty && updates.isEmpty
+                actionTitle: (updates.isEmpty ? visibleEntries.count : updates.count) > 2
+                    ? "See All"
+                    : (!followedTags.isEmpty && updates.isEmpty && visibleEntries.isEmpty ? "Tags" : nil),
+                onSeeAll: visibleEntries.isEmpty && updates.isEmpty && followedTags.isEmpty
                     ? nil
-                    : { path.append(SubscriptionsRoute(tab: updates.isEmpty ? .following : .waiting)) }
+                    : {
+                        let tab: SubscriptionsView.Tab = if !updates.isEmpty {
+                            .waiting
+                        } else if !visibleEntries.isEmpty {
+                            .following
+                        } else {
+                            .tags
+                        }
+                        path.append(SubscriptionsRoute(tab: tab))
+                    }
             )
             .dashboardLeadingRegion()
 
@@ -743,8 +786,12 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
                         )
                         .padding(.horizontal, 16)
                         .contentShape(Rectangle())
-                        .onTapGesture { path.append(SubscriptionsRoute()) }
-                        .accessibilityAction(named: "Open Subscriptions") { path.append(SubscriptionsRoute()) }
+                        .onTapGesture { openHomeSubscriptionUpdate(update) }
+                        .accessibilityAction(
+                            named: update.source.tagWorksRequest != nil ? "Open Tag" : "Open Subscriptions"
+                        ) {
+                            openHomeSubscriptionUpdate(update)
+                        }
                     }
                 }
                 .dashboardLeadingRegion()
@@ -856,6 +903,39 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
         isLoadingSubscriptions = false
     }
 
+    private var isHomeCheckActive: Bool {
+        isHomeVisible && router.selection == .home && path.isEmpty && scenePhase == .active
+    }
+
+    private func startHomeTagCheckIfNeeded() {
+        guard isHomeCheckActive else { return }
+        followedTagCheckTask?.cancel()
+        followedTagCheckTask = Task {
+            await followedTagUpdates.checkIfNeeded(
+                screen: .home,
+                in: context,
+                ignoringCooldown: false,
+                isScreenActive: { isHomeCheckActive }
+            )
+        }
+    }
+
+    private func cancelHomeTagCheck() {
+        followedTagCheckTask?.cancel()
+        followedTagCheckTask = nil
+    }
+
+    private func openHomeSubscriptionUpdate(_ update: SubscriptionUpdate) {
+        if let tagRequest = update.source.tagWorksRequest {
+            if case let .tag(source) = update.source {
+                followedTagUpdates.markSeen(tagID: source.tagID)
+            }
+            path.append(tagRequest)
+        } else {
+            path.append(SubscriptionsRoute())
+        }
+    }
+
     private func refreshHome() async {
         _ = await WorkMetadataRefresh.refresh(visibleHomeWorks, in: context, auth: auth)
         await loadSubscriptions()
@@ -863,6 +943,13 @@ struct HomeView: View { // swiftlint:disable:this type_body_length
         // The Subscriptions rows above can come from mail; reading it asks AO3 for nothing.
         await mailDriver.refresh()
         #endif
+        cancelHomeTagCheck()
+        await followedTagUpdates.checkIfNeeded(
+            screen: .home,
+            in: context,
+            ignoringCooldown: true,
+            isScreenActive: { isHomeCheckActive }
+        )
     }
 
     private var visibleHomeWorks: [SavedWork] {

@@ -1,15 +1,40 @@
 import SwiftUI
 
-/// 1p.4's Works / Series / Authors pills. The same pill row Marked for Later
-/// uses, without a Reset: a scope is not a filter.
+/// `AO3SubscriptionsScope` (AO3's `Works`, `Series`, `Authors`) plus the local `Tags` tab.
+///
+/// Keeping `Tags` outside `AO3SubscriptionsScope` guarantees `?type=` requests
+/// to AO3 never receive an unsupported `tags` scope.
+nonisolated enum AO3SubscriptionsTab: Hashable, CaseIterable, Identifiable, Sendable {
+    case ao3(AO3SubscriptionsScope)
+    case tags
+
+    static let allCases: [AO3SubscriptionsTab] = AO3SubscriptionsScope.allCases.map(Self.ao3) + [.tags]
+
+    var id: String {
+        switch self {
+        case let .ao3(scope): scope.rawValue
+        case .tags: "tags"
+        }
+    }
+
+    var title: String {
+        switch self {
+        case let .ao3(scope): scope.title
+        case .tags: "Tags"
+        }
+    }
+}
+
+/// 1p.4's Works / Series / Authors pills, plus the local Tags tab.
+/// The same pill row Marked for Later uses, without a Reset: a scope is not a filter.
 struct AO3SubscriptionsScopeRail: View {
-    @Binding var selection: AO3SubscriptionsScope
+    @Binding var selection: AO3SubscriptionsTab
     let palette: SubjectPalette
 
     var body: some View {
         // One line cut "Authors" once the pills no longer fit the phone.
         AccessibilityChipRail(horizontalPadding: 16) {
-            ForEach(AO3SubscriptionsScope.allCases) { option in
+            ForEach(AO3SubscriptionsTab.allCases) { option in
                 Button {
                     selection = option
                 } label: {
@@ -21,6 +46,7 @@ struct AO3SubscriptionsScopeRail: View {
                 }
                 .buttonStyle(.plain)
                 .minimumHitTarget(28)
+                .accessibilityLabel(option.title)
                 .accessibilityAddTraits(selection == option ? .isSelected : [])
             }
         }
@@ -51,7 +77,8 @@ enum AO3NamedSubscriptionsCopy {
 /// Series and Authors: one `type=` page of name rows, with the same swipe
 /// unsubscribe the Works rows have. A row opens the series or the author.
 struct AO3NamedSubscriptionsList: View {
-    @Binding var scope: AO3SubscriptionsScope
+    @Binding var tab: AO3SubscriptionsTab
+    let scope: AO3SubscriptionsScope
     let palette: SubjectPalette
     let kicker: String
 
@@ -108,7 +135,7 @@ struct AO3NamedSubscriptionsList: View {
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
                 }
-                AO3SubscriptionsScopeRail(selection: $scope, palette: palette)
+                AO3SubscriptionsScopeRail(selection: $tab, palette: palette)
                     .listRowInsets(EdgeInsets(top: loaded == nil ? 12 : 4, leading: 0, bottom: 8, trailing: 0))
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)

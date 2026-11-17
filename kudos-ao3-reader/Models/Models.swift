@@ -64,6 +64,8 @@ nonisolated enum SyncTombstoneRecordType: String, Codable, CaseIterable {
     case readingFavorite
     /// A per-fandom last-visited watermark the user (or replace-mode) removed.
     case fandomReadWatermark
+    /// A locally followed tag removed via Unfollow or replace-mode.
+    case followedTag
 }
 
 /// Durable marker for an explicit local deletion. Future cloud merge code must treat

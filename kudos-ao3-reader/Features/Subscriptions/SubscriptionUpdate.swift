@@ -34,17 +34,38 @@ struct SubscriptionUpdate: Codable, Equatable, Identifiable, Sendable {
         case unknown
     }
 
-    /// Which subscription brought this update in. The name is the series or author
-    /// followed, not the work.
+    /// Which subscription brought this update in. The name is the series, author,
+    /// or locally followed tag, not the work.
     enum Source: Codable, Equatable, Sendable {
         case work
         case series(String)
         case author(String)
+        case tag(FollowedTagUpdateSource)
         /// The footer's unsubscribe URL did not parse, so not even the kind is
         /// known — the crate's `Subscription.unknown`. Present so the mapping
         /// from the crate never has to pick a kind it cannot support: calling
         /// this `.work` would report the work as pinned when nothing is.
         case unknown
+
+        var tagWorksRequest: AO3TagWorksRequest? {
+            guard case let .tag(tag) = self else { return nil }
+            let url = tag.tagURLString
+                .flatMap(URL.init(string:))
+                .flatMap { AO3RequestDefaults.isTrustedURL($0) ? $0 : nil }
+                ?? AO3Client.tagWorksURL(tagName: tag.name)
+            guard let url else { return nil }
+            return AO3TagWorksRequest(url: url, title: tag.name)
+        }
+    }
+
+    nonisolated struct FollowedTagUpdateSource: Codable, Equatable, Hashable, Sendable {
+        let tagID: Int
+        let name: String
+        let category: String?
+        let tagURLString: String?
+        let count: Int
+        let isBusy: Bool
+        let showOnHome: Bool
     }
 
     /// The IMAP UID of the notification this was read from.
@@ -111,7 +132,14 @@ struct SubscriptionUpdate: Codable, Equatable, Identifiable, Sendable {
         case storedAdditionalTags = "additionalTags"
     }
 
-    var id: String { "\(uid)-\(workID)" }
+    var id: String {
+        switch source {
+        case let .tag(tag):
+            return "tag-\(tag.tagID)-\(uid)-\(workID)"
+        case .work, .series, .author, .unknown:
+            return "\(uid)-\(workID)"
+        }
+    }
 
     /// True when the screen may offer to open a specific chapter.
     var canDeepLinkToChapter: Bool { certainty == .confirmed && chapterID != nil }
@@ -170,7 +198,9 @@ struct SubscriptionUpdate: Codable, Equatable, Identifiable, Sendable {
         self.source = source
         self.extraCreations = extraCreations
 
-        let trustworthy = !isContested && isAnchoredToWork && source == .work
+        let isTagSource: Bool
+        if case .tag = source { isTagSource = true } else { isTagSource = false }
+        let trustworthy = (!isContested && isAnchoredToWork && source == .work) || isTagSource
         certainty = trustworthy ? .confirmed : .workOnly
 
         // A contested preface loses everything read from it, including the
@@ -193,7 +223,7 @@ struct SubscriptionUpdate: Codable, Equatable, Identifiable, Sendable {
         self.author = prefaceReadable ? author : ""
 
         if trustworthy {
-            self.chapterID = chapterID
+            self.chapterID = isTagSource ? nil : chapterID
             change = isNewWork ? .newWork : .newChapter(number: chapterNumber)
         } else {
             self.chapterID = nil

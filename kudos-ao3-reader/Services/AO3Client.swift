@@ -30,13 +30,14 @@ nonisolated struct AO3SubscriptionsIndex: Sendable {
 actor AO3Client { // swiftlint:disable:this type_body_length
     static let shared = AO3Client()
     private static let queueSourceCoordinator = AO3RequestCoordinator(limit: 1)
+    static let followedTagCoordinator = AO3RequestCoordinator(limit: 1)
 
     private let base = "https://archiveofourown.org"
-    private let session: URLSession
+    let session: URLSession
     private let redirectCookieRelay = AO3RedirectCookieRelay()
     /// Replaces `Task.sleep` in tests so a generation change can land inside the
     /// pacing wait without waiting out the real interval. Production sleeps.
-    private let paceSleep: @Sendable (TimeInterval) async throws -> Void
+    let paceSleep: @Sendable (TimeInterval) async throws -> Void
 
     init(
         session: URLSession? = nil,
@@ -212,6 +213,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     private var nextAllowedRequestAt = Date.distantPast
     private var nextAllowedRankTop100RequestAt = Date.distantPast
     private var nextAllowedQueueSourceRequestAt = Date.distantPast
+    private var nextAllowedFollowedTagRequestAt = Date.distantPast
     /// While set and in the future, every request fails fast with `.maintenance`
     /// instead of reaching AO3 (batch refreshes would otherwise each knock on a
     /// site that just said it is down).
@@ -221,7 +223,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
     static let maintenanceHold: TimeInterval = 60
     private let minRequestInterval: TimeInterval = 0.6
 
-    private func pace() async throws {
+    func pace() async throws {
         // Before the claim: a cancelled caller must not book a slot it will never
         // use — the next real request would wait it out (T-255).
         try Task.checkCancellation()
@@ -240,7 +242,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         }
     }
 
-    private func throwIfHeldForMaintenance() throws {
+    func throwIfHeldForMaintenance() throws {
         if let until = maintenanceHoldUntil, Date() < until {
             throw AO3Error.maintenance
         }
@@ -270,6 +272,17 @@ actor AO3Client { // swiftlint:disable:this type_body_length
             now: Date(), nextAllowed: nextAllowedQueueSourceRequestAt, minInterval: 3
         )
         nextAllowedQueueSourceRequestAt = step.nextAllowed
+        if step.wait > 0 { try await paceSleep(step.wait) }
+        try throwIfHeldForMaintenance()
+    }
+
+    func paceFollowedTag() async throws {
+        try Task.checkCancellation()
+        try throwIfHeldForMaintenance()
+        let step = Self.paceStep(
+            now: Date(), nextAllowed: nextAllowedFollowedTagRequestAt, minInterval: 3
+        )
+        nextAllowedFollowedTagRequestAt = step.nextAllowed
         if step.wait > 0 { try await paceSleep(step.wait) }
         try throwIfHeldForMaintenance()
     }
@@ -359,7 +372,7 @@ actor AO3Client { // swiftlint:disable:this type_body_length
 
     /// `check` for a response this client sent: AO3's maintenance page also
     /// starts the `maintenanceHold`. `body` is read only for a non-2xx answer.
-    private func checkStatus(_ response: URLResponse, body: () -> Data?) throws {
+    func checkStatus(_ response: URLResponse, body: () -> Data?) throws {
         do {
             try Self.check(response, body: body)
         } catch AO3Error.maintenance {
@@ -841,6 +854,16 @@ actor AO3Client { // swiftlint:disable:this type_body_length
         else { return nil }
         components.queryItems = workSearchQueryItems(filters: filters, page: page)
         return components.url
+    }
+
+    /// AO3's works listing URL for a tag name (`/tags/<segment>/works`).
+    static func tagWorksURL(tagName: String) -> URL? {
+        let trimmed = tagName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              let segment = tagPathSegment(trimmed),
+              let url = URL(string: "https://archiveofourown.org/tags/\(segment)/works")
+        else { return nil }
+        return url
     }
 
     /// AO3 writes a handful of characters as `*x*` escapes inside a tag's URL
@@ -2123,7 +2146,8 @@ actor AO3Client { // swiftlint:disable:this type_body_length
             currentPage: page,
             totalPages: totalPages,
             summary: try? Self.resultSummary(in: doc),
-            facets: Self.parseFacets(in: doc)
+            facets: Self.parseFacets(in: doc),
+            feedTagID: AO3FandomUnion.feedTagID(in: doc)
         )
     }
 
