@@ -201,9 +201,7 @@ final class FollowedTagUpdateStore {
             ignoringCooldown: ignoringCooldown,
             isScreenActive: isScreenActive,
             isRateLimitHeld: { currentNow in
-                (try? AO3Client.throwIfFollowedTagHeld(now: currentNow, defaults: defaults)) == nil
-                    ? false
-                    : true
+                AO3Client.isFollowedTagHeld(now: currentNow, defaults: defaults)
             },
             now: now,
             sleep: paceSleep,

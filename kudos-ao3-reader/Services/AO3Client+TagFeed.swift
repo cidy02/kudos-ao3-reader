@@ -13,12 +13,29 @@ extension AO3Client {
         return URL(string: "https://archiveofourown.org/tags/\(tagID)/feed.atom")
     }
 
+    private nonisolated static func followedTagHoldRemaining(
+        now: Date,
+        defaults: UserDefaults
+    ) -> TimeInterval? {
+        guard let until = defaults.object(forKey: followedTagHoldKey) as? Date,
+              until > now
+        else { return nil }
+        return until.timeIntervalSince(now)
+    }
+
+    nonisolated static func isFollowedTagHeld(
+        now: Date = Date(),
+        defaults: UserDefaults = .standard
+    ) -> Bool {
+        followedTagHoldRemaining(now: now, defaults: defaults) != nil
+    }
+
     nonisolated static func throwIfFollowedTagHeld(
         now: Date = Date(),
         defaults: UserDefaults = .standard
     ) throws {
-        if let until = defaults.object(forKey: followedTagHoldKey) as? Date, until > now {
-            throw AO3Error.rateLimited(retryAfter: until.timeIntervalSince(now))
+        if let remaining = followedTagHoldRemaining(now: now, defaults: defaults) {
+            throw AO3Error.rateLimited(retryAfter: remaining)
         }
     }
 
@@ -223,10 +240,13 @@ private final class AO3AtomFeedParserDelegate: NSObject, XMLParserDelegate {
         qualifiedName qName: String?
     ) {
         let text = currentText.trimmingCharacters(in: .whitespacesAndNewlines)
-        if elementStack.count == 2, elementStack[0] == "feed" {
-            handleFeedEndElement(elementStack[1], text: text)
-        } else if elementStack.starts(with: ["feed", "entry"]) {
+        // Check entry subtrees (including ["feed", "entry"] itself) before top-level
+        // <feed> children so closing </entry> builds/validates the entry instead of
+        // falling into `handleFeedEndElement("entry", ...)`.
+        if elementStack.starts(with: ["feed", "entry"]) {
             handleEntryEndElement(text: text)
+        } else if elementStack.count == 2, elementStack[0] == "feed" {
+            handleFeedEndElement(elementStack[1], text: text)
         }
         currentText = ""
         if !elementStack.isEmpty {

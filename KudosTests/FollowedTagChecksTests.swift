@@ -365,7 +365,7 @@ struct FollowedTagChecksTests {
             checkedAt: { checkedAt[$0] },
             isScreenActive: { true },
             isRateLimitHeld: { now in
-                (try? AO3Client.throwIfFollowedTagHeld(now: now, defaults: defaults)) != nil
+                AO3Client.isFollowedTagHeld(now: now, defaults: defaults)
             },
             now: { currentNow },
             sleep: { _ in },
@@ -394,7 +394,7 @@ struct FollowedTagChecksTests {
             checkedAt: { checkedAt[$0] },
             isScreenActive: { true },
             isRateLimitHeld: { now in
-                (try? AO3Client.throwIfFollowedTagHeld(now: now, defaults: defaults)) != nil
+                AO3Client.isFollowedTagHeld(now: now, defaults: defaults)
             },
             now: { currentNow },
             sleep: { _ in },
