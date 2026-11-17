@@ -271,7 +271,8 @@ final class AO3WorkActionsModel {
         dismissalTask?.cancel()
         dismissalTask = nil
         bookmarkComposerRevision += 1
-        lastSyncedGeneration = auth.sessionGeneration
+        // Only syncSession advances lastSyncedGeneration: opening the composer must not
+        // swallow a session change whose cached work-page state has not been dropped yet.
         bookmarkGeneration = auth.sessionGeneration
         bookmarkOwnerUsername = Self.normalizedOwner(for: auth)
         if workPageStatesWorkID == workID,
