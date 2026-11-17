@@ -1,10 +1,12 @@
 package io.github.cidy02.kudos.reader.speech
 
 import android.app.Application
+import android.os.Looper
 import android.speech.tts.TextToSpeech
 import android.speech.tts.Voice
 import androidx.test.core.app.ApplicationProvider
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
@@ -88,6 +90,23 @@ class SystemTTSServiceTest {
         val service = SystemTTSService(ApplicationProvider.getApplicationContext())
         shadowOf(ShadowTextToSpeech.getLastTextToSpeechInstance()).onInitListener.onInit(TextToSpeech.SUCCESS)
         assertEquals(SpeechStatus.UNAVAILABLE, service.status.value)
+    }
+
+    @Test fun silentEngineTimesOutThenLateVoiceRecovers() {
+        ShadowTextToSpeech.addVoice(voice("local", Locale.getDefault()))
+        val service = SystemTTSService(ApplicationProvider.getApplicationContext())
+        try {
+            val shadow = shadowOf(ShadowTextToSpeech.getLastTextToSpeechInstance())
+            assertEquals(SpeechStatus.RESOLVING, service.status.value)
+            shadowOf(Looper.getMainLooper()).idleFor(9, TimeUnit.SECONDS)
+            assertEquals(SpeechStatus.RESOLVING, service.status.value)
+            shadowOf(Looper.getMainLooper()).idleFor(1, TimeUnit.SECONDS)
+            assertEquals(SpeechStatus.UNAVAILABLE, service.status.value)
+            shadow.onInitListener.onInit(TextToSpeech.SUCCESS)
+            assertEquals(SpeechStatus.STOPPED, service.status.value)
+        } finally {
+            service.shutdown()
+        }
     }
     @Test fun automaticChecksPackAvailabilityAgainBeforeEveryUtterance() = runBlocking {
         ShadowTextToSpeech.addVoice(voice("local", Locale.getDefault()))

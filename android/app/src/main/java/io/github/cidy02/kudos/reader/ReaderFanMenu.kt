@@ -51,6 +51,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -62,6 +63,7 @@ import io.github.cidy02.kudos.core.model.SavedWork
 import io.github.cidy02.kudos.core.model.ReadingAnnotation
 import io.github.cidy02.kudos.works.WorkTags
 import io.github.cidy02.kudos.reader.readium.ReadiumNavigatorController
+import io.github.cidy02.kudos.reader.speech.SpeechStatus
 import java.net.URI
 
 /** One labelled menu pill in the fanned-out menu (Contents, Find, Themes…). */
@@ -88,16 +90,17 @@ internal enum class ReaderSettingsSheet { Display, Speech }
 
 /** The fan's tap still toggles playback; holding it opens the dedicated speech form. */
 internal fun readerReadAloudAction(
-    active: Boolean,
-    enabled: Boolean,
+    status: SpeechStatus,
+    contentAvailable: Boolean,
     onSettings: (ReaderSettingsSheet) -> Unit,
     onToggle: () -> Unit
 ) = ReaderFanRoundAction(
     id = "readAloud",
     icon = Icons.AutoMirrored.Filled.VolumeUp,
-    accessibilityLabel = if (active) "Stop reading aloud" else "Read aloud",
-    isEnabled = enabled,
-    isEmphasized = active,
+    accessibilityLabel = if (status == SpeechStatus.PLAYING || status == SpeechStatus.PAUSED)
+        "Stop reading aloud" else "Read aloud",
+    isEnabled = contentAvailable && status != SpeechStatus.RESOLVING && status != SpeechStatus.UNAVAILABLE,
+    isEmphasized = status == SpeechStatus.PLAYING || status == SpeechStatus.PAUSED,
     action = onToggle,
     longPressAction = { onSettings(ReaderSettingsSheet.Speech) }
 )
@@ -439,6 +442,7 @@ private fun FanRoundActionButton(
             .semantics {
                 contentDescription = action.accessibilityLabel
                 role = Role.Button
+                if (!action.isEnabled) disabled()
                 if (action.isEmphasized) selected = true
             },
         contentAlignment = Alignment.Center

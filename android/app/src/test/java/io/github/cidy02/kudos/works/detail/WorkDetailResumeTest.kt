@@ -4,6 +4,12 @@ import io.github.cidy02.kudos.app.ReaderLaunchRequest
 import io.github.cidy02.kudos.ui.components.ChapterBarGeometry
 import io.github.cidy02.kudos.ui.components.ChapterBarModel
 import io.github.cidy02.kudos.ui.components.ChapterBarRole
+import io.github.cidy02.kudos.works.launchReaderAfterRefresh
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -147,5 +153,48 @@ class WorkDetailResumeTest {
         speech.receive()
         assertEquals(1, speech.starts)
         assertNull(ReaderLaunchRequest.peek("work-speech"))
+    }
+
+    @Test fun cancellingRefreshBeforeNavigationNeverArmsReaderLaunch() = runTest {
+        val entered = CompletableDeferred<Unit>()
+        val finishRefresh = CompletableDeferred<Unit>()
+        var navigations = 0
+        val launch = launch {
+            launchReaderAfterRefresh("work-cancel", true, true,
+                refresh = { entered.complete(Unit); withContext(NonCancellable) { finishRefresh.await() } },
+                onOpenReader = { navigations++ })
+        }
+        entered.await()
+        assertNull(ReaderLaunchRequest.peek("work-cancel"))
+        launch.cancel()
+        finishRefresh.complete(Unit)
+        launch.join()
+        assertNull(ReaderLaunchRequest.peek("work-cancel"))
+        assertEquals(0, navigations)
+    }
+
+    @Test fun failedReaderNavigationClearsItsLaunch() = runTest {
+        try {
+            launchReaderAfterRefresh("work-failed", false, true,
+                refresh = {}, onOpenReader = { throw IllegalStateException("navigation failed") })
+            throw AssertionError("Navigation should fail")
+        } catch (error: IllegalStateException) {
+            assertEquals("navigation failed", error.message)
+        }
+        assertNull(ReaderLaunchRequest.peek("work-failed"))
+    }
+
+    @Test fun closingOlderReaderDoesNotClearReplacementRequest() {
+        ReaderLaunchRequest.request("work-a", startReadAloud = true)
+        val tokenA = ReaderLaunchRequest.tokenFor("work-a")!!
+        ReaderLaunchRequest.request("work-b", openContents = true)
+        ReaderLaunchRequest.clearIfMatches("work-a", tokenA)
+        assertTrue(ReaderLaunchRequest.consume("work-b")!!.openContents)
+
+        ReaderLaunchRequest.request("work-a", startReadAloud = true)
+        val olderToken = ReaderLaunchRequest.tokenFor("work-a")!!
+        ReaderLaunchRequest.request("work-a", openContents = true)
+        ReaderLaunchRequest.clearIfMatches("work-a", olderToken)
+        assertTrue(ReaderLaunchRequest.consume("work-a")!!.openContents)
     }
 }

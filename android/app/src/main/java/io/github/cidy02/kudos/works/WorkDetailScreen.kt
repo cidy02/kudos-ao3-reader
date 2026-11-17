@@ -133,6 +133,8 @@ import io.github.cidy02.kudos.works.detail.WorkReadingPosition
 import java.io.File
 import java.time.Instant
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.launch
@@ -1226,13 +1228,8 @@ fun WorkDetailScreen(
                     ?: state.remote?.let { workImporter.prepareForReading(it) }
                 when (result) {
                     is WorkImportResult.Success -> {
-                        ReaderLaunchRequest.request(
-                            workId = result.work.id,
-                            openContents = openContents,
-                            startReadAloud = startReadAloud
-                        )
-                        refreshLocal(result.work.id, state.remote)
-                        onOpenReader(result.work.id)
+                        launchReaderAfterRefresh(result.work.id, openContents, startReadAloud,
+                            refresh = { refreshLocal(result.work.id, state.remote) }, onOpenReader = onOpenReader)
                     }
                     is WorkImportResult.Failure -> state = state.copy(error = result.error.displayMessage())
                     null -> state = state.copy(error = "No work selected.")
@@ -1392,6 +1389,25 @@ fun WorkDetailScreen(
         onEditDownloadedDate = { showingPageDateEditor = true },
         onAddPageTag = { showingPageAddTag = true }
     )
+}
+
+internal suspend fun launchReaderAfterRefresh(
+    workId: String,
+    openContents: Boolean,
+    startReadAloud: Boolean,
+    refresh: suspend () -> Unit,
+    onOpenReader: (String) -> Unit
+) {
+    refresh()
+    currentCoroutineContext().ensureActive()
+    ReaderLaunchRequest.request(workId, openContents, startReadAloud)
+    val token = ReaderLaunchRequest.tokenFor(workId)
+    try {
+        onOpenReader(workId)
+    } catch (error: Exception) {
+        if (token != null) ReaderLaunchRequest.clearIfMatches(workId, token)
+        throw error
+    }
 }
 
 @Composable

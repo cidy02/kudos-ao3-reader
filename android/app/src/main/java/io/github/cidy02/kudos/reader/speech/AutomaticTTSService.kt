@@ -1,6 +1,8 @@
 package io.github.cidy02.kudos.reader.speech
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.speech.tts.Voice
@@ -128,19 +130,27 @@ class SystemTTSService(context: Context) : TTSService {
     private val readings = AtomicInteger()
     /** A reading's start and a cancelled one's end, one at a time: skipping ahead runs both at once. */
     private val handover = Any()
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val initDeadline = Runnable {
+        if (_status.value == SpeechStatus.RESOLVING) _status.value = SpeechStatus.UNAVAILABLE
+    }
+    @Volatile private var shutDown = false
     private lateinit var engine: TextToSpeech
 
     init {
         engine = TextToSpeech(context.applicationContext) { result ->
-            val voice = if (result != TextToSpeech.SUCCESS) null else onDeviceVoice(
-                runCatching { engine.voice ?: engine.defaultVoice }.getOrNull(),
-                runCatching { engine.voices }.getOrNull().orEmpty(),
-                Locale.getDefault()
-            )
-            _status.value = if (voice != null && runCatching { engine.setVoice(voice) }.getOrNull() == TextToSpeech.SUCCESS) {
-                SpeechStatus.STOPPED
-            } else {
-                SpeechStatus.UNAVAILABLE
+            if (!shutDown) {
+                mainHandler.removeCallbacks(initDeadline)
+                val voice = if (result != TextToSpeech.SUCCESS) null else onDeviceVoice(
+                    runCatching { engine.voice ?: engine.defaultVoice }.getOrNull(),
+                    runCatching { engine.voices }.getOrNull().orEmpty(),
+                    Locale.getDefault()
+                )
+                _status.value = if (voice != null && runCatching { engine.setVoice(voice) }.getOrNull() == TextToSpeech.SUCCESS) {
+                    SpeechStatus.STOPPED
+                } else {
+                    SpeechStatus.UNAVAILABLE
+                }
             }
         }
         engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
@@ -151,6 +161,7 @@ class SystemTTSService(context: Context) : TTSService {
             override fun onError(id: String, errorCode: Int) = finish(id, true)
             override fun onStop(id: String, interrupted: Boolean) = finish(id, false)
         })
+        mainHandler.postDelayed(initDeadline, 10_000L)
     }
 
     private fun finish(id: String, ended: Boolean) {
@@ -234,6 +245,8 @@ class SystemTTSService(context: Context) : TTSService {
     }
 
     override fun shutdown() {
+        shutDown = true
+        mainHandler.removeCallbacks(initDeadline)
         stop()
         engine.shutdown()
     }

@@ -49,7 +49,7 @@ class ReaderSpeechSettingsSheetTest {
                 ReaderFanMenu(
                     isOpen = true, onOpenChange = {}, pills = emptyList(),
                     roundActions = listOf(readerReadAloudAction(
-                        active = false, enabled = true, onSettings = { sheet = it },
+                        status = SpeechStatus.STOPPED, contentAvailable = true, onSettings = { sheet = it },
                         onToggle = { toggles++ }
                     ))
                 )
@@ -73,6 +73,21 @@ class ReaderSpeechSettingsSheetTest {
     private fun longPress() {
         compose.onNodeWithContentDescription("Read aloud").performTouchInput { longClick() }
         compose.waitForIdle()
+    }
+
+    @Test fun readAloudTapWhileResolvingIsDisabledUntilVoiceIsReady() {
+        var status by mutableStateOf(SpeechStatus.RESOLVING)
+        var taps = 0
+        compose.setContent { MaterialTheme {
+            ReaderFanMenu(isOpen = true, onOpenChange = {}, pills = emptyList(),
+                roundActions = listOf(readerReadAloudAction(status, true, onSettings = {}, onToggle = { taps++ })))
+        } }
+        compose.onNodeWithContentDescription("Read aloud").assertIsNotEnabled()
+            .performTouchInput { click() }
+        assertEquals(0, taps)
+        compose.runOnIdle { status = SpeechStatus.STOPPED }
+        compose.onNodeWithContentDescription("Read aloud").assertIsEnabled().performClick()
+        assertEquals(1, taps)
     }
 
     @Test fun displayIncludesTheSharedSpeechControlsPackStatusAndSwitchLabels() {

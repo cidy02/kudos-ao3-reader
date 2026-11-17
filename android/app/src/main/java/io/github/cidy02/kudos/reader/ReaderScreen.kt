@@ -754,14 +754,13 @@ private fun ReaderReading(
                                 ?.let { add(it) }
 
                             // Read Aloud
-                            val speechActive = speechStatus == SpeechStatus.PLAYING || speechStatus == SpeechStatus.PAUSED
                             add(
                                 readerReadAloudAction(
-                                    active = speechActive,
-                                    enabled = ReaderContentText.isAvailable(publication),
+                                    status = speechStatus,
+                                    contentAvailable = ReaderContentText.isAvailable(publication),
                                     onSettings = { settingsSheet = it },
                                     onToggle = {
-                                        if (speechActive) {
+                                        if (speechStatus == SpeechStatus.PLAYING || speechStatus == SpeechStatus.PAUSED) {
                                             speechController.stop()
                                             showTtsControls = false
                                         } else if (speechStatus == SpeechStatus.MODEL_NOT_DOWNLOADED) {
