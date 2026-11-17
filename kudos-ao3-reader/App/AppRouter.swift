@@ -490,7 +490,10 @@ final class AppRouter {
             open(url)
             return
         }
-        if (panel == .searchFilters && selection == .search)
+        // A second link while the filter sheet is still dismissing must wait too.
+        // The newer URL replaces the one already queued.
+        if pendingAO3LinkAfterPanelDismiss != nil
+            || (panel == .searchFilters && selection == .search)
             || (panel == .libraryFilters && selection == .library) {
             pendingAO3LinkAfterPanelDismiss = url
             panel = .none
@@ -536,8 +539,13 @@ final class AppRouter {
             pendingLoginSessionGeneration = nil
             reopenLinkedWorkAfterDismiss = true
         } else if isPresentingWebBrowser && !isPresentingLinkedWork {
+            // A newer work supersedes a login kept open across password reset.
+            pendingLoginWorkLink = nil
+            pendingLoginSessionGeneration = nil
             isPresentingWebBrowser = false
         } else {
+            pendingLoginWorkLink = nil
+            pendingLoginSessionGeneration = nil
             isPresentingWebBrowser = false
             isPresentingLinkedWork = true
         }
@@ -577,6 +585,13 @@ final class AppRouter {
         guard let url = pendingAO3LinkAfterPanelDismiss else { return }
         pendingAO3LinkAfterPanelDismiss = nil
         openAO3Link(url)
+    }
+
+    /// The filter sheet was removed without its dismiss callback (iPad compact →
+    /// regular). Forget a deferred link so a later, unrelated filter close cannot
+    /// open it.
+    func dropPendingAO3LinkAfterPanelDismiss() {
+        pendingAO3LinkAfterPanelDismiss = nil
     }
 
     /// Pushes a verified author route without changing tabs. Keeping the current
@@ -882,6 +897,25 @@ final class AppRouter {
         isPresentingLinkedWorkLogin = false
     }
 
+    /// Login sheet finished dismissing. A password-reset / invitation browser keeps
+    /// `pendingLoginWorkLink` so closing that browser can present this login again.
+    func linkedWorkLoginSheetDidDismiss(isLoggedIn: Bool, sessionGeneration: Int) {
+        if let link = pendingLoginWorkLink, isLoggedIn,
+           sessionGeneration != pendingLoginSessionGeneration {
+            pendingLoginWorkLink = nil
+            pendingLoginSessionGeneration = nil
+            let url = link.chapterID.map {
+                AO3Client.chapterURL(workID: link.id, chapterID: $0)
+            } ?? AO3Client.workURL(workID: link.id)
+            openAO3Link(url)
+        } else if !opensWebsiteAfterLinkedWorkLoginDismiss {
+            pendingLoginWorkLink = nil
+            pendingLoginSessionGeneration = nil
+            if pendingWorkLink != nil { isPresentingLinkedWork = true }
+        }
+        linkedWorkLoginDidDismiss()
+    }
+
     func linkedWorkLoginDidDismiss() {
         guard opensWebsiteAfterLinkedWorkLoginDismiss else { return }
         let url = websiteURLAfterLinkedWorkLoginDismiss
@@ -889,6 +923,15 @@ final class AppRouter {
         websiteURLAfterLinkedWorkLoginDismiss = nil
         if let url, pendingWorkLink == nil {
             open(url)
+        }
+    }
+
+    /// Root AO3 browser sheet finished dismissing.
+    func webBrowserDidDismiss() {
+        if pendingWorkLink != nil {
+            isPresentingLinkedWork = true
+        } else if pendingLoginWorkLink != nil {
+            isPresentingLinkedWorkLogin = true
         }
     }
 
@@ -983,5 +1026,30 @@ final class AppRouter {
             get: { self.panel == targetPanel },
             set: { self.panel = $0 ? targetPanel : .none }
         )
+    }
+
+    /// The landing sheet and the reader it covers share `panel`. Only the reader
+    /// inside the sheet may present or clear it.
+    static func readerOwnsSharedPanel(landingCoversReader: Bool) -> Bool {
+        !landingCoversReader
+    }
+
+    static func readerClearsSharedPanel(_ panel: Panel, ownsPanel: Bool) -> Bool {
+        ownsPanel && (
+            panel == .readerChapters || panel == .readerDisplay || panel == .readerFind
+        )
+    }
+}
+
+private struct ReaderPanelSuppressedKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    /// True on readers underneath the link-landing sheet. They must not present
+    /// or clear `AppRouter.panel`; the reader inside the sheet owns it.
+    var readerPanelSuppressed: Bool {
+        get { self[ReaderPanelSuppressedKey.self] }
+        set { self[ReaderPanelSuppressedKey.self] = newValue }
     }
 }

@@ -303,9 +303,9 @@ struct AO3LoginView: View {
         }
     }
 
-    /// Opens an AO3 help page (sign-up / password reset) in the in-app Browse tab,
-    /// dismissing the login sheet first. Login resumes when the user returns and
-    /// signs in. AO3 uses Devise, so these are its standard registration / reset
+    /// Opens an AO3 help page (sign-up / password reset). `router.open` defers the
+    /// browser until this sheet has dismissed, and closing that browser returns
+    /// here. AO3 uses Devise, so these are its standard registration / reset
     /// routes; either way AO3's own page shows the current invitation/reset flow.
     private func openOnAO3(_ url: URL) {
         userInitiatedClose = true

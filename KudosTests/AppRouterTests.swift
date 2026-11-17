@@ -895,6 +895,72 @@ struct AppRouterTests {
         #expect(router.pendingLoginWorkLink == nil)
     }
 
+    @Test func secondAO3LinkDuringFilterDeferralKeepsTheNewerURL() {
+        let router = AppRouter()
+        router.selection = .search
+        router.panel = .searchFilters
+        router.openAO3Link(URL(string: "https://archiveofourown.org/works/111")!)
+        router.openAO3Link(URL(string: "https://archiveofourown.org/works/222")!)
+
+        #expect(router.panel == .none)
+        #expect(!router.isPresentingLinkedWork)
+        #expect(router.pendingWorkLink == nil)
+
+        router.panelDidDismiss()
+
+        #expect(router.isPresentingLinkedWork)
+        #expect(router.pendingWorkLink?.id == 222)
+    }
+
+    @Test func filterDeferralDroppedWhenHostDisappearsIsNotOpenedLater() {
+        let router = AppRouter()
+        router.selection = .search
+        router.panel = .searchFilters
+        router.openAO3Link(URL(string: "https://archiveofourown.org/works/123")!)
+
+        router.dropPendingAO3LinkAfterPanelDismiss()
+        router.panelDidDismiss()
+
+        #expect(!router.isPresentingLinkedWork)
+        #expect(router.pendingWorkLink == nil)
+    }
+
+    @Test func coveredReaderDoesNotClearSharedPanel() {
+        #expect(!AppRouter.readerOwnsSharedPanel(landingCoversReader: true))
+        #expect(AppRouter.readerOwnsSharedPanel(landingCoversReader: false))
+        for panel: AppRouter.Panel in [.readerChapters, .readerDisplay, .readerFind] {
+            #expect(!AppRouter.readerClearsSharedPanel(panel, ownsPanel: false))
+            #expect(AppRouter.readerClearsSharedPanel(panel, ownsPanel: true))
+        }
+        #expect(!AppRouter.readerClearsSharedPanel(.searchFilters, ownsPanel: true))
+        #expect(!AppRouter.readerClearsSharedPanel(.none, ownsPanel: true))
+    }
+
+    @Test func passwordResetKeepsRestrictedWorkLoginUntilBrowserCloses() throws {
+        let router = AppRouter()
+        let reset = try #require(URL(string: "https://archiveofourown.org/users/password/new"))
+        router.openAO3Link(URL(string: "https://archiveofourown.org/works/123/chapters/456")!)
+        router.requestLinkedWorkLogin(sessionGeneration: 4)
+        router.linkedWorkDidDismiss()
+        #expect(router.isPresentingLinkedWorkLogin)
+
+        router.open(reset)
+        router.linkedWorkLoginSheetDidDismiss(isLoggedIn: false, sessionGeneration: 4)
+
+        #expect(router.isPresentingWebBrowser)
+        #expect(!router.isPresentingLinkedWorkLogin)
+        #expect(router.pendingLoginWorkLink?.id == 123)
+        #expect(router.pendingLoginWorkLink?.chapterID == 456)
+
+        router.isPresentingWebBrowser = false
+        router.webBrowserDidDismiss()
+
+        #expect(router.isPresentingLinkedWorkLogin)
+        #expect(!router.isPresentingWebBrowser)
+        #expect(router.pendingLoginWorkLink?.id == 123)
+        #expect(router.pendingLoginWorkLink?.chapterID == 456)
+    }
+
     @Test func externalTagLinkWhileLandingIsUpStaysInSheet() {
         let router = AppRouter()
         router.isPresentingLinkedWork = true

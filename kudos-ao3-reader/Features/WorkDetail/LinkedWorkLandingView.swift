@@ -67,6 +67,8 @@ struct LinkedWorkLandingView: View {
             .navigationDestination(for: AO3TagWorksRequest.self) { TagWorksView(request: $0) }
         }
         .presentationDragIndicator(.visible)
+        // This sheet's reader owns the shared panel. The reader it covers does not.
+        .environment(\.readerPanelSuppressed, false)
         #if os(macOS)
         .frame(minWidth: 420, minHeight: 480)
         #endif

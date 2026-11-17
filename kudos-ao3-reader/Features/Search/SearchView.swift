@@ -322,7 +322,8 @@ struct SearchView: View { // swiftlint:disable:this type_body_length
                 .filterPanelPresentation(
                     isPresented: router.isShowing(.searchFilters),
                     detents: [.medium, .large],
-                    onDismiss: { router.panelDidDismiss() }
+                    onDismiss: { router.panelDidDismiss() },
+                    onHostRemoved: { router.dropPendingAO3LinkAfterPanelDismiss() }
                 ) {
                     // Width applies on iPad/macOS, where this is a real inspector;
                     // iPhone gets a sheet, and its grabber, from the modifier.

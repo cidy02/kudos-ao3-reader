@@ -61,6 +61,9 @@ struct ContentView: View {
     var body: some View {
         @Bindable var router = router
         content
+            // Readers under the link-landing sheet must not present or clear the
+            // shared panel. The sheet itself opts back in.
+            .environment(\.readerPanelSuppressed, router.isPresentingLinkedWork)
             // Warms WebKit at launch instead of on first real use (the AO3 login
             // sheet, or Browse) — see WebKitPrewarmView.
             .background { WebKitPrewarmView() }
@@ -89,7 +92,7 @@ struct ContentView: View {
                 },
                 set: { router.isPresentingWebBrowser = $0 }
             ), onDismiss: {
-                if router.pendingWorkLink != nil { router.isPresentingLinkedWork = true }
+                router.webBrowserDidDismiss()
             }) {
                 AO3WebBrowserView()
             }
@@ -110,20 +113,10 @@ struct ContentView: View {
                 }
             }
             .sheet(isPresented: $router.isPresentingLinkedWorkLogin, onDismiss: {
-                if let link = router.pendingLoginWorkLink, auth.isLoggedIn,
-                   auth.sessionGeneration != router.pendingLoginSessionGeneration {
-                    let url = link.chapterID.map {
-                        AO3Client.chapterURL(workID: link.id, chapterID: $0)
-                    } ?? AO3Client.workURL(workID: link.id)
-                    router.pendingLoginWorkLink = nil
-                    router.pendingLoginSessionGeneration = nil
-                    router.openAO3Link(url)
-                } else {
-                    router.pendingLoginWorkLink = nil
-                    router.pendingLoginSessionGeneration = nil
-                    if router.pendingWorkLink != nil { router.isPresentingLinkedWork = true }
-                }
-                router.linkedWorkLoginDidDismiss()
+                router.linkedWorkLoginSheetDidDismiss(
+                    isLoggedIn: auth.isLoggedIn,
+                    sessionGeneration: auth.sessionGeneration
+                )
             }) {
                 if let link = router.pendingLoginWorkLink {
                     AO3LoginView(contextMessage: "Restricted work",
