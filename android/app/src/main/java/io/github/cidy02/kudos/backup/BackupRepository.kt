@@ -208,8 +208,13 @@ class BackupRepository(
         if (mode == BackupImportMode.REPLACE_LIBRARY) {
             if (rawJson != null) {
                 lastImportedManifestStore.save(rawJson, folderUri = keepFolderTag)
-                if (connectedFolderUri == null) pendingImportManifestStore.clear()
-                pendingImportManifestStore.save(rawJson, folderUri = connectedFolderUri)
+                // Same lock as the body write. A disconnected Replace drops a stale folder
+                // tag there and never deletes the overlay first.
+                pendingImportManifestStore.save(
+                    rawJson,
+                    folderUri = connectedFolderUri,
+                    clearStaleFolderTag = connectedFolderUri == null
+                )
             } else {
                 lastImportedManifestStore.clear()
                 pendingImportManifestStore.clear()
@@ -220,15 +225,13 @@ class BackupRepository(
                 mergeImportedManifestJson(rawJson, existing),
                 folderUri = keepFolderTag
             )
-            // Drop any prior folder-tagged pending overlay before saving a disconnected import
-            // so switching folders does not delete the new disconnected overlay via the old tag.
-            if (connectedFolderUri == null && pendingImportManifestStore.taggedFolderUri() != null) {
-                pendingImportManifestStore.clear()
-            }
+            // Load before save. A disconnected Merge/Reconcile keeps every key the new
+            // file lacks, and drops a stale folder tag inside that same save.
             val existingPending = pendingImportManifestStore.load()
             pendingImportManifestStore.save(
                 mergeImportedManifestJson(rawJson, existingPending),
-                folderUri = connectedFolderUri
+                folderUri = connectedFolderUri,
+                clearStaleFolderTag = connectedFolderUri == null
             )
         }
     }

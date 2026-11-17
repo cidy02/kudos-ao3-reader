@@ -1855,6 +1855,169 @@ class SyncManifestPassthroughTest {
     }
 
     @Test
+    fun disconnectedMergeKeepsAuthorIdentitiesAndDocumentsTheNewerFileLacks() = runTest {
+        val workId = "99999999-0000-4000-8000-000000000077"
+        backupRepository.importV2ZipBytes(zipManifest(backupOneOverlay(workId)), mode = BackupImportMode.MERGE)
+        syncRepository.disconnect()
+
+        val backupTwo = JsonObject(
+            mapOf(
+                "version" to JsonPrimitive(8),
+                "exportedAt" to JsonPrimitive("2026-06-26T12:00:00.000Z"),
+                "writingRecovery" to JsonPrimitive("backup-two-draft")
+            )
+        )
+        backupRepository.importV2ZipBytes(zipManifest(backupTwo), mode = BackupImportMode.MERGE)
+        assertFalse(
+            Files.exists(filesRoot.resolve("${BackupRepository.PENDING_IMPORT_MANIFEST_FILE}.folder"))
+        )
+
+        val folderManifest = JsonObject(
+            mapOf(
+                "version" to JsonPrimitive(8),
+                "exportedAt" to JsonPrimitive("2026-06-26T11:00:00.000Z"),
+                "writingRecovery" to JsonPrimitive("folder-without-backup-one")
+            )
+        )
+        writeChild(
+            ensureKudosLibrary(),
+            BackupPaths.MANIFEST,
+            "application/json",
+            BackupJson.encodeToString(JsonObject.serializer(), folderManifest).toByteArray(Charsets.UTF_8)
+        )
+        context.grantUriPermission(
+            context.packageName,
+            treeUri,
+            android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                android.content.Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+        )
+        syncRepository.connect(treeUri)
+        assertTrue(syncRepository.runSync() is SyncResult.Success)
+
+        val synced = Json.parseToJsonElement(
+            readDocument(requireKudosLibrary().findFile(BackupPaths.MANIFEST)!!).toString(Charsets.UTF_8)
+        ).jsonObject
+        assertEquals(
+            JsonPrimitive("[{\"username\":\"ada\"}]"),
+            workJson(synced, workId)["authorIdentitiesJSON"]
+        )
+        assertTrue("documents from Backup 1 must survive a newer file that lacks them", "documents" in synced)
+        assertEquals(
+            "notes/backup-one.json",
+            synced.getValue("documents").jsonArray.single().jsonObject.getValue("name").jsonPrimitive.content
+        )
+    }
+
+    @Test
+    fun disconnectedImportSaveDoesNotEmptyPendingBeforePublish() = runTest {
+        val workId = "99999999-0000-4000-8000-000000000078"
+        val pendingFile = filesRoot.resolve(BackupRepository.PENDING_IMPORT_MANIFEST_FILE)
+        val pendingTagFile = filesRoot.resolve("${BackupRepository.PENDING_IMPORT_MANIFEST_FILE}.folder")
+        backupRepository.importV2ZipBytes(zipManifest(backupOneOverlay(workId)), mode = BackupImportMode.MERGE)
+        assertTrue(Files.isRegularFile(pendingTagFile))
+        syncRepository.disconnect()
+
+        val backupTwo = JsonObject(
+            mapOf(
+                "version" to JsonPrimitive(8),
+                "exportedAt" to JsonPrimitive("2026-06-26T12:00:00.000Z"),
+                "writingRecovery" to JsonPrimitive("backup-two-draft")
+            )
+        )
+        assertPendingBodySurvivesUntilSave(pendingFile, workId) {
+            backupRepository.importV2ZipBytes(zipManifest(backupTwo), mode = BackupImportMode.MERGE)
+        }
+
+        settingsRepository.updateSyncFolderUri(treeUri.toString())
+        backupRepository.importV2ZipBytes(zipManifest(backupOneOverlay(workId)), mode = BackupImportMode.MERGE)
+        assertTrue(Files.isRegularFile(pendingTagFile))
+        syncRepository.disconnect()
+        assertPendingBodySurvivesUntilSave(pendingFile, workId) {
+            backupRepository.importV2ZipBytes(
+                zipManifest(
+                    JsonObject(
+                        mapOf(
+                            "version" to JsonPrimitive(8),
+                            "exportedAt" to JsonPrimitive("2026-06-26T13:00:00.000Z"),
+                            "writingRecovery" to JsonPrimitive("disconnected-replace")
+                        )
+                    )
+                ),
+                mode = BackupImportMode.REPLACE_LIBRARY
+            )
+        }
+        assertFalse(Files.exists(pendingTagFile))
+    }
+
+    private suspend fun assertPendingBodySurvivesUntilSave(
+        pendingFile: java.nio.file.Path,
+        workId: String,
+        block: suspend () -> Unit
+    ) {
+        var publishes = 0
+        SyncLastManifestStore.beforeFilePublish = { path ->
+            if (path.fileName?.toString() == pendingFile.fileName?.toString()) {
+                assertTrue(
+                    "pending overlay must still hold Backup 1 when save begins",
+                    Files.isRegularFile(path) && Files.size(path) > 0L
+                )
+                val body = Json.parseToJsonElement(Files.readAllBytes(path).toString(Charsets.UTF_8)).jsonObject
+                assertEquals(
+                    JsonPrimitive("[{\"username\":\"ada\"}]"),
+                    workJson(body, workId)["authorIdentitiesJSON"]
+                )
+                assertEquals(
+                    "notes/backup-one.json",
+                    body.getValue("documents").jsonArray.single().jsonObject.getValue("name").jsonPrimitive.content
+                )
+                publishes += 1
+            }
+        }
+        try {
+            block()
+        } finally {
+            SyncLastManifestStore.beforeFilePublish = null
+        }
+        assertEquals(1, publishes)
+    }
+
+    private fun backupOneOverlay(workId: String): JsonObject = JsonObject(
+        mapOf(
+            "version" to JsonPrimitive(8),
+            "exportedAt" to JsonPrimitive("2026-06-26T10:00:00.000Z"),
+            "documents" to JsonArray(
+                listOf(
+                    JsonObject(
+                        mapOf(
+                            "name" to JsonPrimitive("notes/backup-one.json"),
+                            "data" to JsonPrimitive("eyJpdGVtcyI6W119"),
+                            "modifiedAt" to JsonPrimitive("2026-06-26T10:35:00.000Z")
+                        )
+                    )
+                )
+            ),
+            "works" to JsonArray(
+                listOf(
+                    JsonObject(
+                        mapOf(
+                            "id" to JsonPrimitive(workId),
+                            "title" to JsonPrimitive("Backup One"),
+                            "author" to JsonPrimitive("Ada"),
+                            "sourceURL" to JsonPrimitive("https://archiveofourown.org/works/820077"),
+                            "ao3WorkID" to JsonPrimitive(820077),
+                            "dateAdded" to JsonPrimitive("2026-06-26T09:00:00.000Z"),
+                            "lastModifiedAt" to JsonPrimitive("2026-06-26T10:00:00.000Z"),
+                            "isSaved" to JsonPrimitive(true),
+                            "authorIdentitiesJSON" to JsonPrimitive("[{\"username\":\"ada\"}]")
+                        )
+                    )
+                )
+            )
+        )
+    )
+
+    @Test
     fun legacyKudosBackupSyncFoldsPendingImportOverlay() = runTest {
         syncRepository.disconnect()
 

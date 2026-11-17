@@ -735,12 +735,21 @@ internal class SyncLastManifestStore(
         return runCatching { Files.readAllBytes(folderFile).toString(Charsets.UTF_8) }.getOrNull()
     }
 
-    fun save(json: JsonObject, folderUri: String? = null) {
+    /**
+     * [clearStaleFolderTag] applies only when [folderUri] is null: a tag already on disk is
+     * deleted before the body moves, and no new tag is written. The body file itself is
+     * replaced in this lock, never removed first. A null URI without the flag leaves the tag.
+     */
+    fun save(json: JsonObject, folderUri: String? = null, clearStaleFolderTag: Boolean = false) {
         val bytes = BackupJson.encodeToString(JsonObject.serializer(), json).toByteArray(Charsets.UTF_8)
-        save(bytes, folderUri)
+        save(bytes, folderUri, clearStaleFolderTag)
     }
 
-    fun save(bytes: ByteArray, folderUri: String? = null) = synchronized(lock) {
+    fun save(
+        bytes: ByteArray,
+        folderUri: String? = null,
+        clearStaleFolderTag: Boolean = false
+    ) = synchronized(lock) {
         // Inside the lock, before the file is replaced, so a clear on any instance
         // cannot finish until this publish does, and cannot be overwritten by it.
         beforeFilePublish?.invoke(file)
@@ -751,8 +760,13 @@ internal class SyncLastManifestStore(
             Files.write(temp, bytes)
             // Drop a differing folder tag before replacing the manifest body so a crash or
             // write failure before the new tag moves never pairs the new body with the old folder.
-            if (folderUri != null && readFolderTag() != folderUri) {
+            // A disconnected import passes no URI and asks to drop a stale tag here, still
+            // before the body move, and then writes no replacement tag.
+            val existingTag = readFolderTag()
+            if (folderUri != null && existingTag != folderUri) {
                 runCatching { Files.deleteIfExists(folderFile) }
+            } else if (folderUri == null && clearStaleFolderTag && existingTag != null) {
+                Files.deleteIfExists(folderFile)
             }
             try {
                 Files.move(temp, file, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
@@ -762,8 +776,9 @@ internal class SyncLastManifestStore(
         } finally {
             runCatching { Files.deleteIfExists(temp) }
         }
-        // A null URI leaves the sidecar alone. Callers that do not know the folder
-        // (a disconnected import) must not strip a tag a previous sync wrote.
+        // A null URI writes no tag. Without [clearStaleFolderTag] the existing tag stays
+        // (a disconnected save of the on-device store must not strip a previous sync's tag).
+        // With the flag, that tag was already removed before the body move.
         if (folderUri != null) {
             beforeTagPublish?.invoke(folderFile)
             val tagTemp = Files.createTempFile(parent, ".sync-last-manifest-folder-", ".tmp")
