@@ -79,10 +79,17 @@ extension ShapeStyle where Self == AccentFillStyle {
 /// everywhere else (Light, Dark, OLED).
 struct SecondaryInkStyle: ShapeStyle {
     func resolve(in environment: EnvironmentValues) -> some ShapeStyle {
-        if let color = environment.secondaryInk {
+        if let color = Self.themeInk(environment.secondaryInk, scheme: environment.colorScheme) {
             return AnyShapeStyle(color)
         }
         return AnyShapeStyle(.secondary)
+    }
+
+    /// Sepia's brown is measured against its cream page; a card that forces a dark
+    /// scheme (the cover-wearing cards) keeps the system grey, which stays readable
+    /// there (seen 2026-11-17: the brown byline measured 2.6:1 on the Resume card).
+    static func themeInk(_ ink: Color?, scheme: ColorScheme) -> Color? {
+        scheme == .light ? ink : nil
     }
 }
 

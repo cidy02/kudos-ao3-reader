@@ -484,6 +484,12 @@ struct AccentInkTests {
         }
     }
 
+    @Test func sepiaInkGivesWayToSystemGreyOnADarkCard() throws {
+        let sepia = try #require(ReaderTheme.sepia.appSecondaryInk)
+        #expect(SecondaryInkStyle.themeInk(sepia, scheme: .light) == sepia)
+        #expect(SecondaryInkStyle.themeInk(sepia, scheme: .dark) == nil)
+    }
+
     @MainActor @Test func secondaryInkRoutesSepiaOnlyAndLeavesOtherThemesUnchanged() throws {
         let defaults = UserDefaults.standard
         let previous = defaults.object(forKey: "appTheme")
