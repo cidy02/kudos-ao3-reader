@@ -589,11 +589,6 @@ final class AO3SeriesSubscribeModel {
         }
     }
 
-    func cancelInFlight() {
-        activeTask?.cancel()
-        activeTask = nil
-    }
-
     static func showsSubscribe(isLoggedIn: Bool) -> Bool {
         isLoggedIn
     }
