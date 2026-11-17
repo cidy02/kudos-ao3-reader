@@ -108,10 +108,12 @@ data class GeneratedCoverRecipe(
             "Fantasy" to "celestial", "Magic" to "celestial", "Science Fiction" to "celestial"
         )
         private val constrainedRotationMotifs = setOf("sprig", "waves", "chevrons", "truchet", "halftone")
-        // Java `\s` is ASCII-only. iOS NSRegularExpression `\s` includes `\p{Z}` (NBSP).
-        // Do not turn on Unicode character classes: that would also widen `\d` past ASCII digits.
-        private val leadingNumberRegex = Regex("^\\d+\\.[\\s\\p{Z}]*")
-        private val subtitleRegex = Regex("^(.*[^\\s\\p{Z}])[\\s\\p{Z}]+(\\(.*\\)|\\[.*\\])$")
+        // Java `\s` is ASCII-only. iOS NSRegularExpression `\s` also matches `\p{Z}` (NBSP) and
+        // U+0085 NEL (checked 2026-11-17). Do not turn on Unicode character classes: that would
+        // also widen `\d` past ASCII digits.
+        private val leadingNumberRegex = Regex("^\\d+\\.[\\s\\p{Z}\\u0085]*")
+        private val subtitleRegex =
+            Regex("^(.*[^\\s\\p{Z}\\u0085])[\\s\\p{Z}\\u0085]+(\\(.*\\)|\\[.*\\])$")
         private val canonicalUuidRegex =
             Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 

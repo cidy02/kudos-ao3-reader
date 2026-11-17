@@ -562,6 +562,16 @@ class GeneratedCoverRecipeTest {
         assertEquals("(Subtitle)", subtitle.subtitle)
         assertEquals(2, subtitle.placement)
 
+        val nextLine = GeneratedCoverRecipe.create(
+            id = 9L,
+            title = "The Work\u0085(Subtitle)",
+            author = "a",
+            fandoms = listOf("Original Work")
+        )
+        assertEquals("The Work", nextLine.title)
+        assertEquals("(Subtitle)", nextLine.subtitle)
+        assertEquals(2, nextLine.placement)
+
         val numbered = GeneratedCoverRecipe.create(
             id = 10L,
             title = "1.\u00A0Title",
