@@ -45,6 +45,24 @@ final class DownloadQueue {
     /// The fill a download with nothing to fetch still shows (owner, 2026-10-01).
     static let instantDuration: TimeInterval = 0.7
 
+    typealias EPUBDownload = @MainActor (Int, @escaping @Sendable (Double) -> Void) async throws -> URL
+    typealias AvailabilityVerifier = @MainActor (SavedWork, ModelContext) async -> Void
+
+    @ObservationIgnored private let downloadEPUB: EPUBDownload
+    @ObservationIgnored private let verifyAvailability: AvailabilityVerifier
+
+    init(
+        downloadEPUB: @escaping EPUBDownload = { workID, onProgress in
+            try await AO3Client.shared.downloadEPUB(workID: workID, onProgress: onProgress)
+        },
+        verifyAvailability: @escaping AvailabilityVerifier = { work, context in
+            await WorkAvailability.verify(work, in: context)
+        }
+    ) {
+        self.downloadEPUB = downloadEPUB
+        self.verifyAvailability = verifyAvailability
+    }
+
     private var context: ModelContext?
 
     /// Works still to process (queued or in flight).
@@ -94,7 +112,8 @@ final class DownloadQueue {
             case .queued, .downloading:
                 if !item.requiresOfflineQueue { items[index].requiresOfflineQueue = false }
             case .done, .skipped, .failed:
-                items[index] = item
+                items.remove(at: index)
+                items.append(item)
             }
         }
     }
@@ -180,8 +199,12 @@ final class DownloadQueue {
         return items.first { $0.id == ao3ID && ($0.status == .queued || $0.status == .downloading) }
     }
 
+    private func index(of id: Int) -> Int? {
+        items.firstIndex(where: { $0.id == id })
+    }
+
     private func setFraction(_ fraction: Double, for id: Int) {
-        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+        guard let index = items.firstIndex(where: { $0.id == id && $0.status == .downloading }) else { return }
         items[index].fraction = max(items[index].fraction, fraction)
     }
 
@@ -230,6 +253,7 @@ final class DownloadQueue {
 
         while let index = items.firstIndex(where: { $0.status == .queued }) {
             let item = items[index]
+            let id = item.id
             let existing = item.sourceURL.flatMap { existingWork(forSource: $0, in: context) }
             guard Self.shouldProcess(item, existing: existing) else {
                 items[index].status = .skipped
@@ -249,15 +273,15 @@ final class DownloadQueue {
             items[index].status = .downloading
             items[index].startedAt = Date()
             do {
-                let id = item.id
-                let temp = try await AO3Client.shared.downloadEPUB(workID: id) { fraction in
+                let temp = try await downloadEPUB(id) { fraction in
                     Task { @MainActor [weak self] in self?.setFraction(fraction, for: id) }
                 }
-                guard Self.shouldProcess(
-                    items[index], existing: item.sourceURL.flatMap { existingWork(forSource: $0, in: context) }
-                ) else {
+                guard let current = self.index(of: id),
+                      Self.shouldProcess(
+                          items[current], existing: item.sourceURL.flatMap { existingWork(forSource: $0, in: context) }
+                      ) else {
                     try? FileManager.default.removeItem(at: temp)
-                    items[index].status = .skipped
+                    if let current = self.index(of: id) { items[current].status = .skipped }
                     continue
                 }
                 let saved = try await importEPUB(
@@ -265,27 +289,31 @@ final class DownloadQueue {
                     isComplete: item.isComplete, seriesURL: item.seriesURL,
                     verifyAvailability: false,
                     canImport: {
-                        Self.shouldProcess(
-                            self.items[index], existing: item.sourceURL.flatMap { existingWork(forSource: $0, in: context) }
+                        guard let liveIndex = self.index(of: id) else { return false }
+                        return Self.shouldProcess(
+                            self.items[liveIndex],
+                            existing: item.sourceURL.flatMap { existingWork(forSource: $0, in: context) }
                         )
                     }, into: context
                 )
                 if saved.modelContext != nil, !saved.isPendingDeletion {
-                    await WorkAvailability.verify(saved, in: context)
+                    await verifyAvailability(saved, context)
                     if saved.modelContext != nil, !saved.isPendingDeletion {
                         Self.finishImportedWork(saved, in: context)
                     }
                 }
                 // A beat at 100% before the ring hands back to reading progress.
-                items[index].fraction = 1
+                if let current = self.index(of: id) { items[current].fraction = 1 }
                 try? await Task.sleep(for: .milliseconds(300))
-                items[index].status = .done
+                if let current = self.index(of: id) { items[current].status = .done }
             } catch {
-                items[index].status = error is CancellationError ? .skipped : .failed
+                if let current = self.index(of: id) {
+                    items[current].status = error is CancellationError ? .skipped : .failed
+                }
                 if !(error is CancellationError) {
                     let reason = error.localizedDescription
                     Log.library.error(
-                        "Queue download \(item.id, privacy: .private(mask: .hash)) failed: \(reason, privacy: .private)"
+                        "Queue download \(id, privacy: .private(mask: .hash)) failed: \(reason, privacy: .private)"
                     )
                 }
             }

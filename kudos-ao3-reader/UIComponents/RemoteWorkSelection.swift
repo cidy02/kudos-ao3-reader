@@ -15,7 +15,11 @@ import SwiftUI
 @MainActor
 @Observable
 final class RemoteWorkSelectionController {
-    enum PriorWorkState: Equatable { case inserted, revived, existing }
+    enum PriorWorkState: Equatable {
+        case inserted
+        case revived(deletedAt: Date?, scheduledAt: Date?)
+        case existing
+    }
 
     struct ToastTarget: Identifiable {
         let id = UUID()
@@ -52,11 +56,21 @@ final class RemoteWorkSelectionController {
         toastTarget = nil
         guard target.work.modelContext != nil,
               target.work.queueMemberships.contains(where: { $0.id == target.membershipID }) else { return }
-        if target.priorWorkState == .inserted {
+        switch target.priorWorkState {
+        case .inserted:
             ReadingQueueService.removeFromQueueAndDeleteIfQueueOnly(
                 target.work, from: target.queue, in: target.context
             )
-        } else {
+        case let .revived(deletedAt, scheduledAt):
+            ReadingQueueService.removeFromQueue(target.work, from: target.queue, in: target.context)
+            if target.work.activeQueueMemberships.isEmpty, !target.work.isPendingDeletion {
+                PreservedWorkService.softDelete(
+                    target.work,
+                    priorDates: (deletedAt, scheduledAt),
+                    in: target.context
+                )
+            }
+        case .existing:
             ReadingQueueService.removeFromQueue(target.work, from: target.queue, in: target.context)
         }
     }
@@ -84,7 +98,9 @@ final class RemoteWorkSelectionController {
         do {
             let existingWork = ReadingQueueService.existingWork(for: summary, in: context)
             let priorWorkState: PriorWorkState = existingWork.map {
-                $0.isPendingDeletion ? .revived : .existing
+                $0.isPendingDeletion
+                    ? .revived(deletedAt: $0.deletedAt, scheduledAt: $0.permanentDeletionScheduledAt)
+                    : .existing
             } ?? .inserted
             let work = try ReadingQueueService.ensureLocalMetadata(for: summary, in: context)
             guard !work.queueMemberships.contains(where: { $0.queue?.id == queue.id }) else {
